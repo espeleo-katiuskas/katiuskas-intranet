@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"katiuskas-intranet/backend/internal/httpapi"
 )
 
 type contextKey string
@@ -20,12 +22,12 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 		header := r.Header.Get("Authorization")
 		token, ok := strings.CutPrefix(header, "Bearer ")
 		if !ok || token == "" {
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return
 		}
 		claims, err := a.ParseAccessToken(token)
 		if err != nil {
-			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
 			return
 		}
 		ctx := context.WithValue(r.Context(), userContextKey, AuthenticatedUser{
@@ -47,7 +49,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := UserFromContext(r.Context())
 			if !ok || !allowed[user.Role] {
-				http.Error(w, "insufficient permissions", http.StatusForbidden)
+				httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -6,9 +6,14 @@ services:
       POSTGRES_PASSWORD: intranet
       POSTGRES_DB: intranet
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intranet -d intranet"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
 
   api:
     build: ./backend
@@ -17,9 +22,11 @@ services:
       DATABASE_URL: "postgres://intranet:intranet@postgres:5432/intranet?sslmode=disable"
       JWT_SECRET: "change-me-to-a-long-random-string"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"
+    restart: unless-stopped
 
   web:
     image: caddy:2-alpine

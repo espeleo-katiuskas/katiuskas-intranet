@@ -61,7 +61,7 @@ página a partir del refresh token guardado en `localStorage`.
 
 ```sh
 docker compose up -d postgres
-export DATABASE_URL=postgres://intranet:intranet@localhost:5432/intranet?sslmode=disable
+export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up          # requiere goose: https://github.com/pressly/goose
 export JWT_SECRET=dev-secret
 make run                 # sirve la API en :8080

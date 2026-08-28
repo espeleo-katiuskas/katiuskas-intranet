@@ -26,7 +26,7 @@ Esto levanta PostgreSQL, la API en `http://localhost:8080` y el frontend en
 migraciones la primera vez:
 
 ```sh
-export DATABASE_URL=postgres://intranet:intranet@localhost:5432/intranet?sslmode=disable
+export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up
 ```
 
