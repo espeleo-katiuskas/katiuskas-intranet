@@ -1,0 +1,104 @@
+package memberships
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	ErrNotFound = errors.New("membership not found")
+	ErrOverlap  = errors.New("membership period overlaps an existing one for this user")
+)
+
+// exclusionViolationCode is the PostgreSQL error code raised when the
+// EXCLUDE USING gist constraint on memberships.period rejects an insert.
+const exclusionViolationCode = "23P01"
+
+type Repository struct {
+	pool *pgxpool.Pool
+}
+
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool}
+}
+
+func (r *Repository) Create(ctx context.Context, in CreateInput) (Membership, error) {
+	var m Membership
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO memberships (user_id, membership_number, start_date)
+		VALUES ($1,$2,$3)
+		RETURNING id, user_id, membership_number, start_date, end_date, end_reason
+	`, in.UserID, in.MembershipNumber, in.StartDate,
+	).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
+		return m, ErrOverlap
+	}
+	return m, err
+}
+
+func (r *Repository) End(ctx context.Context, id int64, in EndInput) (Membership, error) {
+	var m Membership
+	err := r.pool.QueryRow(ctx, `
+		UPDATE memberships SET end_date = $1, end_reason = $2
+		WHERE id = $3
+		RETURNING id, user_id, membership_number, start_date, end_date, end_reason
+	`, in.EndDate, in.EndReason, id,
+	).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return m, ErrNotFound
+	}
+	return m, err
+}
+
+func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_id, membership_number, start_date, end_date, end_reason
+		FROM memberships WHERE user_id = $1 ORDER BY start_date DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Membership
+	for rows.Next() {
+		var m Membership
+		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT m.id, m.user_id, m.membership_number, m.start_date, m.end_date, m.end_reason,
+			u.first_name, u.last_name
+		FROM memberships m
+		JOIN users u ON u.id = m.user_id
+		WHERE m.period @> CURRENT_DATE
+		ORDER BY u.last_name, u.first_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Membership
+	for rows.Next() {
+		var m Membership
+		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate,
+			&m.EndReason, &m.FirstName, &m.LastName); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}

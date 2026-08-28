@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Material — Intranet del club</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Intranet del club</span>
+  <nav class="main-nav">
+    <a href="index.html">Inicio</a>
+    <a href="members.html" data-roles="admin,board">Socios</a>
+    <a href="activities.html">Actividades</a>
+    <a href="inventory.html" class="active">Material</a>
+    <a href="profile.html">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1>Material</h1>
+  <p class="subtitle">Catálogo de material del club y su disponibilidad.</p>
+  <table>
+    <thead>
+      <tr><th>Material</th><th>Categoría</th><th>Disponible</th><th>Estado</th></tr>
+    </thead>
+    <tbody id="items-table-body"></tbody>
+  </table>
+</main>
+<script type="module" src="js/inventory.js"></script>
+</body>
+</html>

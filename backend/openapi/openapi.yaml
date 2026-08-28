@@ -1,0 +1,479 @@
+openapi: 3.0.3
+info:
+  title: Caving Club Intranet API
+  version: "1.0.0"
+  description: >
+    REST API for the club intranet. Consumed by the web frontend today and
+    intended for a future mobile app and terminal client as well.
+servers:
+  - url: /api/v1
+
+paths:
+  /auth/login:
+    post:
+      summary: Log in with a username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Token pair issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: New token pair issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      summary: Revoke a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "204": { description: Session revoked }
+
+  /users:
+    get:
+      summary: List users
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: A page of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      summary: Create a user (and, optionally, a login account)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserInput" }
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /users/{id}:
+    get:
+      summary: Get a user by id
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update a user's personal data
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUserInput" }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /users/{userID}/memberships:
+    get:
+      summary: List a user's membership periods
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Membership history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Membership" }
+    post:
+      summary: Start a new membership period
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_date]
+              properties:
+                membership_number: { type: string, nullable: true }
+                start_date: { type: string, format: date }
+      responses:
+        "201":
+          description: Membership created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "409":
+          description: Overlaps an existing membership period for this user
+
+  /memberships:
+    get:
+      summary: List members whose membership is active today
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Active memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Membership" }
+
+  /memberships/{id}:
+    patch:
+      summary: End a membership period
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [end_date]
+              properties:
+                end_date: { type: string, format: date }
+                end_reason: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Updated membership
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+
+  /activities:
+    get:
+      summary: List activities
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: A page of activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Activity" }
+    post:
+      summary: Create an activity
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Activity created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
+
+  /activities/{id}:
+    patch:
+      summary: Update an activity
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Updated activity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
+    delete:
+      summary: Cancel an activity
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Activity cancelled }
+
+  /activities/{id}/participants:
+    get:
+      summary: List an activity's participants
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Participants
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Participant" }
+    post:
+      summary: Join an activity as the current user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Joined }
+
+  /activities/{id}/participants/{userID}:
+    delete:
+      summary: Leave an activity
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Removed }
+
+  /items:
+    get:
+      summary: List inventory items
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Item" }
+    post:
+      summary: Add an item to the catalog
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+
+  /items/{id}/transactions:
+    get:
+      summary: List an item's transaction history
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Transactions for this item
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+
+  /transactions:
+    get:
+      summary: List transactions (defaults to active ones)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+    post:
+      summary: Open a loan, rental or sale
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Transaction created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "409":
+          description: Not enough available quantity
+
+  /transactions/{id}/return:
+    patch:
+      summary: Close an active loan or rental
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Closed transaction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+    NotFound:
+      description: Resource not found
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+        national_id: { type: string, nullable: true }
+        birth_date: { type: string, format: date, nullable: true }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        emergency_contact_name: { type: string, nullable: true }
+        emergency_contact_phone: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CreateUserInput:
+      allOf:
+        - $ref: "#/components/schemas/UpdateUserInput"
+        - type: object
+          required: [first_name, last_name, email, username, password]
+          properties:
+            email: { type: string, format: email }
+            username: { type: string }
+            password: { type: string }
+            role: { type: string, enum: [admin, board, member] }
+
+    UpdateUserInput:
+      type: object
+      properties:
+        first_name: { type: string }
+        last_name: { type: string }
+        phone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        emergency_contact_name: { type: string, nullable: true }
+        emergency_contact_phone: { type: string, nullable: true }
+
+    Membership:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+        membership_number: { type: string, nullable: true }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        end_reason: { type: string, nullable: true }
+
+    Activity:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        type: { type: string, enum: [caving, training, outdoor, social, other] }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        location: { type: string }
+        description: { type: string, nullable: true }
+        difficulty: { type: integer, nullable: true }
+        max_participants: { type: integer, nullable: true }
+        status: { type: string, enum: [planned, completed, cancelled] }
+        leader_id: { type: integer, nullable: true }
+
+    Participant:
+      type: object
+      properties:
+        activity_id: { type: integer }
+        user_id: { type: integer }
+        role: { type: string, enum: [leader, participant] }
+        confirmed: { type: boolean }
+
+    Item:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        code: { type: string, nullable: true }
+        total_quantity: { type: integer }
+        available_quantity: { type: integer }
+        status: { type: string, enum: [available, on_loan, rented, sold, maintenance, retired] }
+        rental_price_per_day: { type: number, nullable: true }
+        sale_price: { type: number, nullable: true }
+
+    Transaction:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer }
+        user_id: { type: integer }
+        type: { type: string, enum: [loan, rental, sale] }
+        quantity: { type: integer }
+        transacted_at: { type: string, format: date-time }
+        due_date: { type: string, format: date, nullable: true }
+        returned_at: { type: string, format: date, nullable: true }
+        price: { type: number, nullable: true }
+        status: { type: string, enum: [active, completed, overdue, cancelled] }
+        recorded_by: { type: integer, nullable: true }

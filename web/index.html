@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inicio — Intranet del club</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Intranet del club</span>
+  <nav class="main-nav">
+    <a href="index.html" class="active">Inicio</a>
+    <a href="members.html" data-roles="admin,board">Socios</a>
+    <a href="activities.html">Actividades</a>
+    <a href="inventory.html">Material</a>
+    <a href="profile.html">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1>Bienvenido/a</h1>
+  <p class="subtitle">Gestión de socios, actividades y material del club.</p>
+  <div class="card-grid">
+    <a class="card" href="members.html" data-roles="admin,board">
+      <h3>Socios</h3>
+      <p>Altas, bajas e historial de socios.</p>
+    </a>
+    <a class="card" href="activities.html">
+      <h3>Actividades</h3>
+      <p>Próximas salidas y apuntes.</p>
+    </a>
+    <a class="card" href="inventory.html">
+      <h3>Material</h3>
+      <p>Catálogo, préstamos, alquileres y ventas.</p>
+    </a>
+    <a class="card" href="profile.html">
+      <h3>Mi perfil</h3>
+      <p>Tus datos y tu historial como socio.</p>
+    </a>
+  </div>
+</main>
+<script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

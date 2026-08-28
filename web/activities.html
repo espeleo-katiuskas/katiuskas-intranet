@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actividades — Intranet del club</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Intranet del club</span>
+  <nav class="main-nav">
+    <a href="index.html">Inicio</a>
+    <a href="members.html" data-roles="admin,board">Socios</a>
+    <a href="activities.html" class="active">Actividades</a>
+    <a href="inventory.html">Material</a>
+    <a href="profile.html">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1>Actividades</h1>
+  <p class="subtitle">Próximas salidas y actividades del club.</p>
+  <div class="card-grid" id="activities-list"></div>
+</main>
+<script type="module" src="js/activities.js"></script>
+</body>
+</html>

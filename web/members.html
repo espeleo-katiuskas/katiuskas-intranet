@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Socios — Intranet del club</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Intranet del club</span>
+  <nav class="main-nav">
+    <a href="index.html">Inicio</a>
+    <a href="members.html" class="active" data-roles="admin,board">Socios</a>
+    <a href="activities.html">Actividades</a>
+    <a href="inventory.html">Material</a>
+    <a href="profile.html">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1>Socios</h1>
+  <p class="subtitle">Socios con alta vigente en el club.</p>
+  <table>
+    <thead>
+      <tr><th>Nombre</th><th>N.º de socio</th><th>Alta</th></tr>
+    </thead>
+    <tbody id="members-table-body"></tbody>
+  </table>
+</main>
+<script type="module" src="js/members.js"></script>
+</body>
+</html>

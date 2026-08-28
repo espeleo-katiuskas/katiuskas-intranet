@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi perfil — Intranet del club</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Intranet del club</span>
+  <nav class="main-nav">
+    <a href="index.html">Inicio</a>
+    <a href="members.html" data-roles="admin,board">Socios</a>
+    <a href="activities.html">Actividades</a>
+    <a href="inventory.html">Material</a>
+    <a href="profile.html" class="active">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1 id="profile-name">Mi perfil</h1>
+  <p class="subtitle" id="profile-email"></p>
+  <h2>Historial como socio</h2>
+  <table>
+    <thead><tr><th>Alta</th><th>Baja</th></tr></thead>
+    <tbody id="memberships-table-body"></tbody>
+  </table>
+</main>
+<script type="module" src="js/profile.js"></script>
+</body>
+</html>
