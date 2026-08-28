@@ -2,6 +2,7 @@ package users
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -24,6 +25,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin", "board"))
 	mux.Handle("GET /api/v1/users/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/users/{id}", h.authenticator.Protect(h.update))
+	mux.Handle("DELETE /api/v1/users/{id}", h.authenticator.Protect(h.delete, "admin", "board"))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -134,4 +136,31 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	if current.ID == id {
+		httpapi.WriteError(w, http.StatusConflict, "cannot_delete_self", "you cannot delete your own account")
+		return
+	}
+	err = h.service.Delete(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return
+	}
+	if errors.Is(err, ErrHasReferences) {
+		httpapi.WriteError(w, http.StatusConflict, "has_references", err.Error())
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete user")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

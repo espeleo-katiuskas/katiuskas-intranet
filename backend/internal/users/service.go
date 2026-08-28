@@ -38,6 +38,10 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 	return s.repo.Update(ctx, id, in)
 }
 
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
+}
+
 func (s *Service) VerifyCredentials(ctx context.Context, username, password string) (Credentials, error) {
 	creds, err := s.repo.GetCredentialsByUsername(ctx, username)
 	if err != nil {

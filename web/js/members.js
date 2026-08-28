@@ -55,22 +55,61 @@ async function loadMemberships() {
   }
 }
 
+function renderUserRow(person) {
+  return `
+    <tr>
+      <td>${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</td>
+      <td>${escapeHtml(person.email)}</td>
+      <td><span class="badge">${roleLabels[person.role] ?? person.role ?? '—'}</span></td>
+      <td class="table-actions">
+        <button type="button" class="btn btn-secondary btn-small" data-start-membership="${person.id}">Dar de alta</button>
+        <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-person="${person.id}">Editar</button>
+        <button type="button" class="btn btn-danger btn-small" data-delete-person="${person.id}">Borrar</button>
+      </td>
+    </tr>
+    <tr data-edit-person-row="${person.id}" hidden>
+      <td colspan="4">
+        <div class="edit-fields">
+          <div class="field-grid">
+            <div class="field">
+              <label>Nombre</label>
+              <input type="text" data-edit-field="first_name" value="${escapeHtml(person.first_name)}">
+            </div>
+            <div class="field">
+              <label>Apellidos</label>
+              <input type="text" data-edit-field="last_name" value="${escapeHtml(person.last_name)}">
+            </div>
+            <div class="field">
+              <label>Teléfono</label>
+              <input type="tel" data-edit-field="phone" value="${escapeHtml(person.phone ?? '')}">
+            </div>
+            <div class="field span-2">
+              <label>Dirección</label>
+              <input type="text" data-edit-field="address" value="${escapeHtml(person.address ?? '')}">
+            </div>
+            <div class="field">
+              <label>Contacto de emergencia</label>
+              <input type="text" data-edit-field="emergency_contact_name" value="${escapeHtml(person.emergency_contact_name ?? '')}">
+            </div>
+            <div class="field">
+              <label>Teléfono de emergencia</label>
+              <input type="tel" data-edit-field="emergency_contact_phone" value="${escapeHtml(person.emergency_contact_phone ?? '')}">
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-small" data-save-edit-person="${person.id}">Guardar</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 async function loadUsers() {
   const tableBody = document.getElementById('users-table-body');
   try {
     const users = await apiFetch('/users');
-    tableBody.innerHTML = users
-      .map((person) => `
-        <tr>
-          <td>${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</td>
-          <td>${escapeHtml(person.email)}</td>
-          <td><span class="badge">${roleLabels[person.role] ?? person.role ?? '—'}</span></td>
-          <td class="table-actions">
-            <button type="button" class="btn btn-secondary btn-small" data-start-membership="${person.id}">Dar de alta</button>
-          </td>
-        </tr>
-      `)
-      .join('');
+    tableBody.innerHTML = users.length
+      ? users.map(renderUserRow).join('')
+      : '<tr><td colspan="4">Todavía no hay personas registradas.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="4">No se pudo cargar la lista de personas.</td></tr>';
   }
@@ -98,26 +137,78 @@ document.getElementById('memberships-table-body').addEventListener('click', asyn
   }
 });
 
-document.getElementById('users-table-body').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-start-membership]');
-  if (!button) return;
+const usersTableBody = document.getElementById('users-table-body');
 
-  const startDate = prompt('Fecha de alta (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
-  if (!startDate) return;
-  const membershipNumber = prompt('Número de socio (opcional):') || null;
+usersTableBody.addEventListener('click', async (event) => {
+  const startButton = event.target.closest('button[data-start-membership]');
+  if (startButton) {
+    const startDate = prompt('Fecha de alta (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
+    if (!startDate) return;
+    const membershipNumber = prompt('Número de socio (opcional):') || null;
 
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${button.dataset.startMembership}/memberships`, {
-      method: 'POST',
-      body: JSON.stringify({ start_date: startDate, membership_number: membershipNumber }),
-    });
-    showFeedback('Alta registrada.');
-    await loadMemberships();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
+    startButton.disabled = true;
+    try {
+      await apiFetch(`/users/${startButton.dataset.startMembership}/memberships`, {
+        method: 'POST',
+        body: JSON.stringify({ start_date: startDate, membership_number: membershipNumber }),
+      });
+      showFeedback('Alta registrada.');
+      await loadMemberships();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      startButton.disabled = false;
+    }
+    return;
+  }
+
+  const toggleEditButton = event.target.closest('button[data-toggle-edit-person]');
+  if (toggleEditButton) {
+    const row = usersTableBody.querySelector(`[data-edit-person-row="${toggleEditButton.dataset.toggleEditPerson}"]`);
+    row.hidden = !row.hidden;
+    return;
+  }
+
+  const saveEditButton = event.target.closest('button[data-save-edit-person]');
+  if (saveEditButton) {
+    const personId = saveEditButton.dataset.saveEditPerson;
+    const row = usersTableBody.querySelector(`[data-edit-person-row="${personId}"]`);
+    const field = (name) => row.querySelector(`[data-edit-field="${name}"]`).value.trim() || null;
+
+    const body = {
+      first_name: field('first_name'),
+      last_name: field('last_name'),
+      phone: field('phone'),
+      address: field('address'),
+      emergency_contact_name: field('emergency_contact_name'),
+      emergency_contact_phone: field('emergency_contact_phone'),
+    };
+
+    saveEditButton.disabled = true;
+    try {
+      await apiFetch(`/users/${personId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Datos actualizados.');
+      await loadUsers();
+    } catch (err) {
+      saveEditButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const deleteButton = event.target.closest('button[data-delete-person]');
+  if (deleteButton) {
+    if (!confirm('¿Borrar a esta persona? Se perderá su ficha, su acceso y su historial de socio.')) return;
+    deleteButton.disabled = true;
+    try {
+      await apiFetch(`/users/${deleteButton.dataset.deletePerson}`, { method: 'DELETE' });
+      showFeedback('Persona borrada.');
+      await loadUsers();
+      await loadMemberships();
+    } catch (err) {
+      deleteButton.disabled = false;
+      showError(err.message);
+    }
   }
 });
 

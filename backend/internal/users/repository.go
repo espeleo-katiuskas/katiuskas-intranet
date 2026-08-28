@@ -6,10 +6,21 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("user not found")
+var (
+	ErrNotFound = errors.New("user not found")
+	// ErrHasReferences means the user can't be deleted because other
+	// records (an activity they led, an inventory transaction they're
+	// party to) still point at them — deleting would silently erase that
+	// history, so PostgreSQL's foreign keys refuse the delete instead of
+	// cascading through it.
+	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
+)
+
+const foreignKeyViolationCode = "23503"
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -130,6 +141,26 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	`, u.FirstName, u.LastName, u.Phone, u.Address, u.EmergencyContactName,
 		u.EmergencyContactPhone, id)
 	return u, err
+}
+
+// Delete removes a person's record entirely, along with their credentials,
+// refresh tokens, membership history and activity sign-ups (all ON DELETE
+// CASCADE). It's rejected by the database if the person is still referenced
+// as an activity's leader or an inventory transaction's party — that
+// history has to be reassigned or completed first.
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+		return ErrHasReferences
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) GetCredentialsByUsername(ctx context.Context, username string) (Credentials, error) {

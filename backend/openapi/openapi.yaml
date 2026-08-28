@@ -124,6 +124,19 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+    delete:
+      summary: Delete a person (and their login, membership history and activity sign-ups)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            Cannot delete: this account is the caller's own, or the person is
+            still referenced by an activity they led or an inventory
+            transaction they're party to.
 
   /users/{userID}/memberships:
     get:
