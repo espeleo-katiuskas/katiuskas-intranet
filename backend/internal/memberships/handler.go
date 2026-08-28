@@ -7,28 +7,24 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	authenticator *auth.Authenticator
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
+	return &Handler{service: service, authenticator: authenticator}
 }
 
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.With(auth.RequireRole("admin", "board")).Get("/memberships", h.listActive)
-	r.With(auth.RequireRole("admin", "board")).Patch("/memberships/{id}", h.end)
-
-	r.Route("/users/{userID}/memberships", func(r chi.Router) {
-		r.Get("/", h.listByUser)
-		r.With(auth.RequireRole("admin", "board")).Post("/", h.create)
-	})
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/memberships", h.authenticator.Protect(h.listActive, "admin", "board"))
+	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.end, "admin", "board"))
+	mux.Handle("GET /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.listByUser))
+	mux.Handle("POST /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.create, "admin", "board"))
 }
 
 func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +37,7 @@ func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
 		return
@@ -60,7 +56,7 @@ func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
 		return
@@ -93,7 +89,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) end(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return

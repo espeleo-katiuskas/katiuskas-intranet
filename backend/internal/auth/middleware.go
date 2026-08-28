@@ -59,3 +59,15 @@ func UserFromContext(ctx context.Context) (AuthenticatedUser, bool) {
 	user, ok := ctx.Value(userContextKey).(AuthenticatedUser)
 	return user, ok
 }
+
+// Protect wraps a handler with authentication and, when roles are given,
+// authorization. It's the single entry point resource handlers use to
+// register a route, so RequireAuth and RequireRole are always composed in
+// the right order (auth first, so RequireRole finds a user in context).
+func (a *Authenticator) Protect(next http.HandlerFunc, roles ...string) http.Handler {
+	var handler http.Handler = next
+	if len(roles) > 0 {
+		handler = RequireRole(roles...)(handler)
+	}
+	return a.RequireAuth(handler)
+}

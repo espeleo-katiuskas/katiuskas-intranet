@@ -5,27 +5,24 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	authenticator *auth.Authenticator
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
+	return &Handler{service: service, authenticator: authenticator}
 }
 
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Route("/users", func(r chi.Router) {
-		r.With(auth.RequireRole("admin", "board")).Get("/", h.list)
-		r.With(auth.RequireRole("admin", "board")).Post("/", h.create)
-		r.Get("/{id}", h.get)
-		r.Patch("/{id}", h.update)
-	})
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/users", h.authenticator.Protect(h.list, "admin", "board"))
+	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("GET /api/v1/users/{id}", h.authenticator.Protect(h.get))
+	mux.Handle("PATCH /api/v1/users/{id}", h.authenticator.Protect(h.update))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +54,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -76,7 +73,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return

@@ -7,31 +7,28 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	authenticator *auth.Authenticator
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
+	return &Handler{service: service, authenticator: authenticator}
 }
 
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Route("/activities", func(r chi.Router) {
-		r.Get("/", h.list)
-		r.With(auth.RequireRole("admin", "board")).Post("/", h.create)
-		r.With(auth.RequireRole("admin", "board")).Patch("/{id}", h.update)
-		r.With(auth.RequireRole("admin", "board")).Delete("/{id}", h.cancel)
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/activities", h.authenticator.Protect(h.list))
+	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update, "admin", "board"))
+	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel, "admin", "board"))
 
-		r.Get("/{id}/participants", h.listParticipants)
-		r.Post("/{id}/participants", h.join)
-		r.Delete("/{id}/participants/{userID}", h.leave)
-	})
+	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
+	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
+	mux.Handle("DELETE /api/v1/activities/{id}/participants/{userID}", h.authenticator.Protect(h.leave))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +88,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -114,7 +111,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -132,7 +129,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -146,7 +143,7 @@ func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -160,12 +157,12 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
 		return

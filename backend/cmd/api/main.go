@@ -50,12 +50,12 @@ func main() {
 	inventoryRepo := inventory.NewRepository(pool)
 	inventoryService := inventory.NewService(inventoryRepo)
 
-	router := httpapi.NewRouter(authenticator, httpapi.Routes{
+	router := httpapi.NewRouter(httpapi.Routes{
 		Auth:        authapi.NewHandler(usersService, authenticator, cfg.RefreshTokenTTL),
-		Users:       users.NewHandler(usersService),
-		Memberships: memberships.NewHandler(membershipsService),
-		Activities:  activities.NewHandler(activitiesService),
-		Inventory:   inventory.NewHandler(inventoryService),
+		Users:       users.NewHandler(usersService, authenticator),
+		Memberships: memberships.NewHandler(membershipsService, authenticator),
+		Activities:  activities.NewHandler(activitiesService, authenticator),
+		Inventory:   inventory.NewHandler(inventoryService, authenticator),
 	})
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)

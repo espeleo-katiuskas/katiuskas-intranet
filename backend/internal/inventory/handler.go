@@ -7,32 +7,27 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
 type Handler struct {
-	service *Service
+	service       *Service
+	authenticator *auth.Authenticator
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
+	return &Handler{service: service, authenticator: authenticator}
 }
 
-func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Route("/items", func(r chi.Router) {
-		r.Get("/", h.listItems)
-		r.With(auth.RequireRole("admin", "board")).Post("/", h.createItem)
-		r.Get("/{id}/transactions", h.listItemTransactions)
-	})
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/items", h.authenticator.Protect(h.listItems))
+	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board"))
+	mux.Handle("GET /api/v1/items/{id}/transactions", h.authenticator.Protect(h.listItemTransactions))
 
-	r.Route("/transactions", func(r chi.Router) {
-		r.With(auth.RequireRole("admin", "board")).Get("/", h.listTransactions)
-		r.With(auth.RequireRole("admin", "board")).Post("/", h.createTransaction)
-		r.With(auth.RequireRole("admin", "board")).Patch("/{id}/return", h.returnTransaction)
-	})
+	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions, "admin", "board"))
+	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board"))
+	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board"))
 }
 
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +57,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listItemTransactions(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
@@ -128,7 +123,7 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) returnTransaction(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
