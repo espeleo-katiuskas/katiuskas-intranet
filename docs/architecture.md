@@ -51,6 +51,10 @@ Sesión: JWT de acceso de vida corta (15 min) + refresh token opaco persistido (
 SHA-256, no el token en claro) y revocable — pensado para que un cliente de terminal
 pueda mantener sesión sin cookies de navegador.
 
+`cmd/seed-admin` crea la primera cuenta `admin`: `POST /users` ya exige ese rol, así que
+sin este comando no habría forma de entrar en una base de datos recién migrada.
+Idempotente — no hace nada si el usuario ya existe.
+
 ## Frontend (`web/`)
 
 Páginas multi-vista clásicas (no una SPA), con un cliente `fetch` compartido
@@ -63,6 +67,7 @@ página a partir del refresh token guardado en `localStorage`.
 docker compose up -d postgres
 export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up          # requiere goose: https://github.com/pressly/goose
+make seed-admin          # crea admin / changeme123
 export JWT_SECRET=dev-secret
 make run                 # sirve la API en :8080
 ```

@@ -28,6 +28,14 @@ migraciones la primera vez:
 ```sh
 export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up
+make seed-admin
 ```
+
+`seed-admin` crea la primera cuenta de administración — necesaria porque `POST /users` ya
+exige ser `admin` o `board`, así que sin ella no habría forma de entrar en una base de
+datos recién migrada. Por defecto crea `admin` / `changeme123`; para otros valores, exporta
+`SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_FIRST_NAME` o
+`SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si el usuario ya existe, no hace
+nada.
 
 Para desarrollo sin Docker, ver `docs/architecture.md`.
