@@ -21,11 +21,53 @@
 <main>
   <h1 id="profile-name">Mi perfil</h1>
   <p class="subtitle" id="profile-email"></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="panel">
+    <h3>Mis datos</h3>
+    <p class="hint">El nombre, los apellidos y el correo se gestionan desde secretaría; el resto puedes editarlo tú.</p>
+    <form id="edit-profile-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="ep-first-name">Nombre</label>
+          <input id="ep-first-name" name="first_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ep-last-name">Apellidos</label>
+          <input id="ep-last-name" name="last_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ep-phone">Teléfono</label>
+          <input id="ep-phone" name="phone" type="tel">
+        </div>
+        <div class="field span-2">
+          <label for="ep-address">Dirección</label>
+          <input id="ep-address" name="address" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-emergency-name">Contacto de emergencia</label>
+          <input id="ep-emergency-name" name="emergency_contact_name" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-emergency-phone">Teléfono de emergencia</label>
+          <input id="ep-emergency-phone" name="emergency_contact_phone" type="tel">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+
   <h2>Historial como socio</h2>
-  <table>
-    <thead><tr><th>Alta</th><th>Baja</th></tr></thead>
-    <tbody id="memberships-table-body"></tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Alta</th><th>Baja</th></tr></thead>
+      <tbody id="memberships-table-body"></tbody>
+    </table>
+  </div>
 </main>
 <script type="module" src="js/profile.js"></script>
 </body>

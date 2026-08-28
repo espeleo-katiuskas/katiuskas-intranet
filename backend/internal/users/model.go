@@ -24,6 +24,8 @@ type User struct {
 	Address               *string    `json:"address,omitempty"`
 	EmergencyContactName  *string    `json:"emergency_contact_name,omitempty"`
 	EmergencyContactPhone *string    `json:"emergency_contact_phone,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	Role                  *string    `json:"role,omitempty"`
 	CreatedAt             time.Time  `json:"created_at"`
 }
 

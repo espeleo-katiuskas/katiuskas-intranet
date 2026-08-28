@@ -1,10 +1,36 @@
-import { initSession, logout, applyRoleVisibility, apiFetch } from './api.js';
+import {
+  initSession,
+  logout,
+  applyRoleVisibility,
+  currentUser,
+  apiFetch,
+  escapeHtml,
+  formatDate,
+} from './api.js';
 
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
-const statusLabels = {
+const user = currentUser();
+const isAdmin = user?.role === 'admin' || user?.role === 'board';
+
+const feedbackBox = document.getElementById('feedback');
+const errorBox = document.getElementById('error');
+
+function showFeedback(message) {
+  errorBox.hidden = true;
+  feedbackBox.textContent = message;
+  feedbackBox.hidden = false;
+}
+
+function showError(message) {
+  feedbackBox.hidden = true;
+  errorBox.textContent = message;
+  errorBox.hidden = false;
+}
+
+const itemStatusLabels = {
   available: 'Disponible',
   on_loan: 'Prestado',
   rented: 'Alquilado',
@@ -13,23 +39,233 @@ const statusLabels = {
   retired: 'De baja',
 };
 
+const typeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
+const txStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
+
+let itemsById = {};
+
+function renderItemRow(item) {
+  return `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.category) || '—'}</td>
+      <td>${item.available_quantity} / ${item.total_quantity}</td>
+      <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
+      <td><button type="button" class="btn btn-secondary btn-small" data-toggle-item-transactions="${item.id}">Movimientos</button></td>
+    </tr>
+    <tr data-item-transactions-row="${item.id}" hidden>
+      <td colspan="5"><div class="detail-list" data-item-transactions-panel="${item.id}"></div></td>
+    </tr>
+  `;
+}
+
+function renderTransactionDetail(t) {
+  const canReturn = isAdmin && t.status === 'active' && t.type !== 'sale';
+  const dueOrReturned = t.returned_at
+    ? ` · devuelto ${formatDate(t.returned_at)}`
+    : t.due_date
+      ? ` · vence ${formatDate(t.due_date)}`
+      : '';
+  return `
+    <div class="detail-row">
+      <span>${typeLabels[t.type] ?? t.type} · Socio n.º ${t.user_id} · cantidad ${t.quantity} ·
+        ${formatDate(t.transacted_at)}${dueOrReturned} ·
+        <span class="badge">${txStatusLabels[t.status] ?? t.status}</span></span>
+      ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : ''}
+    </div>
+  `;
+}
+
 async function loadItems() {
   const tableBody = document.getElementById('items-table-body');
   try {
     const items = await apiFetch('/items');
-    tableBody.innerHTML = items
-      .map((item) => `
-        <tr>
-          <td>${item.name}</td>
-          <td>${item.category ?? '—'}</td>
-          <td>${item.available_quantity} / ${item.total_quantity}</td>
-          <td><span class="badge">${statusLabels[item.status] ?? item.status}</span></td>
-        </tr>
-      `)
-      .join('');
+    itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
+    tableBody.innerHTML = items.length
+      ? items.map(renderItemRow).join('')
+      : '<tr><td colspan="5">Todavía no hay material dado de alta.</td></tr>';
+    if (isAdmin) {
+      const select = document.getElementById('nt-item');
+      select.innerHTML = items.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+    }
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="4">No se pudo cargar el material.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el material.</td></tr>';
   }
+}
+
+document.getElementById('items-table-body').addEventListener('click', async (event) => {
+  const toggleButton = event.target.closest('button[data-toggle-item-transactions]');
+  if (toggleButton) {
+    const itemId = toggleButton.dataset.toggleItemTransactions;
+    const row = document.querySelector(`[data-item-transactions-row="${itemId}"]`);
+    row.hidden = !row.hidden;
+    if (!row.hidden) {
+      const panel = row.querySelector(`[data-item-transactions-panel="${itemId}"]`);
+      panel.innerHTML = 'Cargando…';
+      try {
+        const transactions = await apiFetch(`/items/${itemId}/transactions`);
+        panel.innerHTML = transactions.length
+          ? transactions.map(renderTransactionDetail).join('')
+          : '<p>Todavía no tiene movimientos.</p>';
+      } catch (err) {
+        panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+      }
+    }
+    return;
+  }
+
+  const returnButton = event.target.closest('button[data-return]');
+  if (returnButton) {
+    await handleReturn(returnButton);
+  }
+});
+
+async function handleReturn(button) {
+  button.disabled = true;
+  try {
+    await apiFetch(`/transactions/${button.dataset.return}/return`, { method: 'PATCH' });
+    showFeedback('Devolución registrada.');
+    await loadItems();
+    if (isAdmin) await loadActiveTransactions();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+}
+
+function renderActiveTransactionRow(t) {
+  const itemName = itemsById[t.item_id]?.name;
+  const canReturn = t.type !== 'sale';
+  return `
+    <tr>
+      <td>${itemName ? escapeHtml(itemName) : `Material n.º ${t.item_id}`}</td>
+      <td>Socio n.º ${t.user_id}</td>
+      <td>${typeLabels[t.type] ?? t.type}</td>
+      <td>${t.quantity}</td>
+      <td>${t.due_date ? formatDate(t.due_date) : '—'}</td>
+      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : '—'}</td>
+    </tr>
+  `;
+}
+
+async function loadActiveTransactions() {
+  const tableBody = document.getElementById('active-transactions-table-body');
+  try {
+    const transactions = await apiFetch('/transactions?status=active');
+    tableBody.innerHTML = transactions.length
+      ? transactions.map(renderActiveTransactionRow).join('')
+      : '<tr><td colspan="6">No hay movimientos activos.</td></tr>';
+  } catch {
+    tableBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar los movimientos.</td></tr>';
+  }
+}
+
+document.getElementById('active-transactions-table-body')?.addEventListener('click', async (event) => {
+  const returnButton = event.target.closest('button[data-return]');
+  if (returnButton) {
+    await handleReturn(returnButton);
+  }
+});
+
+if (isAdmin) {
+  const newItemPanel = document.getElementById('new-item-panel');
+  const newItemForm = document.getElementById('new-item-form');
+
+  document.getElementById('toggle-new-item').addEventListener('click', () => {
+    newItemPanel.hidden = !newItemPanel.hidden;
+  });
+
+  document.getElementById('cancel-new-item').addEventListener('click', () => {
+    newItemForm.reset();
+    newItemPanel.hidden = true;
+  });
+
+  newItemForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(newItemForm);
+    const optionalText = (key) => formData.get(key)?.toString().trim() || null;
+    const optionalNumber = (key) => (formData.get(key) ? Number(formData.get(key)) : null);
+
+    const body = {
+      name: formData.get('name'),
+      description: optionalText('description'),
+      category: optionalText('category'),
+      code: optionalText('code'),
+      total_quantity: Number(formData.get('total_quantity')) || 1,
+      rental_price_per_day: optionalNumber('rental_price_per_day'),
+      sale_price: optionalNumber('sale_price'),
+    };
+
+    const submitButton = newItemForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
+      showFeedback('Material creado.');
+      newItemForm.reset();
+      newItemPanel.hidden = true;
+      await loadItems();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  const userSelect = document.getElementById('nt-user');
+  apiFetch('/users')
+    .then((users) => {
+      userSelect.innerHTML = users
+        .map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`)
+        .join('');
+    })
+    .catch(() => {
+      userSelect.innerHTML = '<option value="">No se pudo cargar la lista de socios</option>';
+    });
+
+  const typeSelect = document.getElementById('nt-type');
+  const dueDateField = document.getElementById('nt-due-date-field');
+  const priceField = document.getElementById('nt-price-field');
+
+  function updateTransactionFieldsVisibility() {
+    const type = typeSelect.value;
+    dueDateField.hidden = type === 'sale';
+    priceField.hidden = type === 'loan';
+  }
+  typeSelect.addEventListener('change', updateTransactionFieldsVisibility);
+  updateTransactionFieldsVisibility();
+
+  const newTransactionForm = document.getElementById('new-transaction-form');
+  newTransactionForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(newTransactionForm);
+    const type = formData.get('type');
+
+    const body = {
+      item_id: Number(formData.get('item_id')),
+      user_id: Number(formData.get('user_id')),
+      type,
+      quantity: Number(formData.get('quantity')) || 1,
+      due_date: type !== 'sale' ? formData.get('due_date') || null : null,
+      price: type !== 'loan' && formData.get('price') ? Number(formData.get('price')) : null,
+    };
+
+    const submitButton = newTransactionForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(body) });
+      showFeedback('Transacción registrada.');
+      newTransactionForm.reset();
+      updateTransactionFieldsVisibility();
+      await loadItems();
+      await loadActiveTransactions();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  loadActiveTransactions();
 }
 
 loadItems();

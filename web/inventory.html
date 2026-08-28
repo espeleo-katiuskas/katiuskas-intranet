@@ -19,14 +19,118 @@
   </nav>
 </header>
 <main>
-  <h1>Material</h1>
-  <p class="subtitle">Catálogo de material del club y su disponibilidad.</p>
-  <table>
-    <thead>
-      <tr><th>Material</th><th>Categoría</th><th>Disponible</th><th>Estado</th></tr>
-    </thead>
-    <tbody id="items-table-body"></tbody>
-  </table>
+  <div class="section-header">
+    <div>
+      <h1>Material</h1>
+      <p class="subtitle">Catálogo de material del club, su disponibilidad y sus movimientos.</p>
+    </div>
+    <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">+ Nuevo material</button>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div id="new-item-panel" class="panel" hidden data-roles="admin,board">
+    <h3>Nuevo material</h3>
+    <form id="new-item-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="ni-name">Nombre</label>
+          <input id="ni-name" name="name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ni-category">Categoría <span class="optional">(opcional)</span></label>
+          <input id="ni-category" name="category" type="text">
+        </div>
+        <div class="field">
+          <label for="ni-code">Código <span class="optional">(opcional)</span></label>
+          <input id="ni-code" name="code" type="text">
+        </div>
+        <div class="field">
+          <label for="ni-total-quantity">Cantidad</label>
+          <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
+        </div>
+        <div class="field">
+          <label for="ni-rental-price">Precio de alquiler / día <span class="optional">(opcional)</span></label>
+          <input id="ni-rental-price" name="rental_price_per_day" type="number" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label for="ni-sale-price">Precio de venta <span class="optional">(opcional)</span></label>
+          <input id="ni-sale-price" name="sale_price" type="number" min="0" step="0.01">
+        </div>
+        <div class="field span-2">
+          <label for="ni-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="ni-description" name="description"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear material</button>
+        <button id="cancel-new-item" type="button" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Material</th><th>Categoría</th><th>Disponible</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="items-table-body"></tbody>
+    </table>
+  </div>
+
+  <div data-roles="admin,board">
+    <h2>Movimientos activos</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Material</th><th>Socio</th><th>Tipo</th><th>Cantidad</th><th>Vencimiento</th><th></th></tr>
+        </thead>
+        <tbody id="active-transactions-table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="section-header">
+      <h2>Nueva transacción</h2>
+    </div>
+    <div class="panel">
+      <form id="new-transaction-form">
+        <div class="field-grid">
+          <div class="field">
+            <label for="nt-item">Material</label>
+            <select id="nt-item" name="item_id" required></select>
+          </div>
+          <div class="field">
+            <label for="nt-user">Socio</label>
+            <select id="nt-user" name="user_id" required></select>
+          </div>
+          <div class="field">
+            <label for="nt-type">Tipo</label>
+            <select id="nt-type" name="type">
+              <option value="loan" selected>Préstamo</option>
+              <option value="rental">Alquiler</option>
+              <option value="sale">Venta</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="nt-quantity">Cantidad</label>
+            <input id="nt-quantity" name="quantity" type="number" min="1" value="1">
+          </div>
+          <div class="field" id="nt-due-date-field">
+            <label for="nt-due-date">Fecha de devolución prevista</label>
+            <input id="nt-due-date" name="due_date" type="date">
+          </div>
+          <div class="field" id="nt-price-field" hidden>
+            <label for="nt-price">Precio</label>
+            <input id="nt-price" name="price" type="number" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="submit" class="btn btn-primary">Registrar transacción</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </main>
 <script type="module" src="js/inventory.js"></script>
 </body>

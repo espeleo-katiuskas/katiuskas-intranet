@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
@@ -37,15 +38,54 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var in CreateInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	var body struct {
+		FirstName             string  `json:"first_name"`
+		LastName              string  `json:"last_name"`
+		NationalID            *string `json:"national_id"`
+		BirthDate             *string `json:"birth_date"`
+		Email                 string  `json:"email"`
+		Phone                 *string `json:"phone"`
+		Address               *string `json:"address"`
+		EmergencyContactName  *string `json:"emergency_contact_name"`
+		EmergencyContactPhone *string `json:"emergency_contact_phone"`
+		Username              string  `json:"username"`
+		Password              string  `json:"password"`
+		Role                  Role    `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if in.Role == "" {
-		in.Role = RoleMember
+
+	var birthDate *time.Time
+	if body.BirthDate != nil && *body.BirthDate != "" {
+		d, err := time.Parse("2006-01-02", *body.BirthDate)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
+			return
+		}
+		birthDate = &d
 	}
-	user, err := h.service.Create(r.Context(), in)
+
+	role := body.Role
+	if role == "" {
+		role = RoleMember
+	}
+
+	user, err := h.service.Create(r.Context(), CreateInput{
+		FirstName:             body.FirstName,
+		LastName:              body.LastName,
+		NationalID:            body.NationalID,
+		BirthDate:             birthDate,
+		Email:                 body.Email,
+		Phone:                 body.Phone,
+		Address:               body.Address,
+		EmergencyContactName:  body.EmergencyContactName,
+		EmergencyContactPhone: body.EmergencyContactPhone,
+		Username:              body.Username,
+		Password:              body.Password,
+		Role:                  role,
+	})
 	if err != nil {
 		httpapi.WriteError(w, http.StatusConflict, "create_failed", err.Error())
 		return

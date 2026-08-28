@@ -1,11 +1,13 @@
 :root {
   --bg: #f4f5f1;
   --surface: #ffffff;
+  --surface-muted: #f7f8f5;
   --ink: #1c211e;
   --ink-muted: #5b625c;
   --accent: #b4732e;
   --line: #dcded7;
   --danger: #a1453d;
+  --success: #4c7a52;
 }
 
 * {
@@ -70,6 +72,22 @@ p.subtitle {
   margin-top: 0;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.section-header h2 {
+  margin-top: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -118,6 +136,46 @@ th {
   margin: 0;
   color: var(--ink-muted);
   font-size: 0.88rem;
+}
+
+.card .card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.card select.status-select {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.card .edit-fields {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-list {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+
+.detail-list .detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .badge {
@@ -187,6 +245,15 @@ form.form-panel button {
   margin-top: 14px;
 }
 
+.success-message {
+  background: #e8f0e9;
+  color: var(--success);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  margin-top: 14px;
+}
+
 button.link-button {
   background: none;
   border: none;
@@ -194,4 +261,121 @@ button.link-button {
   cursor: pointer;
   font-size: 0.88rem;
   padding: 4px 8px;
+}
+
+/* Generic panel: bordered box used for creation forms and grouped actions. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-top: 16px;
+}
+
+.panel h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.panel p.hint {
+  margin: 0 0 16px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+/* Field grid: label-above-input pairs, wrapping into columns on wide screens. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field.span-2 {
+  grid-column: span 2;
+}
+
+.field label {
+  font-size: 0.85rem;
+}
+
+.field .optional {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+/* Buttons: one shared base, three intents, one size variant. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.btn-danger {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--danger);
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }

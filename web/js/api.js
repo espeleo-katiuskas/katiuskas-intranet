@@ -100,6 +100,18 @@ function setAccessTokenFromLogin(token) {
   accessToken = token;
 }
 
+// Escapes text before it's interpolated into an innerHTML template, since
+// several forms now let admins enter free text (descriptions, notes,
+// names) that gets rendered back into tables.
+function escapeHtml(value) {
+  const chars = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(value ?? '').replace(/[&<>"']/g, (char) => chars[char]);
+}
+
+function formatDate(isoDate) {
+  return new Date(isoDate).toLocaleDateString('es-ES');
+}
+
 export {
   apiFetch,
   initSession,
@@ -107,4 +119,6 @@ export {
   currentUser,
   applyRoleVisibility,
   setAccessTokenFromLogin,
+  escapeHtml,
+  formatDate,
 };

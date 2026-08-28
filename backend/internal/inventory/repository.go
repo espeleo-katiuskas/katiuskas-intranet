@@ -5,13 +5,21 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
 	ErrNotFound          = errors.New("item or transaction not found")
 	ErrInsufficientStock = errors.New("not enough available quantity")
+	ErrCannotReturnSale  = errors.New("sale transactions cannot be returned")
 )
+
+// saleHasNoReturnConstraint is the CHECK constraint (see migration 00005)
+// that keeps a sale from ever getting a returned_at date. ReturnTransaction
+// relies on it as the single source of truth for "is this returnable"
+// instead of duplicating the type check in Go.
+const saleHasNoReturnConstraint = "sale_has_no_return"
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -122,6 +130,10 @@ func (r *Repository) ReturnTransaction(ctx context.Context, id int64) (Transacti
 			price, status, recorded_by
 	`, id).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt, &t.DueDate,
 		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.ConstraintName == saleHasNoReturnConstraint {
+		return t, ErrCannotReturnSale
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, ErrNotFound
 	}

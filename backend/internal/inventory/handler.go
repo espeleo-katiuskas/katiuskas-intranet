@@ -133,6 +133,10 @@ func (h *Handler) returnTransaction(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "active transaction not found")
 		return
 	}
+	if errors.Is(err, ErrCannotReturnSale) {
+		httpapi.WriteError(w, http.StatusConflict, "cannot_return_sale", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not return transaction")
 		return

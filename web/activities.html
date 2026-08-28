@@ -19,8 +19,67 @@
   </nav>
 </header>
 <main>
-  <h1>Actividades</h1>
-  <p class="subtitle">Próximas salidas y actividades del club.</p>
+  <div class="section-header">
+    <div>
+      <h1>Actividades</h1>
+      <p class="subtitle">Próximas salidas y actividades del club.</p>
+    </div>
+    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">+ Nueva actividad</button>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div id="new-activity-panel" class="panel" hidden data-roles="admin,board">
+    <h3>Nueva actividad</h3>
+    <form id="new-activity-form">
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="na-title">Título</label>
+          <input id="na-title" name="title" type="text" required>
+        </div>
+        <div class="field">
+          <label for="na-type">Tipo</label>
+          <select id="na-type" name="type">
+            <option value="caving" selected>Espeleología</option>
+            <option value="training">Formación</option>
+            <option value="outdoor">Exterior</option>
+            <option value="social">Social</option>
+            <option value="other">Otra</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="na-location">Lugar</label>
+          <input id="na-location" name="location" type="text" required>
+        </div>
+        <div class="field">
+          <label for="na-start-date">Fecha de inicio</label>
+          <input id="na-start-date" name="start_date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="na-end-date">Fecha de fin <span class="optional">(opcional)</span></label>
+          <input id="na-end-date" name="end_date" type="date">
+        </div>
+        <div class="field">
+          <label for="na-difficulty">Dificultad 1–5 <span class="optional">(opcional)</span></label>
+          <input id="na-difficulty" name="difficulty" type="number" min="1" max="5">
+        </div>
+        <div class="field">
+          <label for="na-max-participants">Plazas <span class="optional">(opcional)</span></label>
+          <input id="na-max-participants" name="max_participants" type="number" min="1">
+        </div>
+        <div class="field span-2">
+          <label for="na-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="na-description" name="description"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear actividad</button>
+        <button id="cancel-new-activity" type="button" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
   <div class="card-grid" id="activities-list"></div>
 </main>
 <script type="module" src="js/activities.js"></script>

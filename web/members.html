@@ -20,13 +20,98 @@
 </header>
 <main>
   <h1>Socios</h1>
-  <p class="subtitle">Socios con alta vigente en el club.</p>
-  <table>
-    <thead>
-      <tr><th>Nombre</th><th>N.º de socio</th><th>Alta</th></tr>
-    </thead>
-    <tbody id="members-table-body"></tbody>
-  </table>
+  <p class="subtitle">Altas, bajas y personas registradas en el club.</p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <h2>Socios activos</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>N.º de socio</th><th>Alta</th><th></th></tr>
+      </thead>
+      <tbody id="memberships-table-body"></tbody>
+    </table>
+  </div>
+
+  <div class="section-header">
+    <h2>Todas las personas</h2>
+    <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small">+ Nueva persona</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>Email</th><th>Rol</th><th></th></tr>
+      </thead>
+      <tbody id="users-table-body"></tbody>
+    </table>
+  </div>
+
+  <div id="new-person-panel" class="panel" hidden>
+    <h3>Nueva persona</h3>
+    <p class="hint">Crea la ficha y, si quieres, dale acceso a la intranet con un usuario y una contraseña.</p>
+    <form id="new-person-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="np-first-name">Nombre</label>
+          <input id="np-first-name" name="first_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="np-last-name">Apellidos</label>
+          <input id="np-last-name" name="last_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="np-email">Email</label>
+          <input id="np-email" name="email" type="email" required>
+        </div>
+        <div class="field">
+          <label for="np-phone">Teléfono <span class="optional">(opcional)</span></label>
+          <input id="np-phone" name="phone" type="tel">
+        </div>
+        <div class="field">
+          <label for="np-national-id">DNI <span class="optional">(opcional)</span></label>
+          <input id="np-national-id" name="national_id" type="text">
+        </div>
+        <div class="field">
+          <label for="np-birth-date">Fecha de nacimiento <span class="optional">(opcional)</span></label>
+          <input id="np-birth-date" name="birth_date" type="date">
+        </div>
+        <div class="field span-2">
+          <label for="np-address">Dirección <span class="optional">(opcional)</span></label>
+          <input id="np-address" name="address" type="text">
+        </div>
+        <div class="field">
+          <label for="np-emergency-name">Contacto de emergencia <span class="optional">(opcional)</span></label>
+          <input id="np-emergency-name" name="emergency_contact_name" type="text">
+        </div>
+        <div class="field">
+          <label for="np-emergency-phone">Teléfono de emergencia <span class="optional">(opcional)</span></label>
+          <input id="np-emergency-phone" name="emergency_contact_phone" type="tel">
+        </div>
+        <div class="field">
+          <label for="np-username">Usuario de acceso</label>
+          <input id="np-username" name="username" type="text" required>
+        </div>
+        <div class="field">
+          <label for="np-password">Contraseña</label>
+          <input id="np-password" name="password" type="text" required>
+        </div>
+        <div class="field">
+          <label for="np-role">Rol</label>
+          <select id="np-role" name="role">
+            <option value="member" selected>Socio</option>
+            <option value="board">Directiva</option>
+            <option value="admin">Administración</option>
+          </select>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear persona</button>
+        <button id="cancel-new-person" type="button" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
 </main>
 <script type="module" src="js/members.js"></script>
 </body>

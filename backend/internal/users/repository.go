@@ -48,6 +48,8 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 	if err != nil {
 		return u, err
 	}
+	username, role := in.Username, string(in.Role)
+	u.Username, u.Role = &username, &role
 
 	return u, tx.Commit(ctx)
 }
@@ -55,11 +57,15 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact_name, emergency_contact_phone, created_at
-		FROM users WHERE id = $1
+		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+			u.address, u.emergency_contact_name, u.emergency_contact_phone, u.created_at,
+			c.username, c.role
+		FROM users u
+		LEFT JOIN credentials c ON c.user_id = u.id
+		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.EmergencyContactName, &u.EmergencyContactPhone, &u.CreatedAt)
+		&u.Phone, &u.Address, &u.EmergencyContactName, &u.EmergencyContactPhone, &u.CreatedAt,
+		&u.Username, &u.Role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -68,9 +74,12 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact_name, emergency_contact_phone, created_at
-		FROM users ORDER BY last_name, first_name LIMIT $1 OFFSET $2
+		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+			u.address, u.emergency_contact_name, u.emergency_contact_phone, u.created_at,
+			c.username, c.role
+		FROM users u
+		LEFT JOIN credentials c ON c.user_id = u.id
+		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
 		return nil, err
@@ -82,7 +91,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
 			&u.Email, &u.Phone, &u.Address, &u.EmergencyContactName,
-			&u.EmergencyContactPhone, &u.CreatedAt); err != nil {
+			&u.EmergencyContactPhone, &u.CreatedAt, &u.Username, &u.Role); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
