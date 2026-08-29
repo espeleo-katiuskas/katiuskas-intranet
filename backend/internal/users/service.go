@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/roles"
 )
 
@@ -17,18 +16,14 @@ func NewService(repo *Repository, rolesService *roles.Service) *Service {
 	return &Service{repo: repo, roles: rolesService}
 }
 
-// Create inserts the person and their credentials, then assigns their
-// roles as a separate step (defaulting to "member" if none were given).
-// That second step isn't part of the same database transaction as the
-// insert — a club-scale app doesn't need cross-package transactions for
-// this, but it does mean a role-assignment failure leaves a person record
-// behind with no roles rather than rolling back the whole creation.
+// Create inserts the person, optionally grants them access, then assigns
+// their roles as a separate step (defaulting to "member" if none were
+// given). Neither of those two follow-on steps is part of the same
+// database transaction as the insert — a club-scale app doesn't need
+// cross-package transactions for this, but it does mean a failure there
+// leaves a person record behind that didn't get everything requested.
 func (s *Service) Create(ctx context.Context, in CreateInput) (User, error) {
-	hash, err := auth.HashPassword(in.Password)
-	if err != nil {
-		return User{}, err
-	}
-	user, err := s.repo.Create(ctx, in, hash)
+	user, err := s.repo.Create(ctx, in)
 	if err != nil {
 		return user, err
 	}
@@ -73,19 +68,12 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *Service) VerifyCredentials(ctx context.Context, username, password string) (Credentials, error) {
-	creds, err := s.repo.GetCredentialsByUsername(ctx, username)
-	if err != nil {
-		return creds, err
-	}
-	if !creds.IsActive || !auth.VerifyPassword(creds.PasswordHash, password) {
-		return creds, auth.ErrInvalidCredentials
-	}
-	return creds, nil
+func (s *Service) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
+	return s.repo.FindActiveByEmailAndPhone(ctx, email, phone)
 }
 
-func (s *Service) GetCredentialsByUserID(ctx context.Context, userID int64) (Credentials, error) {
-	return s.repo.GetCredentialsByUserID(ctx, userID)
+func (s *Service) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
+	return s.repo.GetAccountByUserID(ctx, userID)
 }
 
 func (s *Service) TouchLastLogin(ctx context.Context, userID int64) error {
@@ -102,4 +90,16 @@ func (s *Service) ResolveRefreshToken(ctx context.Context, tokenHash string) (in
 
 func (s *Service) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
 	return s.repo.RevokeRefreshToken(ctx, tokenHash)
+}
+
+func (s *Service) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	return s.repo.CreateMagicLinkToken(ctx, userID, tokenHash, expiresAt)
+}
+
+func (s *Service) ConsumeMagicLinkToken(ctx context.Context, tokenHash string) (int64, error) {
+	return s.repo.ConsumeMagicLinkToken(ctx, tokenHash)
+}
+
+func (s *Service) HasRecentMagicLinkToken(ctx context.Context, userID int64, since time.Time) (bool, error) {
+	return s.repo.HasRecentMagicLinkToken(ctx, userID, since)
 }

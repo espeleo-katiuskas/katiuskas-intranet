@@ -193,6 +193,7 @@ function renderUserRow(person) {
     <tr>
       <td>${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</td>
       <td>${escapeHtml(person.email)}</td>
+      <td>${person.has_access ? '<span class="badge status-completed">Con acceso</span>' : '<span class="badge">Sin acceso</span>'}</td>
       <td>${renderRoleBadges(person)}${renderRoleAddControl(person)}</td>
       <td class="table-actions">
         <button type="button" class="btn btn-secondary btn-small" data-start-membership="${person.id}">Dar de alta</button>
@@ -201,7 +202,7 @@ function renderUserRow(person) {
       </td>
     </tr>
     <tr data-edit-person-row="${person.id}" hidden>
-      <td colspan="4">
+      <td colspan="5">
         <div class="edit-fields">
           <div class="field-grid">
             <div class="field">
@@ -262,9 +263,9 @@ async function loadUsers() {
     const users = await apiFetch('/users');
     tableBody.innerHTML = users.length
       ? users.map(renderUserRow).join('')
-      : '<tr><td colspan="4">Todavía no hay personas registradas.</td></tr>';
+      : '<tr><td colspan="5">Todavía no hay personas registradas.</td></tr>';
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="4">No se pudo cargar la lista de personas.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar la lista de personas.</td></tr>';
   }
 }
 
@@ -422,12 +423,19 @@ newPersonForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(newPersonForm);
   const optional = (key) => formData.get(key)?.toString().trim() || null;
+  const grantAccess = formData.get('grant_access') === 'on';
+  const phone = optional('phone');
+
+  if (grantAccess && !phone) {
+    showError('El teléfono es obligatorio para dar acceso a la intranet.');
+    return;
+  }
 
   const body = {
     first_name: formData.get('first_name'),
     last_name: formData.get('last_name'),
     email: formData.get('email'),
-    phone: optional('phone'),
+    phone,
     national_id: optional('national_id'),
     birth_date: optional('birth_date'),
     address: optional('address'),
@@ -435,8 +443,7 @@ newPersonForm.addEventListener('submit', async (event) => {
     city: optional('city'),
     province: optional('province'),
     emergency_contact: optional('emergency_contact'),
-    username: formData.get('username'),
-    password: formData.get('password'),
+    grant_access: grantAccess,
     role_names: formData.getAll('role_names'),
   };
 

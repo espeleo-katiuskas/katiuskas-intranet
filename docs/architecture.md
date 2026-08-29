@@ -26,8 +26,13 @@ en `backend/openapi/openapi.yaml`.
 ## Modelo de datos (`db/migrations/`)
 
 - **`users`** — datos personales de cualquier persona vinculada al club.
-- **`credentials`** — usuario/contraseña, 1 a 1 con `users`. Separada de `users` porque
-  no toda persona registrada tiene acceso web.
+- **`accounts`** — si una persona puede o no entrar (más si está activa), 1 a 1 con
+  `users`. Separada de `users` porque no toda persona registrada tiene acceso web. No
+  hay contraseñas: el acceso se concede o no, y punto.
+- **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
+  marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
+  persona; solo si ambos coinciden con una cuenta activa se genera uno y se envía por
+  correo — así no sirve para averiguar quién es socio ni para mandar correo no deseado.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board` y `member` son roles de
   *sistema* (`is_system`): son los únicos a los que el código realmente da permisos, y
@@ -46,19 +51,24 @@ en `backend/openapi/openapi.yaml`.
 ## Backend (`backend/`)
 
 Capas separadas por paquete: `internal/httpapi` (router y helpers HTTP), `internal/auth`
-(contraseñas con bcrypt, JWT, middleware de autenticación/autorización), `internal/authapi`
-(login/refresh/logout) y un paquete por recurso de dominio (`users`, `memberships`,
-`activities`, `inventory`), cada uno con `model.go` / `repository.go` (pgx) / `service.go`
-/ `handler.go`. El dominio no depende de `net/http`; el handler es la única capa que sabe
+(JWT, middleware de autenticación/autorización — ya no hay contraseñas que gestionar),
+`internal/mail` (envío de correo: registra el mensaje en el log si no hay `SMTP_HOST`
+configurado, lo manda de verdad si lo hay), `internal/authapi` (magic-link/refresh/logout)
+y un paquete por recurso de dominio (`users`, `roles`, `memberships`, `activities`,
+`inventory`), cada uno con `model.go` / `repository.go` (pgx) / `service.go` /
+`handler.go`. El dominio no depende de `net/http`; el handler es la única capa que sabe
 que existe HTTP.
 
 Sesión: JWT de acceso de vida corta (15 min) + refresh token opaco persistido (hash
 SHA-256, no el token en claro) y revocable — pensado para que un cliente de terminal
-pueda mantener sesión sin cookies de navegador.
+pueda mantener sesión sin cookies de navegador. Empezarla requiere primero un enlace de
+`/auth/magic-link` (15 min de validez, un solo uso).
 
 `cmd/seed-admin` crea la primera cuenta `admin`: `POST /users` ya exige ese rol, así que
 sin este comando no habría forma de entrar en una base de datos recién migrada.
-Idempotente — no hace nada si el usuario ya existe.
+Idempotente — no hace nada si el email ya existe. Como no hay contraseña, para entrar
+hay que pedir un enlace desde la página de acceso con `SEED_ADMIN_EMAIL` y
+`SEED_ADMIN_PHONE`, y mirar los logs de la API (o el buzón, si hay SMTP configurado).
 
 ## Frontend (`web/`)
 
@@ -72,7 +82,7 @@ página a partir del refresh token guardado en `localStorage`.
 docker compose up -d postgres
 export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up          # requiere goose: https://github.com/pressly/goose
-make seed-admin          # crea admin / changeme123
+make seed-admin          # crea la cuenta admin (sin contraseña: acceso por magic link)
 export JWT_SECRET=dev-secret
 make run                 # sirve la API en :8080
 ```

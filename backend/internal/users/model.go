@@ -1,6 +1,6 @@
-// Package users manages personal data and login credentials. A person can
-// exist here without ever getting a login (Credentials), which is why the
-// two are kept in separate tables behind a single package.
+// Package users manages personal data and login access. A person can exist
+// here without ever getting access (Account), which is why the two are
+// kept in separate tables behind a single package.
 package users
 
 import "time"
@@ -18,9 +18,11 @@ type User struct {
 	City             *string    `json:"city,omitempty"`
 	Province         *string    `json:"province,omitempty"`
 	EmergencyContact *string    `json:"emergency_contact,omitempty"`
-	Username         *string    `json:"username,omitempty"`
-	Roles            []string   `json:"roles"`
-	CreatedAt        time.Time  `json:"created_at"`
+	// HasAccess is whether this person can sign in at all (has an accounts
+	// row). It says nothing about *which* roles they hold.
+	HasAccess bool      `json:"has_access"`
+	Roles     []string  `json:"roles"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type CreateInput struct {
@@ -35,8 +37,10 @@ type CreateInput struct {
 	City             *string    `json:"city"`
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
-	Username         string     `json:"username"`
-	Password         string     `json:"password"`
+	// GrantAccess creates an accounts row so this person can sign in with
+	// a magic link. Since that link is only ever requested by matching
+	// email *and* phone, Phone is required when this is true.
+	GrantAccess bool `json:"grant_access"`
 	// RoleNames defaults to ["member"] when empty (see handler).
 	RoleNames []string `json:"role_names"`
 }
@@ -59,9 +63,9 @@ type UpdateInput struct {
 	EmergencyContact *string    `json:"emergency_contact"`
 }
 
-type Credentials struct {
-	UserID       int64
-	Username     string
-	PasswordHash string
-	IsActive     bool
+// Account is a person's ability to sign in at all — separate from Roles,
+// which govern what they can do once signed in.
+type Account struct {
+	UserID   int64
+	IsActive bool
 }

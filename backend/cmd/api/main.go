@@ -13,6 +13,7 @@ import (
 	"katiuskas-intranet/backend/internal/config"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/inventory"
+	"katiuskas-intranet/backend/internal/mail"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/platform/db"
 	"katiuskas-intranet/backend/internal/roles"
@@ -54,8 +55,15 @@ func main() {
 	inventoryRepo := inventory.NewRepository(pool)
 	inventoryService := inventory.NewService(inventoryRepo)
 
+	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth:        authapi.NewHandler(usersService, rolesService, authenticator, cfg.RefreshTokenTTL),
+		Auth: authapi.NewHandler(usersService, rolesService, authenticator, mailer, authapi.Options{
+			RefreshTTL:        cfg.RefreshTokenTTL,
+			MagicLinkTTL:      cfg.MagicLinkTTL,
+			MagicLinkCooldown: cfg.MagicLinkCooldown,
+			PublicBaseURL:     cfg.PublicBaseURL,
+		}),
 		Users:       users.NewHandler(usersService, authenticator),
 		Roles:       roles.NewHandler(rolesService, authenticator),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),

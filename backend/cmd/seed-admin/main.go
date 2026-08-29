@@ -3,7 +3,12 @@
 // It exists because POST /api/v1/users already requires an admin or board
 // account to call it: without this command there would be no way into a
 // freshly migrated database at all. Safe to run more than once — if the
-// username already has an account, it does nothing.
+// email already has an account, it does nothing.
+//
+// There's no password to report: sign-in is by magic link. Request one
+// from the login page with SEED_ADMIN_EMAIL and SEED_ADMIN_PHONE, then
+// check the API's logs for the link (or your SMTP inbox, if SMTP_* is
+// configured).
 package main
 
 import (
@@ -38,18 +43,13 @@ func main() {
 	rolesService := roles.NewService(roles.NewRepository(pool))
 	service := users.NewService(repo, rolesService)
 
-	username := getEnv("SEED_ADMIN_USERNAME", "admin")
 	email := getEnv("SEED_ADMIN_EMAIL", "admin@club.test")
+	phone := getEnv("SEED_ADMIN_PHONE", "600000000")
 	firstName := getEnv("SEED_ADMIN_FIRST_NAME", "Admin")
 	lastName := getEnv("SEED_ADMIN_LAST_NAME", "Club")
-	password := os.Getenv("SEED_ADMIN_PASSWORD")
-	usingDefaultPassword := password == ""
-	if usingDefaultPassword {
-		password = "changeme123"
-	}
 
-	if _, err := repo.GetCredentialsByUsername(ctx, username); err == nil {
-		slog.Info("admin account already exists, nothing to do", "username", username)
+	if _, err := repo.GetByEmail(ctx, email); err == nil {
+		slog.Info("admin account already exists, nothing to do", "email", email)
 		return
 	} else if !errors.Is(err, users.ErrNotFound) {
 		fmt.Fprintf(os.Stderr, "check for an existing account: %v\n", err)
@@ -57,22 +57,21 @@ func main() {
 	}
 
 	_, err = service.Create(ctx, users.CreateInput{
-		FirstName: firstName,
-		LastName:  lastName,
-		Email:     email,
-		Username:  username,
-		Password:  password,
-		RoleNames: []string{"admin"},
+		FirstName:   firstName,
+		LastName:    lastName,
+		Email:       email,
+		Phone:       &phone,
+		GrantAccess: true,
+		RoleNames:   []string{"admin"},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create admin account: %v\n", err)
 		os.Exit(1)
 	}
 
-	slog.Info("admin account created", "username", username, "email", email)
-	if usingDefaultPassword {
-		slog.Warn("created with the default seed password, only fit for local development", "password", password)
-	}
+	slog.Info("admin account created", "email", email, "phone", phone)
+	slog.Info("to sign in: request a magic link from the login page with this email and phone, " +
+		"then check the API's logs (or your SMTP inbox, if configured) for the link")
 }
 
 func getEnv(key, fallback string) string {

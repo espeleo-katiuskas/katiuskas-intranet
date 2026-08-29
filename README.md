@@ -33,9 +33,13 @@ make seed-admin
 
 `seed-admin` crea la primera cuenta de administración — necesaria porque `POST /users` ya
 exige ser `admin` o `board`, así que sin ella no habría forma de entrar en una base de
-datos recién migrada. Por defecto crea `admin` / `changeme123`; para otros valores, exporta
-`SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_FIRST_NAME` o
-`SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si el usuario ya existe, no hace
-nada.
+datos recién migrada. No hay contraseña: por defecto crea `admin@club.test` con el
+teléfono `600000000`; para otros valores, exporta `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PHONE`,
+`SEED_ADMIN_FIRST_NAME` o `SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si
+el email ya existe, no hace nada.
+
+Para entrar, ve a `http://localhost:8000/login.html`, escribe ese email y ese teléfono, y
+mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
+sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
 Para desarrollo sin Docker, ver `docs/architecture.md`.

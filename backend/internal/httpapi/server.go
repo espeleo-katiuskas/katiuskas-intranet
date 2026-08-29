@@ -4,7 +4,8 @@ import "net/http"
 
 // AuthHandler exposes the public, unauthenticated session endpoints.
 type AuthHandler interface {
-	Login(w http.ResponseWriter, r *http.Request)
+	RequestMagicLink(w http.ResponseWriter, r *http.Request)
+	ConsumeMagicLink(w http.ResponseWriter, r *http.Request)
 	Refresh(w http.ResponseWriter, r *http.Request)
 	Logout(w http.ResponseWriter, r *http.Request)
 }
@@ -27,7 +28,8 @@ type Routes struct {
 func NewRouter(routes Routes) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /api/v1/auth/login", routes.Auth.Login)
+	mux.HandleFunc("POST /api/v1/auth/magic-link", routes.Auth.RequestMagicLink)
+	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", routes.Auth.ConsumeMagicLink)
 	mux.HandleFunc("POST /api/v1/auth/refresh", routes.Auth.Refresh)
 	mux.HandleFunc("POST /api/v1/auth/logout", routes.Auth.Logout)
 

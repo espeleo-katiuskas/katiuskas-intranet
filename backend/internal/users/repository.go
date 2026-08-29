@@ -21,12 +21,27 @@ var (
 	// ErrDuplicate means the email or national ID being set already
 	// belongs to another person.
 	ErrDuplicate = errors.New("email or national ID already belongs to another person")
+	// ErrInvalidToken means a magic-link token doesn't exist, already got
+	// used, or expired. It's intentionally the same error for all three
+	// cases — there's nothing useful (or safe) to tell the caller apart.
+	ErrInvalidToken = errors.New("invalid or expired token")
 )
 
 const (
 	foreignKeyViolationCode = "23503"
 	uniqueViolationCode     = "23505"
 )
+
+// hasAccessAndRolesSelect is appended to every query that returns a User:
+// whether they have an accounts row at all, and the names of the roles
+// they hold (never NULL — an empty array when they have none).
+const hasAccessAndRolesSelect = `
+	EXISTS(SELECT 1 FROM accounts a WHERE a.user_id = u.id) AS has_access,
+	COALESCE(
+		(SELECT array_agg(r.name ORDER BY r.name) FROM user_roles ur
+			JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id),
+		ARRAY[]::text[]
+	) AS roles`
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -36,7 +51,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash string) (User, error) {
+func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	var u User
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -62,15 +77,12 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 		return u, err
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO credentials (user_id, username, password_hash)
-		VALUES ($1,$2,$3)
-	`, u.ID, in.Username, passwordHash)
-	if err != nil {
-		return u, err
+	if in.GrantAccess {
+		if _, err = tx.Exec(ctx, `INSERT INTO accounts (user_id) VALUES ($1)`, u.ID); err != nil {
+			return u, err
+		}
+		u.HasAccess = true
 	}
-	username := in.Username
-	u.Username = &username
 
 	return u, tx.Commit(ctx)
 }
@@ -80,36 +92,41 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			c.username, `+rolesSubquery+`
+			`+hasAccessAndRolesSelect+`
 		FROM users u
-		LEFT JOIN credentials c ON c.user_id = u.id
 		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.Username, &u.Roles)
+		&u.CreatedAt, &u.HasAccess, &u.Roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
 	return u, err
 }
 
-// rolesSubquery aggregates a user's role names as a text[], never NULL, so
-// it can be selected as one extra column and scanned straight into a Go
-// []string.
-const rolesSubquery = `
-	COALESCE(
-		(SELECT array_agg(r.name ORDER BY r.name) FROM user_roles ur
-			JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id),
-		ARRAY[]::text[]
-	) AS roles`
+func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error) {
+	var u User
+	err := r.pool.QueryRow(ctx, `
+		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
+			`+hasAccessAndRolesSelect+`
+		FROM users u
+		WHERE u.email = $1
+	`, email).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
+		&u.CreatedAt, &u.HasAccess, &u.Roles)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
 
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			c.username, `+rolesSubquery+`
+			`+hasAccessAndRolesSelect+`
 		FROM users u
-		LEFT JOIN credentials c ON c.user_id = u.id
 		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -122,12 +139,38 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
 			&u.Email, &u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province,
-			&u.EmergencyContact, &u.CreatedAt, &u.Username, &u.Roles); err != nil {
+			&u.EmergencyContact, &u.CreatedAt, &u.HasAccess, &u.Roles); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
 	}
 	return list, rows.Err()
+}
+
+// FindActiveByEmailAndPhone is the login lookup: matches an active
+// account by email and phone (digits only, so formatting differences
+// don't matter), or ErrNotFound for absolutely any other reason — wrong
+// phone, unknown email, no account, or a deactivated one. The caller must
+// not distinguish between those cases in its response.
+func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
+	var u User
+	err := r.pool.QueryRow(ctx, `
+		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
+			`+hasAccessAndRolesSelect+`
+		FROM users u
+		JOIN accounts a ON a.user_id = u.id AND a.is_active
+		WHERE u.email = $1
+			AND u.phone IS NOT NULL
+			AND regexp_replace(u.phone, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
+			AND regexp_replace($2, '\D', '', 'g') <> ''
+	`, email, phone).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
+		&u.CreatedAt, &u.HasAccess, &u.Roles)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
 }
 
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {
@@ -183,11 +226,12 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	return u, err
 }
 
-// Delete removes a person's record entirely, along with their credentials,
-// refresh tokens, membership history and activity sign-ups (all ON DELETE
-// CASCADE). It's rejected by the database if the person is still referenced
-// as an activity's leader or an inventory transaction's party — that
-// history has to be reassigned or completed first.
+// Delete removes a person's record entirely, along with their account,
+// refresh tokens, magic-link tokens, membership history and activity
+// sign-ups (all ON DELETE CASCADE). It's rejected by the database if the
+// person is still referenced as an activity's leader or an inventory
+// transaction's party — that history has to be reassigned or completed
+// first.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	var pgErr *pgconn.PgError
@@ -203,32 +247,19 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *Repository) GetCredentialsByUsername(ctx context.Context, username string) (Credentials, error) {
-	var c Credentials
+func (r *Repository) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
+	var a Account
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, username, password_hash, is_active
-		FROM credentials WHERE username = $1
-	`, username).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.IsActive)
+		SELECT user_id, is_active FROM accounts WHERE user_id = $1
+	`, userID).Scan(&a.UserID, &a.IsActive)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return c, ErrNotFound
+		return a, ErrNotFound
 	}
-	return c, err
-}
-
-func (r *Repository) GetCredentialsByUserID(ctx context.Context, userID int64) (Credentials, error) {
-	var c Credentials
-	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, username, password_hash, is_active
-		FROM credentials WHERE user_id = $1
-	`, userID).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.IsActive)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return c, ErrNotFound
-	}
-	return c, err
+	return a, err
 }
 
 func (r *Repository) TouchLastLogin(ctx context.Context, userID int64) error {
-	_, err := r.pool.Exec(ctx, `UPDATE credentials SET last_login_at = now() WHERE user_id = $1`, userID)
+	_, err := r.pool.Exec(ctx, `UPDATE accounts SET last_login_at = now() WHERE user_id = $1`, userID)
 	return err
 }
 
@@ -253,4 +284,41 @@ func (r *Repository) GetRefreshToken(ctx context.Context, tokenHash string) (use
 func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1`, tokenHash)
 	return err
+}
+
+// CreateMagicLinkToken stores the hash of a freshly issued sign-in link.
+func (r *Repository) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO magic_link_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)
+	`, userID, tokenHash, expiresAt)
+	return err
+}
+
+// ConsumeMagicLinkToken atomically marks a token used and returns whose it
+// was, or ErrInvalidToken if it doesn't exist, already got used, or
+// expired — so a token can never be replayed.
+func (r *Repository) ConsumeMagicLinkToken(ctx context.Context, tokenHash string) (int64, error) {
+	var userID int64
+	err := r.pool.QueryRow(ctx, `
+		UPDATE magic_link_tokens SET consumed_at = now()
+		WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
+		RETURNING user_id
+	`, tokenHash).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrInvalidToken
+	}
+	return userID, err
+}
+
+// HasRecentMagicLinkToken reports whether userID already requested a link
+// within the cooldown window, so a repeated request doesn't spam their
+// inbox (or let someone else spam it).
+func (r *Repository) HasRecentMagicLinkToken(ctx context.Context, userID int64, since time.Time) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM magic_link_tokens WHERE user_id = $1 AND created_at > $2
+		)
+	`, userID, since).Scan(&exists)
+	return exists, err
 }

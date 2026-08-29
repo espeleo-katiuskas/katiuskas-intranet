@@ -53,8 +53,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		City             *string  `json:"city"`
 		Province         *string  `json:"province"`
 		EmergencyContact *string  `json:"emergency_contact"`
-		Username         string   `json:"username"`
-		Password         string   `json:"password"`
+		GrantAccess      bool     `json:"grant_access"`
 		RoleNames        []string `json:"role_names"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -65,6 +64,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	birthDate, err := parseOptionalDate(body.BirthDate)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
+		return
+	}
+	if body.GrantAccess && (body.Phone == nil || *body.Phone == "") {
+		httpapi.WriteError(w, http.StatusBadRequest, "phone_required",
+			"phone is required to grant access: sign-in links are only sent when email and phone both match")
 		return
 	}
 
@@ -80,8 +84,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		City:             body.City,
 		Province:         body.Province,
 		EmergencyContact: body.EmergencyContact,
-		Username:         body.Username,
-		Password:         body.Password,
+		GrantAccess:      body.GrantAccess,
 		RoleNames:        body.RoleNames,
 	})
 	if errors.Is(err, ErrDuplicate) {
