@@ -5,16 +5,17 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"katiuskas-intranet/backend/internal/platform/db"
 )
 
 var ErrNotFound = errors.New("activity not found")
 
 type Repository struct {
-	pool *pgxpool.Pool
+	pool db.PGX
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
+func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 

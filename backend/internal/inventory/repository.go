@@ -6,7 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"katiuskas-intranet/backend/internal/platform/db"
 )
 
 var (
@@ -22,10 +23,10 @@ var (
 const saleHasNoReturnConstraint = "sale_has_no_return"
 
 type Repository struct {
-	pool *pgxpool.Pool
+	pool db.PGX
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
+func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 

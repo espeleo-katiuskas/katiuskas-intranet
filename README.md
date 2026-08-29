@@ -43,3 +43,19 @@ mira los logs de la API (`docker compose logs api`) para encontrar el enlace de 
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
 Para desarrollo sin Docker, ver `docs/architecture.md`.
+
+## Tests
+
+```sh
+docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "CREATE DATABASE intranet_test;"
+export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet_test?sslmode=disable
+cd backend && go test ./...
+```
+
+Cada paquete que toca PostgreSQL (todos menos `auth`, `config`, `mail` y `httpapi`, que son
+lógica pura) usa una base de datos de pruebas real — no hay mocks del acceso a datos, las
+restricciones de PostgreSQL (solapes, claves foráneas, uniqueness) son parte de lo que se
+prueba. `internal/testutil` aplica las migraciones una sola vez y le da a cada test su
+propia transacción, deshecha al terminar, así que los tests no interfieren entre sí. Sin
+`TEST_DATABASE_URL` (o si no hay Postgres accesible), esos tests se saltan solos en vez de
+fallar — `go test ./...` funciona igual en una máquina sin Postgres.
