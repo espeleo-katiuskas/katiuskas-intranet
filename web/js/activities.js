@@ -247,49 +247,61 @@ async function loadParticipants(activityId, panel) {
   }
 }
 
-if (isAdmin) {
-  const newActivityPanel = document.getElementById('new-activity-panel');
-  const newActivityForm = document.getElementById('new-activity-form');
+// Creating an activity is open to any signed-in member, not just admin/board.
+const newActivityPanel = document.getElementById('new-activity-panel');
+const newActivityForm = document.getElementById('new-activity-form');
+const participantsSelect = document.getElementById('na-participants');
 
-  document.getElementById('toggle-new-activity').addEventListener('click', () => {
-    newActivityPanel.hidden = !newActivityPanel.hidden;
+apiFetch('/users/directory')
+  .then((people) => {
+    participantsSelect.innerHTML = people
+      .map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`)
+      .join('');
+  })
+  .catch(() => {
+    participantsSelect.innerHTML = '<option value="">No se pudo cargar la lista de socios</option>';
   });
 
-  document.getElementById('cancel-new-activity').addEventListener('click', () => {
+document.getElementById('toggle-new-activity').addEventListener('click', () => {
+  newActivityPanel.hidden = !newActivityPanel.hidden;
+});
+
+document.getElementById('cancel-new-activity').addEventListener('click', () => {
+  newActivityForm.reset();
+  newActivityPanel.hidden = true;
+});
+
+newActivityForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formData = new FormData(newActivityForm);
+  const optional = (key) => formData.get(key)?.toString().trim() || null;
+  const participantUserIds = Array.from(participantsSelect.selectedOptions).map((o) => Number(o.value));
+
+  const body = {
+    title: formData.get('title'),
+    type: formData.get('type'),
+    location: formData.get('location'),
+    start_date: formData.get('start_date'),
+    end_date: optional('end_date'),
+    description: optional('description'),
+    difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
+    max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
+    participant_user_ids: participantUserIds,
+  };
+
+  const submitButton = newActivityForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetch('/activities', { method: 'POST', body: JSON.stringify(body) });
+    showFeedback('Actividad creada.');
     newActivityForm.reset();
     newActivityPanel.hidden = true;
-  });
-
-  newActivityForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const formData = new FormData(newActivityForm);
-    const optional = (key) => formData.get(key)?.toString().trim() || null;
-
-    const body = {
-      title: formData.get('title'),
-      type: formData.get('type'),
-      location: formData.get('location'),
-      start_date: formData.get('start_date'),
-      end_date: optional('end_date'),
-      description: optional('description'),
-      difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
-      max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
-    };
-
-    const submitButton = newActivityForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    try {
-      await apiFetch('/activities', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Actividad creada.');
-      newActivityForm.reset();
-      newActivityPanel.hidden = true;
-      await loadActivities();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      submitButton.disabled = false;
-    }
-  });
-}
+    await loadActivities();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 
 loadActivities();

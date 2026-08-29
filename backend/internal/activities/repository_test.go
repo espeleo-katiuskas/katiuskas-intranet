@@ -125,6 +125,70 @@ func TestCancelNotFound(t *testing.T) {
 	}
 }
 
+func TestCreateWithInitialParticipants(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	userA := testutil.InsertUser(t, tx, "", false)
+	userB := testutil.InsertUser(t, tx, "", false)
+
+	activity, err := repo.Create(ctx, activities.CreateInput{
+		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		ParticipantUserIDs: []int64{userA.ID, userB.ID},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	list, err := repo.ListParticipants(ctx, activity.ID)
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 participants signed up at creation, got %d", len(list))
+	}
+}
+
+func TestCreateRejectsUnknownParticipant(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	userA := testutil.InsertUser(t, tx, "", false)
+
+	_, err := repo.Create(ctx, activities.CreateInput{
+		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		ParticipantUserIDs: []int64{userA.ID, 999999},
+	})
+	if !errors.Is(err, activities.ErrParticipantNotFound) {
+		t.Errorf("expected ErrParticipantNotFound, got %v", err)
+	}
+}
+
+func TestCreateRejectsUnknownParticipantWithoutCreatingActivity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	if _, err := repo.Create(ctx, activities.CreateInput{
+		Title: "Should not persist", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		ParticipantUserIDs: []int64{999999},
+	}); !errors.Is(err, activities.ErrParticipantNotFound) {
+		t.Fatalf("expected ErrParticipantNotFound, got %v", err)
+	}
+
+	list, err := repo.List(ctx, 50, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, a := range list {
+		if a.Title == "Should not persist" {
+			t.Errorf("expected the whole activity to roll back when a participant is unknown, but found it: %+v", a)
+		}
+	}
+}
+
 func TestParticipants(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)

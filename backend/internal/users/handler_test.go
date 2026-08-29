@@ -176,6 +176,40 @@ func TestHandlerDeleteBlocksTheLastAdminEndToEnd(t *testing.T) {
 	}
 }
 
+func TestHandlerDirectoryIsOpenToAnyAuthenticatedUserButHidesPersonalData(t *testing.T) {
+	mux, authn, svc := newTestServer(t)
+	ctx := context.Background()
+
+	phone := "600111222"
+	person, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Directory", LastName: "Entry", Email: testutil.UniqueEmail(t),
+		Phone: &phone, GrantAccess: true,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	memberToken := tokenFor(t, authn, 999999, "member")
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users/directory", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a plain member to read the directory (200), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !bytes.Contains([]byte(body), []byte(fmt.Sprintf(`"id":%d`, person.ID))) {
+		t.Errorf("expected the directory to include the created person, got %s", body)
+	}
+	var entries []users.DirectoryEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("decode directory: %v", err)
+	}
+	if body := rec.Body.String(); bytes.Contains([]byte(body), []byte(phone)) {
+		t.Errorf("expected the directory to never expose phone numbers, got %s", body)
+	}
+
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users/directory", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with no token, got %d", rec.Code)
+	}
+}
+
 func TestHandlerUpdateSelfVersusOthers(t *testing.T) {
 	mux, authn, svc := newTestServer(t)
 	ctx := context.Background()

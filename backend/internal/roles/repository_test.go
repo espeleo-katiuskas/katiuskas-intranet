@@ -38,8 +38,8 @@ func TestCreateAndGetRole(t *testing.T) {
 	repo := roles.NewRepository(testutil.NewTx(t))
 	ctx := context.Background()
 
-	desc := "Encargado del material del club"
-	created, err := repo.Create(ctx, roles.CreateInput{Name: "material", Description: &desc})
+	desc := "Organiza las salidas fotográficas del club"
+	created, err := repo.Create(ctx, roles.CreateInput{Name: "photography", Description: &desc})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -51,11 +51,11 @@ func TestCreateAndGetRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get by id: %v", err)
 	}
-	if byID.Name != "material" {
-		t.Errorf("expected name %q, got %q", "material", byID.Name)
+	if byID.Name != "photography" {
+		t.Errorf("expected name %q, got %q", "photography", byID.Name)
 	}
 
-	byName, err := repo.GetByName(ctx, "material")
+	byName, err := repo.GetByName(ctx, "photography")
 	if err != nil {
 		t.Fatalf("get by name: %v", err)
 	}

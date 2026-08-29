@@ -25,9 +25,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board"))
 	mux.Handle("GET /api/v1/items/{id}/transactions", h.authenticator.Protect(h.listItemTransactions))
 
-	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions, "admin", "board"))
-	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board"))
-	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board"))
+	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board", "material"))
+	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board", "material"))
 }
 
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
@@ -85,12 +85,13 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ItemID   int64           `json:"item_id"`
-		UserID   int64           `json:"user_id"`
-		Type     TransactionType `json:"type"`
-		Quantity int32           `json:"quantity"`
-		DueDate  *string         `json:"due_date"`
-		Price    *float64        `json:"price"`
+		ItemID     int64           `json:"item_id"`
+		UserID     int64           `json:"user_id"`
+		Type       TransactionType `json:"type"`
+		Quantity   int32           `json:"quantity"`
+		DueDate    *string         `json:"due_date"`
+		Price      *float64        `json:"price"`
+		ActivityID *int64          `json:"activity_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -109,10 +110,14 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	recordedBy := current.ID
 	t, err := h.service.CreateTransaction(r.Context(), CreateTransactionInput{
 		ItemID: body.ItemID, UserID: body.UserID, Type: body.Type, Quantity: body.Quantity,
-		DueDate: dueDate, Price: body.Price, RecordedBy: &recordedBy,
+		DueDate: dueDate, Price: body.Price, RecordedBy: &recordedBy, ActivityID: body.ActivityID,
 	})
 	if errors.Is(err, ErrInsufficientStock) {
 		httpapi.WriteError(w, http.StatusConflict, "insufficient_stock", err.Error())
+		return
+	}
+	if errors.Is(err, ErrActivityRequired) {
+		httpapi.WriteError(w, http.StatusBadRequest, "activity_required", err.Error())
 		return
 	}
 	if err != nil {

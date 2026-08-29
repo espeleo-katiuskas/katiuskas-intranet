@@ -31,7 +31,7 @@ async function consumeMagicLink(rawToken) {
     const data = await response.json();
     setAccessTokenFromLogin(data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    window.location.href = 'index.html';
+    window.location.href = '/';
   } catch {
     consumingMessage.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo a continuación.';
     consumingPanel.hidden = true;

@@ -46,6 +46,9 @@ type CreateInput struct {
 	Difficulty      *int16
 	MaxParticipants *int32
 	LeaderID        *int64
+	// ParticipantUserIDs are signed up in the same operation as the
+	// activity itself, since whoever creates it already knows who's going.
+	ParticipantUserIDs []int64
 }
 
 type UpdateInput struct {

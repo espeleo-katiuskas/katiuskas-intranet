@@ -17,7 +17,7 @@ const user = currentUser();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
 if (!isAdmin) {
-  window.location.href = 'index.html';
+  window.location.href = '/';
 }
 
 const feedbackBox = document.getElementById('feedback');

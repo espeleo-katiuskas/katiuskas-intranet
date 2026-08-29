@@ -401,4 +401,34 @@ func TestConsumeMagicLinkTokenRejectsUnknown(t *testing.T) {
 	}
 }
 
+func TestListDirectoryOnlyIncludesPeopleWithAccess(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	withAccess, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "Ana", LastName: "Con acceso", Email: testutil.UniqueEmail(t),
+		Phone: strPtr("600111222"), GrantAccess: true,
+	})
+	if err != nil {
+		t.Fatalf("create with access: %v", err)
+	}
+	if _, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "Bea", LastName: "Sin acceso", Email: testutil.UniqueEmail(t),
+	}); err != nil {
+		t.Fatalf("create without access: %v", err)
+	}
+
+	list, err := repo.ListDirectory(ctx)
+	if err != nil {
+		t.Fatalf("list directory: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected only the person with access to appear, got %d entries: %+v", len(list), list)
+	}
+	if list[0].ID != withAccess.ID {
+		t.Errorf("expected entry for user %d, got %+v", withAccess.ID, list[0])
+	}
+}
+
 func strPtr(s string) *string { return &s }

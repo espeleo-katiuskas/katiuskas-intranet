@@ -14,6 +14,7 @@ var (
 	ErrNotFound          = errors.New("item or transaction not found")
 	ErrInsufficientStock = errors.New("not enough available quantity")
 	ErrCannotReturnSale  = errors.New("sale transactions cannot be returned")
+	ErrActivityRequired  = errors.New("loan and rental transactions must be linked to an activity")
 )
 
 // saleHasNoReturnConstraint is the CHECK constraint (see migration 00005)
@@ -21,6 +22,11 @@ var (
 // relies on it as the single source of truth for "is this returnable"
 // instead of duplicating the type check in Go.
 const saleHasNoReturnConstraint = "sale_has_no_return"
+
+// loanAndRentalRequireActivityConstraint is the CHECK constraint (see
+// migration 00010) requiring loan/rental transactions to name the
+// activity they're for.
+const loanAndRentalRequireActivityConstraint = "loan_and_rental_require_activity"
 
 type Repository struct {
 	pool db.PGX
@@ -34,21 +40,21 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	var it Item
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO inventory_items (name, description, category, code, total_quantity,
-			available_quantity, rental_price_per_day, sale_price)
+			available_quantity, rental_price_per_week, sale_price)
 		VALUES ($1,$2,$3,$4,$5,$5,$6,$7)
 		RETURNING id, name, description, category, code, total_quantity, available_quantity,
-			status, rental_price_per_day, sale_price
+			status, rental_price_per_week, sale_price
 	`, in.Name, in.Description, in.Category, in.Code, in.TotalQuantity,
-		in.RentalPricePerDay, in.SalePrice,
+		in.RentalPricePerWeek, in.SalePrice,
 	).Scan(&it.ID, &it.Name, &it.Description, &it.Category, &it.Code, &it.TotalQuantity,
-		&it.AvailableQuantity, &it.Status, &it.RentalPricePerDay, &it.SalePrice)
+		&it.AvailableQuantity, &it.Status, &it.RentalPricePerWeek, &it.SalePrice)
 	return it, err
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, category, code, total_quantity, available_quantity,
-			status, rental_price_per_day, sale_price
+			status, rental_price_per_week, sale_price
 		FROM inventory_items ORDER BY name
 	`)
 	if err != nil {
@@ -60,7 +66,7 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	for rows.Next() {
 		var it Item
 		if err := rows.Scan(&it.ID, &it.Name, &it.Description, &it.Category, &it.Code,
-			&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.RentalPricePerDay,
+			&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.RentalPricePerWeek,
 			&it.SalePrice); err != nil {
 			return nil, err
 		}
@@ -100,13 +106,17 @@ func (r *Repository) CreateTransaction(ctx context.Context, in CreateTransaction
 
 	var t Transaction
 	err = tx.QueryRow(ctx, `
-		INSERT INTO item_transactions (item_id, user_id, type, quantity, due_date, price, recorded_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO item_transactions (item_id, user_id, type, quantity, due_date, price, recorded_by, activity_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
-			price, status, recorded_by
-	`, in.ItemID, in.UserID, in.Type, in.Quantity, in.DueDate, in.Price, in.RecordedBy,
+			price, status, recorded_by, activity_id
+	`, in.ItemID, in.UserID, in.Type, in.Quantity, in.DueDate, in.Price, in.RecordedBy, in.ActivityID,
 	).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt, &t.DueDate,
-		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy)
+		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.ConstraintName == loanAndRentalRequireActivityConstraint {
+		return Transaction{}, ErrActivityRequired
+	}
 	if err != nil {
 		return Transaction{}, err
 	}
@@ -128,9 +138,9 @@ func (r *Repository) ReturnTransaction(ctx context.Context, id int64) (Transacti
 		UPDATE item_transactions SET returned_at = now(), status = 'completed'
 		WHERE id = $1 AND status = 'active'
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
-			price, status, recorded_by
+			price, status, recorded_by, activity_id
 	`, id).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt, &t.DueDate,
-		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy)
+		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == saleHasNoReturnConstraint {
 		return t, ErrCannotReturnSale
@@ -163,7 +173,7 @@ func (r *Repository) ListTransactionsByStatus(ctx context.Context, status Transa
 func (r *Repository) queryTransactions(ctx context.Context, whereClause string, arg any) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
-			price, status, recorded_by
+			price, status, recorded_by, activity_id
 		FROM item_transactions `+whereClause, arg)
 	if err != nil {
 		return nil, err
@@ -174,7 +184,7 @@ func (r *Repository) queryTransactions(ctx context.Context, whereClause string, 
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt,
-			&t.DueDate, &t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy); err != nil {
+			&t.DueDate, &t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID); err != nil {
 			return nil, err
 		}
 		list = append(list, t)

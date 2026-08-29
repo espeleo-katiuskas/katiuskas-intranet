@@ -49,10 +49,12 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 
 	item := createItem(t, repo, 3)
 	user := testutil.InsertUser(t, tx, "", false)
+	activityID := testutil.InsertActivity(t, tx)
 	due := time.Now().AddDate(0, 0, 7)
 
 	txn, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1, DueDate: &due,
+		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create transaction: %v", err)
@@ -120,9 +122,11 @@ func TestReturnTransactionRestoresStock(t *testing.T) {
 
 	item := createItem(t, repo, 2)
 	user := testutil.InsertUser(t, tx, "", false)
+	activityID := testutil.InsertActivity(t, tx)
 
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
@@ -162,8 +166,10 @@ func TestReturnTransactionNotFoundOrAlreadyClosed(t *testing.T) {
 
 	item := createItem(t, repo, 1)
 	user := testutil.InsertUser(t, tx, "", false)
+	activityID := testutil.InsertActivity(t, tx)
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
@@ -204,9 +210,11 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 
 	item := createItem(t, repo, 5)
 	user := testutil.InsertUser(t, tx, "", false)
+	activityID := testutil.InsertActivity(t, tx)
 
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
@@ -214,6 +222,7 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	price := 10.0
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1, Price: &price,
+		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create rental: %v", err)
 	}
@@ -243,5 +252,73 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	}
 	if len(active) != 1 {
 		t.Errorf("expected 1 active transaction after returning the loan, got %d", len(active))
+	}
+}
+
+func TestCreateTransactionRequiresActivityForLoanAndRental(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, repo, 5)
+	user := testutil.InsertUser(t, tx, "", false)
+
+	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+	}); !errors.Is(err, inventory.ErrActivityRequired) {
+		t.Errorf("expected ErrActivityRequired for a loan without an activity, got %v", err)
+	}
+}
+
+func TestCreateTransactionRentalRequiresActivity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, repo, 5)
+	user := testutil.InsertUser(t, tx, "", false)
+	price := 10.0
+
+	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1, Price: &price,
+	}); !errors.Is(err, inventory.ErrActivityRequired) {
+		t.Errorf("expected ErrActivityRequired for a rental without an activity, got %v", err)
+	}
+}
+
+func TestCreateTransactionSaleDoesNotRequireActivity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, repo, 1)
+	user := testutil.InsertUser(t, tx, "", false)
+	price := 25.0
+
+	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+	}); err != nil {
+		t.Errorf("expected a sale without an activity to succeed, got %v", err)
+	}
+}
+
+func TestCreateTransactionStoresActivityID(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, repo, 5)
+	user := testutil.InsertUser(t, tx, "", false)
+	activityID := testutil.InsertActivity(t, tx)
+
+	txn, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+	if txn.ActivityID == nil || *txn.ActivityID != activityID {
+		t.Errorf("expected activity id %d to round-trip, got %v", activityID, txn.ActivityID)
 	}
 }

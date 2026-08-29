@@ -266,6 +266,24 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string, withAccess bool) TestUser
 	return TestUser{ID: id, Email: email, Phone: phone}
 }
 
+// InsertActivity inserts a bare-bones activity, for tests that need a real
+// activities.id to satisfy a foreign key — namely a loan or rental
+// transaction, which the loan_and_rental_require_activity CHECK constraint
+// (migration 00010) requires.
+func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
+	t.Helper()
+	var id int64
+	err := tx.QueryRow(context.Background(), `
+		INSERT INTO activities (title, type, start_date, location)
+		VALUES ('Test activity', 'caving', now(), 'Test location')
+		RETURNING id
+	`).Scan(&id)
+	if err != nil {
+		t.Fatalf("insert test activity: %v", err)
+	}
+	return id
+}
+
 // RoleID looks up a system role's id by name (they're seeded by migration
 // 00008: "admin", "board", "member").
 func RoleID(t *testing.T, tx pgx.Tx, name string) int64 {

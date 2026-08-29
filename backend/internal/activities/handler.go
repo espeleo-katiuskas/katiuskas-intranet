@@ -22,7 +22,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/activities", h.authenticator.Protect(h.list))
-	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create))
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update, "admin", "board"))
 	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel, "admin", "board"))
 
@@ -44,15 +44,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Title           string  `json:"title"`
-		Type            Type    `json:"type"`
-		StartDate       string  `json:"start_date"`
-		EndDate         *string `json:"end_date"`
-		Location        string  `json:"location"`
-		Description     *string `json:"description"`
-		Difficulty      *int16  `json:"difficulty"`
-		MaxParticipants *int32  `json:"max_participants"`
-		LeaderID        *int64  `json:"leader_id"`
+		Title              string  `json:"title"`
+		Type               Type    `json:"type"`
+		StartDate          string  `json:"start_date"`
+		EndDate            *string `json:"end_date"`
+		Location           string  `json:"location"`
+		Description        *string `json:"description"`
+		Difficulty         *int16  `json:"difficulty"`
+		MaxParticipants    *int32  `json:"max_participants"`
+		LeaderID           *int64  `json:"leader_id"`
+		ParticipantUserIDs []int64 `json:"participant_user_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -79,7 +80,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Location: body.Location, Description: body.Description, Difficulty: body.Difficulty,
 		MaxParticipants: body.MaxParticipants, LeaderID: body.LeaderID,
+		ParticipantUserIDs: body.ParticipantUserIDs,
 	})
+	if errors.Is(err, ErrParticipantNotFound) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create activity")
 		return

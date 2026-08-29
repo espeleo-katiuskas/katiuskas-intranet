@@ -5,11 +5,20 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"katiuskas-intranet/backend/internal/platform/db"
 )
 
-var ErrNotFound = errors.New("activity not found")
+var (
+	ErrNotFound = errors.New("activity not found")
+	// ErrParticipantNotFound means one of the given participant user ids
+	// doesn't exist. Create rejects the whole activity rather than
+	// creating it with a partial participant list.
+	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
+)
+
+const foreignKeyViolationCode = "23503"
 
 type Repository struct {
 	pool db.PGX
@@ -19,9 +28,18 @@ func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 
+// Create inserts the activity and signs up its initial participants (if
+// any) in a single transaction, so an unknown participant id rolls back
+// the whole thing instead of leaving a half-populated activity behind.
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Activity{}, err
+	}
+	defer tx.Rollback(ctx)
+
 	var a Activity
-	err := r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO activities (title, type, start_date, end_date, location, description,
 			difficulty, max_participants, leader_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -31,7 +49,24 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 		in.Difficulty, in.MaxParticipants, in.LeaderID,
 	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location, &a.Description,
 		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID)
-	return a, err
+	if err != nil {
+		return Activity{}, err
+	}
+
+	for _, userID := range in.ParticipantUserIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO activity_participants (activity_id, user_id) VALUES ($1,$2)
+			ON CONFLICT (activity_id, user_id) DO NOTHING
+		`, a.ID, userID); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+				return Activity{}, ErrParticipantNotFound
+			}
+			return Activity{}, err
+		}
+	}
+
+	return a, tx.Commit(ctx)
 }
 
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, error) {

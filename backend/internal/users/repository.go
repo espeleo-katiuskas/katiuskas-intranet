@@ -248,6 +248,33 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ListDirectory returns every person who can sign in (has an accounts
+// row), for populating pickers like an activity's participant list.
+// People without access aren't club members with an active presence, so
+// they're left out.
+func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id, u.first_name, u.last_name
+		FROM users u
+		JOIN accounts a ON a.user_id = u.id
+		ORDER BY u.last_name, u.first_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []DirectoryEntry
+	for rows.Next() {
+		var e DirectoryEntry
+		if err := rows.Scan(&e.ID, &e.FirstName, &e.LastName); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `

@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Actividades — Intranet del club</title>
+<title>Actividades — Club de Espeleología Katiuskas</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header class="topbar">
-  <span class="brand">Intranet del club</span>
+  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
   <nav class="main-nav">
-    <a href="index.html">Inicio</a>
-    <a href="members.html" data-roles="admin,board">Socios</a>
-    <a href="activities.html" class="active">Actividades</a>
-    <a href="inventory.html">Material</a>
-    <a href="profile.html">Mi perfil</a>
+    <a href="/">Inicio</a>
+    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/activities" class="active">Actividades</a>
+    <a href="/inventory">Material</a>
+    <a href="/profile">Mi perfil</a>
     <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
   </nav>
 </header>
@@ -24,13 +24,13 @@
       <h1>Actividades</h1>
       <p class="subtitle">Próximas salidas y actividades del club.</p>
     </div>
-    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">+ Nueva actividad</button>
+    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small">+ Nueva actividad</button>
   </div>
 
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div id="new-activity-panel" class="panel" hidden data-roles="admin,board">
+  <div id="new-activity-panel" class="panel" hidden>
     <h3>Nueva actividad</h3>
     <form id="new-activity-form">
       <div class="field-grid">
@@ -72,6 +72,10 @@
           <label for="na-description">Descripción <span class="optional">(opcional)</span></label>
           <textarea id="na-description" name="description"></textarea>
         </div>
+        <div class="field span-2">
+          <label for="na-participants">Participantes <span class="optional">(opcional; puedes elegir varios)</span></label>
+          <select id="na-participants" name="participant_user_ids" multiple size="6"></select>
+        </div>
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear actividad</button>
@@ -83,5 +87,6 @@
   <div class="card-grid" id="activities-list"></div>
 </main>
 <script type="module" src="js/activities.js"></script>
+<footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
 </body>
 </html>

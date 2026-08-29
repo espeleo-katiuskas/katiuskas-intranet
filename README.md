@@ -1,7 +1,8 @@
-# Intranet del club de espeleología
+# Intranet del Club de Espeleología Katiuskas
 
 Base de datos en PostgreSQL, API REST en Go y frontend web en JavaScript, pensados para
-que la misma API sirva también a una futura app móvil o a un cliente de terminal.
+que la misma API sirva también a una futura app móvil o a un cliente de terminal. Más
+información sobre el club en [katiuskas.es](https://katiuskas.es/).
 
 - `db/migrations/` — esquema de PostgreSQL (migraciones con [goose](https://github.com/pressly/goose)).
 - `backend/` — API REST en Go (`/api/v1`), ver `backend/openapi/openapi.yaml` para el contrato completo.
@@ -38,7 +39,7 @@ teléfono `600000000`; para otros valores, exporta `SEED_ADMIN_EMAIL`, `SEED_ADM
 `SEED_ADMIN_FIRST_NAME` o `SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si
 el email ya existe, no hace nada.
 
-Para entrar, ve a `http://localhost:8000/login.html`, escribe ese email y ese teléfono, y
+Para entrar, ve a `http://localhost:8000/login`, escribe ese email y ese teléfono, y
 mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 

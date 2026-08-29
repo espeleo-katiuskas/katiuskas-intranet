@@ -24,6 +24,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users", h.authenticator.Protect(h.list, "admin", "board"))
 	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("GET /api/v1/users/directory", h.authenticator.Protect(h.directory))
 	mux.Handle("GET /api/v1/users/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/users/{id}", h.authenticator.Protect(h.update))
 	mux.Handle("DELETE /api/v1/users/{id}", h.authenticator.Protect(h.delete, "admin", "board"))
@@ -35,6 +36,18 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.List(r.Context(), limit, offset)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list users")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// directory lists everyone with access, name only, so any signed-in
+// member can pick a person for an activity's leader or participant list
+// without seeing the personal data GET /users exposes.
+func (h *Handler) directory(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.Directory(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list directory")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)

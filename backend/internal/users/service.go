@@ -54,6 +54,10 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 	return s.repo.Update(ctx, id, in)
 }
 
+func (s *Service) Directory(ctx context.Context) ([]DirectoryEntry, error) {
+	return s.repo.ListDirectory(ctx)
+}
+
 // Delete refuses to remove the only remaining admin, for the same reason
 // roles.Service.Remove refuses to strip just their admin role: someone has
 // to be left who can manage users and roles.

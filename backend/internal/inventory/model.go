@@ -33,26 +33,26 @@ const (
 )
 
 type Item struct {
-	ID                int64      `json:"id"`
-	Name              string     `json:"name"`
-	Description       *string    `json:"description,omitempty"`
-	Category          *string    `json:"category,omitempty"`
-	Code              *string    `json:"code,omitempty"`
-	TotalQuantity     int32      `json:"total_quantity"`
-	AvailableQuantity int32      `json:"available_quantity"`
-	Status            ItemStatus `json:"status"`
-	RentalPricePerDay *float64   `json:"rental_price_per_day,omitempty"`
-	SalePrice         *float64   `json:"sale_price,omitempty"`
+	ID                 int64      `json:"id"`
+	Name               string     `json:"name"`
+	Description        *string    `json:"description,omitempty"`
+	Category           *string    `json:"category,omitempty"`
+	Code               *string    `json:"code,omitempty"`
+	TotalQuantity      int32      `json:"total_quantity"`
+	AvailableQuantity  int32      `json:"available_quantity"`
+	Status             ItemStatus `json:"status"`
+	RentalPricePerWeek *float64   `json:"rental_price_per_week,omitempty"`
+	SalePrice          *float64   `json:"sale_price,omitempty"`
 }
 
 type CreateItemInput struct {
-	Name              string   `json:"name"`
-	Description       *string  `json:"description"`
-	Category          *string  `json:"category"`
-	Code              *string  `json:"code"`
-	TotalQuantity     int32    `json:"total_quantity"`
-	RentalPricePerDay *float64 `json:"rental_price_per_day"`
-	SalePrice         *float64 `json:"sale_price"`
+	Name               string   `json:"name"`
+	Description        *string  `json:"description"`
+	Category           *string  `json:"category"`
+	Code               *string  `json:"code"`
+	TotalQuantity      int32    `json:"total_quantity"`
+	RentalPricePerWeek *float64 `json:"rental_price_per_week"`
+	SalePrice          *float64 `json:"sale_price"`
 }
 
 type Transaction struct {
@@ -67,6 +67,9 @@ type Transaction struct {
 	Price        *float64          `json:"price,omitempty"`
 	Status       TransactionStatus `json:"status"`
 	RecordedBy   *int64            `json:"recorded_by,omitempty"`
+	// ActivityID is required for loan and rental (they always happen as
+	// part of an activity) and left unset for a sale.
+	ActivityID *int64 `json:"activity_id,omitempty"`
 }
 
 type CreateTransactionInput struct {
@@ -77,4 +80,5 @@ type CreateTransactionInput struct {
 	DueDate    *time.Time
 	Price      *float64
 	RecordedBy *int64
+	ActivityID *int64
 }

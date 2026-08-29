@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inicio — Intranet del club</title>
+<title>Inicio — Club de Espeleología Katiuskas</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header class="topbar">
-  <span class="brand">Intranet del club</span>
+  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
   <nav class="main-nav">
-    <a href="index.html" class="active">Inicio</a>
-    <a href="members.html" data-roles="admin,board">Socios</a>
-    <a href="activities.html">Actividades</a>
-    <a href="inventory.html">Material</a>
-    <a href="profile.html">Mi perfil</a>
+    <a href="/" class="active">Inicio</a>
+    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/activities">Actividades</a>
+    <a href="/inventory">Material</a>
+    <a href="/profile">Mi perfil</a>
     <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
   </nav>
 </header>
@@ -22,24 +22,25 @@
   <h1>Bienvenido/a</h1>
   <p class="subtitle">Gestión de socios, actividades y material del club.</p>
   <div class="card-grid">
-    <a class="card" href="members.html" data-roles="admin,board">
+    <a class="card" href="/members" data-roles="admin,board">
       <h3>Socios</h3>
       <p>Altas, bajas e historial de socios.</p>
     </a>
-    <a class="card" href="activities.html">
+    <a class="card" href="/activities">
       <h3>Actividades</h3>
       <p>Próximas salidas y apuntes.</p>
     </a>
-    <a class="card" href="inventory.html">
+    <a class="card" href="/inventory">
       <h3>Material</h3>
       <p>Catálogo, préstamos, alquileres y ventas.</p>
     </a>
-    <a class="card" href="profile.html">
+    <a class="card" href="/profile">
       <h3>Mi perfil</h3>
       <p>Tus datos y tu historial como socio.</p>
     </a>
   </div>
 </main>
 <script type="module" src="js/dashboard.js"></script>
+<footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
 </body>
 </html>

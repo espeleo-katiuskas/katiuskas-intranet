@@ -39,14 +39,29 @@ en `backend/openapi/openapi.yaml`.
   no se pueden borrar. Cualquier otro rol que cree un admin sirve como etiqueta
   organizativa — no desbloquea nada por sí solo salvo que se programe explícitamente.
 - **`refresh_tokens`** — sesiones de refresco, revocables.
+- `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo id y
+  nombre de quienes tienen acceso (nada de teléfono, dirección, DNI...). Existe para que
+  un socio cualquiera pueda elegir participantes al crear una actividad sin que el API
+  tenga que abrirle `GET /users`, que sí expone datos personales y sigue reservado a
+  admin/board.
 - **`memberships`** — periodos de alta/baja de socio. Una persona puede tener varios
   periodos si no se solapan; lo garantiza una restricción `EXCLUDE USING gist` de
   PostgreSQL sobre `(user_id, period)`, no una comprobación manual.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
+  Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
+  además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla
+  sigue reservado a admin/board.
 - **`inventory_items`** / **`item_transactions`** — catálogo de material y sus movimientos
   (`loan`, `rental`, `sale`), modelados en una única tabla con un discriminador de tipo
   en vez de tres tablas paralelas, con `CHECK` que impide, por ejemplo, una venta con
-  fecha de devolución.
+  fecha de devolución. El alquiler se tarifica por semana (`rental_price_per_week`), no
+  por día. Un préstamo o un alquiler siempre va vinculado a una actividad
+  (`item_transactions.activity_id`, exigido por otro `CHECK`); una venta no lo necesita,
+  porque el material sale del inventario del club para siempre, actividad o no. Crear o
+  modificar una transacción de material requiere el rol `admin`, `board` o el rol
+  opcional `material` (sembrado por la migración pero no de sistema: un club que no
+  quiera esa distinción puede borrarlo y seguir usando `board`); dar de alta el propio
+  material del catálogo sigue reservado a admin/board.
 
 ## Backend (`backend/`)
 

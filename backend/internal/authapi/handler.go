@@ -103,11 +103,11 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 		return err
 	}
 
-	link := fmt.Sprintf("%s/login.html?token=%s", h.opts.PublicBaseURL, rawToken)
-	subject := "Accede a la intranet del club"
+	link := fmt.Sprintf("%s/login?token=%s", h.opts.PublicBaseURL, rawToken)
+	subject := "Accede a la intranet del Club de Espeleología Katiuskas"
 	body := fmt.Sprintf(
 		"Hola %s,\n\n"+
-			"Entra en la intranet del club con este enlace, válido durante %d minutos:\n%s\n\n"+
+			"Entra en la intranet del Club de Espeleología Katiuskas con este enlace, válido durante %d minutos:\n%s\n\n"+
 			"Si no has pedido este acceso, puedes ignorar este mensaje.",
 		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link,
 	)

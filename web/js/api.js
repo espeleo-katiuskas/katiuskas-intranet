@@ -9,7 +9,7 @@ let accessToken = null;
 async function initSession() {
   const ok = await refreshSession();
   if (!ok) {
-    window.location.href = 'login.html';
+    window.location.href = '/login';
   }
   return ok;
 }
@@ -66,7 +66,7 @@ function logout() {
       body: JSON.stringify({ refresh_token: refreshToken }),
     }).catch(() => {});
   }
-  window.location.href = 'login.html';
+  window.location.href = '/login';
 }
 
 // Reads the (non-sensitive) user id and role names out of the access

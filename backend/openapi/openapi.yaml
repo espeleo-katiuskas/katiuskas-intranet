@@ -124,6 +124,24 @@ paths:
         "409":
           description: The email or national ID already belongs to another person.
 
+  /users/directory:
+    get:
+      summary: List everyone with login access, name only
+      description: >
+        Open to any authenticated user. Returns just id, first_name and
+        last_name — enough to populate a picker (e.g. an activity's leader
+        or participants) without exposing the personal data that GET
+        /users returns to admin/board.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The directory
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DirectoryEntry" }
+
   /users/{id}:
     get:
       summary: Get a user by id
@@ -347,13 +365,23 @@ paths:
                 items: { $ref: "#/components/schemas/Activity" }
     post:
       summary: Create an activity
+      description: >
+        Any authenticated person can create an activity (there's no role
+        restriction here, unlike update/cancel) and sign up its initial
+        participants in the same call.
       security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateActivityInput" }
       responses:
         "201":
           description: Activity created
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
+        "400":
+          description: One of the given participant_user_ids doesn't exist.
 
   /activities/{id}:
     patch:
@@ -447,6 +475,7 @@ paths:
   /transactions:
     get:
       summary: List transactions (defaults to active ones)
+      description: Requires the admin, board, or material role.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string } }
@@ -460,19 +489,40 @@ paths:
                 items: { $ref: "#/components/schemas/Transaction" }
     post:
       summary: Open a loan, rental or sale
+      description: >
+        Requires the admin, board, or material role. activity_id is
+        required for loan and rental (never for sale) — a member is
+        always borrowing or renting gear *for* something.
       security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, user_id, type]
+              properties:
+                item_id: { type: integer }
+                user_id: { type: integer }
+                type: { type: string, enum: [loan, rental, sale] }
+                quantity: { type: integer, default: 1 }
+                due_date: { type: string, format: date, nullable: true }
+                price: { type: number, nullable: true }
+                activity_id: { type: integer, nullable: true }
       responses:
         "201":
           description: Transaction created
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
+        "400":
+          description: activity_id is missing for a loan or rental.
         "409":
           description: Not enough available quantity
 
   /transactions/{id}/return:
     patch:
       summary: Close an active loan or rental
+      description: Requires the admin, board, or material role.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -552,6 +602,13 @@ components:
             POST/DELETE /users/{userID}/roles, not this field.
         created_at: { type: string, format: date-time }
 
+    DirectoryEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+
     CreateUserInput:
       allOf:
         - $ref: "#/components/schemas/UpdateUserInput"
@@ -617,6 +674,24 @@ components:
         status: { type: string, enum: [planned, completed, cancelled] }
         leader_id: { type: integer, nullable: true }
 
+    CreateActivityInput:
+      type: object
+      required: [title, start_date, location]
+      properties:
+        title: { type: string }
+        type: { type: string, enum: [caving, training, outdoor, social, other], default: caving }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        location: { type: string }
+        description: { type: string, nullable: true }
+        difficulty: { type: integer, nullable: true }
+        max_participants: { type: integer, nullable: true }
+        leader_id: { type: integer, nullable: true }
+        participant_user_ids:
+          type: array
+          items: { type: integer }
+          description: Signed up as participants in the same call that creates the activity.
+
     Participant:
       type: object
       properties:
@@ -636,7 +711,7 @@ components:
         total_quantity: { type: integer }
         available_quantity: { type: integer }
         status: { type: string, enum: [available, on_loan, rented, sold, maintenance, retired] }
-        rental_price_per_day: { type: number, nullable: true }
+        rental_price_per_week: { type: number, nullable: true }
         sale_price: { type: number, nullable: true }
 
     Transaction:
@@ -653,3 +728,7 @@ components:
         price: { type: number, nullable: true }
         status: { type: string, enum: [active, completed, overdue, cancelled] }
         recorded_by: { type: integer, nullable: true }
+        activity_id:
+          type: integer
+          nullable: true
+          description: Required for loan and rental; always null for a sale.

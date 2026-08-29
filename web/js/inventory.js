@@ -15,6 +15,10 @@ document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
+// Managing material transactions (loans, rentals, sales, returns) is open
+// to admin/board plus the optional "material" role — item CRUD stays
+// admin/board-only, so this is deliberately a separate check from isAdmin.
+const canManageTransactions = hasAnyRole(user, ['admin', 'board', 'material']);
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');
@@ -61,7 +65,7 @@ function renderItemRow(item) {
 }
 
 function renderTransactionDetail(t) {
-  const canReturn = isAdmin && t.status === 'active' && t.type !== 'sale';
+  const canReturn = canManageTransactions && t.status === 'active' && t.type !== 'sale';
   const dueOrReturned = t.returned_at
     ? ` · devuelto ${formatDate(t.returned_at)}`
     : t.due_date
@@ -85,7 +89,7 @@ async function loadItems() {
     tableBody.innerHTML = items.length
       ? items.map(renderItemRow).join('')
       : '<tr><td colspan="5">Todavía no hay material dado de alta.</td></tr>';
-    if (isAdmin) {
+    if (canManageTransactions) {
       const select = document.getElementById('nt-item');
       select.innerHTML = items.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
     }
@@ -136,7 +140,7 @@ async function handleReturn(button) {
 
 function renderActiveTransactionRow(t) {
   const itemName = itemsById[t.item_id]?.name;
-  const canReturn = t.type !== 'sale';
+  const canReturn = canManageTransactions && t.type !== 'sale';
   return `
     <tr>
       <td>${itemName ? escapeHtml(itemName) : `Material n.º ${t.item_id}`}</td>
@@ -193,7 +197,7 @@ if (isAdmin) {
       category: optionalText('category'),
       code: optionalText('code'),
       total_quantity: Number(formData.get('total_quantity')) || 1,
-      rental_price_per_day: optionalNumber('rental_price_per_day'),
+      rental_price_per_week: optionalNumber('rental_price_per_week'),
       sale_price: optionalNumber('sale_price'),
     };
 
@@ -211,11 +215,13 @@ if (isAdmin) {
       submitButton.disabled = false;
     }
   });
+}
 
+if (canManageTransactions) {
   const userSelect = document.getElementById('nt-user');
-  apiFetch('/users')
-    .then((users) => {
-      userSelect.innerHTML = users
+  apiFetch('/users/directory')
+    .then((people) => {
+      userSelect.innerHTML = people
         .map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`)
         .join('');
     })
@@ -223,14 +229,30 @@ if (isAdmin) {
       userSelect.innerHTML = '<option value="">No se pudo cargar la lista de socios</option>';
     });
 
+  const activitySelect = document.getElementById('nt-activity');
+  apiFetch('/activities')
+    .then((activities) => {
+      activitySelect.innerHTML = activities
+        .map((activity) => `<option value="${activity.id}">${escapeHtml(activity.title)}</option>`)
+        .join('');
+    })
+    .catch(() => {
+      activitySelect.innerHTML = '<option value="">No se pudo cargar la lista de actividades</option>';
+    });
+
   const typeSelect = document.getElementById('nt-type');
   const dueDateField = document.getElementById('nt-due-date-field');
   const priceField = document.getElementById('nt-price-field');
+  const activityField = document.getElementById('nt-activity-field');
 
   function updateTransactionFieldsVisibility() {
     const type = typeSelect.value;
     dueDateField.hidden = type === 'sale';
     priceField.hidden = type === 'loan';
+    // Loans and rentals always happen as part of an activity; a sale
+    // doesn't (see the loan_and_rental_require_activity constraint).
+    activityField.hidden = type === 'sale';
+    activitySelect.required = type !== 'sale';
   }
   typeSelect.addEventListener('change', updateTransactionFieldsVisibility);
   updateTransactionFieldsVisibility();
@@ -248,6 +270,7 @@ if (isAdmin) {
       quantity: Number(formData.get('quantity')) || 1,
       due_date: type !== 'sale' ? formData.get('due_date') || null : null,
       price: type !== 'loan' && formData.get('price') ? Number(formData.get('price')) : null,
+      activity_id: formData.get('activity_id') ? Number(formData.get('activity_id')) : null,
     };
 
     const submitButton = newTransactionForm.querySelector('button[type="submit"]');

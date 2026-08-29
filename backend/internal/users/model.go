@@ -69,3 +69,12 @@ type Account struct {
 	UserID   int64
 	IsActive bool
 }
+
+// DirectoryEntry is the bare minimum needed to let any member pick a
+// person out of a list — e.g. an activity's leader or participants —
+// without exposing the personal data GET /users returns to admin/board.
+type DirectoryEntry struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
