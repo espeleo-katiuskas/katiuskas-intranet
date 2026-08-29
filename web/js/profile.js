@@ -41,8 +41,14 @@ async function loadProfile() {
 
     editForm.first_name.value = profile.first_name;
     editForm.last_name.value = profile.last_name;
+    editForm.email.value = profile.email;
     editForm.phone.value = profile.phone ?? '';
+    editForm.national_id.value = profile.national_id ?? '';
+    editForm.birth_date.value = profile.birth_date ? profile.birth_date.slice(0, 10) : '';
     editForm.address.value = profile.address ?? '';
+    editForm.postal_code.value = profile.postal_code ?? '';
+    editForm.city.value = profile.city ?? '';
+    editForm.province.value = profile.province ?? '';
     editForm.emergency_contact.value = profile.emergency_contact ?? '';
 
     const memberships = await apiFetch(`/users/${user.id}/memberships`);
@@ -70,8 +76,14 @@ editForm.addEventListener('submit', async (event) => {
   const body = {
     first_name: formData.get('first_name'),
     last_name: formData.get('last_name'),
+    email: formData.get('email'),
     phone: optional('phone'),
+    national_id: optional('national_id'),
+    birth_date: optional('birth_date'),
     address: optional('address'),
+    postal_code: optional('postal_code'),
+    city: optional('city'),
+    province: optional('province'),
     emergency_contact: optional('emergency_contact'),
   };
 
@@ -81,6 +93,7 @@ editForm.addEventListener('submit', async (event) => {
     await apiFetch(`/users/${user.id}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Datos actualizados.');
     document.getElementById('profile-name').textContent = `${body.first_name} ${body.last_name}`;
+    document.getElementById('profile-email').textContent = body.email;
   } catch (err) {
     showError(err.message);
   } finally {

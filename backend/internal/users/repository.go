@@ -18,9 +18,15 @@ var (
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
 	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
+	// ErrDuplicate means the email or national ID being set already
+	// belongs to another person.
+	ErrDuplicate = errors.New("email or national ID already belongs to another person")
 )
 
-const foreignKeyViolationCode = "23503"
+const (
+	foreignKeyViolationCode = "23503"
+	uniqueViolationCode     = "23505"
+)
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -40,14 +46,18 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO users (first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			address, postal_code, city, province, emergency_contact)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id, first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact, created_at
+			address, postal_code, city, province, emergency_contact, created_at
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Email, in.Phone,
-		in.Address, in.EmergencyContact,
+		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact,
 	).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.EmergencyContact, &u.CreatedAt)
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact, &u.CreatedAt)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		return u, ErrDuplicate
+	}
 	if err != nil {
 		return u, err
 	}
@@ -69,14 +79,14 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.emergency_contact, u.created_at,
+			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
 			c.username, c.role
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
 		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.EmergencyContact, &u.CreatedAt,
-		&u.Username, &u.Role)
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
+		&u.CreatedAt, &u.Username, &u.Role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -86,7 +96,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.emergency_contact, u.created_at,
+			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
 			c.username, c.role
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
@@ -101,8 +111,8 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
-			&u.Email, &u.Phone, &u.Address, &u.EmergencyContact,
-			&u.CreatedAt, &u.Username, &u.Role); err != nil {
+			&u.Email, &u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province,
+			&u.EmergencyContact, &u.CreatedAt, &u.Username, &u.Role); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
@@ -121,21 +131,45 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.LastName != nil {
 		u.LastName = *in.LastName
 	}
+	if in.Email != nil {
+		u.Email = *in.Email
+	}
+	if in.NationalID != nil {
+		u.NationalID = in.NationalID
+	}
+	if in.BirthDate != nil {
+		u.BirthDate = in.BirthDate
+	}
 	if in.Phone != nil {
 		u.Phone = in.Phone
 	}
 	if in.Address != nil {
 		u.Address = in.Address
 	}
+	if in.PostalCode != nil {
+		u.PostalCode = in.PostalCode
+	}
+	if in.City != nil {
+		u.City = in.City
+	}
+	if in.Province != nil {
+		u.Province = in.Province
+	}
 	if in.EmergencyContact != nil {
 		u.EmergencyContact = in.EmergencyContact
 	}
 
 	_, err = r.pool.Exec(ctx, `
-		UPDATE users SET first_name=$1, last_name=$2, phone=$3, address=$4,
-			emergency_contact=$5, updated_at=now()
-		WHERE id=$6
-	`, u.FirstName, u.LastName, u.Phone, u.Address, u.EmergencyContact, id)
+		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
+			phone=$6, address=$7, postal_code=$8, city=$9, province=$10, emergency_contact=$11,
+			updated_at=now()
+		WHERE id=$12
+	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Phone, u.Address,
+		u.PostalCode, u.City, u.Province, u.EmergencyContact, id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		return u, ErrDuplicate
+	}
 	return u, err
 }
 

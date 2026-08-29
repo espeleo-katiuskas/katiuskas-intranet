@@ -27,7 +27,7 @@
 
   <div class="panel">
     <h3>Mis datos</h3>
-    <p class="hint">El nombre, los apellidos y el correo se gestionan desde secretaría; el resto puedes editarlo tú.</p>
+    <p class="hint">Mantén tus datos al día: el club los usa para el registro de socios y, si hace falta, en caso de emergencia.</p>
     <form id="edit-profile-form">
       <div class="field-grid">
         <div class="field">
@@ -39,12 +39,36 @@
           <input id="ep-last-name" name="last_name" type="text" required>
         </div>
         <div class="field">
+          <label for="ep-email">Email</label>
+          <input id="ep-email" name="email" type="email" required>
+        </div>
+        <div class="field">
           <label for="ep-phone">Teléfono</label>
           <input id="ep-phone" name="phone" type="tel">
+        </div>
+        <div class="field">
+          <label for="ep-national-id">DNI</label>
+          <input id="ep-national-id" name="national_id" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-birth-date">Fecha de nacimiento</label>
+          <input id="ep-birth-date" name="birth_date" type="date">
         </div>
         <div class="field span-2">
           <label for="ep-address">Dirección</label>
           <input id="ep-address" name="address" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-postal-code">Código postal</label>
+          <input id="ep-postal-code" name="postal_code" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-city">Ciudad</label>
+          <input id="ep-city" name="city" type="text">
+        </div>
+        <div class="field">
+          <label for="ep-province">Provincia</label>
+          <input id="ep-province" name="province" type="text">
         </div>
         <div class="field span-2">
           <label for="ep-emergency-contact">Contacto de emergencia</label>

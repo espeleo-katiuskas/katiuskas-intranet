@@ -48,6 +48,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Email            string  `json:"email"`
 		Phone            *string `json:"phone"`
 		Address          *string `json:"address"`
+		PostalCode       *string `json:"postal_code"`
+		City             *string `json:"city"`
+		Province         *string `json:"province"`
 		EmergencyContact *string `json:"emergency_contact"`
 		Username         string  `json:"username"`
 		Password         string  `json:"password"`
@@ -58,14 +61,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var birthDate *time.Time
-	if body.BirthDate != nil && *body.BirthDate != "" {
-		d, err := time.Parse("2006-01-02", *body.BirthDate)
-		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
-			return
-		}
-		birthDate = &d
+	birthDate, err := parseOptionalDate(body.BirthDate)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
+		return
 	}
 
 	role := body.Role
@@ -81,16 +80,34 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Email:            body.Email,
 		Phone:            body.Phone,
 		Address:          body.Address,
+		PostalCode:       body.PostalCode,
+		City:             body.City,
+		Province:         body.Province,
 		EmergencyContact: body.EmergencyContact,
 		Username:         body.Username,
 		Password:         body.Password,
 		Role:             role,
 	})
+	if errors.Is(err, ErrDuplicate) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate", err.Error())
+		return
+	}
 	if err != nil {
-		httpapi.WriteError(w, http.StatusConflict, "create_failed", err.Error())
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create user")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, user)
+}
+
+func parseOptionalDate(raw *string) (*time.Time, error) {
+	if raw == nil || *raw == "" {
+		return nil, nil
+	}
+	d, err := time.Parse("2006-01-02", *raw)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -123,14 +140,53 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only edit their own profile")
 		return
 	}
-	var in UpdateInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	var body struct {
+		FirstName        *string `json:"first_name"`
+		LastName         *string `json:"last_name"`
+		Email            *string `json:"email"`
+		NationalID       *string `json:"national_id"`
+		BirthDate        *string `json:"birth_date"`
+		Phone            *string `json:"phone"`
+		Address          *string `json:"address"`
+		PostalCode       *string `json:"postal_code"`
+		City             *string `json:"city"`
+		Province         *string `json:"province"`
+		EmergencyContact *string `json:"emergency_contact"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	user, err := h.service.Update(r.Context(), id, in)
+
+	birthDate, err := parseOptionalDate(body.BirthDate)
 	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
+		return
+	}
+
+	user, err := h.service.Update(r.Context(), id, UpdateInput{
+		FirstName:        body.FirstName,
+		LastName:         body.LastName,
+		Email:            body.Email,
+		NationalID:       body.NationalID,
+		BirthDate:        birthDate,
+		Phone:            body.Phone,
+		Address:          body.Address,
+		PostalCode:       body.PostalCode,
+		City:             body.City,
+		Province:         body.Province,
+		EmergencyContact: body.EmergencyContact,
+	})
+	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return
+	}
+	if errors.Is(err, ErrDuplicate) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate", err.Error())
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update user")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, user)

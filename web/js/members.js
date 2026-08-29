@@ -80,12 +80,36 @@ function renderUserRow(person) {
               <input type="text" data-edit-field="last_name" value="${escapeHtml(person.last_name)}">
             </div>
             <div class="field">
+              <label>Email</label>
+              <input type="email" data-edit-field="email" value="${escapeHtml(person.email)}">
+            </div>
+            <div class="field">
               <label>Teléfono</label>
               <input type="tel" data-edit-field="phone" value="${escapeHtml(person.phone ?? '')}">
+            </div>
+            <div class="field">
+              <label>DNI</label>
+              <input type="text" data-edit-field="national_id" value="${escapeHtml(person.national_id ?? '')}">
+            </div>
+            <div class="field">
+              <label>Fecha de nacimiento</label>
+              <input type="date" data-edit-field="birth_date" value="${person.birth_date ? person.birth_date.slice(0, 10) : ''}">
             </div>
             <div class="field span-2">
               <label>Dirección</label>
               <input type="text" data-edit-field="address" value="${escapeHtml(person.address ?? '')}">
+            </div>
+            <div class="field">
+              <label>Código postal</label>
+              <input type="text" data-edit-field="postal_code" value="${escapeHtml(person.postal_code ?? '')}">
+            </div>
+            <div class="field">
+              <label>Ciudad</label>
+              <input type="text" data-edit-field="city" value="${escapeHtml(person.city ?? '')}">
+            </div>
+            <div class="field">
+              <label>Provincia</label>
+              <input type="text" data-edit-field="province" value="${escapeHtml(person.province ?? '')}">
             </div>
             <div class="field span-2">
               <label>Contacto de emergencia</label>
@@ -174,8 +198,14 @@ usersTableBody.addEventListener('click', async (event) => {
     const body = {
       first_name: field('first_name'),
       last_name: field('last_name'),
+      email: field('email'),
+      national_id: field('national_id'),
+      birth_date: field('birth_date'),
       phone: field('phone'),
       address: field('address'),
+      postal_code: field('postal_code'),
+      city: field('city'),
+      province: field('province'),
       emergency_contact: field('emergency_contact'),
     };
 
@@ -232,6 +262,9 @@ newPersonForm.addEventListener('submit', async (event) => {
     national_id: optional('national_id'),
     birth_date: optional('birth_date'),
     address: optional('address'),
+    postal_code: optional('postal_code'),
+    city: optional('city'),
+    province: optional('province'),
     emergency_contact: optional('emergency_contact'),
     username: formData.get('username'),
     password: formData.get('password'),

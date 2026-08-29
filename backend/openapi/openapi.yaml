@@ -94,6 +94,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "409":
+          description: The email or national ID already belongs to another person.
 
   /users/{id}:
     get:
@@ -124,6 +126,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "409":
+          description: The email or national ID being set already belongs to another person.
     delete:
       summary: Delete a person (and their login, membership history and activity sign-ups)
       security: [{ bearerAuth: [] }]
@@ -402,6 +406,9 @@ components:
         email: { type: string, format: email }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
         username: { type: string, nullable: true, description: "Absent if this person has no login account." }
         role: { type: string, enum: [admin, board, member], nullable: true }
@@ -419,12 +426,23 @@ components:
             role: { type: string, enum: [admin, board, member] }
 
     UpdateUserInput:
+      description: >
+        Every field is optional and independently settable. admin/board can
+        edit anyone; a member can only edit their own record — there's no
+        per-field permission split, so this same shape covers self-service
+        profile edits and admin edits alike.
       type: object
       properties:
         first_name: { type: string }
         last_name: { type: string }
+        email: { type: string, format: email }
+        national_id: { type: string, nullable: true }
+        birth_date: { type: string, format: date, nullable: true }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
 
     Membership:
