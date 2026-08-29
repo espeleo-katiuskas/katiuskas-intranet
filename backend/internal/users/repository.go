@@ -40,14 +40,14 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO users (first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact_name, emergency_contact_phone)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			address, emergency_contact)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, first_name, last_name, national_id, birth_date, email, phone,
-			address, emergency_contact_name, emergency_contact_phone, created_at
+			address, emergency_contact, created_at
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Email, in.Phone,
-		in.Address, in.EmergencyContactName, in.EmergencyContactPhone,
+		in.Address, in.EmergencyContact,
 	).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.EmergencyContactName, &u.EmergencyContactPhone, &u.CreatedAt)
+		&u.Phone, &u.Address, &u.EmergencyContact, &u.CreatedAt)
 	if err != nil {
 		return u, err
 	}
@@ -69,13 +69,13 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.emergency_contact_name, u.emergency_contact_phone, u.created_at,
+			u.address, u.emergency_contact, u.created_at,
 			c.username, c.role
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
 		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.EmergencyContactName, &u.EmergencyContactPhone, &u.CreatedAt,
+		&u.Phone, &u.Address, &u.EmergencyContact, &u.CreatedAt,
 		&u.Username, &u.Role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
@@ -86,7 +86,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.emergency_contact_name, u.emergency_contact_phone, u.created_at,
+			u.address, u.emergency_contact, u.created_at,
 			c.username, c.role
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
@@ -101,8 +101,8 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
-			&u.Email, &u.Phone, &u.Address, &u.EmergencyContactName,
-			&u.EmergencyContactPhone, &u.CreatedAt, &u.Username, &u.Role); err != nil {
+			&u.Email, &u.Phone, &u.Address, &u.EmergencyContact,
+			&u.CreatedAt, &u.Username, &u.Role); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
@@ -127,19 +127,15 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.Address != nil {
 		u.Address = in.Address
 	}
-	if in.EmergencyContactName != nil {
-		u.EmergencyContactName = in.EmergencyContactName
-	}
-	if in.EmergencyContactPhone != nil {
-		u.EmergencyContactPhone = in.EmergencyContactPhone
+	if in.EmergencyContact != nil {
+		u.EmergencyContact = in.EmergencyContact
 	}
 
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, phone=$3, address=$4,
-			emergency_contact_name=$5, emergency_contact_phone=$6, updated_at=now()
-		WHERE id=$7
-	`, u.FirstName, u.LastName, u.Phone, u.Address, u.EmergencyContactName,
-		u.EmergencyContactPhone, id)
+			emergency_contact=$5, updated_at=now()
+		WHERE id=$6
+	`, u.FirstName, u.LastName, u.Phone, u.Address, u.EmergencyContact, id)
 	return u, err
 }
 

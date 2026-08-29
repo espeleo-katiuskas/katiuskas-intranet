@@ -14,43 +14,40 @@ const (
 )
 
 type User struct {
-	ID                    int64      `json:"id"`
-	FirstName             string     `json:"first_name"`
-	LastName              string     `json:"last_name"`
-	NationalID            *string    `json:"national_id,omitempty"`
-	BirthDate             *time.Time `json:"birth_date,omitempty"`
-	Email                 string     `json:"email"`
-	Phone                 *string    `json:"phone,omitempty"`
-	Address               *string    `json:"address,omitempty"`
-	EmergencyContactName  *string    `json:"emergency_contact_name,omitempty"`
-	EmergencyContactPhone *string    `json:"emergency_contact_phone,omitempty"`
-	Username              *string    `json:"username,omitempty"`
-	Role                  *string    `json:"role,omitempty"`
-	CreatedAt             time.Time  `json:"created_at"`
+	ID               int64      `json:"id"`
+	FirstName        string     `json:"first_name"`
+	LastName         string     `json:"last_name"`
+	NationalID       *string    `json:"national_id,omitempty"`
+	BirthDate        *time.Time `json:"birth_date,omitempty"`
+	Email            string     `json:"email"`
+	Phone            *string    `json:"phone,omitempty"`
+	Address          *string    `json:"address,omitempty"`
+	EmergencyContact *string    `json:"emergency_contact,omitempty"`
+	Username         *string    `json:"username,omitempty"`
+	Role             *string    `json:"role,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 type CreateInput struct {
-	FirstName             string     `json:"first_name"`
-	LastName              string     `json:"last_name"`
-	NationalID            *string    `json:"national_id"`
-	BirthDate             *time.Time `json:"birth_date"`
-	Email                 string     `json:"email"`
-	Phone                 *string    `json:"phone"`
-	Address               *string    `json:"address"`
-	EmergencyContactName  *string    `json:"emergency_contact_name"`
-	EmergencyContactPhone *string    `json:"emergency_contact_phone"`
-	Username              string     `json:"username"`
-	Password              string     `json:"password"`
-	Role                  Role       `json:"role"`
+	FirstName        string     `json:"first_name"`
+	LastName         string     `json:"last_name"`
+	NationalID       *string    `json:"national_id"`
+	BirthDate        *time.Time `json:"birth_date"`
+	Email            string     `json:"email"`
+	Phone            *string    `json:"phone"`
+	Address          *string    `json:"address"`
+	EmergencyContact *string    `json:"emergency_contact"`
+	Username         string     `json:"username"`
+	Password         string     `json:"password"`
+	Role             Role       `json:"role"`
 }
 
 type UpdateInput struct {
-	FirstName             *string `json:"first_name"`
-	LastName              *string `json:"last_name"`
-	Phone                 *string `json:"phone"`
-	Address               *string `json:"address"`
-	EmergencyContactName  *string `json:"emergency_contact_name"`
-	EmergencyContactPhone *string `json:"emergency_contact_phone"`
+	FirstName        *string `json:"first_name"`
+	LastName         *string `json:"last_name"`
+	Phone            *string `json:"phone"`
+	Address          *string `json:"address"`
+	EmergencyContact *string `json:"emergency_contact"`
 }
 
 type Credentials struct {

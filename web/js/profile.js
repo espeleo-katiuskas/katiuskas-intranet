@@ -43,8 +43,7 @@ async function loadProfile() {
     editForm.last_name.value = profile.last_name;
     editForm.phone.value = profile.phone ?? '';
     editForm.address.value = profile.address ?? '';
-    editForm.emergency_contact_name.value = profile.emergency_contact_name ?? '';
-    editForm.emergency_contact_phone.value = profile.emergency_contact_phone ?? '';
+    editForm.emergency_contact.value = profile.emergency_contact ?? '';
 
     const memberships = await apiFetch(`/users/${user.id}/memberships`);
     const tableBody = document.getElementById('memberships-table-body');
@@ -73,8 +72,7 @@ editForm.addEventListener('submit', async (event) => {
     last_name: formData.get('last_name'),
     phone: optional('phone'),
     address: optional('address'),
-    emergency_contact_name: optional('emergency_contact_name'),
-    emergency_contact_phone: optional('emergency_contact_phone'),
+    emergency_contact: optional('emergency_contact'),
   };
 
   const submitButton = editForm.querySelector('button[type="submit"]');

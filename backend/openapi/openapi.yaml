@@ -402,8 +402,9 @@ components:
         email: { type: string, format: email }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
-        emergency_contact_name: { type: string, nullable: true }
-        emergency_contact_phone: { type: string, nullable: true }
+        emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
+        username: { type: string, nullable: true, description: "Absent if this person has no login account." }
+        role: { type: string, enum: [admin, board, member], nullable: true }
         created_at: { type: string, format: date-time }
 
     CreateUserInput:
@@ -424,8 +425,7 @@ components:
         last_name: { type: string }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
-        emergency_contact_name: { type: string, nullable: true }
-        emergency_contact_phone: { type: string, nullable: true }
+        emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
 
     Membership:
       type: object

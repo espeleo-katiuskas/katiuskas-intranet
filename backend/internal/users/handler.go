@@ -41,18 +41,17 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		FirstName             string  `json:"first_name"`
-		LastName              string  `json:"last_name"`
-		NationalID            *string `json:"national_id"`
-		BirthDate             *string `json:"birth_date"`
-		Email                 string  `json:"email"`
-		Phone                 *string `json:"phone"`
-		Address               *string `json:"address"`
-		EmergencyContactName  *string `json:"emergency_contact_name"`
-		EmergencyContactPhone *string `json:"emergency_contact_phone"`
-		Username              string  `json:"username"`
-		Password              string  `json:"password"`
-		Role                  Role    `json:"role"`
+		FirstName        string  `json:"first_name"`
+		LastName         string  `json:"last_name"`
+		NationalID       *string `json:"national_id"`
+		BirthDate        *string `json:"birth_date"`
+		Email            string  `json:"email"`
+		Phone            *string `json:"phone"`
+		Address          *string `json:"address"`
+		EmergencyContact *string `json:"emergency_contact"`
+		Username         string  `json:"username"`
+		Password         string  `json:"password"`
+		Role             Role    `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -75,18 +74,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.service.Create(r.Context(), CreateInput{
-		FirstName:             body.FirstName,
-		LastName:              body.LastName,
-		NationalID:            body.NationalID,
-		BirthDate:             birthDate,
-		Email:                 body.Email,
-		Phone:                 body.Phone,
-		Address:               body.Address,
-		EmergencyContactName:  body.EmergencyContactName,
-		EmergencyContactPhone: body.EmergencyContactPhone,
-		Username:              body.Username,
-		Password:              body.Password,
-		Role:                  role,
+		FirstName:        body.FirstName,
+		LastName:         body.LastName,
+		NationalID:       body.NationalID,
+		BirthDate:        birthDate,
+		Email:            body.Email,
+		Phone:            body.Phone,
+		Address:          body.Address,
+		EmergencyContact: body.EmergencyContact,
+		Username:         body.Username,
+		Password:         body.Password,
+		Role:             role,
 	})
 	if err != nil {
 		httpapi.WriteError(w, http.StatusConflict, "create_failed", err.Error())

@@ -87,13 +87,9 @@ function renderUserRow(person) {
               <label>Dirección</label>
               <input type="text" data-edit-field="address" value="${escapeHtml(person.address ?? '')}">
             </div>
-            <div class="field">
+            <div class="field span-2">
               <label>Contacto de emergencia</label>
-              <input type="text" data-edit-field="emergency_contact_name" value="${escapeHtml(person.emergency_contact_name ?? '')}">
-            </div>
-            <div class="field">
-              <label>Teléfono de emergencia</label>
-              <input type="tel" data-edit-field="emergency_contact_phone" value="${escapeHtml(person.emergency_contact_phone ?? '')}">
+              <textarea data-edit-field="emergency_contact" placeholder="Nombre, teléfono, correo... uno o varios contactos">${escapeHtml(person.emergency_contact ?? '')}</textarea>
             </div>
           </div>
           <button type="button" class="btn btn-primary btn-small" data-save-edit-person="${person.id}">Guardar</button>
@@ -180,8 +176,7 @@ usersTableBody.addEventListener('click', async (event) => {
       last_name: field('last_name'),
       phone: field('phone'),
       address: field('address'),
-      emergency_contact_name: field('emergency_contact_name'),
-      emergency_contact_phone: field('emergency_contact_phone'),
+      emergency_contact: field('emergency_contact'),
     };
 
     saveEditButton.disabled = true;
@@ -237,8 +232,7 @@ newPersonForm.addEventListener('submit', async (event) => {
     national_id: optional('national_id'),
     birth_date: optional('birth_date'),
     address: optional('address'),
-    emergency_contact_name: optional('emergency_contact_name'),
-    emergency_contact_phone: optional('emergency_contact_phone'),
+    emergency_contact: optional('emergency_contact'),
     username: formData.get('username'),
     password: formData.get('password'),
     role: formData.get('role'),
