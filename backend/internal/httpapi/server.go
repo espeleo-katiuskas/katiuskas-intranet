@@ -18,6 +18,7 @@ type ResourceHandler interface {
 type Routes struct {
 	Auth        AuthHandler
 	Users       ResourceHandler
+	Roles       ResourceHandler
 	Memberships ResourceHandler
 	Activities  ResourceHandler
 	Inventory   ResourceHandler
@@ -31,6 +32,7 @@ func NewRouter(routes Routes) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/logout", routes.Auth.Logout)
 
 	routes.Users.RegisterRoutes(mux)
+	routes.Roles.RegisterRoutes(mux)
 	routes.Memberships.RegisterRoutes(mux)
 	routes.Activities.RegisterRoutes(mux)
 	routes.Inventory.RegisterRoutes(mux)

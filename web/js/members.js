@@ -3,6 +3,7 @@ import {
   logout,
   applyRoleVisibility,
   currentUser,
+  hasAnyRole,
   apiFetch,
   escapeHtml,
   formatDate,
@@ -13,7 +14,9 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
-if (user?.role === 'member') {
+const isAdmin = hasAnyRole(user, ['admin', 'board']);
+const isRealAdmin = hasAnyRole(user, ['admin']);
+if (!isAdmin) {
   window.location.href = 'index.html';
 }
 
@@ -32,7 +35,108 @@ function showError(message) {
   errorBox.hidden = false;
 }
 
-const roleLabels = { admin: 'Administración', board: 'Directiva', member: 'Socio' };
+// The three system roles (see docs/architecture.md) get a friendlier
+// Spanish label; anything an admin created shows as typed.
+const knownRoleLabels = { admin: 'Administración', board: 'Directiva', member: 'Socio' };
+function roleLabel(name) {
+  return knownRoleLabels[name] ?? name;
+}
+
+// A caller can manage any role except "admin", which only an admin can
+// grant or revoke (avoids a board account minting new admins).
+function canManageRole(roleName) {
+  return roleName === 'admin' ? isRealAdmin : isAdmin;
+}
+
+let allRoles = [];
+let rolesByName = {};
+
+async function loadRoles() {
+  const tableBody = document.getElementById('roles-table-body');
+  try {
+    allRoles = await apiFetch('/roles');
+    rolesByName = Object.fromEntries(allRoles.map((role) => [role.name, role]));
+    tableBody.innerHTML = allRoles
+      .map((role) => `
+        <tr>
+          <td>${escapeHtml(roleLabel(role.name))}</td>
+          <td>${escapeHtml(role.description) || '—'}</td>
+          <td>${role.is_system ? '<span class="badge">Del sistema</span>' : ''}</td>
+          <td>${!role.is_system && isRealAdmin ? `<button type="button" class="btn btn-danger btn-small" data-delete-role="${role.id}">Borrar</button>` : ''}</td>
+        </tr>
+      `)
+      .join('');
+
+    const group = document.getElementById('np-roles-group');
+    if (group) {
+      group.innerHTML = allRoles
+        .filter((role) => role.name !== 'admin' || isRealAdmin)
+        .map((role) => `
+          <label>
+            <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}" ${role.name === 'member' ? 'checked' : ''}>
+            ${escapeHtml(roleLabel(role.name))}
+          </label>
+        `)
+        .join('');
+    }
+  } catch {
+    tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los roles.</td></tr>';
+  }
+}
+
+document.getElementById('roles-table-body').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-delete-role]');
+  if (!button) return;
+  if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
+
+  button.disabled = true;
+  try {
+    await apiFetch(`/roles/${button.dataset.deleteRole}`, { method: 'DELETE' });
+    showFeedback('Rol borrado.');
+    await loadRoles();
+    await loadUsers();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
+if (isRealAdmin) {
+  const newRolePanel = document.getElementById('new-role-panel');
+  const newRoleForm = document.getElementById('new-role-form');
+
+  document.getElementById('toggle-new-role').addEventListener('click', () => {
+    newRolePanel.hidden = !newRolePanel.hidden;
+  });
+
+  document.getElementById('cancel-new-role').addEventListener('click', () => {
+    newRoleForm.reset();
+    newRolePanel.hidden = true;
+  });
+
+  newRoleForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(newRoleForm);
+    const body = {
+      name: formData.get('name'),
+      description: formData.get('description')?.toString().trim() || null,
+    };
+
+    const submitButton = newRoleForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await apiFetch('/roles', { method: 'POST', body: JSON.stringify(body) });
+      showFeedback('Rol creado.');
+      newRoleForm.reset();
+      newRolePanel.hidden = true;
+      await loadRoles();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+}
 
 async function loadMemberships() {
   const tableBody = document.getElementById('memberships-table-body');
@@ -55,12 +159,41 @@ async function loadMemberships() {
   }
 }
 
+function renderRoleBadges(person) {
+  return person.roles
+    .map((name) => {
+      const label = escapeHtml(roleLabel(name));
+      if (!canManageRole(name)) {
+        return `<span class="badge">${label}</span>`;
+      }
+      const roleId = rolesByName[name]?.id;
+      return `<span class="badge-removable">${label}<button type="button" data-remove-role="${person.id}:${roleId}" title="Quitar rol">×</button></span>`;
+    })
+    .join('');
+}
+
+function renderRoleAddControl(person) {
+  const assignable = allRoles.filter((role) => !person.roles.includes(role.name) && canManageRole(role.name));
+  if (assignable.length === 0) {
+    return '';
+  }
+  const options = assignable
+    .map((role) => `<option value="${role.id}">${escapeHtml(roleLabel(role.name))}</option>`)
+    .join('');
+  return `
+    <div class="role-add-row">
+      <select data-role-select="${person.id}">${options}</select>
+      <button type="button" class="btn btn-secondary btn-small" data-add-role="${person.id}">+ Rol</button>
+    </div>
+  `;
+}
+
 function renderUserRow(person) {
   return `
     <tr>
       <td>${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</td>
       <td>${escapeHtml(person.email)}</td>
-      <td><span class="badge">${roleLabels[person.role] ?? person.role ?? '—'}</span></td>
+      <td>${renderRoleBadges(person)}${renderRoleAddControl(person)}</td>
       <td class="table-actions">
         <button type="button" class="btn btn-secondary btn-small" data-start-membership="${person.id}">Dar de alta</button>
         <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-person="${person.id}">Editar</button>
@@ -182,6 +315,42 @@ usersTableBody.addEventListener('click', async (event) => {
     return;
   }
 
+  const addRoleButton = event.target.closest('button[data-add-role]');
+  if (addRoleButton) {
+    const personId = addRoleButton.dataset.addRole;
+    const select = usersTableBody.querySelector(`select[data-role-select="${personId}"]`);
+    const roleId = select.value;
+
+    addRoleButton.disabled = true;
+    try {
+      await apiFetch(`/users/${personId}/roles`, {
+        method: 'POST',
+        body: JSON.stringify({ role_id: Number(roleId) }),
+      });
+      showFeedback('Rol añadido.');
+      await loadUsers();
+    } catch (err) {
+      addRoleButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const removeRoleButton = event.target.closest('button[data-remove-role]');
+  if (removeRoleButton) {
+    const [personId, roleId] = removeRoleButton.dataset.removeRole.split(':');
+    removeRoleButton.disabled = true;
+    try {
+      await apiFetch(`/users/${personId}/roles/${roleId}`, { method: 'DELETE' });
+      showFeedback('Rol quitado.');
+      await loadUsers();
+    } catch (err) {
+      removeRoleButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
   const toggleEditButton = event.target.closest('button[data-toggle-edit-person]');
   if (toggleEditButton) {
     const row = usersTableBody.querySelector(`[data-edit-person-row="${toggleEditButton.dataset.toggleEditPerson}"]`);
@@ -268,7 +437,7 @@ newPersonForm.addEventListener('submit', async (event) => {
     emergency_contact: optional('emergency_contact'),
     username: formData.get('username'),
     password: formData.get('password'),
-    role: formData.get('role'),
+    role_names: formData.getAll('role_names'),
   };
 
   const submitButton = newPersonForm.querySelector('button[type="submit"]');
@@ -286,5 +455,6 @@ newPersonForm.addEventListener('submit', async (event) => {
   }
 });
 
+await loadRoles();
 loadMemberships();
 loadUsers();

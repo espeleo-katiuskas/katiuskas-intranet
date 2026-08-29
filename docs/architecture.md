@@ -26,8 +26,13 @@ en `backend/openapi/openapi.yaml`.
 ## Modelo de datos (`db/migrations/`)
 
 - **`users`** — datos personales de cualquier persona vinculada al club.
-- **`credentials`** — usuario/contraseña + rol (`admin`, `board`, `member`), 1 a 1 con `users`.
-  Separada de `users` porque no toda persona registrada tiene acceso web.
+- **`credentials`** — usuario/contraseña, 1 a 1 con `users`. Separada de `users` porque
+  no toda persona registrada tiene acceso web.
+- **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
+  quién tiene cuáles (muchos a muchos). `admin`, `board` y `member` son roles de
+  *sistema* (`is_system`): son los únicos a los que el código realmente da permisos, y
+  no se pueden borrar. Cualquier otro rol que cree un admin sirve como etiqueta
+  organizativa — no desbloquea nada por sí solo salvo que se programe explícitamente.
 - **`refresh_tokens`** — sesiones de refresco, revocables.
 - **`memberships`** — periodos de alta/baja de socio. Una persona puede tener varios
   periodos si no se solapan; lo garantiza una restricción `EXCLUDE USING gist` de

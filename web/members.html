@@ -35,6 +35,43 @@
     </table>
   </div>
 
+  <div class="section-header" data-roles="admin">
+    <h2>Roles</h2>
+    <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
+  </div>
+  <div class="table-wrap" data-roles="admin,board">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>Descripción</th><th></th><th></th></tr>
+      </thead>
+      <tbody id="roles-table-body"></tbody>
+    </table>
+  </div>
+  <div id="new-role-panel" class="panel" hidden data-roles="admin">
+    <h3>Nuevo rol</h3>
+    <p class="hint">
+      Los roles del sistema (admin, directiva, socio) son los únicos que dan permisos
+      en la aplicación. Un rol nuevo sirve como etiqueta organizativa para el club
+      (por ejemplo, "material" o "instructor").
+    </p>
+    <form id="new-role-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="nr-name">Nombre</label>
+          <input id="nr-name" name="name" type="text" required>
+        </div>
+        <div class="field span-2">
+          <label for="nr-description">Descripción <span class="optional">(opcional)</span></label>
+          <input id="nr-description" name="description" type="text">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear rol</button>
+        <button id="cancel-new-role" type="button" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
   <div class="section-header">
     <h2>Todas las personas</h2>
     <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small">+ Nueva persona</button>
@@ -42,7 +79,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Nombre</th><th>Email</th><th>Rol</th><th></th></tr>
+        <tr><th>Nombre</th><th>Email</th><th>Roles</th><th></th></tr>
       </thead>
       <tbody id="users-table-body"></tbody>
     </table>
@@ -105,13 +142,9 @@
           <label for="np-password">Contraseña</label>
           <input id="np-password" name="password" type="text" required>
         </div>
-        <div class="field">
-          <label for="np-role">Rol</label>
-          <select id="np-role" name="role">
-            <option value="member" selected>Socio</option>
-            <option value="board">Directiva</option>
-            <option value="admin">Administración</option>
-          </select>
+        <div class="field span-2">
+          <label>Roles</label>
+          <div id="np-roles-group" class="role-checkbox-group"></div>
         </div>
       </div>
       <div class="panel-actions">

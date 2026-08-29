@@ -15,8 +15,8 @@ var ErrInvalidToken = errors.New("invalid or expired token")
 // request without a database round trip. The refresh token, not this
 // struct, is the source of truth for session validity.
 type Claims struct {
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
+	UserID int64    `json:"user_id"`
+	Roles  []string `json:"roles"`
 	jwt.RegisteredClaims
 }
 
@@ -29,10 +29,10 @@ func NewAuthenticator(secret string, accessTokenTTL time.Duration) *Authenticato
 	return &Authenticator{secret: []byte(secret), accessTokenTTL: accessTokenTTL}
 }
 
-func (a *Authenticator) IssueAccessToken(userID int64, role string) (string, error) {
+func (a *Authenticator) IssueAccessToken(userID int64, roles []string) (string, error) {
 	claims := Claims{
 		UserID: userID,
-		Role:   role,
+		Roles:  roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

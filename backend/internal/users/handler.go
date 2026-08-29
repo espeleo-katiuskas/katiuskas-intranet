@@ -9,6 +9,7 @@ import (
 
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/roles"
 )
 
 type Handler struct {
@@ -41,20 +42,20 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		FirstName        string  `json:"first_name"`
-		LastName         string  `json:"last_name"`
-		NationalID       *string `json:"national_id"`
-		BirthDate        *string `json:"birth_date"`
-		Email            string  `json:"email"`
-		Phone            *string `json:"phone"`
-		Address          *string `json:"address"`
-		PostalCode       *string `json:"postal_code"`
-		City             *string `json:"city"`
-		Province         *string `json:"province"`
-		EmergencyContact *string `json:"emergency_contact"`
-		Username         string  `json:"username"`
-		Password         string  `json:"password"`
-		Role             Role    `json:"role"`
+		FirstName        string   `json:"first_name"`
+		LastName         string   `json:"last_name"`
+		NationalID       *string  `json:"national_id"`
+		BirthDate        *string  `json:"birth_date"`
+		Email            string   `json:"email"`
+		Phone            *string  `json:"phone"`
+		Address          *string  `json:"address"`
+		PostalCode       *string  `json:"postal_code"`
+		City             *string  `json:"city"`
+		Province         *string  `json:"province"`
+		EmergencyContact *string  `json:"emergency_contact"`
+		Username         string   `json:"username"`
+		Password         string   `json:"password"`
+		RoleNames        []string `json:"role_names"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -65,11 +66,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
 		return
-	}
-
-	role := body.Role
-	if role == "" {
-		role = RoleMember
 	}
 
 	user, err := h.service.Create(r.Context(), CreateInput{
@@ -86,10 +82,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		EmergencyContact: body.EmergencyContact,
 		Username:         body.Username,
 		Password:         body.Password,
-		Role:             role,
+		RoleNames:        body.RoleNames,
 	})
 	if errors.Is(err, ErrDuplicate) {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate", err.Error())
+		return
+	}
+	if errors.Is(err, roles.ErrNotFound) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_role", "one of the given role names doesn't exist")
 		return
 	}
 	if err != nil {
@@ -117,7 +117,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if current.Role == string(RoleMember) && current.ID != id {
+	if !current.HasAnyRole("admin", "board") && current.ID != id {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only view their own profile")
 		return
 	}
@@ -136,7 +136,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if current.Role == string(RoleMember) && current.ID != id {
+	if !current.HasAnyRole("admin", "board") && current.ID != id {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only edit their own profile")
 		return
 	}
@@ -210,6 +210,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrHasReferences) {
 		httpapi.WriteError(w, http.StatusConflict, "has_references", err.Error())
+		return
+	}
+	if errors.Is(err, roles.ErrLastAdmin) {
+		httpapi.WriteError(w, http.StatusConflict, "last_admin", err.Error())
 		return
 	}
 	if err != nil {

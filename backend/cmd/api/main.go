@@ -15,6 +15,7 @@ import (
 	"katiuskas-intranet/backend/internal/inventory"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/platform/db"
+	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/users"
 )
 
@@ -38,8 +39,11 @@ func main() {
 
 	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.AccessTokenTTL)
 
+	rolesRepo := roles.NewRepository(pool)
+	rolesService := roles.NewService(rolesRepo)
+
 	usersRepo := users.NewRepository(pool)
-	usersService := users.NewService(usersRepo)
+	usersService := users.NewService(usersRepo, rolesService)
 
 	membershipsRepo := memberships.NewRepository(pool)
 	membershipsService := memberships.NewService(membershipsRepo)
@@ -51,8 +55,9 @@ func main() {
 	inventoryService := inventory.NewService(inventoryRepo)
 
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth:        authapi.NewHandler(usersService, authenticator, cfg.RefreshTokenTTL),
+		Auth:        authapi.NewHandler(usersService, rolesService, authenticator, cfg.RefreshTokenTTL),
 		Users:       users.NewHandler(usersService, authenticator),
+		Roles:       roles.NewHandler(rolesService, authenticator),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),

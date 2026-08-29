@@ -186,6 +186,64 @@ th {
   background: #eee;
 }
 
+.badge-removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: #f1e6da;
+  color: var(--ink);
+  margin: 2px 4px 2px 0;
+}
+
+.badge-removable button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.badge-removable button:hover {
+  color: var(--danger);
+}
+
+.role-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 8px 0;
+}
+
+.role-checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: normal;
+}
+
+.role-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.role-add-row select {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+
 .badge.status-planned {
   background: #e6eef5;
   color: #3e6e8e;

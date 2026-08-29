@@ -142,6 +142,96 @@ paths:
             still referenced by an activity they led or an inventory
             transaction they're party to.
 
+  /roles:
+    get:
+      summary: List every role
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+    post:
+      summary: Create a role
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "409":
+          description: A role with this name already exists.
+
+  /roles/{id}:
+    delete:
+      summary: Delete a role
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            This is a system role (admin/board/member) — it's wired to
+            permissions elsewhere in the API and can't be deleted.
+
+  /users/{userID}/roles:
+    post:
+      summary: Grant a role to a person
+      description: >
+        admin/board can grant any role except "admin" itself, which only an
+        admin can grant (avoids a board account minting new admins).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id: { type: integer }
+      responses:
+        "204": { description: Granted }
+        "403":
+          description: Only an admin can grant the admin role.
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users/{userID}/roles/{roleID}:
+    delete:
+      summary: Revoke a role from a person
+      description: >
+        Same admin-only carve-out as granting; also refuses to revoke
+        "admin" from the last person who has it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: roleID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Revoked }
+        "403":
+          description: Only an admin can revoke the admin role.
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cannot revoke "admin" from the only remaining admin.
+
   /users/{userID}/memberships:
     get:
       summary: List a user's membership periods
@@ -395,6 +485,16 @@ components:
         access_token: { type: string }
         refresh_token: { type: string }
 
+    Role:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        is_system:
+          type: boolean
+          description: admin/board/member — wired to real permissions, can't be deleted.
+
     User:
       type: object
       properties:
@@ -411,7 +511,14 @@ components:
         province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
         username: { type: string, nullable: true, description: "Absent if this person has no login account." }
-        role: { type: string, enum: [admin, board, member], nullable: true }
+        roles:
+          type: array
+          items: { type: string }
+          description: >
+            Role names this person holds. admin/board/member are the system
+            roles the API actually grants permissions to; any other name is
+            an admin-defined organizational label. Manage membership via
+            POST/DELETE /users/{userID}/roles, not this field.
         created_at: { type: string, format: date-time }
 
     CreateUserInput:
@@ -423,7 +530,10 @@ components:
             email: { type: string, format: email }
             username: { type: string }
             password: { type: string }
-            role: { type: string, enum: [admin, board, member] }
+            role_names:
+              type: array
+              items: { type: string }
+              description: Defaults to ["member"] if omitted.
 
     UpdateUserInput:
       description: >

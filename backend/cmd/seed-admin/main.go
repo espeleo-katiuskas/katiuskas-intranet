@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"katiuskas-intranet/backend/internal/platform/db"
+	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/users"
 )
 
@@ -34,7 +35,8 @@ func main() {
 	defer pool.Close()
 
 	repo := users.NewRepository(pool)
-	service := users.NewService(repo)
+	rolesService := roles.NewService(roles.NewRepository(pool))
+	service := users.NewService(repo, rolesService)
 
 	username := getEnv("SEED_ADMIN_USERNAME", "admin")
 	email := getEnv("SEED_ADMIN_EMAIL", "admin@club.test")
@@ -60,7 +62,7 @@ func main() {
 		Email:     email,
 		Username:  username,
 		Password:  password,
-		Role:      users.RoleAdmin,
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create admin account: %v\n", err)

@@ -3,6 +3,7 @@ import {
   logout,
   applyRoleVisibility,
   currentUser,
+  hasAnyRole,
   apiFetch,
   escapeHtml,
   formatDate,
@@ -13,7 +14,7 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
-const isAdmin = user?.role === 'admin' || user?.role === 'board';
+const isAdmin = hasAnyRole(user, ['admin', 'board']);
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');

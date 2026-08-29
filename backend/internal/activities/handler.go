@@ -168,7 +168,7 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if current.Role == "member" && current.ID != userID {
+	if !current.HasAnyRole("admin", "board") && current.ID != userID {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only remove themselves")
 		return
 	}

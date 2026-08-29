@@ -12,17 +12,19 @@ import (
 
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/users"
 )
 
 type Handler struct {
 	users         *users.Service
+	roles         *roles.Service
 	authenticator *auth.Authenticator
 	refreshTTL    time.Duration
 }
 
-func NewHandler(usersService *users.Service, authenticator *auth.Authenticator, refreshTTL time.Duration) *Handler {
-	return &Handler{users: usersService, authenticator: authenticator, refreshTTL: refreshTTL}
+func NewHandler(usersService *users.Service, rolesService *roles.Service, authenticator *auth.Authenticator, refreshTTL time.Duration) *Handler {
+	return &Handler{users: usersService, roles: rolesService, authenticator: authenticator, refreshTTL: refreshTTL}
 }
 
 type tokenPair struct {
@@ -44,7 +46,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "invalid username or password")
 		return
 	}
-	pair, err := h.issueTokenPair(r.Context(), creds.UserID, string(creds.Role))
+	pair, err := h.issueTokenPair(r.Context(), creds.UserID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")
 		return
@@ -67,13 +69,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
 		return
 	}
-	creds, err := h.users.GetCredentialsByUserID(r.Context(), userID)
-	if err != nil {
+	if _, err := h.users.GetCredentialsByUserID(r.Context(), userID); err != nil {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "account no longer exists")
 		return
 	}
 	_ = h.users.RevokeRefreshToken(r.Context(), hash)
-	pair, err := h.issueTokenPair(r.Context(), userID, string(creds.Role))
+	pair, err := h.issueTokenPair(r.Context(), userID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")
 		return
@@ -93,8 +94,12 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
-func (h *Handler) issueTokenPair(ctx context.Context, userID int64, role string) (tokenPair, error) {
-	access, err := h.authenticator.IssueAccessToken(userID, role)
+func (h *Handler) issueTokenPair(ctx context.Context, userID int64) (tokenPair, error) {
+	roleNames, err := h.roles.ListNamesForUser(ctx, userID)
+	if err != nil {
+		return tokenPair{}, err
+	}
+	access, err := h.authenticator.IssueAccessToken(userID, roleNames)
 	if err != nil {
 		return tokenPair{}, err
 	}

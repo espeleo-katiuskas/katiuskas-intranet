@@ -69,28 +69,32 @@ function logout() {
   window.location.href = 'login.html';
 }
 
-// Reads the (non-sensitive) user id and role out of the access token's
-// payload, purely for client-side display and nav filtering. The API is
-// the actual authority on permissions.
+// Reads the (non-sensitive) user id and role names out of the access
+// token's payload, purely for client-side display and nav filtering. The
+// API is the actual authority on permissions.
 function currentUser() {
   if (!accessToken) {
     return null;
   }
   try {
     const payload = JSON.parse(atob(accessToken.split('.')[1]));
-    return { id: payload.user_id, role: payload.role };
+    return { id: payload.user_id, roles: payload.roles ?? [] };
   } catch {
     return null;
   }
 }
 
+// Whether the given user holds at least one of the named roles.
+function hasAnyRole(user, names) {
+  return !!user && user.roles.some((role) => names.includes(role));
+}
+
 // Removes any element marked with data-roles="admin,board" unless the
-// current user's role is in that list.
+// current user holds at least one of those roles.
 function applyRoleVisibility() {
   const user = currentUser();
   document.querySelectorAll('[data-roles]').forEach((el) => {
-    const allowedRoles = el.dataset.roles.split(',');
-    if (!user || !allowedRoles.includes(user.role)) {
+    if (!hasAnyRole(user, el.dataset.roles.split(','))) {
       el.remove();
     }
   });
@@ -117,6 +121,7 @@ export {
   initSession,
   logout,
   currentUser,
+  hasAnyRole,
   applyRoleVisibility,
   setAccessTokenFromLogin,
   escapeHtml,

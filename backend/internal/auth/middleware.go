@@ -13,8 +13,21 @@ type contextKey string
 const userContextKey contextKey = "auth.user"
 
 type AuthenticatedUser struct {
-	ID   int64
-	Role string
+	ID    int64
+	Roles []string
+}
+
+// HasAnyRole reports whether the user holds at least one of the given
+// role names.
+func (u AuthenticatedUser) HasAnyRole(names ...string) bool {
+	for _, want := range names {
+		for _, have := range u.Roles {
+			if have == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
@@ -31,24 +44,20 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), userContextKey, AuthenticatedUser{
-			ID:   claims.UserID,
-			Role: claims.Role,
+			ID:    claims.UserID,
+			Roles: claims.Roles,
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// RequireRole rejects the request unless the authenticated user holds one
-// of the given roles. It must run after RequireAuth.
+// RequireRole rejects the request unless the authenticated user holds at
+// least one of the given roles. It must run after RequireAuth.
 func RequireRole(roles ...string) func(http.Handler) http.Handler {
-	allowed := make(map[string]bool, len(roles))
-	for _, role := range roles {
-		allowed[role] = true
-	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := UserFromContext(r.Context())
-			if !ok || !allowed[user.Role] {
+			if !ok || !user.HasAnyRole(roles...) {
 				httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 				return
 			}

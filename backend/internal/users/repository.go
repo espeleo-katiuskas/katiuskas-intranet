@@ -63,14 +63,14 @@ func (r *Repository) Create(ctx context.Context, in CreateInput, passwordHash st
 	}
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO credentials (user_id, username, password_hash, role)
-		VALUES ($1,$2,$3,$4)
-	`, u.ID, in.Username, passwordHash, in.Role)
+		INSERT INTO credentials (user_id, username, password_hash)
+		VALUES ($1,$2,$3)
+	`, u.ID, in.Username, passwordHash)
 	if err != nil {
 		return u, err
 	}
-	username, role := in.Username, string(in.Role)
-	u.Username, u.Role = &username, &role
+	username := in.Username
+	u.Username = &username
 
 	return u, tx.Commit(ctx)
 }
@@ -80,24 +80,34 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			c.username, c.role
+			c.username, `+rolesSubquery+`
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
 		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.Username, &u.Role)
+		&u.CreatedAt, &u.Username, &u.Roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
 	return u, err
 }
 
+// rolesSubquery aggregates a user's role names as a text[], never NULL, so
+// it can be selected as one extra column and scanned straight into a Go
+// []string.
+const rolesSubquery = `
+	COALESCE(
+		(SELECT array_agg(r.name ORDER BY r.name) FROM user_roles ur
+			JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id),
+		ARRAY[]::text[]
+	) AS roles`
+
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			c.username, c.role
+			c.username, `+rolesSubquery+`
 		FROM users u
 		LEFT JOIN credentials c ON c.user_id = u.id
 		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
@@ -112,7 +122,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
 			&u.Email, &u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province,
-			&u.EmergencyContact, &u.CreatedAt, &u.Username, &u.Role); err != nil {
+			&u.EmergencyContact, &u.CreatedAt, &u.Username, &u.Roles); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
@@ -196,9 +206,9 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 func (r *Repository) GetCredentialsByUsername(ctx context.Context, username string) (Credentials, error) {
 	var c Credentials
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, username, password_hash, role, is_active
+		SELECT user_id, username, password_hash, is_active
 		FROM credentials WHERE username = $1
-	`, username).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.Role, &c.IsActive)
+	`, username).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.IsActive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -208,9 +218,9 @@ func (r *Repository) GetCredentialsByUsername(ctx context.Context, username stri
 func (r *Repository) GetCredentialsByUserID(ctx context.Context, userID int64) (Credentials, error) {
 	var c Credentials
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, username, password_hash, role, is_active
+		SELECT user_id, username, password_hash, is_active
 		FROM credentials WHERE user_id = $1
-	`, userID).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.Role, &c.IsActive)
+	`, userID).Scan(&c.UserID, &c.Username, &c.PasswordHash, &c.IsActive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}

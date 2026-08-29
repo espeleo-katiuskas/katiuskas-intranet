@@ -5,14 +5,6 @@ package users
 
 import "time"
 
-type Role string
-
-const (
-	RoleAdmin  Role = "admin"
-	RoleBoard  Role = "board"
-	RoleMember Role = "member"
-)
-
 type User struct {
 	ID               int64      `json:"id"`
 	FirstName        string     `json:"first_name"`
@@ -27,7 +19,7 @@ type User struct {
 	Province         *string    `json:"province,omitempty"`
 	EmergencyContact *string    `json:"emergency_contact,omitempty"`
 	Username         *string    `json:"username,omitempty"`
-	Role             *string    `json:"role,omitempty"`
+	Roles            []string   `json:"roles"`
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
@@ -45,7 +37,8 @@ type CreateInput struct {
 	EmergencyContact *string    `json:"emergency_contact"`
 	Username         string     `json:"username"`
 	Password         string     `json:"password"`
-	Role             Role       `json:"role"`
+	// RoleNames defaults to ["member"] when empty (see handler).
+	RoleNames []string `json:"role_names"`
 }
 
 // UpdateInput covers every personal-data field, including ones that also
@@ -70,6 +63,5 @@ type Credentials struct {
 	UserID       int64
 	Username     string
 	PasswordHash string
-	Role         Role
 	IsActive     bool
 }
