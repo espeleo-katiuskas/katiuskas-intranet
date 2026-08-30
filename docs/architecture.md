@@ -45,6 +45,18 @@ en `backend/openapi/openapi.yaml`.
   crear una persona salvo que se indique explícitamente. La "categoría" (infantil,
   juvenil, mayores) no se guarda: `web/js/members.js` la calcula al vuelo a partir de
   `birth_date` y el año actual, igual que cualquier otra columna derivada de la lista.
+  `email` y `phone` pueden llevar más de un valor separados por espacio — igual que
+  `emergency_contact` ya admitía varios contactos en texto libre — en vez de una tabla
+  aparte: encajar "alguno de estos" es una comprobación de solape de arrays
+  (`string_to_array(...) && string_to_array(...)`), y esta escala de club no necesita
+  más. Eso sí impide seguir usando un `UNIQUE` de columna en `email` — un mismo correo
+  sigue sin poder pertenecer a dos personas, pero Postgres no puede expresar "ninguna
+  fila comparte un elemento" así, de modo que `users.Repository` lo comprueba a mano en
+  `Create`/`Update` (ver `db/migrations/00013_multiple_contacts.sql`). Iniciar sesión y
+  el enlace de acceso funcionan contra cualquiera de los correos/teléfonos registrados
+  (`Repository.FindActiveByEmailAndPhone`); como el espacio pasa a separar varios
+  teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
+  "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
   marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
   persona; solo se genera uno y se envía por correo si ambos coinciden con alguien de

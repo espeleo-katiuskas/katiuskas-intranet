@@ -178,6 +178,30 @@ func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	}
 }
 
+// A person can register more than one email (see users.User.Email); the
+// magic link must go out to all of them, and signing in works with any
+// one.
+func TestRequestMagicLinkSendsToAllOfSeveralEmails(t *testing.T) {
+	s := newTestServer(t)
+	primary := testutil.UniqueEmail(t)
+	secondary := testutil.UniqueEmail(t)
+	phone := "611222333"
+
+	if _, err := s.users.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: &phone, RoleNames: []string{"board"},
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	token := s.requestAndExtractToken(t, secondary, phone)
+	if token == "" {
+		t.Fatalf("expected a non-empty token when logging in with the secondary email")
+	}
+	if s.mailer.lastTo != primary+", "+secondary {
+		t.Errorf("expected the magic link to be sent to both addresses, got %q", s.mailer.lastTo)
+	}
+}
+
 func TestRequestMagicLinkSkipsSomeoneWithNoBaselineRole(t *testing.T) {
 	s := newTestServer(t)
 	user := testutil.InsertUser(t, s.tx, "611222333")

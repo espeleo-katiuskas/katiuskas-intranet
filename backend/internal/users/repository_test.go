@@ -238,6 +238,28 @@ func TestGetByEmail(t *testing.T) {
 	}
 }
 
+func TestGetByEmailMatchesAnyOfSeveralEmails(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	primary := testutil.UniqueEmail(t)
+	secondary := testutil.UniqueEmail(t)
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: primary + " " + secondary,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	found, err := repo.GetByEmail(context.Background(), secondary)
+	if err != nil {
+		t.Fatalf("get by secondary email: %v", err)
+	}
+	if found.ID != created.ID {
+		t.Errorf("expected id %d, got %d", created.ID, found.ID)
+	}
+}
+
 func TestList(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
@@ -259,23 +281,63 @@ func TestList(t *testing.T) {
 	}
 }
 
+// A stored phone can't use spaces as internal formatting anymore — that's
+// now reserved for separating more than one phone (see
+// Repository.FindActiveByEmailAndPhone) — but other punctuation like
+// dashes is still just noise, on either side of the comparison.
 func TestFindActiveByEmailAndPhoneMatchesRegardlessOfPhoneFormatting(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600 111 222"),
+		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600-111-222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	found, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "600-111-222")
+	found, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "600 111 222")
 	if err != nil {
 		t.Fatalf("expected a match despite different phone formatting, got %v", err)
 	}
 	if found.Email != email {
 		t.Errorf("unexpected match: %+v", found)
+	}
+}
+
+func TestFindActiveByEmailAndPhoneMatchesAnyOfSeveralPhones(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222 622333444"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "622-333-444"); err != nil {
+		t.Errorf("expected a match against the second phone, got %v", err)
+	}
+	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "600-111-222"); err != nil {
+		t.Errorf("expected a match against the first phone, got %v", err)
+	}
+}
+
+func TestFindActiveByEmailAndPhoneMatchesAnyOfSeveralEmails(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	primary := testutil.UniqueEmail(t)
+	secondary := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: strPtr("600111222"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), secondary, "600111222"); err != nil {
+		t.Errorf("expected a match against the secondary email, got %v", err)
 	}
 }
 
@@ -349,6 +411,27 @@ func TestUpdateEmailToADuplicateIsRejected(t *testing.T) {
 	}
 
 	_, err = repo.Update(ctx, second.ID, users.UpdateInput{Email: &taken})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
+	}
+}
+
+// One person can hold several emails, but each individual address still
+// can't belong to two different people — even when it's only one of
+// several the new person is being given.
+func TestCreateRejectsWhenOneOfSeveralEmailsIsAlreadyTaken(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	taken := testutil.UniqueEmail(t)
+	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: taken}); err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+
+	_, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t) + " " + taken,
+	})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
 	}

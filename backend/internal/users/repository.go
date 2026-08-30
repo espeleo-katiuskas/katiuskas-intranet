@@ -19,8 +19,9 @@ var (
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
 	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
-	// ErrDuplicate means the email, national ID, or membership number
-	// being set already belongs to another person.
+	// ErrDuplicate means an email (or one of several), the national ID,
+	// or the membership number being set already belongs to another
+	// person.
 	ErrDuplicate = errors.New("email, national ID, or membership number already belongs to another person")
 	// ErrInvalidToken means a magic-link token doesn't exist, already got
 	// used, or expired. It's intentionally the same error for all three
@@ -58,7 +59,31 @@ func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 
+// emailTakenByAnotherUser reports whether any of the space-separated
+// emails in candidate already belongs to a user other than excludeID
+// (pass 0 when checking a not-yet-created person). This is the check a
+// plain UNIQUE constraint used to do before email could hold more than
+// one address — Postgres can't express "no two rows share an element"
+// as a column constraint, so it's enforced here instead.
+func (r *Repository) emailTakenByAnotherUser(ctx context.Context, excludeID int64, candidate string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM users
+			WHERE id <> $1
+				AND string_to_array(email, ' ') && string_to_array($2, ' ')
+		)
+	`, excludeID, candidate).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
+	if taken, err := r.emailTakenByAnotherUser(ctx, 0, in.Email); err != nil {
+		return User{}, err
+	} else if taken {
+		return User{}, ErrDuplicate
+	}
+
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
 		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, gender, email, phone,
@@ -93,7 +118,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 	err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT `+userSelect+`
 		FROM users u
-		WHERE u.email = $1
+		WHERE $1 = ANY(string_to_array(u.email, ' '))
 	`, email), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
@@ -123,21 +148,25 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	return list, rows.Err()
 }
 
-// FindActiveByEmailAndPhone is the login lookup: matches by email and
-// phone (digits only, so formatting differences don't matter), or
-// ErrNotFound for either not matching. The caller must not distinguish
-// between those cases in its response — see authapi's anti-enumeration
-// design. Anyone in this table with both on file can be found this way;
-// what a resulting session can actually do is entirely down to roles.
+// FindActiveByEmailAndPhone is the login lookup: matches against any one
+// of the person's emails and any one of their phones (digits only, so
+// formatting differences don't matter), or ErrNotFound for either not
+// matching. The caller must not distinguish between those cases in its
+// response — see authapi's anti-enumeration design. Anyone in this table
+// with both on file can be found this way; what a resulting session can
+// actually do is entirely down to roles.
 func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT `+userSelect+`
 		FROM users u
-		WHERE u.email = $1
+		WHERE $1 = ANY(string_to_array(u.email, ' '))
 			AND u.phone IS NOT NULL
-			AND regexp_replace(u.phone, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
 			AND regexp_replace($2, '\D', '', 'g') <> ''
+			AND EXISTS (
+				SELECT 1 FROM unnest(string_to_array(u.phone, ' ')) AS candidate
+				WHERE regexp_replace(candidate, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
+			)
 	`, email, phone), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
@@ -158,6 +187,11 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	}
 	if in.Email != nil {
 		u.Email = *in.Email
+		if taken, err := r.emailTakenByAnotherUser(ctx, id, u.Email); err != nil {
+			return u, err
+		} else if taken {
+			return u, ErrDuplicate
+		}
 	}
 	if in.NationalID != nil {
 		u.NationalID = in.NationalID

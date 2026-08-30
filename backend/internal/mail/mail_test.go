@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -40,5 +41,21 @@ func TestNewSenderFromConfigReturnsSMTPWhenFullyConfigured(t *testing.T) {
 func TestConsoleSenderNeverErrors(t *testing.T) {
 	if err := (ConsoleSender{}).Send(context.Background(), "someone@example.com", "subject", "body"); err != nil {
 		t.Errorf("expected ConsoleSender.Send to never error, got %v", err)
+	}
+}
+
+func TestSplitRecipientsHandlesOneOrSeveralAddresses(t *testing.T) {
+	cases := []struct {
+		to   string
+		want []string
+	}{
+		{"a@example.com", []string{"a@example.com"}},
+		{"a@example.com, b@example.com", []string{"a@example.com", "b@example.com"}},
+		{"a@example.com,b@example.com,c@example.com", []string{"a@example.com", "b@example.com", "c@example.com"}},
+	}
+	for _, tc := range cases {
+		if got := splitRecipients(tc.to); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("splitRecipients(%q) = %v, want %v", tc.to, got, tc.want)
+		}
 	}
 }

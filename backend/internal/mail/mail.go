@@ -9,8 +9,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/smtp"
+	"strings"
 )
 
+// Sender's to is one or more addresses, comma-separated when there's
+// more than one (the caller's job — see authapi.Handler — since a
+// person's stored contact fields hold their own, differently-separated
+// convention).
 type Sender interface {
 	Send(ctx context.Context, to, subject, body string) error
 }
@@ -39,7 +44,19 @@ func (s SMTPSender) Send(_ context.Context, to, subject, body string) error {
 	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		s.From, to, subject, body)
-	return smtp.SendMail(addr, auth, s.From, []string{to}, []byte(msg))
+	return smtp.SendMail(addr, auth, s.From, splitRecipients(to), []byte(msg))
+}
+
+// splitRecipients turns to's comma-separated address list into the
+// individual envelope recipients SMTP's RCPT TO needs — the To: header
+// accepts the joined string as-is, but one combined string there would
+// be sent (and likely rejected) as a single, invalid mailbox.
+func splitRecipients(to string) []string {
+	recipients := strings.Split(to, ",")
+	for i, r := range recipients {
+		recipients[i] = strings.TrimSpace(r)
+	}
+	return recipients
 }
 
 // NewSenderFromConfig returns an SMTPSender when host/port/from are all

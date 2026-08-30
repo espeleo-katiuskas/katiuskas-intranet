@@ -128,7 +128,9 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 			"Si no has pedido este acceso, puedes ignorar este mensaje.",
 		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link,
 	)
-	return h.mailer.Send(ctx, user.Email, subject, body)
+	// user.Email may hold more than one address, space-separated (see
+	// users.User.Email) — mail.Sender expects a comma-separated list.
+	return h.mailer.Send(ctx, strings.Join(strings.Fields(user.Email), ", "), subject, body)
 }
 
 func (h *Handler) ConsumeMagicLink(w http.ResponseWriter, r *http.Request) {

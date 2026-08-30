@@ -44,8 +44,8 @@ paths:
               type: object
               required: [email, phone]
               properties:
-                email: { type: string, format: email }
-                phone: { type: string }
+                email: { type: string, format: email, description: "Matched against any one of the person's registered emails." }
+                phone: { type: string, description: "Matched against any one of the person's registered phones." }
       responses:
         "200":
           description: Always returned, regardless of whether a link was actually sent.
@@ -934,8 +934,21 @@ components:
         national_id: { type: string, nullable: true }
         birth_date: { type: string, format: date, nullable: true }
         gender: { $ref: "#/components/schemas/Gender" }
-        email: { type: string, format: email }
-        phone: { type: string, nullable: true }
+        email:
+          type: string
+          description: >
+            One or more email addresses, space-separated. Signing in and
+            a magic link going out both work against any one of them. An
+            individual address still can't belong to two different
+            people, even as one of several on the same record.
+        phone:
+          type: string
+          nullable: true
+          description: >
+            One or more phone numbers, space-separated — so each number
+            itself can't contain a space (write "600111222", not
+            "600 111 222"; other punctuation like dashes is fine).
+            Matched the same way as email for signing in.
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }
         city: { type: string, nullable: true }
@@ -1026,7 +1039,7 @@ components:
         - type: object
           required: [first_name, last_name, email]
           properties:
-            email: { type: string, format: email }
+            email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
             role_names:
               type: array
               items: { type: string }
@@ -1045,11 +1058,11 @@ components:
       properties:
         first_name: { type: string }
         last_name: { type: string }
-        email: { type: string, format: email }
+        email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
         national_id: { type: string, nullable: true }
         birth_date: { type: string, format: date, nullable: true }
         gender: { $ref: "#/components/schemas/Gender" }
-        phone: { type: string, nullable: true }
+        phone: { type: string, nullable: true, description: "One or more numbers, space-separated — see the User schema." }
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }
         city: { type: string, nullable: true }

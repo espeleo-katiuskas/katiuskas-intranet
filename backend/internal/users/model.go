@@ -1,9 +1,10 @@
 // Package users manages personal data and login access. Anyone in here
 // can sign in — there's no separate "granted access" step or table:
-// requesting a magic link already requires knowing the person's email
-// *and* phone (see authapi), so being in this table with both on file is
-// the only gate. What a session can actually do is entirely down to
-// roles, checked on every request (see the roles and auth packages).
+// requesting a magic link already requires knowing one of the person's
+// emails *and* one of their phones (see authapi), so being in this table
+// with both on file is the only gate. What a session can actually do is
+// entirely down to roles, checked on every request (see the roles and
+// auth packages).
 package users
 
 import "time"
@@ -16,19 +17,27 @@ const (
 )
 
 type User struct {
-	ID               int64      `json:"id"`
-	FirstName        string     `json:"first_name"`
-	LastName         string     `json:"last_name"`
-	NationalID       *string    `json:"national_id,omitempty"`
-	BirthDate        *time.Time `json:"birth_date,omitempty"`
-	Gender           *Gender    `json:"gender,omitempty"`
-	Email            string     `json:"email"`
-	Phone            *string    `json:"phone,omitempty"`
-	Address          *string    `json:"address,omitempty"`
-	PostalCode       *string    `json:"postal_code,omitempty"`
-	City             *string    `json:"city,omitempty"`
-	Province         *string    `json:"province,omitempty"`
-	EmergencyContact *string    `json:"emergency_contact,omitempty"`
+	ID         int64      `json:"id"`
+	FirstName  string     `json:"first_name"`
+	LastName   string     `json:"last_name"`
+	NationalID *string    `json:"national_id,omitempty"`
+	BirthDate  *time.Time `json:"birth_date,omitempty"`
+	Gender     *Gender    `json:"gender,omitempty"`
+	// Email and Phone can each hold more than one value, space-separated
+	// (like EmergencyContact already allows) — someone with a personal
+	// and a work address, say. Signing in, and a magic link going out,
+	// works against any one of them (see
+	// Repository.FindActiveByEmailAndPhone); one email still can't
+	// belong to two different people (Repository enforces that in Go,
+	// since the database can no longer express it as a plain column
+	// constraint once it's not a single atomic value).
+	Email            string  `json:"email"`
+	Phone            *string `json:"phone,omitempty"`
+	Address          *string `json:"address,omitempty"`
+	PostalCode       *string `json:"postal_code,omitempty"`
+	City             *string `json:"city,omitempty"`
+	Province         *string `json:"province,omitempty"`
+	EmergencyContact *string `json:"emergency_contact,omitempty"`
 	// MembershipNumber identifies this person for as long as they're
 	// associated with the club, not any single membership period —
 	// someone who leaves and later rejoins keeps the same one. Set here
