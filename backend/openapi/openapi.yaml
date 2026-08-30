@@ -557,6 +557,53 @@ paths:
         "409":
           description: not_active_member — this person doesn't currently have an open membership period.
 
+  /licenses/{id}:
+    patch:
+      summary: Correct a license
+      description: >
+        Admin-only. Unlike POST, this doesn't re-check that the person
+        currently has an open membership period — it's fixing an
+        existing record, not assigning a new one, so it also works for
+        someone who has since left the club. Same license_type_id /
+        other_detail rule as creating one.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_type_id, issued_date]
+              properties:
+                license_type_id: { type: integer }
+                other_detail: { type: string, nullable: true }
+                issued_date: { type: string, format: date }
+      responses:
+        "200":
+          description: Updated license
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/License" }
+        "400":
+          description: >
+            invalid_license_type (unknown license_type_id) or
+            invalid_other_detail (other_detail missing for "Otra", or
+            given for a type that isn't "Otra").
+        "403": { description: Only admin can correct a license. }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Remove a license
+      description: Admin-only.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Only admin can remove a license. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /license-types:
     get:
       summary: List the federative license name catalog

@@ -43,3 +43,13 @@ type CreateInput struct {
 	OtherDetail *string
 	IssuedDate  time.Time
 }
+
+// UpdateInput corrects a license: every field is always sent together
+// as a full replace, mirroring memberships.UpdateInput — there's no
+// ambiguity between "leave as is" and "clear it" to resolve. Same
+// OtherDetail rule as CreateInput; see Service.Update.
+type UpdateInput struct {
+	LicenseTypeID int64
+	OtherDetail   *string
+	IssuedDate    time.Time
+}

@@ -34,6 +34,24 @@ func (s *Service) ListTypes(ctx context.Context) ([]LicenseType, error) {
 	return s.repo.ListTypes(ctx)
 }
 
+// normalizeOtherDetail applies the "Otra" rule shared by Create and
+// Update: the catalog's escape-hatch entry requires a detail string,
+// every other entry forbids one. Returns the OtherDetail to actually
+// persist (always nil for a non-"Otra" type, even if one was given).
+func normalizeOtherDetail(licenseType LicenseType, otherDetail *string) (*string, error) {
+	hasDetail := otherDetail != nil && *otherDetail != ""
+	switch {
+	case licenseType.IsOther && !hasDetail:
+		return nil, ErrOtherDetailRequired
+	case !licenseType.IsOther && hasDetail:
+		return nil, ErrOtherDetailNotAllowed
+	case !licenseType.IsOther:
+		return nil, nil
+	default:
+		return otherDetail, nil
+	}
+}
+
 func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	active, err := s.memberships.IsActiveMember(ctx, in.UserID)
 	if err != nil {
@@ -47,17 +65,35 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	if err != nil {
 		return License{}, err
 	}
-	hasDetail := in.OtherDetail != nil && *in.OtherDetail != ""
-	switch {
-	case licenseType.IsOther && !hasDetail:
-		return License{}, ErrOtherDetailRequired
-	case !licenseType.IsOther && hasDetail:
-		return License{}, ErrOtherDetailNotAllowed
-	case !licenseType.IsOther:
-		in.OtherDetail = nil
+	otherDetail, err := normalizeOtherDetail(licenseType, in.OtherDetail)
+	if err != nil {
+		return License{}, err
 	}
+	in.OtherDetail = otherDetail
 
 	return s.repo.Create(ctx, in)
+}
+
+// Update corrects a license's type, other_detail, or issued_date. It
+// doesn't re-check the person's membership status the way Create does
+// — that gate is for assigning a new license, not for fixing a typo on
+// one someone already has, even after they've since left the club.
+func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (License, error) {
+	licenseType, err := s.repo.GetTypeByID(ctx, in.LicenseTypeID)
+	if err != nil {
+		return License{}, err
+	}
+	otherDetail, err := normalizeOtherDetail(licenseType, in.OtherDetail)
+	if err != nil {
+		return License{}, err
+	}
+	in.OtherDetail = otherDetail
+
+	return s.repo.Update(ctx, id, in)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]License, error) {

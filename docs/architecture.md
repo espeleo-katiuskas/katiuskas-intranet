@@ -191,7 +191,11 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service` incorpora la
   licencia más reciente de cada persona a `User` (`licenses.Service.LatestByUser`), igual
   que hace con el periodo de socio más reciente. Rutas bajo `/users/{userID}/licenses`:
-  `GET` abierto a la propia persona o admin/board, `POST` solo admin. En `/member`, cada
+  `GET` abierto a la propia persona o admin/board, `POST` solo admin;
+  `PATCH`/`DELETE /licenses/{id}` (por id de licencia, no anidadas bajo el usuario, igual
+  que `/leaves/{id}`) también solo admin — `PATCH` no vuelve a exigir alta activa, porque
+  corrige una licencia ya existente en vez de asignar una nueva, así que sigue
+  funcionando aunque la persona ya haya causado baja. En `/member`, cada
   licencia aparece como un evento más dentro del mismo timeline de altas y bajas, no en
   una sección aparte.
 - **`board_members`** — quién ha estado en la Junta Directiva y con qué cargo

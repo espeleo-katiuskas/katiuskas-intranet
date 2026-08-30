@@ -10,8 +10,12 @@ import (
 	"katiuskas-intranet/backend/internal/platform/db"
 )
 
-// ErrTypeNotFound means the given license_type_id isn't in the catalog.
-var ErrTypeNotFound = errors.New("license type not found")
+var (
+	// ErrTypeNotFound means the given license_type_id isn't in the catalog.
+	ErrTypeNotFound = errors.New("license type not found")
+	// ErrNotFound means the given license id doesn't exist.
+	ErrNotFound = errors.New("license not found")
+)
 
 type Repository struct {
 	pool db.PGX
@@ -82,6 +86,40 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error
 	l.Type = displayType(name, l.OtherDetail)
 	l.ValidUntil = validUntil(l.IssuedDate)
 	return l, nil
+}
+
+func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (License, error) {
+	var l License
+	err := r.pool.QueryRow(ctx, `
+		UPDATE licenses SET license_type_id=$1, other_detail=$2, issued_date=$3
+		WHERE id=$4
+		RETURNING id, user_id, license_type_id, other_detail, issued_date, created_at
+	`, in.LicenseTypeID, in.OtherDetail, in.IssuedDate, id,
+	).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return l, ErrNotFound
+	}
+	if err != nil {
+		return l, err
+	}
+	var name string
+	if err := r.pool.QueryRow(ctx, `SELECT name FROM license_types WHERE id = $1`, l.LicenseTypeID).Scan(&name); err != nil {
+		return l, err
+	}
+	l.Type = displayType(name, l.OtherDetail)
+	l.ValidUntil = validUntil(l.IssuedDate)
+	return l, nil
+}
+
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM licenses WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, error) {

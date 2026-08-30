@@ -139,6 +139,95 @@ func TestServiceCreateRejectsOtherDetailForANonOtraType(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateEnforcesTheSameOtherDetailRuleAsCreate(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+	otraID := testutil.LicenseTypeID(t, tx, "Otra")
+	ctx := context.Background()
+
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01")})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := svc.Update(ctx, created.ID, licenses.UpdateInput{LicenseTypeID: otraID, IssuedDate: date("2026-01-01")}); !errors.Is(err, licenses.ErrOtherDetailRequired) {
+		t.Errorf("expected ErrOtherDetailRequired, got %v", err)
+	}
+
+	detail := "FME"
+	updated, err := svc.Update(ctx, created.ID, licenses.UpdateInput{LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01")})
+	if err != nil {
+		t.Fatalf("expected the update to succeed with other_detail, got %v", err)
+	}
+	if updated.Type != "Otra: FME" {
+		t.Errorf(`expected type "Otra: FME", got %q`, updated.Type)
+	}
+}
+
+func TestServiceUpdateSucceedsEvenAfterMembershipEnded(t *testing.T) {
+	// Unlike Create, Update doesn't require the person to currently be an
+	// active member — it's correcting an existing license, not assigning
+	// a new one.
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+	typeB1 := testutil.LicenseTypeID(t, tx, "B1 PLUS")
+	ctx := context.Background()
+
+	m, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2020-06-01")})
+	if err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+	pastEnd := date("2021-01-01")
+	if _, err := membershipsService.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &pastEnd}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+
+	if _, err := svc.Update(ctx, created.ID, licenses.UpdateInput{LicenseTypeID: typeB1, IssuedDate: date("2020-06-01")}); err != nil {
+		t.Errorf("expected the correction to succeed for a former member, got %v", err)
+	}
+}
+
+func TestServiceDelete(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01")})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := svc.Delete(ctx, created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	latest, err := svc.LatestByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("latest by user: %v", err)
+	}
+	if latest != nil {
+		t.Errorf("expected no license left after delete, got %+v", latest)
+	}
+}
+
 func TestServiceListTypesIncludesTheFullCatalog(t *testing.T) {
 	tx := testutil.NewTx(t)
 	svc := licenses.NewService(licenses.NewRepository(tx), memberships.NewService(memberships.NewRepository(tx)))

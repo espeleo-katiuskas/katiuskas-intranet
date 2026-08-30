@@ -2,6 +2,7 @@ package licenses_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -61,6 +62,78 @@ func TestCreateWithTheOtraTypeStoresOtherDetailAndComposesTheDisplayType(t *test
 	}
 	if l.Type != "Otra: FME" {
 		t.Errorf(`expected type "Otra: FME", got %q`, l.Type)
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := licenses.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+	typeB1 := testutil.LicenseTypeID(t, tx, "B1 PLUS")
+
+	created, err := repo.Create(context.Background(), licenses.CreateInput{
+		UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-01-01"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := repo.Update(context.Background(), created.ID, licenses.UpdateInput{
+		LicenseTypeID: typeB1, IssuedDate: date("2026-03-15"),
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Type != "B1 PLUS" {
+		t.Errorf("expected updated type %q, got %q", "B1 PLUS", updated.Type)
+	}
+	if !updated.IssuedDate.Equal(date("2026-03-15")) {
+		t.Errorf("expected updated issued_date, got %v", updated.IssuedDate)
+	}
+	if !updated.ValidUntil.Equal(date("2026-12-31")) {
+		t.Errorf("expected recomputed valid_until, got %v", updated.ValidUntil)
+	}
+}
+
+func TestUpdateNotFound(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := licenses.NewRepository(tx)
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+
+	_, err := repo.Update(context.Background(), 999999, licenses.UpdateInput{LicenseTypeID: typeA, IssuedDate: date("2026-01-01")})
+	if !errors.Is(err, licenses.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := licenses.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+
+	created, err := repo.Create(context.Background(), licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01")})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.Delete(context.Background(), created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	list, err := repo.ListByUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected the license to be gone, got %+v", list)
+	}
+}
+
+func TestDeleteNotFound(t *testing.T) {
+	repo := licenses.NewRepository(testutil.NewTx(t))
+	if err := repo.Delete(context.Background(), 999999); !errors.Is(err, licenses.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
