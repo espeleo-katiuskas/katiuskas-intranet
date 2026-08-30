@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
@@ -13,19 +14,21 @@ import (
 )
 
 func newUsersService(t *testing.T) (*users.Service, *roles.Service) {
-	svc, roleSvc, _ := newUsersServiceWithMemberships(t)
+	svc, roleSvc, _, _ := newUsersServiceWithMemberships(t)
 	return svc, roleSvc
 }
 
-// newUsersServiceWithMemberships also returns a memberships.Service built
-// on the same transaction, for tests that need to start a membership
-// period and see it reflected through users.Service.
-func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Service, *memberships.Service) {
+// newUsersServiceWithMemberships also returns the memberships.Service and
+// licenses.Service built on the same transaction, for tests that need to
+// start a membership period or issue a license and see it reflected
+// through users.Service.
+func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Service, *memberships.Service, *licenses.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
-	svc := users.NewService(users.NewRepository(tx), rolesService, membershipsService)
-	return svc, rolesService, membershipsService
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	svc := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	return svc, rolesService, membershipsService, licensesService
 }
 
 // "member" used to be the default role assigned at creation; now it's
@@ -94,7 +97,7 @@ func TestServiceCreateWithUnknownRoleFailsButKeepsThePerson(t *testing.T) {
 }
 
 func TestServiceReportsLatestMembershipDates(t *testing.T) {
-	svc, _, membershipsService := newUsersServiceWithMemberships(t)
+	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
@@ -122,6 +125,52 @@ func TestServiceReportsLatestMembershipDates(t *testing.T) {
 	}
 	if current.MembershipEndDate != nil {
 		t.Errorf("expected a still-active membership to have no end date, got %v", current.MembershipEndDate)
+	}
+}
+
+func TestServiceReportsLatestLicense(t *testing.T) {
+	svc, _, membershipsService, licensesService := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if u.LicenseZone != nil {
+		t.Errorf("expected a brand-new person to have no license, got zone %v", u.LicenseZone)
+	}
+
+	startDate, err := time.Parse("2006-01-02", "2020-01-01")
+	if err != nil {
+		t.Fatalf("parse start date: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate}); err != nil {
+		t.Fatalf("start membership: %v", err)
+	}
+	issuedDate, err := time.Parse("2006-01-02", "2026-03-01")
+	if err != nil {
+		t.Fatalf("parse issued date: %v", err)
+	}
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, Zone: "B1", Modality: "PLUS", IssuedDate: issuedDate}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+
+	current, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if current.LicenseZone == nil || *current.LicenseZone != "B1" {
+		t.Errorf("expected license_zone B1, got %v", current.LicenseZone)
+	}
+	if current.LicenseModality == nil || *current.LicenseModality != "PLUS" {
+		t.Errorf("expected license_modality PLUS, got %v", current.LicenseModality)
+	}
+	if current.LicenseIssuedDate == nil || !current.LicenseIssuedDate.Equal(issuedDate) {
+		t.Errorf("expected license_issued_date %v, got %v", issuedDate, current.LicenseIssuedDate)
+	}
+	wantValidUntil, _ := time.Parse("2006-01-02", "2026-12-31")
+	if current.LicenseValidUntil == nil || !current.LicenseValidUntil.Equal(wantValidUntil) {
+		t.Errorf("expected license_valid_until %v, got %v", wantValidUntil, current.LicenseValidUntil)
 	}
 }
 

@@ -404,6 +404,53 @@ paths:
         "409":
           description: Overlaps an existing membership period for this user
 
+  /users/{userID}/licenses:
+    get:
+      summary: List a person's federative licenses
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: License history, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/License" }
+    post:
+      summary: Assign a federative license ("licencia federativa")
+      description: >
+        Only someone who currently has an open membership period (hasn't
+        caused baja) can be assigned one. A license is annual: valid from
+        issued_date through December 31 of that same year — the response
+        includes that computed valid_until, but it isn't something the
+        caller sets. zone and modality are free text, not a fixed set
+        (e.g. zonas A/B/B1, modalidad BASICA/PLUS today, but the club
+        expects others over time).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zone, modality, issued_date]
+              properties:
+                zone: { type: string }
+                modality: { type: string }
+                issued_date: { type: string, format: date }
+      responses:
+        "201":
+          description: License created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/License" }
+        "409":
+          description: not_active_member — this person doesn't currently have an open membership period.
+
   /memberships:
     get:
       summary: List members whose membership is active today
@@ -938,6 +985,20 @@ components:
           description: >
             End date of that same period, or null if it's still open
             (they're currently a member).
+        license_zone: { type: string, nullable: true }
+        license_modality: { type: string, nullable: true }
+        license_issued_date: { type: string, format: date, nullable: true }
+        license_valid_until:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            Together, license_* reflect this person's most recently
+            issued federative license (December 31 of license_issued_date's
+            year), or all null if they've never had one. Read-only here —
+            not settable through PATCH /users/{id}, only through
+            POST /users/{userID}/licenses. See GET /users/{userID}/licenses
+            for the full history.
         created_at: { type: string, format: date-time }
 
     DirectoryEntry:
@@ -1007,6 +1068,26 @@ components:
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
         reason: { type: string, nullable: true }
+
+    License:
+      type: object
+      description: >
+        A federative license ("licencia federativa"). Annual: valid from
+        issued_date through December 31 of that same year.
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        zone:
+          type: string
+          description: "Free text, not a fixed enum — e.g. A, B, B1 today, but the club expects others over time."
+        modality:
+          type: string
+          description: "Free text, not a fixed enum — e.g. BASICA, PLUS today, but the club expects others over time."
+        issued_date: { type: string, format: date }
+        valid_until:
+          type: string
+          format: date
+          description: Computed as December 31 of issued_date's year — never set directly.
 
     Activity:
       type: object

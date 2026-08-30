@@ -47,7 +47,14 @@ type User struct {
 	// member; both nil means they've never been one.
 	MembershipStartDate *time.Time `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
+	// License* reflect the person's most recently issued federative
+	// license (see licenses.Service.LatestByUser) — not settable through
+	// this package, only through POST /users/{userID}/licenses.
+	LicenseZone       *string    `json:"license_zone,omitempty"`
+	LicenseModality   *string    `json:"license_modality,omitempty"`
+	LicenseIssuedDate *time.Time `json:"license_issued_date,omitempty"`
+	LicenseValidUntil *time.Time `json:"license_valid_until,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 type CreateInput struct {

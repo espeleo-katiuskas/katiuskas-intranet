@@ -212,6 +212,9 @@ const COLUMNS = [
       return person.membership_start_date ? '<span class="badge">Activa</span>' : '—';
     },
   },
+  { ...textColumn('license_zone', 'Zona', (p) => p.license_zone ?? ''), default: false },
+  { ...textColumn('license_modality', 'Modalidad', (p) => p.license_modality ?? ''), default: false },
+  { ...dateColumn('license_valid_until', 'Licencia hasta', (p) => p.license_valid_until), default: false },
 ];
 const columnsByKey = Object.fromEntries(COLUMNS.map((c) => [c.key, c]));
 

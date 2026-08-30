@@ -109,6 +109,17 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	return list, rows.Err()
 }
 
+// IsActiveMember reports whether userID currently has an open membership
+// period — used to gate anything that should only apply to someone who
+// hasn't caused baja, like assigning a federative license.
+func (r *Repository) IsActiveMember(ctx context.Context, userID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM memberships WHERE user_id = $1 AND period @> CURRENT_DATE)
+	`, userID).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.user_id, m.start_date, m.end_date, m.end_reason,

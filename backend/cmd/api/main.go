@@ -13,6 +13,7 @@ import (
 	"katiuskas-intranet/backend/internal/config"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/inventory"
+	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/mail"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/platform/db"
@@ -45,8 +46,11 @@ func main() {
 	membershipsRepo := memberships.NewRepository(pool)
 	membershipsService := memberships.NewService(membershipsRepo)
 
+	licensesRepo := licenses.NewRepository(pool)
+	licensesService := licenses.NewService(licensesRepo, membershipsService)
+
 	usersRepo := users.NewRepository(pool)
-	usersService := users.NewService(usersRepo, rolesService, membershipsService)
+	usersService := users.NewService(usersRepo, rolesService, membershipsService, licensesService)
 
 	tokensRepo := tokens.NewRepository(pool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)
@@ -72,6 +76,7 @@ func main() {
 		Roles:       roles.NewHandler(rolesService, authenticator),
 		Tokens:      tokens.NewHandler(tokensService, authenticator),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),
+		Licenses:    licenses.NewHandler(licensesService, authenticator),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),
 	})

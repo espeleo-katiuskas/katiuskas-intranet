@@ -516,8 +516,52 @@ async function loadTransactions() {
   }
 }
 
+function renderLicenseRow(l) {
+  return `
+    <div class="detail-row">
+      <span>${escapeHtml(l.zone)} · ${escapeHtml(l.modality)} — obtenida ${formatDate(l.issued_date)},
+        válida hasta ${formatDate(l.valid_until)}</span>
+    </div>
+  `;
+}
+
+async function loadLicenses() {
+  const container = document.getElementById('licenses-list');
+  container.innerHTML = 'Cargando…';
+  try {
+    const list = await apiFetch(`/users/${memberId}/licenses`);
+    container.innerHTML = list.length
+      ? list.map(renderLicenseRow).join('')
+      : '<p>Sin licencias federativas.</p>';
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById('add-license').addEventListener('click', async () => {
+  const zone = prompt('Zona (por ejemplo A, B, B1):');
+  if (!zone) return;
+  const modality = prompt('Modalidad (por ejemplo BASICA, PLUS):');
+  if (!modality) return;
+  const issuedDate = prompt('Fecha de obtención (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (!issuedDate) return;
+
+  try {
+    await apiFetch(`/users/${memberId}/licenses`, {
+      method: 'POST',
+      body: JSON.stringify({ zone, modality, issued_date: issuedDate }),
+    });
+    showFeedback('Licencia registrada.');
+    await loadLicenses();
+    await loadMember();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
 await loadRolesCatalog();
 loadMember();
 loadTimeline();
+loadLicenses();
 loadActivities();
 loadTransactions();

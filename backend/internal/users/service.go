@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 )
@@ -12,10 +13,11 @@ type Service struct {
 	repo        *Repository
 	roles       *roles.Service
 	memberships *memberships.Service
+	licenses    *licenses.Service
 }
 
-func NewService(repo *Repository, rolesService *roles.Service, membershipsService *memberships.Service) *Service {
-	return &Service{repo: repo, roles: rolesService, memberships: membershipsService}
+func NewService(repo *Repository, rolesService *roles.Service, membershipsService *memberships.Service, licensesService *licenses.Service) *Service {
+	return &Service{repo: repo, roles: rolesService, memberships: membershipsService, licenses: licensesService}
 }
 
 // Create inserts the person, then assigns any explicitly requested roles
@@ -91,6 +93,17 @@ func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 	if latest != nil {
 		user.MembershipStartDate = &latest.StartDate
 		user.MembershipEndDate = latest.EndDate
+	}
+
+	latestLicense, err := s.licenses.LatestByUser(ctx, user.ID)
+	if err != nil {
+		return user, err
+	}
+	if latestLicense != nil {
+		user.LicenseZone = &latestLicense.Zone
+		user.LicenseModality = &latestLicense.Modality
+		user.LicenseIssuedDate = &latestLicense.IssuedDate
+		user.LicenseValidUntil = &latestLicense.ValidUntil
 	}
 	return user, nil
 }

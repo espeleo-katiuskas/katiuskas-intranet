@@ -14,6 +14,7 @@ type Routes struct {
 	Roles       ResourceHandler
 	Tokens      ResourceHandler
 	Memberships ResourceHandler
+	Licenses    ResourceHandler
 	Activities  ResourceHandler
 	Inventory   ResourceHandler
 }
@@ -26,6 +27,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Roles.RegisterRoutes(mux)
 	routes.Tokens.RegisterRoutes(mux)
 	routes.Memberships.RegisterRoutes(mux)
+	routes.Licenses.RegisterRoutes(mux)
 	routes.Activities.RegisterRoutes(mux)
 	routes.Inventory.RegisterRoutes(mux)
 
