@@ -16,7 +16,7 @@ type AuthenticatedUser struct {
 	ID    int64
 	Roles []string
 	// ImpersonatedBy is set only when this session was minted by
-	// POST /users/{userID}/impersonate: the id of the admin acting as
+	// POST /users/{login}/impersonate: the id of the admin acting as
 	// ID, not ID itself — everything else (permissions, ID, Roles) is
 	// resolved exactly as if ID had signed in normally, so this is the
 	// only place that knows an impersonation is happening at all.

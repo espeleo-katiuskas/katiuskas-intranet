@@ -11,7 +11,7 @@ import (
 
 // ErrWrongUser means the token exists but doesn't belong to the user id
 // the caller expected — the admin token-management routes are nested
-// under /users/{userID}/tokens/{tokenID}, so this catches, say, an id for
+// under /users/{login}/tokens/{tokenID}, so this catches, say, an id for
 // someone else's token and reports it as not found rather than leaking
 // that it exists.
 var ErrWrongUser = errors.New("token does not belong to this user")
