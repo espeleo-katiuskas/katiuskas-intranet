@@ -34,10 +34,19 @@ en `backend/openapi/openapi.yaml`.
   persona; solo si ambos coinciden con una cuenta activa se genera uno y se envía por
   correo — así no sirve para averiguar quién es socio ni para mandar correo no deseado.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
-  quién tiene cuáles (muchos a muchos). `admin`, `board` y `member` son roles de
-  *sistema* (`is_system`): son los únicos a los que el código realmente da permisos, y
-  no se pueden borrar. Cualquier otro rol que cree un admin sirve como etiqueta
-  organizativa — no desbloquea nada por sí solo salvo que se programe explícitamente.
+  quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
+  son roles de *sistema* (`is_system`): son los únicos a los que el código realmente
+  da permisos o comportamiento automático, y no se pueden borrar. Cualquier otro rol
+  que cree un admin sirve como etiqueta organizativa — no desbloquea nada por sí solo
+  salvo que se programe explícitamente.
+  `member` y `former_member` son además *automáticos* (`is_automatic`): nadie los
+  asigna ni los quita a mano (`POST`/`DELETE /users/{userID}/roles` los rechaza con
+  409). Se calculan al vuelo a partir de `memberships` —
+  `roles.Repository.ListNamesForUser` es el único sitio que sabe cómo—: `member` si la
+  persona tiene un periodo de socio activo ahora mismo, `former_member` si ha tenido
+  alguno antes pero ninguno activo hoy. Ese cálculo es lo que se firma en el JWT al
+  iniciar sesión, así que los permisos basados en "soy socio" siempre reflejan el
+  estado real de alta, no una etiqueta que alguien olvidó quitar.
 - **`refresh_tokens`** — sesiones de refresco, revocables.
 - `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo id y
   nombre de quienes tienen acceso (nada de teléfono, dirección, DNI...). Existe para que

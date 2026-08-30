@@ -33,16 +33,14 @@ const (
 	uniqueViolationCode     = "23505"
 )
 
-// hasAccessAndRolesSelect is appended to every query that returns a User:
-// whether they have an accounts row at all, and the names of the roles
-// they hold (never NULL — an empty array when they have none).
-const hasAccessAndRolesSelect = `
-	EXISTS(SELECT 1 FROM accounts a WHERE a.user_id = u.id) AS has_access,
-	COALESCE(
-		(SELECT array_agg(r.name ORDER BY r.name) FROM user_roles ur
-			JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id),
-		ARRAY[]::text[]
-	) AS roles`
+// hasAccessSelect is appended to every query that returns a User: whether
+// they have an accounts row at all. Role names aren't selected here —
+// "member"/"former_member" are computed from membership history rather
+// than stored, so the roles package (roles.Service.ListNamesForUser) is
+// the single place that knows how to list a person's roles; the users
+// service overlays that onto every User it returns instead of
+// duplicating the computation in SQL here.
+const hasAccessSelect = `EXISTS(SELECT 1 FROM accounts a WHERE a.user_id = u.id) AS has_access`
 
 type Repository struct {
 	pool db.PGX
@@ -93,12 +91,12 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessAndRolesSelect+`
+			`+hasAccessSelect+`
 		FROM users u
 		WHERE u.id = $1
 	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess, &u.Roles)
+		&u.CreatedAt, &u.HasAccess)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -110,12 +108,12 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessAndRolesSelect+`
+			`+hasAccessSelect+`
 		FROM users u
 		WHERE u.email = $1
 	`, email).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess, &u.Roles)
+		&u.CreatedAt, &u.HasAccess)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -126,7 +124,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessAndRolesSelect+`
+			`+hasAccessSelect+`
 		FROM users u
 		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -140,7 +138,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
 			&u.Email, &u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province,
-			&u.EmergencyContact, &u.CreatedAt, &u.HasAccess, &u.Roles); err != nil {
+			&u.EmergencyContact, &u.CreatedAt, &u.HasAccess); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
@@ -158,7 +156,7 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 	err := r.pool.QueryRow(ctx, `
 		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessAndRolesSelect+`
+			`+hasAccessSelect+`
 		FROM users u
 		JOIN accounts a ON a.user_id = u.id AND a.is_active
 		WHERE u.email = $1
@@ -167,7 +165,7 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 			AND regexp_replace($2, '\D', '', 'g') <> ''
 	`, email, phone).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess, &u.Roles)
+		&u.CreatedAt, &u.HasAccess)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}

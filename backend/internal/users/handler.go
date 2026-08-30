@@ -108,6 +108,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_role", "one of the given role names doesn't exist")
 		return
 	}
+	if errors.Is(err, roles.ErrAutomaticRole) {
+		httpapi.WriteError(w, http.StatusBadRequest, "automatic_role", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create user")
 		return

@@ -115,6 +115,10 @@ func (h *Handler) assign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Assign(r.Context(), userID, role.ID); err != nil {
+		if errors.Is(err, ErrAutomaticRole) {
+			httpapi.WriteError(w, http.StatusConflict, "automatic_role", err.Error())
+			return
+		}
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not assign role")
 		return
 	}
@@ -151,6 +155,10 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 	err = h.service.Remove(r.Context(), userID, roleID)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "that person doesn't have this role")
+		return
+	}
+	if errors.Is(err, ErrAutomaticRole) {
+		httpapi.WriteError(w, http.StatusConflict, "automatic_role", err.Error())
 		return
 	}
 	if errors.Is(err, ErrLastAdmin) {

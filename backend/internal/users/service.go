@@ -17,41 +17,69 @@ func NewService(repo *Repository, rolesService *roles.Service) *Service {
 }
 
 // Create inserts the person, optionally grants them access, then assigns
-// their roles as a separate step (defaulting to "member" if none were
-// given). Neither of those two follow-on steps is part of the same
-// database transaction as the insert — a club-scale app doesn't need
-// cross-package transactions for this, but it does mean a failure there
-// leaves a person record behind that didn't get everything requested.
+// any explicitly requested roles as a separate step. There's no longer a
+// default "member" role to fall back to — that's automatic now, derived
+// from whether the person has an active membership period (which a
+// brand-new person doesn't yet). Neither follow-on step is part of the
+// same database transaction as the insert — a club-scale app doesn't
+// need cross-package transactions for this, but it does mean a failure
+// there leaves a person record behind that didn't get everything
+// requested.
 func (s *Service) Create(ctx context.Context, in CreateInput) (User, error) {
 	user, err := s.repo.Create(ctx, in)
 	if err != nil {
 		return user, err
 	}
-
-	roleNames := in.RoleNames
-	if len(roleNames) == 0 {
-		roleNames = []string{"member"}
-	}
-	if err := s.roles.AssignByName(ctx, user.ID, roleNames); err != nil {
+	if err := s.roles.AssignByName(ctx, user.ID, in.RoleNames); err != nil {
 		return user, err
 	}
-	user.Roles = roleNames
-	return user, nil
+	return s.withRoles(ctx, user)
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (User, error) {
-	return s.repo.GetByID(ctx, id)
+	user, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return user, err
+	}
+	return s.withRoles(ctx, user)
 }
 
 func (s *Service) List(ctx context.Context, limit, offset int) ([]User, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	return s.repo.List(ctx, limit, offset)
+	list, err := s.repo.List(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i], err = s.withRoles(ctx, list[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return list, nil
 }
 
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {
-	return s.repo.Update(ctx, id, in)
+	user, err := s.repo.Update(ctx, id, in)
+	if err != nil {
+		return user, err
+	}
+	return s.withRoles(ctx, user)
+}
+
+// withRoles overlays the authoritative role list — roles.Service is the
+// single place that knows how to compute "member"/"former_member" from
+// membership history on top of whatever's actually stored in
+// user_roles (see roles.Repository.ListNamesForUser).
+func (s *Service) withRoles(ctx context.Context, user User) (User, error) {
+	names, err := s.roles.ListNamesForUser(ctx, user.ID)
+	if err != nil {
+		return user, err
+	}
+	user.Roles = names
+	return user, nil
 }
 
 func (s *Service) Directory(ctx context.Context) ([]DirectoryEntry, error) {

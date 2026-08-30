@@ -106,13 +106,37 @@ func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
 	target := testutil.InsertUser(t, tx, "", false)
-	memberRoleID := testutil.RoleID(t, tx, "member")
+	boardRoleID := testutil.RoleID(t, tx, "board")
 
 	boardToken := rolesToken(t, authn, 1, "board")
 	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), boardToken,
-		map[string]int64{"role_id": memberRoleID})
+		map[string]int64{"role_id": boardRoleID})
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected board to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
+	mux, authn, _, tx := newRolesTestServer(t)
+	target := testutil.InsertUser(t, tx, "", false)
+	memberRoleID := testutil.RoleID(t, tx, "member")
+
+	adminToken := rolesToken(t, authn, 1, "admin")
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), adminToken,
+		map[string]int64{"role_id": memberRoleID})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 granting an automatic role, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := rolesErrorCode(t, rec); code != "automatic_role" {
+		t.Errorf("expected error code automatic_role, got %q", code)
+	}
+
+	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/roles/%d", target.ID, memberRoleID), adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 revoking an automatic role, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := rolesErrorCode(t, rec); code != "automatic_role" {
+		t.Errorf("expected error code automatic_role, got %q", code)
 	}
 }
 

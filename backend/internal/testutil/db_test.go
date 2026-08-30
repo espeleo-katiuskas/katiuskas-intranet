@@ -12,8 +12,8 @@ func TestNewTxAppliesMigrationsAndIsolatesTests(t *testing.T) {
 	if err := tx.QueryRow(context.Background(), `SELECT count(*) FROM roles WHERE is_system`).Scan(&count); err != nil {
 		t.Fatalf("query roles: %v", err)
 	}
-	if count != 3 {
-		t.Fatalf("expected 3 system roles seeded, got %d", count)
+	if count != 4 {
+		t.Fatalf("expected 4 system roles seeded, got %d", count)
 	}
 
 	user := InsertUser(t, tx, "600111222", true)

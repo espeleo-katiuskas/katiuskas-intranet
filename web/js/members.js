@@ -35,16 +35,20 @@ function showError(message) {
   errorBox.hidden = false;
 }
 
-// The three system roles (see docs/architecture.md) get a friendlier
-// Spanish label; anything an admin created shows as typed.
-const knownRoleLabels = { admin: 'Administración', board: 'Directiva', member: 'Socio' };
+// The system roles (see docs/architecture.md) get a friendlier Spanish
+// label; anything an admin created shows as typed.
+const knownRoleLabels = { admin: 'Administración', board: 'Directiva', member: 'Socio', former_member: 'Ex-socio' };
 function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
 
-// A caller can manage any role except "admin", which only an admin can
-// grant or revoke (avoids a board account minting new admins).
+// "member"/"former_member" are computed from membership history — see
+// docs/architecture.md — and can't be granted or revoked by hand at all,
+// regardless of who's asking. Anything else, any caller can manage
+// except "admin", which only an admin can grant or revoke (avoids a
+// board account minting new admins).
 function canManageRole(roleName) {
+  if (rolesByName[roleName]?.is_automatic) return false;
   return roleName === 'admin' ? isRealAdmin : isAdmin;
 }
 
@@ -61,7 +65,10 @@ async function loadRoles() {
         <tr>
           <td>${escapeHtml(roleLabel(role.name))}</td>
           <td>${escapeHtml(role.description) || '—'}</td>
-          <td>${role.is_system ? '<span class="badge">Del sistema</span>' : ''}</td>
+          <td>
+            ${role.is_system ? '<span class="badge">Del sistema</span>' : ''}
+            ${role.is_automatic ? '<span class="badge" title="Se asigna solo, según el historial de socio">Automático</span>' : ''}
+          </td>
           <td>${!role.is_system && isRealAdmin ? `<button type="button" class="btn btn-danger btn-small" data-delete-role="${role.id}">Borrar</button>` : ''}</td>
         </tr>
       `)
@@ -70,10 +77,10 @@ async function loadRoles() {
     const group = document.getElementById('np-roles-group');
     if (group) {
       group.innerHTML = allRoles
-        .filter((role) => role.name !== 'admin' || isRealAdmin)
+        .filter((role) => !role.is_automatic && (role.name !== 'admin' || isRealAdmin))
         .map((role) => `
           <label>
-            <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}" ${role.name === 'member' ? 'checked' : ''}>
+            <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}">
             ${escapeHtml(roleLabel(role.name))}
           </label>
         `)

@@ -36,13 +36,17 @@ func (s *Service) ListNamesForUser(ctx context.Context, userID int64) ([]string,
 }
 
 // AssignByName resolves every name to a role first, so an unknown role
-// name fails the whole call before any assignment happens.
+// name — or an automatic one, which can't be granted by hand — fails
+// the whole call before any assignment happens.
 func (s *Service) AssignByName(ctx context.Context, userID int64, names []string) error {
 	ids := make([]int64, 0, len(names))
 	for _, name := range names {
 		role, err := s.repo.GetByName(ctx, name)
 		if err != nil {
 			return err
+		}
+		if role.IsAutomatic {
+			return ErrAutomaticRole
 		}
 		ids = append(ids, role.ID)
 	}
@@ -54,16 +58,30 @@ func (s *Service) AssignByName(ctx context.Context, userID int64, names []string
 	return nil
 }
 
+// Assign grants a role by id, refusing an automatic one (member,
+// former_member) since those are computed from membership history
+// instead — see the package doc comment.
 func (s *Service) Assign(ctx context.Context, userID, roleID int64) error {
+	role, err := s.repo.GetByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role.IsAutomatic {
+		return ErrAutomaticRole
+	}
 	return s.repo.Assign(ctx, userID, roleID)
 }
 
-// Remove refuses to strip the "admin" role from the last person who has
+// Remove refuses to strip an automatic role (nothing to revoke by hand)
+// and refuses to strip the "admin" role from the last person who has
 // it — otherwise nobody would be left who could manage users or roles.
 func (s *Service) Remove(ctx context.Context, userID, roleID int64) error {
 	role, err := s.repo.GetByID(ctx, roleID)
 	if err != nil {
 		return err
+	}
+	if role.IsAutomatic {
+		return ErrAutomaticRole
 	}
 	if role.Name == "admin" {
 		hasIt, err := s.repo.UserHasRoleName(ctx, userID, "admin")

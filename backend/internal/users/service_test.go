@@ -16,24 +16,32 @@ func newUsersService(t *testing.T) (*users.Service, *roles.Service) {
 	return users.NewService(users.NewRepository(tx), rolesService), rolesService
 }
 
-func TestServiceCreateDefaultsToMemberRole(t *testing.T) {
-	svc, rolesService := newUsersService(t)
+// "member" used to be the default role assigned at creation; now it's
+// computed from membership history instead (see the roles package doc
+// comment), so a brand-new person — who doesn't have one yet — starts
+// with no roles at all unless some are explicitly given.
+func TestServiceCreateWithNoRolesGrantsNothing(t *testing.T) {
+	svc, _ := newUsersService(t)
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if len(u.Roles) != 1 || u.Roles[0] != "member" {
-		t.Errorf("expected default role [member], got %v", u.Roles)
+	if len(u.Roles) != 0 {
+		t.Errorf("expected no roles for a brand-new person, got %v", u.Roles)
 	}
+}
 
-	names, err := rolesService.ListNamesForUser(ctx, u.ID)
-	if err != nil {
-		t.Fatalf("list names: %v", err)
-	}
-	if len(names) != 1 || names[0] != "member" {
-		t.Errorf("expected persisted role [member], got %v", names)
+func TestServiceCreateRejectsAutomaticRoleInRoleNames(t *testing.T) {
+	svc, _ := newUsersService(t)
+	ctx := context.Background()
+
+	_, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), RoleNames: []string{"member"},
+	})
+	if !errors.Is(err, roles.ErrAutomaticRole) {
+		t.Errorf("expected roles.ErrAutomaticRole, got %v", err)
 	}
 }
 

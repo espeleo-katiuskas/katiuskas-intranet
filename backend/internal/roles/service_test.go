@@ -24,7 +24,7 @@ func TestAssignByNameIsAllOrNothing(t *testing.T) {
 	ctx := context.Background()
 	user := newUser("", false)
 
-	err := svc.AssignByName(ctx, user.ID, []string{"member", "does-not-exist"})
+	err := svc.AssignByName(ctx, user.ID, []string{"board", "does-not-exist"})
 	if !errors.Is(err, roles.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for the unknown role, got %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAssignByNameSucceedsWhenAllNamesAreValid(t *testing.T) {
 	ctx := context.Background()
 	user := newUser("", false)
 
-	if err := svc.AssignByName(ctx, user.ID, []string{"member", "board"}); err != nil {
+	if err := svc.AssignByName(ctx, user.ID, []string{"admin", "board"}); err != nil {
 		t.Fatalf("assign by name: %v", err)
 	}
 	names, err := svc.ListNamesForUser(ctx, user.ID)
@@ -52,6 +52,30 @@ func TestAssignByNameSucceedsWhenAllNamesAreValid(t *testing.T) {
 	}
 	if len(names) != 2 {
 		t.Errorf("expected 2 roles assigned, got %v", names)
+	}
+}
+
+func TestAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := roles.NewRepository(tx)
+	svc := roles.NewService(repo)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "", false)
+	memberID := testutil.RoleID(t, tx, "member")
+	formerMemberID := testutil.RoleID(t, tx, "former_member")
+
+	if err := svc.Assign(ctx, user.ID, memberID); !errors.Is(err, roles.ErrAutomaticRole) {
+		t.Errorf("expected ErrAutomaticRole assigning member, got %v", err)
+	}
+	if err := svc.Assign(ctx, user.ID, formerMemberID); !errors.Is(err, roles.ErrAutomaticRole) {
+		t.Errorf("expected ErrAutomaticRole assigning former_member, got %v", err)
+	}
+	if err := svc.AssignByName(ctx, user.ID, []string{"member"}); !errors.Is(err, roles.ErrAutomaticRole) {
+		t.Errorf("expected ErrAutomaticRole assigning member by name, got %v", err)
+	}
+	if err := svc.Remove(ctx, user.ID, memberID); !errors.Is(err, roles.ErrAutomaticRole) {
+		t.Errorf("expected ErrAutomaticRole removing member, got %v", err)
 	}
 }
 
@@ -87,12 +111,12 @@ func TestRemoveNonAdminRoleIsUnaffectedByLastAdminCheck(t *testing.T) {
 	svc := roles.NewService(repo)
 	ctx := context.Background()
 
-	memberID := testutil.RoleID(t, tx, "member")
+	boardID := testutil.RoleID(t, tx, "board")
 	user := testutil.InsertUser(t, tx, "", false)
-	if err := svc.Assign(ctx, user.ID, memberID); err != nil {
+	if err := svc.Assign(ctx, user.ID, boardID); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	if err := svc.Remove(ctx, user.ID, memberID); err != nil {
+	if err := svc.Remove(ctx, user.ID, boardID); err != nil {
 		t.Errorf("expected removing a non-admin role to succeed even as the only holder, got %v", err)
 	}
 }

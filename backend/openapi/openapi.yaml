@@ -241,6 +241,8 @@ paths:
       description: >
         admin/board can grant any role except "admin" itself, which only an
         admin can grant (avoids a board account minting new admins).
+        member/former_member can't be granted this way at all — they're
+        computed from membership history instead.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -258,13 +260,16 @@ paths:
         "403":
           description: Only an admin can grant the admin role.
         "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The role is automatic (member/former_member) and can't be granted by hand.
 
   /users/{userID}/roles/{roleID}:
     delete:
       summary: Revoke a role from a person
       description: >
         Same admin-only carve-out as granting; also refuses to revoke
-        "admin" from the last person who has it.
+        "admin" from the last person who has it, and refuses to revoke
+        member/former_member at all (computed, not stored).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -275,7 +280,10 @@ paths:
           description: Only an admin can revoke the admin role.
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Cannot revoke "admin" from the only remaining admin.
+          description: >
+            Either "admin" from the only remaining admin, or an automatic
+            role (member/former_member), neither of which can be revoked
+            this way.
 
   /users/{userID}/memberships:
     get:
@@ -612,7 +620,17 @@ components:
         description: { type: string, nullable: true }
         is_system:
           type: boolean
-          description: admin/board/member — wired to real permissions, can't be deleted.
+          description: >
+            admin/board/member/former_member — wired to real permissions
+            or automatic behavior, can't be deleted.
+        is_automatic:
+          type: boolean
+          description: >
+            member/former_member: computed from whether the person has a
+            currently active (member) or a past but not current
+            (former_member) membership period. Can't be granted or
+            revoked through POST/DELETE /users/{userID}/roles — those
+            return 409 automatic_role.
 
     User:
       type: object
@@ -667,7 +685,10 @@ components:
             role_names:
               type: array
               items: { type: string }
-              description: Defaults to ["member"] if omitted.
+              description: >
+                Optional, empty by default. Can't include "member" or
+                "former_member" — those are automatic, computed from
+                membership history instead.
 
     UpdateUserInput:
       description: >

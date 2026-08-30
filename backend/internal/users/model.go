@@ -41,7 +41,9 @@ type CreateInput struct {
 	// a magic link. Since that link is only ever requested by matching
 	// email *and* phone, Phone is required when this is true.
 	GrantAccess bool `json:"grant_access"`
-	// RoleNames defaults to ["member"] when empty (see handler).
+	// RoleNames are assigned in the same call. Doesn't need — and can't
+	// include — "member" or "former_member": those are automatic,
+	// derived from membership history instead of granted by hand.
 	RoleNames []string `json:"role_names"`
 }
 

@@ -23,14 +23,67 @@ func TestListIncludesSeededSystemRoles(t *testing.T) {
 			systemNames = append(systemNames, r.Name)
 		}
 	}
-	want := map[string]bool{"admin": true, "board": true, "member": true}
+	want := map[string]bool{"admin": true, "board": true, "member": true, "former_member": true}
 	if len(systemNames) != len(want) {
-		t.Fatalf("expected 3 system roles, got %v", systemNames)
+		t.Fatalf("expected %d system roles, got %v", len(want), systemNames)
 	}
 	for _, name := range systemNames {
 		if !want[name] {
 			t.Errorf("unexpected system role %q", name)
 		}
+	}
+
+	for _, r := range list {
+		wantAutomatic := r.Name == "member" || r.Name == "former_member"
+		if r.IsAutomatic != wantAutomatic {
+			t.Errorf("expected role %q is_automatic=%v, got %v", r.Name, wantAutomatic, r.IsAutomatic)
+		}
+	}
+}
+
+func TestListNamesForUserComputesMemberAndFormerMember(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := roles.NewRepository(tx)
+	ctx := context.Background()
+
+	currentMember := testutil.InsertUser(t, tx, "", false)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO memberships (user_id, start_date) VALUES ($1, '2020-01-01')
+	`, currentMember.ID); err != nil {
+		t.Fatalf("insert active membership: %v", err)
+	}
+
+	formerMember := testutil.InsertUser(t, tx, "", false)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, '2020-01-01', '2021-01-01')
+	`, formerMember.ID); err != nil {
+		t.Fatalf("insert ended membership: %v", err)
+	}
+
+	neverMember := testutil.InsertUser(t, tx, "", false)
+
+	names, err := repo.ListNamesForUser(ctx, currentMember.ID)
+	if err != nil {
+		t.Fatalf("list names for current member: %v", err)
+	}
+	if len(names) != 1 || names[0] != "member" {
+		t.Errorf("expected [member] for someone with an active membership, got %v", names)
+	}
+
+	names, err = repo.ListNamesForUser(ctx, formerMember.ID)
+	if err != nil {
+		t.Fatalf("list names for former member: %v", err)
+	}
+	if len(names) != 1 || names[0] != "former_member" {
+		t.Errorf("expected [former_member] for someone whose membership ended, got %v", names)
+	}
+
+	names, err = repo.ListNamesForUser(ctx, neverMember.ID)
+	if err != nil {
+		t.Fatalf("list names for never a member: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("expected no automatic roles for someone who's never had a membership, got %v", names)
 	}
 }
 

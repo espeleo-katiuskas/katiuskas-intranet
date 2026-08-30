@@ -206,6 +206,31 @@ func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	}
 }
 
+func TestConsumeMagicLinkIssuesTheComputedMemberRole(t *testing.T) {
+	s := newTestServer(t)
+	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	if _, err := s.tx.Exec(context.Background(), `
+		INSERT INTO memberships (user_id, start_date) VALUES ($1, '2020-01-01')
+	`, user.ID); err != nil {
+		t.Fatalf("insert active membership: %v", err)
+	}
+
+	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	pair := decodeTokenPair(t, rec)
+	claims, err := s.auth.ParseAccessToken(pair.AccessToken)
+	if err != nil {
+		t.Fatalf("parse issued access token: %v", err)
+	}
+	if len(claims.Roles) != 1 || claims.Roles[0] != "member" {
+		t.Errorf("expected roles [member] computed from the active membership, got %v", claims.Roles)
+	}
+}
+
 func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 	s := newTestServer(t)
 	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": "never-issued"})
