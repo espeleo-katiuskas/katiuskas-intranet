@@ -95,14 +95,27 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
   "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
-  marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
-  persona; solo se genera uno y se envía por correo si ambos coinciden con alguien de
-  `users` *y* esa persona tiene al menos uno de los roles `admin`, `board` o `member`
-  (`auth.BaselineRoles`, ver más abajo) — a quien no tiene ninguno no le serviría de
-  nada iniciar sesión, así que no se le manda enlace. La respuesta de `/auth/magic-link`
-  es idéntica en los tres casos (no coincide nadie, coincide alguien sin rol, se envía
-  el enlace de verdad) — así no sirve para averiguar quién está en el sistema, ni quién
-  tiene acceso, ni para mandar correo no deseado.
+  marca de consumido), y desde la migración 00018 también el hash de un código numérico
+  de 6 dígitos que va en el mismo correo — pensado para cuando el correo se lee desde un
+  dispositivo distinto al que se quiere usar para entrar: escribir el código en
+  `/login` es más práctico ahí que copiar una URL larga. Enlace y código representan el
+  mismo intento de acceso en la misma fila; consumir uno consume también el otro
+  (`users.Repository.ConsumeMagicLinkToken` / `ConsumeMagicLinkCode`). Como un código de
+  6 dígitos es mucho más fácil de adivinar por fuerza bruta que el token del enlace,
+  `code_attempts` cuenta los intentos fallidos contra cada fila viva de esa persona y,
+  pasado un límite (`maxMagicLinkCodeAttempts`), deja de aceptar el código del todo —
+  sin que eso afecte al enlace, que sigue siendo válido igual. Ambos se piden en
+  `/auth/magic-link` dando el email y el teléfono de la persona; solo se generan y se
+  envían por correo si ambos coinciden con alguien de `users` *y* esa persona tiene al
+  menos uno de los roles `admin`, `board` o `member` (`auth.BaselineRoles`, ver más
+  abajo) — a quien no tiene ninguno no le serviría de nada iniciar sesión, así que no se
+  le manda nada. La respuesta de `/auth/magic-link` es idéntica en los tres casos (no
+  coincide nadie, coincide alguien sin rol, se envía el correo de verdad) — así no sirve
+  para averiguar quién está en el sistema, ni quién tiene acceso, ni para mandar correo
+  no deseado. `POST /auth/magic-link/consume-code` identifica a la persona por
+  email+teléfono igual que la propia petición (el código por sí solo es demasiado corto
+  para servir de clave de búsqueda) y responde siempre con el mismo 401 genérico,
+  también por no distinguir casos desde fuera.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente

@@ -50,6 +50,7 @@ func NewHandler(usersService *users.Service, rolesService *roles.Service, tokens
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/magic-link", h.RequestMagicLink)
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
+	mux.HandleFunc("POST /api/v1/auth/magic-link/consume-code", h.ConsumeMagicLinkCode)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)
 	mux.Handle("GET /api/v1/auth/me", h.authenticator.Protect(h.Me))
 	// RequireAuth only, not Protect: exiting impersonation must work even
@@ -122,7 +123,11 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	if err != nil {
 		return err
 	}
-	if err := h.users.CreateMagicLinkToken(ctx, user.ID, auth.HashToken(rawToken), time.Now().Add(h.opts.MagicLinkTTL)); err != nil {
+	code, err := auth.NewLoginCode()
+	if err != nil {
+		return err
+	}
+	if err := h.users.CreateMagicLinkToken(ctx, user.ID, auth.HashToken(rawToken), auth.HashToken(code), time.Now().Add(h.opts.MagicLinkTTL)); err != nil {
 		return err
 	}
 
@@ -131,8 +136,10 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	body := fmt.Sprintf(
 		"Hola %s,\n\n"+
 			"Entra en la intranet del Club de Espeleología Katiuskas con este enlace, válido durante %d minutos:\n%s\n\n"+
+			"¿Leyendo este correo desde otro dispositivo? También puedes escribir este código en la "+
+			"página de acceso: %s\n\n"+
 			"Si no has pedido este acceso, puedes ignorar este mensaje.",
-		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link,
+		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
 	)
 	// user.Email may hold more than one address, space-separated (see
 	// users.User.Email) — mail.Sender expects a comma-separated list.
@@ -157,7 +164,52 @@ func (h *Handler) ConsumeMagicLink(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not verify sign-in link")
 		return
 	}
+	h.issueSessionAndRespond(w, r, userID)
+}
 
+// ConsumeMagicLinkCode is the code counterpart to ConsumeMagicLink, for
+// reading the email on one device and signing in on another — email and
+// phone identify the person exactly as requesting a link does (the code
+// alone is too low-entropy to look someone up by), and the response is
+// the same generic 401 whether the code was wrong, expired, already
+// used, guessed too many times, or the email/phone didn't match anyone
+// at all: nothing here should tell those cases apart from the outside.
+func (h *Handler) ConsumeMagicLinkCode(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if strings.TrimSpace(body.Email) == "" || strings.TrimSpace(body.Phone) == "" || strings.TrimSpace(body.Code) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "email, phone, and code are all required")
+		return
+	}
+
+	user, err := h.users.FindActiveByEmailAndPhone(r.Context(), body.Email, body.Phone)
+	if err != nil {
+		if !errors.Is(err, users.ErrNotFound) {
+			slog.Error("consume magic link code: lookup failed", "error", err)
+		}
+		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_code", "invalid or expired code")
+		return
+	}
+	userID, err := h.users.ConsumeMagicLinkCode(r.Context(), user.ID, auth.HashToken(body.Code))
+	if errors.Is(err, users.ErrInvalidToken) {
+		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_code", "invalid or expired code")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not verify code")
+		return
+	}
+	h.issueSessionAndRespond(w, r, userID)
+}
+
+func (h *Handler) issueSessionAndRespond(w http.ResponseWriter, r *http.Request, userID int64) {
 	sessionToken, err := h.tokens.Issue(r.Context(), userID, h.opts.TokenTTL)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")

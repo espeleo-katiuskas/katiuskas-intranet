@@ -493,7 +493,7 @@ func TestMagicLinkTokenLifecycle(t *testing.T) {
 		t.Fatalf("expected no recent token yet, got %v (err %v)", recent, err)
 	}
 
-	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", time.Now().Add(15*time.Minute)); err != nil {
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -516,7 +516,7 @@ func TestConsumeMagicLinkTokenRejectsReuse(t *testing.T) {
 	ctx := context.Background()
 
 	user := testutil.InsertUser(t, tx, "")
-	if err := repo.CreateMagicLinkToken(ctx, user.ID, "one-shot", time.Now().Add(15*time.Minute)); err != nil {
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "one-shot", "one-shot-code", time.Now().Add(15*time.Minute)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if _, err := repo.ConsumeMagicLinkToken(ctx, "one-shot"); err != nil {
@@ -533,7 +533,7 @@ func TestConsumeMagicLinkTokenRejectsExpired(t *testing.T) {
 	ctx := context.Background()
 
 	user := testutil.InsertUser(t, tx, "")
-	if err := repo.CreateMagicLinkToken(ctx, user.ID, "expired", time.Now().Add(-time.Minute)); err != nil {
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "expired", "expired-code", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if _, err := repo.ConsumeMagicLinkToken(ctx, "expired"); !errors.Is(err, users.ErrInvalidToken) {
@@ -545,6 +545,132 @@ func TestConsumeMagicLinkTokenRejectsUnknown(t *testing.T) {
 	repo := users.NewRepository(testutil.NewTx(t))
 	if _, err := repo.ConsumeMagicLinkToken(context.Background(), "never-issued"); !errors.Is(err, users.ErrInvalidToken) {
 		t.Errorf("expected ErrInvalidToken, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCode(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	gotID, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash")
+	if err != nil {
+		t.Fatalf("consume code: %v", err)
+	}
+	if gotID != user.ID {
+		t.Errorf("expected user id %d, got %d", user.ID, gotID)
+	}
+}
+
+// Consuming the code also burns the link, and vice versa — they
+// represent the same sign-in attempt, one row.
+func TestConsumeMagicLinkCodeAlsoConsumesTheLink(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash"); err != nil {
+		t.Fatalf("consume code: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkToken(ctx, "token-hash"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected the link to be consumed too, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCodeRejectsReuse(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash"); err != nil {
+		t.Fatalf("first consume: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken on reuse, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCodeRejectsExpired(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(-time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken for an expired code, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCodeRejectsWrongCode(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "wrong-code"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken for a wrong code, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCodeDoesNotMatchAnotherUsersRow(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	owner := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, owner.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.ConsumeMagicLinkCode(ctx, other.ID, "code-hash"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken when the code belongs to a different user, got %v", err)
+	}
+}
+
+func TestConsumeMagicLinkCodeLocksOutAfterTooManyWrongGuesses(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	user := testutil.InsertUser(t, tx, "")
+	if err := repo.CreateMagicLinkToken(ctx, user.ID, "token-hash", "code-hash", time.Now().Add(15*time.Minute)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Exhaust the attempt budget with wrong guesses.
+	for i := 0; i < 8; i++ {
+		if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "wrong-code"); !errors.Is(err, users.ErrInvalidToken) {
+			t.Fatalf("attempt %d: expected ErrInvalidToken, got %v", i, err)
+		}
+	}
+
+	// Even the correct code no longer works once locked out.
+	if _, err := repo.ConsumeMagicLinkCode(ctx, user.ID, "code-hash"); !errors.Is(err, users.ErrInvalidToken) {
+		t.Errorf("expected ErrInvalidToken once the attempt budget is exhausted, got %v", err)
+	}
+
+	// The link itself is unaffected by the code being locked out.
+	if _, err := repo.ConsumeMagicLinkToken(ctx, "token-hash"); err != nil {
+		t.Errorf("expected the link to still work despite the code being locked out, got %v", err)
 	}
 }
 

@@ -21,18 +21,23 @@ servers:
 paths:
   /auth/magic-link:
     post:
-      summary: Request a sign-in link by email
+      summary: Request a sign-in link (and code) by email
       description: >
         There are no passwords in this API, and no separate "granted
         access" step: if email and phone both match someone on file who
         also holds at least one of admin/board/member, they're emailed a
         one-time link (valid 15 minutes) that signs them in via POST
-        /auth/magic-link/consume. Someone matching but holding none of
-        those roles never gets a link — signing in would leave them
-        unable to call anything anyway.
+        /auth/magic-link/consume, and — in the same email — a 6-digit
+        numeric code that does the same via POST
+        /auth/magic-link/consume-code, for signing in on a different
+        device than the one the email is read on. Both represent the
+        same sign-in attempt: consuming either one also consumes the
+        other. Someone matching but holding none of those roles never
+        gets an email at all — signing in would leave them unable to
+        call anything anyway.
 
         The response is identical in every case — no match, a match with
-        no usable role, or a link actually sent (a recent one might
+        no usable role, or an email actually sent (a recent one might
         already be on its way) — telling those cases apart would let
         this endpoint enumerate who's in the system, or spam someone's
         inbox.
@@ -80,6 +85,41 @@ paths:
                   token: { type: string }
         "401":
           description: The link is invalid, already used, or expired.
+
+  /auth/magic-link/consume-code:
+    post:
+      summary: Exchange a magic-link's 6-digit code for a session
+      description: >
+        The code counterpart to POST /auth/magic-link/consume, for
+        reading the sign-in email on one device and signing in on
+        another. Since the code alone is too short to look someone up
+        by, email and phone identify the person exactly as requesting a
+        link does. The response is the same generic 401 whether the code
+        is wrong, expired, already used (by itself or via the matching
+        link), guessed wrong too many times, or the email/phone didn't
+        match anyone at all — nothing here tells those cases apart.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, phone, code]
+              properties:
+                email: { type: string, format: email }
+                phone: { type: string }
+                code: { type: string, description: "The 6-digit code from the sign-in email." }
+      responses:
+        "200":
+          description: Session token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+        "401":
+          description: invalid_code — wrong, expired, already-used, or too-many-attempts code, or no match at all.
 
   /auth/logout:
     post:

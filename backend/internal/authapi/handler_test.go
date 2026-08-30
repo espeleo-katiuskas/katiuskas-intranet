@@ -145,6 +145,24 @@ func (s *testServer) requestAndExtractToken(t *testing.T, email, phone string) s
 	return m[1]
 }
 
+var codeInBody = regexp.MustCompile(`código en la\s*\n?\s*página de acceso: (\d{6})`)
+
+func (s *testServer) requestAndExtractCode(t *testing.T, email, phone string) string {
+	t.Helper()
+	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": email, "phone": phone})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request magic link: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if s.mailer.sent == 0 {
+		t.Fatalf("expected an email to have been sent")
+	}
+	m := codeInBody.FindStringSubmatch(s.mailer.lastBody)
+	if m == nil {
+		t.Fatalf("no code found in email body: %q", s.mailer.lastBody)
+	}
+	return m[1]
+}
+
 func decodeSessionToken(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body struct {
@@ -353,6 +371,106 @@ func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 	second := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
 	if second.Code != http.StatusUnauthorized {
 		t.Errorf("expected reusing the token to fail with 401, got %d", second.Code)
+	}
+}
+
+func TestConsumeMagicLinkCodeIssuesASession(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+
+	code := s.requestAndExtractCode(t, user.Email, user.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": user.Email, "phone": user.Phone, "code": code,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	sessionToken := decodeSessionToken(t, rec)
+	id, _, status := s.me(t, sessionToken)
+	if status != http.StatusOK {
+		t.Fatalf("expected /auth/me to succeed with the issued token, got %d", status)
+	}
+	if id != user.ID {
+		t.Errorf("expected user id %d, got %d", user.ID, id)
+	}
+}
+
+func TestConsumeMagicLinkCodeIsSingleUseAndAlsoBurnsTheLink(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+
+	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request magic link: %d: %s", rec.Code, rec.Body.String())
+	}
+	m := codeInBody.FindStringSubmatch(s.mailer.lastBody)
+	if m == nil {
+		t.Fatalf("no code found in email body: %q", s.mailer.lastBody)
+	}
+	code := m[1]
+	linkToken := tokenInLink.FindStringSubmatch(s.mailer.lastBody)[1]
+
+	first := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": user.Email, "phone": user.Phone, "code": code,
+	})
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected the first consumption to succeed, got %d: %s", first.Code, first.Body.String())
+	}
+
+	second := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": user.Email, "phone": user.Phone, "code": code,
+	})
+	if second.Code != http.StatusUnauthorized {
+		t.Errorf("expected reusing the code to fail with 401, got %d", second.Code)
+	}
+
+	linkAfter := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
+	if linkAfter.Code != http.StatusUnauthorized {
+		t.Errorf("expected the link to be consumed too once the code was used, got %d", linkAfter.Code)
+	}
+}
+
+func TestConsumeMagicLinkCodeRejectsWrongCode(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	s.requestAndExtractCode(t, user.Email, user.Phone)
+
+	rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": user.Email, "phone": user.Phone, "code": "000000",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for a wrong code, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "invalid_code" {
+		t.Errorf("expected error code invalid_code, got %q", code)
+	}
+}
+
+// Responses must look identical (401 invalid_code) whether the email
+// simply doesn't match anyone or the code is wrong for a real match —
+// same anti-enumeration reasoning as the request endpoint.
+func TestConsumeMagicLinkCodeRejectsUnknownEmailWithTheSameError(t *testing.T) {
+	s := newTestServer(t)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": "nobody@example.com", "phone": "000000000", "code": "123456",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "invalid_code" {
+		t.Errorf("expected error code invalid_code, got %q", code)
+	}
+}
+
+func TestConsumeMagicLinkCodeRequiresAllFields(t *testing.T) {
+	s := newTestServer(t)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{"email": "a@example.com", "phone": "611222333"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when code is missing, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "missing_fields" {
+		t.Errorf("expected error code missing_fields, got %q", code)
 	}
 }
 

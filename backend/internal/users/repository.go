@@ -315,17 +315,26 @@ func (r *Repository) TouchLastLogin(ctx context.Context, userID int64, ip string
 	return err
 }
 
-// CreateMagicLinkToken stores the hash of a freshly issued sign-in link.
-func (r *Repository) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+// maxMagicLinkCodeAttempts bounds brute-forcing a magic link's 6-digit
+// login code: once a still-live row has racked up this many wrong
+// guesses, it stops accepting the code at all (the link itself is
+// unaffected — see ConsumeMagicLinkCode).
+const maxMagicLinkCodeAttempts = 8
+
+// CreateMagicLinkToken stores the hash of a freshly issued sign-in link,
+// together with the hash of the numeric code sent in the same email.
+func (r *Repository) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash, codeHash string, expiresAt time.Time) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO magic_link_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)
-	`, userID, tokenHash, expiresAt)
+		INSERT INTO magic_link_tokens (user_id, token_hash, code_hash, expires_at) VALUES ($1,$2,$3,$4)
+	`, userID, tokenHash, codeHash, expiresAt)
 	return err
 }
 
 // ConsumeMagicLinkToken atomically marks a token used and returns whose it
 // was, or ErrInvalidToken if it doesn't exist, already got used, or
-// expired — so a token can never be replayed.
+// expired — so a token can never be replayed. Unaffected by how many
+// times its companion code has been guessed wrong (see
+// ConsumeMagicLinkCode): the link itself never locks out.
 func (r *Repository) ConsumeMagicLinkToken(ctx context.Context, tokenHash string) (int64, error) {
 	var userID int64
 	err := r.pool.QueryRow(ctx, `
@@ -337,6 +346,34 @@ func (r *Repository) ConsumeMagicLinkToken(ctx context.Context, tokenHash string
 		return 0, ErrInvalidToken
 	}
 	return userID, err
+}
+
+// ConsumeMagicLinkCode consumes userID's still-live magic-link code if
+// codeHash matches, the same one-shot way ConsumeMagicLinkToken consumes
+// the link. userID is expected to already be resolved (by email+phone,
+// exactly like requesting a link), not looked up from the code itself —
+// the code alone is too low-entropy to serve as a lookup key. A wrong
+// guess counts against every currently-live row for this user (not just
+// one), so repeated guessing against a pending request is bounded by
+// maxMagicLinkCodeAttempts regardless of which row it targets.
+func (r *Repository) ConsumeMagicLinkCode(ctx context.Context, userID int64, codeHash string) (int64, error) {
+	var gotUserID int64
+	err := r.pool.QueryRow(ctx, `
+		UPDATE magic_link_tokens SET consumed_at = now()
+		WHERE user_id = $1 AND code_hash = $2 AND consumed_at IS NULL
+			AND expires_at > now() AND code_attempts < $3
+		RETURNING user_id
+	`, userID, codeHash, maxMagicLinkCodeAttempts).Scan(&gotUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, updateErr := r.pool.Exec(ctx, `
+			UPDATE magic_link_tokens SET code_attempts = code_attempts + 1
+			WHERE user_id = $1 AND consumed_at IS NULL AND expires_at > now()
+		`, userID); updateErr != nil {
+			return 0, updateErr
+		}
+		return 0, ErrInvalidToken
+	}
+	return gotUserID, err
 }
 
 // HasRecentMagicLinkToken reports whether userID already requested a link

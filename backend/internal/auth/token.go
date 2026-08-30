@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
 )
 
 var ErrInvalidToken = errors.New("invalid, expired, or revoked token")
@@ -45,4 +47,20 @@ func NewOpaqueToken() (string, error) {
 func HashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// NewLoginCode returns a random 6-digit numeric string, zero-padded
+// (e.g. "042817") — the low-entropy companion to a magic link's URL,
+// meant to be read from the same email and typed into the login page by
+// hand. Useful when the email is only reachable from a different device
+// than the one signing in. Its hash is stored and checked the same way
+// as an opaque token's (see HashToken); low entropy is compensated for
+// by expiry and a per-request attempt limit (see
+// users.Repository.ConsumeMagicLinkCode), not by making it hard to type.
+func NewLoginCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
 }

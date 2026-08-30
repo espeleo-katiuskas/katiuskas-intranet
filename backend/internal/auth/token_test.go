@@ -19,6 +19,28 @@ func TestNewOpaqueTokenIsUniqueAndNonEmpty(t *testing.T) {
 	}
 }
 
+func TestNewLoginCodeIsSixDigitsAndVaries(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		code, err := NewLoginCode()
+		if err != nil {
+			t.Fatalf("new login code: %v", err)
+		}
+		if len(code) != 6 {
+			t.Fatalf("expected a 6-character code, got %q", code)
+		}
+		for _, r := range code {
+			if r < '0' || r > '9' {
+				t.Fatalf("expected an all-digit code, got %q", code)
+			}
+		}
+		seen[code] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("expected repeated calls to vary, got the same code every time: %v", seen)
+	}
+}
+
 func TestHashTokenIsDeterministicAndDistinct(t *testing.T) {
 	if HashToken("same") != HashToken("same") {
 		t.Errorf("expected hashing the same input twice to produce the same hash")

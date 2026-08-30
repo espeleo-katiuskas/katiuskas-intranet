@@ -152,12 +152,16 @@ func (s *Service) TouchLastLogin(ctx context.Context, userID int64, ip string) e
 	return s.repo.TouchLastLogin(ctx, userID, ip)
 }
 
-func (s *Service) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	return s.repo.CreateMagicLinkToken(ctx, userID, tokenHash, expiresAt)
+func (s *Service) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash, codeHash string, expiresAt time.Time) error {
+	return s.repo.CreateMagicLinkToken(ctx, userID, tokenHash, codeHash, expiresAt)
 }
 
 func (s *Service) ConsumeMagicLinkToken(ctx context.Context, tokenHash string) (int64, error) {
 	return s.repo.ConsumeMagicLinkToken(ctx, tokenHash)
+}
+
+func (s *Service) ConsumeMagicLinkCode(ctx context.Context, userID int64, codeHash string) (int64, error) {
+	return s.repo.ConsumeMagicLinkCode(ctx, userID, codeHash)
 }
 
 func (s *Service) HasRecentMagicLinkToken(ctx context.Context, userID int64, since time.Time) (bool, error) {
