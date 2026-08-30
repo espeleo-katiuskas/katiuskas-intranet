@@ -307,7 +307,7 @@ function renderActivityRow(activity) {
   return `
     <tr>
       <td>${dateLabel}</td>
-      <td>${escapeHtml(activity.title)}</td>
+      <td><a href="/activity?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
       <td>${escapeHtml(activity.location)}</td>
       <td>${activityTypeLabels[activity.type] ?? activity.type}</td>
       <td><span class="badge status-${activity.status}">${activityStatusLabels[activity.status] ?? activity.status}</span></td>

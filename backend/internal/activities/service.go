@@ -28,6 +28,10 @@ func (s *Service) ListActive(ctx context.Context, limit, offset int) ([]Activity
 	return s.repo.ListActive(ctx, limit, offset)
 }
 
+func (s *Service) Get(ctx context.Context, id int64) (Activity, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activity, error) {
 	return s.repo.Update(ctx, id, in)
 }

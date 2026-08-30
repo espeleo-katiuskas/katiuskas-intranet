@@ -94,12 +94,13 @@
     <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
   </div>
 
+  <p class="hint">Haz clic en una actividad para ver todos sus detalles, apuntarte o gestionarla.</p>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Título</th><th>Lugar</th><th>Tipo</th><th>Estado</th><th></th></tr>
+        <tr><th>Fecha</th><th>Título</th><th>Lugar</th><th>Tipo</th><th>Estado</th></tr>
       </thead>
-      <tbody id="activities-list"></tbody>
+      <tbody id="activities-list" class="clickable-rows"></tbody>
     </table>
   </div>
   <div class="panel-actions">

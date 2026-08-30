@@ -82,6 +82,44 @@ func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 	}
 }
 
+func TestHandlerGet(t *testing.T) {
+	mux, authn := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
+		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/activities/%d", created.ID), memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ID != created.ID || got.Title != "A" {
+		t.Errorf("expected the created activity back, got %+v", got)
+	}
+}
+
+func TestHandlerGetNotFound(t *testing.T) {
+	mux, authn := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/activities/999999", memberToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
 func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
 	mux, authn := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")

@@ -142,11 +142,11 @@ th.sortable:hover {
   color: var(--accent);
 }
 
-#users-table-body tr {
+.clickable-rows tr {
   cursor: pointer;
 }
 
-#users-table-body tr:hover {
+.clickable-rows tr:hover {
   background: var(--surface-muted);
 }
 

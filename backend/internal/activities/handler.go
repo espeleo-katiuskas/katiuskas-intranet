@@ -23,6 +23,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/activities", h.authenticator.Protect(h.list))
 	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create))
+	mux.Handle("GET /api/v1/activities/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update, "admin", "board"))
 	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel, "admin", "board"))
 
@@ -106,6 +107,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, a)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	a, err := h.service.Get(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not fetch activity")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, a)
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {

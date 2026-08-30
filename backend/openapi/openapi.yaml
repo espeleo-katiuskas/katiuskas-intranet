@@ -496,6 +496,18 @@ paths:
           description: One of the given participant_user_ids doesn't exist.
 
   /activities/{id}:
+    get:
+      summary: Fetch a single activity
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The activity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update an activity
       security: [{ bearerAuth: [] }]

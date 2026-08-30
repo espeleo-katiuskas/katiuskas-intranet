@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actividad — Club de Espeleología Katiuskas</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
+  <nav class="main-nav">
+    <a href="/">Inicio</a>
+    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/activities" class="active">Actividades</a>
+    <a href="/inventory">Material</a>
+    <a href="/profile">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <p><a href="/activities">&larr; Volver a actividades</a></p>
+  <h1 id="activity-title">Actividad</h1>
+  <p class="subtitle" id="activity-meta"></p>
+  <p id="activity-description"></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="panel-actions">
+    <button id="join-activity" type="button" class="btn btn-secondary btn-small" hidden>Apuntarme</button>
+    <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
+  </div>
+
+  <div class="panel" data-roles="admin,board">
+    <h3>Editar</h3>
+    <form id="edit-activity-form">
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="ea-title">Título</label>
+          <input id="ea-title" name="title" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ea-location">Lugar</label>
+          <input id="ea-location" name="location" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ea-status">Estado</label>
+          <select id="ea-status" name="status">
+            <option value="planned">Planificada</option>
+            <option value="completed">Realizada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </div>
+        <div class="field span-2">
+          <label for="ea-description">Descripción</label>
+          <textarea id="ea-description" name="description"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="section-header">
+    <h2>Participantes</h2>
+  </div>
+  <div class="detail-list" id="participants-list"></div>
+  <div class="role-add-row" data-roles="admin,board">
+    <input type="text" id="participant-search" list="participant-options" autocomplete="off" placeholder="Escribe un nombre…">
+    <datalist id="participant-options"></datalist>
+    <button type="button" id="add-participant" class="btn btn-secondary btn-small">+ Participante</button>
+  </div>
+
+  <div class="section-header" data-roles="admin,board">
+    <h2>Zona de peligro</h2>
+  </div>
+  <button id="cancel-activity" type="button" class="btn btn-danger" data-roles="admin,board">Cancelar actividad</button>
+</main>
+<script type="module" src="js/activity.js"></script>
+<footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
+</body>
+</html>
