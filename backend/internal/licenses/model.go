@@ -1,6 +1,6 @@
 // Package licenses tracks federative licenses ("licencias federativas")
 // held by a person: a type chosen from a fixed-but-evolving catalog
-// (license_types, see migration 00017) together with the date it was
+// (license_types, see migration 00007) together with the date it was
 // issued. "Otra" is the catalog's escape hatch — its IsOther flag is
 // true — and requires OtherDetail to say which license it actually is.
 // A license is annual: valid from IssuedDate through December 31 of

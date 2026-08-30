@@ -1,6 +1,7 @@
 -- +goose Up
-CREATE TYPE activity_type AS ENUM ('caving', 'training', 'outdoor', 'social', 'other');
+CREATE TYPE activity_type AS ENUM ('caving', 'canyoning', 'training', 'social', 'other');
 CREATE TYPE activity_status AS ENUM ('planned', 'completed', 'cancelled');
+CREATE TYPE activity_visibility AS ENUM ('public', 'private');
 CREATE TYPE participant_role AS ENUM ('leader', 'participant');
 
 CREATE TABLE activities (
@@ -14,7 +15,15 @@ CREATE TABLE activities (
     difficulty        smallint,
     max_participants  integer,
     status            activity_status NOT NULL DEFAULT 'planned',
-    leader_id         bigint REFERENCES users(id),
+    -- The organizer: always set, to whoever created the activity (see
+    -- activities.Service.Create — never something the caller chooses),
+    -- and the only person besides admin/board who can edit or cancel it.
+    leader_id         bigint NOT NULL REFERENCES users(id),
+    -- public (the default): anyone can join themselves, and admin/board
+    -- can add anyone else. private: only the organizer, board, or admin
+    -- may add a participant at all, even to sign up themselves —
+    -- enforced in activities.Handler.join, not here.
+    visibility        activity_visibility NOT NULL DEFAULT 'public',
     created_at        timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT end_not_before_start
         CHECK (end_date IS NULL OR end_date >= start_date)
@@ -34,5 +43,6 @@ CREATE INDEX idx_activities_start_date ON activities(start_date);
 DROP TABLE activity_participants;
 DROP TABLE activities;
 DROP TYPE participant_role;
+DROP TYPE activity_visibility;
 DROP TYPE activity_status;
 DROP TYPE activity_type;

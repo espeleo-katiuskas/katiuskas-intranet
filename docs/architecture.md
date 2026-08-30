@@ -75,7 +75,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   contraseñas. `membership_number` también vive aquí, no en `memberships`: identifica a
   la persona mientras esté vinculada al club, no un periodo de alta concreto, así que
   darse de baja y volver a darse de alta nunca se lo cambia. Es un entero no negativo y
-  único (`CHECK`/índice único, ver `db/migrations/00012_membership_number.sql`),
+  único (`CHECK`/índice único, ver `db/migrations/00002_users.sql`),
   asignado automáticamente — nunca a mano — la primera vez que a alguien se le da de
   alta: `memberships.Service.Create` llama a `users.Service.EnsureMembershipNumber`
   (expuesta como `memberships.MembershipNumberAssigner`, ya que `memberships` no puede
@@ -93,14 +93,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   más. Eso sí impide seguir usando un `UNIQUE` de columna en `email` — un mismo correo
   sigue sin poder pertenecer a dos personas, pero Postgres no puede expresar "ninguna
   fila comparte un elemento" así, de modo que `users.Repository` lo comprueba a mano en
-  `Create`/`Update` (ver `db/migrations/00013_multiple_contacts.sql`). Iniciar sesión y
+  `Create`/`Update` (ver `db/migrations/00002_users.sql`). Iniciar sesión y
   el enlace de acceso funcionan contra cualquiera de los correos/teléfonos registrados
   (`Repository.FindActiveByEmailAndPhone`); como el espacio pasa a separar varios
   teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
   "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
-  marca de consumido), y desde la migración 00018 también el hash de un código numérico
-  de 6 dígitos que va en el mismo correo — pensado para cuando el correo se lee desde un
+  marca de consumido), junto con el hash de un código numérico de 6 dígitos que va en el
+  mismo correo — pensado para cuando el correo se lee desde un
   dispositivo distinto al que se quiere usar para entrar: escribir el código en
   `/login` es más práctico ahí que copiar una URL larga. Enlace y código representan el
   mismo intento de acceso en la misma fila; consumir uno consume también el otro
@@ -190,7 +190,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   distingue "activo" de "baja temporal" en la lista de personas; se calcula solo para
   quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
 - **`licenses`** / **`license_types`** — licencias federativas. El tipo ya no es texto
-  libre: se elige de un catálogo (`license_types`, migración 00017) guardado en la base
+  libre: se elige de un catálogo (`license_types`, migración 00007) guardado en la base
   de datos en vez de un enum de Go, precisamente porque el club espera que la lista
   cambie con el tiempo (una zona nueva, una federación nueva) y eso no debería necesitar
   un despliegue de código — solo un `INSERT`. El catálogo trae sembradas todas las
@@ -243,7 +243,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   federativa vigente (`licenses.Service.IsCurrentlyFederated`); si no, la llamada se
   rechaza con 409 `not_federated` — tanto al unirse después como al dar de alta
   participantes iniciales en la propia creación. Cada actividad tiene también una
-  `visibility` (`public`, valor por defecto, o `private`, migración 00019) que decide
+  `visibility` (`public`, valor por defecto, o `private`, migración 00005) que decide
   quién puede añadir participantes, no solo quién puede apuntarse: en una pública
   cualquiera puede apuntarse a sí mismo y admin/board puede añadir a quien sea, igual que
   siempre; en una privada solo el organizador, board o admin pueden dar de alta a un

@@ -101,10 +101,10 @@ func TestCreateWithoutGenderLeavesItNil(t *testing.T) {
 	}
 }
 
-// membership_number is no longer part of CreateInput/UpdateInput — it's
+// membership_number is not part of CreateInput/UpdateInput — it's
 // assigned by EnsureMembershipNumber, not typed in by hand — but the
 // database's uniqueness and non-negative constraints (see migration
-// 00012) are still the last line of defense, so exercise them directly.
+// 00002) are still the last line of defense, so exercise them directly.
 func TestMembershipNumberMustBeUnique(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

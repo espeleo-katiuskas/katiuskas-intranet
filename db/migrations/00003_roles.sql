@@ -7,9 +7,9 @@ CREATE TABLE roles (
     -- API actually grants permissions to or wires automatic behavior
     -- to; they can't be renamed away or deleted.
     is_system     boolean NOT NULL DEFAULT false,
-    -- automatic roles (member/former_member) are computed from
-    -- membership history rather than granted or revoked by hand — see
-    -- roles.Repository.ListNamesForUser.
+    -- automatic roles (board/member/former_member) are computed live
+    -- from board_members/membership history rather than granted or
+    -- revoked by hand — see roles.Repository.ListNamesForUser.
     is_automatic  boolean NOT NULL DEFAULT false,
     created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -22,7 +22,7 @@ CREATE TABLE user_roles (
 
 INSERT INTO roles (name, description, is_system, is_automatic) VALUES
     ('admin', 'Acceso completo: gestiona socios, actividades, material y roles.', true, false),
-    ('board', 'Directiva: gestiona socios, actividades y material.', true, false),
+    ('board', 'Directiva: gestiona socios, actividades y material.', true, true),
     ('member', 'Socio: acceso de lectura y a sus propios datos.', true, true),
     ('former_member', 'Ha sido socio, pero no tiene ninguna alta activa ahora mismo.', true, true),
     -- Not a system role: a club that doesn't want this distinction can

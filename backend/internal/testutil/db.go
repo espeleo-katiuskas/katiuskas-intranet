@@ -293,7 +293,7 @@ func RoleID(t *testing.T, tx pgx.Tx, name string) int64 {
 }
 
 // LicenseTypeID looks up a catalog license type's id by name (seeded by
-// migration 00017: "A BASICA", "B1 PLUS", "Otra", etc).
+// migration 00007: "A BASICA", "B1 PLUS", "Otra", etc).
 func LicenseTypeID(t *testing.T, tx pgx.Tx, name string) int64 {
 	t.Helper()
 	var id int64
