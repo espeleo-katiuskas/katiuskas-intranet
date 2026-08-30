@@ -714,21 +714,53 @@ async function loadTransactions() {
 // data-roles="admin" on their buttons/panels — POST licenses/
 // board-members is admin-only now, so board never has these elements.
 if (isRealAdmin) {
-  document.getElementById('add-license').addEventListener('click', () => {
+  let licenseTypesById = {};
+  let licenseTypesLoaded = false;
+
+  async function loadLicenseTypes() {
+    if (licenseTypesLoaded) return;
+    try {
+      const types = await apiFetch('/license-types');
+      licenseTypesById = Object.fromEntries(types.map((t) => [t.id, t]));
+      document.getElementById('add-license-type').innerHTML = types
+        .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+        .join('');
+      licenseTypesLoaded = true;
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  document.getElementById('add-license').addEventListener('click', async () => {
     const panel = document.getElementById('add-license-panel');
     const dateInput = document.getElementById('add-license-issued-date');
     if (panel.hidden && !dateInput.value) {
       dateInput.value = new Date().toISOString().slice(0, 10);
     }
+    if (panel.hidden) {
+      await loadLicenseTypes();
+    }
     panel.hidden = !panel.hidden;
   });
 
+  document.getElementById('add-license-type').addEventListener('change', (event) => {
+    const chosen = licenseTypesById[Number(event.target.value)];
+    document.getElementById('add-license-other-detail-field').hidden = !chosen?.is_other;
+  });
+
   document.getElementById('save-add-license').addEventListener('click', async () => {
-    const typeInput = document.getElementById('add-license-type');
+    const typeSelect = document.getElementById('add-license-type');
+    const otherDetailInput = document.getElementById('add-license-other-detail');
     const dateInput = document.getElementById('add-license-issued-date');
-    const type = typeInput.value.trim();
-    if (!type || !dateInput.value) {
+    const licenseTypeId = Number(typeSelect.value);
+    const chosen = licenseTypesById[licenseTypeId];
+    if (!licenseTypeId || !dateInput.value) {
       showError('Indica el tipo de licencia y la fecha de obtención.');
+      return;
+    }
+    const otherDetail = otherDetailInput.value.trim() || null;
+    if (chosen?.is_other && !otherDetail) {
+      showError('Indica de qué licencia se trata.');
       return;
     }
 
@@ -737,11 +769,16 @@ if (isRealAdmin) {
     try {
       await apiFetch(`/users/${memberId}/licenses`, {
         method: 'POST',
-        body: JSON.stringify({ type, issued_date: dateInput.value }),
+        body: JSON.stringify({
+          license_type_id: licenseTypeId,
+          other_detail: chosen?.is_other ? otherDetail : null,
+          issued_date: dateInput.value,
+        }),
       });
       showFeedback('Licencia registrada.');
       document.getElementById('add-license-panel').hidden = true;
-      typeInput.value = '';
+      otherDetailInput.value = '';
+      document.getElementById('add-license-other-detail-field').hidden = true;
       dateInput.value = '';
       await loadTimeline();
     } catch (err) {
