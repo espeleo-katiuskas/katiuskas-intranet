@@ -25,6 +25,18 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{userID}/licenses", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{userID}/licenses", h.authenticator.Protect(h.create, "admin"))
+	mux.Handle("GET /api/v1/license-types", h.authenticator.Protect(h.listTypes, "admin"))
+}
+
+// listTypes is admin-only, matching create: the catalog only exists to
+// populate the "assign a license" form.
+func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListTypes(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list license types")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
@@ -53,15 +65,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Type       string `json:"type"`
-		IssuedDate string `json:"issued_date"`
+		LicenseTypeID int64   `json:"license_type_id"`
+		OtherDetail   *string `json:"other_detail"`
+		IssuedDate    string  `json:"issued_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.Type == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "type is required")
+	if body.LicenseTypeID == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id is required")
 		return
 	}
 	issuedDate, err := time.Parse("2006-01-02", body.IssuedDate)
@@ -71,10 +84,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l, err := h.service.Create(r.Context(), CreateInput{
-		UserID: userID, Type: body.Type, IssuedDate: issuedDate,
+		UserID: userID, LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail, IssuedDate: issuedDate,
 	})
 	if errors.Is(err, ErrNotActiveMember) {
 		httpapi.WriteError(w, http.StatusConflict, "not_active_member", err.Error())
+		return
+	}
+	if errors.Is(err, ErrTypeNotFound) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_license_type", err.Error())
+		return
+	}
+	if errors.Is(err, ErrOtherDetailRequired) || errors.Is(err, ErrOtherDetailNotAllowed) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_other_detail", err.Error())
 		return
 	}
 	if err != nil {

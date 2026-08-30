@@ -524,11 +524,10 @@ paths:
         period (hasn't caused baja) can be assigned one. A license is
         annual: valid from issued_date through December 31 of that same
         year — the response includes that computed valid_until, but it
-        isn't something the caller sets. type is free text, not a fixed
-        set: not just zona A/B/B1 plus modalidad BASICA/PLUS, but
-        combinations like "A BASICA Infantil", or entirely different
-        federations like "FME" or "Murciana" — it doesn't decompose into
-        separate fields.
+        isn't something the caller sets. license_type_id must reference
+        an entry from GET /license-types; other_detail is required when
+        that entry is the catalog's "Otra" escape hatch (is_other) and
+        forbidden otherwise.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -538,9 +537,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [type, issued_date]
+              required: [license_type_id, issued_date]
               properties:
-                type: { type: string }
+                license_type_id: { type: integer }
+                other_detail: { type: string, nullable: true }
                 issued_date: { type: string, format: date }
       responses:
         "201":
@@ -548,9 +548,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/License" }
+        "400":
+          description: >
+            invalid_license_type (unknown license_type_id) or
+            invalid_other_detail (other_detail missing for "Otra", or
+            given for a type that isn't "Otra").
         "403": { description: Only admin can assign a license. }
         "409":
           description: not_active_member — this person doesn't currently have an open membership period.
+
+  /license-types:
+    get:
+      summary: List the federative license name catalog
+      description: >
+        Admin-only, matching POST /users/{userID}/licenses: the catalog
+        only exists to populate that form. Kept in the database rather
+        than a fixed set in code, since the list of valid names (new
+        zones, new federations) can grow over time. is_other flags the
+        "Otra" escape-hatch entry.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The license type catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LicenseType" }
 
   /memberships:
     get:
@@ -1353,6 +1377,21 @@ components:
         end_date: { type: string, format: date }
         reason: { type: string, nullable: true }
 
+    LicenseType:
+      type: object
+      description: >
+        One entry in the license name catalog (see GET /license-types),
+        stored in the database rather than a fixed set in code so the
+        list of valid names can grow without a deploy.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        is_other:
+          type: boolean
+          description: >
+            True only for the catalog's "Otra" escape hatch — assigning
+            a license with this type requires other_detail.
+
     License:
       type: object
       description: >
@@ -1361,12 +1400,16 @@ components:
       properties:
         id: { type: integer }
         user_id: { type: integer }
+        license_type_id: { type: integer }
         type:
           type: string
           description: >
-            Free text, not a fixed enum and not split into a zone plus a
-            modality — e.g. "A BASICA", "B1 PLUS", "A BASICA Infantil",
-            "FME", "Murciana" are all valid as a single opaque string.
+            Human-readable label: the catalog's LicenseType.name, or
+            "<name>: <other_detail>" when license_type_id is "Otra".
+        other_detail:
+          type: string
+          nullable: true
+          description: Only set when license_type_id is the catalog's "Otra" entry.
         issued_date: { type: string, format: date }
         valid_until:
           type: string

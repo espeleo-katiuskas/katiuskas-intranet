@@ -21,9 +21,10 @@ func TestCreateComputesValidUntilAsDecember31(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := licenses.NewRepository(tx)
 	user := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A PLUS")
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, Type: "A PLUS", IssuedDate: date("2026-03-15"),
+		UserID: user.ID, LicenseTypeID: typeID, IssuedDate: date("2026-03-15"),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -39,23 +40,27 @@ func TestCreateComputesValidUntilAsDecember31(t *testing.T) {
 	}
 }
 
-func TestCreateAcceptsArbitraryType(t *testing.T) {
-	// type is free text on purpose (see the migration comment): real
-	// license types don't decompose into a zone plus a modality ("FME",
-	// "Murciana", "A BASICA Infantil"), so nothing here should reject an
-	// unfamiliar one.
+// Whether other_detail is required or forbidden for a given type is a
+// business rule enforced by Service.Create (see service_test.go), not
+// the repository — the repository just persists whatever it's given.
+func TestCreateWithTheOtraTypeStoresOtherDetailAndComposesTheDisplayType(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := licenses.NewRepository(tx)
 	user := testutil.InsertUser(t, tx, "")
+	otraID := testutil.LicenseTypeID(t, tx, "Otra")
+	detail := "FME"
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, Type: "FME", IssuedDate: date("2026-01-01"),
+		UserID: user.ID, LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01"),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if l.Type != "FME" {
-		t.Errorf("expected type %q, got %q", "FME", l.Type)
+	if l.OtherDetail == nil || *l.OtherDetail != "FME" {
+		t.Errorf("expected other_detail %q, got %v", "FME", l.OtherDetail)
+	}
+	if l.Type != "Otra: FME" {
+		t.Errorf(`expected type "Otra: FME", got %q`, l.Type)
 	}
 }
 
@@ -64,16 +69,18 @@ func TestListByUserOrdersNewestFirstAndScopesToTheUser(t *testing.T) {
 	repo := licenses.NewRepository(tx)
 	user := testutil.InsertUser(t, tx, "")
 	other := testutil.InsertUser(t, tx, "")
+	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
+	typeB1 := testutil.LicenseTypeID(t, tx, "B1 PLUS")
 	ctx := context.Background()
 
-	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, Type: "A BASICA", IssuedDate: date("2026-01-01")}); err != nil {
+	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01")}); err != nil {
 		t.Fatalf("create for other: %v", err)
 	}
-	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Type: "A BASICA", IssuedDate: date("2025-02-01")})
+	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-02-01")})
 	if err != nil {
 		t.Fatalf("create older: %v", err)
 	}
-	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Type: "B1 PLUS", IssuedDate: date("2026-02-01")})
+	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeB1, IssuedDate: date("2026-02-01")})
 	if err != nil {
 		t.Fatalf("create newer: %v", err)
 	}
@@ -101,5 +108,29 @@ func TestListByUserReturnsEmptySliceNotNil(t *testing.T) {
 	}
 	if list == nil {
 		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+}
+
+func TestListTypesOrdersByInsertionWithOtraLast(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := licenses.NewRepository(tx)
+
+	list, err := repo.ListTypes(context.Background())
+	if err != nil {
+		t.Fatalf("list types: %v", err)
+	}
+	if len(list) == 0 {
+		t.Fatal("expected a non-empty catalog")
+	}
+	last := list[len(list)-1]
+	if last.Name != "Otra" || !last.IsOther {
+		t.Errorf(`expected "Otra" (is_other) last, got %+v`, last)
+	}
+}
+
+func TestGetTypeByIDNotFound(t *testing.T) {
+	repo := licenses.NewRepository(testutil.NewTx(t))
+	if _, err := repo.GetTypeByID(context.Background(), 999999); err != licenses.ErrTypeNotFound {
+		t.Errorf("expected ErrTypeNotFound, got %v", err)
 	}
 }

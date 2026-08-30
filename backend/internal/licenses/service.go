@@ -8,10 +8,18 @@ import (
 	"katiuskas-intranet/backend/internal/memberships"
 )
 
-// ErrNotActiveMember means the target person doesn't currently have an
-// open membership period — only someone who hasn't caused baja can be
-// assigned a federative license.
-var ErrNotActiveMember = errors.New("only a currently active member can be assigned a federative license")
+var (
+	// ErrNotActiveMember means the target person doesn't currently have
+	// an open membership period — only someone who hasn't caused baja
+	// can be assigned a federative license.
+	ErrNotActiveMember = errors.New("only a currently active member can be assigned a federative license")
+	// ErrOtherDetailRequired means the chosen license type is the
+	// catalog's "Otra" escape hatch, which must say which license it is.
+	ErrOtherDetailRequired = errors.New(`other_detail is required when the license type is "Otra"`)
+	// ErrOtherDetailNotAllowed means other_detail was given for a
+	// license type other than "Otra", where it doesn't apply.
+	ErrOtherDetailNotAllowed = errors.New(`other_detail is only allowed when the license type is "Otra"`)
+)
 
 type Service struct {
 	repo        *Repository
@@ -22,6 +30,10 @@ func NewService(repo *Repository, membershipsService *memberships.Service) *Serv
 	return &Service{repo: repo, memberships: membershipsService}
 }
 
+func (s *Service) ListTypes(ctx context.Context) ([]LicenseType, error) {
+	return s.repo.ListTypes(ctx)
+}
+
 func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	active, err := s.memberships.IsActiveMember(ctx, in.UserID)
 	if err != nil {
@@ -30,6 +42,21 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	if !active {
 		return License{}, ErrNotActiveMember
 	}
+
+	licenseType, err := s.repo.GetTypeByID(ctx, in.LicenseTypeID)
+	if err != nil {
+		return License{}, err
+	}
+	hasDetail := in.OtherDetail != nil && *in.OtherDetail != ""
+	switch {
+	case licenseType.IsOther && !hasDetail:
+		return License{}, ErrOtherDetailRequired
+	case !licenseType.IsOther && hasDetail:
+		return License{}, ErrOtherDetailNotAllowed
+	case !licenseType.IsOther:
+		in.OtherDetail = nil
+	}
+
 	return s.repo.Create(ctx, in)
 }
 

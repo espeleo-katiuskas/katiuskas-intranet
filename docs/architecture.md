@@ -171,22 +171,29 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   ella —, así que `users.User.OnLeave` (`on_leave` en el JSON) es el único sitio que
   distingue "activo" de "baja temporal" en la lista de personas; se calcula solo para
   quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
-- **`licenses`** — licencias federativas: un `type` de texto libre, no un enum ni un
-  catálogo gestionable, y sobre todo *no* separado en zona + modalidad — los tipos
-  reales no se descomponen así ("FME", "Murciana", "A BASICA Infantil" no son zona +
-  modalidad). El club espera que aparezcan valores nuevos con el tiempo, y escribir uno
-  no debería necesitar una migración. De carácter anual: válida desde `issued_date`
-  hasta el 31 de diciembre de ese mismo año (`valid_until`, calculado en Go a partir de
-  `issued_date`, nunca almacenado — igual que la "categoría" de `web/js/members.js`, no
-  vale la pena guardar algo que se deriva trivialmente de otro campo). Solo se le puede
-  asignar una licencia a quien tenga ahora mismo un periodo de `memberships` abierto
-  (`memberships.Service.IsActiveMember`); intentarlo con alguien que nunca ha sido
-  socio o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service`
-  incorpora la licencia más reciente de cada persona a `User`
-  (`licenses.Service.LatestByUser`), igual que hace con el periodo de socio más
-  reciente. Rutas bajo `/users/{userID}/licenses`: `GET` abierto a la propia persona o
-  admin/board, `POST` solo admin/board. En `/member`, cada licencia aparece como un
-  evento más dentro del mismo timeline de altas y bajas, no en una sección aparte.
+- **`licenses`** / **`license_types`** — licencias federativas. El tipo ya no es texto
+  libre: se elige de un catálogo (`license_types`, migración 00017) guardado en la base
+  de datos en vez de un enum de Go, precisamente porque el club espera que la lista
+  cambie con el tiempo (una zona nueva, una federación nueva) y eso no debería necesitar
+  un despliegue de código — solo un `INSERT`. El catálogo trae sembradas todas las
+  combinaciones de zona (A/B/B1) × modalidad (BASICA/PLUS) × franja de edad (adulto,
+  Infantil, Juvenil), más ZERO/ASEDEB/FAE/FERM/FMM, más "Otra" como válvula de escape
+  (`is_other`) para cualquier licencia que no encaje: una licencia de tipo "Otra" exige
+  además `other_detail` diciendo cuál es en realidad, validación que vive en
+  `licenses.Service.Create` (un `CHECK` no puede alcanzar `license_types.is_other` desde
+  otra tabla). `GET /license-types` expone el catálogo, solo admin, igual que la propia
+  asignación. De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de
+  ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
+  almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
+  algo que se deriva trivialmente de otro campo). Solo se le puede asignar una licencia a
+  quien tenga ahora mismo un periodo de `memberships` abierto
+  (`memberships.Service.IsActiveMember`); intentarlo con alguien que nunca ha sido socio
+  o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service` incorpora la
+  licencia más reciente de cada persona a `User` (`licenses.Service.LatestByUser`), igual
+  que hace con el periodo de socio más reciente. Rutas bajo `/users/{userID}/licenses`:
+  `GET` abierto a la propia persona o admin/board, `POST` solo admin. En `/member`, cada
+  licencia aparece como un evento más dentro del mismo timeline de altas y bajas, no en
+  una sección aparte.
 - **`board_members`** — quién ha estado en la Junta Directiva y con qué cargo
   (`president`/`vice_president`/`secretary`/`treasurer`/`member_at_large` — vocal, tipo
   `board_position`), con la misma forma que `memberships`: `start_date`/`end_date`

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
@@ -14,7 +16,7 @@ import (
 )
 
 func newUsersService(t *testing.T) (*users.Service, *roles.Service) {
-	svc, roleSvc, _, _ := newUsersServiceWithMemberships(t)
+	svc, roleSvc, _, _, _ := newUsersServiceWithMemberships(t)
 	return svc, roleSvc
 }
 
@@ -22,14 +24,14 @@ func newUsersService(t *testing.T) (*users.Service, *roles.Service) {
 // licenses.Service built on the same transaction, for tests that need to
 // start a membership period or issue a license and see it reflected
 // through users.Service.
-func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Service, *memberships.Service, *licenses.Service) {
+func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Service, *memberships.Service, *licenses.Service, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	svc := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(svc)
-	return svc, rolesService, membershipsService, licensesService
+	return svc, rolesService, membershipsService, licensesService, tx
 }
 
 // "member" used to be the default role assigned at creation; now it's
@@ -98,7 +100,7 @@ func TestServiceCreateWithUnknownRoleFailsButKeepsThePerson(t *testing.T) {
 }
 
 func TestServiceReportsLatestMembershipDates(t *testing.T) {
-	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
+	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
@@ -130,7 +132,7 @@ func TestServiceReportsLatestMembershipDates(t *testing.T) {
 }
 
 func TestServiceReportsOnLeave(t *testing.T) {
-	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
+	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
@@ -179,7 +181,7 @@ func TestServiceReportsOnLeave(t *testing.T) {
 }
 
 func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.T) {
-	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
+	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	first, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: testutil.UniqueEmail(t)})
@@ -256,7 +258,7 @@ func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.
 }
 
 func TestServiceReportsLatestLicense(t *testing.T) {
-	svc, _, membershipsService, licensesService := newUsersServiceWithMemberships(t)
+	svc, _, membershipsService, licensesService, tx := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
@@ -278,7 +280,8 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse issued date: %v", err)
 	}
-	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, Type: "B1 PLUS", IssuedDate: issuedDate}); err != nil {
+	licenseTypeID := testutil.LicenseTypeID(t, tx, "B1 PLUS")
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, LicenseTypeID: licenseTypeID, IssuedDate: issuedDate}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 
