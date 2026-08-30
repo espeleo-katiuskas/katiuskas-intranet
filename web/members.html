@@ -19,9 +19,6 @@
   </nav>
 </header>
 <main>
-  <h1>Socios</h1>
-  <p class="subtitle">Altas, bajas y personas registradas en el club.</p>
-
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
@@ -63,7 +60,7 @@
   </div>
 
   <div class="section-header">
-    <h2>Todas las personas</h2>
+    <h2>Socios</h2>
     <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small" data-roles="admin">+ Nueva persona</button>
   </div>
   <div id="new-person-panel" class="panel" hidden data-roles="admin">
@@ -157,16 +154,6 @@
         <tr id="users-table-head"></tr>
       </thead>
       <tbody id="users-table-body" class="clickable-rows"></tbody>
-    </table>
-  </div>
-
-  <h2>Junta Directiva</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Nombre</th><th>Apellidos</th><th>Cargo</th><th>Teléfono</th><th>Email</th></tr>
-      </thead>
-      <tbody id="board-table-body"></tbody>
     </table>
   </div>
 </main>
