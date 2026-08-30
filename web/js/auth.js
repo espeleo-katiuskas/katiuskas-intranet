@@ -7,6 +7,24 @@ const consumingMessage = document.getElementById('consuming-message');
 const requestForm = document.getElementById('request-form');
 const feedbackBox = document.getElementById('request-feedback');
 const errorBox = document.getElementById('request-error');
+const codeForm = document.getElementById('code-form');
+const codeInput = document.getElementById('code');
+const codeErrorBox = document.getElementById('code-error');
+
+// Remembered across the request → code step so the code can be checked
+// without asking for email/phone again — the code alone is too short to
+// look someone up by (see POST /auth/magic-link/consume-code).
+let pendingEmail = '';
+let pendingPhone = '';
+
+function wireUpForms() {
+  requestForm.addEventListener('submit', handleRequestSubmit);
+  codeForm.addEventListener('submit', handleCodeSubmit);
+  document.getElementById('request-again').addEventListener('click', () => {
+    codeForm.hidden = true;
+    requestForm.hidden = false;
+  });
+}
 
 const token = new URLSearchParams(window.location.search).get('token');
 
@@ -15,7 +33,7 @@ if (token) {
   consumingPanel.hidden = false;
   consumeMagicLink(token);
 } else {
-  requestForm.addEventListener('submit', handleRequestSubmit);
+  wireUpForms();
 }
 
 async function consumeMagicLink(rawToken) {
@@ -35,7 +53,7 @@ async function consumeMagicLink(rawToken) {
     consumingMessage.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo a continuación.';
     consumingPanel.hidden = true;
     requestForm.hidden = false;
-    requestForm.addEventListener('submit', handleRequestSubmit);
+    wireUpForms();
   }
 }
 
@@ -58,13 +76,44 @@ async function handleRequestSubmit(event) {
     if (!response.ok) {
       throw new Error('request failed');
     }
-    feedbackBox.textContent =
-      'Si los datos coinciden con una cuenta con acceso, te hemos enviado un correo con un enlace para entrar.';
-    feedbackBox.hidden = false;
-    requestForm.reset();
+    pendingEmail = email;
+    pendingPhone = phone;
+    requestForm.hidden = true;
+    codeErrorBox.hidden = true;
+    codeInput.value = '';
+    codeForm.hidden = false;
+    codeInput.focus();
   } catch {
     errorBox.textContent = 'No se ha podido enviar la solicitud. Inténtalo de nuevo en un momento.';
     errorBox.hidden = false;
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+async function handleCodeSubmit(event) {
+  event.preventDefault();
+  codeErrorBox.hidden = true;
+
+  const code = codeInput.value.trim();
+  const submitButton = codeForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/magic-link/consume-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: pendingEmail, phone: pendingPhone, code }),
+    });
+    if (!response.ok) {
+      throw new Error('invalid code');
+    }
+    const data = await response.json();
+    setToken(data.token);
+    window.location.href = '/';
+  } catch {
+    codeErrorBox.textContent = 'Código incorrecto o caducado.';
+    codeErrorBox.hidden = false;
   } finally {
     submitButton.disabled = false;
   }
