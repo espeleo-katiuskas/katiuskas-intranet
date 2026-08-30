@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,13 +12,26 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
+// UserLookup translates between a person's login and their numeric id.
+// This package's own routes are nested under /users/{login}/activities
+// (or name a person by login in a request body), but activities and
+// activity_participants are keyed by numeric user id — users.Service
+// satisfies this structurally (see main.go's wiring), without
+// activities having to import that package (it can't: users already
+// imports this one, via licenses).
+type UserLookup interface {
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
+	LoginForUserID(ctx context.Context, id int64) (string, error)
+}
+
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
+	users         UserLookup
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
-	return &Handler{service: service, authenticator: authenticator}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -29,9 +43,22 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
-	mux.Handle("DELETE /api/v1/activities/{id}/participants/{userID}", h.authenticator.Protect(h.leave))
+	mux.Handle("DELETE /api/v1/activities/{id}/participants/{login}", h.authenticator.Protect(h.leave))
 
-	mux.Handle("GET /api/v1/users/{userID}/activities", h.authenticator.Protect(h.listByUser))
+	mux.Handle("GET /api/v1/users/{login}/activities", h.authenticator.Protect(h.listByUser))
+}
+
+// resolveUserLogin looks up the numeric id behind a {login} path
+// segment. Any failure — malformed, or simply nobody by that login — is
+// reported the same way (404): this package only needs to know whether
+// the lookup succeeded, not why it didn't.
+func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return 0, false
+	}
+	return id, true
 }
 
 // list defaults to every activity (paginated), matching how it always
@@ -60,16 +87,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Title              string     `json:"title"`
-		Type               Type       `json:"type"`
-		StartDate          string     `json:"start_date"`
-		EndDate            *string    `json:"end_date"`
-		Location           string     `json:"location"`
-		Description        *string    `json:"description"`
-		Difficulty         *int16     `json:"difficulty"`
-		MaxParticipants    *int32     `json:"max_participants"`
-		Visibility         Visibility `json:"visibility"`
-		ParticipantUserIDs []int64    `json:"participant_user_ids"`
+		Title             string     `json:"title"`
+		Type              Type       `json:"type"`
+		StartDate         string     `json:"start_date"`
+		EndDate           *string    `json:"end_date"`
+		Location          string     `json:"location"`
+		Description       *string    `json:"description"`
+		Difficulty        *int16     `json:"difficulty"`
+		MaxParticipants   *int32     `json:"max_participants"`
+		Visibility        Visibility `json:"visibility"`
+		ParticipantLogins []string   `json:"participant_logins"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -95,12 +122,21 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Visibility == "" {
 		body.Visibility = VisibilityPublic
 	}
+	participantIDs := make([]int64, 0, len(body.ParticipantLogins))
+	for _, login := range body.ParticipantLogins {
+		id, err := h.users.UserIDForLogin(r.Context(), login)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", "one of the given participants does not exist")
+			return
+		}
+		participantIDs = append(participantIDs, id)
+	}
 	current, _ := auth.UserFromContext(r.Context())
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Location: body.Location, Description: body.Description, Difficulty: body.Difficulty,
 		MaxParticipants: body.MaxParticipants, LeaderID: current.ID, Visibility: body.Visibility,
-		ParticipantUserIDs: body.ParticipantUserIDs,
+		ParticipantUserIDs: participantIDs,
 	})
 	if errors.Is(err, ErrParticipantNotFound) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
@@ -113,6 +149,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create activity")
 		return
+	}
+	if leaderLogin, err := h.users.LoginForUserID(r.Context(), current.ID); err == nil {
+		a.LeaderLogin = leaderLogin
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, a)
 }
@@ -204,9 +243,8 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 // visible to anyone via listParticipants, so this is just the same
 // information viewed from the other direction.
 func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	list, err := h.service.ListByUser(r.Context(), userID)
@@ -244,7 +282,7 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	current, _ := auth.UserFromContext(r.Context())
 
 	var body struct {
-		UserID *int64 `json:"user_id"`
+		Login *string `json:"login"`
 	}
 	if r.ContentLength != 0 {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -254,8 +292,13 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := current.ID
-	if body.UserID != nil {
-		userID = *body.UserID
+	if body.Login != nil {
+		id, err := h.users.UserIDForLogin(r.Context(), *body.Login)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+			return
+		}
+		userID = id
 	}
 
 	activity, err := h.service.Get(r.Context(), id)
@@ -307,9 +350,8 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())

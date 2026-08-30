@@ -20,6 +20,22 @@ var (
 
 const foreignKeyViolationCode = "23503"
 
+// activitySelect is appended to every query that returns one or more
+// Activity rows other than Create's INSERT ... RETURNING (which can't
+// JOIN against the row it just wrote) — every listing here can span
+// activities led by different people, so the organizer's login is
+// joined in rather than resolved one at a time.
+const activitySelect = `
+	a.id, a.title, a.type, a.start_date, a.end_date, a.location, a.description,
+	a.difficulty, a.max_participants, a.status, a.leader_id, ul.login, a.visibility
+	FROM activities a
+	JOIN users ul ON ul.id = a.leader_id`
+
+func scanActivity(row interface{ Scan(dest ...any) error }, a *Activity) error {
+	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location, &a.Description,
+		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
+}
+
 type Repository struct {
 	pool db.PGX
 }
@@ -71,9 +87,8 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id, visibility
-		FROM activities ORDER BY start_date DESC LIMIT $1 OFFSET $2
+		SELECT `+activitySelect+`
+		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
 		return nil, err
@@ -83,8 +98,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 	list := []Activity{}
 	for rows.Next() {
 		var a Activity
-		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
+		if err := scanActivity(rows, &a); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -99,9 +113,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 // to see day to day — List still exists for browsing the full history.
 func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
-			a.description, a.difficulty, a.max_participants, a.status, a.leader_id, a.visibility
-		FROM activities a
+		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN item_transactions t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
 		WHERE a.status = 'planned' OR t.id IS NOT NULL
 		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
@@ -114,8 +126,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activ
 	list := []Activity{}
 	for rows.Next() {
 		var a Activity
-		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
+		if err := scanActivity(rows, &a); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -128,9 +139,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activ
 // shown on that person's page.
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
-			a.description, a.difficulty, a.max_participants, a.status, a.leader_id, a.visibility
-		FROM activities a
+		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN activity_participants ap ON ap.activity_id = a.id
 		WHERE a.leader_id = $1 OR ap.user_id = $1
 		ORDER BY a.start_date DESC
@@ -143,8 +152,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, 
 	list := []Activity{}
 	for rows.Next() {
 		var a Activity
-		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
+		if err := scanActivity(rows, &a); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -154,12 +162,10 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, 
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Activity, error) {
 	var a Activity
-	err := r.pool.QueryRow(ctx, `
-		SELECT id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id, visibility
-		FROM activities WHERE id = $1
-	`, id).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-		&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility)
+	err := scanActivity(r.pool.QueryRow(ctx, `
+		SELECT `+activitySelect+`
+		WHERE a.id = $1
+	`, id), &a)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -223,7 +229,10 @@ func (r *Repository) RemoveParticipant(ctx context.Context, activityID, userID i
 
 func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]Participant, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT activity_id, user_id, role, confirmed FROM activity_participants WHERE activity_id = $1
+		SELECT ap.activity_id, ap.user_id, u.login, ap.role, ap.confirmed
+		FROM activity_participants ap
+		JOIN users u ON u.id = ap.user_id
+		WHERE ap.activity_id = $1
 	`, activityID)
 	if err != nil {
 		return nil, err
@@ -233,7 +242,7 @@ func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]
 	list := []Participant{}
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.Role, &p.Confirmed); err != nil {
+		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.UserLogin, &p.Role, &p.Confirmed); err != nil {
 			return nil, err
 		}
 		list = append(list, p)

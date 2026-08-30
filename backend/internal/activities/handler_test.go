@@ -14,7 +14,9 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/memberships"
+	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
+	"katiuskas-intranet/backend/internal/users"
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
@@ -27,13 +29,15 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx)
 // now required on every activity).
 func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
 	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	service := activities.NewService(activities.NewRepository(tx), licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	activities.NewHandler(service, authenticator).RegisterRoutes(mux)
+	activities.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
 	return mux, resolver, tx
 }
 
@@ -185,14 +189,14 @@ func TestHandlerCreateWithParticipants(t *testing.T) {
 
 	body := map[string]any{
 		"title": "Cena de fin de temporada", "type": "social", "location": "Cazorla", "start_date": "2026-09-15",
-		"participant_user_ids": []int64{},
+		"participant_logins": []string{},
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 with an empty participant list, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	body["participant_user_ids"] = []int64{999999}
+	body["participant_logins"] = []string{"no-such-login"}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for an unknown participant, got %d: %s", rec.Code, rec.Body.String())
@@ -227,11 +231,11 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 		t.Errorf("expected a member to sign themselves up (204), got %d: %s", rec.Code, rec.Body.String())
 	}
 	// A member naming someone else is forbidden.
-	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"login": other.Login}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a member adding someone else to be forbidden, got %d", rec.Code)
 	}
 	// admin/board can add anyone.
-	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add someone else (204), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
@@ -246,13 +250,13 @@ func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
 		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
-		"participant_user_ids": []int64{person.ID},
+		"participant_logins": []string{person.Login},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	path := fmt.Sprintf("/api/v1/users/%d/activities", person.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/activities", person.Login)
 	// Not even admin/board — a plain member (who isn't the person in
 	// question) can still read it, same as listing an activity's
 	// participants requires nothing beyond the baseline.
@@ -285,8 +289,8 @@ func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if created.LeaderID != person.ID {
-		t.Errorf("expected leader_id to be the caller (%d), got %d", person.ID, created.LeaderID)
+	if created.LeaderLogin != person.Login {
+		t.Errorf("expected leader_login to be the caller (%q), got %q", person.Login, created.LeaderLogin)
 	}
 }
 
@@ -447,10 +451,10 @@ func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
 	}
 	// The organizer alone (not admin/board) still can't add someone else
 	// to a *public* activity — that extra privilege is private-only.
-	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"login": other.Login}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected the organizer to be forbidden from adding someone else to a public activity, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add someone else to a public activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
@@ -490,14 +494,14 @@ func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *te
 	}
 
 	// The organizer can add that same member.
-	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"user_id": member.ID}); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"login": member.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected the organizer to add a member to their own private activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// Board and admin can too.
-	if rec := doRequest(mux, http.MethodPost, path, boardToken, map[string]any{"user_id": board.ID}); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPost, path, boardToken, map[string]any{"login": board.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected board to add a participant to a private activity, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"user_id": admin.ID}); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"login": admin.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add a participant to a private activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

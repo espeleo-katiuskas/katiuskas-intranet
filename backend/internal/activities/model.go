@@ -48,11 +48,12 @@ type Activity struct {
 	Difficulty      *int16     `json:"difficulty,omitempty"`
 	MaxParticipants *int32     `json:"max_participants,omitempty"`
 	Status          Status     `json:"status"`
-	// LeaderID is the organizer: always set, to whoever created the
-	// activity (see Service.Create — never something the caller
-	// chooses), and the only person besides admin/board who can edit or
-	// cancel it.
-	LeaderID int64 `json:"leader_id"`
+	// LeaderID/LeaderLogin are the organizer: always set, to whoever
+	// created the activity (see Service.Create — never something the
+	// caller chooses), and the only person besides admin/board who can
+	// edit or cancel it.
+	LeaderID    int64  `json:"-"`
+	LeaderLogin string `json:"leader_login"`
 	// Visibility gates who may add participants: anyone can join a
 	// public activity (themselves, or admin/board adding someone else),
 	// same as before this field existed. A private activity can only
@@ -88,7 +89,8 @@ type UpdateInput struct {
 
 type Participant struct {
 	ActivityID int64  `json:"activity_id"`
-	UserID     int64  `json:"user_id"`
+	UserID     int64  `json:"-"`
+	UserLogin  string `json:"user_login"`
 	Role       string `json:"role"`
 	Confirmed  bool   `json:"confirmed"`
 }
