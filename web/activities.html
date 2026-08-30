@@ -32,6 +32,10 @@
 
   <div id="new-activity-panel" class="panel" hidden>
     <h3>Nueva actividad</h3>
+    <p class="hint">
+      En una actividad pública cualquiera puede apuntarse. En una privada, solo el
+      organizador, la Junta Directiva o la administración pueden añadir participantes.
+    </p>
     <form id="new-activity-form">
       <div class="field-grid">
         <div class="field span-2">
@@ -67,6 +71,13 @@
         <div class="field">
           <label for="na-max-participants">Plazas <span class="optional">(opcional)</span></label>
           <input id="na-max-participants" name="max_participants" type="number" min="1">
+        </div>
+        <div class="field">
+          <label for="na-visibility">Visibilidad</label>
+          <select id="na-visibility" name="visibility">
+            <option value="public" selected>Pública</option>
+            <option value="private">Privada</option>
+          </select>
         </div>
         <div class="field span-2">
           <label for="na-description">Descripción <span class="optional">(opcional)</span></label>

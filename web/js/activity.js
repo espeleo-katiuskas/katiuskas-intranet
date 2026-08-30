@@ -23,6 +23,14 @@ const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 // since it depends on data loaded asynchronously for this specific
 // activity.
 let canManage = isAdmin;
+// Who may add a participant depends on visibility too, not just on
+// canManage: a public activity works as it always has (anyone can join
+// themselves; only admin/board can add someone else — the organizer
+// alone gets no extra say), while a private one restricts adding
+// *anyone*, self included, to the organizer/board/admin. See
+// Handler.join on the backend for the same split.
+let canJoinSelf = true;
+let canAddOthers = isAdmin;
 
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!activityId) {
@@ -46,6 +54,7 @@ function showError(message) {
 
 const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
+const visibilityLabels = { public: 'Pública', private: 'Privada' };
 
 const editForm = document.getElementById('edit-activity-form');
 
@@ -55,7 +64,7 @@ const editForm = document.getElementById('edit-activity-form');
 // but for something only knowable after this specific activity loads.
 function applyManagementVisibility() {
   document.getElementById('edit-activity-panel').hidden = !canManage;
-  document.getElementById('add-participant-row').hidden = !canManage;
+  document.getElementById('add-participant-row').hidden = !canAddOthers;
   document.getElementById('danger-zone-header').hidden = !canManage;
   document.getElementById('cancel-activity').hidden = !canManage;
 }
@@ -68,10 +77,14 @@ async function loadActivity() {
       : formatDate(activity.start_date);
     document.getElementById('activity-title').textContent = activity.title;
     document.getElementById('activity-meta').textContent =
-      `${dateLabel} · ${activity.location} · ${typeLabels[activity.type] ?? activity.type} · ${statusLabels[activity.status] ?? activity.status}`;
+      `${dateLabel} · ${activity.location} · ${typeLabels[activity.type] ?? activity.type} · ` +
+      `${statusLabels[activity.status] ?? activity.status} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
     document.getElementById('activity-description').textContent = activity.description ?? '';
 
     canManage = isAdmin || viewer?.id === activity.leader_id;
+    const isPrivate = activity.visibility === 'private';
+    canJoinSelf = isPrivate ? canManage : true;
+    canAddOthers = isPrivate ? canManage : isAdmin;
     applyManagementVisibility();
 
     if (editForm) {
@@ -79,6 +92,7 @@ async function loadActivity() {
       editForm.type.value = activity.type;
       editForm.location.value = activity.location;
       editForm.status.value = activity.status;
+      editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
     }
   } catch (err) {
@@ -95,6 +109,7 @@ editForm?.addEventListener('submit', async (event) => {
     type: formData.get('type'),
     location: formData.get('location'),
     status: formData.get('status'),
+    visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,
   };
 
@@ -165,7 +180,7 @@ async function loadParticipants() {
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = participants.some((p) => p.user_id === viewer?.id);
-    document.getElementById('join-activity').hidden = alreadyIn;
+    document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
     document.getElementById('leave-activity').hidden = !alreadyIn;
 
     const optionsEl = document.getElementById('participant-options');

@@ -193,6 +193,7 @@ newActivityForm.addEventListener('submit', async (event) => {
     description: optional('description'),
     difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
     max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
+    visibility: formData.get('visibility'),
     participant_user_ids: Array.from(chosenParticipants.keys()),
   };
 
