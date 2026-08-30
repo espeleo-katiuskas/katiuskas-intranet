@@ -66,20 +66,6 @@
     <h2>Todas las personas</h2>
     <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small">+ Nueva persona</button>
   </div>
-  <p class="hint">
-    Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
-    último acceso, sus roles y su historial de altas y bajas se gestionan ahí.
-  </p>
-  <div class="role-checkbox-group" id="column-toggle"></div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr id="users-table-head"></tr>
-      </thead>
-      <tbody id="users-table-body" class="clickable-rows"></tbody>
-    </table>
-  </div>
-
   <div id="new-person-panel" class="panel" hidden>
     <h3>Nueva persona</h3>
     <p class="hint">
@@ -113,6 +99,14 @@
           <label for="np-birth-date">Fecha de nacimiento <span class="optional">(opcional)</span></label>
           <input id="np-birth-date" name="birth_date" type="date">
         </div>
+        <div class="field">
+          <label for="np-gender">Género <span class="optional">(opcional)</span></label>
+          <select id="np-gender" name="gender">
+            <option value="">Sin especificar</option>
+            <option value="male">Masculino</option>
+            <option value="female">Femenino</option>
+          </select>
+        </div>
         <div class="field span-2">
           <label for="np-address">Dirección <span class="optional">(opcional)</span></label>
           <input id="np-address" name="address" type="text">
@@ -143,6 +137,19 @@
         <button id="cancel-new-person" type="button" class="btn btn-secondary">Cancelar</button>
       </div>
     </form>
+  </div>
+  <p class="hint">
+    Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
+    último acceso, sus roles y su historial de altas y bajas se gestionan ahí.
+  </p>
+  <div class="role-checkbox-group" id="column-toggle"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr id="users-table-head"></tr>
+      </thead>
+      <tbody id="users-table-body" class="clickable-rows"></tbody>
+    </table>
   </div>
 </main>
 <script type="module" src="js/members.js"></script>

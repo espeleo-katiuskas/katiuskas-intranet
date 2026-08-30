@@ -331,6 +331,7 @@ newPersonForm.addEventListener('submit', async (event) => {
     phone: optional('phone'),
     national_id: optional('national_id'),
     birth_date: optional('birth_date'),
+    gender: optional('gender'),
     address: optional('address'),
     postal_code: optional('postal_code'),
     city: optional('city'),
