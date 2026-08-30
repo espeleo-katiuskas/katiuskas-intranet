@@ -14,8 +14,8 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Membership, error
 	return s.repo.Create(ctx, in)
 }
 
-func (s *Service) End(ctx context.Context, id int64, in EndInput) (Membership, error) {
-	return s.repo.End(ctx, id, in)
+func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Membership, error) {
+	return s.repo.Update(ctx, id, in)
 }
 
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {

@@ -43,16 +43,41 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Membership, er
 	return m, err
 }
 
-func (r *Repository) End(ctx context.Context, id int64, in EndInput) (Membership, error) {
+// GetByID is used by Update to merge partial changes onto the existing
+// row before writing it back (the same pattern users.Update follows).
+func (r *Repository) GetByID(ctx context.Context, id int64) (Membership, error) {
 	var m Membership
 	err := r.pool.QueryRow(ctx, `
-		UPDATE memberships SET end_date = $1, end_reason = $2
-		WHERE id = $3
-		RETURNING id, user_id, membership_number, start_date, end_date, end_reason
-	`, in.EndDate, in.EndReason, id,
-	).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
+		SELECT id, user_id, membership_number, start_date, end_date, end_reason
+		FROM memberships WHERE id = $1
+	`, id).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, ErrNotFound
+	}
+	return m, err
+}
+
+func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Membership, error) {
+	m, err := r.GetByID(ctx, id)
+	if err != nil {
+		return m, err
+	}
+	if in.MembershipNumber != nil {
+		m.MembershipNumber = in.MembershipNumber
+	}
+	if in.EndReason != nil {
+		m.EndReason = in.EndReason
+	}
+	m.StartDate = in.StartDate
+	m.EndDate = in.EndDate
+
+	_, err = r.pool.Exec(ctx, `
+		UPDATE memberships SET membership_number = $1, start_date = $2, end_date = $3, end_reason = $4
+		WHERE id = $5
+	`, m.MembershipNumber, m.StartDate, m.EndDate, m.EndReason, id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
+		return m, ErrOverlap
 	}
 	return m, err
 }

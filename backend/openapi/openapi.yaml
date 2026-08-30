@@ -330,7 +330,14 @@ paths:
 
   /memberships/{id}:
     patch:
-      summary: End a membership period
+      summary: Correct a membership period's dates (or end it)
+      description: >
+        start_date is always required and replaces the current value.
+        end_date likewise always replaces the current value: give a date
+        to end the period, or omit/null it to leave the period open —
+        including reopening one that was ended by mistake.
+        membership_number and end_reason are true partial updates: omit
+        either to leave it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -340,9 +347,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [end_date]
+              required: [start_date]
               properties:
-                end_date: { type: string, format: date }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
+                membership_number: { type: string, nullable: true }
                 end_reason: { type: string, nullable: true }
       responses:
         "200":
@@ -350,11 +359,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The corrected dates overlap another period for this person.
 
   /activities:
     get:
       summary: List activities
+      description: >
+        Defaults to every activity (paginated, newest first). Pass
+        status=active to instead get only the ones still needing
+        attention: not yet completed/cancelled, or completed but still
+        with a loan/rental linked to it that hasn't been returned — the
+        practical "what matters right now" view once years of history
+        pile up.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active] }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
       responses:
         "200":
           description: A page of activities

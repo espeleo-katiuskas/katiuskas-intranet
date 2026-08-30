@@ -138,10 +138,16 @@ if (isRealAdmin) {
   });
 }
 
+// Kept in memory so "Dar de baja" can send the period's current
+// start_date back — PATCH /memberships/{id} always replaces it, since
+// that's also what lets an admin correct it later (see loadHistory).
+let activeMembershipsById = {};
+
 async function loadMemberships() {
   const tableBody = document.getElementById('memberships-table-body');
   try {
     const memberships = await apiFetch('/memberships');
+    activeMembershipsById = Object.fromEntries(memberships.map((m) => [m.id, m]));
     tableBody.innerHTML = memberships.length
       ? memberships
           .map((membership) => `
@@ -199,8 +205,14 @@ function renderUserRow(person) {
       <td>${renderRoleBadges(person)}${renderRoleAddControl(person)}</td>
       <td class="table-actions">
         <button type="button" class="btn btn-secondary btn-small" data-start-membership="${person.id}">Dar de alta</button>
+        <button type="button" class="btn btn-secondary btn-small" data-toggle-history="${person.id}">Historial</button>
         <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-person="${person.id}">Editar</button>
         <button type="button" class="btn btn-danger btn-small" data-delete-person="${person.id}">Borrar</button>
+      </td>
+    </tr>
+    <tr data-history-row="${person.id}" hidden>
+      <td colspan="5">
+        <div class="detail-list" data-history-rows="${person.id}"></div>
       </td>
     </tr>
     <tr data-edit-person-row="${person.id}" hidden>
@@ -259,6 +271,45 @@ function renderUserRow(person) {
   `;
 }
 
+function renderMembershipHistoryRow(m) {
+  return `
+    <div class="detail-row" data-membership-row="${m.id}">
+      <span>${escapeHtml(m.membership_number) || 'Sin número'} · ${formatDate(m.start_date)} –
+        ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
+    </div>
+    <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>N.º de socio</label>
+          <input type="text" data-membership-field="membership_number" value="${escapeHtml(m.membership_number ?? '')}">
+        </div>
+        <div class="field">
+          <label>Fecha de alta</label>
+          <input type="date" data-membership-field="start_date" value="${m.start_date.slice(0, 10)}">
+        </div>
+        <div class="field">
+          <label>Fecha de baja <span class="optional">(vacío = sigue activa)</span></label>
+          <input type="date" data-membership-field="end_date" value="${m.end_date ? m.end_date.slice(0, 10) : ''}">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-membership="${m.id}">Guardar</button>
+    </div>
+  `;
+}
+
+async function loadMembershipHistory(personId, container) {
+  container.innerHTML = 'Cargando…';
+  try {
+    const history = await apiFetch(`/users/${personId}/memberships`);
+    container.innerHTML = history.length
+      ? history.map(renderMembershipHistoryRow).join('')
+      : '<p>Todavía no ha sido socio.</p>';
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
 async function loadUsers() {
   const tableBody = document.getElementById('users-table-body');
   try {
@@ -278,12 +329,17 @@ document.getElementById('memberships-table-body').addEventListener('click', asyn
   const endDate = prompt('Fecha de baja (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
   if (!endDate) return;
   const endReason = prompt('Motivo de la baja (opcional):') || null;
+  const membership = activeMembershipsById[button.dataset.endMembership];
 
   button.disabled = true;
   try {
     await apiFetch(`/memberships/${button.dataset.endMembership}`, {
       method: 'PATCH',
-      body: JSON.stringify({ end_date: endDate, end_reason: endReason }),
+      body: JSON.stringify({
+        start_date: membership.start_date.slice(0, 10),
+        end_date: endDate,
+        end_reason: endReason,
+      }),
     });
     showFeedback('Baja registrada.');
     await loadMemberships();
@@ -349,6 +405,52 @@ usersTableBody.addEventListener('click', async (event) => {
       await loadUsers();
     } catch (err) {
       removeRoleButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const toggleHistoryButton = event.target.closest('button[data-toggle-history]');
+  if (toggleHistoryButton) {
+    const personId = toggleHistoryButton.dataset.toggleHistory;
+    const row = usersTableBody.querySelector(`[data-history-row="${personId}"]`);
+    row.hidden = !row.hidden;
+    if (!row.hidden) {
+      const container = row.querySelector(`[data-history-rows="${personId}"]`);
+      await loadMembershipHistory(personId, container);
+    }
+    return;
+  }
+
+  const toggleEditMembershipButton = event.target.closest('button[data-toggle-edit-membership]');
+  if (toggleEditMembershipButton) {
+    const panel = usersTableBody.querySelector(`[data-edit-membership-panel="${toggleEditMembershipButton.dataset.toggleEditMembership}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const saveMembershipButton = event.target.closest('button[data-save-membership]');
+  if (saveMembershipButton) {
+    const membershipId = saveMembershipButton.dataset.saveMembership;
+    const panel = usersTableBody.querySelector(`[data-edit-membership-panel="${membershipId}"]`);
+    const container = panel.closest('[data-history-rows]');
+    const personId = container.dataset.historyRows;
+    const field = (name) => panel.querySelector(`[data-membership-field="${name}"]`).value;
+
+    const body = {
+      membership_number: field('membership_number').trim() || null,
+      start_date: field('start_date'),
+      end_date: field('end_date') || null,
+    };
+
+    saveMembershipButton.disabled = true;
+    try {
+      await apiFetch(`/memberships/${membershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Periodo actualizado.');
+      await loadMembershipHistory(personId, container);
+      await loadMemberships();
+    } catch (err) {
+      saveMembershipButton.disabled = false;
       showError(err.message);
     }
     return;

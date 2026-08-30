@@ -62,7 +62,8 @@ func TestCreateAllowsNonOverlappingPeriodsAfterEnding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if _, err := repo.End(ctx, first.ID, memberships.EndInput{EndDate: date("2020-12-31")}); err != nil {
+	firstEnd := date("2020-12-31")
+	if _, err := repo.Update(ctx, first.ID, memberships.UpdateInput{StartDate: first.StartDate, EndDate: &firstEnd}); err != nil {
 		t.Fatalf("end: %v", err)
 	}
 
@@ -71,9 +72,70 @@ func TestCreateAllowsNonOverlappingPeriodsAfterEnding(t *testing.T) {
 	}
 }
 
-func TestEndNotFound(t *testing.T) {
+func TestUpdateCorrectsDatesAndCanReopenAClosedPeriod(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "", false)
+	ctx := context.Background()
+
+	original, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Correct a wrong start date and (mistakenly) end it.
+	wrongEnd := date("2020-06-01")
+	updated, err := repo.Update(ctx, original.ID, memberships.UpdateInput{StartDate: date("2020-02-01"), EndDate: &wrongEnd})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if !updated.StartDate.Equal(date("2020-02-01")) {
+		t.Errorf("expected start date to be corrected, got %v", updated.StartDate)
+	}
+	if updated.EndDate == nil || !updated.EndDate.Equal(wrongEnd) {
+		t.Errorf("expected end date to be set, got %v", updated.EndDate)
+	}
+
+	// Realize the "baja" was a mistake and reopen the period by omitting EndDate.
+	reopened, err := repo.Update(ctx, original.ID, memberships.UpdateInput{StartDate: date("2020-02-01")})
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if reopened.EndDate != nil {
+		t.Errorf("expected the end date to be cleared, got %v", reopened.EndDate)
+	}
+}
+
+func TestUpdateRejectsOverlap(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "", false)
+	ctx := context.Background()
+
+	first, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+	firstEnd := date("2020-06-01")
+	if _, err := repo.Update(ctx, first.ID, memberships.UpdateInput{StartDate: first.StartDate, EndDate: &firstEnd}); err != nil {
+		t.Fatalf("end first: %v", err)
+	}
+	second, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2021-01-01")})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+
+	// Stretching the second period's start back into the first's range should
+	// be rejected by the same exclusion constraint Create relies on.
+	if _, err := repo.Update(ctx, second.ID, memberships.UpdateInput{StartDate: date("2020-03-01")}); !errors.Is(err, memberships.ErrOverlap) {
+		t.Errorf("expected ErrOverlap, got %v", err)
+	}
+}
+
+func TestUpdateNotFound(t *testing.T) {
 	repo := memberships.NewRepository(testutil.NewTx(t))
-	_, err := repo.End(context.Background(), 999999, memberships.EndInput{EndDate: date("2024-01-01")})
+	endDate := date("2024-01-01")
+	_, err := repo.Update(context.Background(), 999999, memberships.UpdateInput{StartDate: date("2020-01-01"), EndDate: &endDate})
 	if !errors.Is(err, memberships.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -151,7 +213,8 @@ func TestListActiveIncludesNameAndOnlyCurrentlyOpenPeriods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create past: %v", err)
 	}
-	if _, err := repo.End(ctx, pastMembership.ID, memberships.EndInput{EndDate: date("2011-01-01")}); err != nil {
+	pastEnd := date("2011-01-01")
+	if _, err := repo.Update(ctx, pastMembership.ID, memberships.UpdateInput{StartDate: pastMembership.StartDate, EndDate: &pastEnd}); err != nil {
 		t.Fatalf("end past: %v", err)
 	}
 
