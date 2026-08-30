@@ -15,6 +15,12 @@ info:
     endpoints that role would otherwise unlock. Since "member" is itself
     computed from an active membership period, this also means access is
     cut off automatically the moment someone's membership lapses.
+
+    A person is never identified by a numeric id anywhere in this API —
+    every response and path that names one uses their login instead (a
+    unique, admin-editable slug like "maria.garcia"), generated
+    automatically when they're created. Every other resource (an
+    activity, a license, a token...) still has its own opaque numeric id.
 servers:
   - url: /api/v1
 
@@ -63,7 +69,7 @@ paths:
         separate short-lived access token and long-lived refresh token
         pair. The token is used directly as the bearer credential on
         every subsequent request until it's revoked (via /auth/logout or
-        by an admin, see DELETE /users/{userID}/tokens/{tokenID}) or it
+        by an admin, see DELETE /users/{login}/tokens/{tokenID}) or it
         expires.
       requestBody:
         required: true
@@ -146,7 +152,7 @@ paths:
         the way a JWT could be. Costs no extra database round trip: it's
         resolved by the same lookup that authenticated the request.
         impersonated_by is present only for a session started by
-        POST /users/{userID}/impersonate: id/roles above are the
+        POST /users/{login}/impersonate: login/roles above are the
         impersonated person's, not the admin's.
       security: [{ bearerAuth: [] }]
       responses:
@@ -157,14 +163,17 @@ paths:
               schema:
                 type: object
                 properties:
-                  id: { type: integer }
+                  login: { type: string }
                   roles: { type: array, items: { type: string } }
                   impersonated_by:
                     type: object
                     nullable: true
-                    description: The admin currently impersonating this session, if any.
+                    description: >
+                      The admin currently impersonating this session, if
+                      any. An empty object in the rare case that admin's
+                      own account has since been deleted.
                     properties:
-                      id: { type: integer }
+                      login: { type: string }
                       first_name: { type: string }
                       last_name: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -174,7 +183,7 @@ paths:
       summary: Stop impersonating and go back to being yourself
       description: >
         Only meaningful for a session started by
-        POST /users/{userID}/impersonate — revokes it and mints a fresh,
+        POST /users/{login}/impersonate — revokes it and mints a fresh,
         normal token for the admin who started it (not the token they had
         before impersonating, which the API has no way to hand back out
         again). Requires only a valid bearer token, not any particular
@@ -219,7 +228,11 @@ paths:
                     - { $ref: "#/components/schemas/MemberListing" }
     post:
       summary: Create a user (and, optionally, a login account)
-      description: Admin-only — board can no longer modify a person's data at all.
+      description: >
+        Admin-only — board can no longer modify a person's data at all.
+        The new person's login (their sole identifier everywhere else in
+        this API) is generated automatically from their name and
+        returned in the response; it isn't something the caller sets here.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -241,7 +254,7 @@ paths:
       summary: List everyone with login access, name only
       description: >
         Open to any authenticated user, including one who'd only get
-        MemberListing from GET /users. Returns just id, first_name and
+        MemberListing from GET /users. Returns just login, first_name and
         last_name — enough to populate a picker (e.g. an activity's leader
         or participants) without exposing anything more.
       security: [{ bearerAuth: [] }]
@@ -254,13 +267,13 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/DirectoryEntry" }
 
-  /users/{id}:
+  /users/{login}:
     get:
-      summary: Get a user by id
+      summary: Get a user by login
       description: admin/board can view anyone; anyone else only themselves.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: The user
@@ -275,12 +288,12 @@ paths:
         Only admin can set every field on anyone. Everyone else can only
         edit their own record (403 otherwise), and even then only the
         contact fields UpdateUserInput lists as such — attempting to also
-        change name, national ID, birth date, or gender gets the whole
-        request rejected with 403 restricted_fields, rather than silently
-        dropping just those fields.
+        change name, national ID, birth date, gender, or login gets the
+        whole request rejected with 403 restricted_fields, rather than
+        silently dropping just those fields.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -292,19 +305,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "400":
+          description: invalid_login — the given login isn't lowercase letters, digits, dots, or hyphens.
         "403":
           description: >
             forbidden — not admin, and not editing your own record; or
             restricted_fields — a non-admin tried to change a field
             beyond the contact ones.
         "409":
-          description: The email or national ID being set already belongs to another person.
+          description: The email, national ID, or login being set already belongs to another person.
     delete:
       summary: Delete a person (and their login, membership history and activity sign-ups)
       description: Admin-only — board can no longer modify a person's data at all.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "204": { description: Deleted }
         "403": { description: Only admin can delete a person. }
@@ -364,7 +379,7 @@ paths:
             This is a system role (admin/board/member) — it's wired to
             permissions elsewhere in the API and can't be deleted.
 
-  /users/{userID}/roles:
+  /users/{login}/roles:
     post:
       summary: Grant a role to a person
       description: >
@@ -374,7 +389,7 @@ paths:
         all — they're computed from membership/board history instead.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -392,7 +407,7 @@ paths:
         "409":
           description: The role is automatic (member/former_member/board) and can't be granted by hand.
 
-  /users/{userID}/roles/{roleID}:
+  /users/{login}/roles/{roleID}:
     delete:
       summary: Revoke a role from a person
       description: >
@@ -401,7 +416,7 @@ paths:
         automatic role (member/former_member/board) at all.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
         - { name: roleID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Revoked }
@@ -414,7 +429,7 @@ paths:
             role (member/former_member/board), neither of which can be
             revoked this way.
 
-  /users/{userID}/tokens:
+  /users/{login}/tokens:
     get:
       summary: List a person's session tokens
       description: >
@@ -426,7 +441,7 @@ paths:
         where it was last used.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: This person's tokens
@@ -436,26 +451,26 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Token" }
 
-  /users/{userID}/impersonate:
+  /users/{login}/impersonate:
     post:
       summary: Start a session that behaves as this person
       description: >
         Admin-only — deliberately not admin/board, since handing board
         members the ability to act as anyone (including other admins) is
         a bigger step than the rest of what they can already do. Mints a
-        token whose id and roles are userID's, live-resolved exactly as
-        if userID had signed in — so every existing permission check
-        already treats the resulting session as that person, with no
-        special-casing anywhere else in the API. The one exception is
+        token whose identity and roles are this person's, live-resolved
+        exactly as if they had signed in — so every existing permission
+        check already treats the resulting session as that person, with
+        no special-casing anywhere else in the API. The one exception is
         GET /auth/me, which also reports impersonated_by, and
-        POST /auth/impersonate/exit, reachable regardless of userID's own
-        roles. Rejected (409) for yourself, or for someone with no
-        baseline role (including a userID that doesn't exist) — their
+        POST /auth/impersonate/exit, reachable regardless of the target's
+        own roles. Rejected (409) for yourself, or for someone with no
+        baseline role (including a login that doesn't exist) — their
         session couldn't call anything anyway. The token is shorter-lived
         than a normal sign-in on purpose.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "201":
           description: Impersonation session created
@@ -469,13 +484,13 @@ paths:
         "409":
           description: cannot_impersonate_self, or not_eligible (no baseline role).
 
-  /users/{userID}/tokens/{tokenID}:
+  /users/{login}/tokens/{tokenID}:
     patch:
       summary: Change a token's expiry
       description: Admin-only. Lets a token be extended or shortened without revoking it.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
         - { name: tokenID, in: path, required: true, schema: { type: integer } }
       requestBody:
         required: true
@@ -497,18 +512,18 @@ paths:
         made with it gets 401.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
         - { name: tokenID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Revoked }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /users/{userID}/memberships:
+  /users/{login}/memberships:
     get:
       summary: List a user's membership periods
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: Membership history
@@ -522,7 +537,7 @@ paths:
       description: Admin-only — board can see every membership period but no longer starts, corrects, or ends one.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -542,12 +557,12 @@ paths:
         "409":
           description: Overlaps an existing membership period for this user
 
-  /users/{userID}/licenses:
+  /users/{login}/licenses:
     get:
       summary: List a person's federative licenses
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: License history, newest first
@@ -570,7 +585,7 @@ paths:
         forbidden otherwise.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -648,7 +663,7 @@ paths:
     get:
       summary: List the federative license name catalog
       description: >
-        Admin-only, matching POST /users/{userID}/licenses: the catalog
+        Admin-only, matching POST /users/{login}/licenses: the catalog
         only exists to populate that form. Kept in the database rather
         than a fixed set in code, since the list of valid names (new
         zones, new federations) can grow over time. is_other flags the
@@ -712,12 +727,12 @@ paths:
         "409":
           description: The corrected dates overlap another period for this person.
 
-  /users/{userID}/board-members:
+  /users/{login}/board-members:
     get:
       summary: List a person's board (Junta Directiva) terms
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: Board term history, newest first
@@ -736,7 +751,7 @@ paths:
         two board terms at once.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -930,7 +945,7 @@ paths:
       description: >
         Any authenticated person can create an activity (there's no role
         restriction here, unlike update/cancel) and sign up its initial
-        participants in the same call. The organizer (leader_id) is
+        participants in the same call. The organizer (leader_login) is
         always set to the caller — it can't be chosen in the request
         body.
       security: [{ bearerAuth: [] }]
@@ -945,11 +960,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
         "400":
-          description: One of the given participant_user_ids doesn't exist.
+          description: One of the given participant_logins doesn't exist.
         "409":
           description: >
             not_federated — the activity is caving or canyoning and one of
-            the given participant_user_ids isn't currently federated.
+            the given participant_logins isn't currently federated.
 
   /activities/{id}:
     get:
@@ -967,7 +982,7 @@ paths:
     patch:
       summary: Update an activity
       description: >
-        Only the activity's organizer (leader_id), or admin/board, may
+        Only the activity's organizer (leader_login), or admin/board, may
         update it — anyone else gets a 403.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -987,7 +1002,7 @@ paths:
     delete:
       summary: Cancel an activity
       description: >
-        Only the activity's organizer (leader_id), or admin/board, may
+        Only the activity's organizer (leader_login), or admin/board, may
         cancel it — anyone else gets a 403.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -1014,13 +1029,13 @@ paths:
     post:
       summary: Join an activity, or (admin/board, or the organizer) add someone else to it
       description: >
-        On a public activity: with no body (or a null/omitted user_id)
+        On a public activity: with no body (or a null/omitted login)
         signs up the caller; a plain member naming anyone other than
-        themselves gets a 403; admin/board can name any user_id to add
+        themselves gets a 403; admin/board can name any login to add
         them on that person's behalf. On a private activity, only the
         organizer, board, or admin may call this at all — even to sign up
         the caller themselves; anyone else gets a 403 regardless of whose
-        user_id they name. If the activity's type is caving or canyoning,
+        login they name. If the activity's type is caving or canyoning,
         the person being added must currently hold a valid federative
         license, or the call is rejected with 409 not_federated.
       security: [{ bearerAuth: [] }]
@@ -1033,7 +1048,7 @@ paths:
             schema:
               type: object
               properties:
-                user_id: { type: integer, nullable: true }
+                login: { type: string, nullable: true }
       responses:
         "204": { description: Joined }
         "403":
@@ -1048,7 +1063,7 @@ paths:
             not_federated — the activity is caving or canyoning and the
             person being added isn't currently federated.
 
-  /activities/{id}/participants/{userID}:
+  /activities/{id}/participants/{login}:
     delete:
       summary: Leave an activity
       description: >
@@ -1056,12 +1071,12 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "204": { description: Removed }
         "403": { description: A plain member tried to remove someone other than themselves. }
 
-  /users/{userID}/activities:
+  /users/{login}/activities:
     get:
       summary: List a person's activity history
       description: >
@@ -1073,7 +1088,7 @@ paths:
         viewed from the other direction.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: This person's activities
@@ -1083,7 +1098,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Activity" }
 
-  /users/{userID}/transactions:
+  /users/{login}/transactions:
     get:
       summary: List a person's material transaction history
       description: >
@@ -1094,7 +1109,7 @@ paths:
         GET /transactions rather than activity participation.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
           description: This person's transactions
@@ -1162,17 +1177,18 @@ paths:
       description: >
         Requires the admin, board, or material role. activity_id is
         required for loan and rental (never for sale) — a member is
-        always borrowing or renting gear *for* something.
+        always borrowing or renting gear *for* something. recorded_by_login
+        (the caller) is set automatically, never chosen by the caller.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
             schema:
               type: object
-              required: [item_id, user_id, type]
+              required: [item_id, login, type]
               properties:
                 item_id: { type: integer }
-                user_id: { type: integer }
+                login: { type: string, description: "The person the transaction is for." }
                 type: { type: string, enum: [loan, rental, sale] }
                 quantity: { type: integer, default: 1 }
                 due_date: { type: string, format: date, nullable: true }
@@ -1186,6 +1202,8 @@ paths:
               schema: { $ref: "#/components/schemas/Transaction" }
         "400":
           description: activity_id is missing for a loan or rental.
+        "404":
+          description: The given login doesn't belong to anyone.
         "409":
           description: Not enough available quantity
 
@@ -1299,10 +1317,10 @@ components:
       type: object
       description: >
         A session token as an admin sees it — never the token value
-        itself, only its metadata (see GET /users/{userID}/tokens).
+        itself, only its metadata (see GET /users/{login}/tokens).
       properties:
         id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         revoked_at: { type: string, format: date-time, nullable: true }
@@ -1314,12 +1332,12 @@ components:
             X-Forwarded-For if present (the production deploy sits behind
             a reverse proxy), otherwise the raw connection address.
             Purely informational.
-        impersonated_by:
-          type: integer
+        impersonated_by_login:
+          type: string
           nullable: true
           description: >
             The admin who started this session via
-            POST /users/{userID}/impersonate, if it is one — absent for a
+            POST /users/{login}/impersonate, if it is one — absent for a
             normal token.
 
     Role:
@@ -1340,13 +1358,18 @@ components:
             has a currently active (member) or a past but not current
             (former_member) membership period, or a currently open board
             term (board). Can't be granted or revoked through
-            POST/DELETE /users/{userID}/roles — those return 409
+            POST/DELETE /users/{login}/roles — those return 409
             automatic_role.
 
     User:
       type: object
       properties:
-        id: { type: integer }
+        login:
+          type: string
+          description: >
+            This person's sole identifier anywhere in the API — a unique
+            slug (e.g. "maria.garcia") generated from their name when
+            created, and admin-editable afterward via PATCH.
         first_name: { type: string }
         last_name: { type: string }
         national_id: { type: string, nullable: true }
@@ -1379,7 +1402,7 @@ components:
             Role names this person holds. admin/board/member are the system
             roles the API actually grants permissions to; any other name is
             an admin-defined organizational label. Manage membership via
-            POST/DELETE /users/{userID}/roles, not this field.
+            POST/DELETE /users/{login}/roles, not this field.
         last_login_at:
           type: string
           format: date-time
@@ -1402,7 +1425,7 @@ components:
             the club, not any single membership period — leaving and
             rejoining keeps the same number. Read-only here: assigned
             automatically, one past the current highest, the first time
-            someone gets an alta via POST /users/{userID}/memberships —
+            someone gets an alta via POST /users/{login}/memberships —
             not settable through POST/PATCH /users.
         membership_start_date:
           type: string
@@ -1413,7 +1436,7 @@ components:
             or null if they've never been a member. Someone who left and
             rejoined has more than one period; this is always the
             earliest one, not the latest rejoin. See
-            GET /users/{userID}/memberships for the full history.
+            GET /users/{login}/memberships for the full history.
         membership_end_date:
           type: string
           format: date
@@ -1443,8 +1466,8 @@ components:
             Together, license_* reflect this person's most recently
             issued federative license (December 31 of license_issued_date's
             year), or all null if they've never had one. Read-only here —
-            not settable through PATCH /users/{id}, only through
-            POST /users/{userID}/licenses. See GET /users/{userID}/licenses
+            not settable through PATCH /users/{login}, only through
+            POST /users/{login}/licenses. See GET /users/{login}/licenses
             for the full history.
         created_at: { type: string, format: date-time }
 
@@ -1457,7 +1480,7 @@ components:
         whom; everything else User exposes (DNI, address, contact info,
         license, roles...) is left out entirely.
       properties:
-        id: { type: integer }
+        login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
         gender: { $ref: "#/components/schemas/Gender" }
@@ -1477,7 +1500,7 @@ components:
     DirectoryEntry:
       type: object
       properties:
-        id: { type: integer }
+        login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
 
@@ -1503,11 +1526,17 @@ components:
         on anyone. Anyone else can only PATCH their own record, and even
         then only the contact fields — email, phone, address,
         postal_code, city, province, emergency_contact — not
-        first_name/last_name/national_id/birth_date/gender, which get
-        the whole request rejected with 403 restricted_fields instead of
-        being silently dropped.
+        first_name/last_name/national_id/birth_date/gender/login, which
+        get the whole request rejected with 403 restricted_fields instead
+        of being silently dropped.
       type: object
       properties:
+        login:
+          type: string
+          description: >
+            Admin-only to change. Must be lowercase letters, digits,
+            dots, or hyphens; auto-generated at creation and otherwise
+            left alone.
         first_name: { type: string, description: "Admin-only to change." }
         last_name: { type: string, description: "Admin-only to change." }
         email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
@@ -1525,7 +1554,7 @@ components:
       type: object
       properties:
         id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
         start_date: { type: string, format: date }
@@ -1567,7 +1596,7 @@ components:
         issued_date through December 31 of that same year.
       properties:
         id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         license_type_id: { type: integer }
         type:
           type: string
@@ -1599,7 +1628,7 @@ components:
         schema) — nobody grants or revokes it by hand.
       properties:
         id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
         position: { $ref: "#/components/schemas/BoardPosition" }
@@ -1619,8 +1648,8 @@ components:
         difficulty: { type: integer, nullable: true }
         max_participants: { type: integer, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
-        leader_id:
-          type: integer
+        leader_login:
+          type: string
           description: >
             The organizer: always the person who created the activity, and
             the only one besides admin/board who can update or cancel it.
@@ -1647,9 +1676,9 @@ components:
         difficulty: { type: integer, nullable: true }
         max_participants: { type: integer, nullable: true }
         visibility: { type: string, enum: [public, private], default: public }
-        participant_user_ids:
+        participant_logins:
           type: array
-          items: { type: integer }
+          items: { type: string }
           description: >
             Signed up as participants in the same call that creates the
             activity. If type is caving or canyoning, every one of them
@@ -1670,7 +1699,7 @@ components:
       type: object
       properties:
         activity_id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         role: { type: string, enum: [leader, participant] }
         confirmed: { type: boolean }
 
@@ -1693,7 +1722,7 @@ components:
       properties:
         id: { type: integer }
         item_id: { type: integer }
-        user_id: { type: integer }
+        user_login: { type: string }
         type: { type: string, enum: [loan, rental, sale] }
         quantity: { type: integer }
         transacted_at: { type: string, format: date-time }
@@ -1701,7 +1730,7 @@ components:
         returned_at: { type: string, format: date, nullable: true }
         price: { type: number, nullable: true }
         status: { type: string, enum: [active, completed, overdue, cancelled] }
-        recorded_by: { type: integer, nullable: true }
+        recorded_by_login: { type: string, nullable: true }
         activity_id:
           type: integer
           nullable: true
