@@ -205,7 +205,10 @@ function renderMembershipRow(m) {
   return `
     <div class="detail-row" data-membership-row="${m.id}">
       <span>${formatDate(m.start_date)} – ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
+      <span>
+        <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
+        <button type="button" class="btn btn-secondary btn-small" data-toggle-leaves="${m.id}">Bajas temporales</button>
+      </span>
     </div>
     <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
       <div class="field-grid">
@@ -220,7 +223,55 @@ function renderMembershipRow(m) {
       </div>
       <button type="button" class="btn btn-primary btn-small" data-save-membership="${m.id}">Guardar</button>
     </div>
+    <div class="detail-list" data-leaves-panel="${m.id}" hidden>
+      <div data-leaves-rows="${m.id}"></div>
+      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${m.id}">+ Baja temporal</button>
+    </div>
   `;
+}
+
+// A temporary leave ("baja temporal") always falls within one membership
+// period, unlike the period itself both dates are known up front, so
+// there's no "reopen" affordance — just correct the dates or delete it.
+function renderLeaveRow(l) {
+  return `
+    <div class="detail-row" data-leave-row="${l.id}">
+      <span>${formatDate(l.start_date)} – ${formatDate(l.end_date)}${l.reason ? ` · ${escapeHtml(l.reason)}` : ''}</span>
+      <span>
+        <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${l.id}">Editar</button>
+        <button type="button" class="btn btn-danger btn-small" data-delete-leave="${l.id}">Borrar</button>
+      </span>
+    </div>
+    <div class="edit-fields" data-edit-leave-panel="${l.id}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>Fecha de inicio</label>
+          <input type="date" data-leave-field="start_date" value="${l.start_date.slice(0, 10)}">
+        </div>
+        <div class="field">
+          <label>Fecha de fin</label>
+          <input type="date" data-leave-field="end_date" value="${l.end_date.slice(0, 10)}">
+        </div>
+        <div class="field span-2">
+          <label>Motivo <span class="optional">(opcional)</span></label>
+          <input type="text" data-leave-field="reason" value="${escapeHtml(l.reason ?? '')}">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-leave="${l.id}">Guardar</button>
+    </div>
+  `;
+}
+
+async function loadLeaves(membershipId, rowsContainer) {
+  rowsContainer.innerHTML = 'Cargando…';
+  try {
+    const leaves = await apiFetch(`/memberships/${membershipId}/leaves`);
+    rowsContainer.innerHTML = leaves.length
+      ? leaves.map(renderLeaveRow).join('')
+      : '<p>Sin bajas temporales.</p>';
+  } catch (err) {
+    rowsContainer.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
 }
 
 async function loadMemberships() {
@@ -258,6 +309,90 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
   if (toggleButton) {
     const panel = document.querySelector(`[data-edit-membership-panel="${toggleButton.dataset.toggleEditMembership}"]`);
     panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const toggleLeavesButton = event.target.closest('button[data-toggle-leaves]');
+  if (toggleLeavesButton) {
+    const membershipId = toggleLeavesButton.dataset.toggleLeaves;
+    const panel = document.querySelector(`[data-leaves-panel="${membershipId}"]`);
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      await loadLeaves(membershipId, panel.querySelector(`[data-leaves-rows="${membershipId}"]`));
+    }
+    return;
+  }
+
+  const addLeaveButton = event.target.closest('button[data-add-leave]');
+  if (addLeaveButton) {
+    const membershipId = addLeaveButton.dataset.addLeave;
+    const startDate = prompt('Fecha de inicio de la baja temporal (AAAA-MM-DD):');
+    if (!startDate) return;
+    const endDate = prompt('Fecha de fin (AAAA-MM-DD):');
+    if (!endDate) return;
+    const reason = prompt('Motivo (opcional):') || null;
+
+    addLeaveButton.disabled = true;
+    try {
+      await apiFetch(`/memberships/${membershipId}/leaves`, {
+        method: 'POST',
+        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
+      });
+      showFeedback('Baja temporal registrada.');
+      const panel = document.querySelector(`[data-leaves-panel="${membershipId}"]`);
+      await loadLeaves(membershipId, panel.querySelector(`[data-leaves-rows="${membershipId}"]`));
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      addLeaveButton.disabled = false;
+    }
+    return;
+  }
+
+  const toggleEditLeaveButton = event.target.closest('button[data-toggle-edit-leave]');
+  if (toggleEditLeaveButton) {
+    const panel = document.querySelector(`[data-edit-leave-panel="${toggleEditLeaveButton.dataset.toggleEditLeave}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const saveLeaveButton = event.target.closest('button[data-save-leave]');
+  if (saveLeaveButton) {
+    const leaveId = saveLeaveButton.dataset.saveLeave;
+    const editPanel = document.querySelector(`[data-edit-leave-panel="${leaveId}"]`);
+    const field = (name) => editPanel.querySelector(`[data-leave-field="${name}"]`).value;
+    const body = {
+      start_date: field('start_date'),
+      end_date: field('end_date'),
+      reason: field('reason').trim() || null,
+    };
+    const rowsContainer = editPanel.closest('[data-leaves-panel]').querySelector('[data-leaves-rows]');
+
+    saveLeaveButton.disabled = true;
+    try {
+      await apiFetch(`/leaves/${leaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Baja temporal actualizada.');
+      await loadLeaves(rowsContainer.dataset.leavesRows, rowsContainer);
+    } catch (err) {
+      saveLeaveButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const deleteLeaveButton = event.target.closest('button[data-delete-leave]');
+  if (deleteLeaveButton) {
+    if (!confirm('¿Borrar esta baja temporal?')) return;
+    const rowsContainer = deleteLeaveButton.closest('[data-leaves-panel]').querySelector('[data-leaves-rows]');
+
+    deleteLeaveButton.disabled = true;
+    try {
+      await apiFetch(`/leaves/${deleteLeaveButton.dataset.deleteLeave}`, { method: 'DELETE' });
+      await loadLeaves(rowsContainer.dataset.leavesRows, rowsContainer);
+    } catch (err) {
+      deleteLeaveButton.disabled = false;
+      showError(err.message);
+    }
     return;
   }
 

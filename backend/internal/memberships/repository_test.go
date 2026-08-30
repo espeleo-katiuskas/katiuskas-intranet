@@ -231,3 +231,212 @@ func TestListActiveIncludesNameAndOnlyCurrentlyOpenPeriods(t *testing.T) {
 		t.Errorf("expected the active list to include the person's name, got %+v", list[0])
 	}
 }
+
+func TestCreateLeaveWithinPeriod(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	reason := "operación de rodilla"
+	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"), Reason: &reason,
+	})
+	if err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+	if l.MembershipID != m.ID {
+		t.Errorf("expected membership id %d, got %d", m.ID, l.MembershipID)
+	}
+	if l.Reason == nil || *l.Reason != reason {
+		t.Errorf("expected reason %q, got %v", reason, l.Reason)
+	}
+}
+
+func TestCreateLeaveRejectsStartBeforeMembership(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2019-12-01"), EndDate: date("2020-01-15"),
+	})
+	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+}
+
+func TestCreateLeaveRejectsEndAfterMembershipEnds(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	closedEnd := date("2020-06-30")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &closedEnd}); err != nil {
+		t.Fatalf("close membership: %v", err)
+	}
+
+	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-07-15"),
+	})
+	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+}
+
+func TestCreateLeaveAllowedWhenMembershipStillOpen(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	// The membership is still open (no end_date), so a leave far in the
+	// future is fine — there's no upper bound to violate yet.
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2030-01-01"), EndDate: date("2030-02-01"),
+	}); err != nil {
+		t.Errorf("expected the leave to be accepted, got %v", err)
+	}
+}
+
+func TestCreateLeaveRejectsOverlap(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	}); err != nil {
+		t.Fatalf("create first leave: %v", err)
+	}
+
+	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-15"), EndDate: date("2020-07-15"),
+	})
+	if !errors.Is(err, memberships.ErrLeaveOverlap) {
+		t.Errorf("expected ErrLeaveOverlap, got %v", err)
+	}
+}
+
+func TestUpdateLeaveCorrectsDatesAndRevalidatesContainment(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	closedEnd := date("2020-12-31")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &closedEnd}); err != nil {
+		t.Fatalf("close membership: %v", err)
+	}
+	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	})
+	if err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	// A valid correction goes through.
+	updated, err := repo.UpdateLeave(ctx, l.ID, memberships.UpdateLeaveInput{
+		StartDate: date("2020-07-01"), EndDate: date("2020-07-31"),
+	})
+	if err != nil {
+		t.Fatalf("update leave: %v", err)
+	}
+	if !updated.StartDate.Equal(date("2020-07-01")) {
+		t.Errorf("expected corrected start date, got %v", updated.StartDate)
+	}
+
+	// Pushing it past the membership's end date is rejected, same as at creation.
+	_, err = repo.UpdateLeave(ctx, l.ID, memberships.UpdateLeaveInput{
+		StartDate: date("2020-12-01"), EndDate: date("2021-01-15"),
+	})
+	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+}
+
+func TestDeleteLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	})
+	if err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	if err := repo.DeleteLeave(ctx, l.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	list, err := repo.ListLeavesByMembership(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no leaves left, got %+v", list)
+	}
+}
+
+func TestDeleteLeaveNotFound(t *testing.T) {
+	repo := memberships.NewRepository(testutil.NewTx(t))
+	if err := repo.DeleteLeave(context.Background(), 999999); !errors.Is(err, memberships.ErrLeaveNotFound) {
+		t.Errorf("expected ErrLeaveNotFound, got %v", err)
+	}
+}
+
+func TestListLeavesByMembershipReturnsEmptySliceNotNil(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	list, err := repo.ListLeavesByMembership(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if list == nil {
+		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+}

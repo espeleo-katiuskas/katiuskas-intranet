@@ -38,3 +38,19 @@ func (s *Service) LatestByUser(ctx context.Context, userID int64) (*Membership, 
 	}
 	return &list[0], nil
 }
+
+func (s *Service) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, error) {
+	return s.repo.CreateLeave(ctx, in)
+}
+
+func (s *Service) UpdateLeave(ctx context.Context, id int64, in UpdateLeaveInput) (Leave, error) {
+	return s.repo.UpdateLeave(ctx, id, in)
+}
+
+func (s *Service) DeleteLeave(ctx context.Context, id int64) error {
+	return s.repo.DeleteLeave(ctx, id)
+}
+
+func (s *Service) ListLeavesByMembership(ctx context.Context, membershipID int64) ([]Leave, error) {
+	return s.repo.ListLeavesByMembership(ctx, membershipID)
+}

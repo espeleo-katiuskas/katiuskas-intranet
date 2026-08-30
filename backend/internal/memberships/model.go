@@ -1,6 +1,10 @@
 // Package memberships tracks membership periods (start/end date) for a
-// user. A user can have more than one period as long as they don't overlap;
-// that invariant is enforced by the database, not by this package.
+// user, and temporary leaves ("bajas temporales") within them. A user can
+// have more than one period as long as they don't overlap; that
+// invariant is enforced by the database, not by this package. A leave
+// must fall entirely within the period it belongs to — that invariant
+// isn't something a database constraint can express across two tables,
+// so this package enforces it instead.
 package memberships
 
 import "time"
@@ -30,4 +34,30 @@ type UpdateInput struct {
 	StartDate time.Time
 	EndDate   *time.Time
 	EndReason *string
+}
+
+// Leave is a "baja temporal": a bounded window, always entirely within
+// one membership period, where the person steps away for a while
+// without actually leaving the club. Unlike a membership period itself,
+// both dates are always known up front — a temporary leave is a planned,
+// finite thing, not something opened now and closed later.
+type Leave struct {
+	ID           int64     `json:"id"`
+	MembershipID int64     `json:"membership_id"`
+	StartDate    time.Time `json:"start_date"`
+	EndDate      time.Time `json:"end_date"`
+	Reason       *string   `json:"reason,omitempty"`
+}
+
+type CreateLeaveInput struct {
+	MembershipID int64
+	StartDate    time.Time
+	EndDate      time.Time
+	Reason       *string
+}
+
+type UpdateLeaveInput struct {
+	StartDate time.Time
+	EndDate   time.Time
+	Reason    *string
 }

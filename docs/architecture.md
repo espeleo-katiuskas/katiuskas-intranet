@@ -79,6 +79,15 @@ en `backend/openapi/openapi.yaml`.
   (activo o no); `users.Service` lo incorpora a cada `User` como
   `membership_start_date`/`membership_end_date`, para que la lista de personas pueda
   mostrar y ordenar por fecha de alta/baja sin una petición aparte por persona.
+- **`membership_leaves`** — "bajas temporales": una ventana con fecha de inicio y fin
+  (ambas obligatorias desde el principio, a diferencia de un periodo de socio) dentro
+  de un periodo de `memberships` concreto — la persona se ausenta un tiempo sin dejar
+  de ser socia. Que la ventana quede *contenida* en el periodo de socio no es algo que
+  una restricción `CHECK` pueda comprobar entre dos tablas, y este proyecto no usa
+  triggers, así que `memberships.Repository` lo valida en Go antes de cada
+  `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`); que dos bajas del mismo periodo no
+  se solapen sí lo garantiza `EXCLUDE USING gist`, igual que con los propios periodos.
+  Rutas bajo `/memberships/{membershipID}/leaves` y `/leaves/{id}`, admin/board.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
   además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla

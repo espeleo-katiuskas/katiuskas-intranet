@@ -450,6 +450,94 @@ paths:
         "409":
           description: The corrected dates overlap another period for this person.
 
+  /memberships/{membershipID}/leaves:
+    get:
+      summary: List a membership period's temporary leaves
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: membershipID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Temporary leaves for this period
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Leave" }
+    post:
+      summary: Record a temporary leave ("baja temporal")
+      description: >
+        Unlike a membership period, both dates are required up front — a
+        temporary leave is a bounded, planned thing. It must fall
+        entirely within its membership period's dates.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: membershipID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_date, end_date]
+              properties:
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                reason: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Leave created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Leave" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            Either outside_membership_period (the dates aren't fully
+            contained within the membership period) or overlapping_period
+            (they overlap another leave in the same period) — see the
+            error code.
+
+  /leaves/{id}:
+    patch:
+      summary: Correct a temporary leave's dates or reason
+      description: >
+        start_date and end_date are always required and replace the
+        current values; the containment check against the membership
+        period runs again on every correction. reason is a true partial
+        update: omit it to leave it as is.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_date, end_date]
+              properties:
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                reason: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Updated leave
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Leave" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: outside_membership_period or overlapping_period — see the error code.
+    delete:
+      summary: Remove a temporary leave
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /activities:
     get:
       summary: List activities
@@ -906,6 +994,19 @@ components:
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }
         end_reason: { type: string, nullable: true }
+
+    Leave:
+      type: object
+      description: >
+        A "baja temporal": a bounded window within a membership period
+        where the person steps away for a while without actually leaving
+        the club.
+      properties:
+        id: { type: integer }
+        membership_id: { type: integer }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        reason: { type: string, nullable: true }
 
     Activity:
       type: object
