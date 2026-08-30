@@ -35,8 +35,8 @@ const (
 )
 
 // userSelect is appended to every query that returns a User. Role names
-// aren't selected here — "member"/"former_member" are computed from
-// membership history rather than stored, so the roles package
+// aren't selected here — "member"/"former_member"/"board" are computed
+// from membership/board history rather than stored, so the roles package
 // (roles.Service.ListNamesForUser) is the single place that knows how
 // to list a person's roles; the users service overlays that onto every
 // User it returns instead of duplicating the computation in SQL here.

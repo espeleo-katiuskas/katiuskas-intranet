@@ -87,8 +87,9 @@ type CreateInput struct {
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
 	// RoleNames are assigned in the same call. Doesn't need — and can't
-	// include — "member" or "former_member": those are automatic,
-	// derived from membership history instead of granted by hand.
+	// include — "member", "former_member", or "board": those are
+	// automatic, derived from membership/board history instead of
+	// granted by hand.
 	RoleNames []string `json:"role_names"`
 }
 

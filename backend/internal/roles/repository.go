@@ -104,7 +104,8 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 
 // ListNamesForUser is the single source of truth for "what roles does
 // this person hold": everything stored in user_roles, plus "member" and
-// "former_member" computed live from their membership history (see the
+// "former_member" computed live from their membership history, and
+// "board" computed live from their board_members history (see the
 // package doc comment). It backs both the JWT roles claim issued at
 // login and the roles shown on their profile, so the two can never
 // disagree.
@@ -126,6 +127,12 @@ func (r *Repository) ListNamesForUser(ctx context.Context, userID int64) ([]stri
 			SELECT 1 FROM memberships m WHERE m.user_id = $1
 		) AND NOT EXISTS (
 			SELECT 1 FROM memberships m WHERE m.user_id = $1 AND m.period @> CURRENT_DATE
+		)
+
+		UNION
+
+		SELECT 'board' WHERE EXISTS (
+			SELECT 1 FROM board_members bm WHERE bm.user_id = $1 AND bm.period @> CURRENT_DATE
 		)
 
 		ORDER BY 1

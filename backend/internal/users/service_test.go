@@ -66,13 +66,13 @@ func TestServiceCreateWithExplicitRoles(t *testing.T) {
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), RoleNames: []string{"board"},
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), RoleNames: []string{"material"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if len(u.Roles) != 1 || u.Roles[0] != "board" {
-		t.Errorf("expected role [board], got %v", u.Roles)
+	if len(u.Roles) != 1 || u.Roles[0] != "material" {
+		t.Errorf("expected role [material], got %v", u.Roles)
 	}
 }
 

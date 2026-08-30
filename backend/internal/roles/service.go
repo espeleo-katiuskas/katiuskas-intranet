@@ -59,8 +59,8 @@ func (s *Service) AssignByName(ctx context.Context, userID int64, names []string
 }
 
 // Assign grants a role by id, refusing an automatic one (member,
-// former_member) since those are computed from membership history
-// instead — see the package doc comment.
+// former_member, board) since those are computed from membership/board
+// history instead — see the package doc comment.
 func (s *Service) Assign(ctx context.Context, userID, roleID int64) error {
 	role, err := s.repo.GetByID(ctx, roleID)
 	if err != nil {

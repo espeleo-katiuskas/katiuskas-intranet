@@ -10,6 +10,7 @@ import (
 	"katiuskas-intranet/backend/internal/activities"
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/authapi"
+	"katiuskas-intranet/backend/internal/board"
 	"katiuskas-intranet/backend/internal/config"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/inventory"
@@ -46,6 +47,9 @@ func main() {
 	membershipsRepo := memberships.NewRepository(pool)
 	membershipsService := memberships.NewService(membershipsRepo)
 
+	boardRepo := board.NewRepository(pool)
+	boardService := board.NewService(boardRepo)
+
 	licensesRepo := licenses.NewRepository(pool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
 
@@ -80,6 +84,7 @@ func main() {
 		Licenses:    licenses.NewHandler(licensesService, authenticator),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),
+		Board:       board.NewHandler(boardService, authenticator),
 	})
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)

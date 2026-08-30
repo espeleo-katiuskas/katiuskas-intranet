@@ -83,10 +83,10 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 
 // enrich overlays data this package doesn't own: the authoritative role
 // list (roles.Service is the single place that knows how to compute
-// "member"/"former_member" from membership history on top of whatever's
-// actually stored in user_roles — see roles.Repository.ListNamesForUser)
-// and the person's latest membership period, shown as their "alta/baja"
-// dates.
+// "member"/"former_member"/"board" from membership/board history on top
+// of whatever's actually stored in user_roles — see
+// roles.Repository.ListNamesForUser) and the person's latest membership
+// period, shown as their "alta/baja" dates.
 func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 	names, err := s.roles.ListNamesForUser(ctx, user.ID)
 	if err != nil {

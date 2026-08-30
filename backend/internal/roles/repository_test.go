@@ -34,7 +34,7 @@ func TestListIncludesSeededSystemRoles(t *testing.T) {
 	}
 
 	for _, r := range list {
-		wantAutomatic := r.Name == "member" || r.Name == "former_member"
+		wantAutomatic := r.Name == "member" || r.Name == "former_member" || r.Name == "board"
 		if r.IsAutomatic != wantAutomatic {
 			t.Errorf("expected role %q is_automatic=%v, got %v", r.Name, wantAutomatic, r.IsAutomatic)
 		}
@@ -84,6 +84,42 @@ func TestListNamesForUserComputesMemberAndFormerMember(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Errorf("expected no automatic roles for someone who's never had a membership, got %v", names)
+	}
+}
+
+func TestListNamesForUserComputesBoard(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := roles.NewRepository(tx)
+	ctx := context.Background()
+
+	currentBoardMember := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO board_members (user_id, position, start_date) VALUES ($1, 'treasurer', '2020-01-01')
+	`, currentBoardMember.ID); err != nil {
+		t.Fatalf("insert active board term: %v", err)
+	}
+
+	formerBoardMember := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO board_members (user_id, position, start_date, end_date) VALUES ($1, 'vice_president', '2020-01-01', '2021-01-01')
+	`, formerBoardMember.ID); err != nil {
+		t.Fatalf("insert ended board term: %v", err)
+	}
+
+	names, err := repo.ListNamesForUser(ctx, currentBoardMember.ID)
+	if err != nil {
+		t.Fatalf("list names for current board member: %v", err)
+	}
+	if len(names) != 1 || names[0] != "board" {
+		t.Errorf("expected [board] for someone with an open board term, got %v", names)
+	}
+
+	names, err = repo.ListNamesForUser(ctx, formerBoardMember.ID)
+	if err != nil {
+		t.Fatalf("list names for former board member: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("expected no automatic roles for someone whose board term ended, got %v", names)
 	}
 }
 

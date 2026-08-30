@@ -72,14 +72,15 @@ en `backend/openapi/openapi.yaml`.
   da permisos o comportamiento automático, y no se pueden borrar. Cualquier otro rol
   que cree un admin sirve como etiqueta organizativa — no desbloquea nada por sí solo
   salvo que se programe explícitamente.
-  `member` y `former_member` son además *automáticos* (`is_automatic`): nadie los
-  asigna ni los quita a mano (`POST`/`DELETE /users/{userID}/roles` los rechaza con
-  409). Se calculan al vuelo a partir de `memberships` —
-  `roles.Repository.ListNamesForUser` es el único sitio que sabe cómo—: `member` si la
-  persona tiene un periodo de socio activo ahora mismo, `former_member` si ha tenido
-  alguno antes pero ninguno activo hoy. Ese cálculo es lo que resuelve cada petición
-  autenticada (ver más abajo), así que los permisos basados en "soy socio" siempre
-  reflejan el estado real de alta, no una etiqueta que alguien olvidó quitar.
+  `member`, `former_member` y `board` son además *automáticos* (`is_automatic`): nadie
+  los asigna ni los quita a mano (`POST`/`DELETE /users/{userID}/roles` los rechaza con
+  409). Se calculan al vuelo — `roles.Repository.ListNamesForUser` es el único sitio que
+  sabe cómo—: `member` a partir de `memberships` si la persona tiene un periodo de socio
+  activo ahora mismo, `former_member` si ha tenido alguno antes pero ninguno activo hoy,
+  y `board` a partir de `board_members` si tiene un cargo de la Junta Directiva abierto
+  ahora mismo. Ese cálculo es lo que resuelve cada petición autenticada (ver más abajo),
+  así que los permisos basados en "soy socio" o "soy de la junta" siempre reflejan el
+  estado real de alta, no una etiqueta que alguien olvidó quitar.
 - **`tokens`** — el token de sesión de cada persona: opaco (hash SHA-256 guardado, nunca
   el valor en claro), revocable, con `expires_at`, y `last_used_at`/`last_used_ip` (misma
   lógica de `X-Forwarded-For` que `users.last_login_ip`) actualizados en cada petición
@@ -127,6 +128,21 @@ en `backend/openapi/openapi.yaml`.
   reciente. Rutas bajo `/users/{userID}/licenses`: `GET` abierto a la propia persona o
   admin/board, `POST` solo admin/board. En `/member`, cada licencia aparece como un
   evento más dentro del mismo timeline de altas y bajas, no en una sección aparte.
+- **`board_members`** — quién ha estado en la Junta Directiva y con qué cargo
+  (`president`/`vice_president`/`secretary`/`treasurer`/`member_at_large` — vocal, tipo
+  `board_position`), con la misma forma que `memberships`: `start_date`/`end_date`
+  (vacío = sigue en el cargo) y un `EXCLUDE USING gist (user_id WITH =, period WITH &&)`
+  que impide que una persona tenga dos cargos abiertos a la vez, sean o no el mismo — no
+  hay restricción, en cambio, sobre que dos personas tengan el mismo cargo simultáneamente
+  (por ejemplo varios vocales a la vez es normal). El paquete `board` no depende de
+  `users` ni de `memberships` — no necesita el juego de interfaz que sí hace falta para
+  `membership_number` (ver más abajo), porque el rol automático `board` se calcula con
+  una consulta SQL directa contra `board_members` desde el propio paquete `roles`, igual
+  que `member`/`former_member` contra `memberships`. Rutas bajo
+  `/users/{userID}/board-members` (`GET` propia persona o admin/board, `POST` solo
+  admin/board), `GET /board-members` (la Junta Directiva actual), y
+  `PATCH /board-members/{id}` para corregir cargo o fechas. En `/member`, un cargo
+  aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
   además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla
@@ -157,7 +173,7 @@ nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal
 roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
 correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
 verdad si lo hay), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
-dominio (`users`, `roles`, `memberships`, `activities`, `inventory`), cada uno con
+dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP.
 

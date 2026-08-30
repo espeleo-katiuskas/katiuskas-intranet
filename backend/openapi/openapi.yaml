@@ -497,6 +497,95 @@ paths:
         "409":
           description: The corrected dates overlap another period for this person.
 
+  /users/{userID}/board-members:
+    get:
+      summary: List a person's board (Junta Directiva) terms
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Board term history, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BoardMember" }
+    post:
+      summary: Start a new board term
+      description: >
+        The automatic "board" role (see the User schema) is computed from
+        whoever currently has an open term here — there's no other way to
+        grant it. Rejected if this person already has an open (or
+        overlapping) term, whatever the position: nobody holds two board
+        terms at once.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position, start_date]
+              properties:
+                position: { $ref: "#/components/schemas/BoardPosition" }
+                start_date: { type: string, format: date }
+      responses:
+        "201":
+          description: Board term created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BoardMember" }
+        "409":
+          description: Overlaps an existing board term for this person.
+
+  /board-members:
+    get:
+      summary: List the current Junta Directiva
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Everyone with an open board term today, across every position
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BoardMember" }
+
+  /board-members/{id}:
+    patch:
+      summary: Correct a board term's position or dates (or end it)
+      description: >
+        position and start_date are always required and replace the
+        current values. end_date likewise always replaces the current
+        value: give a date to end the term, or omit/null it to leave it
+        open — including reopening one that was ended by mistake.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position, start_date]
+              properties:
+                position: { $ref: "#/components/schemas/BoardPosition" }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
+      responses:
+        "200":
+          description: Updated board term
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BoardMember" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The corrected dates overlap another board term for this person.
+
   /memberships/{membershipID}/leaves:
     get:
       summary: List a membership period's temporary leaves
@@ -919,11 +1008,12 @@ components:
         is_automatic:
           type: boolean
           description: >
-            member/former_member: computed from whether the person has a
-            currently active (member) or a past but not current
-            (former_member) membership period. Can't be granted or
-            revoked through POST/DELETE /users/{userID}/roles — those
-            return 409 automatic_role.
+            member/former_member/board: computed from whether the person
+            has a currently active (member) or a past but not current
+            (former_member) membership period, or a currently open board
+            term (board). Can't be granted or revoked through
+            POST/DELETE /users/{userID}/roles — those return 409
+            automatic_role.
 
     User:
       type: object
@@ -1112,6 +1202,28 @@ components:
           type: string
           format: date
           description: Computed as December 31 of issued_date's year — never set directly.
+
+    BoardPosition:
+      type: string
+      enum: [president, vice_president, secretary, treasurer, member_at_large]
+      description: >
+        Cargos of the Junta Directiva. member_at_large is "vocal" — unlike
+        the other four, a club can have several of these open at once.
+
+    BoardMember:
+      type: object
+      description: >
+        One person's term in one board position. Whoever currently has an
+        open term here holds the automatic "board" role (see the User
+        schema) — nobody grants or revokes it by hand.
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+        position: { $ref: "#/components/schemas/BoardPosition" }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
 
     Activity:
       type: object

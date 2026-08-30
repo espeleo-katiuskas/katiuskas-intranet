@@ -24,7 +24,7 @@ func TestAssignByNameIsAllOrNothing(t *testing.T) {
 	ctx := context.Background()
 	user := newUser("")
 
-	err := svc.AssignByName(ctx, user.ID, []string{"board", "does-not-exist"})
+	err := svc.AssignByName(ctx, user.ID, []string{"admin", "does-not-exist"})
 	if !errors.Is(err, roles.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for the unknown role, got %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAssignByNameSucceedsWhenAllNamesAreValid(t *testing.T) {
 	ctx := context.Background()
 	user := newUser("")
 
-	if err := svc.AssignByName(ctx, user.ID, []string{"admin", "board"}); err != nil {
+	if err := svc.AssignByName(ctx, user.ID, []string{"admin", "material"}); err != nil {
 		t.Fatalf("assign by name: %v", err)
 	}
 	names, err := svc.ListNamesForUser(ctx, user.ID)
@@ -111,12 +111,12 @@ func TestRemoveNonAdminRoleIsUnaffectedByLastAdminCheck(t *testing.T) {
 	svc := roles.NewService(repo)
 	ctx := context.Background()
 
-	boardID := testutil.RoleID(t, tx, "board")
+	materialID := testutil.RoleID(t, tx, "material")
 	user := testutil.InsertUser(t, tx, "")
-	if err := svc.Assign(ctx, user.ID, boardID); err != nil {
+	if err := svc.Assign(ctx, user.ID, materialID); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	if err := svc.Remove(ctx, user.ID, boardID); err != nil {
+	if err := svc.Remove(ctx, user.ID, materialID); err != nil {
 		t.Errorf("expected removing a non-admin role to succeed even as the only holder, got %v", err)
 	}
 }

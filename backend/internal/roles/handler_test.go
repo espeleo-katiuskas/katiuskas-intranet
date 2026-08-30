@@ -100,11 +100,11 @@ func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	boardRoleID := testutil.RoleID(t, tx, "board")
+	materialRoleID := testutil.RoleID(t, tx, "material")
 
 	boardToken := rolesToken(t, authn, 1, "board")
 	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), boardToken,
-		map[string]int64{"role_id": boardRoleID})
+		map[string]int64{"role_id": materialRoleID})
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected board to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
 	}

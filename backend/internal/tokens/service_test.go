@@ -19,8 +19,13 @@ func TestIssueThenAuthenticate(t *testing.T) {
 	ctx := context.Background()
 
 	user := testutil.InsertUser(t, tx, "")
-	if err := rolesService.AssignByName(ctx, user.ID, []string{"board"}); err != nil {
-		t.Fatalf("assign role: %v", err)
+	// "board" is automatic now — computed from board_members, not
+	// grantable through AssignByName — so give them an open board term
+	// directly instead of assigning the role by hand.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO board_members (user_id, position, start_date) VALUES ($1, 'secretary', '2020-01-01')
+	`, user.ID); err != nil {
+		t.Fatalf("insert board membership: %v", err)
 	}
 
 	raw, err := svc.Issue(ctx, user.ID, time.Hour)

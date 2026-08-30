@@ -170,7 +170,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	s := newTestServer(t)
-	user := s.insertUserWithRole(t, "611222333", "board")
+	user := s.insertUserWithRole(t, "611222333", "admin")
 
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	if token == "" {
@@ -188,7 +188,7 @@ func TestRequestMagicLinkSendsToAllOfSeveralEmails(t *testing.T) {
 	phone := "611222333"
 
 	if _, err := s.users.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: &phone, RoleNames: []string{"board"},
+		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: &phone, RoleNames: []string{"admin"},
 	}); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestRequestMagicLinkSkipsSomeoneWithNoBaselineRole(t *testing.T) {
 
 func TestRequestMagicLinkResponseIsIdenticalWhetherOrNotItMatches(t *testing.T) {
 	s := newTestServer(t)
-	user := s.insertUserWithRole(t, "611222333", "board")
+	user := s.insertUserWithRole(t, "611222333", "admin")
 
 	match := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
 	wrongPhone := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": "000000000"})
@@ -249,7 +249,7 @@ func TestRequestMagicLinkRequiresBothFields(t *testing.T) {
 
 func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 	s := newTestServer(t)
-	user := s.insertUserWithRole(t, "611222333", "board")
+	user := s.insertUserWithRole(t, "611222333", "admin")
 
 	s.requestAndExtractToken(t, user.Email, user.Phone)
 	if s.mailer.sent != 1 {
@@ -323,7 +323,7 @@ func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 
 func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 	s := newTestServer(t)
-	user := s.insertUserWithRole(t, "611222333", "board")
+	user := s.insertUserWithRole(t, "611222333", "admin")
 	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 
 	first := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
@@ -349,7 +349,7 @@ func TestMeRejectsMissingOrRevokedToken(t *testing.T) {
 
 func TestLogoutRevokesTheToken(t *testing.T) {
 	s := newTestServer(t)
-	user := s.insertUserWithRole(t, "611222333", "board")
+	user := s.insertUserWithRole(t, "611222333", "admin")
 
 	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 	sessionToken := decodeSessionToken(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken}))

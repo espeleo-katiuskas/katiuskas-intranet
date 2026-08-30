@@ -6,12 +6,13 @@
 // role an admin creates is free for the club to use as an organizational
 // label — it doesn't unlock anything on its own.
 //
-// "member" and "former_member" are also automatic: nobody grants or
-// revokes them by hand. A person holds "member" exactly when they have a
-// currently active membership period, and "former_member" exactly when
-// they've had one before but don't now — see
-// Repository.ListNamesForUser, which computes both from the memberships
-// table on every read instead of storing them in user_roles.
+// "member", "former_member", and "board" are also automatic: nobody
+// grants or revokes them by hand. A person holds "member" exactly when
+// they have a currently active membership period, "former_member"
+// exactly when they've had one before but don't now, and "board" exactly
+// when they have a currently open board_members period — see
+// Repository.ListNamesForUser, which computes all three on every read
+// instead of storing them in user_roles.
 package roles
 
 type Role struct {
