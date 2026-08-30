@@ -12,19 +12,25 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"katiuskas-intranet/backend/internal/licenses"
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
 	"katiuskas-intranet/backend/internal/tokens"
+	"katiuskas-intranet/backend/internal/users"
 )
 
 func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *tokens.Service, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	service := tokens.NewService(tokens.NewRepository(tx), rolesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	tokens.NewHandler(service, authenticator, time.Hour).RegisterRoutes(mux)
+	tokens.NewHandler(service, authenticator, usersService, time.Hour).RegisterRoutes(mux)
 	return mux, resolver, service, tx
 }
 
@@ -51,12 +57,12 @@ func TestHandlerListRequiresAdmin(t *testing.T) {
 	target := testutil.InsertUser(t, tx, "")
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
-	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%d/tokens", target.ID), boardToken, nil); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", target.Login), boardToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from listing tokens, got %d", rec.Code)
 	}
 
 	adminToken := testutil.TokenFor(resolver, 2, "admin")
-	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%d/tokens", target.ID), adminToken, nil); rec.Code != http.StatusOK {
+	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", target.Login), adminToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected admin to list tokens, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
@@ -70,7 +76,7 @@ func TestHandlerImpersonateRequiresAdmin(t *testing.T) {
 	boardCaller := testutil.InsertUser(t, tx, "")
 
 	boardToken := testutil.TokenFor(resolver, boardCaller.ID, "board")
-	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", target.ID), boardToken, nil)
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", target.Login), boardToken, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from impersonating, got %d", rec.Code)
 	}
@@ -87,7 +93,7 @@ func TestHandlerImpersonateSucceedsAndTheTokenWorksAsTheTarget(t *testing.T) {
 	}
 
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
-	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", target.ID), adminToken, nil)
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", target.Login), adminToken, nil)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -120,12 +126,12 @@ func TestHandlerImpersonateRejectsSelfAndIneligibleTarget(t *testing.T) {
 
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
 
-	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", admin.ID), adminToken, nil)
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", admin.Login), adminToken, nil)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409 impersonating yourself, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", noRoleTarget.ID), adminToken, nil)
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", noRoleTarget.Login), adminToken, nil)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409 impersonating an ineligible target, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -139,7 +145,7 @@ func TestHandlerListReturnsTokensNewestFirstWithoutHashes(t *testing.T) {
 	}
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%d/tokens", target.ID), adminToken, nil)
+	rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", target.Login), adminToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -169,7 +175,7 @@ func TestHandlerUpdateExpiryAndRevokeRequireAdmin(t *testing.T) {
 	tokenID := list[0].ID
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
-	path := fmt.Sprintf("/api/v1/users/%d/tokens/%d", target.ID, tokenID)
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID)
 
 	if rec := doRequest(mux, http.MethodPatch, path, boardToken, map[string]string{"expires_at": time.Now().Add(48 * time.Hour).Format(time.RFC3339)}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from extending expiry, got %d", rec.Code)
@@ -190,7 +196,7 @@ func TestHandlerUpdateExpiry(t *testing.T) {
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	newExpiry := time.Now().Add(90 * 24 * time.Hour).UTC().Truncate(time.Second)
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d/tokens/%d", target.ID, tokenID), adminToken,
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken,
 		map[string]string{"expires_at": newExpiry.Format(time.RFC3339)})
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
@@ -215,7 +221,7 @@ func TestHandlerRevoke(t *testing.T) {
 	tokenID := list[0].ID
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/tokens/%d", target.ID, tokenID), adminToken, nil)
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, nil)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -240,7 +246,7 @@ func TestHandlerRejectsTokenIDBelongingToAnotherUser(t *testing.T) {
 	tokenID := list[0].ID
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	path := fmt.Sprintf("/api/v1/users/%d/tokens/%d", someoneElse.ID, tokenID)
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", someoneElse.Login, tokenID)
 	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for a token id under the wrong user, got %d", rec.Code)
 	}

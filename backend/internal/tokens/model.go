@@ -8,15 +8,21 @@ package tokens
 import "time"
 
 type Token struct {
-	ID         int64      `json:"id"`
-	UserID     int64      `json:"user_id"`
+	ID     int64  `json:"id"`
+	UserID int64  `json:"-"`
+	// UserLogin is only populated by queries that JOIN against users
+	// (GetByID, ListForUser) — Create and CreateImpersonation return a
+	// Token whose caller only ever checks the error, so they skip the
+	// join and leave this blank rather than pay for it needlessly.
+	UserLogin  string     `json:"user_login"`
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	LastUsedIP *string    `json:"last_used_ip,omitempty"`
-	// ImpersonatedBy is set only for a token minted by
-	// POST /users/{userID}/impersonate: the id of the admin who started
-	// it, not UserID (whose session this actually is).
-	ImpersonatedBy *int64 `json:"impersonated_by,omitempty"`
+	// ImpersonatedBy/ImpersonatedByLogin are set only for a token minted
+	// by POST /users/{login}/impersonate: the admin who started it, not
+	// UserID/UserLogin (whose session this actually is).
+	ImpersonatedBy      *int64  `json:"-"`
+	ImpersonatedByLogin *string `json:"impersonated_by_login,omitempty"`
 }

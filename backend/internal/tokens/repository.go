@@ -12,10 +12,30 @@ import (
 
 var ErrNotFound = errors.New("token not found")
 
-const tokenSelect = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip, impersonated_by`
+// tokenColumns is for INSERT ... RETURNING, which can only return columns
+// of the row just written — no JOIN available — so it leaves UserLogin
+// and ImpersonatedByLogin blank. That's fine: Create and
+// CreateImpersonation's callers only ever check the returned error.
+const tokenColumns = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip, impersonated_by`
 
 func scanToken(row interface{ Scan(dest ...any) error }, t *Token) error {
 	return row.Scan(&t.ID, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP, &t.ImpersonatedBy)
+}
+
+// tokenSelectJoined is for reads that actually get serialized back over
+// the API: it joins in both the token owner's login and, if any, the
+// impersonating admin's — the only two identifiers this package's JSON
+// is allowed to expose for a person (see Token.UserLogin).
+const tokenSelectJoined = `
+	t.id, t.user_id, u.login, t.created_at, t.expires_at, t.revoked_at, t.last_used_at, t.last_used_ip,
+	t.impersonated_by, ib.login
+	FROM tokens t
+	JOIN users u ON u.id = t.user_id
+	LEFT JOIN users ib ON ib.id = t.impersonated_by`
+
+func scanTokenJoined(row interface{ Scan(dest ...any) error }, t *Token) error {
+	return row.Scan(&t.ID, &t.UserID, &t.UserLogin, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP,
+		&t.ImpersonatedBy, &t.ImpersonatedByLogin)
 }
 
 type Repository struct {
@@ -30,7 +50,7 @@ func (r *Repository) Create(ctx context.Context, userID int64, tokenHash string,
 	var t Token
 	err := scanToken(r.pool.QueryRow(ctx, `
 		INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)
-		RETURNING `+tokenSelect, userID, tokenHash, expiresAt), &t)
+		RETURNING `+tokenColumns, userID, tokenHash, expiresAt), &t)
 	return t, err
 }
 
@@ -41,7 +61,7 @@ func (r *Repository) CreateImpersonation(ctx context.Context, targetUserID, impe
 	var t Token
 	err := scanToken(r.pool.QueryRow(ctx, `
 		INSERT INTO tokens (user_id, token_hash, expires_at, impersonated_by) VALUES ($1, $2, $3, $4)
-		RETURNING `+tokenSelect, targetUserID, tokenHash, expiresAt, impersonatorID), &t)
+		RETURNING `+tokenColumns, targetUserID, tokenHash, expiresAt, impersonatorID), &t)
 	return t, err
 }
 
@@ -74,7 +94,7 @@ func (r *Repository) RevokeByHash(ctx context.Context, tokenHash string) error {
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Token, error) {
 	var t Token
-	err := scanToken(r.pool.QueryRow(ctx, `SELECT `+tokenSelect+` FROM tokens WHERE id = $1`, id), &t)
+	err := scanTokenJoined(r.pool.QueryRow(ctx, `SELECT `+tokenSelectJoined+` WHERE t.id = $1`, id), &t)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, ErrNotFound
 	}
@@ -89,7 +109,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Token, error) {
 // monotonically increasing.
 func (r *Repository) ListForUser(ctx context.Context, userID int64) ([]Token, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+tokenSelect+` FROM tokens WHERE user_id = $1 ORDER BY id DESC
+		SELECT `+tokenSelectJoined+` WHERE t.user_id = $1 ORDER BY t.id DESC
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -99,7 +119,7 @@ func (r *Repository) ListForUser(ctx context.Context, userID int64) ([]Token, er
 	var list []Token
 	for rows.Next() {
 		var t Token
-		if err := scanToken(rows, &t); err != nil {
+		if err := scanTokenJoined(rows, &t); err != nil {
 			return nil, err
 		}
 		list = append(list, t)

@@ -246,7 +246,11 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 	ctx := context.Background()
 
 	email := UniqueEmail(t)
-	login := strings.ToLower(nonAlnum.ReplaceAllString(fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano()), "-"))
+	// login is deliberately opaque, not derived from t.Name() the way
+	// UniqueEmail is — a test name can contain a word (like "Hashes" or
+	// "Token") that a test then greps the response for, and a login
+	// embedding it would produce a false-positive substring match.
+	login := fmt.Sprintf("test-user-%d", time.Now().UnixNano())
 	var phoneArg any
 	if phone != "" {
 		phoneArg = phone
