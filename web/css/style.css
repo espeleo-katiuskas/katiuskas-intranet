@@ -178,7 +178,7 @@ th {
   color: var(--ink);
 }
 
-.edit-fields {
+.edit-fields:not([hidden]) {
   margin-top: 10px;
   padding: 12px;
   display: flex;
