@@ -202,6 +202,16 @@ function categoryFor(person) {
   return 'Mayores';
 }
 
+// A plain member's listing doesn't include birth_date (see
+// users.MemberListing) — just the already-bucketed age_category the API
+// computes from it (child/teen/adult), so this maps that instead of
+// deriving it locally like categoryFor does for the full listing.
+const AGE_CATEGORY_LABELS = { child: 'Infantil', teen: 'Juvenil', adult: 'Mayores' };
+const AGE_CATEGORY_ORDER = ['child', 'teen', 'adult'];
+function memberCategoryFor(person) {
+  return person.age_category ? AGE_CATEGORY_LABELS[person.age_category] : null;
+}
+
 // A person's membership status for filtering purposes isn't just the
 // alta/baja dates: someone on a temporary leave still counts as "active"
 // for role/access purposes (see docs/architecture.md), but should filter
@@ -311,22 +321,14 @@ function filteredPeople() {
 }
 
 const FULL_COLUMNS = [
+  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: false },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
-  { ...textColumn('email', 'Email', (p) => p.email), default: false },
-  { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
-  { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
-  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: false },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
+  { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
   { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: true },
-  {
-    key: 'category',
-    label: 'Categoría',
-    default: false,
-    value: categoryFor,
-    render: (person) => categoryFor(person) ?? '—',
-    compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
-  },
+  { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
+  { ...textColumn('email', 'Email', (p) => p.email), default: false },
   { ...textColumn('address', 'Dirección', (p) => p.address ?? ''), default: false },
   { ...textColumn('postal_code', 'Código postal', (p) => p.postal_code ?? ''), default: false },
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },
@@ -339,6 +341,14 @@ const FULL_COLUMNS = [
       if (person.membership_end_date) return formatDate(person.membership_end_date);
       return person.membership_start_date ? '<span class="badge">Activa</span>' : '—';
     },
+  },
+  {
+    key: 'category',
+    label: 'Categoría',
+    default: false,
+    value: categoryFor,
+    render: (person) => categoryFor(person) ?? '—',
+    compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
   },
   {
     key: 'membership_status',
@@ -355,12 +365,20 @@ const FULL_COLUMNS = [
 // themselves (see users.MemberListing) — the rest of FULL_COLUMNS would
 // just render as "—" for every row, so they're not offered at all.
 const MEMBER_COLUMNS = [
+  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: true },
-  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
   { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
   { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: true },
+  {
+    key: 'category',
+    label: 'Categoría',
+    default: false,
+    value: memberCategoryFor,
+    render: (person) => memberCategoryFor(person) ?? '—',
+    compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
+  },
 ];
 
 const COLUMNS = isAdmin ? FULL_COLUMNS : MEMBER_COLUMNS;
