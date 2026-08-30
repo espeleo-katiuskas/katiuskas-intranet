@@ -440,3 +440,53 @@ func TestListLeavesByMembershipReturnsEmptySliceNotNil(t *testing.T) {
 		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
 	}
 }
+
+func TestIsOnLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	ctx := context.Background()
+
+	activeNoLeave := testutil.InsertUser(t, tx, "")
+	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: activeNoLeave.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if onLeave, err := repo.IsOnLeave(ctx, activeNoLeave.ID); err != nil {
+		t.Fatalf("is on leave: %v", err)
+	} else if onLeave {
+		t.Error("expected a member with no leaves to not be on leave")
+	}
+
+	currentlyOnLeave := testutil.InsertUser(t, tx, "")
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: currentlyOnLeave.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date(yesterday), EndDate: date(tomorrow),
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+	if onLeave, err := repo.IsOnLeave(ctx, currentlyOnLeave.ID); err != nil {
+		t.Fatalf("is on leave: %v", err)
+	} else if !onLeave {
+		t.Error("expected a leave window containing today to report on leave")
+	}
+
+	pastLeaveOnly := testutil.InsertUser(t, tx, "")
+	m2, err := repo.Create(ctx, memberships.CreateInput{UserID: pastLeaveOnly.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m2.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+	if onLeave, err := repo.IsOnLeave(ctx, pastLeaveOnly.ID); err != nil {
+		t.Fatalf("is on leave: %v", err)
+	} else if onLeave {
+		t.Error("expected a leave that already ended to not report on leave")
+	}
+}

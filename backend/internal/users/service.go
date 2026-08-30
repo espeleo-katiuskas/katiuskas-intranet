@@ -94,6 +94,17 @@ func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 		user.MembershipStartDate = &latest.StartDate
 		user.MembershipEndDate = latest.EndDate
 	}
+	// A leave doesn't touch the membership period it belongs to, so
+	// telling "activo" apart from "baja temporal" needs its own check —
+	// only worth doing for someone currently active, since a closed
+	// period can't have a leave covering today.
+	if latest != nil && latest.EndDate == nil {
+		onLeave, err := s.memberships.IsOnLeave(ctx, user.ID)
+		if err != nil {
+			return user, err
+		}
+		user.OnLeave = onLeave
+	}
 
 	latestLicense, err := s.licenses.LatestByUser(ctx, user.ID)
 	if err != nil {

@@ -120,6 +120,23 @@ func (r *Repository) IsActiveMember(ctx context.Context, userID int64) (bool, er
 	return exists, err
 }
 
+// IsOnLeave reports whether userID is currently within one of their
+// temporary leave windows — used by users.Service to tell "activo" apart
+// from "baja temporal" on the people list, a distinction that isn't
+// visible in the "member" role itself (a leave doesn't end the
+// membership period it belongs to).
+func (r *Repository) IsOnLeave(ctx context.Context, userID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM membership_leaves ml
+			JOIN memberships m ON m.id = ml.membership_id
+			WHERE m.user_id = $1 AND ml.period @> CURRENT_DATE
+		)
+	`, userID).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.user_id, m.start_date, m.end_date, m.end_reason,

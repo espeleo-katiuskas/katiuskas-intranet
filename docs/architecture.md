@@ -87,7 +87,11 @@ en `backend/openapi/openapi.yaml`.
   triggers, así que `memberships.Repository` lo valida en Go antes de cada
   `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`); que dos bajas del mismo periodo no
   se solapen sí lo garantiza `EXCLUDE USING gist`, igual que con los propios periodos.
-  Rutas bajo `/memberships/{membershipID}/leaves` y `/leaves/{id}`, admin/board.
+  Rutas bajo `/memberships/{membershipID}/leaves` y `/leaves/{id}`, admin/board. Una
+  baja temporal no toca el periodo de socio al que pertenece — sigue abierto durante
+  ella —, así que `users.User.OnLeave` (`on_leave` en el JSON) es el único sitio que
+  distingue "activo" de "baja temporal" en la lista de personas; se calcula solo para
+  quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
 - **`licenses`** — licencias federativas: un `type` de texto libre, no un enum ni un
   catálogo gestionable, y sobre todo *no* separado en zona + modalidad — los tipos
   reales no se descomponen así ("FME", "Murciana", "A BASICA Infantil" no son zona +

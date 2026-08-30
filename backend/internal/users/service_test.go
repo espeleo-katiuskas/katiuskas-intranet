@@ -128,6 +128,55 @@ func TestServiceReportsLatestMembershipDates(t *testing.T) {
 	}
 }
 
+func TestServiceReportsOnLeave(t *testing.T) {
+	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	startDate, err := time.Parse("2006-01-02", "2020-01-01")
+	if err != nil {
+		t.Fatalf("parse start date: %v", err)
+	}
+	m, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate})
+	if err != nil {
+		t.Fatalf("start membership: %v", err)
+	}
+
+	active, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if active.OnLeave {
+		t.Error("expected an active member with no leave to report on_leave=false")
+	}
+
+	yesterday, err := time.Parse("2006-01-02", time.Now().AddDate(0, 0, -1).Format("2006-01-02"))
+	if err != nil {
+		t.Fatalf("parse yesterday: %v", err)
+	}
+	tomorrow, err := time.Parse("2006-01-02", time.Now().AddDate(0, 0, 1).Format("2006-01-02"))
+	if err != nil {
+		t.Fatalf("parse tomorrow: %v", err)
+	}
+	if _, err := membershipsService.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: yesterday, EndDate: tomorrow,
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	onLeave, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !onLeave.OnLeave {
+		t.Error("expected a member currently within a leave window to report on_leave=true")
+	}
+}
+
 func TestServiceReportsLatestLicense(t *testing.T) {
 	svc, _, membershipsService, licensesService := newUsersServiceWithMemberships(t)
 	ctx := context.Background()

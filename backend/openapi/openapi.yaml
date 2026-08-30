@@ -985,6 +985,16 @@ components:
           description: >
             End date of that same period, or null if it's still open
             (they're currently a member).
+        on_leave:
+          type: boolean
+          description: >
+            Whether today falls within one of this person's temporary leave
+            windows. Only ever true alongside a currently-active membership
+            (null membership_end_date) — a leave doesn't end the period it
+            belongs to, so this is the only way to tell "activo" apart from
+            "baja temporal". Read-only here — set through
+            POST /memberships/{membershipID}/leaves and
+            PATCH/DELETE /leaves/{id}.
         license_type: { type: string, nullable: true }
         license_issued_date: { type: string, format: date, nullable: true }
         license_valid_until:

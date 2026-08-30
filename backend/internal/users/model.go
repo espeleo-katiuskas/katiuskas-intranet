@@ -47,6 +47,11 @@ type User struct {
 	// member; both nil means they've never been one.
 	MembershipStartDate *time.Time `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
+	// OnLeave is only ever true alongside a currently-active membership
+	// (nil MembershipEndDate): whether today falls within one of their
+	// temporary leave windows, which a "member" role alone can't tell —
+	// a leave never touches the membership period it belongs to.
+	OnLeave bool `json:"on_leave"`
 	// License* reflect the person's most recently issued federative
 	// license (see licenses.Service.LatestByUser) — not settable through
 	// this package, only through POST /users/{userID}/licenses.
