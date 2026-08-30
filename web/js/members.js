@@ -40,7 +40,7 @@ function showError(message) {
 // label; anything an admin created shows as typed. Only used here for the
 // role catalog table and the "Nueva persona" checkboxes — managing an
 // existing person's roles happens on their own page (/member?id=…) now.
-const knownRoleLabels = { admin: 'Administración', board: 'Directiva', member: 'Socio', former_member: 'Ex-socio' };
+const knownRoleLabels = { admin: 'Administración', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
 function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
