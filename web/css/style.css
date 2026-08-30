@@ -447,6 +447,10 @@ button.link-button {
   gap: 4px;
 }
 
+.field[hidden] {
+  display: none;
+}
+
 .field.span-2 {
   grid-column: span 2;
 }
