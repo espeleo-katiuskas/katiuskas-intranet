@@ -142,18 +142,20 @@ async function loadMemberships() {
   const tableBody = document.getElementById('memberships-table-body');
   try {
     const memberships = await apiFetch('/memberships');
-    tableBody.innerHTML = memberships
-      .map((membership) => `
-        <tr>
-          <td>${membership.first_name ? escapeHtml(`${membership.first_name} ${membership.last_name}`) : `Socio n.º ${membership.user_id}`}</td>
-          <td>${escapeHtml(membership.membership_number) || '—'}</td>
-          <td>${formatDate(membership.start_date)}</td>
-          <td class="table-actions">
-            <button type="button" class="btn btn-danger btn-small" data-end-membership="${membership.id}">Dar de baja</button>
-          </td>
-        </tr>
-      `)
-      .join('');
+    tableBody.innerHTML = memberships.length
+      ? memberships
+          .map((membership) => `
+            <tr>
+              <td>${membership.first_name ? escapeHtml(`${membership.first_name} ${membership.last_name}`) : `Socio n.º ${membership.user_id}`}</td>
+              <td>${escapeHtml(membership.membership_number) || '—'}</td>
+              <td>${formatDate(membership.start_date)}</td>
+              <td class="table-actions">
+                <button type="button" class="btn btn-danger btn-small" data-end-membership="${membership.id}">Dar de baja</button>
+              </td>
+            </tr>
+          `)
+          .join('')
+      : '<tr><td colspan="4">Todavía no hay socios activos.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="4">No se pudo cargar la lista de socios.</td></tr>';
   }

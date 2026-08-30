@@ -102,6 +102,40 @@ func TestListByUser(t *testing.T) {
 	}
 }
 
+// A nil slice marshals to JSON null, not []; the frontend calls .map()/
+// .length on the response unconditionally, so an empty result must come
+// back as [] or the page crashes trying to render it.
+func TestListActiveReturnsEmptySliceNotNilWhenNothingIsActive(t *testing.T) {
+	repo := memberships.NewRepository(testutil.NewTx(t))
+	list, err := repo.ListActive(context.Background())
+	if err != nil {
+		t.Fatalf("list active: %v", err)
+	}
+	if list == nil {
+		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no active memberships in a fresh transaction, got %+v", list)
+	}
+}
+
+func TestListByUserReturnsEmptySliceNotNilWhenUserHasNoHistory(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "", false)
+
+	list, err := repo.ListByUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if list == nil {
+		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no membership history for a brand-new user, got %+v", list)
+	}
+}
+
 func TestListActiveIncludesNameAndOnlyCurrentlyOpenPeriods(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)

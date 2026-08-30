@@ -178,11 +178,20 @@ th {
   color: var(--ink);
 }
 
-.card .edit-fields {
+.edit-fields {
   margin-top: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.edit-fields label {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
 }
 
 .detail-list {

@@ -38,7 +38,7 @@ func (r *Repository) List(ctx context.Context) ([]Role, error) {
 	}
 	defer rows.Close()
 
-	var list []Role
+	list := []Role{}
 	for rows.Next() {
 		var role Role
 		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.IsSystem); err != nil {

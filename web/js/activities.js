@@ -19,6 +19,27 @@ const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');
 
+// Loaded once and shared by the "new activity" participant picker, the
+// per-activity participants panel (to show names instead of bare ids) and
+// its "add participant" control.
+let directory = [];
+let directoryById = {};
+
+async function loadDirectory() {
+  try {
+    directory = await apiFetch('/users/directory');
+    directoryById = Object.fromEntries(directory.map((person) => [person.id, person]));
+  } catch {
+    directory = [];
+    directoryById = {};
+  }
+}
+
+function personLabel(userId) {
+  const person = directoryById[userId];
+  return person ? `${person.first_name} ${person.last_name}` : `Socio n.º ${userId}`;
+}
+
 function showFeedback(message) {
   errorBox.hidden = true;
   feedbackBox.textContent = message;
@@ -78,7 +99,15 @@ function renderActivity(activity) {
     : '';
 
   const participantsPanel = isAdmin
-    ? `<div class="detail-list" data-participants-panel="${activity.id}" hidden></div>`
+    ? `
+      <div class="detail-list" data-participants-panel="${activity.id}" hidden>
+        <div data-participants-rows="${activity.id}"></div>
+        <div class="role-add-row">
+          <select data-participant-select="${activity.id}"></select>
+          <button type="button" class="btn btn-secondary btn-small" data-add-participant="${activity.id}">+ Participante</button>
+        </div>
+      </div>
+    `
     : '';
 
   return `
@@ -225,25 +254,55 @@ activitiesList.addEventListener('click', async (event) => {
       removeParticipantButton.disabled = false;
       showError(err.message);
     }
+    return;
+  }
+
+  const addParticipantButton = event.target.closest('button[data-add-participant]');
+  if (addParticipantButton) {
+    const activityId = addParticipantButton.dataset.addParticipant;
+    const panel = activitiesList.querySelector(`[data-participants-panel="${activityId}"]`);
+    const select = panel.querySelector(`[data-participant-select="${activityId}"]`);
+    if (!select.value) return;
+
+    addParticipantButton.disabled = true;
+    try {
+      await apiFetch(`/activities/${activityId}/participants`, {
+        method: 'POST',
+        body: JSON.stringify({ user_id: Number(select.value) }),
+      });
+      await loadParticipants(activityId, panel);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      addParticipantButton.disabled = false;
+    }
   }
 });
 
 async function loadParticipants(activityId, panel) {
-  panel.innerHTML = 'Cargando…';
+  const rows = panel.querySelector(`[data-participants-rows="${activityId}"]`);
+  const addSelect = panel.querySelector(`[data-participant-select="${activityId}"]`);
+  rows.innerHTML = 'Cargando…';
   try {
     const participants = await apiFetch(`/activities/${activityId}/participants`);
-    panel.innerHTML = participants.length
+    rows.innerHTML = participants.length
       ? participants
           .map((p) => `
             <div class="detail-row">
-              <span>Socio n.º ${p.user_id}${p.role === 'leader' ? ' · responsable' : ''}</span>
+              <span>${escapeHtml(personLabel(p.user_id))}${p.role === 'leader' ? ' · responsable' : ''}</span>
               <button type="button" class="btn btn-danger btn-small" data-remove-participant="${activityId}:${p.user_id}">Quitar</button>
             </div>
           `)
           .join('')
       : '<p>Todavía no hay nadie apuntado.</p>';
+
+    const alreadyIn = new Set(participants.map((p) => p.user_id));
+    const candidates = directory.filter((person) => !alreadyIn.has(person.id));
+    addSelect.innerHTML = candidates.length
+      ? candidates.map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`).join('')
+      : '<option value="">No queda nadie más por añadir</option>';
   } catch (err) {
-    panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+    rows.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -252,15 +311,11 @@ const newActivityPanel = document.getElementById('new-activity-panel');
 const newActivityForm = document.getElementById('new-activity-form');
 const participantsSelect = document.getElementById('na-participants');
 
-apiFetch('/users/directory')
-  .then((people) => {
-    participantsSelect.innerHTML = people
-      .map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`)
-      .join('');
-  })
-  .catch(() => {
-    participantsSelect.innerHTML = '<option value="">No se pudo cargar la lista de socios</option>';
-  });
+loadDirectory().then(() => {
+  participantsSelect.innerHTML = directory.length
+    ? directory.map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`).join('')
+    : '<option value="">No se pudo cargar la lista de socios</option>';
+});
 
 document.getElementById('toggle-new-activity').addEventListener('click', () => {
   newActivityPanel.hidden = !newActivityPanel.hidden;

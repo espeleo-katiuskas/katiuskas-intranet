@@ -80,7 +80,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 	}
 	defer rows.Close()
 
-	var list []Activity
+	list := []Activity{}
 	for rows.Next() {
 		var a Activity
 		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
@@ -164,7 +164,7 @@ func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]
 	}
 	defer rows.Close()
 
-	var list []Participant
+	list := []Participant{}
 	for rows.Next() {
 		var p Participant
 		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.Role, &p.Confirmed); err != nil {

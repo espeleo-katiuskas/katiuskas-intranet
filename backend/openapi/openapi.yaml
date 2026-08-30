@@ -418,22 +418,39 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Participant" }
     post:
-      summary: Join an activity as the current user
+      summary: Join an activity, or (admin/board) add someone else to it
+      description: >
+        With no body (or a null/omitted user_id) signs up the caller. A
+        plain member naming anyone other than themselves gets a 403;
+        admin/board can name any user_id to add them on that person's
+        behalf.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: { type: integer, nullable: true }
       responses:
         "204": { description: Joined }
+        "403": { description: A plain member tried to add someone other than themselves. }
 
   /activities/{id}/participants/{userID}:
     delete:
       summary: Leave an activity
+      description: >
+        A member can only remove themselves; admin/board can remove anyone.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: userID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Removed }
+        "403": { description: A plain member tried to remove someone other than themselves. }
 
   /items:
     get:

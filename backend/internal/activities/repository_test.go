@@ -70,6 +70,23 @@ func TestList(t *testing.T) {
 	}
 }
 
+// A nil slice marshals to JSON null, not []; the frontend calls .map()
+// on the response, so an empty result must come back as [] or the page
+// crashes trying to render it.
+func TestListReturnsEmptySliceNotNilWhenThereAreNoActivities(t *testing.T) {
+	repo := activities.NewRepository(testutil.NewTx(t))
+	list, err := repo.List(context.Background(), 50, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if list == nil {
+		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no activities in a fresh transaction, got %+v", list)
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)

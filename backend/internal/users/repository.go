@@ -135,7 +135,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	}
 	defer rows.Close()
 
-	var list []User
+	list := []User{}
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
@@ -264,7 +264,7 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 	}
 	defer rows.Close()
 
-	var list []DirectoryEntry
+	list := []DirectoryEntry{}
 	for rows.Next() {
 		var e DirectoryEntry
 		if err := rows.Scan(&e.ID, &e.FirstName, &e.LastName); err != nil {

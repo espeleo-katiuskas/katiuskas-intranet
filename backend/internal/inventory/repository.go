@@ -62,7 +62,7 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	}
 	defer rows.Close()
 
-	var list []Item
+	list := []Item{}
 	for rows.Next() {
 		var it Item
 		if err := rows.Scan(&it.ID, &it.Name, &it.Description, &it.Category, &it.Code,
@@ -180,7 +180,7 @@ func (r *Repository) queryTransactions(ctx context.Context, whereClause string, 
 	}
 	defer rows.Close()
 
-	var list []Transaction
+	list := []Transaction{}
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt,

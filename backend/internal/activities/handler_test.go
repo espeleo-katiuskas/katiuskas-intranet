@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"katiuskas-intranet/backend/internal/activities"
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
@@ -16,13 +18,21 @@ import (
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, *auth.Authenticator) {
+	mux, authenticator, _ := newTestServerWithTx(t)
+	return mux, authenticator
+}
+
+// newTestServerWithTx also returns the underlying transaction, for tests
+// that need to insert real user rows to satisfy a foreign key (e.g.
+// signing someone up as a participant).
+func newTestServerWithTx(t *testing.T) (*http.ServeMux, *auth.Authenticator, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	service := activities.NewService(activities.NewRepository(tx))
 	authenticator := auth.NewAuthenticator("test-secret", time.Hour)
 
 	mux := http.NewServeMux()
 	activities.NewHandler(service, authenticator).RegisterRoutes(mux)
-	return mux, authenticator
+	return mux, authenticator, tx
 }
 
 func tokenFor(t *testing.T, a *auth.Authenticator, id int64, roleNames ...string) string {
@@ -98,6 +108,40 @@ func TestHandlerCreateWithParticipants(t *testing.T) {
 	}
 	if code := errorCode(t, rec); code != "unknown_participant" {
 		t.Errorf("expected error code unknown_participant, got %q", code)
+	}
+}
+
+func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	member := testutil.InsertUser(t, tx, "", false)
+	admin := testutil.InsertUser(t, tx, "", false)
+	other := testutil.InsertUser(t, tx, "", false)
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	participantsPath := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+
+	// No body: signs up the caller.
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected a member to sign themselves up (204), got %d: %s", rec.Code, rec.Body.String())
+	}
+	// A member naming someone else is forbidden.
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member adding someone else to be forbidden, got %d", rec.Code)
+	}
+	// admin/board can add anyone.
+	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected admin to add someone else (204), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

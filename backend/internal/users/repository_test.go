@@ -401,6 +401,23 @@ func TestConsumeMagicLinkTokenRejectsUnknown(t *testing.T) {
 	}
 }
 
+// A nil slice marshals to JSON null, not []; the frontend calls .map()/
+// .length on the response, so an empty result must come back as [] or
+// the page crashes trying to render it.
+func TestListReturnsEmptySliceNotNilWhenThereAreNoUsers(t *testing.T) {
+	repo := users.NewRepository(testutil.NewTx(t))
+	list, err := repo.List(context.Background(), 50, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if list == nil {
+		t.Error("expected an empty slice, got nil (would serialize to JSON null)")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no users in a fresh transaction, got %+v", list)
+	}
+}
+
 func TestListDirectoryOnlyIncludesPeopleWithAccess(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

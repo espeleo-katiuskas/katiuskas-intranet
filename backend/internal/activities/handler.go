@@ -148,6 +148,10 @@ func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
+// join signs a person up as a participant. With no body (or an empty
+// user_id) it signs up the caller ("Apuntarme"); admin/board can instead
+// name someone else in the body to add them on that person's behalf. A
+// plain member naming anyone other than themselves is forbidden.
 func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -155,7 +159,27 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.Join(r.Context(), id, current.ID); err != nil {
+
+	var body struct {
+		UserID *int64 `json:"user_id"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+			return
+		}
+	}
+
+	userID := current.ID
+	if body.UserID != nil {
+		userID = *body.UserID
+	}
+	if !current.HasAnyRole("admin", "board") && userID != current.ID {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only add themselves")
+		return
+	}
+
+	if err := h.service.Join(r.Context(), id, userID); err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not join activity")
 		return
 	}

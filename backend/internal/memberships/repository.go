@@ -67,7 +67,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	}
 	defer rows.Close()
 
-	var list []Membership
+	list := []Membership{}
 	for rows.Next() {
 		var m Membership
 		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason); err != nil {
@@ -92,7 +92,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	}
 	defer rows.Close()
 
-	var list []Membership
+	list := []Membership{}
 	for rows.Next() {
 		var m Membership
 		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate,
