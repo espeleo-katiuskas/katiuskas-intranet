@@ -33,7 +33,14 @@ en `backend/openapi/openapi.yaml`.
   más abajo), y esos mismos roles deciden si le llega o no un enlace de acceso — no hay
   contraseñas. `membership_number` también vive aquí, no en `memberships`: identifica a
   la persona mientras esté vinculada al club, no un periodo de alta concreto, así que
-  darse de baja y volver a darse de alta nunca se lo cambia. `gender` (tipo enum de
+  darse de baja y volver a darse de alta nunca se lo cambia. Es un entero no negativo y
+  único (`CHECK`/índice único, ver `db/migrations/00012_membership_number.sql`),
+  asignado automáticamente — nunca a mano — la primera vez que a alguien se le da de
+  alta: `memberships.Service.Create` llama a `users.Service.EnsureMembershipNumber`
+  (expuesta como `memberships.MembershipNumberAssigner`, ya que `memberships` no puede
+  importar `users` — es al revés — así que `cmd/api`/`cmd/seed-admin` la conectan tras
+  construir ambos servicios), que le pone el siguiente número tras el más alto que haya
+  en ese momento, y no hace nada si la persona ya tiene uno. `gender` (tipo enum de
   PostgreSQL, `male`/`female`) es opcional y nulo por defecto — nadie lo rellena al
   crear una persona salvo que se indique explícitamente. La "categoría" (infantil,
   juvenil, mayores) no se guarda: `web/js/members.js` la calcula al vuelo a partir de

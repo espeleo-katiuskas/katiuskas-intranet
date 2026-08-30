@@ -33,8 +33,11 @@ type User struct {
 	// associated with the club, not any single membership period —
 	// someone who leaves and later rejoins keeps the same one. Set here
 	// rather than per-period (see memberships.Membership) so a rejoin
-	// never needs a fresh number, and never accidentally gets one.
-	MembershipNumber *string  `json:"membership_number,omitempty"`
+	// never needs a fresh number, and never accidentally gets one. Not
+	// settable through this package: memberships.Service.Create assigns
+	// it automatically (see EnsureMembershipNumber) the first time a
+	// person gets an alta, one past the current highest.
+	MembershipNumber *int     `json:"membership_number,omitempty"`
 	Roles            []string `json:"roles"`
 	// LastLoginAt/LastLoginIP are informational only — updated on every
 	// successful magic-link consume (see authapi.Handler.issueTokenPair),
@@ -74,7 +77,6 @@ type CreateInput struct {
 	City             *string    `json:"city"`
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
-	MembershipNumber *string    `json:"membership_number"`
 	// RoleNames are assigned in the same call. Doesn't need — and can't
 	// include — "member" or "former_member": those are automatic,
 	// derived from membership history instead of granted by hand.
@@ -98,7 +100,6 @@ type UpdateInput struct {
 	City             *string    `json:"city"`
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
-	MembershipNumber *string    `json:"membership_number"`
 }
 
 // DirectoryEntry is the bare minimum needed to let any member pick a

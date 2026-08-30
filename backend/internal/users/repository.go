@@ -62,11 +62,11 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
 		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, gender, email, phone,
-			address, postal_code, city, province, emergency_contact, membership_number)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			address, postal_code, city, province, emergency_contact)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING `+userSelect+`
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Gender, in.Email, in.Phone,
-		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact, in.MembershipNumber,
+		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact,
 	), &u)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
@@ -186,22 +186,36 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.EmergencyContact != nil {
 		u.EmergencyContact = in.EmergencyContact
 	}
-	if in.MembershipNumber != nil {
-		u.MembershipNumber = in.MembershipNumber
-	}
 
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
 			gender=$6, phone=$7, address=$8, postal_code=$9, city=$10, province=$11, emergency_contact=$12,
-			membership_number=$13, updated_at=now()
-		WHERE id=$14
+			updated_at=now()
+		WHERE id=$13
 	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Gender, u.Phone, u.Address,
-		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.MembershipNumber, id)
+		u.PostalCode, u.City, u.Province, u.EmergencyContact, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate
 	}
 	return u, err
+}
+
+// EnsureMembershipNumber gives userID the next membership number after
+// the current highest one, but only if they don't already have one —
+// someone who leaves and later rejoins keeps the number they got the
+// first time (see User.MembershipNumber). The new value is computed in
+// the same statement that assigns it, keeping the read-then-write race
+// window as small as possible; a genuine concurrent collision would
+// still be caught by the unique index rather than silently duplicating a
+// number.
+func (r *Repository) EnsureMembershipNumber(ctx context.Context, userID int64) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE users
+		SET membership_number = (SELECT COALESCE(MAX(membership_number), 0) + 1 FROM users)
+		WHERE id = $1 AND membership_number IS NULL
+	`, userID)
+	return err
 }
 
 // Delete removes a person's record entirely, along with their refresh

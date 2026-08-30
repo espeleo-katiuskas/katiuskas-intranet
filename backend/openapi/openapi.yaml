@@ -963,13 +963,16 @@ components:
             behind a reverse proxy that sets it), otherwise the
             connection's own address. Informational only.
         membership_number:
-          type: string
+          type: integer
+          minimum: 0
           nullable: true
           description: >
             Identifies this person for as long as they're associated with
             the club, not any single membership period — leaving and
-            rejoining keeps the same number. Set via PATCH /users/{id}
-            like any other personal-data field, not per-period.
+            rejoining keeps the same number. Read-only here: assigned
+            automatically, one past the current highest, the first time
+            someone gets an alta via POST /users/{userID}/memberships —
+            not settable through POST/PATCH /users.
         membership_start_date:
           type: string
           format: date
@@ -1052,7 +1055,6 @@ components:
         city: { type: string, nullable: true }
         province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
-        membership_number: { type: string, nullable: true }
 
     Membership:
       type: object

@@ -101,50 +101,111 @@ func TestCreateWithoutGenderLeavesItNil(t *testing.T) {
 	}
 }
 
-func TestCreateDuplicateMembershipNumberRejected(t *testing.T) {
+// membership_number is no longer part of CreateInput/UpdateInput — it's
+// assigned by EnsureMembershipNumber, not typed in by hand — but the
+// database's uniqueness and non-negative constraints (see migration
+// 00012) are still the last line of defense, so exercise them directly.
+func TestMembershipNumberMustBeUnique(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
-	number := "0001"
+	ctx := context.Background()
 
-	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
-	}); err != nil {
-		t.Fatalf("first create: %v", err)
+	a, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create a: %v", err)
 	}
-	_, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
-	})
-	if !errors.Is(err, users.ErrDuplicate) {
-		t.Errorf("expected ErrDuplicate, got %v", err)
+	b, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE users SET membership_number = 1 WHERE id = $1`, a.ID); err != nil {
+		t.Fatalf("set first number: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE users SET membership_number = 1 WHERE id = $1`, b.ID); err == nil {
+		t.Error("expected a duplicate membership_number to be rejected by the database")
+	}
+}
+
+func TestMembershipNumberCannotBeNegative(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE users SET membership_number = -1 WHERE id = $1`, u.ID); err == nil {
+		t.Error("expected a negative membership_number to be rejected by the database")
+	}
+}
+
+func TestEnsureMembershipNumberAssignsNextAfterHighest(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	first, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+	if err := repo.EnsureMembershipNumber(ctx, first.ID); err != nil {
+		t.Fatalf("ensure first: %v", err)
+	}
+	gotFirst, err := repo.GetByID(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("get first: %v", err)
+	}
+	if gotFirst.MembershipNumber == nil {
+		t.Fatal("expected a membership number to be assigned")
+	}
+
+	second, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+	if err := repo.EnsureMembershipNumber(ctx, second.ID); err != nil {
+		t.Fatalf("ensure second: %v", err)
+	}
+	gotSecond, err := repo.GetByID(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("get second: %v", err)
+	}
+	if gotSecond.MembershipNumber == nil || *gotSecond.MembershipNumber != *gotFirst.MembershipNumber+1 {
+		t.Errorf("expected membership number %d, got %v", *gotFirst.MembershipNumber+1, gotSecond.MembershipNumber)
 	}
 }
 
 // A person's membership number belongs to them, not to any one
 // membership period — leaving and rejoining (however many times) must
-// never change it, since the whole point of moving it here (off the
-// per-period memberships table) was to stop that from happening.
-func TestMembershipNumberSurvivesLeavingAndRejoining(t *testing.T) {
+// never change it, so a second call is a no-op once one is already set.
+func TestEnsureMembershipNumberIsANoOpOnceAlreadySet(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
-	number := "0002"
+	ctx := context.Background()
 
-	created, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
-	})
+	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-
-	// Simulate an unrelated profile edit made while they were away — the
-	// kind of update that must never touch membership_number since it's
-	// not part of what's being changed.
-	newCity := "Bilbao"
-	updated, err := repo.Update(context.Background(), created.ID, users.UpdateInput{City: &newCity})
-	if err != nil {
-		t.Fatalf("update: %v", err)
+	if err := repo.EnsureMembershipNumber(ctx, u.ID); err != nil {
+		t.Fatalf("ensure: %v", err)
 	}
-	if updated.MembershipNumber == nil || *updated.MembershipNumber != number {
-		t.Errorf("expected membership_number to stay %q, got %v", number, updated.MembershipNumber)
+	first, err := repo.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	if err := repo.EnsureMembershipNumber(ctx, u.ID); err != nil {
+		t.Fatalf("ensure again: %v", err)
+	}
+	second, err := repo.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get again: %v", err)
+	}
+	if *second.MembershipNumber != *first.MembershipNumber {
+		t.Errorf("expected membership number to stay %d, got %d", *first.MembershipNumber, *second.MembershipNumber)
 	}
 }
 

@@ -51,6 +51,7 @@ func main() {
 
 	usersRepo := users.NewRepository(pool)
 	usersService := users.NewService(usersRepo, rolesService, membershipsService, licensesService)
+	membershipsService.SetNumberAssigner(usersService)
 
 	tokensRepo := tokens.NewRepository(pool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)

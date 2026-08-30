@@ -46,6 +46,7 @@ func main() {
 	membershipsService := memberships.NewService(memberships.NewRepository(pool))
 	licensesService := licenses.NewService(licenses.NewRepository(pool), membershipsService)
 	service := users.NewService(repo, rolesService, membershipsService, licensesService)
+	membershipsService.SetNumberAssigner(service)
 
 	email := getEnv("SEED_ADMIN_EMAIL", "admin@club.test")
 	phone := getEnv("SEED_ADMIN_PHONE", "600000000")

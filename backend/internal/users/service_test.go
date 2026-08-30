@@ -28,6 +28,7 @@ func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Servic
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	svc := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	membershipsService.SetNumberAssigner(svc)
 	return svc, rolesService, membershipsService, licensesService
 }
 
@@ -174,6 +175,83 @@ func TestServiceReportsOnLeave(t *testing.T) {
 	}
 	if !onLeave.OnLeave {
 		t.Error("expected a member currently within a leave window to report on_leave=true")
+	}
+}
+
+func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.T) {
+	svc, _, membershipsService, _ := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	first, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+	if first.MembershipNumber != nil {
+		t.Errorf("expected a brand-new person with no alta to have no membership number, got %v", *first.MembershipNumber)
+	}
+
+	startDate, err := time.Parse("2006-01-02", "2020-01-01")
+	if err != nil {
+		t.Fatalf("parse start date: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: first.ID, StartDate: startDate}); err != nil {
+		t.Fatalf("start membership: %v", err)
+	}
+	withNumber, err := svc.Get(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if withNumber.MembershipNumber == nil {
+		t.Fatal("expected a membership number to be assigned on first alta")
+	}
+	firstNumber := *withNumber.MembershipNumber
+
+	// A second person's first alta gets the next number.
+	second, err := svc.Create(ctx, users.CreateInput{FirstName: "B", LastName: "Two", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+	secondStart, err := time.Parse("2006-01-02", "2020-02-01")
+	if err != nil {
+		t.Fatalf("parse second start date: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: second.ID, StartDate: secondStart}); err != nil {
+		t.Fatalf("start second membership: %v", err)
+	}
+	secondWithNumber, err := svc.Get(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("get second: %v", err)
+	}
+	if secondWithNumber.MembershipNumber == nil || *secondWithNumber.MembershipNumber != firstNumber+1 {
+		t.Errorf("expected membership number %d, got %v", firstNumber+1, secondWithNumber.MembershipNumber)
+	}
+
+	// Ending the first person's period and rejoining later must keep
+	// their original number, not assign a new one.
+	endDate, err := time.Parse("2006-01-02", "2020-06-01")
+	if err != nil {
+		t.Fatalf("parse end date: %v", err)
+	}
+	latest, err := membershipsService.LatestByUser(ctx, first.ID)
+	if err != nil || latest == nil {
+		t.Fatalf("latest by user: %v", err)
+	}
+	if _, err := membershipsService.Update(ctx, latest.ID, memberships.UpdateInput{StartDate: latest.StartDate, EndDate: &endDate}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+	rejoinDate, err := time.Parse("2006-01-02", "2021-01-01")
+	if err != nil {
+		t.Fatalf("parse rejoin date: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: first.ID, StartDate: rejoinDate}); err != nil {
+		t.Fatalf("rejoin: %v", err)
+	}
+	rejoined, err := svc.Get(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("get rejoined: %v", err)
+	}
+	if rejoined.MembershipNumber == nil || *rejoined.MembershipNumber != firstNumber {
+		t.Errorf("expected rejoining to keep membership number %d, got %v", firstNumber, rejoined.MembershipNumber)
 	}
 }
 

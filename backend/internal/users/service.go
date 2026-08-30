@@ -40,6 +40,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (User, error) {
 	return s.enrich(ctx, user)
 }
 
+// EnsureMembershipNumber satisfies memberships.MembershipNumberAssigner —
+// memberships.Service.Create calls this after starting a membership
+// period, and the repository skips it entirely if the person already has
+// a number.
+func (s *Service) EnsureMembershipNumber(ctx context.Context, userID int64) error {
+	return s.repo.EnsureMembershipNumber(ctx, userID)
+}
+
 func (s *Service) Get(ctx context.Context, id int64) (User, error) {
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
