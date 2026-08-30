@@ -104,7 +104,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Member, er
 // is also how a plain member is meant to find out how to reach them.
 func (r *Repository) ListActive(ctx context.Context) ([]Member, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT bm.id, bm.user_id, bm.position, bm.start_date, bm.end_date,
+		SELECT bm.id, bm.user_id, u.login, bm.position, bm.start_date, bm.end_date,
 			u.first_name, u.last_name, u.email, u.phone
 		FROM board_members bm
 		JOIN users u ON u.id = bm.user_id
@@ -119,7 +119,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Member, error) {
 	list := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Position, &m.StartDate, &m.EndDate,
+		if err := rows.Scan(&m.ID, &m.UserID, &m.UserLogin, &m.Position, &m.StartDate, &m.EndDate,
 			&m.FirstName, &m.LastName, &m.Email, &m.Phone); err != nil {
 			return nil, err
 		}

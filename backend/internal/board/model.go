@@ -21,8 +21,15 @@ const (
 )
 
 type Member struct {
-	ID        int64  `json:"id"`
-	UserID    int64  `json:"user_id"`
+	ID     int64 `json:"id"`
+	UserID int64 `json:"-"`
+	// UserLogin is filled in either by ListActive's JOIN (which spans
+	// many different people at once, the same as its FirstName/LastName
+	// columns) or, for a query scoped to one already-known
+	// /users/{login}, directly by the handler — see
+	// licenses.Handler for the same split, including the reverse lookup
+	// Update needs since it's addressed by board-term id, not a user path.
+	UserLogin string `json:"user_login"`
 	FirstName string `json:"first_name,omitempty"`
 	LastName  string `json:"last_name,omitempty"`
 	// Email/Phone are only ever populated by ListActive, joined in from

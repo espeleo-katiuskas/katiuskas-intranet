@@ -91,7 +91,7 @@ func main() {
 		Licenses:    licenses.NewHandler(licensesService, authenticator, usersService),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),
-		Board:       board.NewHandler(boardService, authenticator),
+		Board:       board.NewHandler(boardService, authenticator, usersService),
 		Library:     library.NewHandler(libraryService, authenticator),
 	})
 
