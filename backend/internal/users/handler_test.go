@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/licenses"
@@ -122,8 +123,12 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 	ctx := context.Background()
 
 	nationalID := "12345678A"
+	birthDate, err := time.Parse("2006-01-02", "2000-01-01")
+	if err != nil {
+		t.Fatalf("parse birth date: %v", err)
+	}
 	if _, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Target", LastName: "Person", Email: testutil.UniqueEmail(t), NationalID: &nationalID,
+		FirstName: "Target", LastName: "Person", Email: testutil.UniqueEmail(t), NationalID: &nationalID, BirthDate: &birthDate,
 	}); err != nil {
 		t.Fatalf("create target: %v", err)
 	}
@@ -135,6 +140,12 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 	}
 	if bytes.Contains(rec.Body.Bytes(), []byte("national_id")) {
 		t.Errorf("expected a plain member's listing to hide national_id entirely, got %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("birth_date")) {
+		t.Errorf("expected a plain member's listing to hide the exact birth_date, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"age_category":"adult"`)) {
+		t.Errorf("expected the coarse age_category to still be visible to a member, got %s", rec.Body.String())
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"first_name":"Target"`)) {
 		t.Errorf("expected first_name to still be visible to a member, got %s", rec.Body.String())

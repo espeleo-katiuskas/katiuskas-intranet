@@ -1389,6 +1389,15 @@ components:
         first_name: { type: string }
         last_name: { type: string }
         gender: { $ref: "#/components/schemas/Gender" }
+        age_category:
+          type: string
+          enum: [child, teen, adult]
+          nullable: true
+          description: >
+            A coarse age bracket computed from birth_date (child up to 13,
+            teen 14-17, adult 18+, based on the age turned this calendar
+            year) — stands in for the exact birth_date, which isn't
+            exposed here.
         membership_number: { type: integer, minimum: 0, nullable: true }
         membership_start_date: { type: string, format: date, nullable: true }
         membership_end_date: { type: string, format: date, nullable: true }

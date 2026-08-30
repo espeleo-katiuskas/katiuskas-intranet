@@ -16,6 +16,35 @@ const (
 	GenderFemale Gender = "female"
 )
 
+type AgeCategory string
+
+const (
+	AgeCategoryChild AgeCategory = "child"
+	AgeCategoryTeen  AgeCategory = "teen"
+	AgeCategoryAdult AgeCategory = "adult"
+)
+
+// ageCategoryFor buckets a birth date into a caving-club-style age
+// category, based on the age the person turns *this calendar year* (not
+// their exact age today) — child up to 13, teen 14-17, adult 18 and up.
+// An unknown birth date means an unknown category, not a guess. Exists
+// so MemberListing can show a coarse age bracket without exposing the
+// exact birth date it's computed from — see ForMemberListing.
+func ageCategoryFor(birthDate *time.Time) *AgeCategory {
+	if birthDate == nil {
+		return nil
+	}
+	ageThisYear := time.Now().Year() - birthDate.Year()
+	category := AgeCategoryAdult
+	switch {
+	case ageThisYear <= 13:
+		category = AgeCategoryChild
+	case ageThisYear <= 17:
+		category = AgeCategoryTeen
+	}
+	return &category
+}
+
 type User struct {
 	ID         int64      `json:"id"`
 	FirstName  string     `json:"first_name"`
@@ -128,14 +157,18 @@ type DirectoryEntry struct {
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside
 // the club — just enough to see who's a socio, since when, and to whom.
+// AgeCategory stands in for BirthDate itself, which isn't exposed here:
+// the coarse bracket is enough to know at a glance without revealing
+// everyone's exact birth date.
 type MemberListing struct {
-	ID                  int64      `json:"id"`
-	FirstName           string     `json:"first_name"`
-	LastName            string     `json:"last_name"`
-	Gender              *Gender    `json:"gender,omitempty"`
-	MembershipNumber    *int       `json:"membership_number,omitempty"`
-	MembershipStartDate *time.Time `json:"membership_start_date,omitempty"`
-	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
+	ID                  int64        `json:"id"`
+	FirstName           string       `json:"first_name"`
+	LastName            string       `json:"last_name"`
+	Gender              *Gender      `json:"gender,omitempty"`
+	AgeCategory         *AgeCategory `json:"age_category,omitempty"`
+	MembershipNumber    *int         `json:"membership_number,omitempty"`
+	MembershipStartDate *time.Time   `json:"membership_start_date,omitempty"`
+	MembershipEndDate   *time.Time   `json:"membership_end_date,omitempty"`
 }
 
 // ForMemberListing narrows a full User down to what MemberListing
@@ -147,6 +180,7 @@ func (u User) ForMemberListing() MemberListing {
 		FirstName:           u.FirstName,
 		LastName:            u.LastName,
 		Gender:              u.Gender,
+		AgeCategory:         ageCategoryFor(u.BirthDate),
 		MembershipNumber:    u.MembershipNumber,
 		MembershipStartDate: u.MembershipStartDate,
 		MembershipEndDate:   u.MembershipEndDate,

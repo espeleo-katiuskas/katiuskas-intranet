@@ -35,8 +35,12 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   (rutas bajo `/users`, `/memberships`, `/leaves`, `/users/{userID}/licenses`,
   `/board-members`, `/users/{userID}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
-  persona: solo `users.MemberListing` (nombre, apellidos, género, número de socio,
-  fecha de alta y de baja) para todo el mundo, no solo para sí mismo. `users.Handler.
+  persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
+  número de socio, fecha de alta y de baja) para todo el mundo, no solo para sí mismo.
+  `age_category` (child/teen/adult, calculado con `ageCategoryFor` a partir de
+  `birth_date`) sustituye a la fecha de nacimiento exacta, que no se expone aquí — el
+  tramo basta para lo que hace falta ver de un vistazo sin revelar la fecha de
+  nacimiento de nadie. `users.Handler.
   list` decide qué forma devolver según el rol de quien pregunta — no hay una ruta
   aparte. También puede ver `GET /board-members` (la Junta Directiva actual, con cargo,
   teléfono y correo — esa ruta es la única, aparte de las de admin/board, abierta a
