@@ -25,14 +25,18 @@ en `backend/openapi/openapi.yaml`.
 
 ## Modelo de datos (`db/migrations/`)
 
-- **`users`** — datos personales de cualquier persona vinculada al club.
-- **`accounts`** — si una persona puede o no entrar (más si está activa), 1 a 1 con
-  `users`. Separada de `users` porque no toda persona registrada tiene acceso web. No
-  hay contraseñas: el acceso se concede o no, y punto.
+- **`users`** — datos personales de cualquier persona vinculada al club, incluidos
+  `last_login_at` y `last_login_ip` (la IP de la última vez que inició sesión —
+  `X-Forwarded-For` si existe, ya que en producción hay un proxy inverso por delante;
+  la propia conexión si no). No hay tabla `accounts` ni ningún otro paso de "conceder
+  acceso": cualquier persona de esta tabla puede pedir un enlace de acceso en cuanto
+  tenga email y teléfono guardados, y qué puede hacer con la sesión resultante depende
+  solo de sus roles (ver más abajo). No hay contraseñas.
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
   marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
-  persona; solo si ambos coinciden con una cuenta activa se genera uno y se envía por
-  correo — así no sirve para averiguar quién es socio ni para mandar correo no deseado.
+  persona; solo si ambos coinciden con alguien de `users` se genera uno y se envía por
+  correo — así no sirve para averiguar quién está en el sistema ni para mandar correo
+  no deseado.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente

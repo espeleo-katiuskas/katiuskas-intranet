@@ -33,14 +33,22 @@ const (
 	uniqueViolationCode     = "23505"
 )
 
-// hasAccessSelect is appended to every query that returns a User: whether
-// they have an accounts row at all. Role names aren't selected here —
-// "member"/"former_member" are computed from membership history rather
-// than stored, so the roles package (roles.Service.ListNamesForUser) is
-// the single place that knows how to list a person's roles; the users
-// service overlays that onto every User it returns instead of
-// duplicating the computation in SQL here.
-const hasAccessSelect = `EXISTS(SELECT 1 FROM accounts a WHERE a.user_id = u.id) AS has_access`
+// userSelect is appended to every query that returns a User. Role names
+// aren't selected here — "member"/"former_member" are computed from
+// membership history rather than stored, so the roles package
+// (roles.Service.ListNamesForUser) is the single place that knows how
+// to list a person's roles; the users service overlays that onto every
+// User it returns instead of duplicating the computation in SQL here.
+const userSelect = `
+	u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+	u.address, u.postal_code, u.city, u.province, u.emergency_contact,
+	u.last_login_at, u.last_login_ip, u.created_at`
+
+func scanUser(row interface{ Scan(dest ...any) error }, u *User) error {
+	return row.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
+		&u.LastLoginAt, &u.LastLoginIP, &u.CreatedAt)
+}
 
 type Repository struct {
 	pool db.PGX
@@ -52,51 +60,28 @@ func NewRepository(pool db.PGX) *Repository {
 
 func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	var u User
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return u, err
-	}
-	defer tx.Rollback(ctx)
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO users (first_name, last_name, national_id, birth_date, email, phone,
+	err := scanUser(r.pool.QueryRow(ctx, `
+		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, email, phone,
 			address, postal_code, city, province, emergency_contact)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-		RETURNING id, first_name, last_name, national_id, birth_date, email, phone,
-			address, postal_code, city, province, emergency_contact, created_at
+		RETURNING `+userSelect+`
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Email, in.Phone,
 		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact,
-	).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact, &u.CreatedAt)
+	), &u)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate
 	}
-	if err != nil {
-		return u, err
-	}
-
-	if in.GrantAccess {
-		if _, err = tx.Exec(ctx, `INSERT INTO accounts (user_id) VALUES ($1)`, u.ID); err != nil {
-			return u, err
-		}
-		u.HasAccess = true
-	}
-
-	return u, tx.Commit(ctx)
+	return u, err
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
-	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessSelect+`
+	err := scanUser(r.pool.QueryRow(ctx, `
+		SELECT `+userSelect+`
 		FROM users u
 		WHERE u.id = $1
-	`, id).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess)
+	`, id), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -105,15 +90,11 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 
 func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error) {
 	var u User
-	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessSelect+`
+	err := scanUser(r.pool.QueryRow(ctx, `
+		SELECT `+userSelect+`
 		FROM users u
 		WHERE u.email = $1
-	`, email).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess)
+	`, email), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -122,9 +103,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessSelect+`
+		SELECT `+userSelect+`
 		FROM users u
 		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -136,9 +115,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	list := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate,
-			&u.Email, &u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province,
-			&u.EmergencyContact, &u.CreatedAt, &u.HasAccess); err != nil {
+		if err := scanUser(rows, &u); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
@@ -146,26 +123,22 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 	return list, rows.Err()
 }
 
-// FindActiveByEmailAndPhone is the login lookup: matches an active
-// account by email and phone (digits only, so formatting differences
-// don't matter), or ErrNotFound for absolutely any other reason — wrong
-// phone, unknown email, or no account at all. The caller must not
-// distinguish between those cases in its response.
+// FindActiveByEmailAndPhone is the login lookup: matches by email and
+// phone (digits only, so formatting differences don't matter), or
+// ErrNotFound for either not matching. The caller must not distinguish
+// between those cases in its response — see authapi's anti-enumeration
+// design. Anyone in this table with both on file can be found this way;
+// what a resulting session can actually do is entirely down to roles.
 func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
 	var u User
-	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
-			`+hasAccessSelect+`
+	err := scanUser(r.pool.QueryRow(ctx, `
+		SELECT `+userSelect+`
 		FROM users u
-		JOIN accounts a ON a.user_id = u.id
 		WHERE u.email = $1
 			AND u.phone IS NOT NULL
 			AND regexp_replace(u.phone, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
 			AND regexp_replace($2, '\D', '', 'g') <> ''
-	`, email, phone).Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
-		&u.CreatedAt, &u.HasAccess)
+	`, email, phone), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -225,9 +198,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	return u, err
 }
 
-// Delete removes a person's record entirely, along with their account,
-// refresh tokens, magic-link tokens, membership history and activity
-// sign-ups (all ON DELETE CASCADE). It's rejected by the database if the
+// Delete removes a person's record entirely, along with their refresh
+// tokens, magic-link tokens, membership history and activity sign-ups
+// (all ON DELETE CASCADE). It's rejected by the database if the
 // person is still referenced as an activity's leader or an inventory
 // transaction's party — that history has to be reassigned or completed
 // first.
@@ -246,15 +219,14 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// ListDirectory returns every person who can sign in (has an accounts
-// row), for populating pickers like an activity's participant list.
-// People without access aren't club members with an active presence, so
-// they're left out.
+// ListDirectory returns every person on file, for populating pickers
+// like an activity's participant list — being a participant, or the
+// party to a material transaction, doesn't require being able to sign
+// in at all.
 func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.first_name, u.last_name
 		FROM users u
-		JOIN accounts a ON a.user_id = u.id
 		ORDER BY u.last_name, u.first_name
 	`)
 	if err != nil {
@@ -273,19 +245,19 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 	return list, rows.Err()
 }
 
-func (r *Repository) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
-	var a Account
-	err := r.pool.QueryRow(ctx, `
-		SELECT user_id FROM accounts WHERE user_id = $1
-	`, userID).Scan(&a.UserID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return a, ErrNotFound
+// TouchLastLogin records when and, if known, from where a session was
+// most recently issued. ip is whatever authapi resolved from
+// X-Forwarded-For (behind the production reverse proxy) or the
+// connection's own address — purely informational, never checked for
+// authorization.
+func (r *Repository) TouchLastLogin(ctx context.Context, userID int64, ip string) error {
+	var ipArg any
+	if ip != "" {
+		ipArg = ip
 	}
-	return a, err
-}
-
-func (r *Repository) TouchLastLogin(ctx context.Context, userID int64) error {
-	_, err := r.pool.Exec(ctx, `UPDATE accounts SET last_login_at = now() WHERE user_id = $1`, userID)
+	_, err := r.pool.Exec(ctx, `
+		UPDATE users SET last_login_at = now(), last_login_ip = $2 WHERE id = $1
+	`, userID, ipArg)
 	return err
 }
 

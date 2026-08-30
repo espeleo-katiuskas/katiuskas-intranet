@@ -236,9 +236,10 @@ type TestUser struct {
 }
 
 // InsertUser inserts a bare-bones person. Pass phone as "" to leave it
-// NULL; pass withAccess=true to also create an accounts row, which
-// FindActiveByEmailAndPhone and the magic-link flow require.
-func InsertUser(t *testing.T, tx pgx.Tx, phone string, withAccess bool) TestUser {
+// NULL — FindActiveByEmailAndPhone and the magic-link flow both require
+// one, since matching email *and* phone is the only thing gating a
+// sign-in link now (there's no separate "granted access" flag or row).
+func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 	t.Helper()
 	ctx := context.Background()
 
@@ -255,12 +256,6 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string, withAccess bool) TestUser
 	`, email, phoneArg).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert test user: %v", err)
-	}
-
-	if withAccess {
-		if _, err := tx.Exec(ctx, `INSERT INTO accounts (user_id) VALUES ($1)`, id); err != nil {
-			t.Fatalf("grant test user access: %v", err)
-		}
 	}
 
 	return TestUser{ID: id, Email: email, Phone: phone}

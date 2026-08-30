@@ -10,42 +10,22 @@ import (
 	"katiuskas-intranet/backend/internal/users"
 )
 
-func TestCreateWithoutAccess(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := users.NewRepository(tx)
-
-	u, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "Ana", LastName: "Espeleo", Email: testutil.UniqueEmail(t),
-	})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if u.HasAccess {
-		t.Errorf("expected HasAccess to be false when GrantAccess wasn't set")
-	}
-	if u.ID == 0 {
-		t.Errorf("expected a non-zero id")
-	}
-}
-
-func TestCreateWithAccess(t *testing.T) {
+func TestCreate(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	phone := "611222333"
 
 	u, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "Marta", LastName: "Prueba", Email: testutil.UniqueEmail(t),
-		Phone: &phone, GrantAccess: true,
+		FirstName: "Ana", LastName: "Espeleo", Email: testutil.UniqueEmail(t), Phone: &phone,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if !u.HasAccess {
-		t.Errorf("expected HasAccess to be true when GrantAccess was set")
+	if u.ID == 0 {
+		t.Errorf("expected a non-zero id")
 	}
-
-	if _, err := repo.GetAccountByUserID(context.Background(), u.ID); err != nil {
-		t.Errorf("expected a freshly created account to exist, got %v", err)
+	if u.Phone == nil || *u.Phone != phone {
+		t.Errorf("expected phone %q, got %v", phone, u.Phone)
 	}
 }
 
@@ -137,7 +117,7 @@ func TestFindActiveByEmailAndPhoneMatchesRegardlessOfPhoneFormatting(t *testing.
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600 111 222"), GrantAccess: true,
+		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600 111 222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -157,7 +137,7 @@ func TestFindActiveByEmailAndPhoneRejectsWrongPhone(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222"), GrantAccess: true,
+		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -167,19 +147,19 @@ func TestFindActiveByEmailAndPhoneRejectsWrongPhone(t *testing.T) {
 	}
 }
 
-func TestFindActiveByEmailAndPhoneRejectsNoAccountAtAll(t *testing.T) {
+func TestFindActiveByEmailAndPhoneRejectsWhenNoPhoneOnFile(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222"),
+		FirstName: "A", LastName: "B", Email: email,
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "600111222"); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("expected ErrNotFound when the person has no account at all, got %v", err)
+		t.Errorf("expected ErrNotFound when the person has no phone on file at all, got %v", err)
 	}
 }
 
@@ -276,7 +256,7 @@ func TestRefreshTokenRoundTrip(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	if err := repo.SaveRefreshToken(ctx, user.ID, "hash-1", time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -302,7 +282,7 @@ func TestGetRefreshTokenRejectsExpired(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	if err := repo.SaveRefreshToken(ctx, user.ID, "expired-hash", time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -316,7 +296,7 @@ func TestMagicLinkTokenLifecycle(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	if recent, err := repo.HasRecentMagicLinkToken(ctx, user.ID, time.Now().Add(-time.Minute)); err != nil || recent {
 		t.Fatalf("expected no recent token yet, got %v (err %v)", recent, err)
@@ -344,7 +324,7 @@ func TestConsumeMagicLinkTokenRejectsReuse(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	if err := repo.CreateMagicLinkToken(ctx, user.ID, "one-shot", time.Now().Add(15*time.Minute)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -361,7 +341,7 @@ func TestConsumeMagicLinkTokenRejectsExpired(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	if err := repo.CreateMagicLinkToken(ctx, user.ID, "expired", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -394,33 +374,38 @@ func TestListReturnsEmptySliceNotNilWhenThereAreNoUsers(t *testing.T) {
 	}
 }
 
-func TestListDirectoryOnlyIncludesPeopleWithAccess(t *testing.T) {
+// Being a directory entry never required being able to sign in — an
+// activity participant or the party to a material transaction doesn't
+// need login access at all, so everyone on file shows up here.
+func TestListDirectoryIncludesEveryone(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	withAccess, err := repo.Create(ctx, users.CreateInput{
-		FirstName: "Ana", LastName: "Con acceso", Email: testutil.UniqueEmail(t),
-		Phone: strPtr("600111222"), GrantAccess: true,
+	withPhone, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "Ana", LastName: "Con teléfono", Email: testutil.UniqueEmail(t),
+		Phone: strPtr("600111222"),
 	})
 	if err != nil {
-		t.Fatalf("create with access: %v", err)
+		t.Fatalf("create with phone: %v", err)
 	}
-	if _, err := repo.Create(ctx, users.CreateInput{
-		FirstName: "Bea", LastName: "Sin acceso", Email: testutil.UniqueEmail(t),
-	}); err != nil {
-		t.Fatalf("create without access: %v", err)
+	withoutPhone, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "Bea", LastName: "Sin teléfono", Email: testutil.UniqueEmail(t),
+	})
+	if err != nil {
+		t.Fatalf("create without phone: %v", err)
 	}
 
 	list, err := repo.ListDirectory(ctx)
 	if err != nil {
 		t.Fatalf("list directory: %v", err)
 	}
-	if len(list) != 1 {
-		t.Fatalf("expected only the person with access to appear, got %d entries: %+v", len(list), list)
+	if len(list) != 2 {
+		t.Fatalf("expected both people to appear, got %d entries: %+v", len(list), list)
 	}
-	if list[0].ID != withAccess.ID {
-		t.Errorf("expected entry for user %d, got %+v", withAccess.ID, list[0])
+	ids := map[int64]bool{list[0].ID: true, list[1].ID: true}
+	if !ids[withPhone.ID] || !ids[withoutPhone.ID] {
+		t.Errorf("expected both %d and %d, got %+v", withPhone.ID, withoutPhone.ID, list)
 	}
 }
 

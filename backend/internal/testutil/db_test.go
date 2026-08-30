@@ -16,7 +16,7 @@ func TestNewTxAppliesMigrationsAndIsolatesTests(t *testing.T) {
 		t.Fatalf("expected 4 system roles seeded, got %d", count)
 	}
 
-	user := InsertUser(t, tx, "600111222", true)
+	user := InsertUser(t, tx, "600111222")
 	if user.ID == 0 {
 		t.Fatalf("expected a non-zero user id")
 	}

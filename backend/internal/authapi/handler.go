@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -51,10 +52,10 @@ type tokenPair struct {
 }
 
 // RequestMagicLink always answers the same way regardless of whether
-// email+phone matched anyone, whether that person has access, or whether
-// a link was actually sent (a recent one might already be on its way) —
-// telling those cases apart would let this endpoint be used to check
-// who's a member, or to spam a real person's inbox.
+// email+phone matched anyone, or whether a link was actually sent (a
+// recent one might already be on its way) — telling those cases apart
+// would let this endpoint be used to check who's in the system, or to
+// spam a real person's inbox.
 func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email string `json:"email"`
@@ -74,7 +75,7 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{
-		"message": "If those details match an account with access, an email with a sign-in link is on its way.",
+		"message": "If those details match someone in our records, an email with a sign-in link is on its way.",
 	})
 }
 
@@ -138,7 +139,7 @@ func (h *Handler) ConsumeMagicLink(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")
 		return
 	}
-	_ = h.users.TouchLastLogin(r.Context(), userID)
+	_ = h.users.TouchLastLogin(r.Context(), userID, clientIP(r))
 	httpapi.WriteJSON(w, http.StatusOK, pair)
 }
 
@@ -154,10 +155,6 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.users.ResolveRefreshToken(r.Context(), hash)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
-		return
-	}
-	if _, err := h.users.GetAccountByUserID(r.Context(), userID); err != nil {
-		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "account no longer has access")
 		return
 	}
 	_ = h.users.RevokeRefreshToken(r.Context(), hash)
@@ -206,4 +203,23 @@ func (h *Handler) issueTokenPair(ctx context.Context, userID int64) (tokenPair, 
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// clientIP resolves the caller's address for TouchLastLogin: the first
+// entry of X-Forwarded-For when present (the production deploy sits
+// behind a reverse proxy that sets it), otherwise the connection's own
+// remote address. This is purely informational — never used for any
+// access decision — since a client-supplied header is only as
+// trustworthy as whatever's in front of this service actually setting
+// it, rather than passing through whatever the client sent.
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		first, _, _ := strings.Cut(fwd, ",")
+		return strings.TrimSpace(first)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

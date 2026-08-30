@@ -159,9 +159,9 @@ func TestHandlerCreateWithParticipants(t *testing.T) {
 
 func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	member := testutil.InsertUser(t, tx, "", false)
-	admin := testutil.InsertUser(t, tx, "", false)
-	other := testutil.InsertUser(t, tx, "", false)
+	member := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 

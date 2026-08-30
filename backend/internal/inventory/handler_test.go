@@ -87,10 +87,10 @@ func TestHandlerCreateItemRequiresAdminOrBoard(t *testing.T) {
 // board), isn't enough for the material endpoints either.
 func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "", false)
-	materialOnlyUser := testutil.InsertUser(t, tx, "", false)
-	materialMemberUser := testutil.InsertUser(t, tx, "", false)
-	memberUser := testutil.InsertUser(t, tx, "", false)
+	boardUser := testutil.InsertUser(t, tx, "")
+	materialOnlyUser := testutil.InsertUser(t, tx, "")
+	materialMemberUser := testutil.InsertUser(t, tx, "")
+	memberUser := testutil.InsertUser(t, tx, "")
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	materialOnlyToken := tokenFor(t, authn, materialOnlyUser.ID, "material")
 	materialMemberToken := tokenFor(t, authn, materialMemberUser.ID, "material", "member")
@@ -105,7 +105,7 @@ func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testin
 		t.Fatalf("decode item: %v", err)
 	}
 	activityID := testutil.InsertActivity(t, tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	body := map[string]any{
 		"item_id": item.ID, "user_id": user.ID, "type": "loan", "quantity": 1, "activity_id": activityID,
@@ -146,7 +146,7 @@ func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	body := map[string]any{"item_id": item.ID, "user_id": user.ID, "type": "loan", "quantity": 1}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, body)

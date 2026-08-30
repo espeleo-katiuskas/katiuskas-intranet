@@ -21,7 +21,7 @@ func date(s string) time.Time {
 func TestCreateMembership(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	number := "0001"
 
 	m, err := repo.Create(context.Background(), memberships.CreateInput{
@@ -38,7 +38,7 @@ func TestCreateMembership(t *testing.T) {
 func TestCreateRejectsOverlappingPeriod(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
 	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")}); err != nil {
@@ -55,7 +55,7 @@ func TestCreateRejectsOverlappingPeriod(t *testing.T) {
 func TestCreateAllowsNonOverlappingPeriodsAfterEnding(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
 	first, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
@@ -75,7 +75,7 @@ func TestCreateAllowsNonOverlappingPeriodsAfterEnding(t *testing.T) {
 func TestUpdateCorrectsDatesAndCanReopenAClosedPeriod(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
 	original, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
@@ -109,7 +109,7 @@ func TestUpdateCorrectsDatesAndCanReopenAClosedPeriod(t *testing.T) {
 func TestUpdateRejectsOverlap(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
 	first, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
@@ -144,8 +144,8 @@ func TestUpdateNotFound(t *testing.T) {
 func TestListByUser(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
-	other := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
 	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")}); err != nil {
@@ -184,7 +184,7 @@ func TestListActiveReturnsEmptySliceNotNilWhenNothingIsActive(t *testing.T) {
 func TestListByUserReturnsEmptySliceNotNilWhenUserHasNoHistory(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	list, err := repo.ListByUser(context.Background(), user.ID)
 	if err != nil {
@@ -203,12 +203,12 @@ func TestListActiveIncludesNameAndOnlyCurrentlyOpenPeriods(t *testing.T) {
 	repo := memberships.NewRepository(tx)
 	ctx := context.Background()
 
-	active := testutil.InsertUser(t, tx, "", false)
+	active := testutil.InsertUser(t, tx, "")
 	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: active.ID, StartDate: date("2020-01-01")}); err != nil {
 		t.Fatalf("create active: %v", err)
 	}
 
-	past := testutil.InsertUser(t, tx, "", false)
+	past := testutil.InsertUser(t, tx, "")
 	pastMembership, err := repo.Create(ctx, memberships.CreateInput{UserID: past.ID, StartDate: date("2010-01-01")})
 	if err != nil {
 		t.Fatalf("create past: %v", err)

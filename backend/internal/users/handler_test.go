@@ -108,19 +108,21 @@ func TestHandlerListRequiresAdminOrBoard(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateRequiresPhoneWhenGrantingAccess(t *testing.T) {
+// There's no "grant access" step anymore — creating a person always
+// succeeds regardless of whether a phone is given. Without one, they
+// simply can't ever be found by FindActiveByEmailAndPhone (see the
+// users package doc comment), which isn't something creation needs to
+// validate up front.
+func TestHandlerCreateWithoutPhoneSucceeds(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	adminToken := tokenFor(t, authn, 1, "admin")
 
 	body := map[string]any{
-		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t), "grant_access": true,
+		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t),
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if code := errorCode(t, rec); code != "phone_required" {
-		t.Errorf("expected error code phone_required, got %q", code)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -183,7 +185,7 @@ func TestHandlerDirectoryIsOpenToAnyAuthenticatedUserButHidesPersonalData(t *tes
 	phone := "600111222"
 	person, err := svc.Create(ctx, users.CreateInput{
 		FirstName: "Directory", LastName: "Entry", Email: testutil.UniqueEmail(t),
-		Phone: &phone, GrantAccess: true,
+		Phone: &phone,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)

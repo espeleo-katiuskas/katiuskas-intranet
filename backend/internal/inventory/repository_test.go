@@ -48,7 +48,7 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 3)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 	due := time.Now().AddDate(0, 0, 7)
 
@@ -78,7 +78,7 @@ func TestLoanRejectedWhenInsufficientStock(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 1)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	_, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 2,
@@ -94,7 +94,7 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 1)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -121,7 +121,7 @@ func TestReturnTransactionRestoresStock(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 2)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -165,7 +165,7 @@ func TestReturnTransactionNotFoundOrAlreadyClosed(t *testing.T) {
 	}
 
 	item := createItem(t, repo, 1)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
@@ -188,7 +188,7 @@ func TestReturnTransactionRefusesSales(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 1)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
 	sale, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -209,7 +209,7 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 5)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -261,7 +261,7 @@ func TestCreateTransactionRequiresActivityForLoanAndRental(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 5)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
 		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
@@ -276,7 +276,7 @@ func TestCreateTransactionRentalRequiresActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 5)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	price := 10.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -292,7 +292,7 @@ func TestCreateTransactionSaleDoesNotRequireActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 1)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -308,7 +308,7 @@ func TestCreateTransactionStoresActivityID(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, repo, 5)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
 	txn, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{

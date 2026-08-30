@@ -121,7 +121,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	if token == "" {
@@ -131,7 +131,7 @@ func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 
 func TestRequestMagicLinkResponseIsIdenticalWhetherOrNotItMatches(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 
 	match := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
 	wrongPhone := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": "000000000"})
@@ -163,7 +163,7 @@ func TestRequestMagicLinkRequiresBothFields(t *testing.T) {
 
 func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 
 	s.requestAndExtractToken(t, user.Email, user.Phone)
 	if s.mailer.sent != 1 {
@@ -181,7 +181,7 @@ func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 
 func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 	rolesService := roles.NewService(roles.NewRepository(s.tx))
 	if err := rolesService.AssignByName(context.Background(), user.ID, []string{"admin"}); err != nil {
 		t.Fatalf("assign role: %v", err)
@@ -208,7 +208,7 @@ func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 
 func TestConsumeMagicLinkIssuesTheComputedMemberRole(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 	if _, err := s.tx.Exec(context.Background(), `
 		INSERT INTO memberships (user_id, start_date) VALUES ($1, '2020-01-01')
 	`, user.ID); err != nil {
@@ -241,7 +241,7 @@ func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 
 func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 
 	first := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
@@ -256,7 +256,7 @@ func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 
 func TestRefreshRotatesTheToken(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
 
@@ -276,30 +276,9 @@ func TestRefreshRotatesTheToken(t *testing.T) {
 	}
 }
 
-// Having an accounts row at all is the access switch (see
-// users.Account); losing access means that row is gone, so refresh must
-// re-check it exists rather than trusting a still-valid refresh token
-// alone — otherwise removing someone's access wouldn't actually revoke
-// their already-issued sessions.
-func TestRefreshRejectsWhenAccountNoLongerExists(t *testing.T) {
-	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
-
-	if _, err := s.tx.Exec(context.Background(), `DELETE FROM accounts WHERE user_id = $1`, user.ID); err != nil {
-		t.Fatalf("remove account: %v", err)
-	}
-
-	rec := s.post(t, "/api/v1/auth/refresh", map[string]string{"refresh_token": pair.RefreshToken})
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected refreshing without an account to fail with 401, got %d", rec.Code)
-	}
-}
-
 func TestLogoutRevokesTheRefreshToken(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333", true)
+	user := testutil.InsertUser(t, s.tx, "611222333")
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
 

@@ -16,15 +16,15 @@ func NewService(repo *Repository, rolesService *roles.Service) *Service {
 	return &Service{repo: repo, roles: rolesService}
 }
 
-// Create inserts the person, optionally grants them access, then assigns
-// any explicitly requested roles as a separate step. There's no longer a
-// default "member" role to fall back to — that's automatic now, derived
-// from whether the person has an active membership period (which a
-// brand-new person doesn't yet). Neither follow-on step is part of the
-// same database transaction as the insert — a club-scale app doesn't
-// need cross-package transactions for this, but it does mean a failure
-// there leaves a person record behind that didn't get everything
-// requested.
+// Create inserts the person, then assigns any explicitly requested roles
+// as a separate step (not part of the same database transaction as the
+// insert — a club-scale app doesn't need cross-package transactions for
+// this, but it does mean a failure there leaves a person record behind
+// that didn't get its roles). There's no "grant access" step: anyone in
+// the table can request a magic link once they have an email and phone
+// on file, so a brand-new person just starts with no roles — including
+// no "member", which is automatic and derived from an active membership
+// period a brand-new person doesn't have yet.
 func (s *Service) Create(ctx context.Context, in CreateInput) (User, error) {
 	user, err := s.repo.Create(ctx, in)
 	if err != nil {
@@ -104,12 +104,8 @@ func (s *Service) FindActiveByEmailAndPhone(ctx context.Context, email, phone st
 	return s.repo.FindActiveByEmailAndPhone(ctx, email, phone)
 }
 
-func (s *Service) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
-	return s.repo.GetAccountByUserID(ctx, userID)
-}
-
-func (s *Service) TouchLastLogin(ctx context.Context, userID int64) error {
-	return s.repo.TouchLastLogin(ctx, userID)
+func (s *Service) TouchLastLogin(ctx context.Context, userID int64, ip string) error {
+	return s.repo.TouchLastLogin(ctx, userID, ip)
 }
 
 func (s *Service) SaveRefreshToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {

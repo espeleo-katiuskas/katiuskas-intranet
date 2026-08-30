@@ -12,17 +12,17 @@ import (
 func newService(t *testing.T) (*roles.Service, testUserFactory) {
 	tx := testutil.NewTx(t)
 	repo := roles.NewRepository(tx)
-	return roles.NewService(repo), func(phone string, access bool) testutil.TestUser {
-		return testutil.InsertUser(t, tx, phone, access)
+	return roles.NewService(repo), func(phone string) testutil.TestUser {
+		return testutil.InsertUser(t, tx, phone)
 	}
 }
 
-type testUserFactory func(phone string, access bool) testutil.TestUser
+type testUserFactory func(phone string) testutil.TestUser
 
 func TestAssignByNameIsAllOrNothing(t *testing.T) {
 	svc, newUser := newService(t)
 	ctx := context.Background()
-	user := newUser("", false)
+	user := newUser("")
 
 	err := svc.AssignByName(ctx, user.ID, []string{"board", "does-not-exist"})
 	if !errors.Is(err, roles.ErrNotFound) {
@@ -41,7 +41,7 @@ func TestAssignByNameIsAllOrNothing(t *testing.T) {
 func TestAssignByNameSucceedsWhenAllNamesAreValid(t *testing.T) {
 	svc, newUser := newService(t)
 	ctx := context.Background()
-	user := newUser("", false)
+	user := newUser("")
 
 	if err := svc.AssignByName(ctx, user.ID, []string{"admin", "board"}); err != nil {
 		t.Fatalf("assign by name: %v", err)
@@ -61,7 +61,7 @@ func TestAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 	svc := roles.NewService(repo)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	memberID := testutil.RoleID(t, tx, "member")
 	formerMemberID := testutil.RoleID(t, tx, "former_member")
 
@@ -86,7 +86,7 @@ func TestRemoveBlocksStrippingTheLastAdmin(t *testing.T) {
 	ctx := context.Background()
 
 	adminID := testutil.RoleID(t, tx, "admin")
-	solo := testutil.InsertUser(t, tx, "", false)
+	solo := testutil.InsertUser(t, tx, "")
 	if err := svc.Assign(ctx, solo.ID, adminID); err != nil {
 		t.Fatalf("assign admin: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRemoveBlocksStrippingTheLastAdmin(t *testing.T) {
 	}
 
 	// Once a second admin exists, removing the first one's admin role is fine.
-	second := testutil.InsertUser(t, tx, "", false)
+	second := testutil.InsertUser(t, tx, "")
 	if err := svc.Assign(ctx, second.ID, adminID); err != nil {
 		t.Fatalf("assign second admin: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestRemoveNonAdminRoleIsUnaffectedByLastAdminCheck(t *testing.T) {
 	ctx := context.Background()
 
 	boardID := testutil.RoleID(t, tx, "board")
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	if err := svc.Assign(ctx, user.ID, boardID); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
@@ -128,8 +128,8 @@ func TestIsLastAdmin(t *testing.T) {
 	ctx := context.Background()
 
 	adminID := testutil.RoleID(t, tx, "admin")
-	solo := testutil.InsertUser(t, tx, "", false)
-	other := testutil.InsertUser(t, tx, "", false)
+	solo := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
 
 	if is, err := svc.IsLastAdmin(ctx, solo.ID); err != nil || is {
 		t.Fatalf("expected false before any admin exists, got %v (err %v)", is, err)

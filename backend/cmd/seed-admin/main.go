@@ -1,9 +1,9 @@
-// Command seed-admin creates the first administrator account.
+// Command seed-admin creates the first administrator.
 //
 // It exists because POST /api/v1/users already requires an admin or board
-// account to call it: without this command there would be no way into a
+// role to call it: without this command there would be no way into a
 // freshly migrated database at all. Safe to run more than once — if the
-// email already has an account, it does nothing.
+// email already has a person record, it does nothing.
 //
 // There's no password to report: sign-in is by magic link. Request one
 // from the login page with SEED_ADMIN_EMAIL and SEED_ADMIN_PHONE, then
@@ -57,12 +57,11 @@ func main() {
 	}
 
 	_, err = service.Create(ctx, users.CreateInput{
-		FirstName:   firstName,
-		LastName:    lastName,
-		Email:       email,
-		Phone:       &phone,
-		GrantAccess: true,
-		RoleNames:   []string{"admin"},
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Phone:     &phone,
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create admin account: %v\n", err)

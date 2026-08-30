@@ -46,21 +46,21 @@ func TestListNamesForUserComputesMemberAndFormerMember(t *testing.T) {
 	repo := roles.NewRepository(tx)
 	ctx := context.Background()
 
-	currentMember := testutil.InsertUser(t, tx, "", false)
+	currentMember := testutil.InsertUser(t, tx, "")
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO memberships (user_id, start_date) VALUES ($1, '2020-01-01')
 	`, currentMember.ID); err != nil {
 		t.Fatalf("insert active membership: %v", err)
 	}
 
-	formerMember := testutil.InsertUser(t, tx, "", false)
+	formerMember := testutil.InsertUser(t, tx, "")
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, '2020-01-01', '2021-01-01')
 	`, formerMember.ID); err != nil {
 		t.Fatalf("insert ended membership: %v", err)
 	}
 
-	neverMember := testutil.InsertUser(t, tx, "", false)
+	neverMember := testutil.InsertUser(t, tx, "")
 
 	names, err := repo.ListNamesForUser(ctx, currentMember.ID)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestAssignAndListNamesForUser(t *testing.T) {
 	repo := roles.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	memberID := testutil.RoleID(t, tx, "member")
 	boardID := testutil.RoleID(t, tx, "board")
 
@@ -217,7 +217,7 @@ func TestAssignUnknownUserFails(t *testing.T) {
 func TestAssignUnknownRoleFails(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := roles.NewRepository(tx)
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 
 	if err := repo.Assign(context.Background(), user.ID, 999999); !errors.Is(err, roles.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for unknown role, got %v", err)
@@ -229,7 +229,7 @@ func TestRemoveRole(t *testing.T) {
 	repo := roles.NewRepository(tx)
 	ctx := context.Background()
 
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	memberID := testutil.RoleID(t, tx, "member")
 	if err := repo.Assign(ctx, user.ID, memberID); err != nil {
 		t.Fatalf("assign: %v", err)
@@ -250,8 +250,8 @@ func TestCountUsersWithRoleNameAndUserHasRoleName(t *testing.T) {
 	ctx := context.Background()
 
 	adminID := testutil.RoleID(t, tx, "admin")
-	userA := testutil.InsertUser(t, tx, "", false)
-	userB := testutil.InsertUser(t, tx, "", false)
+	userA := testutil.InsertUser(t, tx, "")
+	userB := testutil.InsertUser(t, tx, "")
 
 	if count, err := repo.CountUsersWithRoleName(ctx, "admin"); err != nil || count != 0 {
 		t.Fatalf("expected 0 admins initially, got %d (err %v)", count, err)

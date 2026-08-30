@@ -1,6 +1,9 @@
-// Package users manages personal data and login access. A person can exist
-// here without ever getting access (Account), which is why the two are
-// kept in separate tables behind a single package.
+// Package users manages personal data and login access. Anyone in here
+// can sign in — there's no separate "granted access" step or table:
+// requesting a magic link already requires knowing the person's email
+// *and* phone (see authapi), so being in this table with both on file is
+// the only gate. What a session can actually do is entirely down to
+// roles, checked on every request (see the roles and auth packages).
 package users
 
 import "time"
@@ -18,11 +21,13 @@ type User struct {
 	City             *string    `json:"city,omitempty"`
 	Province         *string    `json:"province,omitempty"`
 	EmergencyContact *string    `json:"emergency_contact,omitempty"`
-	// HasAccess is whether this person can sign in at all (has an accounts
-	// row). It says nothing about *which* roles they hold.
-	HasAccess bool      `json:"has_access"`
-	Roles     []string  `json:"roles"`
-	CreatedAt time.Time `json:"created_at"`
+	Roles            []string   `json:"roles"`
+	// LastLoginAt/LastLoginIP are informational only — updated on every
+	// successful magic-link consume (see authapi.Handler.issueTokenPair),
+	// never checked for authorization.
+	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	LastLoginIP *string    `json:"last_login_ip,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type CreateInput struct {
@@ -37,10 +42,6 @@ type CreateInput struct {
 	City             *string    `json:"city"`
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
-	// GrantAccess creates an accounts row so this person can sign in with
-	// a magic link. Since that link is only ever requested by matching
-	// email *and* phone, Phone is required when this is true.
-	GrantAccess bool `json:"grant_access"`
 	// RoleNames are assigned in the same call. Doesn't need — and can't
 	// include — "member" or "former_member": those are automatic,
 	// derived from membership history instead of granted by hand.
@@ -63,14 +64,6 @@ type UpdateInput struct {
 	City             *string    `json:"city"`
 	Province         *string    `json:"province"`
 	EmergencyContact *string    `json:"emergency_contact"`
-}
-
-// Account is a person's ability to sign in at all — separate from Roles,
-// which govern what they can do once signed in. Having a row here (not
-// a flag on it) is the switch: there's no is_active, since nothing ever
-// exposed a way to flip one after creation anyway.
-type Account struct {
-	UserID int64
 }
 
 // DirectoryEntry is the bare minimum needed to let any member pick a

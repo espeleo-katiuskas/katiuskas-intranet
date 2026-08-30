@@ -89,7 +89,7 @@ func TestHandlerListAllowsBoard(t *testing.T) {
 
 func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
-	target := testutil.InsertUser(t, tx, "", false)
+	target := testutil.InsertUser(t, tx, "")
 	adminRoleID := testutil.RoleID(t, tx, "admin")
 
 	boardToken := rolesToken(t, authn, 1, "board")
@@ -105,7 +105,7 @@ func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 
 func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
-	target := testutil.InsertUser(t, tx, "", false)
+	target := testutil.InsertUser(t, tx, "")
 	boardRoleID := testutil.RoleID(t, tx, "board")
 
 	boardToken := rolesToken(t, authn, 1, "board")
@@ -118,7 +118,7 @@ func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
 
 func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
-	target := testutil.InsertUser(t, tx, "", false)
+	target := testutil.InsertUser(t, tx, "")
 	memberRoleID := testutil.RoleID(t, tx, "member")
 
 	adminToken := rolesToken(t, authn, 1, "admin")
@@ -142,7 +142,7 @@ func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 
 func TestHandlerAdminCanGrantTheAdminRole(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
-	target := testutil.InsertUser(t, tx, "", false)
+	target := testutil.InsertUser(t, tx, "")
 	adminRoleID := testutil.RoleID(t, tx, "admin")
 
 	adminToken := rolesToken(t, authn, 1, "admin")
@@ -158,8 +158,8 @@ func TestHandlerOnlyAdminCanRevokeTheAdminRole(t *testing.T) {
 	ctx := context.Background()
 	adminRoleID := testutil.RoleID(t, tx, "admin")
 
-	holder := testutil.InsertUser(t, tx, "", false)
-	other := testutil.InsertUser(t, tx, "", false)
+	holder := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
 	if err := service.Assign(ctx, holder.ID, adminRoleID); err != nil {
 		t.Fatalf("assign admin to holder: %v", err)
 	}

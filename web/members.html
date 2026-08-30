@@ -79,7 +79,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Nombre</th><th>Email</th><th>Acceso</th><th>Roles</th><th></th></tr>
+        <tr><th>Nombre</th><th>Email</th><th>Último acceso</th><th>Roles</th><th></th></tr>
       </thead>
       <tbody id="users-table-body"></tbody>
     </table>
@@ -88,9 +88,9 @@
   <div id="new-person-panel" class="panel" hidden>
     <h3>Nueva persona</h3>
     <p class="hint">
-      Crea la ficha y, si quieres, dale acceso a la intranet. No hay contraseñas: para
-      entrar, pedirá un enlace de un solo uso desde la página de acceso con su correo y
-      su teléfono, así que el teléfono es obligatorio si le das acceso.
+      No hay contraseñas: para entrar, pedirá un enlace de un solo uso desde la página
+      de acceso con su correo y su teléfono. Si no le pones teléfono, no podrá entrar
+      hasta que se lo añadas.
     </p>
     <form id="new-person-form">
       <div class="field-grid">
@@ -137,12 +137,6 @@
         <div class="field span-2">
           <label for="np-emergency-contact">Contacto de emergencia <span class="optional">(opcional)</span></label>
           <textarea id="np-emergency-contact" name="emergency_contact" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
-        </div>
-        <div class="field span-2">
-          <label>
-            <input type="checkbox" id="np-grant-access" name="grant_access" checked>
-            Dar acceso a la intranet
-          </label>
         </div>
         <div class="field span-2">
           <label>Roles</label>

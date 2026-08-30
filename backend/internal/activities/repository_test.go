@@ -96,7 +96,7 @@ func TestListActive(t *testing.T) {
 	if _, err := repo.Update(ctx, completedWithMaterial.ID, activities.UpdateInput{Status: &completed}); err != nil {
 		t.Fatalf("mark completed: %v", err)
 	}
-	user := testutil.InsertUser(t, tx, "", false)
+	user := testutil.InsertUser(t, tx, "")
 	var itemID int64
 	if err := tx.QueryRow(ctx, `INSERT INTO inventory_items (name) VALUES ('Test item') RETURNING id`).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
@@ -215,8 +215,8 @@ func TestCreateWithInitialParticipants(t *testing.T) {
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 
-	userA := testutil.InsertUser(t, tx, "", false)
-	userB := testutil.InsertUser(t, tx, "", false)
+	userA := testutil.InsertUser(t, tx, "")
+	userB := testutil.InsertUser(t, tx, "")
 
 	activity, err := repo.Create(ctx, activities.CreateInput{
 		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
@@ -240,7 +240,7 @@ func TestCreateRejectsUnknownParticipant(t *testing.T) {
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 
-	userA := testutil.InsertUser(t, tx, "", false)
+	userA := testutil.InsertUser(t, tx, "")
 
 	_, err := repo.Create(ctx, activities.CreateInput{
 		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
@@ -283,8 +283,8 @@ func TestParticipants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create activity: %v", err)
 	}
-	userA := testutil.InsertUser(t, tx, "", false)
-	userB := testutil.InsertUser(t, tx, "", false)
+	userA := testutil.InsertUser(t, tx, "")
+	userB := testutil.InsertUser(t, tx, "")
 
 	if err := repo.AddParticipant(ctx, activity.ID, userA.ID); err != nil {
 		t.Fatalf("add participant A: %v", err)

@@ -23,15 +23,16 @@ paths:
     post:
       summary: Request a sign-in link by email
       description: >
-        There are no passwords in this API. If email and phone both match
-        a person with access, they're emailed a one-time link (valid 15
-        minutes) that signs them in via POST /auth/magic-link/consume.
+        There are no passwords in this API, and no separate "granted
+        access" step: if email and phone both match someone on file,
+        they're emailed a one-time link (valid 15 minutes) that signs
+        them in via POST /auth/magic-link/consume. What that session can
+        then do is entirely down to their roles.
 
-        The response is identical whether or not anything matched, whether
-        the match has access, and whether a link was actually sent (a
-        recent one might already be on its way) — telling those cases
-        apart would let this endpoint enumerate members or spam someone's
-        inbox.
+        The response is identical whether or not anything matched, and
+        whether a link was actually sent (a recent one might already be
+        on its way) — telling those cases apart would let this endpoint
+        enumerate who's in the system, or spam someone's inbox.
       requestBody:
         required: true
         content:
@@ -657,11 +658,6 @@ components:
         city: { type: string, nullable: true }
         province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
-        has_access:
-          type: boolean
-          description: >
-            Whether this person can sign in at all (has an accounts row).
-            Says nothing about which roles they hold.
         roles:
           type: array
           items: { type: string }
@@ -670,6 +666,19 @@ components:
             roles the API actually grants permissions to; any other name is
             an admin-defined organizational label. Manage membership via
             POST/DELETE /users/{userID}/roles, not this field.
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this person last completed a magic-link sign-in.
+        last_login_ip:
+          type: string
+          nullable: true
+          description: >
+            Where from, at that same sign-in: the first X-Forwarded-For
+            entry if the request had one (the production deploy sits
+            behind a reverse proxy that sets it), otherwise the
+            connection's own address. Informational only.
         created_at: { type: string, format: date-time }
 
     DirectoryEntry:
@@ -686,12 +695,6 @@ components:
           required: [first_name, last_name, email]
           properties:
             email: { type: string, format: email }
-            grant_access:
-              type: boolean
-              description: >
-                Creates an accounts row so this person can sign in with a
-                magic link. Requires phone to be set, since a link is only
-                ever sent when email *and* phone match.
             role_names:
               type: array
               items: { type: string }
