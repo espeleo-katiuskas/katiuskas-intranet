@@ -276,19 +276,24 @@ func TestRefreshRotatesTheToken(t *testing.T) {
 	}
 }
 
-func TestRefreshRejectsDeactivatedAccount(t *testing.T) {
+// Having an accounts row at all is the access switch (see
+// users.Account); losing access means that row is gone, so refresh must
+// re-check it exists rather than trusting a still-valid refresh token
+// alone — otherwise removing someone's access wouldn't actually revoke
+// their already-issued sessions.
+func TestRefreshRejectsWhenAccountNoLongerExists(t *testing.T) {
 	s := newTestServer(t)
 	user := testutil.InsertUser(t, s.tx, "611222333", true)
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
 
-	if _, err := s.tx.Exec(context.Background(), `UPDATE accounts SET is_active = false WHERE user_id = $1`, user.ID); err != nil {
-		t.Fatalf("deactivate account: %v", err)
+	if _, err := s.tx.Exec(context.Background(), `DELETE FROM accounts WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("remove account: %v", err)
 	}
 
 	rec := s.post(t, "/api/v1/auth/refresh", map[string]string{"refresh_token": pair.RefreshToken})
 	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected refreshing a deactivated account to fail with 401, got %d", rec.Code)
+		t.Errorf("expected refreshing without an account to fail with 401, got %d", rec.Code)
 	}
 }
 

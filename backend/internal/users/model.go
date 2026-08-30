@@ -66,10 +66,11 @@ type UpdateInput struct {
 }
 
 // Account is a person's ability to sign in at all — separate from Roles,
-// which govern what they can do once signed in.
+// which govern what they can do once signed in. Having a row here (not
+// a flag on it) is the switch: there's no is_active, since nothing ever
+// exposed a way to flip one after creation anyway.
 type Account struct {
-	UserID   int64
-	IsActive bool
+	UserID int64
 }
 
 // DirectoryEntry is the bare minimum needed to let any member pick a

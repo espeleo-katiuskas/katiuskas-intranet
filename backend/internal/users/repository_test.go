@@ -44,12 +44,8 @@ func TestCreateWithAccess(t *testing.T) {
 		t.Errorf("expected HasAccess to be true when GrantAccess was set")
 	}
 
-	account, err := repo.GetAccountByUserID(context.Background(), u.ID)
-	if err != nil {
-		t.Fatalf("get account: %v", err)
-	}
-	if !account.IsActive {
-		t.Errorf("expected a freshly created account to be active")
+	if _, err := repo.GetAccountByUserID(context.Background(), u.ID); err != nil {
+		t.Errorf("expected a freshly created account to exist, got %v", err)
 	}
 }
 
@@ -168,26 +164,6 @@ func TestFindActiveByEmailAndPhoneRejectsWrongPhone(t *testing.T) {
 
 	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "000000000"); !errors.Is(err, users.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for a mismatched phone, got %v", err)
-	}
-}
-
-func TestFindActiveByEmailAndPhoneRejectsInactiveAccount(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := users.NewRepository(tx)
-	email := testutil.UniqueEmail(t)
-
-	created, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222"), GrantAccess: true,
-	})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if _, err := tx.Exec(context.Background(), `UPDATE accounts SET is_active = false WHERE user_id = $1`, created.ID); err != nil {
-		t.Fatalf("deactivate account: %v", err)
-	}
-
-	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), email, "600111222"); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("expected ErrNotFound for a deactivated account, got %v", err)
 	}
 }
 

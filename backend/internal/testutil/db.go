@@ -236,8 +236,8 @@ type TestUser struct {
 }
 
 // InsertUser inserts a bare-bones person. Pass phone as "" to leave it
-// NULL; pass withAccess=true to also create an accounts row (is_active),
-// which FindActiveByEmailAndPhone and the magic-link flow require.
+// NULL; pass withAccess=true to also create an accounts row, which
+// FindActiveByEmailAndPhone and the magic-link flow require.
 func InsertUser(t *testing.T, tx pgx.Tx, phone string, withAccess bool) TestUser {
 	t.Helper()
 	ctx := context.Background()

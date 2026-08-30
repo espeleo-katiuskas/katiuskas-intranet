@@ -156,8 +156,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "refresh token is invalid or expired")
 		return
 	}
-	account, err := h.users.GetAccountByUserID(r.Context(), userID)
-	if err != nil || !account.IsActive {
+	if _, err := h.users.GetAccountByUserID(r.Context(), userID); err != nil {
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_token", "account no longer has access")
 		return
 	}

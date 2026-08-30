@@ -149,8 +149,8 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 // FindActiveByEmailAndPhone is the login lookup: matches an active
 // account by email and phone (digits only, so formatting differences
 // don't matter), or ErrNotFound for absolutely any other reason — wrong
-// phone, unknown email, no account, or a deactivated one. The caller must
-// not distinguish between those cases in its response.
+// phone, unknown email, or no account at all. The caller must not
+// distinguish between those cases in its response.
 func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
 	var u User
 	err := r.pool.QueryRow(ctx, `
@@ -158,7 +158,7 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 			u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.created_at,
 			`+hasAccessSelect+`
 		FROM users u
-		JOIN accounts a ON a.user_id = u.id AND a.is_active
+		JOIN accounts a ON a.user_id = u.id
 		WHERE u.email = $1
 			AND u.phone IS NOT NULL
 			AND regexp_replace(u.phone, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
@@ -276,8 +276,8 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 func (r *Repository) GetAccountByUserID(ctx context.Context, userID int64) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, is_active FROM accounts WHERE user_id = $1
-	`, userID).Scan(&a.UserID, &a.IsActive)
+		SELECT user_id FROM accounts WHERE user_id = $1
+	`, userID).Scan(&a.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, ErrNotFound
 	}
