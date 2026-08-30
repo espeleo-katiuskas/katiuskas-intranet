@@ -88,7 +88,7 @@ func main() {
 		Roles:       roles.NewHandler(rolesService, authenticator, usersService),
 		Tokens:      tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),
-		Licenses:    licenses.NewHandler(licensesService, authenticator),
+		Licenses:    licenses.NewHandler(licensesService, authenticator, usersService),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),
 		Board:       board.NewHandler(boardService, authenticator),

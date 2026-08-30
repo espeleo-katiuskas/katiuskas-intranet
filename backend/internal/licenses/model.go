@@ -21,8 +21,14 @@ type LicenseType struct {
 }
 
 type License struct {
-	ID            int64  `json:"id"`
-	UserID        int64  `json:"user_id"`
+	ID     int64  `json:"id"`
+	UserID int64  `json:"-"`
+	// UserLogin is filled in by the handler, not this package's queries:
+	// every route here is either scoped under a known /users/{login}, or
+	// resolves the owner separately after the fact (see
+	// Handler.update) — cheaper than joining against users on every
+	// query just to expose an identifier the caller already gave us.
+	UserLogin     string `json:"user_login"`
 	LicenseTypeID int64  `json:"license_type_id"`
 	// Type is the human-readable label: the catalog name, or
 	// "<name>: <other_detail>" when the chosen type is "Otra".
