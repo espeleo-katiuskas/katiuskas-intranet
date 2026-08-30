@@ -164,6 +164,24 @@ function dateColumn(key, label, getValue) {
   };
 }
 
+// Género is stored as-is; categoría never is — it's derived from
+// birth_date and the current year, the same way any other page computes
+// something from data it already has instead of asking the API for it.
+const genderLabels = { male: 'Masculino', female: 'Femenino' };
+
+// A caving-club-style age category, based on the age a person turns
+// *this calendar year* (not today's exact age) — infantil up to 13,
+// juvenil 14–17, mayores 18 and up. Unknown birth_date means unknown
+// category, not a guess.
+const CATEGORY_ORDER = ['Infantil', 'Juvenil', 'Mayores'];
+function categoryFor(person) {
+  if (!person.birth_date) return null;
+  const ageThisYear = new Date().getFullYear() - new Date(person.birth_date).getFullYear();
+  if (ageThisYear <= 13) return 'Infantil';
+  if (ageThisYear <= 17) return 'Juvenil';
+  return 'Mayores';
+}
+
 const COLUMNS = [
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
@@ -171,7 +189,16 @@ const COLUMNS = [
   { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
   { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
   { ...textColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? ''), default: false },
+  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
   { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: true },
+  {
+    key: 'category',
+    label: 'Categoría',
+    default: false,
+    value: categoryFor,
+    render: (person) => categoryFor(person) ?? '—',
+    compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
+  },
   { ...textColumn('address', 'Dirección', (p) => p.address ?? ''), default: false },
   { ...textColumn('postal_code', 'Código postal', (p) => p.postal_code ?? ''), default: false },
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },

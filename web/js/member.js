@@ -154,6 +154,7 @@ async function loadMember() {
     editForm.national_id.value = person.national_id ?? '';
     editForm.membership_number.value = person.membership_number ?? '';
     editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';
+    editForm.gender.value = person.gender ?? '';
     editForm.address.value = person.address ?? '';
     editForm.postal_code.value = person.postal_code ?? '';
     editForm.city.value = person.city ?? '';
@@ -178,6 +179,7 @@ editForm.addEventListener('submit', async (event) => {
     national_id: optional('national_id'),
     membership_number: optional('membership_number'),
     birth_date: optional('birth_date'),
+    gender: optional('gender'),
     address: optional('address'),
     postal_code: optional('postal_code'),
     city: optional('city'),

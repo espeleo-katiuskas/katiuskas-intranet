@@ -8,12 +8,20 @@ package users
 
 import "time"
 
+type Gender string
+
+const (
+	GenderMale   Gender = "male"
+	GenderFemale Gender = "female"
+)
+
 type User struct {
 	ID               int64      `json:"id"`
 	FirstName        string     `json:"first_name"`
 	LastName         string     `json:"last_name"`
 	NationalID       *string    `json:"national_id,omitempty"`
 	BirthDate        *time.Time `json:"birth_date,omitempty"`
+	Gender           *Gender    `json:"gender,omitempty"`
 	Email            string     `json:"email"`
 	Phone            *string    `json:"phone,omitempty"`
 	Address          *string    `json:"address,omitempty"`
@@ -47,6 +55,7 @@ type CreateInput struct {
 	LastName         string     `json:"last_name"`
 	NationalID       *string    `json:"national_id"`
 	BirthDate        *time.Time `json:"birth_date"`
+	Gender           *Gender    `json:"gender"`
 	Email            string     `json:"email"`
 	Phone            *string    `json:"phone"`
 	Address          *string    `json:"address"`
@@ -71,6 +80,7 @@ type UpdateInput struct {
 	Email            *string    `json:"email"`
 	NationalID       *string    `json:"national_id"`
 	BirthDate        *time.Time `json:"birth_date"`
+	Gender           *Gender    `json:"gender"`
 	Phone            *string    `json:"phone"`
 	Address          *string    `json:"address"`
 	PostalCode       *string    `json:"postal_code"`

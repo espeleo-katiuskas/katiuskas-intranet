@@ -59,6 +59,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		LastName         string   `json:"last_name"`
 		NationalID       *string  `json:"national_id"`
 		BirthDate        *string  `json:"birth_date"`
+		Gender           *Gender  `json:"gender"`
 		Email            string   `json:"email"`
 		Phone            *string  `json:"phone"`
 		Address          *string  `json:"address"`
@@ -85,6 +86,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		LastName:         body.LastName,
 		NationalID:       body.NationalID,
 		BirthDate:        birthDate,
+		Gender:           body.Gender,
 		Email:            body.Email,
 		Phone:            body.Phone,
 		Address:          body.Address,
@@ -161,6 +163,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Email            *string `json:"email"`
 		NationalID       *string `json:"national_id"`
 		BirthDate        *string `json:"birth_date"`
+		Gender           *Gender `json:"gender"`
 		Phone            *string `json:"phone"`
 		Address          *string `json:"address"`
 		PostalCode       *string `json:"postal_code"`
@@ -186,6 +189,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Email:            body.Email,
 		NationalID:       body.NationalID,
 		BirthDate:        birthDate,
+		Gender:           body.Gender,
 		Phone:            body.Phone,
 		Address:          body.Address,
 		PostalCode:       body.PostalCode,

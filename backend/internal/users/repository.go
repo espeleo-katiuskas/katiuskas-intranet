@@ -40,12 +40,12 @@ const (
 // to list a person's roles; the users service overlays that onto every
 // User it returns instead of duplicating the computation in SQL here.
 const userSelect = `
-	u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
+	u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.gender, u.email, u.phone,
 	u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.membership_number,
 	u.last_login_at, u.last_login_ip, u.created_at`
 
 func scanUser(row interface{ Scan(dest ...any) error }, u *User) error {
-	return row.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
+	return row.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Gender, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact, &u.MembershipNumber,
 		&u.LastLoginAt, &u.LastLoginIP, &u.CreatedAt)
 }
@@ -61,11 +61,11 @@ func NewRepository(pool db.PGX) *Repository {
 func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
-		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, email, phone,
+		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, gender, email, phone,
 			address, postal_code, city, province, emergency_contact, membership_number)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING `+userSelect+`
-	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Email, in.Phone,
+	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Gender, in.Email, in.Phone,
 		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact, in.MembershipNumber,
 	), &u)
 	var pgErr *pgconn.PgError
@@ -165,6 +165,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.BirthDate != nil {
 		u.BirthDate = in.BirthDate
 	}
+	if in.Gender != nil {
+		u.Gender = in.Gender
+	}
 	if in.Phone != nil {
 		u.Phone = in.Phone
 	}
@@ -189,10 +192,10 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
-			phone=$6, address=$7, postal_code=$8, city=$9, province=$10, emergency_contact=$11,
-			membership_number=$12, updated_at=now()
-		WHERE id=$13
-	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Phone, u.Address,
+			gender=$6, phone=$7, address=$8, postal_code=$9, city=$10, province=$11, emergency_contact=$12,
+			membership_number=$13, updated_at=now()
+		WHERE id=$14
+	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Gender, u.Phone, u.Address,
 		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.MembershipNumber, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {

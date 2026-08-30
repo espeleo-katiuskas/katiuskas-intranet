@@ -744,6 +744,12 @@ components:
             code: { type: string }
             message: { type: string }
 
+    Gender:
+      type: string
+      enum: [male, female]
+      nullable: true
+      description: Not recorded at all unless set explicitly — nullable, no default.
+
     Token:
       type: object
       description: >
@@ -792,6 +798,7 @@ components:
         last_name: { type: string }
         national_id: { type: string, nullable: true }
         birth_date: { type: string, format: date, nullable: true }
+        gender: { $ref: "#/components/schemas/Gender" }
         email: { type: string, format: email }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
@@ -880,6 +887,7 @@ components:
         email: { type: string, format: email }
         national_id: { type: string, nullable: true }
         birth_date: { type: string, format: date, nullable: true }
+        gender: { $ref: "#/components/schemas/Gender" }
         phone: { type: string, nullable: true }
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }

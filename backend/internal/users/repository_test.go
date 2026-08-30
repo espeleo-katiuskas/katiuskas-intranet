@@ -61,6 +61,46 @@ func TestCreateDuplicateNationalIDRejected(t *testing.T) {
 	}
 }
 
+func TestCreateAndUpdateGender(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	female := users.GenderFemale
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), Gender: &female,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.Gender == nil || *created.Gender != users.GenderFemale {
+		t.Errorf("expected gender %q, got %v", users.GenderFemale, created.Gender)
+	}
+
+	male := users.GenderMale
+	updated, err := repo.Update(context.Background(), created.ID, users.UpdateInput{Gender: &male})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Gender == nil || *updated.Gender != users.GenderMale {
+		t.Errorf("expected gender %q after update, got %v", users.GenderMale, updated.Gender)
+	}
+}
+
+func TestCreateWithoutGenderLeavesItNil(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.Gender != nil {
+		t.Errorf("expected nil gender, got %v", *created.Gender)
+	}
+}
+
 func TestCreateDuplicateMembershipNumberRejected(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
