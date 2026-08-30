@@ -1,9 +1,6 @@
 # Arquitectura
 
-Documento de referencia, en sincronía con el código. La versión narrada y con diagramas
-vive en este artifact: https://claude.ai/code/artifact/21ceb4cf-5acd-443b-8531-403bc76099b0
-(los nombres de tablas y rutas de ese documento estaban en español; aquí, y en el código,
-están en inglés).
+Documento de referencia, en sincronía con el código.
 
 ## Idioma
 
