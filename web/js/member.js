@@ -279,7 +279,7 @@ async function buildTimelineEvents(memberships) {
     events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
   }
 
-  events.sort((a, b) => b.date.localeCompare(a.date));
+  events.sort((a, b) => a.date.localeCompare(b.date));
   return events;
 }
 
