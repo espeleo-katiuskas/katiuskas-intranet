@@ -139,7 +139,7 @@ func (r *Repository) IsOnLeave(ctx context.Context, userID int64) (bool, error) 
 
 func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT m.id, m.user_id, m.start_date, m.end_date, m.end_reason,
+		SELECT m.id, m.user_id, u.login, m.start_date, m.end_date, m.end_reason,
 			u.first_name, u.last_name
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
@@ -154,7 +154,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	list := []Membership{}
 	for rows.Next() {
 		var m Membership
-		if err := rows.Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate,
+		if err := rows.Scan(&m.ID, &m.UserID, &m.UserLogin, &m.StartDate, &m.EndDate,
 			&m.EndReason, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}

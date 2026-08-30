@@ -1,6 +1,7 @@
 package memberships
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,13 +12,24 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
+// UserLookup translates between a person's login and their numeric id.
+// This package's own routes are nested under /users/{login}/memberships,
+// but memberships is keyed by numeric user id — users.Service satisfies
+// this structurally (see main.go's wiring), without memberships having
+// to import that package (it can't: users already imports this one).
+type UserLookup interface {
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
+	LoginForUserID(ctx context.Context, id int64) (string, error)
+}
+
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
+	users         UserLookup
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
-	return &Handler{service: service, authenticator: authenticator}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users}
 }
 
 // Only admin can write here now — board can see every membership period
@@ -26,8 +38,8 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/memberships", h.authenticator.Protect(h.listActive, "admin", "board"))
 	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin"))
-	mux.Handle("GET /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.listByUser))
-	mux.Handle("POST /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.create, "admin"))
+	mux.Handle("GET /api/v1/users/{login}/memberships", h.authenticator.Protect(h.listByUser))
+	mux.Handle("POST /api/v1/users/{login}/memberships", h.authenticator.Protect(h.create, "admin"))
 
 	mux.Handle("GET /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.listLeaves, "admin", "board"))
 	mux.Handle("POST /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
@@ -44,10 +56,23 @@ func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
-func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+// resolveUserLogin looks up the numeric id behind a {login} path
+// segment. Any failure — malformed, or simply nobody by that login — is
+// reported the same way (404): this package only needs to know whether
+// the lookup succeeded, not why it didn't.
+func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
 	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -60,13 +85,16 @@ func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list memberships")
 		return
 	}
+	for i := range list {
+		list[i].UserLogin = login
+	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -92,6 +120,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create membership")
 		return
 	}
+	m.UserLogin = login
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
@@ -145,6 +174,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update membership")
 		return
 	}
+	login, err := h.users.LoginForUserID(r.Context(), m.UserID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not resolve membership owner")
+		return
+	}
+	m.UserLogin = login
 	httpapi.WriteJSON(w, http.StatusOK, m)
 }
 
