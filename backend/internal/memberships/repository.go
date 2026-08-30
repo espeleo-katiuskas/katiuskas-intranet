@@ -30,11 +30,11 @@ func NewRepository(pool db.PGX) *Repository {
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Membership, error) {
 	var m Membership
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO memberships (user_id, membership_number, start_date)
-		VALUES ($1,$2,$3)
-		RETURNING id, user_id, membership_number, start_date, end_date, end_reason
-	`, in.UserID, in.MembershipNumber, in.StartDate,
-	).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
+		INSERT INTO memberships (user_id, start_date)
+		VALUES ($1,$2)
+		RETURNING id, user_id, start_date, end_date, end_reason
+	`, in.UserID, in.StartDate,
+	).Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate, &m.EndReason)
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
@@ -48,9 +48,9 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Membership, er
 func (r *Repository) GetByID(ctx context.Context, id int64) (Membership, error) {
 	var m Membership
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, user_id, membership_number, start_date, end_date, end_reason
+		SELECT id, user_id, start_date, end_date, end_reason
 		FROM memberships WHERE id = $1
-	`, id).Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason)
+	`, id).Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate, &m.EndReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, ErrNotFound
 	}
@@ -62,9 +62,6 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Memb
 	if err != nil {
 		return m, err
 	}
-	if in.MembershipNumber != nil {
-		m.MembershipNumber = in.MembershipNumber
-	}
 	if in.EndReason != nil {
 		m.EndReason = in.EndReason
 	}
@@ -72,9 +69,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Memb
 	m.EndDate = in.EndDate
 
 	_, err = r.pool.Exec(ctx, `
-		UPDATE memberships SET membership_number = $1, start_date = $2, end_date = $3, end_reason = $4
-		WHERE id = $5
-	`, m.MembershipNumber, m.StartDate, m.EndDate, m.EndReason, id)
+		UPDATE memberships SET start_date = $1, end_date = $2, end_reason = $3
+		WHERE id = $4
+	`, m.StartDate, m.EndDate, m.EndReason, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
 		return m, ErrOverlap
@@ -84,7 +81,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Memb
 
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, membership_number, start_date, end_date, end_reason
+		SELECT id, user_id, start_date, end_date, end_reason
 		FROM memberships WHERE user_id = $1 ORDER BY start_date DESC
 	`, userID)
 	if err != nil {
@@ -95,7 +92,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	list := []Membership{}
 	for rows.Next() {
 		var m Membership
-		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate, &m.EndReason); err != nil {
+		if err := rows.Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate, &m.EndReason); err != nil {
 			return nil, err
 		}
 		list = append(list, m)
@@ -105,7 +102,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 
 func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT m.id, m.user_id, m.membership_number, m.start_date, m.end_date, m.end_reason,
+		SELECT m.id, m.user_id, m.start_date, m.end_date, m.end_reason,
 			u.first_name, u.last_name
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
@@ -120,7 +117,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 	list := []Membership{}
 	for rows.Next() {
 		var m Membership
-		if err := rows.Scan(&m.ID, &m.UserID, &m.MembershipNumber, &m.StartDate, &m.EndDate,
+		if err := rows.Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate,
 			&m.EndReason, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}

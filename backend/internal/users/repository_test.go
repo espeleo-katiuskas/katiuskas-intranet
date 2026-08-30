@@ -61,6 +61,53 @@ func TestCreateDuplicateNationalIDRejected(t *testing.T) {
 	}
 }
 
+func TestCreateDuplicateMembershipNumberRejected(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	number := "0001"
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
+	}); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
+	})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
+	}
+}
+
+// A person's membership number belongs to them, not to any one
+// membership period — leaving and rejoining (however many times) must
+// never change it, since the whole point of moving it here (off the
+// per-period memberships table) was to stop that from happening.
+func TestMembershipNumberSurvivesLeavingAndRejoining(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	number := "0002"
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), MembershipNumber: &number,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Simulate an unrelated profile edit made while they were away — the
+	// kind of update that must never touch membership_number since it's
+	// not part of what's being changed.
+	newCity := "Bilbao"
+	updated, err := repo.Update(context.Background(), created.ID, users.UpdateInput{City: &newCity})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.MembershipNumber == nil || *updated.MembershipNumber != number {
+		t.Errorf("expected membership_number to stay %q, got %v", number, updated.MembershipNumber)
+	}
+}
+
 func TestGetByIDNotFound(t *testing.T) {
 	repo := users.NewRepository(testutil.NewTx(t))
 	if _, err := repo.GetByID(context.Background(), 999999); !errors.Is(err, users.ErrNotFound) {

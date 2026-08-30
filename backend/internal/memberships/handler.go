@@ -62,8 +62,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		MembershipNumber *string `json:"membership_number"`
-		StartDate        string  `json:"start_date"`
+		StartDate string `json:"start_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -75,7 +74,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m, err := h.service.Create(r.Context(), CreateInput{
-		UserID: userID, MembershipNumber: body.MembershipNumber, StartDate: startDate,
+		UserID: userID, StartDate: startDate,
 	})
 	if errors.Is(err, ErrOverlap) {
 		httpapi.WriteError(w, http.StatusConflict, "overlapping_period", err.Error())
@@ -89,10 +88,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // update covers both ending a membership (send just end_date) and fully
-// correcting a period's dates or number later — start_date is always
-// required and end_date always replaces whatever was there (null/omitted
-// means the period is open), so there's no ambiguity about which fields
-// a partial body was meant to leave alone versus clear.
+// correcting a period's dates later — start_date is always required and
+// end_date always replaces whatever was there (null/omitted means the
+// period is open), so there's no ambiguity about which fields a partial
+// body was meant to leave alone versus clear.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -100,10 +99,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		MembershipNumber *string `json:"membership_number"`
-		StartDate        string  `json:"start_date"`
-		EndDate          *string `json:"end_date"`
-		EndReason        *string `json:"end_reason"`
+		StartDate string  `json:"start_date"`
+		EndDate   *string `json:"end_date"`
+		EndReason *string `json:"end_reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -125,7 +123,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := h.service.Update(r.Context(), id, UpdateInput{
-		MembershipNumber: body.MembershipNumber, StartDate: startDate, EndDate: endDate, EndReason: body.EndReason,
+		StartDate: startDate, EndDate: endDate, EndReason: body.EndReason,
 	})
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "membership not found")

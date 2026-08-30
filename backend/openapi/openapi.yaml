@@ -394,7 +394,6 @@ paths:
               type: object
               required: [start_date]
               properties:
-                membership_number: { type: string, nullable: true }
                 start_date: { type: string, format: date }
       responses:
         "201":
@@ -425,9 +424,8 @@ paths:
         start_date is always required and replaces the current value.
         end_date likewise always replaces the current value: give a date
         to end the period, or omit/null it to leave the period open —
-        including reopening one that was ended by mistake.
-        membership_number and end_reason are true partial updates: omit
-        either to leave it as is.
+        including reopening one that was ended by mistake. end_reason is
+        a true partial update: omit it to leave it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -441,7 +439,6 @@ paths:
               properties:
                 start_date: { type: string, format: date }
                 end_date: { type: string, format: date, nullable: true }
-                membership_number: { type: string, nullable: true }
                 end_reason: { type: string, nullable: true }
       responses:
         "200":
@@ -811,6 +808,14 @@ components:
             entry if the request had one (the production deploy sits
             behind a reverse proxy that sets it), otherwise the
             connection's own address. Informational only.
+        membership_number:
+          type: string
+          nullable: true
+          description: >
+            Identifies this person for as long as they're associated with
+            the club, not any single membership period — leaving and
+            rejoining keeps the same number. Set via PATCH /users/{id}
+            like any other personal-data field, not per-period.
         membership_start_date:
           type: string
           format: date
@@ -869,6 +874,7 @@ components:
         city: { type: string, nullable: true }
         province: { type: string, nullable: true }
         emergency_contact: { type: string, nullable: true, description: "Free text: one or more names, phones, emails..." }
+        membership_number: { type: string, nullable: true }
 
     Membership:
       type: object
@@ -877,7 +883,6 @@ components:
         user_id: { type: integer }
         first_name: { type: string }
         last_name: { type: string }
-        membership_number: { type: string, nullable: true }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }
         end_reason: { type: string, nullable: true }

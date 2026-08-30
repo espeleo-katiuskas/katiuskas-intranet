@@ -22,10 +22,9 @@ func TestCreateMembership(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
 	user := testutil.InsertUser(t, tx, "")
-	number := "0001"
 
 	m, err := repo.Create(context.Background(), memberships.CreateInput{
-		UserID: user.ID, MembershipNumber: &number, StartDate: date("2020-01-01"),
+		UserID: user.ID, StartDate: date("2020-01-01"),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)

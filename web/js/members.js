@@ -170,6 +170,7 @@ const COLUMNS = [
   { ...textColumn('email', 'Email', (p) => p.email), default: false },
   { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
   { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
+  { ...textColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? ''), default: false },
   { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: true },
   { ...textColumn('address', 'Dirección', (p) => p.address ?? ''), default: false },
   { ...textColumn('postal_code', 'Código postal', (p) => p.postal_code ?? ''), default: false },

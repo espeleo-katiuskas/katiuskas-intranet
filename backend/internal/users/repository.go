@@ -19,9 +19,9 @@ var (
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
 	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
-	// ErrDuplicate means the email or national ID being set already
-	// belongs to another person.
-	ErrDuplicate = errors.New("email or national ID already belongs to another person")
+	// ErrDuplicate means the email, national ID, or membership number
+	// being set already belongs to another person.
+	ErrDuplicate = errors.New("email, national ID, or membership number already belongs to another person")
 	// ErrInvalidToken means a magic-link token doesn't exist, already got
 	// used, or expired. It's intentionally the same error for all three
 	// cases — there's nothing useful (or safe) to tell the caller apart.
@@ -41,12 +41,12 @@ const (
 // User it returns instead of duplicating the computation in SQL here.
 const userSelect = `
 	u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.email, u.phone,
-	u.address, u.postal_code, u.city, u.province, u.emergency_contact,
+	u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.membership_number,
 	u.last_login_at, u.last_login_ip, u.created_at`
 
 func scanUser(row interface{ Scan(dest ...any) error }, u *User) error {
 	return row.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Email,
-		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact,
+		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact, &u.MembershipNumber,
 		&u.LastLoginAt, &u.LastLoginIP, &u.CreatedAt)
 }
 
@@ -62,11 +62,11 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
 		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, email, phone,
-			address, postal_code, city, province, emergency_contact)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			address, postal_code, city, province, emergency_contact, membership_number)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING `+userSelect+`
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Email, in.Phone,
-		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact,
+		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact, in.MembershipNumber,
 	), &u)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
@@ -183,14 +183,17 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.EmergencyContact != nil {
 		u.EmergencyContact = in.EmergencyContact
 	}
+	if in.MembershipNumber != nil {
+		u.MembershipNumber = in.MembershipNumber
+	}
 
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
 			phone=$6, address=$7, postal_code=$8, city=$9, province=$10, emergency_contact=$11,
-			updated_at=now()
-		WHERE id=$12
+			membership_number=$12, updated_at=now()
+		WHERE id=$13
 	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Phone, u.Address,
-		u.PostalCode, u.City, u.Province, u.EmergencyContact, id)
+		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.MembershipNumber, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate

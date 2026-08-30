@@ -152,6 +152,7 @@ async function loadMember() {
     editForm.email.value = person.email;
     editForm.phone.value = person.phone ?? '';
     editForm.national_id.value = person.national_id ?? '';
+    editForm.membership_number.value = person.membership_number ?? '';
     editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';
     editForm.address.value = person.address ?? '';
     editForm.postal_code.value = person.postal_code ?? '';
@@ -175,6 +176,7 @@ editForm.addEventListener('submit', async (event) => {
     email: formData.get('email'),
     phone: optional('phone'),
     national_id: optional('national_id'),
+    membership_number: optional('membership_number'),
     birth_date: optional('birth_date'),
     address: optional('address'),
     postal_code: optional('postal_code'),
@@ -200,16 +202,11 @@ editForm.addEventListener('submit', async (event) => {
 function renderMembershipRow(m) {
   return `
     <div class="detail-row" data-membership-row="${m.id}">
-      <span>${escapeHtml(m.membership_number) || 'Sin número'} · ${formatDate(m.start_date)} –
-        ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
+      <span>${formatDate(m.start_date)} – ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
     </div>
     <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
       <div class="field-grid">
-        <div class="field">
-          <label>N.º de socio</label>
-          <input type="text" data-membership-field="membership_number" value="${escapeHtml(m.membership_number ?? '')}">
-        </div>
         <div class="field">
           <label>Fecha de alta</label>
           <input type="date" data-membership-field="start_date" value="${m.start_date.slice(0, 10)}">
@@ -240,12 +237,11 @@ async function loadMemberships() {
 document.getElementById('start-membership').addEventListener('click', async () => {
   const startDate = prompt('Fecha de alta (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
   if (!startDate) return;
-  const membershipNumber = prompt('Número de socio (opcional):') || null;
 
   try {
     await apiFetch(`/users/${memberId}/memberships`, {
       method: 'POST',
-      body: JSON.stringify({ start_date: startDate, membership_number: membershipNumber }),
+      body: JSON.stringify({ start_date: startDate }),
     });
     showFeedback('Alta registrada.');
     await loadMemberships();
@@ -270,7 +266,6 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
     const field = (name) => panel.querySelector(`[data-membership-field="${name}"]`).value;
 
     const body = {
-      membership_number: field('membership_number').trim() || null,
       start_date: field('start_date'),
       end_date: field('end_date') || null,
     };

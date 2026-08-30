@@ -66,6 +66,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		City             *string  `json:"city"`
 		Province         *string  `json:"province"`
 		EmergencyContact *string  `json:"emergency_contact"`
+		MembershipNumber *string  `json:"membership_number"`
 		RoleNames        []string `json:"role_names"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -91,6 +92,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		City:             body.City,
 		Province:         body.Province,
 		EmergencyContact: body.EmergencyContact,
+		MembershipNumber: body.MembershipNumber,
 		RoleNames:        body.RoleNames,
 	})
 	if errors.Is(err, ErrDuplicate) {
@@ -165,6 +167,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		City             *string `json:"city"`
 		Province         *string `json:"province"`
 		EmergencyContact *string `json:"emergency_contact"`
+		MembershipNumber *string `json:"membership_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -189,6 +192,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		City:             body.City,
 		Province:         body.Province,
 		EmergencyContact: body.EmergencyContact,
+		MembershipNumber: body.MembershipNumber,
 	})
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")

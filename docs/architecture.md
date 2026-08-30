@@ -31,7 +31,9 @@ en `backend/openapi/openapi.yaml`.
   la propia conexión si no). No hay tabla `accounts` ni ningún otro paso de "conceder
   acceso": lo que puede hacer una sesión depende solo de los roles de esa persona (ver
   más abajo), y esos mismos roles deciden si le llega o no un enlace de acceso — no hay
-  contraseñas.
+  contraseñas. `membership_number` también vive aquí, no en `memberships`: identifica a
+  la persona mientras esté vinculada al club, no un periodo de alta concreto, así que
+  darse de baja y volver a darse de alta nunca se lo cambia.
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
   marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
   persona; solo se genera uno y se envía por correo si ambos coinciden con alguien de
