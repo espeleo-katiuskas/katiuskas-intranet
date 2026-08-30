@@ -182,6 +182,86 @@ function categoryFor(person) {
   return 'Mayores';
 }
 
+// A person's membership status for filtering purposes isn't just the
+// alta/baja dates: someone on a temporary leave still counts as "active"
+// for role/access purposes (see docs/architecture.md), but should filter
+// separately from both "activo" and "ex-socio".
+const membershipStatusLabels = {
+  active: 'Activo',
+  on_leave: 'Baja temporal',
+  former: 'Ex-socio',
+  none: 'Nunca ha sido socio',
+};
+function membershipStatusFor(person) {
+  if (!person.membership_start_date) return 'none';
+  if (person.membership_end_date) return 'former';
+  return person.on_leave ? 'on_leave' : 'active';
+}
+
+// Row filters narrow which people show, independent of which columns are
+// visible — same show/hide idea as COLUMNS, but for rows. Each groups
+// people into a fixed, known-in-advance set of values (not derived from
+// whatever happens to be loaded) so the filter UI can render before the
+// data even arrives, and every value starts checked so filtering opens
+// as a no-op.
+const FILTERS = [
+  {
+    key: 'gender',
+    label: 'Género',
+    options: ['Masculino', 'Femenino', 'Sin especificar'],
+    value: (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : 'Sin especificar'),
+  },
+  {
+    key: 'membership_status',
+    label: 'Tipo de socio',
+    options: Object.values(membershipStatusLabels),
+    value: (p) => membershipStatusLabels[membershipStatusFor(p)],
+  },
+  {
+    key: 'category',
+    label: 'Categoría',
+    options: [...CATEGORY_ORDER, 'Sin categoría'],
+    value: (p) => categoryFor(p) ?? 'Sin categoría',
+  },
+];
+
+const activeFilterValues = Object.fromEntries(FILTERS.map((f) => [f.key, new Set(f.options)]));
+
+function renderFilters() {
+  const container = document.getElementById('row-filters');
+  container.innerHTML = FILTERS
+    .map((f) => `
+      <div class="filter-group">
+        <span class="filter-group-label">${escapeHtml(f.label)}</span>
+        ${f.options
+          .map((opt) => `
+            <label>
+              <input type="checkbox" data-filter="${f.key}" value="${escapeHtml(opt)}" ${activeFilterValues[f.key].has(opt) ? 'checked' : ''}>
+              ${escapeHtml(opt)}
+            </label>
+          `)
+          .join('')}
+      </div>
+    `)
+    .join('');
+}
+
+document.getElementById('row-filters').addEventListener('change', (event) => {
+  const checkbox = event.target.closest('input[data-filter]');
+  if (!checkbox) return;
+  const values = activeFilterValues[checkbox.dataset.filter];
+  if (checkbox.checked) {
+    values.add(checkbox.value);
+  } else {
+    values.delete(checkbox.value);
+  }
+  renderUsersTable();
+});
+
+function filteredPeople() {
+  return people.filter((p) => FILTERS.every((f) => activeFilterValues[f.key].has(f.value(p))));
+}
+
 const COLUMNS = [
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
@@ -278,6 +358,7 @@ function renderUserRow(person) {
 }
 
 function renderUsersTable() {
+  renderFilters();
   renderColumnToggle();
   renderUsersTableHead();
 
@@ -287,8 +368,14 @@ function renderUsersTable() {
     return;
   }
 
+  const visible = filteredPeople();
+  if (visible.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="${Math.max(visibleColumns.size, 1)}">Ninguna persona coincide con los filtros.</td></tr>`;
+    return;
+  }
+
   const column = columnsByKey[sortKey];
-  const sorted = people.slice().sort((a, b) => (sortDir === 'asc' ? column.compare(a, b) : column.compare(b, a)));
+  const sorted = visible.slice().sort((a, b) => (sortDir === 'asc' ? column.compare(a, b) : column.compare(b, a)));
   tableBody.innerHTML = sorted.map(renderUserRow).join('');
 }
 

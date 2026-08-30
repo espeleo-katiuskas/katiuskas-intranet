@@ -276,6 +276,27 @@ th.sortable:hover {
   font-weight: normal;
 }
 
+.filter-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 10px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-group-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  min-width: 100px;
+}
+
 .role-add-row {
   display: flex;
   gap: 6px;
