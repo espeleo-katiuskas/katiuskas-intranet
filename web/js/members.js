@@ -149,6 +149,20 @@ function textColumn(key, label, getValue) {
   };
 }
 
+function numberColumn(key, label, getValue) {
+  return {
+    key,
+    label,
+    value: getValue,
+    render: (person) => {
+      const raw = getValue(person);
+      return raw == null ? '—' : String(raw);
+    },
+    // Missing values (never assigned one) sort first.
+    compare: (a, b) => (getValue(a) ?? -Infinity) - (getValue(b) ?? -Infinity),
+  };
+}
+
 function dateColumn(key, label, getValue) {
   return {
     key,
@@ -269,7 +283,7 @@ const COLUMNS = [
   { ...textColumn('email', 'Email', (p) => p.email), default: false },
   { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
   { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
-  { ...textColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? ''), default: false },
+  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: false },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
   { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: true },
   {

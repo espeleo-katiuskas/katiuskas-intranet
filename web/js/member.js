@@ -142,6 +142,9 @@ async function loadMember() {
     const person = await apiFetch(`/users/${memberId}`);
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email;
+    document.getElementById('member-number').textContent = person.membership_number != null
+      ? `N.º de socio: ${person.membership_number}`
+      : 'Sin número de socio todavía.';
     document.getElementById('member-last-login').textContent = person.last_login_at
       ? `Último acceso: ${formatDate(person.last_login_at)}${person.last_login_ip ? ` desde ${person.last_login_ip}` : ''}`
       : 'Todavía no ha iniciado sesión.';
@@ -152,7 +155,6 @@ async function loadMember() {
     editForm.email.value = person.email;
     editForm.phone.value = person.phone ?? '';
     editForm.national_id.value = person.national_id ?? '';
-    editForm.membership_number.value = person.membership_number ?? '';
     editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';
     editForm.gender.value = person.gender ?? '';
     editForm.address.value = person.address ?? '';
@@ -177,7 +179,6 @@ editForm.addEventListener('submit', async (event) => {
     email: formData.get('email'),
     phone: optional('phone'),
     national_id: optional('national_id'),
-    membership_number: optional('membership_number'),
     birth_date: optional('birth_date'),
     gender: optional('gender'),
     address: optional('address'),
