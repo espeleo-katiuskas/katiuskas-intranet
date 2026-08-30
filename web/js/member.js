@@ -70,6 +70,30 @@ async function loadRolesCatalog() {
   }
 }
 
+// Loaded once (admin-only endpoint) so both the "+ Licencia" form and
+// each existing license's inline edit panel can build their type
+// <select> from the same catalog.
+let allLicenseTypes = [];
+let licenseTypesById = {};
+
+function licenseTypeOptions(selectedId) {
+  return allLicenseTypes
+    .map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`)
+    .join('');
+}
+
+async function loadLicenseTypesCatalog() {
+  if (!isRealAdmin) return;
+  try {
+    allLicenseTypes = await apiFetch('/license-types');
+    licenseTypesById = Object.fromEntries(allLicenseTypes.map((t) => [t.id, t]));
+    document.getElementById('add-license-type').innerHTML = licenseTypeOptions();
+  } catch {
+    allLicenseTypes = [];
+    licenseTypesById = {};
+  }
+}
+
 function renderRoleBadges(person) {
   if (person.roles.length === 0) {
     return '<p>Sin roles asignados.</p>';
@@ -318,6 +342,29 @@ function renderLeaveEditPanel(l) {
   `;
 }
 
+function renderLicenseEditPanel(l) {
+  const chosen = licenseTypesById[l.license_type_id];
+  return `
+    <div class="edit-fields" data-edit-license-panel="${l.id}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>Tipo de licencia</label>
+          <select data-license-field="license_type_id" data-license-type-select="${l.id}">${licenseTypeOptions(l.license_type_id)}</select>
+        </div>
+        <div class="field" data-license-other-detail-field="${l.id}" ${chosen?.is_other ? '' : 'hidden'}>
+          <label>¿Cuál?</label>
+          <input type="text" data-license-field="other_detail" value="${escapeHtml(l.other_detail ?? '')}">
+        </div>
+        <div class="field">
+          <label>Fecha de obtención</label>
+          <input type="date" data-license-field="issued_date" value="${l.issued_date.slice(0, 10)}">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-license="${l.id}">Guardar</button>
+    </div>
+  `;
+}
+
 const eventLabels = {
   alta: 'Alta',
   baja: 'Baja',
@@ -386,6 +433,12 @@ function renderTimelineEvent(event) {
       <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
     `;
     panel = renderLeaveEditPanel(event.leave);
+  } else if (isRealAdmin && event.type === 'license') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-license="${event.license.id}">Editar</button>
+      <button type="button" class="btn btn-danger btn-small" data-delete-license="${event.license.id}">Borrar</button>
+    `;
+    panel = renderLicenseEditPanel(event.license);
   } else if (isRealAdmin && event.type === 'board_start') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-board="${event.boardMember.id}">Editar</button>
@@ -456,6 +509,14 @@ if (isRealAdmin) {
     }
   });
 }
+
+document.getElementById('timeline-list').addEventListener('change', (event) => {
+  const select = event.target.closest('select[data-license-type-select]');
+  if (!select) return;
+  const chosen = licenseTypesById[Number(select.value)];
+  const field = document.querySelector(`[data-license-other-detail-field="${select.dataset.licenseTypeSelect}"]`);
+  field.hidden = !chosen?.is_other;
+});
 
 document.getElementById('timeline-list').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-edit-membership]');
@@ -538,6 +599,57 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       await loadTimeline();
     } catch (err) {
       deleteLeaveButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const toggleEditLicenseButton = event.target.closest('button[data-toggle-edit-license]');
+  if (toggleEditLicenseButton) {
+    const panel = document.querySelector(`[data-edit-license-panel="${toggleEditLicenseButton.dataset.toggleEditLicense}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const saveLicenseButton = event.target.closest('button[data-save-license]');
+  if (saveLicenseButton) {
+    const licenseId = saveLicenseButton.dataset.saveLicense;
+    const editPanel = document.querySelector(`[data-edit-license-panel="${licenseId}"]`);
+    const field = (name) => editPanel.querySelector(`[data-license-field="${name}"]`).value;
+    const licenseTypeId = Number(field('license_type_id'));
+    const chosen = licenseTypesById[licenseTypeId];
+    const otherDetail = field('other_detail').trim() || null;
+    if (chosen?.is_other && !otherDetail) {
+      showError('Indica de qué licencia se trata.');
+      return;
+    }
+    const body = {
+      license_type_id: licenseTypeId,
+      other_detail: chosen?.is_other ? otherDetail : null,
+      issued_date: field('issued_date'),
+    };
+
+    saveLicenseButton.disabled = true;
+    try {
+      await apiFetch(`/licenses/${licenseId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Licencia actualizada.');
+      await loadTimeline();
+    } catch (err) {
+      saveLicenseButton.disabled = false;
+      showError(err.message);
+    }
+    return;
+  }
+
+  const deleteLicenseButton = event.target.closest('button[data-delete-license]');
+  if (deleteLicenseButton) {
+    if (!confirm('¿Borrar esta licencia?')) return;
+    deleteLicenseButton.disabled = true;
+    try {
+      await apiFetch(`/licenses/${deleteLicenseButton.dataset.deleteLicense}`, { method: 'DELETE' });
+      await loadTimeline();
+    } catch (err) {
+      deleteLicenseButton.disabled = false;
       showError(err.message);
     }
     return;
@@ -714,31 +826,11 @@ async function loadTransactions() {
 // data-roles="admin" on their buttons/panels — POST licenses/
 // board-members is admin-only now, so board never has these elements.
 if (isRealAdmin) {
-  let licenseTypesById = {};
-  let licenseTypesLoaded = false;
-
-  async function loadLicenseTypes() {
-    if (licenseTypesLoaded) return;
-    try {
-      const types = await apiFetch('/license-types');
-      licenseTypesById = Object.fromEntries(types.map((t) => [t.id, t]));
-      document.getElementById('add-license-type').innerHTML = types
-        .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
-        .join('');
-      licenseTypesLoaded = true;
-    } catch (err) {
-      showError(err.message);
-    }
-  }
-
-  document.getElementById('add-license').addEventListener('click', async () => {
+  document.getElementById('add-license').addEventListener('click', () => {
     const panel = document.getElementById('add-license-panel');
     const dateInput = document.getElementById('add-license-issued-date');
     if (panel.hidden && !dateInput.value) {
       dateInput.value = new Date().toISOString().slice(0, 10);
-    }
-    if (panel.hidden) {
-      await loadLicenseTypes();
     }
     panel.hidden = !panel.hidden;
   });
@@ -829,6 +921,7 @@ if (isRealAdmin) {
 }
 
 await loadRolesCatalog();
+await loadLicenseTypesCatalog();
 loadMember();
 loadTimeline();
 loadActivities();
