@@ -97,7 +97,10 @@ func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 	}
 }
 
-func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
+// Board lost the ability to modify a person's data entirely, role
+// assignment included — granting or revoking any role, not just admin,
+// is admin-only now.
+func TestHandlerBoardCannotGrantOrRevokeAnyRole(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
 	materialRoleID := testutil.RoleID(t, tx, "material")
@@ -105,8 +108,26 @@ func TestHandlerBoardCanGrantNonAdminRoles(t *testing.T) {
 	boardToken := rolesToken(t, authn, 1, "board")
 	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), boardToken,
 		map[string]int64{"role_id": materialRoleID})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected board granting a role to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/roles/%d", target.ID, materialRoleID), boardToken, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected board revoking a role to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerAdminCanGrantNonAdminRoles(t *testing.T) {
+	mux, authn, _, tx := newRolesTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	materialRoleID := testutil.RoleID(t, tx, "material")
+
+	adminToken := rolesToken(t, authn, 1, "admin")
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), adminToken,
+		map[string]int64{"role_id": materialRoleID})
 	if rec.Code != http.StatusNoContent {
-		t.Errorf("expected board to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
+		t.Errorf("expected admin to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -22,20 +22,34 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /api/v1/users", h.authenticator.Protect(h.list, "admin", "board"))
-	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("GET /api/v1/users", h.authenticator.Protect(h.list, "admin", "board", "member"))
+	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin"))
 	mux.Handle("GET /api/v1/users/directory", h.authenticator.Protect(h.directory))
 	mux.Handle("GET /api/v1/users/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/users/{id}", h.authenticator.Protect(h.update))
-	mux.Handle("DELETE /api/v1/users/{id}", h.authenticator.Protect(h.delete, "admin", "board"))
+	mux.Handle("DELETE /api/v1/users/{id}", h.authenticator.Protect(h.delete, "admin"))
 }
 
+// list is the only place a plain member can see anyone's data besides
+// their own: admin/board get the full picture, everyone else gets
+// MemberListing's narrower view of every person (not just themselves) —
+// see its doc comment for exactly what that includes.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	list, err := h.service.List(r.Context(), limit, offset)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list users")
+		return
+	}
+
+	current, _ := auth.UserFromContext(r.Context())
+	if !current.HasAnyRole("admin", "board") {
+		restricted := make([]MemberListing, len(list))
+		for i, u := range list {
+			restricted[i] = u.ForMemberListing()
+		}
+		httpapi.WriteJSON(w, http.StatusOK, restricted)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
@@ -144,6 +158,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
 
+// update lets admin edit anyone's full record, and anyone else edit only
+// their own — and even then, only the contact fields (see UpdateInput's
+// doc comment): board lost the general ability to modify a person's
+// data along with everyone else who isn't admin, and self-service edits
+// were never meant to touch identity fields like name, DNI, birth date,
+// or gender.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -151,8 +171,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if !current.HasAnyRole("admin", "board") && current.ID != id {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only edit their own profile")
+	isAdmin := current.HasAnyRole("admin")
+	if !isAdmin && current.ID != id {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "you can only edit your own profile")
 		return
 	}
 	var body struct {
@@ -171,6 +192,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if !isAdmin && (body.FirstName != nil || body.LastName != nil || body.NationalID != nil || body.BirthDate != nil || body.Gender != nil) {
+		httpapi.WriteError(w, http.StatusForbidden, "restricted_fields",
+			"you can only edit email, phone, address, postal_code, city, province, and emergency_contact")
 		return
 	}
 

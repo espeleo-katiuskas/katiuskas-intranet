@@ -20,11 +20,16 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 	return &Handler{service: service, authenticator: authenticator}
 }
 
+// listActive is open to plain members too — anyone can see who's
+// currently on the Junta Directiva, cargo and contact details included
+// (see Member's fields) — but only admin can write here: changing who's
+// on the board is data about a person, same as the rest of their
+// profile, which board itself can no longer touch.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /api/v1/board-members", h.authenticator.Protect(h.listActive, "admin", "board"))
-	mux.Handle("PATCH /api/v1/board-members/{id}", h.authenticator.Protect(h.update, "admin", "board"))
+	mux.Handle("GET /api/v1/board-members", h.authenticator.Protect(h.listActive, "admin", "board", "member"))
+	mux.Handle("PATCH /api/v1/board-members/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("GET /api/v1/users/{userID}/board-members", h.authenticator.Protect(h.listByUser))
-	mux.Handle("POST /api/v1/users/{userID}/board-members", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("POST /api/v1/users/{userID}/board-members", h.authenticator.Protect(h.create, "admin"))
 }
 
 func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {

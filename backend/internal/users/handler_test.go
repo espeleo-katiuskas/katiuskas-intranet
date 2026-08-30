@@ -90,19 +90,84 @@ func TestHandlerGetSelfVersusOthers(t *testing.T) {
 	}
 }
 
-func TestHandlerListRequiresAdminOrBoard(t *testing.T) {
+func TestHandlerListRequiresABaselineRole(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
 	boardToken := tokenFor(t, authn, 2, "board")
+	adminToken := tokenFor(t, authn, 3, "admin")
+	materialToken := tokenFor(t, authn, 4, "material") // not a baseline role
 
-	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for a member listing users, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for a member listing users, got %d", rec.Code)
 	}
 	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", boardToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected 200 for board listing users, got %d", rec.Code)
 	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", adminToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin listing users, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", materialToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for someone with no baseline role, got %d", rec.Code)
+	}
 	if rec := doRequest(mux, http.MethodGet, "/api/v1/users", "", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 with no token, got %d", rec.Code)
+	}
+}
+
+// A plain member sees everyone on the list (not just themselves), but
+// only MemberListing's fields — board and admin still get the full
+// picture.
+func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.T) {
+	mux, authn, svc := newTestServer(t)
+	ctx := context.Background()
+
+	nationalID := "12345678A"
+	if _, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Target", LastName: "Person", Email: testutil.UniqueEmail(t), NationalID: &nationalID,
+	}); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("national_id")) {
+		t.Errorf("expected a plain member's listing to hide national_id entirely, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"first_name":"Target"`)) {
+		t.Errorf("expected first_name to still be visible to a member, got %s", rec.Body.String())
+	}
+
+	boardToken := tokenFor(t, authn, 2, "board")
+	rec = doRequest(mux, http.MethodGet, "/api/v1/users", boardToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(nationalID)) {
+		t.Errorf("expected board to still see national_id, got %s", rec.Body.String())
+	}
+}
+
+// Creating and deleting a person are admin-only now — board lost every
+// way to modify a person's data, this included.
+func TestHandlerCreateAndDeleteRequireAdminNotBoard(t *testing.T) {
+	mux, authn, svc := newTestServer(t)
+	ctx := context.Background()
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	createBody := map[string]any{"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t)}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/users", boardToken, createBody); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board creating a person to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "T", LastName: "Arget", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d", target.ID), boardToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board deleting a person to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -232,5 +297,59 @@ func TestHandlerUpdateSelfVersusOthers(t *testing.T) {
 	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", other.ID), memberToken, map[string]any{"city": "Madrid"})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected a member editing someone else's profile to get 403, got %d", rec.Code)
+	}
+
+	// Board lost the general ability to edit anyone's profile along with
+	// every other non-admin caller — it's not just members who are
+	// limited to their own record now.
+	boardToken := tokenFor(t, authn, 999998, "board")
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", other.ID), boardToken, map[string]any{"city": "Madrid"})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected board editing someone else's profile to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Self-service edits — the only kind left for anyone but admin — are
+// limited to contact fields: name, national ID, birth date, and gender
+// stay off-limits even on your own record.
+func TestHandlerUpdateRestrictsFieldsForNonAdminSelfEdit(t *testing.T) {
+	mux, authn, svc := newTestServer(t)
+	ctx := context.Background()
+
+	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	allowed := map[string]any{
+		"email": testutil.UniqueEmail(t), "phone": "611222333", "address": "Calle Mayor 1",
+		"postal_code": "28080", "city": "Madrid", "province": "Madrid", "emergency_contact": "Alguien, 611000000",
+	}
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", member.ID), memberToken, allowed); rec.Code != http.StatusOK {
+		t.Errorf("expected all-contact-fields self-edit to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	restrictedBodies := []map[string]any{
+		{"first_name": "New"},
+		{"last_name": "New"},
+		{"national_id": "12345678A"},
+		{"birth_date": "2000-01-01"},
+		{"gender": "male"},
+	}
+	for _, body := range restrictedBodies {
+		rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", member.ID), memberToken, body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected self-editing %v to be forbidden, got %d: %s", body, rec.Code, rec.Body.String())
+		}
+		if code := errorCode(t, rec); code != "restricted_fields" {
+			t.Errorf("expected error code restricted_fields for %v, got %q", body, code)
+		}
+	}
+
+	adminToken := tokenFor(t, authn, 999997, "admin")
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", member.ID), adminToken, map[string]any{"first_name": "Renamed"})
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected admin to still edit any field on anyone, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

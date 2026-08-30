@@ -21,10 +21,16 @@ const (
 )
 
 type Member struct {
-	ID        int64      `json:"id"`
-	UserID    int64      `json:"user_id"`
-	FirstName string     `json:"first_name,omitempty"`
-	LastName  string     `json:"last_name,omitempty"`
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"user_id"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	// Email/Phone are only ever populated by ListActive, joined in from
+	// users — any signed-in member can see them here (cargo + how to
+	// reach the current Junta Directiva), same as admin/board already
+	// could through the person's own profile.
+	Email     string     `json:"email,omitempty"`
+	Phone     *string    `json:"phone,omitempty"`
 	Position  Position   `json:"position"`
 	StartDate time.Time  `json:"start_date"`
 	EndDate   *time.Time `json:"end_date,omitempty"`

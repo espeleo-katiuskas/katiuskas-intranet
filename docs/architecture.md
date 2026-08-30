@@ -23,6 +23,46 @@ cliente toca PostgreSQL directamente, lo que permite añadir una app móvil o un
 de terminal más adelante sin duplicar reglas de negocio: comparten el contrato descrito
 en `backend/openapi/openapi.yaml`.
 
+## Permisos
+
+Tres niveles, de más a menos acceso — cada ruta lo aplica con `Authenticator.Protect`
+más, cuando hace falta, una comprobación adicional dentro del propio handler (ver
+`auth.BaselineRoles`, que ya exige admin/board/member en todas las rutas protegidas):
+
+- **`admin`** — puede hacer todo, sin excepción.
+- **`board`** — puede **ver** todos los datos del API (personas, socios, licencias,
+  Junta Directiva, roles, actividades, material), pero solo puede **modificar**
+  actividades y material — exactamente igual que antes. Ya no puede crear ni borrar
+  personas, dar de alta/baja, corregir bajas temporales, asignar licencias, gestionar
+  la Junta Directiva, ni asignar/quitar roles a nadie: todo eso es admin-only ahora
+  (rutas bajo `/users`, `/memberships`, `/leaves`, `/users/{userID}/licenses`,
+  `/board-members`, `/users/{userID}/roles`).
+- **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
+  persona: solo `users.MemberListing` (nombre, apellidos, género, número de socio,
+  fecha de alta y de baja) para todo el mundo, no solo para sí mismo. `users.Handler.
+  list` decide qué forma devolver según el rol de quien pregunta — no hay una ruta
+  aparte. También puede ver `GET /board-members` (la Junta Directiva actual, con cargo,
+  teléfono y correo — esa ruta es la única, aparte de las de admin/board, abierta a
+  member). Sobre su propio registro, puede seguir editando datos de contacto —
+  email, phone, address, postal_code, city, province, emergency_contact — pero no
+  nombre, apellidos, DNI, fecha de nacimiento ni género: `users.Handler.update`
+  rechaza con 403 `restricted_fields` cualquier intento de tocar esos campos si quien
+  llama no es admin, en vez de ignorarlos en silencio. `GET /users/{id}` (la ficha
+  completa) sigue reservado a admin/board o a la propia persona, sin cambios.
+
+En el frontend, `/members` ahora es visible para member además de admin/board: la
+lista de columnas y los filtros se reducen a lo que `MemberListing` realmente trae
+(`MEMBER_COLUMNS`/`MEMBER_FILTERS` en `web/js/members.js`, en vez de las versiones
+`FULL_*`), las filas dejan de ser clicables (`/member?id=…` sigue siendo solo para
+admin/board), y las secciones de gestión (roles, nueva persona) llevan
+`data-roles="admin"` o `"admin,board"` para que `applyRoleVisibility()` las quite del
+todo. En `/member`, los botones de escritura (dar de alta, licencias, Junta Directiva,
+gestión de roles, borrar persona) llevan `data-roles="admin"` en el HTML estático, y
+las acciones que se generan dinámicamente por evento del timeline (los botones
+"Editar" de cada fila) se filtran en JavaScript comprobando `isRealAdmin`, ya que
+`data-roles` no llega a examinar contenido que todavía no existía cuando
+`applyRoleVisibility()` se ejecutó.
+
 ## Modelo de datos (`db/migrations/`)
 
 - **`users`** — datos personales de cualquier persona vinculada al club, incluidos

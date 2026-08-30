@@ -20,16 +20,19 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 	return &Handler{service: service, authenticator: authenticator}
 }
 
+// Only admin can write here now — board can see every membership period
+// (this whole resource is read-only to them, like the rest of a
+// person's data) but not start, correct, or end one.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/memberships", h.authenticator.Protect(h.listActive, "admin", "board"))
-	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin", "board"))
+	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("GET /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.listByUser))
-	mux.Handle("POST /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("POST /api/v1/users/{userID}/memberships", h.authenticator.Protect(h.create, "admin"))
 
 	mux.Handle("GET /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.listLeaves, "admin", "board"))
-	mux.Handle("POST /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.createLeave, "admin", "board"))
-	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin", "board"))
-	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin", "board"))
+	mux.Handle("POST /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
+	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
+	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
 }
 
 func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {

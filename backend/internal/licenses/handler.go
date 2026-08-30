@@ -20,9 +20,11 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 	return &Handler{service: service, authenticator: authenticator}
 }
 
+// POST is admin-only: board can see everyone's licenses (read-only, like
+// the rest of a person's data) but not assign one.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{userID}/licenses", h.authenticator.Protect(h.listByUser))
-	mux.Handle("POST /api/v1/users/{userID}/licenses", h.authenticator.Protect(h.create, "admin", "board"))
+	mux.Handle("POST /api/v1/users/{userID}/licenses", h.authenticator.Protect(h.create, "admin"))
 }
 
 func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {

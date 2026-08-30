@@ -157,20 +157,29 @@ paths:
   /users:
     get:
       summary: List users
+      description: >
+        admin/board get every field (User, below); a plain member gets
+        everyone on the list too, but only MemberListing's much narrower
+        view — no DNI, address, contact info, or anything else that
+        isn't already effectively public knowledge inside the club.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: limit, in: query, schema: { type: integer } }
         - { name: offset, in: query, schema: { type: integer } }
       responses:
         "200":
-          description: A page of users
+          description: A page of users (User for admin/board, MemberListing otherwise)
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/User" }
+                items:
+                  oneOf:
+                    - { $ref: "#/components/schemas/User" }
+                    - { $ref: "#/components/schemas/MemberListing" }
     post:
       summary: Create a user (and, optionally, a login account)
+      description: Admin-only — board can no longer modify a person's data at all.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -183,6 +192,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "403": { description: Only admin can create a person. }
         "409":
           description: The email or national ID already belongs to another person.
 
@@ -190,10 +200,10 @@ paths:
     get:
       summary: List everyone with login access, name only
       description: >
-        Open to any authenticated user. Returns just id, first_name and
+        Open to any authenticated user, including one who'd only get
+        MemberListing from GET /users. Returns just id, first_name and
         last_name — enough to populate a picker (e.g. an activity's leader
-        or participants) without exposing the personal data that GET
-        /users returns to admin/board.
+        or participants) without exposing anything more.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -207,6 +217,7 @@ paths:
   /users/{id}:
     get:
       summary: Get a user by id
+      description: admin/board can view anyone; anyone else only themselves.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -216,9 +227,17 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "403": { description: Not admin/board, and not viewing your own record. }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update a user's personal data
+      description: >
+        Only admin can set every field on anyone. Everyone else can only
+        edit their own record (403 otherwise), and even then only the
+        contact fields UpdateUserInput lists as such — attempting to also
+        change name, national ID, birth date, or gender gets the whole
+        request rejected with 403 restricted_fields, rather than silently
+        dropping just those fields.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -233,15 +252,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
+        "403":
+          description: >
+            forbidden — not admin, and not editing your own record; or
+            restricted_fields — a non-admin tried to change a field
+            beyond the contact ones.
         "409":
           description: The email or national ID being set already belongs to another person.
     delete:
       summary: Delete a person (and their login, membership history and activity sign-ups)
+      description: Admin-only — board can no longer modify a person's data at all.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
+        "403": { description: Only admin can delete a person. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
@@ -252,6 +278,7 @@ paths:
   /roles:
     get:
       summary: List every role
+      description: admin/board only — the catalog itself, read-only.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -301,10 +328,10 @@ paths:
     post:
       summary: Grant a role to a person
       description: >
-        admin/board can grant any role except "admin" itself, which only an
-        admin can grant (avoids a board account minting new admins).
-        member/former_member can't be granted this way at all — they're
-        computed from membership history instead.
+        Admin-only — board lost the ability to modify a person's data,
+        role assignment included, even for roles that aren't "admin"
+        itself. member/former_member/board can't be granted this way at
+        all — they're computed from membership/board history instead.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -320,18 +347,18 @@ paths:
       responses:
         "204": { description: Granted }
         "403":
-          description: Only an admin can grant the admin role.
+          description: Only admin can grant a role.
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: The role is automatic (member/former_member) and can't be granted by hand.
+          description: The role is automatic (member/former_member/board) and can't be granted by hand.
 
   /users/{userID}/roles/{roleID}:
     delete:
       summary: Revoke a role from a person
       description: >
-        Same admin-only carve-out as granting; also refuses to revoke
-        "admin" from the last person who has it, and refuses to revoke
-        member/former_member at all (computed, not stored).
+        Same admin-only rule as granting; also refuses to revoke "admin"
+        from the last person who has it, and refuses to revoke an
+        automatic role (member/former_member/board) at all.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -339,13 +366,13 @@ paths:
       responses:
         "204": { description: Revoked }
         "403":
-          description: Only an admin can revoke the admin role.
+          description: Only admin can revoke a role.
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
             Either "admin" from the only remaining admin, or an automatic
-            role (member/former_member), neither of which can be revoked
-            this way.
+            role (member/former_member/board), neither of which can be
+            revoked this way.
 
   /users/{userID}/tokens:
     get:
@@ -452,6 +479,7 @@ paths:
                 items: { $ref: "#/components/schemas/Membership" }
     post:
       summary: Start a new membership period
+      description: Admin-only — board can see every membership period but no longer starts, corrects, or ends one.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -470,6 +498,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "403": { description: Only admin can start a membership period. }
         "409":
           description: Overlaps an existing membership period for this user
 
@@ -490,14 +519,16 @@ paths:
     post:
       summary: Assign a federative license ("licencia federativa")
       description: >
-        Only someone who currently has an open membership period (hasn't
-        caused baja) can be assigned one. A license is annual: valid from
-        issued_date through December 31 of that same year — the response
-        includes that computed valid_until, but it isn't something the
-        caller sets. type is free text, not a fixed set: not just zona
-        A/B/B1 plus modalidad BASICA/PLUS, but combinations like "A
-        BASICA Infantil", or entirely different federations like "FME"
-        or "Murciana" — it doesn't decompose into separate fields.
+        Admin-only — board can see everyone's licenses but no longer
+        assigns one. Only someone who currently has an open membership
+        period (hasn't caused baja) can be assigned one. A license is
+        annual: valid from issued_date through December 31 of that same
+        year — the response includes that computed valid_until, but it
+        isn't something the caller sets. type is free text, not a fixed
+        set: not just zona A/B/B1 plus modalidad BASICA/PLUS, but
+        combinations like "A BASICA Infantil", or entirely different
+        federations like "FME" or "Murciana" — it doesn't decompose into
+        separate fields.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -517,12 +548,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/License" }
+        "403": { description: Only admin can assign a license. }
         "409":
           description: not_active_member — this person doesn't currently have an open membership period.
 
   /memberships:
     get:
       summary: List members whose membership is active today
+      description: admin/board — read-only.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -537,11 +570,12 @@ paths:
     patch:
       summary: Correct a membership period's dates (or end it)
       description: >
-        start_date is always required and replaces the current value.
-        end_date likewise always replaces the current value: give a date
-        to end the period, or omit/null it to leave the period open —
-        including reopening one that was ended by mistake. end_reason is
-        a true partial update: omit it to leave it as is.
+        Admin-only. start_date is always required and replaces the
+        current value. end_date likewise always replaces the current
+        value: give a date to end the period, or omit/null it to leave
+        the period open — including reopening one that was ended by
+        mistake. end_reason is a true partial update: omit it to leave
+        it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -562,6 +596,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "403": { description: Only admin can correct a membership period. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: The corrected dates overlap another period for this person.
@@ -583,11 +618,11 @@ paths:
     post:
       summary: Start a new board term
       description: >
-        The automatic "board" role (see the User schema) is computed from
-        whoever currently has an open term here — there's no other way to
-        grant it. Rejected if this person already has an open (or
-        overlapping) term, whatever the position: nobody holds two board
-        terms at once.
+        Admin-only. The automatic "board" role (see the User schema) is
+        computed from whoever currently has an open term here — there's
+        no other way to grant it. Rejected if this person already has an
+        open (or overlapping) term, whatever the position: nobody holds
+        two board terms at once.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -607,12 +642,18 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
+        "403": { description: Only admin can start a board term. }
         "409":
           description: Overlaps an existing board term for this person.
 
   /board-members:
     get:
       summary: List the current Junta Directiva
+      description: >
+        Open to admin, board, and plain members alike — anyone signed in
+        can see who's currently on the board, their cargo, and how to
+        reach them (email/phone, joined in from the person's own
+        profile).
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -627,10 +668,11 @@ paths:
     patch:
       summary: Correct a board term's position or dates (or end it)
       description: >
-        position and start_date are always required and replace the
-        current values. end_date likewise always replaces the current
-        value: give a date to end the term, or omit/null it to leave it
-        open — including reopening one that was ended by mistake.
+        Admin-only. position and start_date are always required and
+        replace the current values. end_date likewise always replaces
+        the current value: give a date to end the term, or omit/null it
+        to leave it open — including reopening one that was ended by
+        mistake.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -651,6 +693,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
+        "403": { description: Only admin can correct a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: The corrected dates overlap another board term for this person.
@@ -672,9 +715,9 @@ paths:
     post:
       summary: Record a temporary leave ("baja temporal")
       description: >
-        Unlike a membership period, both dates are required up front — a
-        temporary leave is a bounded, planned thing. It must fall
-        entirely within its membership period's dates.
+        Admin-only. Unlike a membership period, both dates are required
+        up front — a temporary leave is a bounded, planned thing. It
+        must fall entirely within its membership period's dates.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: membershipID, in: path, required: true, schema: { type: integer } }
@@ -695,6 +738,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
+        "403": { description: Only admin can record a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
@@ -707,10 +751,10 @@ paths:
     patch:
       summary: Correct a temporary leave's dates or reason
       description: >
-        start_date and end_date are always required and replace the
-        current values; the containment check against the membership
-        period runs again on every correction. reason is a true partial
-        update: omit it to leave it as is.
+        Admin-only. start_date and end_date are always required and
+        replace the current values; the containment check against the
+        membership period runs again on every correction. reason is a
+        true partial update: omit it to leave it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -731,11 +775,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
+        "403": { description: Only admin can correct a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: outside_membership_period or overlapping_period — see the error code.
     delete:
       summary: Remove a temporary leave
+      description: Admin-only.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1192,6 +1238,23 @@ components:
             for the full history.
         created_at: { type: string, format: date-time }
 
+    MemberListing:
+      type: object
+      description: >
+        What GET /users returns to a caller who's a plain member (not
+        admin or board) — for every person on the list, not just
+        themselves. Just enough to see who's a socio, since when, and to
+        whom; everything else User exposes (DNI, address, contact info,
+        license, roles...) is left out entirely.
+      properties:
+        id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+        gender: { $ref: "#/components/schemas/Gender" }
+        membership_number: { type: integer, minimum: 0, nullable: true }
+        membership_start_date: { type: string, format: date, nullable: true }
+        membership_end_date: { type: string, format: date, nullable: true }
+
     DirectoryEntry:
       type: object
       properties:
@@ -1216,18 +1279,22 @@ components:
 
     UpdateUserInput:
       description: >
-        Every field is optional and independently settable. admin/board can
-        edit anyone; a member can only edit their own record — there's no
-        per-field permission split, so this same shape covers self-service
-        profile edits and admin edits alike.
+        Every field is optional and independently settable, but who can
+        set which ones isn't uniform anymore: admin can set any of them
+        on anyone. Anyone else can only PATCH their own record, and even
+        then only the contact fields — email, phone, address,
+        postal_code, city, province, emergency_contact — not
+        first_name/last_name/national_id/birth_date/gender, which get
+        the whole request rejected with 403 restricted_fields instead of
+        being silently dropped.
       type: object
       properties:
-        first_name: { type: string }
-        last_name: { type: string }
+        first_name: { type: string, description: "Admin-only to change." }
+        last_name: { type: string, description: "Admin-only to change." }
         email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
-        national_id: { type: string, nullable: true }
-        birth_date: { type: string, format: date, nullable: true }
-        gender: { $ref: "#/components/schemas/Gender" }
+        national_id: { type: string, nullable: true, description: "Admin-only to change." }
+        birth_date: { type: string, format: date, nullable: true, description: "Admin-only to change." }
+        gender: { allOf: [{ $ref: "#/components/schemas/Gender" }], description: "Admin-only to change." }
         phone: { type: string, nullable: true, description: "One or more numbers, space-separated — see the User schema." }
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }

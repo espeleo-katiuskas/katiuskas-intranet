@@ -94,9 +94,12 @@ type CreateInput struct {
 }
 
 // UpdateInput covers every personal-data field, including ones that also
-// have identity/uniqueness weight (email, national ID). The API applies the
-// same permission rule to all of them: admin/board can edit anyone, a
-// member can only edit their own record — there's no per-field split.
+// have identity/uniqueness weight (email, national ID). Only admin can
+// set every field on anyone; a person editing their own record (the
+// only other case the handler allows at all) is restricted to the
+// contact fields — Email, Phone, Address, PostalCode, City, Province,
+// EmergencyContact — enforced in Handler.update, not here, since it's a
+// permission concern rather than a data-shape one.
 type UpdateInput struct {
 	FirstName        *string    `json:"first_name"`
 	LastName         *string    `json:"last_name"`
@@ -119,4 +122,33 @@ type DirectoryEntry struct {
 	ID        int64  `json:"id"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
+}
+
+// MemberListing is what GET /users returns to a caller who's a plain
+// member (not admin or board): no DNI, address, contact info, or
+// anything else that isn't already effectively public knowledge inside
+// the club — just enough to see who's a socio, since when, and to whom.
+type MemberListing struct {
+	ID                  int64      `json:"id"`
+	FirstName           string     `json:"first_name"`
+	LastName            string     `json:"last_name"`
+	Gender              *Gender    `json:"gender,omitempty"`
+	MembershipNumber    *int       `json:"membership_number,omitempty"`
+	MembershipStartDate *time.Time `json:"membership_start_date,omitempty"`
+	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
+}
+
+// ForMemberListing narrows a full User down to what MemberListing
+// exposes — used by Handler.list so the restriction lives in one place
+// rather than being reimplemented at every call site.
+func (u User) ForMemberListing() MemberListing {
+	return MemberListing{
+		ID:                  u.ID,
+		FirstName:           u.FirstName,
+		LastName:            u.LastName,
+		Gender:              u.Gender,
+		MembershipNumber:    u.MembershipNumber,
+		MembershipStartDate: u.MembershipStartDate,
+		MembershipEndDate:   u.MembershipEndDate,
+	}
 }

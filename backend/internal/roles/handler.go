@@ -19,13 +19,16 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 	return &Handler{service: service, authenticator: authenticator}
 }
 
+// Assigning or revoking a role is data about a person, same as their
+// profile fields — board can list the catalog (read-only) but not touch
+// who holds what.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/roles", h.authenticator.Protect(h.list, "admin", "board"))
 	mux.Handle("POST /api/v1/roles", h.authenticator.Protect(h.create, "admin"))
 	mux.Handle("DELETE /api/v1/roles/{id}", h.authenticator.Protect(h.delete, "admin"))
 
-	mux.Handle("POST /api/v1/users/{userID}/roles", h.authenticator.Protect(h.assign, "admin", "board"))
-	mux.Handle("DELETE /api/v1/users/{userID}/roles/{roleID}", h.authenticator.Protect(h.remove, "admin", "board"))
+	mux.Handle("POST /api/v1/users/{userID}/roles", h.authenticator.Protect(h.assign, "admin"))
+	mux.Handle("DELETE /api/v1/users/{userID}/roles/{roleID}", h.authenticator.Protect(h.remove, "admin"))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
