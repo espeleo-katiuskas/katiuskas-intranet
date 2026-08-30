@@ -81,13 +81,19 @@ func TestHandlerCreateItemRequiresAdminOrBoard(t *testing.T) {
 	}
 }
 
-func TestHandlerTransactionsAllowMaterialRoleButNotPlainMember(t *testing.T) {
+// The API-wide baseline (see auth.Protect) requires admin/board/member
+// on every route, on top of whatever else that route requires — so
+// "material" alone, without also being a current member (or admin/
+// board), isn't enough for the material endpoints either.
+func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardUser := testutil.InsertUser(t, tx, "", false)
-	materialUser := testutil.InsertUser(t, tx, "", false)
+	materialOnlyUser := testutil.InsertUser(t, tx, "", false)
+	materialMemberUser := testutil.InsertUser(t, tx, "", false)
 	memberUser := testutil.InsertUser(t, tx, "", false)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	materialToken := tokenFor(t, authn, materialUser.ID, "material")
+	materialOnlyToken := tokenFor(t, authn, materialOnlyUser.ID, "material")
+	materialMemberToken := tokenFor(t, authn, materialMemberUser.ID, "material", "member")
 	memberToken := tokenFor(t, authn, memberUser.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{"name": "Casco", "total_quantity": 5})
@@ -107,9 +113,12 @@ func TestHandlerTransactionsAllowMaterialRoleButNotPlainMember(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", memberToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from creating a transaction, got %d", rec.Code)
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", materialToken, body)
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", materialOnlyToken, body); rec.Code != http.StatusForbidden {
+		t.Errorf("expected \"material\" alone (no admin/board/member) to be forbidden, got %d", rec.Code)
+	}
+	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", materialMemberToken, body)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected the material role to create a transaction, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected material+member to create a transaction, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var txn inventory.Transaction
@@ -120,8 +129,8 @@ func TestHandlerTransactionsAllowMaterialRoleButNotPlainMember(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, returnPath, memberToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from returning a transaction, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPatch, returnPath, materialToken, nil); rec.Code != http.StatusOK {
-		t.Errorf("expected the material role to register a return, got %d: %s", rec.Code, rec.Body.String())
+	if rec := doRequest(mux, http.MethodPatch, returnPath, materialMemberToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected material+member to register a return, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

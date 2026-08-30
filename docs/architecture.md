@@ -83,6 +83,14 @@ y un paquete por recurso de dominio (`users`, `roles`, `memberships`, `activitie
 `handler.go`. El dominio no depende de `net/http`; el handler es la única capa que sabe
 que existe HTTP.
 
+`auth.Authenticator.Protect`, el punto único por el que cada ruta se registra, exige
+siempre tener al menos uno de los roles `admin`, `board` o `member` — un suelo que se
+aplica *además* de los roles concretos que pida esa ruta, no un valor por defecto que
+esos roles sustituyan. Alguien con solo, por ejemplo, `material` (sin ser también
+admin, board o socio activo) no puede usar el API en absoluto, ni siquiera las rutas
+de material. Como `member` es automático (se calcula de tener una alta activa ahora
+mismo), esto también corta el acceso en el momento en que alguien deja de ser socio.
+
 Sesión: JWT de acceso de vida corta (15 min) + refresh token opaco persistido (hash
 SHA-256, no el token en claro) y revocable — pensado para que un cliente de terminal
 pueda mantener sesión sin cookies de navegador. Empezarla requiere primero un enlace de

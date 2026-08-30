@@ -169,14 +169,44 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 		}
 	})
 
-	t.Run("no roles required means any authenticated user passes", func(t *testing.T) {
+	t.Run("no extra roles required still needs a baseline role", func(t *testing.T) {
 		open := a.Protect(ok)
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("Authorization", "Bearer "+memberToken)
 		rec := httptest.NewRecorder()
 		open.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
-			t.Errorf("expected 200, got %d", rec.Code)
+			t.Errorf("expected a baseline role (member) to pass, got %d", rec.Code)
+		}
+	})
+
+	t.Run("baseline applies even without a token role outside it", func(t *testing.T) {
+		open := a.Protect(ok)
+		outsiderToken, err := a.IssueAccessToken(3, []string{"former_member"})
+		if err != nil {
+			t.Fatalf("issue token: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer "+outsiderToken)
+		rec := httptest.NewRecorder()
+		open.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for a role outside admin/board/member, got %d", rec.Code)
+		}
+	})
+
+	t.Run("baseline applies on top of a route's own specific roles", func(t *testing.T) {
+		materialToken, err := a.IssueAccessToken(4, []string{"material"})
+		if err != nil {
+			t.Fatalf("issue token: %v", err)
+		}
+		materialOnly := a.Protect(ok, "material")
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer "+materialToken)
+		rec := httptest.NewRecorder()
+		materialOnly.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403: holding \"material\" alone isn't enough without admin/board/member too, got %d", rec.Code)
 		}
 	})
 }

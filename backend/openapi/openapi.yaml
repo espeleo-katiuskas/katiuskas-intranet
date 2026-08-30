@@ -5,6 +5,16 @@ info:
   description: >
     REST API for the club intranet. Consumed by the web frontend today and
     intended for a future mobile app and terminal client as well.
+
+    Every endpoint below that requires bearerAuth requires the caller to
+    hold at least one of admin, board, or member — this is a floor that
+    applies on top of whatever more specific roles an endpoint's own
+    description calls out, not a default that gets overridden by them.
+    Someone holding only a role outside that set (e.g. "material" with
+    no admin/board/member) is refused everywhere, including the
+    endpoints that role would otherwise unlock. Since "member" is itself
+    computed from an active membership period, this also means access is
+    cut off automatically the moment someone's membership lapses.
 servers:
   - url: /api/v1
 
