@@ -3,6 +3,7 @@ import {
   logout,
   applyRoleVisibility,
   currentUser,
+  hasAnyRole,
   apiFetch,
   formatDate,
 } from './api.js';
@@ -12,6 +13,7 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
+const isAdmin = hasAnyRole(user, ['admin']);
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');
@@ -50,6 +52,19 @@ async function loadProfile() {
     editForm.city.value = profile.city ?? '';
     editForm.province.value = profile.province ?? '';
     editForm.emergency_contact.value = profile.emergency_contact ?? '';
+
+    // Only admin can change name, DNI, or birth date — everyone else
+    // can see their own, but self-service edits are limited to contact
+    // fields (see users.UpdateInput). Disabling (not hiding) them keeps
+    // the values visible while excluding them from the submitted form —
+    // a disabled field is never part of FormData.
+    if (!isAdmin) {
+      editForm.first_name.disabled = true;
+      editForm.last_name.disabled = true;
+      editForm.national_id.disabled = true;
+      editForm.birth_date.disabled = true;
+      document.getElementById('restricted-fields-hint').hidden = false;
+    }
 
     const memberships = await apiFetch(`/users/${user.id}/memberships`);
     const tableBody = document.getElementById('memberships-table-body');

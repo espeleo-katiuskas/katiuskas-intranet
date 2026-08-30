@@ -14,11 +14,12 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
+// isAdmin means "full read access" (admin or board) — a plain member
+// still gets this page, but with far fewer fields (see MEMBER_COLUMNS/
+// MEMBER_FILTERS) and none of the admin/board management UI, which
+// applyRoleVisibility() already strips via each element's data-roles.
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
-if (!isAdmin) {
-  window.location.href = '/';
-}
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');
@@ -81,21 +82,26 @@ async function loadRoles() {
   }
 }
 
-document.getElementById('roles-table-body').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-delete-role]');
-  if (!button) return;
-  if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
+// The whole "Roles" section has data-roles="admin"/"admin,board" in the
+// markup, so applyRoleVisibility() removes it from the DOM entirely for
+// a plain member — nothing here to wire up in that case.
+if (isAdmin) {
+  document.getElementById('roles-table-body').addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-delete-role]');
+    if (!button) return;
+    if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
 
-  button.disabled = true;
-  try {
-    await apiFetch(`/roles/${button.dataset.deleteRole}`, { method: 'DELETE' });
-    showFeedback('Rol borrado.');
-    await loadRoles();
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
-  }
-});
+    button.disabled = true;
+    try {
+      await apiFetch(`/roles/${button.dataset.deleteRole}`, { method: 'DELETE' });
+      showFeedback('Rol borrado.');
+      await loadRoles();
+    } catch (err) {
+      button.disabled = false;
+      showError(err.message);
+    }
+  });
+}
 
 if (isRealAdmin) {
   const newRolePanel = document.getElementById('new-role-panel');
@@ -219,7 +225,7 @@ const MEMBERSHIP_STATUS_ORDER = ['active', 'on_leave', 'former', 'none'];
 // whatever happens to be loaded) so the filter UI can render before the
 // data even arrives, and every value starts checked so filtering opens
 // as a no-op.
-const FILTERS = [
+const FULL_FILTERS = [
   {
     key: 'gender',
     label: 'Género',
@@ -239,6 +245,32 @@ const FILTERS = [
     value: (p) => categoryFor(p) ?? 'Sin categoría',
   },
 ];
+
+// GET /users only gives a plain member first_name/last_name/gender/
+// membership_number/membership_start_date/membership_end_date (see
+// users.MemberListing) — no on_leave or birth_date to derive "baja
+// temporal" or "categoría" from, so their filters stick to what's
+// actually there.
+const MEMBER_FILTERS = [
+  {
+    key: 'gender',
+    label: 'Género',
+    options: ['Masculino', 'Femenino', 'Sin especificar'],
+    value: (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : 'Sin especificar'),
+  },
+  {
+    key: 'membership_status',
+    label: 'Tipo de socio',
+    options: ['Activo', 'Ex-socio', 'Nunca ha sido socio'],
+    value: (p) => {
+      if (!p.membership_start_date) return 'Nunca ha sido socio';
+      if (p.membership_end_date) return 'Ex-socio';
+      return 'Activo';
+    },
+  },
+];
+
+const FILTERS = isAdmin ? FULL_FILTERS : MEMBER_FILTERS;
 
 const activeFilterValues = Object.fromEntries(FILTERS.map((f) => [f.key, new Set(f.options)]));
 
@@ -278,7 +310,7 @@ function filteredPeople() {
   return people.filter((p) => FILTERS.every((f) => activeFilterValues[f.key].has(f.value(p))));
 }
 
-const COLUMNS = [
+const FULL_COLUMNS = [
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('email', 'Email', (p) => p.email), default: false },
@@ -318,6 +350,20 @@ const COLUMNS = [
   },
   { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false },
 ];
+
+// GET /users only sends a plain member these six fields for anyone but
+// themselves (see users.MemberListing) — the rest of FULL_COLUMNS would
+// just render as "—" for every row, so they're not offered at all.
+const MEMBER_COLUMNS = [
+  { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
+  { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
+  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: true },
+  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
+  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
+  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: true },
+];
+
+const COLUMNS = isAdmin ? FULL_COLUMNS : MEMBER_COLUMNS;
 const columnsByKey = Object.fromEntries(COLUMNS.map((c) => [c.key, c]));
 
 let visibleColumns = new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
@@ -457,11 +503,18 @@ function renderUsersTable() {
   tableBody.innerHTML = sorted.map(renderUserRow).join('');
 }
 
-document.getElementById('users-table-body').addEventListener('click', (event) => {
-  const row = event.target.closest('tr[data-person-id]');
-  if (!row) return;
-  window.location.href = `/member?id=${row.dataset.personId}`;
-});
+// /member?id=… is still admin/board-only — a plain member's row click
+// wouldn't go anywhere but back here, so it's not wired up at all, and
+// the row-hover affordance is removed to match.
+if (isAdmin) {
+  document.getElementById('users-table-body').addEventListener('click', (event) => {
+    const row = event.target.closest('tr[data-person-id]');
+    if (!row) return;
+    window.location.href = `/member?id=${row.dataset.personId}`;
+  });
+} else {
+  document.getElementById('users-table-body').classList.remove('clickable-rows');
+}
 
 async function loadUsers() {
   const tableBody = document.getElementById('users-table-body');
@@ -474,53 +527,94 @@ async function loadUsers() {
   }
 }
 
-const newPersonPanel = document.getElementById('new-person-panel');
-const newPersonForm = document.getElementById('new-person-form');
+const positionLabels = {
+  president: 'Presidente',
+  vice_president: 'Vicepresidente',
+  secretary: 'Secretario',
+  treasurer: 'Tesorero',
+  member_at_large: 'Vocal',
+};
 
-document.getElementById('toggle-new-person').addEventListener('click', () => {
-  newPersonPanel.hidden = !newPersonPanel.hidden;
-});
-
-document.getElementById('cancel-new-person').addEventListener('click', () => {
-  newPersonForm.reset();
-  newPersonPanel.hidden = true;
-});
-
-newPersonForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const formData = new FormData(newPersonForm);
-  const optional = (key) => formData.get(key)?.toString().trim() || null;
-
-  const body = {
-    first_name: formData.get('first_name'),
-    last_name: formData.get('last_name'),
-    email: formData.get('email'),
-    phone: optional('phone'),
-    national_id: optional('national_id'),
-    birth_date: optional('birth_date'),
-    gender: optional('gender'),
-    address: optional('address'),
-    postal_code: optional('postal_code'),
-    city: optional('city'),
-    province: optional('province'),
-    emergency_contact: optional('emergency_contact'),
-    role_names: formData.getAll('role_names'),
-  };
-
-  const submitButton = newPersonForm.querySelector('button[type="submit"]');
-  submitButton.disabled = true;
+// GET /board-members is open to anyone with a baseline role (admin,
+// board, or member) — anyone can see who's currently on the Junta
+// Directiva and how to reach them.
+async function loadBoardMembers() {
+  const tableBody = document.getElementById('board-table-body');
   try {
-    await apiFetch('/users', { method: 'POST', body: JSON.stringify(body) });
-    showFeedback('Persona creada.');
+    const boardMembers = await apiFetch('/board-members');
+    tableBody.innerHTML = boardMembers.length
+      ? boardMembers
+          .map((b) => `
+            <tr>
+              <td>${escapeHtml(b.first_name)}</td>
+              <td>${escapeHtml(b.last_name)}</td>
+              <td>${escapeHtml(positionLabels[b.position] ?? b.position)}</td>
+              <td>${escapeHtml(b.phone ?? '')}</td>
+              <td>${escapeHtml(b.email ?? '')}</td>
+            </tr>
+          `)
+          .join('')
+      : '<tr><td colspan="5">Ahora mismo no hay nadie en la Junta Directiva.</td></tr>';
+  } catch {
+    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar la Junta Directiva.</td></tr>';
+  }
+}
+
+// "+ Nueva persona" has data-roles="admin" in the markup — POST /users
+// is admin-only now, so there's nothing to wire up for anyone else
+// (applyRoleVisibility already removed the button, panel, and form).
+if (isRealAdmin) {
+  const newPersonPanel = document.getElementById('new-person-panel');
+  const newPersonForm = document.getElementById('new-person-form');
+
+  document.getElementById('toggle-new-person').addEventListener('click', () => {
+    newPersonPanel.hidden = !newPersonPanel.hidden;
+  });
+
+  document.getElementById('cancel-new-person').addEventListener('click', () => {
     newPersonForm.reset();
     newPersonPanel.hidden = true;
-    await loadUsers();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    submitButton.disabled = false;
-  }
-});
+  });
 
-await loadRoles();
+  newPersonForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(newPersonForm);
+    const optional = (key) => formData.get(key)?.toString().trim() || null;
+
+    const body = {
+      first_name: formData.get('first_name'),
+      last_name: formData.get('last_name'),
+      email: formData.get('email'),
+      phone: optional('phone'),
+      national_id: optional('national_id'),
+      birth_date: optional('birth_date'),
+      gender: optional('gender'),
+      address: optional('address'),
+      postal_code: optional('postal_code'),
+      city: optional('city'),
+      province: optional('province'),
+      emergency_contact: optional('emergency_contact'),
+      role_names: formData.getAll('role_names'),
+    };
+
+    const submitButton = newPersonForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await apiFetch('/users', { method: 'POST', body: JSON.stringify(body) });
+      showFeedback('Persona creada.');
+      newPersonForm.reset();
+      newPersonPanel.hidden = true;
+      await loadUsers();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+}
+
+if (isAdmin) {
+  await loadRoles();
+}
 loadUsers();
+loadBoardMembers();

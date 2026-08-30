@@ -11,7 +11,7 @@
   <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
   <nav class="main-nav">
     <a href="/">Inicio</a>
-    <a href="/members" class="active" data-roles="admin,board">Socios</a>
+    <a href="/members" class="active" data-roles="admin,board,member">Socios</a>
     <a href="/activities">Actividades</a>
     <a href="/inventory">Material</a>
     <a href="/profile">Mi perfil</a>
@@ -64,9 +64,9 @@
 
   <div class="section-header">
     <h2>Todas las personas</h2>
-    <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small">+ Nueva persona</button>
+    <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small" data-roles="admin">+ Nueva persona</button>
   </div>
-  <div id="new-person-panel" class="panel" hidden>
+  <div id="new-person-panel" class="panel" hidden data-roles="admin">
     <h3>Nueva persona</h3>
     <p class="hint">
       No hay contraseñas: para entrar, pedirá un enlace de un solo uso desde la página
@@ -138,7 +138,7 @@
       </div>
     </form>
   </div>
-  <p class="hint">
+  <p class="hint" data-roles="admin,board">
     Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
     último acceso, sus roles y su historial de altas y bajas se gestionan ahí.
   </p>
@@ -150,6 +150,16 @@
         <tr id="users-table-head"></tr>
       </thead>
       <tbody id="users-table-body" class="clickable-rows"></tbody>
+    </table>
+  </div>
+
+  <h2>Junta Directiva</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>Apellidos</th><th>Cargo</th><th>Teléfono</th><th>Email</th></tr>
+      </thead>
+      <tbody id="board-table-body"></tbody>
     </table>
   </div>
 </main>

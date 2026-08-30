@@ -11,7 +11,7 @@
   <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
   <nav class="main-nav">
     <a href="/">Inicio</a>
-    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/members" data-roles="admin,board,member">Socios</a>
     <a href="/activities">Actividades</a>
     <a href="/inventory">Material</a>
     <a href="/profile">Mi perfil</a>
@@ -35,6 +35,9 @@
 
   <div class="panel">
     <h3>Datos</h3>
+    <p class="hint" id="board-readonly-hint" hidden>
+      Puedes ver los datos de los socios, pero solo la administración puede modificarlos.
+    </p>
     <form id="edit-member-form">
       <div class="field-grid">
         <div class="field">
@@ -104,18 +107,18 @@
 
   <div class="section-header">
     <h2>Altas y bajas</h2>
-    <span>
+    <span data-roles="admin">
       <button id="start-membership" type="button" class="btn btn-secondary btn-small">Dar de alta</button>
       <button id="add-license" type="button" class="btn btn-secondary btn-small">+ Licencia</button>
       <button id="add-board-term" type="button" class="btn btn-secondary btn-small">+ Junta directiva</button>
     </span>
   </div>
-  <p class="hint">
+  <p class="hint" data-roles="admin">
     Una licencia federativa solo se le puede asignar a quien tenga ahora mismo un alta
     activa, y es válida desde su fecha de obtención hasta el 31 de diciembre de ese
     mismo año.
   </p>
-  <div class="edit-fields" id="add-membership-panel" hidden>
+  <div class="edit-fields" id="add-membership-panel" hidden data-roles="admin">
     <div class="field-grid">
       <div class="field">
         <label for="add-membership-start-date">Fecha de alta</label>
@@ -124,7 +127,7 @@
     </div>
     <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
   </div>
-  <div class="edit-fields" id="add-license-panel" hidden>
+  <div class="edit-fields" id="add-license-panel" hidden data-roles="admin">
     <div class="field-grid">
       <div class="field">
         <label for="add-license-type">Tipo de licencia</label>
@@ -137,7 +140,7 @@
     </div>
     <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
   </div>
-  <div class="edit-fields" id="add-board-panel" hidden>
+  <div class="edit-fields" id="add-board-panel" hidden data-roles="admin">
     <div class="field-grid">
       <div class="field">
         <label for="add-board-position">Cargo</label>
@@ -178,11 +181,11 @@
     </table>
   </div>
 
-  <div class="section-header">
+  <div class="section-header" data-roles="admin">
     <h2>Zona de peligro</h2>
   </div>
-  <p class="hint">Borrar a esta persona es irreversible: se pierde su ficha, su acceso y su historial de socio.</p>
-  <button id="delete-member" type="button" class="btn btn-danger">Borrar persona</button>
+  <p class="hint" data-roles="admin">Borrar a esta persona es irreversible: se pierde su ficha, su acceso y su historial de socio.</p>
+  <button id="delete-member" type="button" class="btn btn-danger" data-roles="admin">Borrar persona</button>
 </main>
 <script type="module" src="js/member.js"></script>
 <footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>

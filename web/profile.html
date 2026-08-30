@@ -11,7 +11,7 @@
   <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
   <nav class="main-nav">
     <a href="/">Inicio</a>
-    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/members" data-roles="admin,board,member">Socios</a>
     <a href="/activities">Actividades</a>
     <a href="/inventory">Material</a>
     <a href="/profile" class="active">Mi perfil</a>
@@ -28,6 +28,9 @@
   <div class="panel">
     <h3>Mis datos</h3>
     <p class="hint">Mantén tus datos al día: el club los usa para el registro de socios y, si hace falta, en caso de emergencia.</p>
+    <p class="hint" id="restricted-fields-hint" hidden>
+      Nombre, apellidos, DNI y fecha de nacimiento solo puede cambiarlos la administración.
+    </p>
     <form id="edit-profile-form">
       <div class="field-grid">
         <div class="field">

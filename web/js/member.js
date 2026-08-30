@@ -48,13 +48,13 @@ function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
 
-// "member"/"former_member" are computed from membership history and
-// can't be granted or revoked by hand at all. Anything else, any
-// admin/board caller can manage except "admin", which only an admin can
-// grant or revoke (avoids a board account minting new admins).
+// "member"/"former_member"/"board" are computed from membership/board
+// history and can't be granted or revoked by hand at all. Everything
+// else is admin-only now — board lost the ability to modify a person's
+// data, role assignment included.
 function canManageRole(roleName) {
   if (rolesByName[roleName]?.is_automatic) return false;
-  return roleName === 'admin' ? isRealAdmin : isAdmin;
+  return isRealAdmin;
 }
 
 let allRoles = [];
@@ -137,6 +137,19 @@ document.getElementById('member-role-add').addEventListener('click', async (even
 });
 
 const editForm = document.getElementById('edit-member-form');
+
+// Board can still see every field here (loadMember populates them
+// regardless), but PATCH /users/{id} now only accepts a self-edit, and
+// board is never "self" on someone else's page — so there's nothing a
+// submit could do here but fail. Disabling the whole form instead of
+// just hiding the submit button keeps the fields visibly read-only
+// rather than looking editable and then erroring out.
+if (isAdmin && !isRealAdmin) {
+  for (const field of editForm.elements) {
+    field.disabled = true;
+  }
+  document.getElementById('board-readonly-hint').hidden = false;
+}
 
 async function loadMember() {
   try {
@@ -358,19 +371,22 @@ function renderTimelineEvent(event) {
   let actions = '';
   let panel = '';
 
-  if (event.type === 'alta') {
+  // These buttons are rendered fresh on every timeline reload, so
+  // data-roles in static HTML can't reach them — gating admin-only
+  // actions here is the only place it can happen.
+  if (isRealAdmin && event.type === 'alta') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${event.membership.id}">Editar</button>
       <button type="button" class="btn btn-secondary btn-small" data-toggle-add-leave="${event.membership.id}">+ Baja temporal</button>
     `;
     panel = renderMembershipEditPanel(event.membership) + renderLeaveAddPanel(event.membership.id);
-  } else if (event.type === 'leave_start') {
+  } else if (isRealAdmin && event.type === 'leave_start') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${event.leave.id}">Editar</button>
       <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
     `;
     panel = renderLeaveEditPanel(event.leave);
-  } else if (event.type === 'board_start') {
+  } else if (isRealAdmin && event.type === 'board_start') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-board="${event.boardMember.id}">Editar</button>
     `;
@@ -400,40 +416,46 @@ async function loadTimeline() {
   }
 }
 
-document.getElementById('start-membership').addEventListener('click', () => {
-  const panel = document.getElementById('add-membership-panel');
-  const input = document.getElementById('add-membership-start-date');
-  if (panel.hidden && !input.value) {
-    input.value = new Date().toISOString().slice(0, 10);
-  }
-  panel.hidden = !panel.hidden;
-});
+// "Dar de alta"/"+ Licencia"/"+ Junta directiva" and their panels all
+// have data-roles="admin" in the markup — POST memberships/licenses/
+// board-members is admin-only now, so applyRoleVisibility() already
+// removed these elements for board; nothing to wire up in that case.
+if (isRealAdmin) {
+  document.getElementById('start-membership').addEventListener('click', () => {
+    const panel = document.getElementById('add-membership-panel');
+    const input = document.getElementById('add-membership-start-date');
+    if (panel.hidden && !input.value) {
+      input.value = new Date().toISOString().slice(0, 10);
+    }
+    panel.hidden = !panel.hidden;
+  });
 
-document.getElementById('save-add-membership').addEventListener('click', async () => {
-  const input = document.getElementById('add-membership-start-date');
-  if (!input.value) {
-    showError('Indica la fecha de alta.');
-    return;
-  }
+  document.getElementById('save-add-membership').addEventListener('click', async () => {
+    const input = document.getElementById('add-membership-start-date');
+    if (!input.value) {
+      showError('Indica la fecha de alta.');
+      return;
+    }
 
-  const button = document.getElementById('save-add-membership');
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${memberId}/memberships`, {
-      method: 'POST',
-      body: JSON.stringify({ start_date: input.value }),
-    });
-    showFeedback('Alta registrada.');
-    document.getElementById('add-membership-panel').hidden = true;
-    input.value = '';
-    await loadTimeline();
-    await loadMember();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
-  }
-});
+    const button = document.getElementById('save-add-membership');
+    button.disabled = true;
+    try {
+      await apiFetch(`/users/${memberId}/memberships`, {
+        method: 'POST',
+        body: JSON.stringify({ start_date: input.value }),
+      });
+      showFeedback('Alta registrada.');
+      document.getElementById('add-membership-panel').hidden = true;
+      input.value = '';
+      await loadTimeline();
+      await loadMember();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
 
 document.getElementById('timeline-list').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-edit-membership]');
@@ -577,18 +599,22 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
   }
 });
 
-document.getElementById('delete-member').addEventListener('click', async () => {
-  if (!confirm('¿Borrar a esta persona? Se perderá su ficha, su acceso y su historial de socio.')) return;
-  const button = document.getElementById('delete-member');
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${memberId}`, { method: 'DELETE' });
-    window.location.href = '/members';
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
-  }
-});
+// "Borrar persona" has data-roles="admin" — DELETE /users/{id} is
+// admin-only now, so board never has this button to begin with.
+if (isRealAdmin) {
+  document.getElementById('delete-member').addEventListener('click', async () => {
+    if (!confirm('¿Borrar a esta persona? Se perderá su ficha, su acceso y su historial de socio.')) return;
+    const button = document.getElementById('delete-member');
+    button.disabled = true;
+    try {
+      await apiFetch(`/users/${memberId}`, { method: 'DELETE' });
+      window.location.href = '/members';
+    } catch (err) {
+      button.disabled = false;
+      showError(err.message);
+    }
+  });
+}
 
 // Impersonating yourself is rejected by the API anyway, but there's no
 // reason to even offer it on your own page.
@@ -684,82 +710,86 @@ async function loadTransactions() {
 
 // A federative license shows up as just another event on the same
 // altas-y-bajas timeline (see buildTimelineEvents) rather than in a
-// section of its own.
-document.getElementById('add-license').addEventListener('click', () => {
-  const panel = document.getElementById('add-license-panel');
-  const dateInput = document.getElementById('add-license-issued-date');
-  if (panel.hidden && !dateInput.value) {
-    dateInput.value = new Date().toISOString().slice(0, 10);
-  }
-  panel.hidden = !panel.hidden;
-});
+// section of its own. Both this and the board-term block below have
+// data-roles="admin" on their buttons/panels — POST licenses/
+// board-members is admin-only now, so board never has these elements.
+if (isRealAdmin) {
+  document.getElementById('add-license').addEventListener('click', () => {
+    const panel = document.getElementById('add-license-panel');
+    const dateInput = document.getElementById('add-license-issued-date');
+    if (panel.hidden && !dateInput.value) {
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+    panel.hidden = !panel.hidden;
+  });
 
-document.getElementById('save-add-license').addEventListener('click', async () => {
-  const typeInput = document.getElementById('add-license-type');
-  const dateInput = document.getElementById('add-license-issued-date');
-  const type = typeInput.value.trim();
-  if (!type || !dateInput.value) {
-    showError('Indica el tipo de licencia y la fecha de obtención.');
-    return;
-  }
+  document.getElementById('save-add-license').addEventListener('click', async () => {
+    const typeInput = document.getElementById('add-license-type');
+    const dateInput = document.getElementById('add-license-issued-date');
+    const type = typeInput.value.trim();
+    if (!type || !dateInput.value) {
+      showError('Indica el tipo de licencia y la fecha de obtención.');
+      return;
+    }
 
-  const button = document.getElementById('save-add-license');
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${memberId}/licenses`, {
-      method: 'POST',
-      body: JSON.stringify({ type, issued_date: dateInput.value }),
-    });
-    showFeedback('Licencia registrada.');
-    document.getElementById('add-license-panel').hidden = true;
-    typeInput.value = '';
-    dateInput.value = '';
-    await loadTimeline();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
-  }
-});
+    const button = document.getElementById('save-add-license');
+    button.disabled = true;
+    try {
+      await apiFetch(`/users/${memberId}/licenses`, {
+        method: 'POST',
+        body: JSON.stringify({ type, issued_date: dateInput.value }),
+      });
+      showFeedback('Licencia registrada.');
+      document.getElementById('add-license-panel').hidden = true;
+      typeInput.value = '';
+      dateInput.value = '';
+      await loadTimeline();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
 
-// A board term is also just another event on the same timeline, and
-// holding one is what the automatic "board" role is computed from (see
-// docs/architecture.md) — there's no separate way to grant it.
-document.getElementById('add-board-term').addEventListener('click', () => {
-  const panel = document.getElementById('add-board-panel');
-  const dateInput = document.getElementById('add-board-start-date');
-  if (panel.hidden && !dateInput.value) {
-    dateInput.value = new Date().toISOString().slice(0, 10);
-  }
-  panel.hidden = !panel.hidden;
-});
+  // A board term is also just another event on the same timeline, and
+  // holding one is what the automatic "board" role is computed from
+  // (see docs/architecture.md) — there's no separate way to grant it.
+  document.getElementById('add-board-term').addEventListener('click', () => {
+    const panel = document.getElementById('add-board-panel');
+    const dateInput = document.getElementById('add-board-start-date');
+    if (panel.hidden && !dateInput.value) {
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+    panel.hidden = !panel.hidden;
+  });
 
-document.getElementById('save-add-board-term').addEventListener('click', async () => {
-  const positionSelect = document.getElementById('add-board-position');
-  const dateInput = document.getElementById('add-board-start-date');
-  if (!dateInput.value) {
-    showError('Indica la fecha de inicio en la Junta Directiva.');
-    return;
-  }
+  document.getElementById('save-add-board-term').addEventListener('click', async () => {
+    const positionSelect = document.getElementById('add-board-position');
+    const dateInput = document.getElementById('add-board-start-date');
+    if (!dateInput.value) {
+      showError('Indica la fecha de inicio en la Junta Directiva.');
+      return;
+    }
 
-  const button = document.getElementById('save-add-board-term');
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${memberId}/board-members`, {
-      method: 'POST',
-      body: JSON.stringify({ position: positionSelect.value, start_date: dateInput.value }),
-    });
-    showFeedback('Cargo registrado.');
-    document.getElementById('add-board-panel').hidden = true;
-    dateInput.value = '';
-    await loadTimeline();
-    await loadMember();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
-  }
-});
+    const button = document.getElementById('save-add-board-term');
+    button.disabled = true;
+    try {
+      await apiFetch(`/users/${memberId}/board-members`, {
+        method: 'POST',
+        body: JSON.stringify({ position: positionSelect.value, start_date: dateInput.value }),
+      });
+      showFeedback('Cargo registrado.');
+      document.getElementById('add-board-panel').hidden = true;
+      dateInput.value = '';
+      await loadTimeline();
+      await loadMember();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
 
 await loadRolesCatalog();
 loadMember();
