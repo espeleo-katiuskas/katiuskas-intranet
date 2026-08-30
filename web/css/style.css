@@ -132,6 +132,24 @@ th {
   letter-spacing: 0.04em;
 }
 
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  color: var(--accent);
+}
+
+#users-table-body tr {
+  cursor: pointer;
+}
+
+#users-table-body tr:hover {
+  background: var(--surface-muted);
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

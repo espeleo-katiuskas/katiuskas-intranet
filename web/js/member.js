@@ -14,7 +14,9 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 
 const viewer = currentUser();
-if (!hasAnyRole(viewer, ['admin', 'board'])) {
+const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
+const isRealAdmin = hasAnyRole(viewer, ['admin']);
+if (!isAdmin) {
   window.location.href = '/';
 }
 
@@ -45,6 +47,94 @@ function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
 
+// "member"/"former_member" are computed from membership history and
+// can't be granted or revoked by hand at all. Anything else, any
+// admin/board caller can manage except "admin", which only an admin can
+// grant or revoke (avoids a board account minting new admins).
+function canManageRole(roleName) {
+  if (rolesByName[roleName]?.is_automatic) return false;
+  return roleName === 'admin' ? isRealAdmin : isAdmin;
+}
+
+let allRoles = [];
+let rolesByName = {};
+
+async function loadRolesCatalog() {
+  try {
+    allRoles = await apiFetch('/roles');
+    rolesByName = Object.fromEntries(allRoles.map((role) => [role.name, role]));
+  } catch {
+    allRoles = [];
+    rolesByName = {};
+  }
+}
+
+function renderRoleBadges(person) {
+  if (person.roles.length === 0) {
+    return '<p>Sin roles asignados.</p>';
+  }
+  return person.roles
+    .map((name) => {
+      const label = escapeHtml(roleLabel(name));
+      if (!canManageRole(name)) {
+        return `<span class="badge">${label}</span>`;
+      }
+      const roleId = rolesByName[name]?.id;
+      return `<span class="badge-removable">${label}<button type="button" data-remove-role="${roleId}" title="Quitar rol">×</button></span>`;
+    })
+    .join('');
+}
+
+function renderRoleAddControl(person) {
+  const assignable = allRoles.filter((role) => !person.roles.includes(role.name) && canManageRole(role.name));
+  if (assignable.length === 0) {
+    return '';
+  }
+  const options = assignable
+    .map((role) => `<option value="${role.id}">${escapeHtml(roleLabel(role.name))}</option>`)
+    .join('');
+  return `
+    <div class="role-add-row">
+      <select id="role-select">${options}</select>
+      <button type="button" id="add-role" class="btn btn-secondary btn-small">+ Rol</button>
+    </div>
+  `;
+}
+
+function renderRoles(person) {
+  document.getElementById('member-roles-list').innerHTML = renderRoleBadges(person);
+  document.getElementById('member-role-add').innerHTML = renderRoleAddControl(person);
+}
+
+document.getElementById('member-roles-list').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-remove-role]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/users/${memberId}/roles/${button.dataset.removeRole}`, { method: 'DELETE' });
+    showFeedback('Rol quitado.');
+    await loadMember();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
+document.getElementById('member-role-add').addEventListener('click', async (event) => {
+  const button = event.target.closest('#add-role');
+  if (!button) return;
+  const roleId = document.getElementById('role-select').value;
+  button.disabled = true;
+  try {
+    await apiFetch(`/users/${memberId}/roles`, { method: 'POST', body: JSON.stringify({ role_id: Number(roleId) }) });
+    showFeedback('Rol añadido.');
+    await loadMember();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
 const editForm = document.getElementById('edit-member-form');
 
 async function loadMember() {
@@ -52,9 +142,10 @@ async function loadMember() {
     const person = await apiFetch(`/users/${memberId}`);
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email;
-    document.getElementById('member-roles').textContent = person.roles.length
-      ? `Roles: ${person.roles.map(roleLabel).join(', ')}`
-      : 'Sin roles asignados.';
+    document.getElementById('member-last-login').textContent = person.last_login_at
+      ? `Último acceso: ${formatDate(person.last_login_at)}${person.last_login_ip ? ` desde ${person.last_login_ip}` : ''}`
+      : 'Todavía no ha iniciado sesión.';
+    renderRoles(person);
 
     editForm.first_name.value = person.first_name;
     editForm.last_name.value = person.last_name;
@@ -103,6 +194,110 @@ editForm.addEventListener('submit', async (event) => {
     showError(err.message);
   } finally {
     submitButton.disabled = false;
+  }
+});
+
+function renderMembershipRow(m) {
+  return `
+    <div class="detail-row" data-membership-row="${m.id}">
+      <span>${escapeHtml(m.membership_number) || 'Sin número'} · ${formatDate(m.start_date)} –
+        ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
+    </div>
+    <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>N.º de socio</label>
+          <input type="text" data-membership-field="membership_number" value="${escapeHtml(m.membership_number ?? '')}">
+        </div>
+        <div class="field">
+          <label>Fecha de alta</label>
+          <input type="date" data-membership-field="start_date" value="${m.start_date.slice(0, 10)}">
+        </div>
+        <div class="field">
+          <label>Fecha de baja <span class="optional">(vacío = sigue activa)</span></label>
+          <input type="date" data-membership-field="end_date" value="${m.end_date ? m.end_date.slice(0, 10) : ''}">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-membership="${m.id}">Guardar</button>
+    </div>
+  `;
+}
+
+async function loadMemberships() {
+  const container = document.getElementById('memberships-list');
+  container.innerHTML = 'Cargando…';
+  try {
+    const history = await apiFetch(`/users/${memberId}/memberships`);
+    container.innerHTML = history.length
+      ? history.map(renderMembershipRow).join('')
+      : '<p>Todavía no ha sido socio.</p>';
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById('start-membership').addEventListener('click', async () => {
+  const startDate = prompt('Fecha de alta (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (!startDate) return;
+  const membershipNumber = prompt('Número de socio (opcional):') || null;
+
+  try {
+    await apiFetch(`/users/${memberId}/memberships`, {
+      method: 'POST',
+      body: JSON.stringify({ start_date: startDate, membership_number: membershipNumber }),
+    });
+    showFeedback('Alta registrada.');
+    await loadMemberships();
+    await loadMember();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+document.getElementById('memberships-list').addEventListener('click', async (event) => {
+  const toggleButton = event.target.closest('button[data-toggle-edit-membership]');
+  if (toggleButton) {
+    const panel = document.querySelector(`[data-edit-membership-panel="${toggleButton.dataset.toggleEditMembership}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const saveButton = event.target.closest('button[data-save-membership]');
+  if (saveButton) {
+    const membershipId = saveButton.dataset.saveMembership;
+    const panel = document.querySelector(`[data-edit-membership-panel="${membershipId}"]`);
+    const field = (name) => panel.querySelector(`[data-membership-field="${name}"]`).value;
+
+    const body = {
+      membership_number: field('membership_number').trim() || null,
+      start_date: field('start_date'),
+      end_date: field('end_date') || null,
+    };
+
+    saveButton.disabled = true;
+    try {
+      await apiFetch(`/memberships/${membershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Periodo actualizado.');
+      await loadMemberships();
+      await loadMember();
+    } catch (err) {
+      saveButton.disabled = false;
+      showError(err.message);
+    }
+  }
+});
+
+document.getElementById('delete-member').addEventListener('click', async () => {
+  if (!confirm('¿Borrar a esta persona? Se perderá su ficha, su acceso y su historial de socio.')) return;
+  const button = document.getElementById('delete-member');
+  button.disabled = true;
+  try {
+    await apiFetch(`/users/${memberId}`, { method: 'DELETE' });
+    window.location.href = '/members';
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
   }
 });
 
@@ -176,6 +371,8 @@ async function loadTransactions() {
   }
 }
 
+await loadRolesCatalog();
 loadMember();
+loadMemberships();
 loadActivities();
 loadTransactions();

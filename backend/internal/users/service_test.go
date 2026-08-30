@@ -4,16 +4,28 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
 	"katiuskas-intranet/backend/internal/users"
 )
 
 func newUsersService(t *testing.T) (*users.Service, *roles.Service) {
+	svc, roleSvc, _ := newUsersServiceWithMemberships(t)
+	return svc, roleSvc
+}
+
+// newUsersServiceWithMemberships also returns a memberships.Service built
+// on the same transaction, for tests that need to start a membership
+// period and see it reflected through users.Service.
+func newUsersServiceWithMemberships(t *testing.T) (*users.Service, *roles.Service, *memberships.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
-	return users.NewService(users.NewRepository(tx), rolesService), rolesService
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := users.NewService(users.NewRepository(tx), rolesService, membershipsService)
+	return svc, rolesService, membershipsService
 }
 
 // "member" used to be the default role assigned at creation; now it's
@@ -78,6 +90,38 @@ func TestServiceCreateWithUnknownRoleFailsButKeepsThePerson(t *testing.T) {
 	}
 	if len(found.Roles) != 0 {
 		t.Errorf("expected no roles assigned, got %v", found.Roles)
+	}
+}
+
+func TestServiceReportsLatestMembershipDates(t *testing.T) {
+	svc, _, membershipsService := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if u.MembershipStartDate != nil || u.MembershipEndDate != nil {
+		t.Errorf("expected a brand-new person to have no membership dates, got start=%v end=%v", u.MembershipStartDate, u.MembershipEndDate)
+	}
+
+	startDate, err := time.Parse("2006-01-02", "2020-01-01")
+	if err != nil {
+		t.Fatalf("parse start date: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate}); err != nil {
+		t.Fatalf("start membership: %v", err)
+	}
+
+	current, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if current.MembershipStartDate == nil || !current.MembershipStartDate.Equal(startDate) {
+		t.Errorf("expected membership_start_date %v, got %v", startDate, current.MembershipStartDate)
+	}
+	if current.MembershipEndDate != nil {
+		t.Errorf("expected a still-active membership to have no end date, got %v", current.MembershipEndDate)
 	}
 }
 

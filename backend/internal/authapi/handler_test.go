@@ -15,6 +15,7 @@ import (
 	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/authapi"
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
 	"katiuskas-intranet/backend/internal/tokens"
@@ -46,7 +47,8 @@ type testServer struct {
 func newTestServer(t *testing.T) *testServer {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
-	usersService := users.NewService(users.NewRepository(tx), rolesService)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService)
 	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
 	authenticator := auth.NewAuthenticator(tokensService)
 	mailer := &capturingMailer{}

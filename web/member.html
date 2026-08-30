@@ -22,7 +22,7 @@
   <p><a href="/members">&larr; Volver a socios</a></p>
   <h1 id="member-name">Socio</h1>
   <p class="subtitle" id="member-email"></p>
-  <p id="member-roles"></p>
+  <p id="member-last-login"></p>
 
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
@@ -82,6 +82,18 @@
     </form>
   </div>
 
+  <div class="section-header">
+    <h2>Roles</h2>
+  </div>
+  <div id="member-roles-list"></div>
+  <div id="member-role-add"></div>
+
+  <div class="section-header">
+    <h2>Altas y bajas</h2>
+    <button id="start-membership" type="button" class="btn btn-secondary btn-small">Dar de alta</button>
+  </div>
+  <div class="detail-list" id="memberships-list"></div>
+
   <h2>Actividades</h2>
   <div class="table-wrap">
     <table>
@@ -101,6 +113,12 @@
       <tbody id="transactions-table-body"></tbody>
     </table>
   </div>
+
+  <div class="section-header">
+    <h2>Zona de peligro</h2>
+  </div>
+  <p class="hint">Borrar a esta persona es irreversible: se pierde su ficha, su acceso y su historial de socio.</p>
+  <button id="delete-member" type="button" class="btn btn-danger">Borrar persona</button>
 </main>
 <script type="module" src="js/member.js"></script>
 <footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>

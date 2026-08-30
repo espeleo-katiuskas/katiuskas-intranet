@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/platform/db"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/users"
@@ -41,7 +42,8 @@ func main() {
 
 	repo := users.NewRepository(pool)
 	rolesService := roles.NewService(roles.NewRepository(pool))
-	service := users.NewService(repo, rolesService)
+	membershipsService := memberships.NewService(memberships.NewRepository(pool))
+	service := users.NewService(repo, rolesService, membershipsService)
 
 	email := getEnv("SEED_ADMIN_EMAIL", "admin@club.test")
 	phone := getEnv("SEED_ADMIN_PHONE", "600000000")

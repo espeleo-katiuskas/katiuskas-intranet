@@ -25,16 +25,6 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <h2>Socios activos</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Nombre</th><th>N.º de socio</th><th>Alta</th><th></th></tr>
-      </thead>
-      <tbody id="memberships-table-body"></tbody>
-    </table>
-  </div>
-
   <div class="section-header" data-roles="admin">
     <h2>Roles</h2>
     <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
@@ -76,10 +66,15 @@
     <h2>Todas las personas</h2>
     <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small">+ Nueva persona</button>
   </div>
+  <p class="hint">
+    Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
+    último acceso, sus roles y su historial de altas y bajas se gestionan ahí.
+  </p>
+  <div class="role-checkbox-group" id="column-toggle"></div>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Nombre</th><th>Email</th><th>Último acceso</th><th>Roles</th><th></th></tr>
+        <tr id="users-table-head"></tr>
       </thead>
       <tbody id="users-table-body"></tbody>
     </table>

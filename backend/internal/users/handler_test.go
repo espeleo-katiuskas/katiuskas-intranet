@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
 	"katiuskas-intranet/backend/internal/users"
@@ -18,7 +19,8 @@ import (
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
-	usersService := users.NewService(users.NewRepository(tx), rolesService)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()

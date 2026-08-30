@@ -4,16 +4,18 @@ import (
 	"context"
 	"time"
 
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 )
 
 type Service struct {
-	repo  *Repository
-	roles *roles.Service
+	repo        *Repository
+	roles       *roles.Service
+	memberships *memberships.Service
 }
 
-func NewService(repo *Repository, rolesService *roles.Service) *Service {
-	return &Service{repo: repo, roles: rolesService}
+func NewService(repo *Repository, rolesService *roles.Service, membershipsService *memberships.Service) *Service {
+	return &Service{repo: repo, roles: rolesService, memberships: membershipsService}
 }
 
 // Create inserts the person, then assigns any explicitly requested roles
@@ -33,7 +35,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (User, error) {
 	if err := s.roles.AssignByName(ctx, user.ID, in.RoleNames); err != nil {
 		return user, err
 	}
-	return s.withRoles(ctx, user)
+	return s.enrich(ctx, user)
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (User, error) {
@@ -41,7 +43,7 @@ func (s *Service) Get(ctx context.Context, id int64) (User, error) {
 	if err != nil {
 		return user, err
 	}
-	return s.withRoles(ctx, user)
+	return s.enrich(ctx, user)
 }
 
 func (s *Service) List(ctx context.Context, limit, offset int) ([]User, error) {
@@ -53,7 +55,7 @@ func (s *Service) List(ctx context.Context, limit, offset int) ([]User, error) {
 		return nil, err
 	}
 	for i := range list {
-		list[i], err = s.withRoles(ctx, list[i])
+		list[i], err = s.enrich(ctx, list[i])
 		if err != nil {
 			return nil, err
 		}
@@ -66,19 +68,30 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 	if err != nil {
 		return user, err
 	}
-	return s.withRoles(ctx, user)
+	return s.enrich(ctx, user)
 }
 
-// withRoles overlays the authoritative role list — roles.Service is the
-// single place that knows how to compute "member"/"former_member" from
-// membership history on top of whatever's actually stored in
-// user_roles (see roles.Repository.ListNamesForUser).
-func (s *Service) withRoles(ctx context.Context, user User) (User, error) {
+// enrich overlays data this package doesn't own: the authoritative role
+// list (roles.Service is the single place that knows how to compute
+// "member"/"former_member" from membership history on top of whatever's
+// actually stored in user_roles — see roles.Repository.ListNamesForUser)
+// and the person's latest membership period, shown as their "alta/baja"
+// dates.
+func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 	names, err := s.roles.ListNamesForUser(ctx, user.ID)
 	if err != nil {
 		return user, err
 	}
 	user.Roles = names
+
+	latest, err := s.memberships.LatestByUser(ctx, user.ID)
+	if err != nil {
+		return user, err
+	}
+	if latest != nil {
+		user.MembershipStartDate = &latest.StartDate
+		user.MembershipEndDate = latest.EndDate
+	}
 	return user, nil
 }
 

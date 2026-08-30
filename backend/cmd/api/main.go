@@ -42,16 +42,16 @@ func main() {
 	rolesRepo := roles.NewRepository(pool)
 	rolesService := roles.NewService(rolesRepo)
 
+	membershipsRepo := memberships.NewRepository(pool)
+	membershipsService := memberships.NewService(membershipsRepo)
+
 	usersRepo := users.NewRepository(pool)
-	usersService := users.NewService(usersRepo, rolesService)
+	usersService := users.NewService(usersRepo, rolesService, membershipsService)
 
 	tokensRepo := tokens.NewRepository(pool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)
 
 	authenticator := auth.NewAuthenticator(tokensService)
-
-	membershipsRepo := memberships.NewRepository(pool)
-	membershipsService := memberships.NewService(membershipsRepo)
 
 	activitiesRepo := activities.NewRepository(pool)
 	activitiesService := activities.NewService(activitiesRepo)

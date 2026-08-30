@@ -811,6 +811,21 @@ components:
             entry if the request had one (the production deploy sits
             behind a reverse proxy that sets it), otherwise the
             connection's own address. Informational only.
+        membership_start_date:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            Start date of this person's most recent membership period, or
+            null if they've never been a member. See
+            GET /users/{userID}/memberships for the full history.
+        membership_end_date:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            End date of that same period, or null if it's still open
+            (they're currently a member).
         created_at: { type: string, format: date-time }
 
     DirectoryEntry:

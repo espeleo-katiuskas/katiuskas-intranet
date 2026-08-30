@@ -69,6 +69,10 @@ en `backend/openapi/openapi.yaml`.
 - **`memberships`** — periodos de alta/baja de socio. Una persona puede tener varios
   periodos si no se solapan; lo garantiza una restricción `EXCLUDE USING gist` de
   PostgreSQL sobre `(user_id, period)`, no una comprobación manual.
+  `memberships.Service.LatestByUser` expone el periodo más reciente de una persona
+  (activo o no); `users.Service` lo incorpora a cada `User` como
+  `membership_start_date`/`membership_end_date`, para que la lista de personas pueda
+  mostrar y ordenar por fecha de alta/baja sin una petición aparte por persona.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
   además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla
