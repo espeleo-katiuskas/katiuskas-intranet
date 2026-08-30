@@ -197,6 +197,7 @@ function membershipStatusFor(person) {
   if (person.membership_end_date) return 'former';
   return person.on_leave ? 'on_leave' : 'active';
 }
+const MEMBERSHIP_STATUS_ORDER = ['active', 'on_leave', 'former', 'none'];
 
 // Row filters narrow which people show, independent of which columns are
 // visible — same show/hide idea as COLUMNS, but for rows. Each groups
@@ -292,8 +293,15 @@ const COLUMNS = [
       return person.membership_start_date ? '<span class="badge">Activa</span>' : '—';
     },
   },
+  {
+    key: 'membership_status',
+    label: 'Tipo de socio',
+    default: true,
+    value: (p) => membershipStatusLabels[membershipStatusFor(p)],
+    render: (person) => membershipStatusLabels[membershipStatusFor(person)],
+    compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
+  },
   { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false },
-  { ...dateColumn('license_valid_until', 'Licencia hasta', (p) => p.license_valid_until), default: false },
 ];
 const columnsByKey = Object.fromEntries(COLUMNS.map((c) => [c.key, c]));
 
