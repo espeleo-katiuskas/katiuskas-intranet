@@ -266,6 +266,23 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   El primero está tan abierto como `listParticipants` (cualquier persona autenticada);
   el segundo exige ser la propia persona o tener `admin`, `board` o `material`, igual que
   `GET /transactions`, porque una transacción lleva precio.
+- **`internal/library`** — biblioteca de documentos del club (estatutos, reglamentos,
+  normativas, memorias de actividades, actas de reuniones...): un árbol de directorios en
+  disco (`config.LibraryRoot`, montado de solo lectura en el contenedor desde `./library`
+  en el host — ver `docker-compose.yml`), no nada en PostgreSQL, así que a diferencia de
+  cualquier otro recurso no hay `repository.go`/pgx: `Service` trabaja directamente contra
+  el sistema de archivos. `GET /library?path=…` lista un directorio (subdirectorios
+  primero, luego ficheros, alfabético; los ficheros ocultos nunca aparecen);
+  `GET /library/file?path=…` sirve el contenido crudo de un fichero, con
+  `Content-Disposition: inline` por defecto o `attachment` con `?download=1`. Ambas rutas
+  son de solo lectura y abiertas a cualquier rol baseline (admin/board/member) — no hay
+  forma de subir, renombrar ni borrar nada a través de la API; los documentos los coloca
+  quien administra el servidor, directamente en `./library`. Cada ruta dada por quien
+  llama se resuelve y se comprueba contra la raíz antes de tocar el disco
+  (`Service.resolve`): un `".."` nunca puede escapar de la raíz porque se ancla primero
+  bajo una raíz sintética `/` antes de limpiarla (el mismo truco que usa el propio
+  `net/http.FileServer`), y un symlink que apunte fuera del árbol se detecta resolviéndolo
+  y comprobando que el destino real sigue dentro de la raíz.
 
 ## Backend (`backend/`)
 
@@ -278,7 +295,10 @@ correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo mand
 verdad si lo hay), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
-de `net/http`; el handler es la única capa que sabe que existe HTTP.
+de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` es
+la única excepción a ese patrón de capas: como no hay nada en PostgreSQL, no tiene
+`repository.go` — `service.go` trabaja directamente contra el sistema de archivos (ver
+más arriba).
 
 `auth.Authenticator.Protect`, el punto único por el que cada ruta se registra, exige
 siempre tener al menos uno de los roles `admin`, `board` o `member` — un suelo que se

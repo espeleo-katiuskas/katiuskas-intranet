@@ -15,6 +15,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("SMTP_PORT", "")
+	t.Setenv("LIBRARY_ROOT", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -32,6 +33,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.SMTPHost != "" {
 		t.Errorf("expected SMTPHost to have no default, got %q", cfg.SMTPHost)
 	}
+	if cfg.LibraryRoot != "/data/library" {
+		t.Errorf("expected default LibraryRoot /data/library, got %q", cfg.LibraryRoot)
+	}
 }
 
 func TestLoadHonorsOverrides(t *testing.T) {
@@ -40,6 +44,7 @@ func TestLoadHonorsOverrides(t *testing.T) {
 	t.Setenv("PUBLIC_BASE_URL", "https://intranet.example")
 	t.Setenv("SMTP_HOST", "smtp.example.com")
 	t.Setenv("SMTP_PORT", "2525")
+	t.Setenv("LIBRARY_ROOT", "/srv/documents")
 
 	cfg, err := Load()
 	if err != nil {
@@ -56,5 +61,8 @@ func TestLoadHonorsOverrides(t *testing.T) {
 	}
 	if cfg.SMTPPort != "2525" {
 		t.Errorf("expected overridden SMTPPort, got %q", cfg.SMTPPort)
+	}
+	if cfg.LibraryRoot != "/srv/documents" {
+		t.Errorf("expected overridden LibraryRoot, got %q", cfg.LibraryRoot)
 	}
 }

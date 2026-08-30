@@ -27,6 +27,11 @@ type Config struct {
 	SMTPUsername  string
 	SMTPPassword  string
 	SMTPFrom      string
+	// LibraryRoot is the directory the internal/library package serves
+	// club documents (estatutos, actas...) from — mounted read-only into
+	// the container, populated by whoever deploys the club's documents,
+	// never written to by the API itself.
+	LibraryRoot string
 }
 
 func Load() (Config, error) {
@@ -43,6 +48,7 @@ func Load() (Config, error) {
 		SMTPUsername:          os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:              os.Getenv("SMTP_FROM"),
+		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")

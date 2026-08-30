@@ -14,6 +14,7 @@ import (
 	"katiuskas-intranet/backend/internal/config"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/inventory"
+	"katiuskas-intranet/backend/internal/library"
 	"katiuskas-intranet/backend/internal/licenses"
 	"katiuskas-intranet/backend/internal/mail"
 	"katiuskas-intranet/backend/internal/memberships"
@@ -68,6 +69,12 @@ func main() {
 	inventoryRepo := inventory.NewRepository(pool)
 	inventoryService := inventory.NewService(inventoryRepo)
 
+	libraryService, err := library.NewService(cfg.LibraryRoot)
+	if err != nil {
+		slog.Error("set up document library", "error", err, "root", cfg.LibraryRoot)
+		os.Exit(1)
+	}
+
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	router := httpapi.NewRouter(httpapi.Routes{
@@ -85,6 +92,7 @@ func main() {
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),
 		Board:       board.NewHandler(boardService, authenticator),
+		Library:     library.NewHandler(libraryService, authenticator),
 	})
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)

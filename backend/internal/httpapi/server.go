@@ -18,6 +18,7 @@ type Routes struct {
 	Activities  ResourceHandler
 	Inventory   ResourceHandler
 	Board       ResourceHandler
+	Library     ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
@@ -32,6 +33,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Activities.RegisterRoutes(mux)
 	routes.Inventory.RegisterRoutes(mux)
 	routes.Board.RegisterRoutes(mux)
+	routes.Library.RegisterRoutes(mux)
 
 	return Recoverer(RequestLogger(mux))
 }

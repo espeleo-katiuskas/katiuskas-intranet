@@ -1203,6 +1203,66 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
 
+  /library:
+    get:
+      summary: List a document library directory
+      description: >
+        Browses the club's document library (estatutos, reglamentos,
+        normativas, memorias de actividades, actas...) — a plain
+        directory tree on disk (config.LibraryRoot), not anything stored
+        in the database. Open to any baseline role (admin/board/member),
+        read-only: there's no way to upload, rename, or delete anything
+        through this API. path defaults to the library's root when
+        omitted; every path is resolved and checked against root
+        server-side, so one that tries to escape it (a "..", an absolute
+        path, a symlink pointing outside) either lands back inside root
+        or is rejected — see the Listing schema and 400 invalid_path
+        below. Dotfiles are never listed.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: path
+          in: query
+          schema: { type: string, default: "" }
+          description: Slash-separated, root-relative directory path.
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryListing" }
+        "400":
+          description: invalid_path (escapes root) or not_a_directory (path names a file).
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/file:
+    get:
+      summary: Read or download a document
+      description: >
+        Streams a document's raw bytes with a best-effort Content-Type
+        (registered explicitly for a few extensions — .md, .docx, .odt...
+        — Go's mime package and the API image's minimal /etc/mime.types
+        don't otherwise agree on) so the frontend can either render it
+        itself (Markdown) or hand it to the browser (PDF, image, HTML).
+        Supports HTTP Range requests. Same path resolution and root
+        confinement as GET /library.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+          description: Slash-separated, root-relative file path.
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: When "1", sets Content-Disposition to attachment (a Save dialog) instead of inline.
+      responses:
+        "200":
+          description: The file's raw content.
+        "400":
+          description: invalid_path (escapes root) or not_a_file (path names a directory).
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1646,3 +1706,28 @@ components:
           type: integer
           nullable: true
           description: Required for loan and rental; always null for a sale.
+
+    LibraryEntry:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [dir, file] }
+        size:
+          type: integer
+          description: Bytes. Omitted for a directory.
+        modified_at: { type: string, format: date-time }
+
+    LibraryListing:
+      type: object
+      properties:
+        path:
+          type: string
+          description: >
+            The requested path, normalized (no leading/trailing slash,
+            "" for the root) — echoed back so the frontend can build
+            breadcrumbs without re-deriving it from what it originally
+            sent.
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryEntry" }
+          description: Subdirectories first, then files, both alphabetical. Dotfiles never appear.

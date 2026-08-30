@@ -23,6 +23,12 @@ services:
       PUBLIC_BASE_URL: "http://localhost:8000"
       # Leave SMTP_HOST unset to log sign-in emails to `docker compose logs api`
       # instead of sending them for real.
+      LIBRARY_ROOT: "/data/library"
+    volumes:
+      # Club documents (estatutos, actas...) for every socio to browse —
+      # drop files straight into ./library on the host, no rebuild or
+      # restart needed. Created automatically on first run if missing.
+      - ./library:/data/library
     depends_on:
       postgres:
         condition: service_healthy
