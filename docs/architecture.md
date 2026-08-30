@@ -32,8 +32,8 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   actividades y material — exactamente igual que antes. Ya no puede crear ni borrar
   personas, dar de alta/baja, corregir bajas temporales, asignar licencias, gestionar
   la Junta Directiva, ni asignar/quitar roles a nadie: todo eso es admin-only ahora
-  (rutas bajo `/users`, `/memberships`, `/leaves`, `/users/{userID}/licenses`,
-  `/board-members`, `/users/{userID}/roles`).
+  (rutas bajo `/users`, `/memberships`, `/leaves`, `/users/{login}/licenses`,
+  `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
   número de socio, fecha de alta y de baja) para todo el mundo, no solo para sí mismo.
@@ -48,13 +48,13 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   email, phone, address, postal_code, city, province, emergency_contact — pero no
   nombre, apellidos, DNI, fecha de nacimiento ni género: `users.Handler.update`
   rechaza con 403 `restricted_fields` cualquier intento de tocar esos campos si quien
-  llama no es admin, en vez de ignorarlos en silencio. `GET /users/{id}` (la ficha
+  llama no es admin, en vez de ignorarlos en silencio. `GET /users/{login}` (la ficha
   completa) sigue reservado a admin/board o a la propia persona, sin cambios.
 
 En el frontend, `/members` ahora es visible para member además de admin/board: la
 lista de columnas y los filtros se reducen a lo que `MemberListing` realmente trae
 (`MEMBER_COLUMNS`/`MEMBER_FILTERS` en `web/js/members.js`, en vez de las versiones
-`FULL_*`), las filas dejan de ser clicables (`/member?id=…` sigue siendo solo para
+`FULL_*`), las filas dejan de ser clicables (`/member?login=…` sigue siendo solo para
 admin/board), y las secciones de gestión (roles, nueva persona) llevan
 `data-roles="admin"` o `"admin,board"` para que `applyRoleVisibility()` las quite del
 todo. En `/member`, los botones de escritura (dar de alta, licencias, Junta Directiva,
@@ -98,6 +98,25 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   (`Repository.FindActiveByEmailAndPhone`); como el espacio pasa a separar varios
   teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
   "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
+  `login` (`text UNIQUE NOT NULL`, migración `00009_users_login.sql`) es el único
+  identificador de una persona que cruza el API — ninguna respuesta ni ruta expone jamás
+  el id numérico interno. Se genera solo al crear a la persona: nombre y apellidos
+  pasados por `users.slugify` (acentos fuera, todo lo que no sea letra o dígito colapsado
+  a un guión) y unidos con un punto, con un sufijo numérico si esa combinación ya
+  existe (`users.Repository.generateLogin`). Editable después, pero solo por admin, vía
+  `PATCH /users/{login}` (formato comprobado con la misma expresión regular,
+  `ErrInvalidLogin` si no cumple; `ErrDuplicate` si ya es de otra persona). Todos los
+  paquetes que antes anidaban sus rutas bajo un `{userID}` numérico (`tokens`, `roles`,
+  `licenses`, `memberships`, `board`, `inventory`, `activities`) reciben ahora un login y
+  lo traducen al id interno con una interfaz mínima definida en cada uno de ellos
+  (`UserLookup`, con `UserIDForLogin`/`LoginForUserID`) que `*users.Service` satisface de
+  forma estructural — no pueden importar `users` directamente, porque `users` ya importa
+  a varios de ellos (`roles`, `memberships`, `licenses`). Un listado que puede mezclar a
+  varias personas a la vez (`GET /transactions`, `GET /activities`...) resuelve el login
+  con un `JOIN` SQL contra `users` en vez de una consulta por fila; una escritura de una
+  sola fila con `INSERT`/`UPDATE ... RETURNING` (que no admite `JOIN`) lo resuelve a
+  partir de un login que el handler ya tiene a mano, o con una llamada de vuelta a
+  `LoginForUserID`.
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
   marca de consumido), junto con el hash de un código numérico de 6 dígitos que va en el
   mismo correo — pensado para cuando el correo se lee desde un
@@ -127,7 +146,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   que cree un admin sirve como etiqueta organizativa — no desbloquea nada por sí solo
   salvo que se programe explícitamente.
   `member`, `former_member` y `board` son además *automáticos* (`is_automatic`): nadie
-  los asigna ni los quita a mano (`POST`/`DELETE /users/{userID}/roles` los rechaza con
+  los asigna ni los quita a mano (`POST`/`DELETE /users/{login}/roles` los rechaza con
   409). Se calculan al vuelo — `roles.Repository.ListNamesForUser` es el único sitio que
   sabe cómo—: `member` a partir de `memberships` si la persona tiene un periodo de socio
   activo ahora mismo, `former_member` si ha tenido alguno antes pero ninguno activo hoy,
@@ -139,9 +158,9 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   el valor en claro), revocable, con `expires_at`, y `last_used_at`/`last_used_ip` (misma
   lógica de `X-Forwarded-For` que `users.last_login_ip`) actualizados en cada petición
   que lo usa. Un admin puede ver, re-caducar o revocar el token de cualquier persona —
-  `GET`/`PATCH`/`DELETE /users/{userID}/tokens[/{tokenID}]` —, pero nunca ver el valor
+  `GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]` —, pero nunca ver el valor
   del token en sí, solo sus metadatos.
-  **Impersonación**: `POST /users/{userID}/impersonate` (solo admin, no board — actuar
+  **Impersonación**: `POST /users/{login}/impersonate` (solo admin, no board — actuar
   como cualquiera, incluido otro admin, es un salto mayor que el resto de lo que board ya
   puede hacer) crea un token cuyo `user_id` es el de esa persona y con un
   `impersonated_by` (el id del admin) guardado junto a él. Como los roles se resuelven en
@@ -160,7 +179,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   dura mucho menos que uno normal (`config.ImpersonationTokenTTL`, 1 hora frente a 30
   días): una sesión actuando como otra persona es un riesgo mayor que una normal como para
   dejarla viva un mes si alguien se olvida de salir.
-- `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo id y
+- `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo login y
   nombre de quienes tienen acceso (nada de teléfono, dirección, DNI...). Existe para que
   un socio cualquiera pueda elegir participantes al crear una actividad sin que el API
   tenga que abrirle `GET /users`, que sí expone datos personales y sigue reservado a
@@ -208,7 +227,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   (`memberships.Service.IsActiveMember`); intentarlo con alguien que nunca ha sido socio
   o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service` incorpora la
   licencia más reciente de cada persona a `User` (`licenses.Service.LatestByUser`), igual
-  que hace con el periodo de socio más reciente. Rutas bajo `/users/{userID}/licenses`:
+  que hace con el periodo de socio más reciente. Rutas bajo `/users/{login}/licenses`:
   `GET` abierto a la propia persona o admin/board, `POST` solo admin;
   `PATCH`/`DELETE /licenses/{id}` (por id de licencia, no anidadas bajo el usuario, igual
   que `/leaves/{id}`) también solo admin — `PATCH` no vuelve a exigir alta activa, porque
@@ -223,11 +242,15 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   que impide que una persona tenga dos cargos abiertos a la vez, sean o no el mismo — no
   hay restricción, en cambio, sobre que dos personas tengan el mismo cargo simultáneamente
   (por ejemplo varios vocales a la vez es normal). El paquete `board` no depende de
-  `users` ni de `memberships` — no necesita el juego de interfaz que sí hace falta para
-  `membership_number` (ver más abajo), porque el rol automático `board` se calcula con
-  una consulta SQL directa contra `board_members` desde el propio paquete `roles`, igual
-  que `member`/`former_member` contra `memberships`. Rutas bajo
-  `/users/{userID}/board-members` (`GET` propia persona o admin/board, `POST` solo
+  `users` ni de `memberships` para calcular el rol automático — no necesita el juego de
+  interfaz que sí hace falta para `membership_number` (ver más abajo), porque `board` se
+  calcula con una consulta SQL directa contra `board_members` desde el propio paquete
+  `roles`, igual que `member`/`former_member` contra `memberships`. Su `handler.go` sí
+  define, aparte y por un motivo distinto, la misma interfaz mínima `UserLookup` que
+  `tokens`/`roles`/`licenses`/`memberships`/`inventory`/`activities` — para traducir el
+  login de sus rutas `/users/{login}/...` a un id, no para nada relacionado con el rol
+  automático. Rutas bajo
+  `/users/{login}/board-members` (`GET` propia persona o admin/board, `POST` solo
   admin/board), `GET /board-members` (la Junta Directiva actual), y
   `PATCH /board-members/{id}` para corregir cargo o fechas. En `/member`, un cargo
   aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas.
@@ -261,7 +284,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   opcional `material` (sembrado por la migración pero no de sistema: un club que no
   quiera esa distinción puede borrarlo y seguir usando `board`); dar de alta el propio
   material del catálogo sigue reservado a admin/board.
-- `GET /users/{userID}/activities` y `GET /users/{userID}/transactions` — el historial de
+- `GET /users/{login}/activities` y `GET /users/{login}/transactions` — el historial de
   una persona visto desde su propia ficha, en vez de desde la actividad o la transacción.
   El primero está tan abierto como `listParticipants` (cualquier persona autenticada);
   el segundo exige ser la propia persona o tener `admin`, `board` o `material`, igual que
@@ -329,10 +352,10 @@ Páginas multi-vista clásicas (no una SPA), con un cliente `fetch` compartido
 cargar cada página, llama a `GET /auth/me` para confirmar que sigue siendo válido y
 saber qué roles tiene quien lo usa.
 
-Cada fila de la tabla de personas en `/members` enlaza a `/member?id=<id>`
+Cada fila de la tabla de personas en `/members` enlaza a `/member?login=<login>`
 (`member.html`/`member.js`, solo admin/board): la ficha de esa persona, con sus datos
 editables y su historial de actividades y material, leído de
-`GET /users/{userID}/activities` y `GET /users/{userID}/transactions`.
+`GET /users/{login}/activities` y `GET /users/{login}/transactions`.
 
 ## Cómo ejecutar en local
 

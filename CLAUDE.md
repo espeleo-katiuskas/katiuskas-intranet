@@ -84,8 +84,8 @@ separate access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,
 it has no database dependency. `internal/tokens` is the real resolver: it hashes the raw
 token, validates and touches `last_used_at`/`last_used_ip` in one query, then resolves
 roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes
-admin-only endpoints (`GET`/`PATCH`/`DELETE /users/{userID}/tokens[/{tokenID}]`) to audit,
-re-expire, or revoke any token, plus `POST /users/{userID}/impersonate` (admin-only,
+admin-only endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`) to audit,
+re-expire, or revoke any token, plus `POST /users/{login}/impersonate` (admin-only,
 issues a short-lived token — `config.ImpersonationTokenTTL` — that resolves as the target
 person in every way except `AuthenticatedUser.ImpersonatedBy`, which names the admin) and
 `POST /auth/impersonate/exit` to end one and get a fresh normal token back.
@@ -118,6 +118,23 @@ whether the person currently has an open `board_members` or `memberships` period
 losing membership, or a board term ending, revokes access on the very next request, no
 stale role to clean up.
 
+**Login is the only external identifier for a person**: `users.login` (`text UNIQUE NOT
+NULL`, migration `00009_users_login.sql`) is generated automatically at creation — first
+and last name slugified (accents stripped, `users.slugify`) and dot-joined, with a numeric
+suffix on collision (`users.Repository.generateLogin`) — and admin-editable afterward via
+`PATCH /users/{login}` (format-checked, `ErrInvalidLogin` on a bad one; `ErrDuplicate` if
+another person already has it). No response or path anywhere in the API ever carries a
+person's numeric database id; every package that used to key a route or a JSON field on
+one (`tokens`, `roles`, `licenses`, `memberships`, `board`, `inventory`, `activities`) now
+takes a login instead, translated to the internal id via a small, locally-defined
+`UserLookup` interface (`UserIDForLogin`/`LoginForUserID`) that `*users.Service` satisfies
+structurally — those packages can't import `users` directly, since `users` already imports
+several of them. A listing that can span several different people at once (e.g.
+`GET /transactions`, `GET /activities`) resolves the login via a SQL `JOIN` against `users`
+instead of a lookup per row; a single-row write via `INSERT`/`UPDATE ... RETURNING` (which
+can't `JOIN`) resolves it from a login the handler already has in scope, or with a
+follow-up `LoginForUserID` call.
+
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,
 licenses, roles) but can only write activities and material — every person-data,
@@ -126,12 +143,12 @@ passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
 bucketed from — membership number, alta/baja dates; no DNI, contact info, license, or role
 details) and may only edit their own contact fields (`email`, `phone`, `address`,
-`postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{id}` — anything
-else in that body gets 403 `restricted_fields` instead of being silently ignored.
+`postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
+anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
 
-**Activities**: every activity has a mandatory `leader_id` (the organizer, always set to
-whoever creates it — never chosen by the caller) who, along with admin/board, is the only
-one who can edit or cancel it (`Handler.canManage`). Its `type`
+**Activities**: every activity has a mandatory `leader_id` (exposed as `leader_login`; the
+organizer, always set to whoever creates it — never chosen by the caller) who, along with
+admin/board, is the only one who can edit or cancel it (`Handler.canManage`). Its `type`
 (`caving`/`canyoning`/`training`/`social`/`other`) gates a federation check: joining — or
 being named as an initial participant at creation time — a `caving`/`canyoning` activity
 requires a currently valid federative license (`licenses.Service.IsCurrentlyFederated`),
@@ -160,7 +177,9 @@ open to any baseline role and read-only — nothing here lets a caller upload, r
 delete anything.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
-transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures, and
+transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
+`TestUser` `InsertUser` returns carries a `Login` too, for tests exercising a
+login-addressed route), and
 `FakeResolver` + `NewTestAuthenticator`/`TokenFor` — an in-memory `auth.SessionResolver`
 so handler tests in every *other* package can mint bearer tokens for arbitrary
 users/roles without hitting the real `tokens` table (only the `auth` and `tokens`
@@ -188,7 +207,7 @@ asynchronously for one specific record (e.g. "is the viewer this activity's orga
 can't be a static `data-roles` attribute, since `applyRoleVisibility()` only runs once at
 page load — that case computes a plain JS boolean after the data arrives and toggles
 `.hidden` directly instead (see `activity.js`'s `canManage`/`canJoinSelf`/`canAddOthers`).
-Detail pages read an id from the query string (`/member?id=<id>`,
+Detail pages read a login from the query string (`/member?login=<login>`,
 `new URLSearchParams(window.location.search)`), same pattern `login.html` uses for the
 magic-link token from an emailed URL. Its login code has no URL of its own to arrive
 in — `login.html`'s second panel gets it typed in by hand — so the email/phone from the
