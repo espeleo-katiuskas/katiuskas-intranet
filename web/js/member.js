@@ -249,6 +249,39 @@ function renderLeaveAddPanel(membershipId) {
   `;
 }
 
+const positionLabels = {
+  president: 'Presidente',
+  vice_president: 'Vicepresidente',
+  secretary: 'Secretario',
+  treasurer: 'Tesorero',
+  member_at_large: 'Vocal',
+};
+
+function renderBoardEditPanel(b) {
+  const options = Object.entries(positionLabels)
+    .map(([value, label]) => `<option value="${value}" ${value === b.position ? 'selected' : ''}>${label}</option>`)
+    .join('');
+  return `
+    <div class="edit-fields" data-edit-board-panel="${b.id}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>Cargo</label>
+          <select data-board-field="position">${options}</select>
+        </div>
+        <div class="field">
+          <label>Fecha de inicio</label>
+          <input type="date" data-board-field="start_date" value="${b.start_date.slice(0, 10)}">
+        </div>
+        <div class="field">
+          <label>Fecha de fin <span class="optional">(vacío = sigue en la junta)</span></label>
+          <input type="date" data-board-field="end_date" value="${b.end_date ? b.end_date.slice(0, 10) : ''}">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-board="${b.id}">Guardar</button>
+    </div>
+  `;
+}
+
 function renderLeaveEditPanel(l) {
   return `
     <div class="edit-fields" data-edit-leave-panel="${l.id}" hidden>
@@ -277,14 +310,16 @@ const eventLabels = {
   leave_start: 'Inicio de baja temporal',
   leave_end: 'Fin de baja temporal',
   license: 'Licencia federativa',
+  board_start: 'Entra en la Junta Directiva',
+  board_end: 'Sale de la Junta Directiva',
 };
 
 // Builds one flat, chronological list of events out of every membership
 // period, every temporary leave within it (a "baja temporal" always
-// belongs to exactly one period — see docs/architecture.md), and every
-// federative license this person has ever been issued (those are scoped
-// to the person directly, not to any one period, even though issuing one
-// requires an active period at the time).
+// belongs to exactly one period — see docs/architecture.md), every
+// federative license this person has ever been issued, and every board
+// term they've served (those are scoped to the person directly, not to
+// any one membership period, the same way licenses are).
 async function buildTimelineEvents(memberships) {
   const events = [];
   for (const m of memberships) {
@@ -302,6 +337,15 @@ async function buildTimelineEvents(memberships) {
   const licenses = await apiFetch(`/users/${memberId}/licenses`).catch(() => []);
   for (const l of licenses) {
     events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
+  }
+
+  const boardTerms = await apiFetch(`/users/${memberId}/board-members`).catch(() => []);
+  for (const b of boardTerms) {
+    const positionLabel = positionLabels[b.position] ?? b.position;
+    events.push({ date: b.start_date, type: 'board_start', boardMember: b, reason: positionLabel });
+    if (b.end_date) {
+      events.push({ date: b.end_date, type: 'board_end', boardMember: b, reason: positionLabel });
+    }
   }
 
   events.sort((a, b) => a.date.localeCompare(b.date));
@@ -325,6 +369,11 @@ function renderTimelineEvent(event) {
       <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
     `;
     panel = renderLeaveEditPanel(event.leave);
+  } else if (event.type === 'board_start') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-board="${event.boardMember.id}">Editar</button>
+    `;
+    panel = renderBoardEditPanel(event.boardMember);
   }
 
   return `
@@ -492,6 +541,38 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       saveButton.disabled = false;
       showError(err.message);
     }
+    return;
+  }
+
+  const toggleEditBoardButton = event.target.closest('button[data-toggle-edit-board]');
+  if (toggleEditBoardButton) {
+    const panel = document.querySelector(`[data-edit-board-panel="${toggleEditBoardButton.dataset.toggleEditBoard}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
+
+  const saveBoardButton = event.target.closest('button[data-save-board]');
+  if (saveBoardButton) {
+    const boardMemberId = saveBoardButton.dataset.saveBoard;
+    const panel = document.querySelector(`[data-edit-board-panel="${boardMemberId}"]`);
+    const field = (name) => panel.querySelector(`[data-board-field="${name}"]`).value;
+
+    const body = {
+      position: field('position'),
+      start_date: field('start_date'),
+      end_date: field('end_date') || null,
+    };
+
+    saveBoardButton.disabled = true;
+    try {
+      await apiFetch(`/board-members/${boardMemberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showFeedback('Cargo actualizado.');
+      await loadTimeline();
+      await loadMember();
+    } catch (err) {
+      saveBoardButton.disabled = false;
+      showError(err.message);
+    }
   }
 });
 
@@ -611,6 +692,45 @@ document.getElementById('save-add-license').addEventListener('click', async () =
     typeInput.value = '';
     dateInput.value = '';
     await loadTimeline();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// A board term is also just another event on the same timeline, and
+// holding one is what the automatic "board" role is computed from (see
+// docs/architecture.md) — there's no separate way to grant it.
+document.getElementById('add-board-term').addEventListener('click', () => {
+  const panel = document.getElementById('add-board-panel');
+  const dateInput = document.getElementById('add-board-start-date');
+  if (panel.hidden && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+  panel.hidden = !panel.hidden;
+});
+
+document.getElementById('save-add-board-term').addEventListener('click', async () => {
+  const positionSelect = document.getElementById('add-board-position');
+  const dateInput = document.getElementById('add-board-start-date');
+  if (!dateInput.value) {
+    showError('Indica la fecha de inicio en la Junta Directiva.');
+    return;
+  }
+
+  const button = document.getElementById('save-add-board-term');
+  button.disabled = true;
+  try {
+    await apiFetch(`/users/${memberId}/board-members`, {
+      method: 'POST',
+      body: JSON.stringify({ position: positionSelect.value, start_date: dateInput.value }),
+    });
+    showFeedback('Cargo registrado.');
+    document.getElementById('add-board-panel').hidden = true;
+    dateInput.value = '';
+    await loadTimeline();
+    await loadMember();
   } catch (err) {
     showError(err.message);
   } finally {
