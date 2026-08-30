@@ -55,10 +55,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 // RequestMagicLink always answers the same way regardless of whether
-// email+phone matched anyone, or whether a link was actually sent (a
-// recent one might already be on its way) — telling those cases apart
-// would let this endpoint be used to check who's in the system, or to
-// spam a real person's inbox.
+// email+phone matched anyone, whether that person holds a role that
+// could actually use the API (see auth.BaselineRoles), or whether a
+// link was actually sent (a recent one might already be on its way) —
+// telling those cases apart would let this endpoint be used to check
+// who's in the system, or to spam a real person's inbox.
 func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email string `json:"email"`
@@ -89,6 +90,18 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	}
 	if err != nil {
 		return err
+	}
+
+	// Signing in would be pointless for someone who can't call the API
+	// anyway (see auth.BaselineRoles) — don't hand out a link, and don't
+	// even let the cooldown check below reveal that this email/phone
+	// combination exists but has no baseline role.
+	roleNames, err := h.roles.ListNamesForUser(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if !auth.HasBaselineRole(roleNames) {
+		return nil
 	}
 
 	recently, err := h.users.HasRecentMagicLinkToken(ctx, user.ID, time.Now().Add(-h.opts.MagicLinkCooldown))

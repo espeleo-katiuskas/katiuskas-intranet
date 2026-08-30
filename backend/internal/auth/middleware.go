@@ -68,7 +68,7 @@ func UserFromContext(ctx context.Context) (AuthenticatedUser, bool) {
 	return user, ok
 }
 
-// baselineRoles are the only roles allowed to use the API at all — a
+// BaselineRoles are the only roles allowed to use the API at all — a
 // club policy, not just a default: it applies on top of whatever more
 // specific roles a route also requires, so someone holding only, say,
 // "material" still can't call the material endpoints unless they're
@@ -76,10 +76,18 @@ func UserFromContext(ctx context.Context) (AuthenticatedUser, bool) {
 // lapsed (see the roles package: "member" is computed from active
 // membership) loses API access the moment it does, even if their
 // account and any other role names are still on file.
-var baselineRoles = []string{"admin", "board", "member"}
+var BaselineRoles = []string{"admin", "board", "member"}
+
+// HasBaselineRole reports whether the given role names include at least
+// one of BaselineRoles — the same test Protect applies to every request,
+// exposed standalone for callers (like authapi's magic-link flow) that
+// need to check it before there's a request to protect.
+func HasBaselineRole(roleNames []string) bool {
+	return AuthenticatedUser{Roles: roleNames}.HasAnyRole(BaselineRoles...)
+}
 
 // Protect wraps a handler with authentication and authorization: every
-// route requires at least one of baselineRoles, and, when roles are
+// route requires at least one of BaselineRoles, and, when roles are
 // given too, also at least one of those. It's the single entry point
 // resource handlers use to register a route, so RequireAuth and
 // RequireRole are always composed in the right order (auth first, so
@@ -89,6 +97,6 @@ func (a *Authenticator) Protect(next http.HandlerFunc, roles ...string) http.Han
 	if len(roles) > 0 {
 		handler = RequireRole(roles...)(handler)
 	}
-	handler = RequireRole(baselineRoles...)(handler)
+	handler = RequireRole(BaselineRoles...)(handler)
 	return a.RequireAuth(handler)
 }

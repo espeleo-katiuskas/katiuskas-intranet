@@ -24,15 +24,18 @@ paths:
       summary: Request a sign-in link by email
       description: >
         There are no passwords in this API, and no separate "granted
-        access" step: if email and phone both match someone on file,
-        they're emailed a one-time link (valid 15 minutes) that signs
-        them in via POST /auth/magic-link/consume. What that session can
-        then do is entirely down to their roles.
+        access" step: if email and phone both match someone on file who
+        also holds at least one of admin/board/member, they're emailed a
+        one-time link (valid 15 minutes) that signs them in via POST
+        /auth/magic-link/consume. Someone matching but holding none of
+        those roles never gets a link — signing in would leave them
+        unable to call anything anyway.
 
-        The response is identical whether or not anything matched, and
-        whether a link was actually sent (a recent one might already be
-        on its way) — telling those cases apart would let this endpoint
-        enumerate who's in the system, or spam someone's inbox.
+        The response is identical in every case — no match, a match with
+        no usable role, or a link actually sent (a recent one might
+        already be on its way) — telling those cases apart would let
+        this endpoint enumerate who's in the system, or spam someone's
+        inbox.
       requestBody:
         required: true
         content:

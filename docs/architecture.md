@@ -29,14 +29,18 @@ en `backend/openapi/openapi.yaml`.
   `last_login_at` y `last_login_ip` (la IP de la última vez que inició sesión —
   `X-Forwarded-For` si existe, ya que en producción hay un proxy inverso por delante;
   la propia conexión si no). No hay tabla `accounts` ni ningún otro paso de "conceder
-  acceso": cualquier persona de esta tabla puede pedir un enlace de acceso en cuanto
-  tenga email y teléfono guardados, y qué puede hacer con la sesión resultante depende
-  solo de sus roles (ver más abajo). No hay contraseñas.
+  acceso": lo que puede hacer una sesión depende solo de los roles de esa persona (ver
+  más abajo), y esos mismos roles deciden si le llega o no un enlace de acceso — no hay
+  contraseñas.
 - **`magic_link_tokens`** — enlaces de acceso de un solo uso (hash del token, caducidad,
   marca de consumido). Se piden en `/auth/magic-link` dando el email y el teléfono de la
-  persona; solo si ambos coinciden con alguien de `users` se genera uno y se envía por
-  correo — así no sirve para averiguar quién está en el sistema ni para mandar correo
-  no deseado.
+  persona; solo se genera uno y se envía por correo si ambos coinciden con alguien de
+  `users` *y* esa persona tiene al menos uno de los roles `admin`, `board` o `member`
+  (`auth.BaselineRoles`, ver más abajo) — a quien no tiene ninguno no le serviría de
+  nada iniciar sesión, así que no se le manda enlace. La respuesta de `/auth/magic-link`
+  es idéntica en los tres casos (no coincide nadie, coincide alguien sin rol, se envía
+  el enlace de verdad) — así no sirve para averiguar quién está en el sistema, ni quién
+  tiene acceso, ni para mandar correo no deseado.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente

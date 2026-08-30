@@ -88,6 +88,21 @@ func (s *testServer) getWithToken(t *testing.T, path, token string) *httptest.Re
 	return rec
 }
 
+// insertUserWithRole inserts a person and assigns them a role — needed
+// for any test that expects a magic link to actually be sent, since
+// RequestMagicLink now silently skips anyone with no auth.BaselineRoles
+// role at all (signing in would be pointless for them, see
+// sendMagicLinkIfEligible).
+func (s *testServer) insertUserWithRole(t *testing.T, phone, role string) testutil.TestUser {
+	t.Helper()
+	user := testutil.InsertUser(t, s.tx, phone)
+	rolesService := roles.NewService(roles.NewRepository(s.tx))
+	if err := rolesService.AssignByName(context.Background(), user.ID, []string{role}); err != nil {
+		t.Fatalf("assign role: %v", err)
+	}
+	return user
+}
+
 var tokenInLink = regexp.MustCompile(`token=([\w-]+)`)
 
 func (s *testServer) requestAndExtractToken(t *testing.T, email, phone string) string {
@@ -151,7 +166,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
+	user := s.insertUserWithRole(t, "611222333", "board")
 
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	if token == "" {
@@ -159,9 +174,22 @@ func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	}
 }
 
-func TestRequestMagicLinkResponseIsIdenticalWhetherOrNotItMatches(t *testing.T) {
+func TestRequestMagicLinkSkipsSomeoneWithNoBaselineRole(t *testing.T) {
 	s := newTestServer(t)
 	user := testutil.InsertUser(t, s.tx, "611222333")
+
+	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 even though no link is sent, got %d", rec.Code)
+	}
+	if s.mailer.sent != 0 {
+		t.Errorf("expected no email for someone with no admin/board/member role, got %d sent", s.mailer.sent)
+	}
+}
+
+func TestRequestMagicLinkResponseIsIdenticalWhetherOrNotItMatches(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "board")
 
 	match := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
 	wrongPhone := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": "000000000"})
@@ -193,7 +221,7 @@ func TestRequestMagicLinkRequiresBothFields(t *testing.T) {
 
 func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
+	user := s.insertUserWithRole(t, "611222333", "board")
 
 	s.requestAndExtractToken(t, user.Email, user.Phone)
 	if s.mailer.sent != 1 {
@@ -211,11 +239,7 @@ func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 
 func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
-	rolesService := roles.NewService(roles.NewRepository(s.tx))
-	if err := rolesService.AssignByName(context.Background(), user.ID, []string{"admin"}); err != nil {
-		t.Fatalf("assign role: %v", err)
-	}
+	user := s.insertUserWithRole(t, "611222333", "admin")
 
 	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
@@ -271,7 +295,7 @@ func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 
 func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
+	user := s.insertUserWithRole(t, "611222333", "board")
 	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 
 	first := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
@@ -297,11 +321,7 @@ func TestMeRejectsMissingOrRevokedToken(t *testing.T) {
 
 func TestLogoutRevokesTheToken(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
-	rolesService := roles.NewService(roles.NewRepository(s.tx))
-	if err := rolesService.AssignByName(context.Background(), user.ID, []string{"board"}); err != nil {
-		t.Fatalf("assign role: %v", err)
-	}
+	user := s.insertUserWithRole(t, "611222333", "board")
 
 	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 	sessionToken := decodeSessionToken(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken}))
