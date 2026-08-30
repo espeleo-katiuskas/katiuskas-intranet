@@ -224,6 +224,30 @@ function renderMembershipEditPanel(m) {
   `;
 }
 
+// Same field-grid look as the edit panels, but with empty inputs — used
+// to create a new leave rather than correct an existing one.
+function renderLeaveAddPanel(membershipId) {
+  return `
+    <div class="edit-fields" data-add-leave-panel="${membershipId}" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label>Fecha de inicio</label>
+          <input type="date" data-new-leave-field="start_date">
+        </div>
+        <div class="field">
+          <label>Fecha de fin</label>
+          <input type="date" data-new-leave-field="end_date">
+        </div>
+        <div class="field span-2">
+          <label>Motivo <span class="optional">(opcional)</span></label>
+          <input type="text" data-new-leave-field="reason">
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small" data-save-new-leave="${membershipId}">Guardar</button>
+    </div>
+  `;
+}
+
 function renderLeaveEditPanel(l) {
   return `
     <div class="edit-fields" data-edit-leave-panel="${l.id}" hidden>
@@ -291,9 +315,9 @@ function renderTimelineEvent(event) {
   if (event.type === 'alta') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${event.membership.id}">Editar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${event.membership.id}">+ Baja temporal</button>
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-add-leave="${event.membership.id}">+ Baja temporal</button>
     `;
-    panel = renderMembershipEditPanel(event.membership);
+    panel = renderMembershipEditPanel(event.membership) + renderLeaveAddPanel(event.membership.id);
   } else if (event.type === 'leave_start') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${event.leave.id}">Editar</button>
@@ -325,20 +349,38 @@ async function loadTimeline() {
   }
 }
 
-document.getElementById('start-membership').addEventListener('click', async () => {
-  const startDate = prompt('Fecha de alta (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
-  if (!startDate) return;
+document.getElementById('start-membership').addEventListener('click', () => {
+  const panel = document.getElementById('add-membership-panel');
+  const input = document.getElementById('add-membership-start-date');
+  if (panel.hidden && !input.value) {
+    input.value = new Date().toISOString().slice(0, 10);
+  }
+  panel.hidden = !panel.hidden;
+});
 
+document.getElementById('save-add-membership').addEventListener('click', async () => {
+  const input = document.getElementById('add-membership-start-date');
+  if (!input.value) {
+    showError('Indica la fecha de alta.');
+    return;
+  }
+
+  const button = document.getElementById('save-add-membership');
+  button.disabled = true;
   try {
     await apiFetch(`/users/${memberId}/memberships`, {
       method: 'POST',
-      body: JSON.stringify({ start_date: startDate }),
+      body: JSON.stringify({ start_date: input.value }),
     });
     showFeedback('Alta registrada.');
+    document.getElementById('add-membership-panel').hidden = true;
+    input.value = '';
     await loadTimeline();
     await loadMember();
   } catch (err) {
     showError(err.message);
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -350,25 +392,35 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     return;
   }
 
-  const addLeaveButton = event.target.closest('button[data-add-leave]');
-  if (addLeaveButton) {
-    const membershipId = addLeaveButton.dataset.addLeave;
-    const startDate = prompt('Fecha de inicio de la baja temporal (AAAA-MM-DD):');
-    if (!startDate) return;
-    const endDate = prompt('Fecha de fin (AAAA-MM-DD):');
-    if (!endDate) return;
-    const reason = prompt('Motivo (opcional):') || null;
+  const toggleAddLeaveButton = event.target.closest('button[data-toggle-add-leave]');
+  if (toggleAddLeaveButton) {
+    const panel = document.querySelector(`[data-add-leave-panel="${toggleAddLeaveButton.dataset.toggleAddLeave}"]`);
+    panel.hidden = !panel.hidden;
+    return;
+  }
 
-    addLeaveButton.disabled = true;
+  const saveNewLeaveButton = event.target.closest('button[data-save-new-leave]');
+  if (saveNewLeaveButton) {
+    const membershipId = saveNewLeaveButton.dataset.saveNewLeave;
+    const panel = document.querySelector(`[data-add-leave-panel="${membershipId}"]`);
+    const field = (name) => panel.querySelector(`[data-new-leave-field="${name}"]`).value;
+    const startDate = field('start_date');
+    const endDate = field('end_date');
+    if (!startDate || !endDate) {
+      showError('Indica la fecha de inicio y de fin de la baja temporal.');
+      return;
+    }
+
+    saveNewLeaveButton.disabled = true;
     try {
       await apiFetch(`/memberships/${membershipId}/leaves`, {
         method: 'POST',
-        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
+        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason: field('reason').trim() || null }),
       });
       showFeedback('Baja temporal registrada.');
       await loadTimeline();
     } catch (err) {
-      addLeaveButton.disabled = false;
+      saveNewLeaveButton.disabled = false;
       showError(err.message);
     }
     return;
@@ -528,21 +580,40 @@ async function loadTransactions() {
 // A federative license shows up as just another event on the same
 // altas-y-bajas timeline (see buildTimelineEvents) rather than in a
 // section of its own.
-document.getElementById('add-license').addEventListener('click', async () => {
-  const type = prompt('Tipo de licencia (por ejemplo "A BASICA", "B1 PLUS", "FME"...):');
-  if (!type) return;
-  const issuedDate = prompt('Fecha de obtención (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
-  if (!issuedDate) return;
+document.getElementById('add-license').addEventListener('click', () => {
+  const panel = document.getElementById('add-license-panel');
+  const dateInput = document.getElementById('add-license-issued-date');
+  if (panel.hidden && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+  panel.hidden = !panel.hidden;
+});
 
+document.getElementById('save-add-license').addEventListener('click', async () => {
+  const typeInput = document.getElementById('add-license-type');
+  const dateInput = document.getElementById('add-license-issued-date');
+  const type = typeInput.value.trim();
+  if (!type || !dateInput.value) {
+    showError('Indica el tipo de licencia y la fecha de obtención.');
+    return;
+  }
+
+  const button = document.getElementById('save-add-license');
+  button.disabled = true;
   try {
     await apiFetch(`/users/${memberId}/licenses`, {
       method: 'POST',
-      body: JSON.stringify({ type, issued_date: issuedDate }),
+      body: JSON.stringify({ type, issued_date: dateInput.value }),
     });
     showFeedback('Licencia registrada.');
+    document.getElementById('add-license-panel').hidden = true;
+    typeInput.value = '';
+    dateInput.value = '';
     await loadTimeline();
   } catch (err) {
     showError(err.message);
+  } finally {
+    button.disabled = false;
   }
 });
 

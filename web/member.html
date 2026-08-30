@@ -112,6 +112,28 @@
     activa, y es válida desde su fecha de obtención hasta el 31 de diciembre de ese
     mismo año.
   </p>
+  <div class="edit-fields" id="add-membership-panel" hidden>
+    <div class="field-grid">
+      <div class="field">
+        <label for="add-membership-start-date">Fecha de alta</label>
+        <input id="add-membership-start-date" type="date">
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
+  </div>
+  <div class="edit-fields" id="add-license-panel" hidden>
+    <div class="field-grid">
+      <div class="field">
+        <label for="add-license-type">Tipo de licencia</label>
+        <input id="add-license-type" type="text" placeholder='Por ejemplo &quot;A BASICA&quot;, &quot;B1 PLUS&quot;, &quot;FME&quot;...'>
+      </div>
+      <div class="field">
+        <label for="add-license-issued-date">Fecha de obtención</label>
+        <input id="add-license-issued-date" type="date">
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
+  </div>
   <div class="detail-list" id="timeline-list"></div>
 
   <h2>Actividades</h2>
