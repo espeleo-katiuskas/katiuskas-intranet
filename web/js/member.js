@@ -638,7 +638,7 @@ if (impersonateButton) {
   }
 }
 
-const activityTypeLabels = { caving: 'Espeleología', training: 'Formación', outdoor: 'Exterior', social: 'Social', other: 'Otra' };
+const activityTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 const activityStatusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
 function renderActivityRow(activity) {

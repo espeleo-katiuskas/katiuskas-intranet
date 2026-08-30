@@ -17,6 +17,12 @@ document.getElementById('logout-button').addEventListener('click', logout);
 
 const viewer = currentUser();
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
+// Set once loadActivity() resolves and the activity's leader_id is
+// known — admin/board can manage any activity, and the organizer who
+// created it can manage their own. Can't be a data-roles attribute
+// since it depends on data loaded asynchronously for this specific
+// activity.
+let canManage = isAdmin;
 
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!activityId) {
@@ -38,10 +44,21 @@ function showError(message) {
   errorBox.hidden = false;
 }
 
-const typeLabels = { caving: 'Espeleología', training: 'Formación', outdoor: 'Exterior', social: 'Social', other: 'Otra' };
+const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
 const editForm = document.getElementById('edit-activity-form');
+
+// Toggles every management-only control (edit panel, "+ Participante"
+// row, "Zona de peligro") according to canManage — mirrors what
+// data-roles/applyRoleVisibility does for static, role-only elements,
+// but for something only knowable after this specific activity loads.
+function applyManagementVisibility() {
+  document.getElementById('edit-activity-panel').hidden = !canManage;
+  document.getElementById('add-participant-row').hidden = !canManage;
+  document.getElementById('danger-zone-header').hidden = !canManage;
+  document.getElementById('cancel-activity').hidden = !canManage;
+}
 
 async function loadActivity() {
   try {
@@ -54,8 +71,12 @@ async function loadActivity() {
       `${dateLabel} · ${activity.location} · ${typeLabels[activity.type] ?? activity.type} · ${statusLabels[activity.status] ?? activity.status}`;
     document.getElementById('activity-description').textContent = activity.description ?? '';
 
+    canManage = isAdmin || viewer?.id === activity.leader_id;
+    applyManagementVisibility();
+
     if (editForm) {
       editForm.title.value = activity.title;
+      editForm.type.value = activity.type;
       editForm.location.value = activity.location;
       editForm.status.value = activity.status;
       editForm.description.value = activity.description ?? '';
@@ -71,6 +92,7 @@ editForm?.addEventListener('submit', async (event) => {
   const formData = new FormData(editForm);
   const body = {
     title: formData.get('title'),
+    type: formData.get('type'),
     location: formData.get('location'),
     status: formData.get('status'),
     description: formData.get('description')?.toString().trim() || null,
@@ -129,7 +151,7 @@ function renderParticipantRow(p) {
   return `
     <div class="detail-row">
       <span><a href="/member?id=${p.user_id}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · responsable' : ''}</span>
-      ${isAdmin ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_id}">Quitar</button>` : ''}
+      ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_id}">Quitar</button>` : ''}
     </div>
   `;
 }
@@ -210,5 +232,5 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 });
 
 await loadDirectory();
-loadActivity();
+await loadActivity();
 loadParticipants();

@@ -32,13 +32,23 @@
     <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
   </div>
 
-  <div class="panel" data-roles="admin,board">
+  <div class="panel" id="edit-activity-panel" hidden>
     <h3>Editar</h3>
     <form id="edit-activity-form">
       <div class="field-grid">
         <div class="field span-2">
           <label for="ea-title">Título</label>
           <input id="ea-title" name="title" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ea-type">Tipo</label>
+          <select id="ea-type" name="type">
+            <option value="caving">Espeleología</option>
+            <option value="canyoning">Cañones</option>
+            <option value="training">Formación</option>
+            <option value="social">Social</option>
+            <option value="other">Otro</option>
+          </select>
         </div>
         <div class="field">
           <label for="ea-location">Lugar</label>
@@ -67,16 +77,16 @@
     <h2>Participantes</h2>
   </div>
   <div class="detail-list" id="participants-list"></div>
-  <div class="role-add-row" data-roles="admin,board">
+  <div class="role-add-row" id="add-participant-row" hidden>
     <input type="text" id="participant-search" list="participant-options" autocomplete="off" placeholder="Escribe un nombre…">
     <datalist id="participant-options"></datalist>
     <button type="button" id="add-participant" class="btn btn-secondary btn-small">+ Participante</button>
   </div>
 
-  <div class="section-header" data-roles="admin,board">
+  <div class="section-header" id="danger-zone-header" hidden>
     <h2>Zona de peligro</h2>
   </div>
-  <button id="cancel-activity" type="button" class="btn btn-danger" data-roles="admin,board">Cancelar actividad</button>
+  <button id="cancel-activity" type="button" class="btn btn-danger" hidden>Cancelar actividad</button>
 </main>
 <script type="module" src="js/activity.js"></script>
 <footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
