@@ -70,6 +70,74 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListActive(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	planned, err := repo.Create(ctx, activities.CreateInput{Title: "Planned", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"})
+	if err != nil {
+		t.Fatalf("create planned: %v", err)
+	}
+
+	completedNoMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, nothing pending", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	if err != nil {
+		t.Fatalf("create completed: %v", err)
+	}
+	completed := activities.StatusCompleted
+	if _, err := repo.Update(ctx, completedNoMaterial.ID, activities.UpdateInput{Status: &completed}); err != nil {
+		t.Fatalf("mark completed: %v", err)
+	}
+
+	completedWithMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, material still out", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	if err != nil {
+		t.Fatalf("create completed with material: %v", err)
+	}
+	if _, err := repo.Update(ctx, completedWithMaterial.ID, activities.UpdateInput{Status: &completed}); err != nil {
+		t.Fatalf("mark completed: %v", err)
+	}
+	user := testutil.InsertUser(t, tx, "", false)
+	var itemID int64
+	if err := tx.QueryRow(ctx, `INSERT INTO inventory_items (name) VALUES ('Test item') RETURNING id`).Scan(&itemID); err != nil {
+		t.Fatalf("insert item: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO item_transactions (item_id, user_id, type, activity_id, status)
+		VALUES ($1, $2, 'loan', $3, 'active')
+	`, itemID, user.ID, completedWithMaterial.ID); err != nil {
+		t.Fatalf("insert transaction: %v", err)
+	}
+
+	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	if err != nil {
+		t.Fatalf("create cancelled: %v", err)
+	}
+	if err := repo.Cancel(ctx, cancelled.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	list, err := repo.ListActive(ctx, 50, 0)
+	if err != nil {
+		t.Fatalf("list active: %v", err)
+	}
+	got := map[int64]bool{}
+	for _, a := range list {
+		got[a.ID] = true
+	}
+	if !got[planned.ID] {
+		t.Error("expected a planned activity to be active")
+	}
+	if !got[completedWithMaterial.ID] {
+		t.Error("expected a completed activity with an unreturned loan to still be active")
+	}
+	if got[completedNoMaterial.ID] {
+		t.Error("expected a completed activity with nothing pending to not be active")
+	}
+	if got[cancelled.ID] {
+		t.Error("expected a cancelled activity to not be active")
+	}
+}
+
 // A nil slice marshals to JSON null, not []; the frontend calls .map()
 // on the response, so an empty result must come back as [] or the page
 // crashes trying to render it.

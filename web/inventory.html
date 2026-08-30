@@ -102,11 +102,13 @@
           </div>
           <div class="field">
             <label for="nt-user">Socio</label>
-            <select id="nt-user" name="user_id" required></select>
+            <input id="nt-user" type="text" list="nt-user-options" autocomplete="off" required placeholder="Escribe un nombre…">
+            <datalist id="nt-user-options"></datalist>
           </div>
           <div class="field" id="nt-activity-field">
             <label for="nt-activity">Actividad</label>
-            <select id="nt-activity" name="activity_id"></select>
+            <input id="nt-activity" type="text" list="nt-activity-options" autocomplete="off" placeholder="Escribe para buscar…">
+            <datalist id="nt-activity-options"></datalist>
           </div>
           <div class="field">
             <label for="nt-type">Tipo</label>

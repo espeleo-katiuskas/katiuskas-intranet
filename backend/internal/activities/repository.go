@@ -92,6 +92,37 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 	return list, rows.Err()
 }
 
+// ListActive returns activities that still need attention: anything not
+// yet completed or cancelled, plus anything (even completed) that still
+// has a loan or rental linked to it that hasn't been returned. With
+// activities piling up for years, this is what the club actually wants
+// to see day to day — List still exists for browsing the full history.
+func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
+			a.description, a.difficulty, a.max_participants, a.status, a.leader_id
+		FROM activities a
+		LEFT JOIN item_transactions t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
+		WHERE a.status = 'planned' OR t.id IS NOT NULL
+		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Activity{}
+	for rows.Next() {
+		var a Activity
+		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
+			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID); err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) GetByID(ctx context.Context, id int64) (Activity, error) {
 	var a Activity
 	err := r.pool.QueryRow(ctx, `

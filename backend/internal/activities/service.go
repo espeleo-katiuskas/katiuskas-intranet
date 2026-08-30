@@ -21,6 +21,13 @@ func (s *Service) List(ctx context.Context, limit, offset int) ([]Activity, erro
 	return s.repo.List(ctx, limit, offset)
 }
 
+func (s *Service) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	return s.repo.ListActive(ctx, limit, offset)
+}
+
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activity, error) {
 	return s.repo.Update(ctx, id, in)
 }

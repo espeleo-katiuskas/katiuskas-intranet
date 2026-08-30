@@ -31,10 +31,23 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/activities/{id}/participants/{userID}", h.authenticator.Protect(h.leave))
 }
 
+// list defaults to every activity (paginated), matching how it always
+// worked; passing ?status=active switches to only the ones still needing
+// attention (see Repository.ListActive) — with years of history piling
+// up, that's what most callers actually want day to day.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	list, err := h.service.List(r.Context(), limit, offset)
+
+	var (
+		list []Activity
+		err  error
+	)
+	if r.URL.Query().Get("status") == "active" {
+		list, err = h.service.ListActive(r.Context(), limit, offset)
+	} else {
+		list, err = h.service.List(r.Context(), limit, offset)
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list activities")
 		return

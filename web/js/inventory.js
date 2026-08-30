@@ -7,6 +7,9 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  pickerLabel,
+  renderPickerOptions,
+  resolvePickerId,
 } from './api.js';
 
 await initSession();
@@ -217,28 +220,37 @@ if (isAdmin) {
   });
 }
 
+// Both socios and activities pile up over time, so a plain <select> stops
+// being usable — these are text inputs backed by a <datalist> instead,
+// searchable as you type. See pickerLabel/renderPickerOptions/
+// resolvePickerId in api.js.
+let userEntries = [];
+let activityEntries = [];
+
 if (canManageTransactions) {
-  const userSelect = document.getElementById('nt-user');
+  const userInput = document.getElementById('nt-user');
+  const userOptions = document.getElementById('nt-user-options');
   apiFetch('/users/directory')
     .then((people) => {
-      userSelect.innerHTML = people
-        .map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`)
-        .join('');
+      userEntries = people
+        .slice()
+        .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+        .map((person) => ({ id: person.id, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.id) }));
+      userOptions.innerHTML = renderPickerOptions(userEntries);
     })
-    .catch(() => {
-      userSelect.innerHTML = '<option value="">No se pudo cargar la lista de socios</option>';
-    });
+    .catch(() => showError('No se pudo cargar la lista de socios.'));
 
-  const activitySelect = document.getElementById('nt-activity');
-  apiFetch('/activities')
+  const activityInput = document.getElementById('nt-activity');
+  const activityOptions = document.getElementById('nt-activity-options');
+  apiFetch('/activities?status=active')
     .then((activities) => {
-      activitySelect.innerHTML = activities
-        .map((activity) => `<option value="${activity.id}">${escapeHtml(activity.title)}</option>`)
-        .join('');
+      activityEntries = activities.map((activity) => ({
+        id: activity.id,
+        label: pickerLabel(`${formatDate(activity.start_date)} — ${activity.title}`, activity.id),
+      }));
+      activityOptions.innerHTML = renderPickerOptions(activityEntries);
     })
-    .catch(() => {
-      activitySelect.innerHTML = '<option value="">No se pudo cargar la lista de actividades</option>';
-    });
+    .catch(() => showError('No se pudo cargar la lista de actividades.'));
 
   const typeSelect = document.getElementById('nt-type');
   const dueDateField = document.getElementById('nt-due-date-field');
@@ -252,7 +264,7 @@ if (canManageTransactions) {
     // Loans and rentals always happen as part of an activity; a sale
     // doesn't (see the loan_and_rental_require_activity constraint).
     activityField.hidden = type === 'sale';
-    activitySelect.required = type !== 'sale';
+    activityInput.required = type !== 'sale';
   }
   typeSelect.addEventListener('change', updateTransactionFieldsVisibility);
   updateTransactionFieldsVisibility();
@@ -263,14 +275,28 @@ if (canManageTransactions) {
     const formData = new FormData(newTransactionForm);
     const type = formData.get('type');
 
+    const userId = resolvePickerId(userEntries, userInput.value);
+    if (!userId) {
+      showError('Elige un socio de la lista.');
+      return;
+    }
+    let activityId = null;
+    if (!activityField.hidden) {
+      activityId = resolvePickerId(activityEntries, activityInput.value);
+      if (!activityId) {
+        showError('Elige una actividad de la lista.');
+        return;
+      }
+    }
+
     const body = {
       item_id: Number(formData.get('item_id')),
-      user_id: Number(formData.get('user_id')),
+      user_id: userId,
       type,
       quantity: Number(formData.get('quantity')) || 1,
       due_date: type !== 'sale' ? formData.get('due_date') || null : null,
       price: type !== 'loan' && formData.get('price') ? Number(formData.get('price')) : null,
-      activity_id: formData.get('activity_id') ? Number(formData.get('activity_id')) : null,
+      activity_id: activityId,
     };
 
     const submitButton = newTransactionForm.querySelector('button[type="submit"]');

@@ -73,8 +73,13 @@
           <textarea id="na-description" name="description"></textarea>
         </div>
         <div class="field span-2">
-          <label for="na-participants">Participantes <span class="optional">(opcional; puedes elegir varios)</span></label>
-          <select id="na-participants" name="participant_user_ids" multiple size="6"></select>
+          <label for="na-participant-search">Participantes <span class="optional">(opcional)</span></label>
+          <div class="role-add-row">
+            <input id="na-participant-search" type="text" list="na-participant-options" autocomplete="off" placeholder="Escribe un nombre…">
+            <datalist id="na-participant-options"></datalist>
+            <button type="button" id="na-add-participant" class="btn btn-secondary btn-small">Añadir</button>
+          </div>
+          <div id="na-participants-chips"></div>
         </div>
       </div>
       <div class="panel-actions">
@@ -84,7 +89,22 @@
     </form>
   </div>
 
-  <div class="card-grid" id="activities-list"></div>
+  <div class="section-header">
+    <h2>Actividades</h2>
+    <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Título</th><th>Lugar</th><th>Tipo</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="activities-list"></tbody>
+    </table>
+  </div>
+  <div class="panel-actions">
+    <button id="load-more-activities" type="button" class="btn btn-secondary btn-small" hidden>Cargar más</button>
+  </div>
 </main>
 <script type="module" src="js/activities.js"></script>
 <footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>

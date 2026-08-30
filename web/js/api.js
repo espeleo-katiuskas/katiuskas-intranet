@@ -116,6 +116,35 @@ function formatDate(isoDate) {
   return new Date(isoDate).toLocaleDateString('es-ES');
 }
 
+// A plain <select> stops being usable once there are hundreds of
+// people or activities to choose from, especially with no obvious
+// ordering. These three helpers back a searchable alternative instead:
+// a text <input list="..."> paired with a <datalist>, which gives free
+// incremental filtering as the person types, for the price of a couple
+// of small utility functions instead of a whole new widget.
+//
+// Each option's visible label embeds a "#<id>" suffix a person is
+// unlikely to type themselves, so a search that narrows down to one
+// match can still be resolved back to an id unambiguously even when two
+// entries would otherwise look identical (two people with the same
+// name, two activities with the same title).
+function pickerLabel(text, id) {
+  return `${text} #${id}`;
+}
+
+function renderPickerOptions(entries) {
+  return entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
+}
+
+// Resolves what's currently typed in the picker input back to an id, or
+// null if it doesn't exactly match one of the offered options (so a
+// half-typed search can't be submitted as if it were a real pick).
+function resolvePickerId(entries, typedValue) {
+  const value = (typedValue ?? '').trim();
+  const match = entries.find((e) => e.label === value);
+  return match ? match.id : null;
+}
+
 export {
   apiFetch,
   initSession,
@@ -126,4 +155,7 @@ export {
   setAccessTokenFromLogin,
   escapeHtml,
   formatDate,
+  pickerLabel,
+  renderPickerOptions,
+  resolvePickerId,
 };

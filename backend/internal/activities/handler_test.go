@@ -88,6 +88,52 @@ func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 	}
 }
 
+func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
+	mux, authn := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
+		"title": "Planned", "type": "caving", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/activities?status=active", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list active: %d: %s", rec.Code, rec.Body.String())
+	}
+	var active []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &active); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active activity, got %d: %+v", len(active), active)
+	}
+
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d", active[0].ID), tokenFor(t, authn, 2, "admin"), map[string]any{"status": "completed"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("complete: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/activities?status=active", memberToken, nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &active); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(active) != 0 {
+		t.Errorf("expected the now-completed activity to drop out of ?status=active, got %+v", active)
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/activities", memberToken, nil)
+	var all []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(all) != 1 {
+		t.Errorf("expected the unfiltered list to still include it, got %+v", all)
+	}
+}
+
 func TestHandlerCreateWithParticipants(t *testing.T) {
 	mux, authn := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")

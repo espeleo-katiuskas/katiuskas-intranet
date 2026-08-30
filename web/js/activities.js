@@ -7,6 +7,9 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  pickerLabel,
+  renderPickerOptions,
+  resolvePickerId,
 } from './api.js';
 
 await initSession();
@@ -24,14 +27,20 @@ const errorBox = document.getElementById('error');
 // its "add participant" control.
 let directory = [];
 let directoryById = {};
+let personEntries = [];
 
 async function loadDirectory() {
   try {
     directory = await apiFetch('/users/directory');
     directoryById = Object.fromEntries(directory.map((person) => [person.id, person]));
+    personEntries = directory
+      .slice()
+      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+      .map((person) => ({ id: person.id, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.id) }));
   } catch {
     directory = [];
     directoryById = {};
+    personEntries = [];
   }
 }
 
@@ -54,6 +63,7 @@ function showError(message) {
 
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 const statusOrder = ['planned', 'completed', 'cancelled'];
+const typeLabels = { caving: 'Espeleología', training: 'Formación', outdoor: 'Exterior', social: 'Social', other: 'Otra' };
 
 function renderStatusOptions(current) {
   return statusOrder
@@ -103,7 +113,8 @@ function renderActivity(activity) {
       <div class="detail-list" data-participants-panel="${activity.id}" hidden>
         <div data-participants-rows="${activity.id}"></div>
         <div class="role-add-row">
-          <select data-participant-select="${activity.id}"></select>
+          <input type="text" list="participant-options-${activity.id}" data-participant-search="${activity.id}" autocomplete="off" placeholder="Escribe un nombre…">
+          <datalist id="participant-options-${activity.id}"></datalist>
           <button type="button" class="btn btn-secondary btn-small" data-add-participant="${activity.id}">+ Participante</button>
         </div>
       </div>
@@ -111,35 +122,70 @@ function renderActivity(activity) {
     : '';
 
   return `
-    <div class="card" data-activity-id="${activity.id}">
-      <h3>${escapeHtml(activity.title)}</h3>
-      <p>${dateLabel} · ${escapeHtml(activity.location)}</p>
-      ${activity.description ? `<p>${escapeHtml(activity.description)}</p>` : ''}
-      <p>${statusMarkup}</p>
-      <div class="card-actions">
+    <tr data-activity-id="${activity.id}">
+      <td>${dateLabel}</td>
+      <td>${escapeHtml(activity.title)}</td>
+      <td>${escapeHtml(activity.location)}</td>
+      <td>${typeLabels[activity.type] ?? activity.type}</td>
+      <td>${statusMarkup}</td>
+      <td class="table-actions">
         <button type="button" class="btn btn-secondary btn-small" data-join="${activity.id}">Apuntarme</button>
         <button type="button" class="btn btn-secondary btn-small" data-leave="${activity.id}">Darme de baja</button>
         ${adminActions}
-      </div>
-      ${editPanel}
-      ${participantsPanel}
-    </div>
+      </td>
+    </tr>
+    <tr data-activity-detail-row="${activity.id}">
+      <td colspan="6">
+        ${activity.description ? `<p>${escapeHtml(activity.description)}</p>` : ''}
+        ${editPanel}
+        ${participantsPanel}
+      </td>
+    </tr>
   `;
 }
 
-async function loadActivities() {
-  const list = document.getElementById('activities-list');
+const activitiesList = document.getElementById('activities-list');
+const toggleFilterButton = document.getElementById('toggle-activity-filter');
+const loadMoreButton = document.getElementById('load-more-activities');
+
+const PAGE_SIZE = 50;
+let showingActive = true;
+let offset = 0;
+let loadedActivities = [];
+
+function activityQuery() {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  if (showingActive) {
+    params.set('status', 'active');
+  }
+  return `/activities?${params.toString()}`;
+}
+
+async function loadActivities({ append = false } = {}) {
   try {
-    const activities = await apiFetch('/activities');
-    list.innerHTML = activities.length
-      ? activities.map(renderActivity).join('')
-      : '<p>Todavía no hay actividades.</p>';
+    const page = await apiFetch(activityQuery());
+    loadedActivities = append ? loadedActivities.concat(page) : page;
+    activitiesList.innerHTML = loadedActivities.length
+      ? loadedActivities.map(renderActivity).join('')
+      : `<tr><td colspan="6">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
+    loadMoreButton.hidden = page.length < PAGE_SIZE;
   } catch {
-    list.innerHTML = '<p>No se pudieron cargar las actividades.</p>';
+    activitiesList.innerHTML = '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
+    loadMoreButton.hidden = true;
   }
 }
 
-const activitiesList = document.getElementById('activities-list');
+toggleFilterButton.addEventListener('click', async () => {
+  showingActive = !showingActive;
+  offset = 0;
+  toggleFilterButton.textContent = showingActive ? 'Ver todas' : 'Ver solo activas';
+  await loadActivities();
+});
+
+loadMoreButton.addEventListener('click', async () => {
+  offset += PAGE_SIZE;
+  await loadActivities({ append: true });
+});
 
 activitiesList.addEventListener('change', async (event) => {
   const select = event.target.closest('select[data-status-for]');
@@ -261,15 +307,20 @@ activitiesList.addEventListener('click', async (event) => {
   if (addParticipantButton) {
     const activityId = addParticipantButton.dataset.addParticipant;
     const panel = activitiesList.querySelector(`[data-participants-panel="${activityId}"]`);
-    const select = panel.querySelector(`[data-participant-select="${activityId}"]`);
-    if (!select.value) return;
+    const input = panel.querySelector(`[data-participant-search="${activityId}"]`);
+    const personId = resolvePickerId(personEntries, input.value);
+    if (!personId) {
+      showError('Escribe un nombre de la lista de socios.');
+      return;
+    }
 
     addParticipantButton.disabled = true;
     try {
       await apiFetch(`/activities/${activityId}/participants`, {
         method: 'POST',
-        body: JSON.stringify({ user_id: Number(select.value) }),
+        body: JSON.stringify({ user_id: personId }),
       });
+      input.value = '';
       await loadParticipants(activityId, panel);
     } catch (err) {
       showError(err.message);
@@ -281,7 +332,8 @@ activitiesList.addEventListener('click', async (event) => {
 
 async function loadParticipants(activityId, panel) {
   const rows = panel.querySelector(`[data-participants-rows="${activityId}"]`);
-  const addSelect = panel.querySelector(`[data-participant-select="${activityId}"]`);
+  const searchInput = panel.querySelector(`[data-participant-search="${activityId}"]`);
+  const searchOptions = panel.querySelector(`#participant-options-${activityId}`);
   rows.innerHTML = 'Cargando…';
   try {
     const participants = await apiFetch(`/activities/${activityId}/participants`);
@@ -297,10 +349,9 @@ async function loadParticipants(activityId, panel) {
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = new Set(participants.map((p) => p.user_id));
-    const candidates = directory.filter((person) => !alreadyIn.has(person.id));
-    addSelect.innerHTML = candidates.length
-      ? candidates.map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`).join('')
-      : '<option value="">No queda nadie más por añadir</option>';
+    const candidates = personEntries.filter((entry) => !alreadyIn.has(entry.id));
+    searchOptions.innerHTML = renderPickerOptions(candidates);
+    searchInput.disabled = candidates.length === 0;
   } catch (err) {
     rows.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
@@ -309,12 +360,45 @@ async function loadParticipants(activityId, panel) {
 // Creating an activity is open to any signed-in member, not just admin/board.
 const newActivityPanel = document.getElementById('new-activity-panel');
 const newActivityForm = document.getElementById('new-activity-form');
-const participantsSelect = document.getElementById('na-participants');
+const participantSearchInput = document.getElementById('na-participant-search');
+const participantOptions = document.getElementById('na-participant-options');
+const participantChips = document.getElementById('na-participants-chips');
+const chosenParticipants = new Map();
+
+function renderParticipantChips() {
+  participantChips.innerHTML = Array.from(chosenParticipants.entries())
+    .map(([id, name]) => `<span class="badge-removable">${escapeHtml(name)}<button type="button" data-remove-chip="${id}" title="Quitar">×</button></span>`)
+    .join('');
+}
+
+function addChosenParticipant() {
+  const personId = resolvePickerId(personEntries, participantSearchInput.value);
+  if (!personId) {
+    showError('Escribe un nombre de la lista de socios.');
+    return;
+  }
+  const person = directoryById[personId];
+  chosenParticipants.set(personId, `${person.first_name} ${person.last_name}`);
+  participantSearchInput.value = '';
+  renderParticipantChips();
+}
+
+document.getElementById('na-add-participant').addEventListener('click', addChosenParticipant);
+participantSearchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    addChosenParticipant();
+  }
+});
+participantChips.addEventListener('click', (event) => {
+  const removeButton = event.target.closest('button[data-remove-chip]');
+  if (!removeButton) return;
+  chosenParticipants.delete(Number(removeButton.dataset.removeChip));
+  renderParticipantChips();
+});
 
 loadDirectory().then(() => {
-  participantsSelect.innerHTML = directory.length
-    ? directory.map((person) => `<option value="${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</option>`).join('')
-    : '<option value="">No se pudo cargar la lista de socios</option>';
+  participantOptions.innerHTML = renderPickerOptions(personEntries);
 });
 
 document.getElementById('toggle-new-activity').addEventListener('click', () => {
@@ -323,6 +407,8 @@ document.getElementById('toggle-new-activity').addEventListener('click', () => {
 
 document.getElementById('cancel-new-activity').addEventListener('click', () => {
   newActivityForm.reset();
+  chosenParticipants.clear();
+  renderParticipantChips();
   newActivityPanel.hidden = true;
 });
 
@@ -330,7 +416,6 @@ newActivityForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(newActivityForm);
   const optional = (key) => formData.get(key)?.toString().trim() || null;
-  const participantUserIds = Array.from(participantsSelect.selectedOptions).map((o) => Number(o.value));
 
   const body = {
     title: formData.get('title'),
@@ -341,7 +426,7 @@ newActivityForm.addEventListener('submit', async (event) => {
     description: optional('description'),
     difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
     max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
-    participant_user_ids: participantUserIds,
+    participant_user_ids: Array.from(chosenParticipants.keys()),
   };
 
   const submitButton = newActivityForm.querySelector('button[type="submit"]');
@@ -350,7 +435,10 @@ newActivityForm.addEventListener('submit', async (event) => {
     await apiFetch('/activities', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Actividad creada.');
     newActivityForm.reset();
+    chosenParticipants.clear();
+    renderParticipantChips();
     newActivityPanel.hidden = true;
+    offset = 0;
     await loadActivities();
   } catch (err) {
     showError(err.message);
