@@ -168,10 +168,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
 - **`memberships`** — periodos de alta/baja de socio. Una persona puede tener varios
   periodos si no se solapan; lo garantiza una restricción `EXCLUDE USING gist` de
   PostgreSQL sobre `(user_id, period)`, no una comprobación manual.
-  `memberships.Service.LatestByUser` expone el periodo más reciente de una persona
-  (activo o no); `users.Service` lo incorpora a cada `User` como
-  `membership_start_date`/`membership_end_date`, para que la lista de personas pueda
-  mostrar y ordenar por fecha de alta/baja sin una petición aparte por persona.
+  `users.Service.enrich` pide todos los periodos de una persona
+  (`memberships.Service.ListByUser`, más reciente primero) y separa las dos fechas que
+  incorpora a cada `User`: `membership_start_date` es la del *primer* periodo (cuándo
+  entró por primera vez, no la última vez que ha vuelto a entrar tras una baja) y
+  `membership_end_date` la del periodo *más reciente* (o vacía si sigue de alta) — para
+  que alguien que ha estado varias veces en el club siga mostrando su alta original en
+  vez de la fecha de su último reingreso. Así la lista de personas puede mostrar y
+  ordenar por fecha de alta/baja sin una petición aparte por persona.
 - **`membership_leaves`** — "bajas temporales": una ventana con fecha de inicio y fin
   (ambas obligatorias desde el principio, a diferencia de un periodo de socio) dentro
   de un periodo de `memberships` concreto — la persona se ausenta un tiempo sin dejar

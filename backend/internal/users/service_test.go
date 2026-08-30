@@ -131,6 +131,50 @@ func TestServiceReportsLatestMembershipDates(t *testing.T) {
 	}
 }
 
+// Someone who left the club and rejoined has two membership periods.
+// Their reported alta must be the first period's start — when they
+// originally joined — not the second period's, even though the second
+// period is the "latest" one and does supply the baja/still-active
+// status.
+func TestServiceReportsFirstAltaAcrossMultipleMembershipPeriods(t *testing.T) {
+	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	firstStart, _ := time.Parse("2006-01-02", "2015-01-01")
+	firstEnd, _ := time.Parse("2006-01-02", "2016-01-01")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: firstStart}); err != nil {
+		t.Fatalf("create first period: %v", err)
+	}
+	firstPeriods, err := membershipsService.ListByUser(ctx, u.ID)
+	if err != nil || len(firstPeriods) == 0 {
+		t.Fatalf("list by user: %v", err)
+	}
+	if _, err := membershipsService.Update(ctx, firstPeriods[0].ID, memberships.UpdateInput{StartDate: firstStart, EndDate: &firstEnd}); err != nil {
+		t.Fatalf("end first period: %v", err)
+	}
+
+	secondStart, _ := time.Parse("2006-01-02", "2020-01-01")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: secondStart}); err != nil {
+		t.Fatalf("create second period: %v", err)
+	}
+
+	current, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if current.MembershipStartDate == nil || !current.MembershipStartDate.Equal(firstStart) {
+		t.Errorf("expected membership_start_date %v (the first alta), got %v", firstStart, current.MembershipStartDate)
+	}
+	if current.MembershipEndDate != nil {
+		t.Errorf("expected the currently-open second period to report no end date, got %v", current.MembershipEndDate)
+	}
+}
+
 func TestServiceReportsOnLeave(t *testing.T) {
 	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
@@ -234,10 +278,11 @@ func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.
 	if err != nil {
 		t.Fatalf("parse end date: %v", err)
 	}
-	latest, err := membershipsService.LatestByUser(ctx, first.ID)
-	if err != nil || latest == nil {
-		t.Fatalf("latest by user: %v", err)
+	periods, err := membershipsService.ListByUser(ctx, first.ID)
+	if err != nil || len(periods) == 0 {
+		t.Fatalf("list by user: %v", err)
 	}
+	latest := periods[0]
 	if _, err := membershipsService.Update(ctx, latest.ID, memberships.UpdateInput{StartDate: latest.StartDate, EndDate: &endDate}); err != nil {
 		t.Fatalf("end membership: %v", err)
 	}
@@ -254,6 +299,13 @@ func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.
 	}
 	if rejoined.MembershipNumber == nil || *rejoined.MembershipNumber != firstNumber {
 		t.Errorf("expected rejoining to keep membership number %d, got %v", firstNumber, rejoined.MembershipNumber)
+	}
+	// The reported alta is the very first one, not this rejoin.
+	if rejoined.MembershipStartDate == nil || !rejoined.MembershipStartDate.Equal(startDate) {
+		t.Errorf("expected membership_start_date to stay %v (the original alta), got %v", startDate, rejoined.MembershipStartDate)
+	}
+	if rejoined.MembershipEndDate != nil {
+		t.Errorf("expected the rejoined (current) period to report no end date, got %v", rejoined.MembershipEndDate)
 	}
 }
 

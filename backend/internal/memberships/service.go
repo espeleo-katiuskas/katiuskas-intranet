@@ -66,19 +66,6 @@ func (s *Service) IsOnLeave(ctx context.Context, userID int64) (bool, error) {
 	return s.repo.IsOnLeave(ctx, userID)
 }
 
-// LatestByUser returns the person's most recent membership period —
-// active if they currently are one, otherwise their last one — or nil if
-// they've never been a member. Used to show a start/end "alta/baja" date
-// on the people list without a separate per-person round trip for full
-// history.
-func (s *Service) LatestByUser(ctx context.Context, userID int64) (*Membership, error) {
-	list, err := s.repo.ListByUser(ctx, userID)
-	if err != nil || len(list) == 0 {
-		return nil, err
-	}
-	return &list[0], nil
-}
-
 func (s *Service) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, error) {
 	return s.repo.CreateLeave(ctx, in)
 }

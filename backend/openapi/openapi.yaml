@@ -1341,16 +1341,20 @@ components:
           format: date
           nullable: true
           description: >
-            Start date of this person's most recent membership period, or
-            null if they've never been a member. See
+            Start date of this person's *first* membership period ever,
+            or null if they've never been a member. Someone who left and
+            rejoined has more than one period; this is always the
+            earliest one, not the latest rejoin. See
             GET /users/{userID}/memberships for the full history.
         membership_end_date:
           type: string
           format: date
           nullable: true
           description: >
-            End date of that same period, or null if it's still open
-            (they're currently a member).
+            End date of this person's most recent membership period (not
+            necessarily the same period membership_start_date comes
+            from), or null if it's still open (they're currently a
+            member).
         on_leave:
           type: boolean
           description: >

@@ -85,8 +85,12 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 // list (roles.Service is the single place that knows how to compute
 // "member"/"former_member"/"board" from membership/board history on top
 // of whatever's actually stored in user_roles — see
-// roles.Repository.ListNamesForUser) and the person's latest membership
-// period, shown as their "alta/baja" dates.
+// roles.Repository.ListNamesForUser) and the person's "alta/baja" dates.
+// Someone who has left and rejoined the club has more than one
+// membership period; their alta shown here is the *first* one they ever
+// started, not the latest rejoin, while baja (or "still active")
+// reflects the latest period — the two dates can come from different
+// rows.
 func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 	names, err := s.roles.ListNamesForUser(ctx, user.ID)
 	if err != nil {
@@ -94,24 +98,29 @@ func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 	}
 	user.Roles = names
 
-	latest, err := s.memberships.LatestByUser(ctx, user.ID)
+	// Newest first (see memberships.Repository.ListByUser), so periods[0]
+	// is the current or most recent period and periods[len-1] the first.
+	periods, err := s.memberships.ListByUser(ctx, user.ID)
 	if err != nil {
 		return user, err
 	}
-	if latest != nil {
-		user.MembershipStartDate = &latest.StartDate
+	if len(periods) > 0 {
+		latest := periods[0]
+		first := periods[len(periods)-1]
+		user.MembershipStartDate = &first.StartDate
 		user.MembershipEndDate = latest.EndDate
-	}
-	// A leave doesn't touch the membership period it belongs to, so
-	// telling "activo" apart from "baja temporal" needs its own check —
-	// only worth doing for someone currently active, since a closed
-	// period can't have a leave covering today.
-	if latest != nil && latest.EndDate == nil {
-		onLeave, err := s.memberships.IsOnLeave(ctx, user.ID)
-		if err != nil {
-			return user, err
+
+		// A leave doesn't touch the membership period it belongs to, so
+		// telling "activo" apart from "baja temporal" needs its own
+		// check — only worth doing for someone currently active, since a
+		// closed period can't have a leave covering today.
+		if latest.EndDate == nil {
+			onLeave, err := s.memberships.IsOnLeave(ctx, user.ID)
+			if err != nil {
+				return user, err
+			}
+			user.OnLeave = onLeave
 		}
-		user.OnLeave = onLeave
 	}
 
 	latestLicense, err := s.licenses.LatestByUser(ctx, user.ID)

@@ -82,9 +82,11 @@ type User struct {
 	// never checked for authorization.
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	LastLoginIP *string    `json:"last_login_ip,omitempty"`
-	// MembershipStartDate/MembershipEndDate reflect the person's most
-	// recent membership period (see memberships.Service.LatestByUser): a
-	// nil end date with a non-nil start date means they're currently a
+	// MembershipStartDate is the start of the person's *first* membership
+	// period ever, and MembershipEndDate the end of their most recent one
+	// (see Service.enrich) — someone who left and rejoined has more than
+	// one period, and these two dates can come from different ones. A nil
+	// end date with a non-nil start date means they're currently a
 	// member; both nil means they've never been one.
 	MembershipStartDate *time.Time `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
