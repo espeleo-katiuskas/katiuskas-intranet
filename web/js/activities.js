@@ -51,6 +51,11 @@ function showError(message) {
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 
+function leaderLabel(activity) {
+  const leader = directoryById[activity.leader_id];
+  return leader ? `${leader.first_name} ${leader.last_name}` : `Socio n.º ${activity.leader_id}`;
+}
+
 function renderActivity(activity) {
   const dateLabel = activity.end_date
     ? `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`
@@ -62,6 +67,7 @@ function renderActivity(activity) {
       <td>${escapeHtml(activity.title)}</td>
       <td>${escapeHtml(activity.location)}</td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
+      <td>${escapeHtml(leaderLabel(activity))}</td>
       <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
     </tr>
   `;
@@ -90,10 +96,10 @@ async function loadActivities({ append = false } = {}) {
     loadedActivities = append ? loadedActivities.concat(page) : page;
     activitiesList.innerHTML = loadedActivities.length
       ? loadedActivities.map(renderActivity).join('')
-      : `<tr><td colspan="5">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
+      : `<tr><td colspan="6">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
     loadMoreButton.hidden = page.length < PAGE_SIZE;
   } catch {
-    activitiesList.innerHTML = '<tr><td colspan="5">No se pudieron cargar las actividades.</td></tr>';
+    activitiesList.innerHTML = '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
     loadMoreButton.hidden = true;
   }
 }
@@ -156,9 +162,11 @@ participantChips.addEventListener('click', (event) => {
   renderParticipantChips();
 });
 
-loadDirectory().then(() => {
-  participantOptions.innerHTML = renderPickerOptions(personEntries);
-});
+// Awaited before the first loadActivities() call at the bottom of this
+// file, so the organizer column has names to show on first paint
+// instead of falling back to "Socio n.º …" until a re-render happens.
+await loadDirectory();
+participantOptions.innerHTML = renderPickerOptions(personEntries);
 
 document.getElementById('toggle-new-activity').addEventListener('click', () => {
   newActivityPanel.hidden = !newActivityPanel.hidden;
