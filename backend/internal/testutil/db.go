@@ -267,12 +267,13 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 // (migration 00006) requires.
 func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
 	t.Helper()
+	leader := InsertUser(t, tx, "")
 	var id int64
 	err := tx.QueryRow(context.Background(), `
-		INSERT INTO activities (title, type, start_date, location)
-		VALUES ('Test activity', 'caving', now(), 'Test location')
+		INSERT INTO activities (title, type, start_date, location, leader_id)
+		VALUES ('Test activity', 'caving', now(), 'Test location', $1)
 		RETURNING id
-	`).Scan(&id)
+	`, leader.ID).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert test activity: %v", err)
 	}

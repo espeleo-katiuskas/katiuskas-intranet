@@ -174,6 +174,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.Title != nil {
 		a.Title = *in.Title
 	}
+	if in.Type != nil {
+		a.Type = *in.Type
+	}
 	if in.Description != nil {
 		a.Description = in.Description
 	}
@@ -184,8 +187,8 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 		a.Location = *in.Location
 	}
 	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, description=$2, status=$3, location=$4 WHERE id=$5
-	`, a.Title, a.Description, a.Status, a.Location, id)
+		UPDATE activities SET title=$1, type=$2, description=$3, status=$4, location=$5 WHERE id=$6
+	`, a.Title, a.Type, a.Description, a.Status, a.Location, id)
 	return a, err
 }
 

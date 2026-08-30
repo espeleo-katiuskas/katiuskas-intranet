@@ -819,7 +819,9 @@ paths:
       description: >
         Any authenticated person can create an activity (there's no role
         restriction here, unlike update/cancel) and sign up its initial
-        participants in the same call.
+        participants in the same call. The organizer (leader_id) is
+        always set to the caller — it can't be chosen in the request
+        body.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -833,6 +835,10 @@ paths:
               schema: { $ref: "#/components/schemas/Activity" }
         "400":
           description: One of the given participant_user_ids doesn't exist.
+        "409":
+          description: >
+            not_federated — the activity is caving or canyoning and one of
+            the given participant_user_ids isn't currently federated.
 
   /activities/{id}:
     get:
@@ -849,22 +855,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update an activity
+      description: >
+        Only the activity's organizer (leader_id), or admin/board, may
+        update it — anyone else gets a 403.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateActivityInput" }
       responses:
         "200":
           description: Updated activity
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
+        "403": { description: Only the organizer, board, or admin can update this activity. }
+        "404": { $ref: "#/components/responses/NotFound" }
     delete:
       summary: Cancel an activity
+      description: >
+        Only the activity's organizer (leader_id), or admin/board, may
+        cancel it — anyone else gets a 403.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Activity cancelled }
+        "403": { description: Only the organizer, board, or admin can cancel this activity. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /activities/{id}/participants:
     get:
@@ -886,7 +906,9 @@ paths:
         With no body (or a null/omitted user_id) signs up the caller. A
         plain member naming anyone other than themselves gets a 403;
         admin/board can name any user_id to add them on that person's
-        behalf.
+        behalf. If the activity's type is caving or canyoning, the person
+        being added must currently hold a valid federative license, or
+        the call is rejected with 409 not_federated.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -901,6 +923,11 @@ paths:
       responses:
         "204": { description: Joined }
         "403": { description: A plain member tried to add someone other than themselves. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            not_federated — the activity is caving or canyoning and the
+            person being added isn't currently federated.
 
   /activities/{id}/participants/{userID}:
     delete:
@@ -1373,7 +1400,7 @@ components:
       properties:
         id: { type: integer }
         title: { type: string }
-        type: { type: string, enum: [caving, training, outdoor, social, other] }
+        type: { type: string, enum: [caving, canyoning, training, social, other] }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }
         location: { type: string }
@@ -1381,25 +1408,41 @@ components:
         difficulty: { type: integer, nullable: true }
         max_participants: { type: integer, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
-        leader_id: { type: integer, nullable: true }
+        leader_id:
+          type: integer
+          description: >
+            The organizer: always the person who created the activity, and
+            the only one besides admin/board who can update or cancel it.
 
     CreateActivityInput:
       type: object
       required: [title, start_date, location]
       properties:
         title: { type: string }
-        type: { type: string, enum: [caving, training, outdoor, social, other], default: caving }
+        type: { type: string, enum: [caving, canyoning, training, social, other], default: caving }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }
         location: { type: string }
         description: { type: string, nullable: true }
         difficulty: { type: integer, nullable: true }
         max_participants: { type: integer, nullable: true }
-        leader_id: { type: integer, nullable: true }
         participant_user_ids:
           type: array
           items: { type: integer }
-          description: Signed up as participants in the same call that creates the activity.
+          description: >
+            Signed up as participants in the same call that creates the
+            activity. If type is caving or canyoning, every one of them
+            must currently hold a valid federative license, or the whole
+            call is rejected with 409 not_federated.
+
+    UpdateActivityInput:
+      type: object
+      properties:
+        title: { type: string }
+        type: { type: string, enum: [caving, canyoning, training, social, other] }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [planned, completed, cancelled] }
+        location: { type: string }
 
     Participant:
       type: object

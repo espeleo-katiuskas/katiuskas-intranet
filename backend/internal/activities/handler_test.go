@@ -12,20 +12,24 @@ import (
 
 	"katiuskas-intranet/backend/internal/activities"
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/licenses"
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/testutil"
 )
 
-func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver) {
-	mux, authenticator, _ := newTestServerWithTx(t)
-	return mux, authenticator
+func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
+	return newTestServerWithTx(t)
 }
 
 // newTestServerWithTx also returns the underlying transaction, for tests
 // that need to insert real user rows to satisfy a foreign key (e.g.
-// signing someone up as a participant).
+// signing someone up as a participant, or being the activity's leader —
+// now required on every activity).
 func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
 	tx := testutil.NewTx(t)
-	service := activities.NewService(activities.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
@@ -66,11 +70,14 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 }
 
 func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	body := map[string]any{
-		"title": "Sima del Viento", "type": "caving", "location": "Cazorla", "start_date": "2026-09-15",
+		// "social", not "caving": this test is about who may create an
+		// activity, not about the federation requirement.
+		"title": "Cena de fin de temporada", "type": "social", "location": "Cazorla", "start_date": "2026-09-15",
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
 	if rec.Code != http.StatusCreated {
@@ -83,11 +90,12 @@ func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 }
 
 func TestHandlerGet(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -111,8 +119,9 @@ func TestHandlerGet(t *testing.T) {
 }
 
 func TestHandlerGetNotFound(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodGet, "/api/v1/activities/999999", memberToken, nil)
 	if rec.Code != http.StatusNotFound {
@@ -121,11 +130,14 @@ func TestHandlerGetNotFound(t *testing.T) {
 }
 
 func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
+	mux, authn, tx := newTestServer(t)
+	member := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "Planned", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "Planned", "type": "social", "location": "X", "start_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -143,7 +155,7 @@ func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
 		t.Fatalf("expected 1 active activity, got %d: %+v", len(active), active)
 	}
 
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d", active[0].ID), tokenFor(t, authn, 2, "admin"), map[string]any{"status": "completed"})
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d", active[0].ID), adminToken, map[string]any{"status": "completed"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("complete: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -167,11 +179,12 @@ func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
 }
 
 func TestHandlerCreateWithParticipants(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	body := map[string]any{
-		"title": "Sima del Viento", "type": "caving", "location": "Cazorla", "start_date": "2026-09-15",
+		"title": "Cena de fin de temporada", "type": "social", "location": "Cazorla", "start_date": "2026-09-15",
 		"participant_user_ids": []int64{},
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
@@ -198,7 +211,7 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -225,13 +238,14 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 
 func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
+	admin := testutil.InsertUser(t, tx, "")
 	person := testutil.InsertUser(t, tx, "")
 	other := testutil.InsertUser(t, tx, "")
-	adminToken := tokenFor(t, authn, 1, "admin")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
 	memberToken := tokenFor(t, authn, other.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
 		"participant_user_ids": []int64{person.ID},
 	})
 	if rec.Code != http.StatusCreated {
@@ -255,13 +269,38 @@ func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 	}
 }
 
-func TestHandlerUpdateAndCancelStillRequireAdminOrBoard(t *testing.T) {
-	mux, authn := newTestServer(t)
-	memberToken := tokenFor(t, authn, 1, "member")
-	adminToken := tokenFor(t, authn, 2, "admin")
+func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"leader_id": 999999, // must be ignored: the organizer is always the caller
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.LeaderID != person.ID {
+		t.Errorf("expected leader_id to be the caller (%d), got %d", person.ID, created.LeaderID)
+	}
+}
+
+func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	otherMember := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	otherMemberToken := tokenFor(t, authn, otherMember.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -272,13 +311,91 @@ func TestHandlerUpdateAndCancelStillRequireAdminOrBoard(t *testing.T) {
 	}
 
 	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
-	if rec := doRequest(mux, http.MethodPatch, path, memberToken, map[string]any{"title": "New"}); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member to be forbidden from updating an activity, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodPatch, path, otherMemberToken, map[string]any{"title": "New"}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a non-leader member to be forbidden from updating an activity, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"title": "New"}); rec.Code != http.StatusOK {
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"title": "New"}); rec.Code != http.StatusOK {
+		t.Errorf("expected the organizer to update their own activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"title": "Newer"}); rec.Code != http.StatusOK {
 		t.Errorf("expected an admin to update an activity, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodDelete, path, memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member to be forbidden from cancelling an activity, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodDelete, path, otherMemberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a non-leader member to be forbidden from cancelling an activity, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, leaderToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected the organizer to cancel their own activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerUpdateCanChangeType(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "training", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"type": "social"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update type: %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.Type != activities.TypeSocial {
+		t.Errorf("expected type to change to social, got %q", updated.Type)
+	}
+}
+
+func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	admin := testutil.InsertUser(t, tx, "")
+	unfederated := testutil.InsertUser(t, tx, "")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+	unfederatedToken := tokenFor(t, authn, unfederated.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "Sima", "type": "caving", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create caving activity: %d: %s", rec.Code, rec.Body.String())
+	}
+	var caving activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &caving); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/participants", caving.ID), unfederatedToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for an unfederated member joining a caving activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "not_federated" {
+		t.Errorf("expected error code not_federated, got %q", code)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "Social", "type": "social", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create social activity: %d: %s", rec.Code, rec.Body.String())
+	}
+	var social activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &social); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/participants", social.ID), unfederatedToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("expected an unfederated member to still join a social activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

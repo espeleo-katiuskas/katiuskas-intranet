@@ -24,8 +24,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/activities", h.authenticator.Protect(h.list))
 	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create))
 	mux.Handle("GET /api/v1/activities/{id}", h.authenticator.Protect(h.get))
-	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update, "admin", "board"))
-	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel, "admin", "board"))
+	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update))
+	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel))
 
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
@@ -68,7 +68,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Description        *string `json:"description"`
 		Difficulty         *int16  `json:"difficulty"`
 		MaxParticipants    *int32  `json:"max_participants"`
-		LeaderID           *int64  `json:"leader_id"`
 		ParticipantUserIDs []int64 `json:"participant_user_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -92,14 +91,19 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Type == "" {
 		body.Type = TypeCaving
 	}
+	current, _ := auth.UserFromContext(r.Context())
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Location: body.Location, Description: body.Description, Difficulty: body.Difficulty,
-		MaxParticipants: body.MaxParticipants, LeaderID: body.LeaderID,
+		MaxParticipants: body.MaxParticipants, LeaderID: current.ID,
 		ParticipantUserIDs: body.ParticipantUserIDs,
 	})
 	if errors.Is(err, ErrParticipantNotFound) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
+		return
+	}
+	if errors.Is(err, ErrNotFederated) {
+		httpapi.WriteError(w, http.StatusConflict, "not_federated", err.Error())
 		return
 	}
 	if err != nil {
@@ -127,10 +131,29 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, a)
 }
 
+// canManage reports whether the current user may edit or cancel the
+// given activity: admin/board can manage any activity, and the leader
+// who created it can manage their own.
+func (h *Handler) canManage(r *http.Request, activityID int64) bool {
+	current, _ := auth.UserFromContext(r.Context())
+	if current.HasAnyRole("admin", "board") {
+		return true
+	}
+	a, err := h.service.Get(r.Context(), activityID)
+	if err != nil {
+		return false
+	}
+	return a.LeaderID == current.ID
+}
+
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if !h.canManage(r, id) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can edit this activity")
 		return
 	}
 	var in UpdateInput
@@ -154,6 +177,10 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if !h.canManage(r, id) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can cancel this activity")
 		return
 	}
 	err = h.service.Cancel(r.Context(), id)
@@ -231,7 +258,16 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Join(r.Context(), id, userID); err != nil {
+	err = h.service.Join(r.Context(), id, userID)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	}
+	if errors.Is(err, ErrNotFederated) {
+		httpapi.WriteError(w, http.StatusConflict, "not_federated", err.Error())
+		return
+	}
+	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not join activity")
 		return
 	}

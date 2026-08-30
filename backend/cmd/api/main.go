@@ -63,7 +63,7 @@ func main() {
 	authenticator := auth.NewAuthenticator(tokensService)
 
 	activitiesRepo := activities.NewRepository(pool)
-	activitiesService := activities.NewService(activitiesRepo)
+	activitiesService := activities.NewService(activitiesRepo, licensesService)
 
 	inventoryRepo := inventory.NewRepository(pool)
 	inventoryService := inventory.NewService(inventoryRepo)

@@ -1,16 +1,50 @@
 package activities
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"katiuskas-intranet/backend/internal/licenses"
+)
+
+// ErrNotFederated means one of the given participants doesn't currently
+// hold a valid federative license, required to join a caving or
+// canyoning activity (see Type.RequiresFederation).
+var ErrNotFederated = errors.New("only a currently federated member can join a caving or canyoning activity")
 
 type Service struct {
-	repo *Repository
+	repo     *Repository
+	licenses *licenses.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, licensesService *licenses.Service) *Service {
+	return &Service{repo: repo, licenses: licensesService}
+}
+
+// checkFederationRequired verifies that every given user is currently
+// federated, if the activity type requires it. Called both when an
+// activity is created with initial participants and when someone joins
+// one afterwards.
+func (s *Service) checkFederationRequired(ctx context.Context, t Type, userIDs []int64) error {
+	if !t.RequiresFederation() {
+		return nil
+	}
+	for _, userID := range userIDs {
+		federated, err := s.licenses.IsCurrentlyFederated(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if !federated {
+			return ErrNotFederated
+		}
+	}
+	return nil
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) {
+	if err := s.checkFederationRequired(ctx, in.Type, in.ParticipantUserIDs); err != nil {
+		return Activity{}, err
+	}
 	return s.repo.Create(ctx, in)
 }
 
@@ -41,6 +75,13 @@ func (s *Service) Cancel(ctx context.Context, id int64) error {
 }
 
 func (s *Service) Join(ctx context.Context, activityID, userID int64) error {
+	activity, err := s.repo.GetByID(ctx, activityID)
+	if err != nil {
+		return err
+	}
+	if err := s.checkFederationRequired(ctx, activity.Type, []int64{userID}); err != nil {
+		return err
+	}
 	return s.repo.AddParticipant(ctx, activityID, userID)
 }
 

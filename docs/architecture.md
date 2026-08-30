@@ -204,8 +204,16 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
-  además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla
-  sigue reservado a admin/board.
+  además puede apuntar de una vez a los participantes iniciales. Toda actividad tiene un
+  organizador obligatorio (`leader_id`), fijado siempre a quien la crea — nunca elegible
+  por quien llama al endpoint —, y editarla o cancelarla está reservado a ese organizador
+  o a admin/board (`Handler.canManage`, que consulta la actividad para comparar
+  `leader_id` con el usuario autenticado). El tipo (`caving`, `canyoning`, `training`,
+  `social`, `other`) también se puede cambiar al editar. Apuntar a un participante en una
+  actividad de tipo `caving` o `canyoning` exige que esa persona tenga una licencia
+  federativa vigente (`licenses.Service.IsCurrentlyFederated`); si no, la llamada se
+  rechaza con 409 `not_federated` — tanto al unirse después como al dar de alta
+  participantes iniciales en la propia creación.
 - **`inventory_items`** / **`item_transactions`** — catálogo de material y sus movimientos
   (`loan`, `rental`, `sale`), modelados en una única tabla con un discriminador de tipo
   en vez de tres tablas paralelas, con `CHECK` que impide, por ejemplo, una venta con

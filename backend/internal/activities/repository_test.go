@@ -21,16 +21,20 @@ func date(s string) time.Time {
 func TestCreateAndGetActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
+	leader := testutil.InsertUser(t, tx, "")
 
 	created, err := repo.Create(context.Background(), activities.CreateInput{
 		Title: "Sima del Viento", Type: activities.TypeCaving,
-		StartDate: date("2026-09-15"), Location: "Sierra de Cazorla",
+		StartDate: date("2026-09-15"), Location: "Sierra de Cazorla", LeaderID: leader.ID,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if created.Status != activities.StatusPlanned {
 		t.Errorf("expected default status %q, got %q", activities.StatusPlanned, created.Status)
+	}
+	if created.LeaderID != leader.ID {
+		t.Errorf("expected leader_id %d, got %d", leader.ID, created.LeaderID)
 	}
 
 	found, err := repo.GetByID(context.Background(), created.ID)
@@ -53,11 +57,12 @@ func TestList(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
-	if _, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"}); err != nil {
+	if _, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := repo.Create(ctx, activities.CreateInput{Title: "B", Type: activities.TypeSocial, StartDate: date("2026-02-01"), Location: "Y"}); err != nil {
+	if _, err := repo.Create(ctx, activities.CreateInput{Title: "B", Type: activities.TypeSocial, StartDate: date("2026-02-01"), Location: "Y", LeaderID: leader.ID}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -74,13 +79,14 @@ func TestListActive(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
-	planned, err := repo.Create(ctx, activities.CreateInput{Title: "Planned", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"})
+	planned, err := repo.Create(ctx, activities.CreateInput{Title: "Planned", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create planned: %v", err)
 	}
 
-	completedNoMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, nothing pending", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	completedNoMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, nothing pending", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create completed: %v", err)
 	}
@@ -89,7 +95,7 @@ func TestListActive(t *testing.T) {
 		t.Fatalf("mark completed: %v", err)
 	}
 
-	completedWithMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, material still out", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	completedWithMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, material still out", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create completed with material: %v", err)
 	}
@@ -108,7 +114,7 @@ func TestListActive(t *testing.T) {
 		t.Fatalf("insert transaction: %v", err)
 	}
 
-	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X"})
+	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, StartDate: date("2020-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create cancelled: %v", err)
 	}
@@ -159,15 +165,17 @@ func TestUpdate(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
-	created, err := repo.Create(ctx, activities.CreateInput{Title: "Old title", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"})
+	created, err := repo.Create(ctx, activities.CreateInput{Title: "Old title", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	newTitle := "New title"
 	completed := activities.StatusCompleted
-	updated, err := repo.Update(ctx, created.ID, activities.UpdateInput{Title: &newTitle, Status: &completed})
+	newType := activities.TypeSocial
+	updated, err := repo.Update(ctx, created.ID, activities.UpdateInput{Title: &newTitle, Status: &completed, Type: &newType})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -176,6 +184,9 @@ func TestUpdate(t *testing.T) {
 	}
 	if updated.Status != completed {
 		t.Errorf("expected updated status, got %q", updated.Status)
+	}
+	if updated.Type != newType {
+		t.Errorf("expected updated type, got %q", updated.Type)
 	}
 	if updated.Location != "X" {
 		t.Errorf("expected untouched fields to survive, got location %q", updated.Location)
@@ -186,8 +197,9 @@ func TestCancel(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
-	created, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"})
+	created, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -215,11 +227,12 @@ func TestCreateWithInitialParticipants(t *testing.T) {
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 
+	leader := testutil.InsertUser(t, tx, "")
 	userA := testutil.InsertUser(t, tx, "")
 	userB := testutil.InsertUser(t, tx, "")
 
 	activity, err := repo.Create(ctx, activities.CreateInput{
-		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID,
 		ParticipantUserIDs: []int64{userA.ID, userB.ID},
 	})
 	if err != nil {
@@ -240,10 +253,11 @@ func TestCreateRejectsUnknownParticipant(t *testing.T) {
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 
+	leader := testutil.InsertUser(t, tx, "")
 	userA := testutil.InsertUser(t, tx, "")
 
 	_, err := repo.Create(ctx, activities.CreateInput{
-		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID,
 		ParticipantUserIDs: []int64{userA.ID, 999999},
 	})
 	if !errors.Is(err, activities.ErrParticipantNotFound) {
@@ -255,9 +269,10 @@ func TestCreateRejectsUnknownParticipantWithoutCreatingActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
 	if _, err := repo.Create(ctx, activities.CreateInput{
-		Title: "Should not persist", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		Title: "Should not persist", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID,
 		ParticipantUserIDs: []int64{999999},
 	}); !errors.Is(err, activities.ErrParticipantNotFound) {
 		t.Fatalf("expected ErrParticipantNotFound, got %v", err)
@@ -283,13 +298,13 @@ func TestListByUserIncludesLedAndParticipatedActivities(t *testing.T) {
 	other := testutil.InsertUser(t, tx, "")
 
 	led, err := repo.Create(ctx, activities.CreateInput{
-		Title: "Led", Type: activities.TypeCaving, StartDate: date("2026-02-01"), Location: "X", LeaderID: &person.ID,
+		Title: "Led", Type: activities.TypeCaving, StartDate: date("2026-02-01"), Location: "X", LeaderID: person.ID,
 	})
 	if err != nil {
 		t.Fatalf("create led activity: %v", err)
 	}
 	joined, err := repo.Create(ctx, activities.CreateInput{
-		Title: "Joined", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+		Title: "Joined", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: other.ID,
 	})
 	if err != nil {
 		t.Fatalf("create joined activity: %v", err)
@@ -299,7 +314,7 @@ func TestListByUserIncludesLedAndParticipatedActivities(t *testing.T) {
 	}
 	// Someone else's activity should never show up.
 	if _, err := repo.Create(ctx, activities.CreateInput{
-		Title: "Unrelated", Type: activities.TypeCaving, StartDate: date("2026-03-01"), Location: "X", LeaderID: &other.ID,
+		Title: "Unrelated", Type: activities.TypeCaving, StartDate: date("2026-03-01"), Location: "X", LeaderID: other.ID,
 	}); err != nil {
 		t.Fatalf("create unrelated activity: %v", err)
 	}
@@ -338,8 +353,9 @@ func TestParticipants(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
 
-	activity, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X"})
+	activity, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X", LeaderID: leader.ID})
 	if err != nil {
 		t.Fatalf("create activity: %v", err)
 	}

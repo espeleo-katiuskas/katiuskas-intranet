@@ -7,12 +7,20 @@ import "time"
 type Type string
 
 const (
-	TypeCaving   Type = "caving"
-	TypeTraining Type = "training"
-	TypeOutdoor  Type = "outdoor"
-	TypeSocial   Type = "social"
-	TypeOther    Type = "other"
+	TypeCaving    Type = "caving"
+	TypeCanyoning Type = "canyoning"
+	TypeTraining  Type = "training"
+	TypeSocial    Type = "social"
+	TypeOther     Type = "other"
 )
+
+// RequiresFederation reports whether joining an activity of this type
+// requires a currently valid federative license — see
+// Service.checkFederationRequired. Caving and canyoning both go through
+// terrain a federation covers people for; the others don't.
+func (t Type) RequiresFederation() bool {
+	return t == TypeCaving || t == TypeCanyoning
+}
 
 type Status string
 
@@ -33,7 +41,11 @@ type Activity struct {
 	Difficulty      *int16     `json:"difficulty,omitempty"`
 	MaxParticipants *int32     `json:"max_participants,omitempty"`
 	Status          Status     `json:"status"`
-	LeaderID        *int64     `json:"leader_id,omitempty"`
+	// LeaderID is the organizer: always set, to whoever created the
+	// activity (see Service.Create — never something the caller
+	// chooses), and the only person besides admin/board who can edit or
+	// cancel it.
+	LeaderID int64 `json:"leader_id"`
 }
 
 type CreateInput struct {
@@ -45,7 +57,7 @@ type CreateInput struct {
 	Description     *string
 	Difficulty      *int16
 	MaxParticipants *int32
-	LeaderID        *int64
+	LeaderID        int64
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
@@ -53,6 +65,7 @@ type CreateInput struct {
 
 type UpdateInput struct {
 	Title       *string `json:"title"`
+	Type        *Type   `json:"type"`
 	Description *string `json:"description"`
 	Status      *Status `json:"status"`
 	Location    *string `json:"location"`
