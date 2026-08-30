@@ -105,6 +105,9 @@ paths:
         for a client to learn that — there's nothing to decode locally
         the way a JWT could be. Costs no extra database round trip: it's
         resolved by the same lookup that authenticated the request.
+        impersonated_by is present only for a session started by
+        POST /users/{userID}/impersonate: id/roles above are the
+        impersonated person's, not the admin's.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -116,7 +119,40 @@ paths:
                 properties:
                   id: { type: integer }
                   roles: { type: array, items: { type: string } }
+                  impersonated_by:
+                    type: object
+                    nullable: true
+                    description: The admin currently impersonating this session, if any.
+                    properties:
+                      id: { type: integer }
+                      first_name: { type: string }
+                      last_name: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/impersonate/exit:
+    post:
+      summary: Stop impersonating and go back to being yourself
+      description: >
+        Only meaningful for a session started by
+        POST /users/{userID}/impersonate — revokes it and mints a fresh,
+        normal token for the admin who started it (not the token they had
+        before impersonating, which the API has no way to hand back out
+        again). Requires only a valid bearer token, not any particular
+        role: exiting must still work even if the impersonated person has
+        since lost their baseline role, which would otherwise block every
+        other authenticated route including this one.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Impersonation ended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: A fresh session token for the admin. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { description: not_impersonating — this session isn't an impersonation. }
 
   /users:
     get:
@@ -332,6 +368,39 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Token" }
+
+  /users/{userID}/impersonate:
+    post:
+      summary: Start a session that behaves as this person
+      description: >
+        Admin-only — deliberately not admin/board, since handing board
+        members the ability to act as anyone (including other admins) is
+        a bigger step than the rest of what they can already do. Mints a
+        token whose id and roles are userID's, live-resolved exactly as
+        if userID had signed in — so every existing permission check
+        already treats the resulting session as that person, with no
+        special-casing anywhere else in the API. The one exception is
+        GET /auth/me, which also reports impersonated_by, and
+        POST /auth/impersonate/exit, reachable regardless of userID's own
+        roles. Rejected (409) for yourself, or for someone with no
+        baseline role (including a userID that doesn't exist) — their
+        session couldn't call anything anyway. The token is shorter-lived
+        than a normal sign-in on purpose.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "201":
+          description: Impersonation session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+        "403": { description: Only admin can impersonate. }
+        "409":
+          description: cannot_impersonate_self, or not_eligible (no baseline role).
 
   /users/{userID}/tokens/{tokenID}:
     patch:
@@ -993,6 +1062,13 @@ components:
             X-Forwarded-For if present (the production deploy sits behind
             a reverse proxy), otherwise the raw connection address.
             Purely informational.
+        impersonated_by:
+          type: integer
+          nullable: true
+          description: >
+            The admin who started this session via
+            POST /users/{userID}/impersonate, if it is one — absent for a
+            normal token.
 
     Role:
       type: object

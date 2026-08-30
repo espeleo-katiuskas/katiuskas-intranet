@@ -16,6 +16,14 @@ import (
 // that it exists.
 var ErrWrongUser = errors.New("token does not belong to this user")
 
+var (
+	ErrCannotImpersonateSelf = errors.New("cannot impersonate yourself")
+	// ErrNotEligibleForImpersonation also covers a target id that
+	// doesn't exist at all: someone with no roles at all (real or not)
+	// fails the same baseline-role check a real, role-less person would.
+	ErrNotEligibleForImpersonation = errors.New("this person has no baseline role and can't be impersonated")
+)
+
 type Service struct {
 	repo  *Repository
 	roles *roles.Service
@@ -44,7 +52,7 @@ func (s *Service) Issue(ctx context.Context, userID int64, ttl time.Duration) (r
 // takes effect on the very next request instead of waiting for the
 // token to be reissued.
 func (s *Service) Authenticate(ctx context.Context, rawToken, ip string) (auth.AuthenticatedUser, error) {
-	userID, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip)
+	userID, impersonatedBy, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip)
 	if errors.Is(err, ErrNotFound) {
 		return auth.AuthenticatedUser{}, auth.ErrInvalidToken
 	}
@@ -55,7 +63,57 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, ip string) (auth.A
 	if err != nil {
 		return auth.AuthenticatedUser{}, err
 	}
-	return auth.AuthenticatedUser{ID: userID, Roles: roleNames}, nil
+	return auth.AuthenticatedUser{ID: userID, Roles: roleNames, ImpersonatedBy: impersonatedBy}, nil
+}
+
+// Impersonate mints a session token for targetUserID that behaves
+// exactly like one they issued themselves — same id, same live-resolved
+// roles, so every existing permission check in the API already treats it
+// as if targetUserID had signed in, with no special-casing needed
+// anywhere else. Only someone with a baseline role can be impersonated,
+// the same eligibility a magic-link sign-in itself requires (see
+// auth.HasBaselineRole) — anyone else, including a target id that
+// doesn't exist, would end up with a session that can't call anything.
+func (s *Service) Impersonate(ctx context.Context, impersonatorID, targetUserID int64, ttl time.Duration) (string, error) {
+	if impersonatorID == targetUserID {
+		return "", ErrCannotImpersonateSelf
+	}
+	roleNames, err := s.roles.ListNamesForUser(ctx, targetUserID)
+	if err != nil {
+		return "", err
+	}
+	if !auth.HasBaselineRole(roleNames) {
+		return "", ErrNotEligibleForImpersonation
+	}
+
+	raw, err := auth.NewOpaqueToken()
+	if err != nil {
+		return "", err
+	}
+	if _, err := s.repo.CreateImpersonation(ctx, targetUserID, impersonatorID, auth.HashToken(raw), time.Now().Add(ttl)); err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+// ExitImpersonation revokes the current impersonation session and mints
+// a fresh, normal one for impersonatorID — the admin who started it —
+// rather than resuming whatever token they used before, which the API
+// never has the raw value of again to hand back. Trusts rawToken the
+// same way Logout does: having it is what proves this call is allowed to
+// end that specific session.
+func (s *Service) ExitImpersonation(ctx context.Context, rawToken string, impersonatorID int64, ttl time.Duration) (string, error) {
+	if err := s.repo.RevokeByHash(ctx, auth.HashToken(rawToken)); err != nil {
+		return "", err
+	}
+	raw, err := auth.NewOpaqueToken()
+	if err != nil {
+		return "", err
+	}
+	if _, err := s.repo.Create(ctx, impersonatorID, auth.HashToken(raw), time.Now().Add(ttl)); err != nil {
+		return "", err
+	}
+	return raw, nil
 }
 
 func (s *Service) RevokeByHash(ctx context.Context, rawToken string) error {

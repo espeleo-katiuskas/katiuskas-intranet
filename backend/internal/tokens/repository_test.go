@@ -27,12 +27,15 @@ func TestCreateAndAuthenticateRoundTrip(t *testing.T) {
 		t.Errorf("expected a freshly created token to have no last-use info, got %+v", created)
 	}
 
-	gotID, err := repo.Authenticate(ctx, "hash-1", "203.0.113.5")
+	gotID, impersonatedBy, err := repo.Authenticate(ctx, "hash-1", "203.0.113.5")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if gotID != user.ID {
 		t.Errorf("expected user id %d, got %d", user.ID, gotID)
+	}
+	if impersonatedBy != nil {
+		t.Errorf("expected a normal token to have no impersonated_by, got %v", *impersonatedBy)
 	}
 
 	got, err := repo.GetByID(ctx, created.ID)
@@ -47,6 +50,37 @@ func TestCreateAndAuthenticateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCreateImpersonationRoundTrip(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := tokens.NewRepository(tx)
+	ctx := context.Background()
+
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+
+	created, err := repo.CreateImpersonation(ctx, target.ID, admin.ID, "impersonation-hash", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("create impersonation: %v", err)
+	}
+	if created.UserID != target.ID {
+		t.Errorf("expected user_id %d (the target), got %d", target.ID, created.UserID)
+	}
+	if created.ImpersonatedBy == nil || *created.ImpersonatedBy != admin.ID {
+		t.Errorf("expected impersonated_by %d, got %v", admin.ID, created.ImpersonatedBy)
+	}
+
+	gotID, impersonatedBy, err := repo.Authenticate(ctx, "impersonation-hash", "")
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if gotID != target.ID {
+		t.Errorf("expected authenticate to resolve to the target %d, got %d", target.ID, gotID)
+	}
+	if impersonatedBy == nil || *impersonatedBy != admin.ID {
+		t.Errorf("expected impersonated_by %d from Authenticate, got %v", admin.ID, impersonatedBy)
+	}
+}
+
 func TestAuthenticateRejectsExpired(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := tokens.NewRepository(tx)
@@ -56,7 +90,7 @@ func TestAuthenticateRejectsExpired(t *testing.T) {
 	if _, err := repo.Create(ctx, user.ID, "expired-hash", time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := repo.Authenticate(ctx, "expired-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, _, err := repo.Authenticate(ctx, "expired-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for an expired token, got %v", err)
 	}
 }
@@ -74,7 +108,7 @@ func TestAuthenticateRejectsRevoked(t *testing.T) {
 	if err := repo.Revoke(ctx, created.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if _, err := repo.Authenticate(ctx, "revoked-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, _, err := repo.Authenticate(ctx, "revoked-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for a revoked token, got %v", err)
 	}
 }
@@ -83,7 +117,7 @@ func TestAuthenticateRejectsUnknownHash(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := tokens.NewRepository(tx)
 
-	if _, err := repo.Authenticate(context.Background(), "never-issued", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, _, err := repo.Authenticate(context.Background(), "never-issued", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -100,7 +134,7 @@ func TestRevokeByHash(t *testing.T) {
 	if err := repo.RevokeByHash(ctx, "logout-hash"); err != nil {
 		t.Fatalf("revoke by hash: %v", err)
 	}
-	if _, err := repo.Authenticate(ctx, "logout-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, _, err := repo.Authenticate(ctx, "logout-hash", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected the token to no longer authenticate, got %v", err)
 	}
 }

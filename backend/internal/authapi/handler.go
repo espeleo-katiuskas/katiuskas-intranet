@@ -52,6 +52,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)
 	mux.Handle("GET /api/v1/auth/me", h.authenticator.Protect(h.Me))
+	// RequireAuth only, not Protect: exiting impersonation must work even
+	// if the impersonated person has since lost their baseline role (a
+	// lapsed membership, say) — otherwise that admin would be stuck
+	// impersonating someone whose session can no longer call anything,
+	// including this.
+	mux.Handle("POST /api/v1/auth/impersonate/exit", h.authenticator.RequireAuth(http.HandlerFunc(h.ExitImpersonation)))
 }
 
 // RequestMagicLink always answers the same way regardless of whether
@@ -181,5 +187,43 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // itself (there's nothing to decode: it's opaque).
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
-	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"id": user.ID, "roles": user.Roles})
+	response := map[string]any{"id": user.ID, "roles": user.Roles}
+	if user.ImpersonatedBy != nil {
+		response["impersonated_by"] = h.impersonatorSummary(r.Context(), *user.ImpersonatedBy)
+	}
+	httpapi.WriteJSON(w, http.StatusOK, response)
+}
+
+// impersonatorSummary is best-effort: the frontend banner still has an
+// id to show even if, say, the admin's own account was since deleted.
+func (h *Handler) impersonatorSummary(ctx context.Context, impersonatorID int64) map[string]any {
+	impersonator, err := h.users.Get(ctx, impersonatorID)
+	if err != nil {
+		return map[string]any{"id": impersonatorID}
+	}
+	return map[string]any{"id": impersonator.ID, "first_name": impersonator.FirstName, "last_name": impersonator.LastName}
+}
+
+// ExitImpersonation ends the current impersonation session and hands
+// back a fresh, normal token for the admin who started it — see
+// tokens.Service.ExitImpersonation for why it's a new token rather than
+// the one they had before.
+func (h *Handler) ExitImpersonation(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.UserFromContext(r.Context())
+	if user.ImpersonatedBy == nil {
+		httpapi.WriteError(w, http.StatusConflict, "not_impersonating", "this session isn't an impersonation")
+		return
+	}
+	rawToken, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || rawToken == "" {
+		httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+		return
+	}
+
+	newToken, err := h.tokens.ExitImpersonation(r.Context(), rawToken, *user.ImpersonatedBy, h.opts.TokenTTL)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not exit impersonation")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": newToken})
 }

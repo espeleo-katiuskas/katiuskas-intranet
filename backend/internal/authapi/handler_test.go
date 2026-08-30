@@ -92,6 +92,26 @@ func (s *testServer) getWithToken(t *testing.T, path, token string) *httptest.Re
 	return rec
 }
 
+// postWithToken is post plus a bearer token — needed for
+// /auth/impersonate/exit, unlike every other route in this package,
+// which is either unauthenticated (magic-link/logout) or reached via
+// getWithToken (/auth/me).
+func (s *testServer) postWithToken(t *testing.T, path, token string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	return rec
+}
+
 // insertUserWithRole inserts a person and assigns them a role — needed
 // for any test that expects a magic link to actually be sent, since
 // RequestMagicLink now silently skips anyone with no auth.BaselineRoles
@@ -344,6 +364,109 @@ func TestMeRejectsMissingOrRevokedToken(t *testing.T) {
 	}
 	if _, _, status := s.me(t, "never-issued"); status != http.StatusUnauthorized {
 		t.Errorf("expected 401 for an unknown token, got %d", status)
+	}
+}
+
+func TestMeReportsImpersonation(t *testing.T) {
+	s := newTestServer(t)
+	admin := s.insertUserWithRole(t, "611222333", "admin")
+	target := s.insertUserWithRole(t, "622333444", "admin")
+
+	raw, err := s.tokens.Impersonate(context.Background(), admin.ID, target.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("impersonate: %v", err)
+	}
+
+	rec := s.getWithToken(t, "/api/v1/auth/me", raw)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		ID             int64 `json:"id"`
+		ImpersonatedBy *struct {
+			ID int64 `json:"id"`
+		} `json:"impersonated_by"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode /auth/me response %q: %v", rec.Body.String(), err)
+	}
+	if body.ID != target.ID {
+		t.Errorf("expected id %d (the target), got %d", target.ID, body.ID)
+	}
+	if body.ImpersonatedBy == nil || body.ImpersonatedBy.ID != admin.ID {
+		t.Fatalf("expected impersonated_by.id %d, got %v", admin.ID, body.ImpersonatedBy)
+	}
+}
+
+func TestMeOmitsImpersonatedByForANormalSession(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	raw, err := s.tokens.Issue(context.Background(), user.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	rec := s.getWithToken(t, "/api/v1/auth/me", raw)
+	if bytes.Contains(rec.Body.Bytes(), []byte("impersonated_by")) {
+		t.Errorf("expected no impersonated_by for a normal session, got %s", rec.Body.String())
+	}
+}
+
+func TestExitImpersonationEndsTheSessionAndRestoresTheAdmin(t *testing.T) {
+	s := newTestServer(t)
+	admin := s.insertUserWithRole(t, "611222333", "admin")
+	target := s.insertUserWithRole(t, "622333444", "admin")
+
+	impersonationToken, err := s.tokens.Impersonate(context.Background(), admin.ID, target.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("impersonate: %v", err)
+	}
+
+	rec := s.postWithToken(t, "/api/v1/auth/impersonate/exit", impersonationToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Token == "" || body.Token == impersonationToken {
+		t.Fatalf("expected a fresh, non-empty token, got %q", body.Token)
+	}
+
+	if _, _, status := s.me(t, impersonationToken); status != http.StatusUnauthorized {
+		t.Errorf("expected the impersonation token to be revoked, got status %d", status)
+	}
+	id, _, status := s.me(t, body.Token)
+	if status != http.StatusOK {
+		t.Fatalf("expected the new token to work, got %d", status)
+	}
+	if id != admin.ID {
+		t.Errorf("expected the new token to resolve to the admin %d, got %d", admin.ID, id)
+	}
+}
+
+func TestExitImpersonationRejectsANormalSession(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	raw, err := s.tokens.Issue(context.Background(), user.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	rec := s.postWithToken(t, "/api/v1/auth/impersonate/exit", raw, nil)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 exiting a normal (non-impersonation) session, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestExitImpersonationRequiresAuthentication(t *testing.T) {
+	s := newTestServer(t)
+	rec := s.postWithToken(t, "/api/v1/auth/impersonate/exit", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with no token, got %d", rec.Code)
 	}
 }
 

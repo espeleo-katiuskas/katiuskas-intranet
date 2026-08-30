@@ -24,7 +24,7 @@ func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, 
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	tokens.NewHandler(service, authenticator).RegisterRoutes(mux)
+	tokens.NewHandler(service, authenticator, time.Hour).RegisterRoutes(mux)
 	return mux, resolver, service, tx
 }
 
@@ -58,6 +58,76 @@ func TestHandlerListRequiresAdmin(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 2, "admin")
 	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%d/tokens", target.ID), adminToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected admin to list tokens, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// CreateImpersonation's row references the caller's id via a real
+// foreign key, unlike the other admin routes here — so, unlike them,
+// this test needs a real inserted admin, not just an arbitrary fake id.
+func TestHandlerImpersonateRequiresAdmin(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	boardCaller := testutil.InsertUser(t, tx, "")
+
+	boardToken := testutil.TokenFor(resolver, boardCaller.ID, "board")
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", target.ID), boardToken, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from impersonating, got %d", rec.Code)
+	}
+}
+
+func TestHandlerImpersonateSucceedsAndTheTokenWorksAsTheTarget(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	if err := rolesService.AssignByName(ctx, target.ID, []string{"admin"}); err != nil {
+		t.Fatalf("assign admin to target: %v", err)
+	}
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", target.ID), adminToken, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Token == "" {
+		t.Fatal("expected a non-empty token")
+	}
+
+	resolved, err := service.Authenticate(ctx, body.Token, "")
+	if err != nil {
+		t.Fatalf("authenticate with the impersonation token: %v", err)
+	}
+	if resolved.ID != target.ID {
+		t.Errorf("expected the token to resolve to the target %d, got %d", target.ID, resolved.ID)
+	}
+	if resolved.ImpersonatedBy == nil || *resolved.ImpersonatedBy != admin.ID {
+		t.Errorf("expected impersonated_by %d, got %v", admin.ID, resolved.ImpersonatedBy)
+	}
+}
+
+func TestHandlerImpersonateRejectsSelfAndIneligibleTarget(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	admin := testutil.InsertUser(t, tx, "")
+	noRoleTarget := testutil.InsertUser(t, tx, "")
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", admin.ID), adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 impersonating yourself, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/impersonate", noRoleTarget.ID), adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 impersonating an ineligible target, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

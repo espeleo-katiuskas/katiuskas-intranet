@@ -87,6 +87,25 @@ en `backend/openapi/openapi.yaml`.
   que lo usa. Un admin puede ver, re-caducar o revocar el token de cualquier persona —
   `GET`/`PATCH`/`DELETE /users/{userID}/tokens[/{tokenID}]` —, pero nunca ver el valor
   del token en sí, solo sus metadatos.
+  **Impersonación**: `POST /users/{userID}/impersonate` (solo admin, no board — actuar
+  como cualquiera, incluido otro admin, es un salto mayor que el resto de lo que board ya
+  puede hacer) crea un token cuyo `user_id` es el de esa persona y con un
+  `impersonated_by` (el id del admin) guardado junto a él. Como los roles se resuelven en
+  vivo a partir de `user_id` (igual que cualquier sesión normal), esa sesión ya sólo puede
+  hacer lo mismo que esa persona sin ningún caso especial en el resto del API — la única
+  excepción vive en `authapi`: `GET /auth/me` añade `impersonated_by` a la respuesta
+  (para que el frontend pueda avisarlo) y `POST /auth/impersonate/exit` deja salir de la
+  impersonación pase lo que pase con los roles de la persona impersonada en ese momento
+  (por eso ese endpoint sólo exige `RequireAuth`, no `Protect`, que exigiría un rol base —
+  si la persona lo hubiera perdido mientras se la impersonaba, ese admin se quedaría sin
+  forma de salir). Salir no reutiliza el token que tenía el admin antes de impersonar —el
+  API nunca vuelve a tener el valor en claro de un token ya emitido—, sino que revoca la
+  sesión de impersonación y emite una nueva para el admin. Sólo se puede impersonar a
+  quien tenga ahora mismo algún rol base (`auth.BaselineRoles`) — igual que un enlace de
+  acceso no se manda a quien no lo tiene —, y nunca a uno mismo. El token de impersonación
+  dura mucho menos que uno normal (`config.ImpersonationTokenTTL`, 1 hora frente a 30
+  días): una sesión actuando como otra persona es un riesgo mayor que una normal como para
+  dejarla viva un mes si alguien se olvida de salir.
 - `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo id y
   nombre de quienes tienen acceso (nada de teléfono, dirección, DNI...). Existe para que
   un socio cualquiera pueda elegir participantes al crear una actividad sin que el API

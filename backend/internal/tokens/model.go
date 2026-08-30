@@ -15,4 +15,8 @@ type Token struct {
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	LastUsedIP *string    `json:"last_used_ip,omitempty"`
+	// ImpersonatedBy is set only for a token minted by
+	// POST /users/{userID}/impersonate: the id of the admin who started
+	// it, not UserID (whose session this actually is).
+	ImpersonatedBy *int64 `json:"impersonated_by,omitempty"`
 }

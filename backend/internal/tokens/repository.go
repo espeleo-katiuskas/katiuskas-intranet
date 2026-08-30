@@ -12,10 +12,10 @@ import (
 
 var ErrNotFound = errors.New("token not found")
 
-const tokenSelect = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip`
+const tokenSelect = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip, impersonated_by`
 
 func scanToken(row interface{ Scan(dest ...any) error }, t *Token) error {
-	return row.Scan(&t.ID, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP)
+	return row.Scan(&t.ID, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP, &t.ImpersonatedBy)
 }
 
 type Repository struct {
@@ -34,11 +34,22 @@ func (r *Repository) Create(ctx context.Context, userID int64, tokenHash string,
 	return t, err
 }
 
+// CreateImpersonation is Create plus impersonatorID recorded alongside —
+// the only difference between an impersonation session and a normal one
+// at the database level.
+func (r *Repository) CreateImpersonation(ctx context.Context, targetUserID, impersonatorID int64, tokenHash string, expiresAt time.Time) (Token, error) {
+	var t Token
+	err := scanToken(r.pool.QueryRow(ctx, `
+		INSERT INTO tokens (user_id, token_hash, expires_at, impersonated_by) VALUES ($1, $2, $3, $4)
+		RETURNING `+tokenSelect, targetUserID, tokenHash, expiresAt, impersonatorID), &t)
+	return t, err
+}
+
 // Authenticate validates a token hash and, in the same statement, records
 // that it was just used — so a session's last_used_at/last_used_ip always
 // reflects the request that's checking it, not a separate follow-up
 // write.
-func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip string) (userID int64, err error) {
+func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip string) (userID int64, impersonatedBy *int64, err error) {
 	var ipArg any
 	if ip != "" {
 		ipArg = ip
@@ -46,12 +57,12 @@ func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip string) (us
 	err = r.pool.QueryRow(ctx, `
 		UPDATE tokens SET last_used_at = now(), last_used_ip = $2
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-		RETURNING user_id
-	`, tokenHash, ipArg).Scan(&userID)
+		RETURNING user_id, impersonated_by
+	`, tokenHash, ipArg).Scan(&userID, &impersonatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrNotFound
+		return 0, nil, ErrNotFound
 	}
-	return userID, err
+	return userID, impersonatedBy, err
 }
 
 // RevokeByHash is used by logout, which only ever has the raw token, not
