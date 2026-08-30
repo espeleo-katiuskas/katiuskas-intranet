@@ -15,7 +15,7 @@ async function initSession() {
   }
   try {
     const me = await apiFetch('/auth/me');
-    cachedUser = { id: me.id, roles: me.roles ?? [], impersonatedBy: me.impersonated_by ?? null };
+    cachedUser = { login: me.login, roles: me.roles ?? [], impersonatedBy: me.impersonated_by ?? null };
     if (cachedUser.impersonatedBy) {
       await renderImpersonationBanner(cachedUser.impersonatedBy);
     }
@@ -33,12 +33,12 @@ async function initSession() {
 // lookup for the impersonated person's own name fails, the banner still
 // shows with what it already knows rather than not showing at all.
 async function renderImpersonationBanner(impersonator) {
-  let selfName = `#${cachedUser.id}`;
+  let selfName = cachedUser.login;
   try {
-    const self = await apiFetch(`/users/${cachedUser.id}`);
+    const self = await apiFetch(`/users/${cachedUser.login}`);
     selfName = `${self.first_name} ${self.last_name}`;
   } catch {
-    // Keep the id-only fallback above.
+    // Keep the login-only fallback above.
   }
 
   const banner = document.createElement('div');

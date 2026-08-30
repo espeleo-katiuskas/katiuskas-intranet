@@ -39,7 +39,7 @@ function showError(message) {
 // The system roles (see docs/architecture.md) get a friendlier Spanish
 // label; anything an admin created shows as typed. Only used here for the
 // role catalog table and the "Nueva persona" checkboxes — managing an
-// existing person's roles happens on their own page (/member?id=…) now.
+// existing person's roles happens on their own page (/member?login=…) now.
 const knownRoleLabels = { admin: 'Administración', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
 function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
@@ -142,7 +142,7 @@ if (isRealAdmin) {
 
 // The people list is purely informational and sortable: every action
 // about a specific person (edit their data, manage their roles, register
-// an alta/baja, delete them) lives on their own page (/member?id=…) now.
+// an alta/baja, delete them) lives on their own page (/member?login=…) now.
 // Each column knows how to render a cell and how to compare two people
 // for sorting, so both concerns stay in one place.
 function textColumn(key, label, getValue) {
@@ -496,7 +496,7 @@ function renderUserRow(person) {
     .filter((c) => visibleColumns.has(c.key))
     .map((c) => `<td>${c.render(person)}</td>`)
     .join('');
-  return `<tr data-person-id="${person.id}">${cells}</tr>`;
+  return `<tr data-person-login="${person.login}">${cells}</tr>`;
 }
 
 function renderUsersTable() {
@@ -521,14 +521,14 @@ function renderUsersTable() {
   tableBody.innerHTML = sorted.map(renderUserRow).join('');
 }
 
-// /member?id=… is still admin/board-only — a plain member's row click
+// /member?login=… is still admin/board-only — a plain member's row click
 // wouldn't go anywhere but back here, so it's not wired up at all, and
 // the row-hover affordance is removed to match.
 if (isAdmin) {
   document.getElementById('users-table-body').addEventListener('click', (event) => {
-    const row = event.target.closest('tr[data-person-id]');
+    const row = event.target.closest('tr[data-person-login]');
     if (!row) return;
-    window.location.href = `/member?id=${row.dataset.personId}`;
+    window.location.href = `/member?login=${row.dataset.personLogin}`;
   });
 } else {
   document.getElementById('users-table-body').classList.remove('clickable-rows');
@@ -591,7 +591,7 @@ if (isRealAdmin) {
       let feedback = 'Persona creada.';
       if (membershipStartDate) {
         try {
-          await apiFetch(`/users/${person.id}/memberships`, {
+          await apiFetch(`/users/${person.login}/memberships`, {
             method: 'POST',
             body: JSON.stringify({ start_date: membershipStartDate }),
           });

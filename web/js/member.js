@@ -21,8 +21,8 @@ if (!isAdmin) {
   window.location.href = '/';
 }
 
-const memberId = Number(new URLSearchParams(window.location.search).get('id'));
-if (!memberId) {
+const memberLogin = new URLSearchParams(window.location.search).get('login');
+if (!memberLogin) {
   window.location.href = '/members';
 }
 
@@ -136,7 +136,7 @@ document.getElementById('member-roles-list').addEventListener('click', async (ev
   if (!button) return;
   button.disabled = true;
   try {
-    await apiFetch(`/users/${memberId}/roles/${button.dataset.removeRole}`, { method: 'DELETE' });
+    await apiFetch(`/users/${memberLogin}/roles/${button.dataset.removeRole}`, { method: 'DELETE' });
     showFeedback('Rol quitado.');
     await loadMember();
   } catch (err) {
@@ -151,7 +151,7 @@ document.getElementById('member-role-add').addEventListener('click', async (even
   const roleId = document.getElementById('role-select').value;
   button.disabled = true;
   try {
-    await apiFetch(`/users/${memberId}/roles`, { method: 'POST', body: JSON.stringify({ role_id: Number(roleId) }) });
+    await apiFetch(`/users/${memberLogin}/roles`, { method: 'POST', body: JSON.stringify({ role_id: Number(roleId) }) });
     showFeedback('Rol añadido.');
     await loadMember();
   } catch (err) {
@@ -163,7 +163,7 @@ document.getElementById('member-role-add').addEventListener('click', async (even
 const editForm = document.getElementById('edit-member-form');
 
 // Board can still see every field here (loadMember populates them
-// regardless), but PATCH /users/{id} now only accepts a self-edit, and
+// regardless), but PATCH /users/{login} now only accepts a self-edit, and
 // board is never "self" on someone else's page — so there's nothing a
 // submit could do here but fail. Disabling the whole form instead of
 // just hiding the submit button keeps the fields visibly read-only
@@ -177,7 +177,7 @@ if (isAdmin && !isRealAdmin) {
 
 async function loadMember() {
   try {
-    const person = await apiFetch(`/users/${memberId}`);
+    const person = await apiFetch(`/users/${memberLogin}`);
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email;
     document.getElementById('member-number').textContent = person.membership_number != null
@@ -229,7 +229,7 @@ editForm.addEventListener('submit', async (event) => {
   const submitButton = editForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch(`/users/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/users/${memberLogin}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Datos actualizados.');
     document.getElementById('member-name').textContent = `${body.first_name} ${body.last_name}`;
     document.getElementById('member-email').textContent = body.email;
@@ -395,12 +395,12 @@ async function buildTimelineEvents(memberships) {
     }
   }
 
-  const licenses = await apiFetch(`/users/${memberId}/licenses`).catch(() => []);
+  const licenses = await apiFetch(`/users/${memberLogin}/licenses`).catch(() => []);
   for (const l of licenses) {
     events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
   }
 
-  const boardTerms = await apiFetch(`/users/${memberId}/board-members`).catch(() => []);
+  const boardTerms = await apiFetch(`/users/${memberLogin}/board-members`).catch(() => []);
   for (const b of boardTerms) {
     const positionLabel = positionLabels[b.position] ?? b.position;
     events.push({ date: b.start_date, type: 'board_start', boardMember: b, reason: positionLabel });
@@ -459,7 +459,7 @@ async function loadTimeline() {
   const container = document.getElementById('timeline-list');
   container.innerHTML = 'Cargando…';
   try {
-    const memberships = await apiFetch(`/users/${memberId}/memberships`);
+    const memberships = await apiFetch(`/users/${memberLogin}/memberships`);
     const events = await buildTimelineEvents(memberships);
     container.innerHTML = events.length
       ? events.map(renderTimelineEvent).join('')
@@ -493,7 +493,7 @@ if (isRealAdmin) {
     const button = document.getElementById('save-add-membership');
     button.disabled = true;
     try {
-      await apiFetch(`/users/${memberId}/memberships`, {
+      await apiFetch(`/users/${memberLogin}/memberships`, {
         method: 'POST',
         body: JSON.stringify({ start_date: input.value }),
       });
@@ -711,7 +711,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
   }
 });
 
-// "Borrar persona" has data-roles="admin" — DELETE /users/{id} is
+// "Borrar persona" has data-roles="admin" — DELETE /users/{login} is
 // admin-only now, so board never has this button to begin with.
 if (isRealAdmin) {
   document.getElementById('delete-member').addEventListener('click', async () => {
@@ -719,7 +719,7 @@ if (isRealAdmin) {
     const button = document.getElementById('delete-member');
     button.disabled = true;
     try {
-      await apiFetch(`/users/${memberId}`, { method: 'DELETE' });
+      await apiFetch(`/users/${memberLogin}`, { method: 'DELETE' });
       window.location.href = '/members';
     } catch (err) {
       button.disabled = false;
@@ -732,14 +732,14 @@ if (isRealAdmin) {
 // reason to even offer it on your own page.
 const impersonateButton = document.getElementById('impersonate-button');
 if (impersonateButton) {
-  if (memberId === viewer.id) {
+  if (memberLogin === viewer.login) {
     impersonateButton.remove();
   } else {
     impersonateButton.addEventListener('click', async () => {
       if (!confirm('¿Entrar en la intranet como esta persona? Podrás salir de la impersonación en cualquier momento.')) return;
       impersonateButton.disabled = true;
       try {
-        const result = await apiFetch(`/users/${memberId}/impersonate`, { method: 'POST' });
+        const result = await apiFetch(`/users/${memberLogin}/impersonate`, { method: 'POST' });
         setToken(result.token);
         window.location.href = '/';
       } catch (err) {
@@ -757,7 +757,7 @@ function renderActivityRow(activity) {
   const dateLabel = activity.end_date
     ? `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`
     : formatDate(activity.start_date);
-  const role = activity.leader_id === memberId ? 'Responsable' : 'Participante';
+  const role = activity.leader_login === memberLogin ? 'Responsable' : 'Participante';
   return `
     <tr>
       <td>${dateLabel}</td>
@@ -773,7 +773,7 @@ function renderActivityRow(activity) {
 async function loadActivities() {
   const tableBody = document.getElementById('activities-table-body');
   try {
-    const activities = await apiFetch(`/users/${memberId}/activities`);
+    const activities = await apiFetch(`/users/${memberLogin}/activities`);
     tableBody.innerHTML = activities.length
       ? activities.map(renderActivityRow).join('')
       : '<tr><td colspan="6">Todavía no ha participado en ninguna actividad.</td></tr>';
@@ -809,7 +809,7 @@ async function loadTransactions() {
   try {
     const [items, transactions] = await Promise.all([
       apiFetch('/items').catch(() => []),
-      apiFetch(`/users/${memberId}/transactions`),
+      apiFetch(`/users/${memberLogin}/transactions`),
     ]);
     const itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     tableBody.innerHTML = transactions.length
@@ -859,7 +859,7 @@ if (isRealAdmin) {
     const button = document.getElementById('save-add-license');
     button.disabled = true;
     try {
-      await apiFetch(`/users/${memberId}/licenses`, {
+      await apiFetch(`/users/${memberLogin}/licenses`, {
         method: 'POST',
         body: JSON.stringify({
           license_type_id: licenseTypeId,
@@ -903,7 +903,7 @@ if (isRealAdmin) {
     const button = document.getElementById('save-add-board-term');
     button.disabled = true;
     try {
-      await apiFetch(`/users/${memberId}/board-members`, {
+      await apiFetch(`/users/${memberLogin}/board-members`, {
         method: 'POST',
         body: JSON.stringify({ position: positionSelect.value, start_date: dateInput.value }),
       });

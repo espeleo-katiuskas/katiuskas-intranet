@@ -17,7 +17,7 @@ document.getElementById('logout-button').addEventListener('click', logout);
 
 const viewer = currentUser();
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
-// Set once loadActivity() resolves and the activity's leader_id is
+// Set once loadActivity() resolves and the activity's leader_login is
 // known — admin/board can manage any activity, and the organizer who
 // created it can manage their own. Can't be a data-roles attribute
 // since it depends on data loaded asynchronously for this specific
@@ -81,7 +81,7 @@ async function loadActivity() {
       `${statusLabels[activity.status] ?? activity.status} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
     document.getElementById('activity-description').textContent = activity.description ?? '';
 
-    canManage = isAdmin || viewer?.id === activity.leader_id;
+    canManage = isAdmin || viewer?.login === activity.leader_login;
     const isPrivate = activity.visibility === 'private';
     canJoinSelf = isPrivate ? canManage : true;
     canAddOthers = isPrivate ? canManage : isAdmin;
@@ -140,33 +140,33 @@ document.getElementById('cancel-activity')?.addEventListener('click', async () =
   }
 });
 
-// Loaded once so participant names can link to their own /member?id=…
-// page instead of showing a bare id, and (for admin/board) so the "add
-// participant" picker can search by name.
-let directoryById = {};
+// Loaded once so participant names can link to their own /member?login=…
+// page instead of showing a bare login, and (for admin/board) so the
+// "add participant" picker can search by name.
+let directoryByLogin = {};
 let personEntries = [];
 
 async function loadDirectory() {
   try {
     const directory = await apiFetch('/users/directory');
-    directoryById = Object.fromEntries(directory.map((person) => [person.id, person]));
+    directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
     personEntries = directory
       .slice()
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
-      .map((person) => ({ id: person.id, label: `${person.first_name} ${person.last_name} #${person.id}` }));
+      .map((person) => ({ id: person.login, label: `${person.first_name} ${person.last_name} #${person.login}` }));
   } catch {
-    directoryById = {};
+    directoryByLogin = {};
     personEntries = [];
   }
 }
 
 function renderParticipantRow(p) {
-  const person = directoryById[p.user_id];
-  const name = person ? `${person.first_name} ${person.last_name}` : `Socio n.º ${p.user_id}`;
+  const person = directoryByLogin[p.user_login];
+  const name = person ? `${person.first_name} ${person.last_name}` : p.user_login;
   return `
     <div class="detail-row">
-      <span><a href="/member?id=${p.user_id}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · responsable' : ''}</span>
-      ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_id}">Quitar</button>` : ''}
+      <span><a href="/member?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · responsable' : ''}</span>
+      ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;
 }
@@ -179,13 +179,13 @@ async function loadParticipants() {
       ? participants.map(renderParticipantRow).join('')
       : '<p>Todavía no hay nadie apuntado.</p>';
 
-    const alreadyIn = participants.some((p) => p.user_id === viewer?.id);
+    const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
     document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
     document.getElementById('leave-activity').hidden = !alreadyIn;
 
     const optionsEl = document.getElementById('participant-options');
     if (optionsEl) {
-      const alreadyInSet = new Set(participants.map((p) => p.user_id));
+      const alreadyInSet = new Set(participants.map((p) => p.user_login));
       const candidates = personEntries.filter((entry) => !alreadyInSet.has(entry.id));
       optionsEl.innerHTML = renderPickerOptions(candidates);
     }
@@ -206,7 +206,7 @@ document.getElementById('join-activity').addEventListener('click', async () => {
 
 document.getElementById('leave-activity').addEventListener('click', async () => {
   try {
-    await apiFetch(`/activities/${activityId}/participants/${viewer.id}`, { method: 'DELETE' });
+    await apiFetch(`/activities/${activityId}/participants/${viewer.login}`, { method: 'DELETE' });
     showFeedback('Te has dado de baja de la actividad.');
     await loadParticipants();
   } catch (err) {
@@ -216,15 +216,15 @@ document.getElementById('leave-activity').addEventListener('click', async () => 
 
 document.getElementById('add-participant')?.addEventListener('click', async () => {
   const input = document.getElementById('participant-search');
-  const personId = resolvePickerId(personEntries, input.value);
-  if (!personId) {
+  const login = resolvePickerId(personEntries, input.value);
+  if (!login) {
     showError('Escribe un nombre de la lista de socios.');
     return;
   }
   try {
     await apiFetch(`/activities/${activityId}/participants`, {
       method: 'POST',
-      body: JSON.stringify({ user_id: personId }),
+      body: JSON.stringify({ login }),
     });
     input.value = '';
     await loadParticipants();

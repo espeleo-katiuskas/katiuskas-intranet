@@ -19,19 +19,19 @@ const errorBox = document.getElementById('error');
 
 // Loaded once, shared only by the "new activity" participant picker now —
 // per-activity participant management lives on /activity?id=… instead.
-let directoryById = {};
+let directoryByLogin = {};
 let personEntries = [];
 
 async function loadDirectory() {
   try {
     const directory = await apiFetch('/users/directory');
-    directoryById = Object.fromEntries(directory.map((person) => [person.id, person]));
+    directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
     personEntries = directory
       .slice()
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
-      .map((person) => ({ id: person.id, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.id) }));
+      .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
   } catch {
-    directoryById = {};
+    directoryByLogin = {};
     personEntries = [];
   }
 }
@@ -52,8 +52,8 @@ const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled
 const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 
 function leaderLabel(activity) {
-  const leader = directoryById[activity.leader_id];
-  return leader ? `${leader.first_name} ${leader.last_name}` : `Socio n.º ${activity.leader_id}`;
+  const leader = directoryByLogin[activity.leader_login];
+  return leader ? `${leader.first_name} ${leader.last_name}` : activity.leader_login;
 }
 
 function renderActivity(activity) {
@@ -137,13 +137,13 @@ function renderParticipantChips() {
 }
 
 function addChosenParticipant() {
-  const personId = resolvePickerId(personEntries, participantSearchInput.value);
-  if (!personId) {
+  const login = resolvePickerId(personEntries, participantSearchInput.value);
+  if (!login) {
     showError('Escribe un nombre de la lista de socios.');
     return;
   }
-  const person = directoryById[personId];
-  chosenParticipants.set(personId, `${person.first_name} ${person.last_name}`);
+  const person = directoryByLogin[login];
+  chosenParticipants.set(login, `${person.first_name} ${person.last_name}`);
   participantSearchInput.value = '';
   renderParticipantChips();
 }
@@ -158,7 +158,7 @@ participantSearchInput.addEventListener('keydown', (event) => {
 participantChips.addEventListener('click', (event) => {
   const removeButton = event.target.closest('button[data-remove-chip]');
   if (!removeButton) return;
-  chosenParticipants.delete(Number(removeButton.dataset.removeChip));
+  chosenParticipants.delete(removeButton.dataset.removeChip);
   renderParticipantChips();
 });
 
@@ -194,7 +194,7 @@ newActivityForm.addEventListener('submit', async (event) => {
     difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
     max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
     visibility: formData.get('visibility'),
-    participant_user_ids: Array.from(chosenParticipants.keys()),
+    participant_logins: Array.from(chosenParticipants.keys()),
   };
 
   const submitButton = newActivityForm.querySelector('button[type="submit"]');

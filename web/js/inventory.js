@@ -76,7 +76,7 @@ function renderTransactionDetail(t) {
       : '';
   return `
     <div class="detail-row">
-      <span>${typeLabels[t.type] ?? t.type} · Socio n.º ${t.user_id} · cantidad ${t.quantity} ·
+      <span>${typeLabels[t.type] ?? t.type} · Socio ${t.user_login} · cantidad ${t.quantity} ·
         ${formatDate(t.transacted_at)}${dueOrReturned} ·
         <span class="badge">${txStatusLabels[t.status] ?? t.status}</span></span>
       ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : ''}
@@ -147,7 +147,7 @@ function renderActiveTransactionRow(t) {
   return `
     <tr>
       <td>${itemName ? escapeHtml(itemName) : `Material n.º ${t.item_id}`}</td>
-      <td>Socio n.º ${t.user_id}</td>
+      <td>Socio ${t.user_login}</td>
       <td>${typeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
       <td>${t.due_date ? formatDate(t.due_date) : '—'}</td>
@@ -235,7 +235,7 @@ if (canManageTransactions) {
       userEntries = people
         .slice()
         .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
-        .map((person) => ({ id: person.id, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.id) }));
+        .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
       userOptions.innerHTML = renderPickerOptions(userEntries);
     })
     .catch(() => showError('No se pudo cargar la lista de socios.'));
@@ -275,8 +275,8 @@ if (canManageTransactions) {
     const formData = new FormData(newTransactionForm);
     const type = formData.get('type');
 
-    const userId = resolvePickerId(userEntries, userInput.value);
-    if (!userId) {
+    const userLogin = resolvePickerId(userEntries, userInput.value);
+    if (!userLogin) {
       showError('Elige un socio de la lista.');
       return;
     }
@@ -291,7 +291,7 @@ if (canManageTransactions) {
 
     const body = {
       item_id: Number(formData.get('item_id')),
-      user_id: userId,
+      login: userLogin,
       type,
       quantity: Number(formData.get('quantity')) || 1,
       due_date: type !== 'sale' ? formData.get('due_date') || null : null,

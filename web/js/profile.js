@@ -37,7 +37,7 @@ async function loadProfile() {
     return;
   }
   try {
-    const profile = await apiFetch(`/users/${user.id}`);
+    const profile = await apiFetch(`/users/${user.login}`);
     document.getElementById('profile-name').textContent = `${profile.first_name} ${profile.last_name}`;
     document.getElementById('profile-email').textContent = profile.email;
 
@@ -68,7 +68,7 @@ async function loadProfile() {
       document.getElementById('restricted-fields-hint').hidden = false;
     }
 
-    const memberships = await apiFetch(`/users/${user.id}/memberships`);
+    const memberships = await apiFetch(`/users/${user.login}/memberships`);
     const tableBody = document.getElementById('memberships-table-body');
     tableBody.innerHTML = memberships.length
       ? memberships
@@ -108,7 +108,7 @@ editForm.addEventListener('submit', async (event) => {
   const submitButton = editForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch(`/users/${user.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/users/${user.login}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Datos actualizados.');
     document.getElementById('profile-name').textContent = `${body.first_name} ${body.last_name}`;
     document.getElementById('profile-email').textContent = body.email;
