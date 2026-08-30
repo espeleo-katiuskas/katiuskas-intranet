@@ -13,7 +13,7 @@ CREATE TABLE inventory_items (
     available_quantity     integer NOT NULL DEFAULT 1,
     status                 item_status NOT NULL DEFAULT 'available',
     acquired_at            date,
-    rental_price_per_day   numeric(10,2),
+    rental_price_per_week  numeric(10,2),
     sale_price             numeric(10,2),
     CONSTRAINT available_within_total
         CHECK (available_quantity BETWEEN 0 AND total_quantity)
@@ -31,11 +31,18 @@ CREATE TABLE item_transactions (
     price          numeric(10,2),
     status         transaction_status NOT NULL DEFAULT 'active',
     recorded_by    bigint REFERENCES users(id),
+    -- Loans and rentals always happen as part of an activity; a sale
+    -- doesn't (the material leaves the club's inventory for good,
+    -- activity or not).
+    activity_id    bigint REFERENCES activities(id),
     CONSTRAINT sale_has_no_return CHECK (
         type <> 'sale' OR (due_date IS NULL AND returned_at IS NULL)
     ),
     CONSTRAINT rental_and_sale_require_price CHECK (
         type = 'loan' OR price IS NOT NULL
+    ),
+    CONSTRAINT loan_and_rental_require_activity CHECK (
+        type = 'sale' OR activity_id IS NOT NULL
     )
 );
 
