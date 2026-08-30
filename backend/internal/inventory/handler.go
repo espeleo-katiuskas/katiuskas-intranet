@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,13 +12,25 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
+// UserLookup translates between a person's login and their numeric id.
+// This package's own routes are nested under /users/{login}/transactions,
+// but item_transactions is keyed by numeric user id — users.Service
+// satisfies this structurally (see main.go's wiring), without inventory
+// having to import that package (it can't: users already imports this
+// one).
+type UserLookup interface {
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
+	LoginForUserID(ctx context.Context, id int64) (string, error)
+}
+
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
+	users         UserLookup
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
-	return &Handler{service: service, authenticator: authenticator}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -29,7 +42,20 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board", "material"))
 
-	mux.Handle("GET /api/v1/users/{userID}/transactions", h.authenticator.Protect(h.listTransactionsByUser))
+	mux.Handle("GET /api/v1/users/{login}/transactions", h.authenticator.Protect(h.listTransactionsByUser))
+}
+
+// resolveUserLogin looks up the numeric id behind a {login} path
+// segment. Any failure — malformed, or simply nobody by that login — is
+// reported the same way (404): this package only needs to know whether
+// the lookup succeeded, not why it didn't.
+func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return 0, false
+	}
+	return id, true
 }
 
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
@@ -90,9 +116,8 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 // memberships.listByUser uses, since a transaction carries a price and is
 // more sensitive than, say, activity participation.
 func (h *Handler) listTransactionsByUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -111,7 +136,7 @@ func (h *Handler) listTransactionsByUser(w http.ResponseWriter, r *http.Request)
 func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ItemID     int64           `json:"item_id"`
-		UserID     int64           `json:"user_id"`
+		Login      string          `json:"login"`
 		Type       TransactionType `json:"type"`
 		Quantity   int32           `json:"quantity"`
 		DueDate    *string         `json:"due_date"`
@@ -120,6 +145,11 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	userID, err := h.users.UserIDForLogin(r.Context(), body.Login)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
 		return
 	}
 	var dueDate *time.Time
@@ -134,7 +164,7 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	current, _ := auth.UserFromContext(r.Context())
 	recordedBy := current.ID
 	t, err := h.service.CreateTransaction(r.Context(), CreateTransactionInput{
-		ItemID: body.ItemID, UserID: body.UserID, Type: body.Type, Quantity: body.Quantity,
+		ItemID: body.ItemID, UserID: userID, Type: body.Type, Quantity: body.Quantity,
 		DueDate: dueDate, Price: body.Price, RecordedBy: &recordedBy, ActivityID: body.ActivityID,
 	})
 	if errors.Is(err, ErrInsufficientStock) {
@@ -148,6 +178,10 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create transaction")
 		return
+	}
+	t.UserLogin = body.Login
+	if recordedByLogin, err := h.users.LoginForUserID(r.Context(), recordedBy); err == nil {
+		t.RecordedByLogin = &recordedByLogin
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, t)
 }
@@ -170,6 +204,17 @@ func (h *Handler) returnTransaction(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not return transaction")
 		return
+	}
+	login, err := h.users.LoginForUserID(r.Context(), t.UserID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not resolve transaction owner")
+		return
+	}
+	t.UserLogin = login
+	if t.RecordedBy != nil {
+		if login, err := h.users.LoginForUserID(r.Context(), *t.RecordedBy); err == nil {
+			t.RecordedByLogin = &login
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, t)
 }

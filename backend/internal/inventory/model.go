@@ -56,9 +56,15 @@ type CreateItemInput struct {
 }
 
 type Transaction struct {
-	ID           int64             `json:"id"`
-	ItemID       int64             `json:"item_id"`
-	UserID       int64             `json:"user_id"`
+	ID     int64 `json:"id"`
+	ItemID int64 `json:"item_id"`
+	UserID int64 `json:"-"`
+	// UserLogin/RecordedByLogin are filled in either by
+	// Repository.queryTransactions' JOIN (which can span many different
+	// people across a single listing) or, for the two writes that use
+	// INSERT/UPDATE ... RETURNING (no JOIN available there), by the
+	// handler afterward — see licenses.Handler for the same split.
+	UserLogin    string            `json:"user_login"`
 	Type         TransactionType   `json:"type"`
 	Quantity     int32             `json:"quantity"`
 	TransactedAt time.Time         `json:"transacted_at"`
@@ -66,7 +72,8 @@ type Transaction struct {
 	ReturnedAt   *time.Time        `json:"returned_at,omitempty"`
 	Price        *float64          `json:"price,omitempty"`
 	Status       TransactionStatus `json:"status"`
-	RecordedBy   *int64            `json:"recorded_by,omitempty"`
+	RecordedBy      *int64  `json:"-"`
+	RecordedByLogin *string `json:"recorded_by_login,omitempty"`
 	// ActivityID is required for loan and rental (they always happen as
 	// part of an activity) and left unset for a sale.
 	ActivityID *int64 `json:"activity_id,omitempty"`

@@ -90,7 +90,7 @@ func main() {
 		Memberships: memberships.NewHandler(membershipsService, authenticator, usersService),
 		Licenses:    licenses.NewHandler(licensesService, authenticator, usersService),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
-		Inventory:   inventory.NewHandler(inventoryService, authenticator),
+		Inventory:   inventory.NewHandler(inventoryService, authenticator, usersService),
 		Board:       board.NewHandler(boardService, authenticator, usersService),
 		Library:     library.NewHandler(libraryService, authenticator),
 	})

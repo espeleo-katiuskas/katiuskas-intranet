@@ -12,16 +12,24 @@ import (
 
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/inventory"
+	"katiuskas-intranet/backend/internal/licenses"
+	"katiuskas-intranet/backend/internal/memberships"
+	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
+	"katiuskas-intranet/backend/internal/users"
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	service := inventory.NewService(inventory.NewRepository(tx))
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	inventory.NewHandler(service, authenticator).RegisterRoutes(mux)
+	inventory.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
 	return mux, resolver, tx
 }
 
@@ -102,7 +110,7 @@ func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testin
 	user := testutil.InsertUser(t, tx, "")
 
 	body := map[string]any{
-		"item_id": item.ID, "user_id": user.ID, "type": "loan", "quantity": 1, "activity_id": activityID,
+		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
 	}
 	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", memberToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from creating a transaction, got %d", rec.Code)
@@ -147,13 +155,13 @@ func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	}
 	price := 10.0
 	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, map[string]any{
-		"item_id": item.ID, "user_id": target.ID, "type": "sale", "quantity": 1, "price": price,
+		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1, "price": price,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	path := fmt.Sprintf("/api/v1/users/%d/transactions", target.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/transactions", target.Login)
 	if rec := doRequest(mux, http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected another plain member to be forbidden, got %d", rec.Code)
 	}
@@ -187,7 +195,7 @@ func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	}
 	user := testutil.InsertUser(t, tx, "")
 
-	body := map[string]any{"item_id": item.ID, "user_id": user.ID, "type": "loan", "quantity": 1}
+	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for a loan without an activity, got %d: %s", rec.Code, rec.Body.String())

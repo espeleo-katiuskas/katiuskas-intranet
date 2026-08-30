@@ -163,25 +163,34 @@ func (r *Repository) ReturnTransaction(ctx context.Context, id int64) (Transacti
 }
 
 func (r *Repository) ListTransactionsByItem(ctx context.Context, itemID int64) ([]Transaction, error) {
-	return r.queryTransactions(ctx, `WHERE item_id = $1 ORDER BY transacted_at DESC`, itemID)
+	return r.queryTransactions(ctx, `WHERE it.item_id = $1 ORDER BY it.transacted_at DESC`, itemID)
 }
 
 func (r *Repository) ListTransactionsByStatus(ctx context.Context, status TransactionStatus) ([]Transaction, error) {
-	return r.queryTransactions(ctx, `WHERE status = $1 ORDER BY transacted_at DESC`, status)
+	return r.queryTransactions(ctx, `WHERE it.status = $1 ORDER BY it.transacted_at DESC`, status)
 }
 
 // ListTransactionsByUser returns every purchase, rental and loan a person
 // has ever made, regardless of status — the material history shown on
 // that person's page.
 func (r *Repository) ListTransactionsByUser(ctx context.Context, userID int64) ([]Transaction, error) {
-	return r.queryTransactions(ctx, `WHERE user_id = $1 ORDER BY transacted_at DESC`, userID)
+	return r.queryTransactions(ctx, `WHERE it.user_id = $1 ORDER BY it.transacted_at DESC`, userID)
 }
 
+// queryTransactions joins in the login of both the transaction's party
+// and, if recorded, whoever logged it — every caller here can span many
+// different people at once (by item, by status, or even by user, since
+// nothing stops the same listing shape from being reused later), so a
+// JOIN is simpler than resolving each id after the fact the way the two
+// single-row RETURNING writes below have to.
 func (r *Repository) queryTransactions(ctx context.Context, whereClause string, arg any) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
-			price, status, recorded_by, activity_id
-		FROM item_transactions `+whereClause, arg)
+		SELECT it.id, it.item_id, it.user_id, u.login, it.type, it.quantity, it.transacted_at, it.due_date,
+			it.returned_at, it.price, it.status, it.recorded_by, ru.login, it.activity_id
+		FROM item_transactions it
+		JOIN users u ON u.id = it.user_id
+		LEFT JOIN users ru ON ru.id = it.recorded_by
+		`+whereClause, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -190,8 +199,8 @@ func (r *Repository) queryTransactions(ctx context.Context, whereClause string, 
 	list := []Transaction{}
 	for rows.Next() {
 		var t Transaction
-		if err := rows.Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt,
-			&t.DueDate, &t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID); err != nil {
+		if err := rows.Scan(&t.ID, &t.ItemID, &t.UserID, &t.UserLogin, &t.Type, &t.Quantity, &t.TransactedAt,
+			&t.DueDate, &t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.RecordedByLogin, &t.ActivityID); err != nil {
 			return nil, err
 		}
 		list = append(list, t)
