@@ -270,6 +270,7 @@ document.getElementById('row-filters').addEventListener('change', (event) => {
   } else {
     values.delete(checkbox.value);
   }
+  saveViewState();
   renderUsersTable();
 });
 
@@ -324,6 +325,59 @@ let sortKey = 'last_name';
 let sortDir = 'asc';
 let people = [];
 
+// Persist the whole view — filters, visible columns, sort — across
+// navigation, so leaving to a person's page and clicking "Volver a
+// socios" lands back on the same view instead of a reset one. Per
+// browser only, and never worth failing the page over (private
+// browsing, a full quota...), so every read/write is best-effort.
+const VIEW_STATE_KEY = 'katiuskas:members-view';
+
+function saveViewState() {
+  try {
+    localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
+      visibleColumns: [...visibleColumns],
+      sortKey,
+      sortDir,
+      filters: Object.fromEntries(FILTERS.map((f) => [f.key, [...activeFilterValues[f.key]]])),
+    }));
+  } catch {
+    // Not persisting the view isn't worth surfacing to the user.
+  }
+}
+
+// Applied once at startup. Unknown column keys or filter values (e.g.
+// after a column gets renamed or removed) are dropped rather than
+// crashing the page on stale saved state.
+function restoreViewState() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(VIEW_STATE_KEY));
+  } catch {
+    return;
+  }
+  if (!saved) return;
+
+  if (Array.isArray(saved.visibleColumns)) {
+    const known = saved.visibleColumns.filter((key) => columnsByKey[key]);
+    if (known.length > 0) visibleColumns = new Set(known);
+  }
+  if (typeof saved.sortKey === 'string' && columnsByKey[saved.sortKey]) {
+    sortKey = saved.sortKey;
+  }
+  if (saved.sortDir === 'asc' || saved.sortDir === 'desc') {
+    sortDir = saved.sortDir;
+  }
+  if (saved.filters) {
+    for (const f of FILTERS) {
+      const values = saved.filters[f.key];
+      if (Array.isArray(values)) {
+        activeFilterValues[f.key] = new Set(values.filter((v) => f.options.includes(v)));
+      }
+    }
+  }
+}
+restoreViewState();
+
 function renderColumnToggle() {
   const container = document.getElementById('column-toggle');
   container.innerHTML = COLUMNS
@@ -344,6 +398,7 @@ document.getElementById('column-toggle').addEventListener('change', (event) => {
   } else {
     visibleColumns.delete(checkbox.dataset.toggleColumn);
   }
+  saveViewState();
   renderUsersTable();
 });
 
@@ -368,6 +423,7 @@ document.getElementById('users-table-head').addEventListener('click', (event) =>
     sortKey = key;
     sortDir = 'asc';
   }
+  saveViewState();
   renderUsersTable();
 });
 
