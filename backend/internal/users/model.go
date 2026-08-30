@@ -46,7 +46,14 @@ func ageCategoryFor(birthDate *time.Time) *AgeCategory {
 }
 
 type User struct {
-	ID         int64      `json:"id"`
+	// ID is never exposed over the API — Login is this person's only
+	// externally visible identifier (used in URLs and, later, as the
+	// name of their private-document directory), so every JSON response
+	// and path parameter that used to carry a numeric id now carries
+	// this instead. ID stays on the struct because the Go layer still
+	// needs it for foreign keys and permission checks.
+	ID         int64      `json:"-"`
+	Login      string     `json:"login"`
 	FirstName  string     `json:"first_name"`
 	LastName   string     `json:"last_name"`
 	NationalID *string    `json:"national_id,omitempty"`
@@ -132,6 +139,13 @@ type CreateInput struct {
 // EmergencyContact — enforced in Handler.update, not here, since it's a
 // permission concern rather than a data-shape one.
 type UpdateInput struct {
+	// Login is admin-only, same as the identity fields below it — it's
+	// referenced from URLs (and, later, a filesystem directory name)
+	// throughout the app, so a self-service typo or joke has a bigger
+	// blast radius than a wrong phone number. Auto-generated at creation
+	// time (see Repository.generateLogin); this is only for correcting
+	// or deliberately changing one afterward.
+	Login            *string    `json:"login"`
 	FirstName        *string    `json:"first_name"`
 	LastName         *string    `json:"last_name"`
 	Email            *string    `json:"email"`
@@ -150,7 +164,7 @@ type UpdateInput struct {
 // person out of a list — e.g. an activity's leader or participants —
 // without exposing the personal data GET /users returns to admin/board.
 type DirectoryEntry struct {
-	ID        int64  `json:"id"`
+	Login     string `json:"login"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 }
@@ -163,7 +177,7 @@ type DirectoryEntry struct {
 // the coarse bracket is enough to know at a glance without revealing
 // everyone's exact birth date.
 type MemberListing struct {
-	ID                  int64        `json:"id"`
+	Login               string       `json:"login"`
 	FirstName           string       `json:"first_name"`
 	LastName            string       `json:"last_name"`
 	Gender              *Gender      `json:"gender,omitempty"`
@@ -178,7 +192,7 @@ type MemberListing struct {
 // rather than being reimplemented at every call site.
 func (u User) ForMemberListing() MemberListing {
 	return MemberListing{
-		ID:                  u.ID,
+		Login:               u.Login,
 		FirstName:           u.FirstName,
 		LastName:            u.LastName,
 		Gender:              u.Gender,

@@ -720,9 +720,9 @@ func TestListDirectoryIncludesEveryone(t *testing.T) {
 	if len(list) != 2 {
 		t.Fatalf("expected both people to appear, got %d entries: %+v", len(list), list)
 	}
-	ids := map[int64]bool{list[0].ID: true, list[1].ID: true}
-	if !ids[withPhone.ID] || !ids[withoutPhone.ID] {
-		t.Errorf("expected both %d and %d, got %+v", withPhone.ID, withoutPhone.ID, list)
+	logins := map[string]bool{list[0].Login: true, list[1].Login: true}
+	if !logins[withPhone.Login] || !logins[withoutPhone.Login] {
+		t.Errorf("expected both %q and %q, got %+v", withPhone.Login, withoutPhone.Login, list)
 	}
 }
 

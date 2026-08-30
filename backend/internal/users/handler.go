@@ -25,9 +25,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users", h.authenticator.Protect(h.list, "admin", "board", "member"))
 	mux.Handle("POST /api/v1/users", h.authenticator.Protect(h.create, "admin"))
 	mux.Handle("GET /api/v1/users/directory", h.authenticator.Protect(h.directory))
-	mux.Handle("GET /api/v1/users/{id}", h.authenticator.Protect(h.get))
-	mux.Handle("PATCH /api/v1/users/{id}", h.authenticator.Protect(h.update))
-	mux.Handle("DELETE /api/v1/users/{id}", h.authenticator.Protect(h.delete, "admin"))
+	mux.Handle("GET /api/v1/users/{login}", h.authenticator.Protect(h.get))
+	mux.Handle("PATCH /api/v1/users/{login}", h.authenticator.Protect(h.update))
+	mux.Handle("DELETE /api/v1/users/{login}", h.authenticator.Protect(h.delete, "admin"))
 }
 
 // list is the only place a plain member can see anyone's data besides
@@ -139,10 +139,25 @@ func parseOptionalDate(raw *string) (*time.Time, error) {
 	return &d, nil
 }
 
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+// resolveLogin looks up the numeric id behind a {login} path segment,
+// writing a 404 (never revealing whether the login was merely malformed)
+// and reporting ok=false if it doesn't belong to anyone.
+func (h *Handler) resolveLogin(w http.ResponseWriter, r *http.Request) (id int64, ok bool) {
+	id, err := h.service.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return 0, false
+	}
 	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not look up user")
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.resolveLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -165,9 +180,8 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 // were never meant to touch identity fields like name, DNI, birth date,
 // or gender.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+	id, ok := h.resolveLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -177,6 +191,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
+		Login            *string `json:"login"`
 		FirstName        *string `json:"first_name"`
 		LastName         *string `json:"last_name"`
 		Email            *string `json:"email"`
@@ -194,7 +209,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if !isAdmin && (body.FirstName != nil || body.LastName != nil || body.NationalID != nil || body.BirthDate != nil || body.Gender != nil) {
+	if !isAdmin && (body.Login != nil || body.FirstName != nil || body.LastName != nil || body.NationalID != nil || body.BirthDate != nil || body.Gender != nil) {
 		httpapi.WriteError(w, http.StatusForbidden, "restricted_fields",
 			"you can only edit email, phone, address, postal_code, city, province, and emergency_contact")
 		return
@@ -207,6 +222,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.service.Update(r.Context(), id, UpdateInput{
+		Login:            body.Login,
 		FirstName:        body.FirstName,
 		LastName:         body.LastName,
 		Email:            body.Email,
@@ -228,6 +244,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate", err.Error())
 		return
 	}
+	if errors.Is(err, ErrInvalidLogin) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_login", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update user")
 		return
@@ -236,9 +256,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+	id, ok := h.resolveLogin(w, r)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -246,7 +265,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "cannot_delete_self", "you cannot delete your own account")
 		return
 	}
-	err = h.service.Delete(r.Context(), id)
+	err := h.service.Delete(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
 		return

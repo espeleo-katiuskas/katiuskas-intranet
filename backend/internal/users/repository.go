@@ -3,6 +3,8 @@ package users
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,7 +24,11 @@ var (
 	// ErrDuplicate means an email (or one of several), the national ID,
 	// or the membership number being set already belongs to another
 	// person.
-	ErrDuplicate = errors.New("email, national ID, or membership number already belongs to another person")
+	ErrDuplicate = errors.New("email, national ID, login, or membership number already belongs to another person")
+	// ErrInvalidLogin means an admin-supplied login doesn't match
+	// loginFormat — lowercase letters, digits, dots, and hyphens only,
+	// never at the edges or doubled.
+	ErrInvalidLogin = errors.New("login must be lowercase letters, digits, dots, or hyphens")
 	// ErrInvalidToken means a magic-link token doesn't exist, already got
 	// used, or expired. It's intentionally the same error for all three
 	// cases — there's nothing useful (or safe) to tell the caller apart.
@@ -41,12 +47,12 @@ const (
 // to list a person's roles; the users service overlays that onto every
 // User it returns instead of duplicating the computation in SQL here.
 const userSelect = `
-	u.id, u.first_name, u.last_name, u.national_id, u.birth_date, u.gender, u.email, u.phone,
+	u.id, u.login, u.first_name, u.last_name, u.national_id, u.birth_date, u.gender, u.email, u.phone,
 	u.address, u.postal_code, u.city, u.province, u.emergency_contact, u.membership_number,
 	u.last_login_at, u.last_login_ip, u.created_at`
 
 func scanUser(row interface{ Scan(dest ...any) error }, u *User) error {
-	return row.Scan(&u.ID, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Gender, &u.Email,
+	return row.Scan(&u.ID, &u.Login, &u.FirstName, &u.LastName, &u.NationalID, &u.BirthDate, &u.Gender, &u.Email,
 		&u.Phone, &u.Address, &u.PostalCode, &u.City, &u.Province, &u.EmergencyContact, &u.MembershipNumber,
 		&u.LastLoginAt, &u.LastLoginIP, &u.CreatedAt)
 }
@@ -83,21 +89,89 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	} else if taken {
 		return User{}, ErrDuplicate
 	}
+	login, err := r.generateLogin(ctx, in.FirstName, in.LastName)
+	if err != nil {
+		return User{}, err
+	}
 
 	var u User
-	err := scanUser(r.pool.QueryRow(ctx, `
+	err = scanUser(r.pool.QueryRow(ctx, `
 		INSERT INTO users AS u (first_name, last_name, national_id, birth_date, gender, email, phone,
-			address, postal_code, city, province, emergency_contact)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			address, postal_code, city, province, emergency_contact, login)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING `+userSelect+`
 	`, in.FirstName, in.LastName, in.NationalID, in.BirthDate, in.Gender, in.Email, in.Phone,
-		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact,
+		in.Address, in.PostalCode, in.City, in.Province, in.EmergencyContact, login,
 	), &u)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate
 	}
 	return u, err
+}
+
+// maxLoginGenerationAttempts bounds the collision-suffix search below —
+// astronomically more than a club this size could ever need, so hitting
+// it means something else is wrong rather than a genuinely exhausted
+// namespace.
+const maxLoginGenerationAttempts = 200
+
+// generateLogin picks the login a brand-new person gets: their name
+// slugified and dot-joined (see candidateLogin), or that same value with
+// a numeric suffix if someone else already has it — the first
+// still-free candidate in that sequence wins.
+func (r *Repository) generateLogin(ctx context.Context, firstName, lastName string) (string, error) {
+	base := candidateLogin(firstName, lastName)
+	for n := 1; n <= maxLoginGenerationAttempts; n++ {
+		candidate := base
+		if n > 1 {
+			candidate = loginWithSuffix(base, n)
+		}
+		taken, err := r.loginTakenByAnotherUser(ctx, 0, candidate)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique login for %q %q after %d attempts", firstName, lastName, maxLoginGenerationAttempts)
+}
+
+func (r *Repository) loginTakenByAnotherUser(ctx context.Context, excludeID int64, login string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM users WHERE id <> $1 AND login = $2)
+	`, excludeID, login).Scan(&exists)
+	return exists, err
+}
+
+// FindIDForLogin resolves a login to the numeric id it names. Every
+// other package that accepts a login at its own HTTP boundary (a route
+// like /users/{login}/tokens, say) needs exactly this translation before
+// it can look up, filter, or insert anything keyed by user id — see
+// Service.UserIDForLogin, which the rest of the API depends on through a
+// small interface defined locally in each of those packages.
+func (r *Repository) FindIDForLogin(ctx context.Context, login string) (int64, error) {
+	var id int64
+	err := r.pool.QueryRow(ctx, `SELECT id FROM users WHERE login = $1`, login).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return id, err
+}
+
+// FindLoginForID is FindIDForLogin's inverse, for the handful of
+// responses that need to name a person by an id resolved some other way
+// (see authapi.Handler.impersonatorSummary) rather than one a
+// repository JOIN already turned into a login inline.
+func (r *Repository) FindLoginForID(ctx context.Context, id int64) (string, error) {
+	var login string
+	err := r.pool.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, id).Scan(&login)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return login, err
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
@@ -179,6 +253,18 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if err != nil {
 		return u, err
 	}
+	if in.Login != nil {
+		login := strings.ToLower(strings.TrimSpace(*in.Login))
+		if !loginFormat.MatchString(login) {
+			return u, ErrInvalidLogin
+		}
+		if taken, err := r.loginTakenByAnotherUser(ctx, id, login); err != nil {
+			return u, err
+		} else if taken {
+			return u, ErrDuplicate
+		}
+		u.Login = login
+	}
 	if in.FirstName != nil {
 		u.FirstName = *in.FirstName
 	}
@@ -224,10 +310,10 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
 			gender=$6, phone=$7, address=$8, postal_code=$9, city=$10, province=$11, emergency_contact=$12,
-			updated_at=now()
-		WHERE id=$13
+			login=$13, updated_at=now()
+		WHERE id=$14
 	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Gender, u.Phone, u.Address,
-		u.PostalCode, u.City, u.Province, u.EmergencyContact, id)
+		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.Login, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate
@@ -279,7 +365,7 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 // in at all.
 func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT u.id, u.first_name, u.last_name
+		SELECT u.login, u.first_name, u.last_name
 		FROM users u
 		ORDER BY u.last_name, u.first_name
 	`)
@@ -291,7 +377,7 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 	list := []DirectoryEntry{}
 	for rows.Next() {
 		var e DirectoryEntry
-		if err := rows.Scan(&e.ID, &e.FirstName, &e.LastName); err != nil {
+		if err := rows.Scan(&e.Login, &e.FirstName, &e.LastName); err != nil {
 			return nil, err
 		}
 		list = append(list, e)

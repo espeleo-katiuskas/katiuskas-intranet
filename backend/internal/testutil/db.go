@@ -228,9 +228,11 @@ func UniqueEmail(t *testing.T) string {
 
 // TestUser is a minimal person row inserted for tests that need a real
 // users.id to satisfy a foreign key (role assignment, activity
-// participation, a membership period, and so on).
+// participation, a membership period, and so on), or a real login for a
+// test that exercises a login-addressed route.
 type TestUser struct {
 	ID    int64
+	Login string
 	Email string
 	Phone string
 }
@@ -244,6 +246,7 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 	ctx := context.Background()
 
 	email := UniqueEmail(t)
+	login := strings.ToLower(nonAlnum.ReplaceAllString(fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano()), "-"))
 	var phoneArg any
 	if phone != "" {
 		phoneArg = phone
@@ -251,14 +254,14 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 
 	var id int64
 	err := tx.QueryRow(ctx, `
-		INSERT INTO users (first_name, last_name, email, phone) VALUES ('Test', 'User', $1, $2)
+		INSERT INTO users (first_name, last_name, email, phone, login) VALUES ('Test', 'User', $1, $2, $3)
 		RETURNING id
-	`, email, phoneArg).Scan(&id)
+	`, email, phoneArg, login).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert test user: %v", err)
 	}
 
-	return TestUser{ID: id, Email: email, Phone: phone}
+	return TestUser{ID: id, Login: login, Email: email, Phone: phone}
 }
 
 // InsertActivity inserts a bare-bones activity, for tests that need a real

@@ -139,6 +139,26 @@ func (s *Service) Directory(ctx context.Context) ([]DirectoryEntry, error) {
 	return s.repo.ListDirectory(ctx)
 }
 
+// UserIDForLogin resolves a login to the numeric id it names. Every
+// package whose own HTTP boundary accepts a person by login (a route
+// like /users/{login}/tokens, or a request body naming someone else)
+// needs this translation before it can act against anything keyed by
+// user id — those packages can't import this one directly (this one
+// already imports several of them), so each defines its own narrow
+// interface that *Service satisfies structurally, and main.go wires
+// this service in to satisfy it.
+func (s *Service) UserIDForLogin(ctx context.Context, login string) (int64, error) {
+	return s.repo.FindIDForLogin(ctx, login)
+}
+
+// LoginForUserID is UserIDForLogin's inverse, for the few responses that
+// need to name a person by an id resolved some other way (see
+// authapi.Handler.impersonatorSummary) rather than one a repository JOIN
+// already turned into a login inline.
+func (s *Service) LoginForUserID(ctx context.Context, id int64) (string, error) {
+	return s.repo.FindLoginForID(ctx, id)
+}
+
 // Delete refuses to remove the only remaining admin, for the same reason
 // roles.Service.Remove refuses to strip just their admin role: someone has
 // to be left who can manage users and roles.
