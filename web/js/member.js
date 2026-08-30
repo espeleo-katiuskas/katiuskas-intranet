@@ -7,6 +7,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  setToken,
 } from './api.js';
 
 await initSession();
@@ -588,6 +589,28 @@ document.getElementById('delete-member').addEventListener('click', async () => {
     showError(err.message);
   }
 });
+
+// Impersonating yourself is rejected by the API anyway, but there's no
+// reason to even offer it on your own page.
+const impersonateButton = document.getElementById('impersonate-button');
+if (impersonateButton) {
+  if (memberId === viewer.id) {
+    impersonateButton.remove();
+  } else {
+    impersonateButton.addEventListener('click', async () => {
+      if (!confirm('¿Entrar en la intranet como esta persona? Podrás salir de la impersonación en cualquier momento.')) return;
+      impersonateButton.disabled = true;
+      try {
+        const result = await apiFetch(`/users/${memberId}/impersonate`, { method: 'POST' });
+        setToken(result.token);
+        window.location.href = '/';
+      } catch (err) {
+        impersonateButton.disabled = false;
+        showError(err.message);
+      }
+    });
+  }
+}
 
 const activityTypeLabels = { caving: 'Espeleología', training: 'Formación', outdoor: 'Exterior', social: 'Social', other: 'Otra' };
 const activityStatusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };

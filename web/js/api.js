@@ -15,13 +15,55 @@ async function initSession() {
   }
   try {
     const me = await apiFetch('/auth/me');
-    cachedUser = { id: me.id, roles: me.roles ?? [] };
+    cachedUser = { id: me.id, roles: me.roles ?? [], impersonatedBy: me.impersonated_by ?? null };
+    if (cachedUser.impersonatedBy) {
+      await renderImpersonationBanner(cachedUser.impersonatedBy);
+    }
     return true;
   } catch {
     localStorage.removeItem('token');
     token = null;
     window.location.href = '/login';
     return false;
+  }
+}
+
+// Shown on every page while impersonating, so it's never something only
+// the page that started it would know about. Best-effort: if the extra
+// lookup for the impersonated person's own name fails, the banner still
+// shows with what it already knows rather than not showing at all.
+async function renderImpersonationBanner(impersonator) {
+  let selfName = `#${cachedUser.id}`;
+  try {
+    const self = await apiFetch(`/users/${cachedUser.id}`);
+    selfName = `${self.first_name} ${self.last_name}`;
+  } catch {
+    // Keep the id-only fallback above.
+  }
+
+  const banner = document.createElement('div');
+  banner.className = 'impersonation-banner';
+  banner.innerHTML = `
+    <span>
+      Estás usando la intranet como <strong>${escapeHtml(selfName)}</strong>
+      — impersonado por ${escapeHtml(impersonator.first_name ?? '')} ${escapeHtml(impersonator.last_name ?? '')}.
+    </span>
+    <button type="button" id="exit-impersonation-button" class="btn btn-secondary btn-small">Salir de la impersonación</button>
+  `;
+  document.body.prepend(banner);
+  document.getElementById('exit-impersonation-button').addEventListener('click', exitImpersonation);
+}
+
+async function exitImpersonation() {
+  const button = document.getElementById('exit-impersonation-button');
+  button.disabled = true;
+  try {
+    const result = await apiFetch('/auth/impersonate/exit', { method: 'POST' });
+    setToken(result.token);
+    window.location.href = '/members';
+  } catch (err) {
+    button.disabled = false;
+    alert(err.message || 'No se ha podido salir de la impersonación.');
   }
 }
 
