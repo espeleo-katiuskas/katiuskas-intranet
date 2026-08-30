@@ -12,8 +12,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"katiuskas-intranet/backend/internal/httpapi"
+	"katiuskas-intranet/backend/internal/licenses"
+	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
+	"katiuskas-intranet/backend/internal/users"
 )
 
 // newRolesTestServer returns the transaction alongside the server so test
@@ -23,10 +26,13 @@ import (
 func newRolesTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *roles.Service, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	service := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), service, membershipsService, licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	roles.NewHandler(service, authenticator).RegisterRoutes(mux)
+	roles.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
 	return mux, resolver, service, tx
 }
 
@@ -87,7 +93,7 @@ func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 	adminRoleID := testutil.RoleID(t, tx, "admin")
 
 	boardToken := rolesToken(t, authn, 1, "board")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), boardToken,
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), boardToken,
 		map[string]int64{"role_id": adminRoleID})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected board granting admin to be forbidden, got %d: %s", rec.Code, rec.Body.String())
@@ -106,13 +112,13 @@ func TestHandlerBoardCannotGrantOrRevokeAnyRole(t *testing.T) {
 	materialRoleID := testutil.RoleID(t, tx, "material")
 
 	boardToken := rolesToken(t, authn, 1, "board")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), boardToken,
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), boardToken,
 		map[string]int64{"role_id": materialRoleID})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected board granting a role to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/roles/%d", target.ID, materialRoleID), boardToken, nil)
+	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", target.Login, materialRoleID), boardToken, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected board revoking a role to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -124,7 +130,7 @@ func TestHandlerAdminCanGrantNonAdminRoles(t *testing.T) {
 	materialRoleID := testutil.RoleID(t, tx, "material")
 
 	adminToken := rolesToken(t, authn, 1, "admin")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), adminToken,
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), adminToken,
 		map[string]int64{"role_id": materialRoleID})
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
@@ -137,7 +143,7 @@ func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 	memberRoleID := testutil.RoleID(t, tx, "member")
 
 	adminToken := rolesToken(t, authn, 1, "admin")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), adminToken,
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), adminToken,
 		map[string]int64{"role_id": memberRoleID})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 granting an automatic role, got %d: %s", rec.Code, rec.Body.String())
@@ -146,7 +152,7 @@ func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 		t.Errorf("expected error code automatic_role, got %q", code)
 	}
 
-	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/roles/%d", target.ID, memberRoleID), adminToken, nil)
+	rec = rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", target.Login, memberRoleID), adminToken, nil)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 revoking an automatic role, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -161,7 +167,7 @@ func TestHandlerAdminCanGrantTheAdminRole(t *testing.T) {
 	adminRoleID := testutil.RoleID(t, tx, "admin")
 
 	adminToken := rolesToken(t, authn, 1, "admin")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%d/roles", target.ID), adminToken,
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), adminToken,
 		map[string]int64{"role_id": adminRoleID})
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to be able to grant admin, got %d: %s", rec.Code, rec.Body.String())
@@ -183,7 +189,7 @@ func TestHandlerOnlyAdminCanRevokeTheAdminRole(t *testing.T) {
 	}
 
 	boardToken := rolesToken(t, authn, 1, "board")
-	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%d/roles/%d", holder.ID, adminRoleID), boardToken, nil)
+	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", holder.Login, adminRoleID), boardToken, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected board revoking admin to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}

@@ -85,7 +85,7 @@ func main() {
 			PublicBaseURL:     cfg.PublicBaseURL,
 		}),
 		Users:       users.NewHandler(usersService, authenticator),
-		Roles:       roles.NewHandler(rolesService, authenticator),
+		Roles:       roles.NewHandler(rolesService, authenticator, usersService),
 		Tokens:      tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),
 		Licenses:    licenses.NewHandler(licensesService, authenticator),

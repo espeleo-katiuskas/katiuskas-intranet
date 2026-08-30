@@ -1,6 +1,7 @@
 package roles
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,13 +11,24 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 )
 
+// UserLookup resolves a login into the numeric id it names. This
+// package's role-assignment routes are nested under /users/{login}/...,
+// but user_roles is keyed by that person's numeric id, so the handler
+// needs this translation before it can call into Service —
+// users.Service satisfies this structurally (see main.go's wiring),
+// without roles having to import that package.
+type UserLookup interface {
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
+}
+
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
+	users         UserLookup
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
-	return &Handler{service: service, authenticator: authenticator}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users}
 }
 
 // Assigning or revoking a role is data about a person, same as their
@@ -27,8 +39,21 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/roles", h.authenticator.Protect(h.create, "admin"))
 	mux.Handle("DELETE /api/v1/roles/{id}", h.authenticator.Protect(h.delete, "admin"))
 
-	mux.Handle("POST /api/v1/users/{userID}/roles", h.authenticator.Protect(h.assign, "admin"))
-	mux.Handle("DELETE /api/v1/users/{userID}/roles/{roleID}", h.authenticator.Protect(h.remove, "admin"))
+	mux.Handle("POST /api/v1/users/{login}/roles", h.authenticator.Protect(h.assign, "admin"))
+	mux.Handle("DELETE /api/v1/users/{login}/roles/{roleID}", h.authenticator.Protect(h.remove, "admin"))
+}
+
+// resolveUserLogin looks up the numeric id behind a {login} path
+// segment. Any failure — malformed, or simply nobody by that login — is
+// reported the same way (404): this package only needs to know whether
+// the lookup succeeded, not why it didn't.
+func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return 0, false
+	}
+	return id, true
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -89,9 +114,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) assign(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -129,9 +153,8 @@ func (h *Handler) assign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	roleID, err := strconv.ParseInt(r.PathValue("roleID"), 10, 64)
