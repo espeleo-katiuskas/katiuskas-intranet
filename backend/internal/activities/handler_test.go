@@ -399,3 +399,135 @@ func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
 		t.Errorf("expected an unfederated member to still join a social activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandlerCreateDefaultsToPublicVisibility(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Visibility != activities.VisibilityPublic {
+		t.Errorf("expected visibility to default to public, got %q", created.Visibility)
+	}
+}
+
+func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "visibility": "public", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+
+	if rec := doRequest(mux, http.MethodPost, path, memberToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected a plain member to sign themselves up to a public activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The organizer alone (not admin/board) still can't add someone else
+	// to a *public* activity — that extra privilege is private-only.
+	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected the organizer to be forbidden from adding someone else to a public activity, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"user_id": other.ID}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected admin to add someone else to a public activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	board := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	boardToken := tokenFor(t, authn, board.ID, "board")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "visibility": "private", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Visibility != activities.VisibilityPrivate {
+		t.Fatalf("expected a private activity, got %q", created.Visibility)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+
+	// A plain, unrelated member can't even sign *themselves* up.
+	if rec := doRequest(mux, http.MethodPost, path, memberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a plain member to be forbidden from self-joining a private activity, got %d", rec.Code)
+	}
+	if code := errorCode(t, doRequest(mux, http.MethodPost, path, memberToken, nil)); code != "forbidden" {
+		t.Errorf("expected error code forbidden, got %q", code)
+	}
+
+	// The organizer can add that same member.
+	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"user_id": member.ID}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected the organizer to add a member to their own private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Board and admin can too.
+	if rec := doRequest(mux, http.MethodPost, path, boardToken, map[string]any{"user_id": board.ID}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected board to add a participant to a private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"user_id": admin.ID}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected admin to add a participant to a private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"visibility": "private"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update visibility: %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.Visibility != activities.VisibilityPrivate {
+		t.Errorf("expected visibility to change to private, got %q", updated.Visibility)
+	}
+}

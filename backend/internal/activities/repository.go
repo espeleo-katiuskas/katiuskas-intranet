@@ -41,14 +41,14 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 	var a Activity
 	err = tx.QueryRow(ctx, `
 		INSERT INTO activities (title, type, start_date, end_date, location, description,
-			difficulty, max_participants, leader_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			difficulty, max_participants, leader_id, visibility)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		RETURNING id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id
+			difficulty, max_participants, status, leader_id, visibility
 	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Location, in.Description,
-		in.Difficulty, in.MaxParticipants, in.LeaderID,
+		in.Difficulty, in.MaxParticipants, in.LeaderID, in.Visibility,
 	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location, &a.Description,
-		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID)
+		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility)
 	if err != nil {
 		return Activity{}, err
 	}
@@ -72,7 +72,7 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id
+			difficulty, max_participants, status, leader_id, visibility
 		FROM activities ORDER BY start_date DESC LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -84,7 +84,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 	for rows.Next() {
 		var a Activity
 		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID); err != nil {
+			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -100,7 +100,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
-			a.description, a.difficulty, a.max_participants, a.status, a.leader_id
+			a.description, a.difficulty, a.max_participants, a.status, a.leader_id, a.visibility
 		FROM activities a
 		LEFT JOIN item_transactions t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
 		WHERE a.status = 'planned' OR t.id IS NOT NULL
@@ -115,7 +115,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activ
 	for rows.Next() {
 		var a Activity
 		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID); err != nil {
+			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -129,7 +129,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activ
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
-			a.description, a.difficulty, a.max_participants, a.status, a.leader_id
+			a.description, a.difficulty, a.max_participants, a.status, a.leader_id, a.visibility
 		FROM activities a
 		LEFT JOIN activity_participants ap ON ap.activity_id = a.id
 		WHERE a.leader_id = $1 OR ap.user_id = $1
@@ -144,7 +144,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, 
 	for rows.Next() {
 		var a Activity
 		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID); err != nil {
+			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -156,10 +156,10 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Activity, error) {
 	var a Activity
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id
+			difficulty, max_participants, status, leader_id, visibility
 		FROM activities WHERE id = $1
 	`, id).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
-		&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID)
+		&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -186,9 +186,12 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.Location != nil {
 		a.Location = *in.Location
 	}
+	if in.Visibility != nil {
+		a.Visibility = *in.Visibility
+	}
 	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, type=$2, description=$3, status=$4, location=$5 WHERE id=$6
-	`, a.Title, a.Type, a.Description, a.Status, a.Location, id)
+		UPDATE activities SET title=$1, type=$2, description=$3, status=$4, location=$5, visibility=$6 WHERE id=$7
+	`, a.Title, a.Type, a.Description, a.Status, a.Location, a.Visibility, id)
 	return a, err
 }
 

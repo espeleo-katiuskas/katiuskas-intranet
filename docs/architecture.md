@@ -242,7 +242,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   actividad de tipo `caving` o `canyoning` exige que esa persona tenga una licencia
   federativa vigente (`licenses.Service.IsCurrentlyFederated`); si no, la llamada se
   rechaza con 409 `not_federated` — tanto al unirse después como al dar de alta
-  participantes iniciales en la propia creación.
+  participantes iniciales en la propia creación. Cada actividad tiene también una
+  `visibility` (`public`, valor por defecto, o `private`, migración 00019) que decide
+  quién puede añadir participantes, no solo quién puede apuntarse: en una pública
+  cualquiera puede apuntarse a sí mismo y admin/board puede añadir a quien sea, igual que
+  siempre; en una privada solo el organizador, board o admin pueden dar de alta a un
+  participante — ni siquiera un socio cualquiera puede apuntarse a sí mismo sin que uno de
+  esos tres lo haga por él (`Handler.join`, que consulta `leader_id` y `visibility` antes
+  de delegar en `Service.Join`).
 - **`inventory_items`** / **`item_transactions`** — catálogo de material y sus movimientos
   (`loan`, `rental`, `sale`), modelados en una única tabla con un discriminador de tipo
   en vez de tres tablas paralelas, con `CHECK` que impide, por ejemplo, una venta con

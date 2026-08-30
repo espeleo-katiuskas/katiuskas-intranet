@@ -30,6 +30,13 @@ const (
 	StatusCancelled Status = "cancelled"
 )
 
+type Visibility string
+
+const (
+	VisibilityPublic  Visibility = "public"
+	VisibilityPrivate Visibility = "private"
+)
+
 type Activity struct {
 	ID              int64      `json:"id"`
 	Title           string     `json:"title"`
@@ -46,6 +53,12 @@ type Activity struct {
 	// chooses), and the only person besides admin/board who can edit or
 	// cancel it.
 	LeaderID int64 `json:"leader_id"`
+	// Visibility gates who may add participants: anyone can join a
+	// public activity (themselves, or admin/board adding someone else),
+	// same as before this field existed. A private activity can only
+	// gain participants through the organizer, board, or admin — see
+	// Handler.join.
+	Visibility Visibility `json:"visibility"`
 }
 
 type CreateInput struct {
@@ -58,17 +71,19 @@ type CreateInput struct {
 	Difficulty      *int16
 	MaxParticipants *int32
 	LeaderID        int64
+	Visibility      Visibility
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
 }
 
 type UpdateInput struct {
-	Title       *string `json:"title"`
-	Type        *Type   `json:"type"`
-	Description *string `json:"description"`
-	Status      *Status `json:"status"`
-	Location    *string `json:"location"`
+	Title       *string     `json:"title"`
+	Type        *Type       `json:"type"`
+	Description *string     `json:"description"`
+	Status      *Status     `json:"status"`
+	Location    *string     `json:"location"`
+	Visibility  *Visibility `json:"visibility"`
 }
 
 type Participant struct {

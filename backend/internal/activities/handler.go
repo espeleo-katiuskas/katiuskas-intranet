@@ -60,15 +60,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Title              string  `json:"title"`
-		Type               Type    `json:"type"`
-		StartDate          string  `json:"start_date"`
-		EndDate            *string `json:"end_date"`
-		Location           string  `json:"location"`
-		Description        *string `json:"description"`
-		Difficulty         *int16  `json:"difficulty"`
-		MaxParticipants    *int32  `json:"max_participants"`
-		ParticipantUserIDs []int64 `json:"participant_user_ids"`
+		Title              string     `json:"title"`
+		Type               Type       `json:"type"`
+		StartDate          string     `json:"start_date"`
+		EndDate            *string    `json:"end_date"`
+		Location           string     `json:"location"`
+		Description        *string    `json:"description"`
+		Difficulty         *int16     `json:"difficulty"`
+		MaxParticipants    *int32     `json:"max_participants"`
+		Visibility         Visibility `json:"visibility"`
+		ParticipantUserIDs []int64    `json:"participant_user_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -91,11 +92,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Type == "" {
 		body.Type = TypeCaving
 	}
+	if body.Visibility == "" {
+		body.Visibility = VisibilityPublic
+	}
 	current, _ := auth.UserFromContext(r.Context())
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Location: body.Location, Description: body.Description, Difficulty: body.Difficulty,
-		MaxParticipants: body.MaxParticipants, LeaderID: current.ID,
+		MaxParticipants: body.MaxParticipants, LeaderID: current.ID, Visibility: body.Visibility,
 		ParticipantUserIDs: body.ParticipantUserIDs,
 	})
 	if errors.Is(err, ErrParticipantNotFound) {
@@ -228,9 +232,9 @@ func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {
 }
 
 // join signs a person up as a participant. With no body (or an empty
-// user_id) it signs up the caller ("Apuntarme"); admin/board can instead
-// name someone else in the body to add them on that person's behalf. A
-// plain member naming anyone other than themselves is forbidden.
+// user_id) it signs up the caller ("Apuntarme"); admin/board (or, on a
+// private activity, the organizer too) can instead name someone else in
+// the body to add them on that person's behalf.
 func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -253,7 +257,30 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	if body.UserID != nil {
 		userID = *body.UserID
 	}
-	if !current.HasAnyRole("admin", "board") && userID != current.ID {
+
+	activity, err := h.service.Get(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not fetch activity")
+		return
+	}
+
+	// A private activity only gains participants through the organizer,
+	// board, or admin — even signing *yourself* up needs one of them to
+	// do it. A public activity works exactly as it always has: anyone
+	// can sign themselves up, and admin/board can add anyone else — the
+	// organizer gets no extra say over who joins their own public
+	// activity.
+	isStaff := current.HasAnyRole("admin", "board")
+	if activity.Visibility == VisibilityPrivate {
+		if !isStaff && current.ID != activity.LeaderID {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can add participants to a private activity")
+			return
+		}
+	} else if !isStaff && userID != current.ID {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only add themselves")
 		return
 	}

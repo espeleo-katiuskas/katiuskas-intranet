@@ -1012,14 +1012,17 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Participant" }
     post:
-      summary: Join an activity, or (admin/board) add someone else to it
+      summary: Join an activity, or (admin/board, or the organizer) add someone else to it
       description: >
-        With no body (or a null/omitted user_id) signs up the caller. A
-        plain member naming anyone other than themselves gets a 403;
-        admin/board can name any user_id to add them on that person's
-        behalf. If the activity's type is caving or canyoning, the person
-        being added must currently hold a valid federative license, or
-        the call is rejected with 409 not_federated.
+        On a public activity: with no body (or a null/omitted user_id)
+        signs up the caller; a plain member naming anyone other than
+        themselves gets a 403; admin/board can name any user_id to add
+        them on that person's behalf. On a private activity, only the
+        organizer, board, or admin may call this at all — even to sign up
+        the caller themselves; anyone else gets a 403 regardless of whose
+        user_id they name. If the activity's type is caving or canyoning,
+        the person being added must currently hold a valid federative
+        license, or the call is rejected with 409 not_federated.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1033,7 +1036,12 @@ paths:
                 user_id: { type: integer, nullable: true }
       responses:
         "204": { description: Joined }
-        "403": { description: A plain member tried to add someone other than themselves. }
+        "403":
+          description: >
+            A plain member tried to add someone other than themselves to
+            a public activity, or anyone other than the organizer/board/
+            admin tried to add a participant (self included) to a private
+            one.
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
@@ -1556,6 +1564,15 @@ components:
           description: >
             The organizer: always the person who created the activity, and
             the only one besides admin/board who can update or cancel it.
+        visibility:
+          type: string
+          enum: [public, private]
+          description: >
+            public (the default) works as activities always have: anyone
+            can join themselves, and admin/board can add anyone else.
+            private restricts who can add a participant *at all* — only
+            the organizer, board, or admin — even to sign up someone who
+            already wants in. See POST /activities/{id}/participants.
 
     CreateActivityInput:
       type: object
@@ -1569,6 +1586,7 @@ components:
         description: { type: string, nullable: true }
         difficulty: { type: integer, nullable: true }
         max_participants: { type: integer, nullable: true }
+        visibility: { type: string, enum: [public, private], default: public }
         participant_user_ids:
           type: array
           items: { type: integer }
@@ -1586,6 +1604,7 @@ components:
         description: { type: string, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
         location: { type: string }
+        visibility: { type: string, enum: [public, private] }
 
     Participant:
       type: object
