@@ -47,22 +47,24 @@ async function loadProfile() {
     editForm.phone.value = profile.phone ?? '';
     editForm.national_id.value = profile.national_id ?? '';
     editForm.birth_date.value = profile.birth_date ? profile.birth_date.slice(0, 10) : '';
+    editForm.gender.value = profile.gender ?? '';
     editForm.address.value = profile.address ?? '';
     editForm.postal_code.value = profile.postal_code ?? '';
     editForm.city.value = profile.city ?? '';
     editForm.province.value = profile.province ?? '';
     editForm.emergency_contact.value = profile.emergency_contact ?? '';
 
-    // Only admin can change name, DNI, or birth date — everyone else
-    // can see their own, but self-service edits are limited to contact
-    // fields (see users.UpdateInput). Disabling (not hiding) them keeps
-    // the values visible while excluding them from the submitted form —
-    // a disabled field is never part of FormData.
+    // Only admin can change name, DNI, birth date, or gender — everyone
+    // else can see their own, but self-service edits are limited to
+    // contact fields (see users.UpdateInput). Disabling (not hiding)
+    // them keeps the values visible while excluding them from the
+    // submitted form — a disabled field is never part of FormData.
     if (!isAdmin) {
       editForm.first_name.disabled = true;
       editForm.last_name.disabled = true;
       editForm.national_id.disabled = true;
       editForm.birth_date.disabled = true;
+      editForm.gender.disabled = true;
       document.getElementById('restricted-fields-hint').hidden = false;
     }
 
@@ -95,6 +97,7 @@ editForm.addEventListener('submit', async (event) => {
     phone: optional('phone'),
     national_id: optional('national_id'),
     birth_date: optional('birth_date'),
+    gender: optional('gender'),
     address: optional('address'),
     postal_code: optional('postal_code'),
     city: optional('city'),

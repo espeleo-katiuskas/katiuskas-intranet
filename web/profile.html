@@ -29,7 +29,8 @@
     <h3>Mis datos</h3>
     <p class="hint">Mantén tus datos al día: el club los usa para el registro de socios y, si hace falta, en caso de emergencia.</p>
     <p class="hint" id="restricted-fields-hint" hidden>
-      Nombre, apellidos, DNI y fecha de nacimiento solo puede cambiarlos la administración.
+      Si necesitas modificar nombre, apellidos, DNI, género o fecha de nacimiento,
+      contacta con la Junta Directiva.
     </p>
     <form id="edit-profile-form">
       <div class="field-grid">
@@ -56,6 +57,14 @@
         <div class="field">
           <label for="ep-birth-date">Fecha de nacimiento</label>
           <input id="ep-birth-date" name="birth_date" type="date">
+        </div>
+        <div class="field">
+          <label for="ep-gender">Género</label>
+          <select id="ep-gender" name="gender">
+            <option value="">Sin especificar</option>
+            <option value="male">Masculino</option>
+            <option value="female">Femenino</option>
+          </select>
         </div>
         <div class="field span-2">
           <label for="ep-address">Dirección</label>

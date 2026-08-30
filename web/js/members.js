@@ -597,11 +597,25 @@ if (isRealAdmin) {
       role_names: formData.getAll('role_names'),
     };
 
+    const membershipStartDate = optional('membership_start_date');
+
     const submitButton = newPersonForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     try {
-      await apiFetch('/users', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Persona creada.');
+      const person = await apiFetch('/users', { method: 'POST', body: JSON.stringify(body) });
+      let feedback = 'Persona creada.';
+      if (membershipStartDate) {
+        try {
+          await apiFetch(`/users/${person.id}/memberships`, {
+            method: 'POST',
+            body: JSON.stringify({ start_date: membershipStartDate }),
+          });
+          feedback = 'Persona creada y dada de alta como socio.';
+        } catch (err) {
+          feedback = `Persona creada, pero no se pudo dar de alta: ${err.message}`;
+        }
+      }
+      showFeedback(feedback);
       newPersonForm.reset();
       newPersonPanel.hidden = true;
       await loadUsers();

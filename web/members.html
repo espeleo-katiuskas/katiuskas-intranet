@@ -73,6 +73,9 @@
       de acceso con su correo y su teléfono. Si no le pones teléfono, no podrá entrar
       hasta que se lo añadas.
     </p>
+    <p class="hint">
+      Si es un nuevo socio, indica su fecha de alta y se le dará de alta automáticamente.
+    </p>
     <form id="new-person-form">
       <div class="field-grid">
         <div class="field">
@@ -126,6 +129,10 @@
         <div class="field span-2">
           <label for="np-emergency-contact">Contacto de emergencia <span class="optional">(opcional)</span></label>
           <textarea id="np-emergency-contact" name="emergency_contact" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
+        </div>
+        <div class="field">
+          <label for="np-membership-start-date">Fecha de alta <span class="optional">(opcional)</span></label>
+          <input id="np-membership-start-date" name="membership_start_date" type="date">
         </div>
         <div class="field span-2">
           <label>Roles</label>
