@@ -201,15 +201,13 @@ editForm.addEventListener('submit', async (event) => {
   }
 });
 
-function renderMembershipRow(m) {
+// The membership/leave edit panels are the same regardless of which
+// timeline event (alta/baja, inicio/fin) opened them — a period or a
+// leave is always corrected as a whole, both dates at once — so each is
+// rendered once per record and only ever attached to that record's
+// first (earliest) event: alta for a period, inicio for a leave.
+function renderMembershipEditPanel(m) {
   return `
-    <div class="detail-row" data-membership-row="${m.id}">
-      <span>${formatDate(m.start_date)} – ${m.end_date ? formatDate(m.end_date) : 'activa'}</span>
-      <span>
-        <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${m.id}">Editar</button>
-        <button type="button" class="btn btn-secondary btn-small" data-toggle-leaves="${m.id}">Bajas temporales</button>
-      </span>
-    </div>
     <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
       <div class="field-grid">
         <div class="field">
@@ -223,25 +221,11 @@ function renderMembershipRow(m) {
       </div>
       <button type="button" class="btn btn-primary btn-small" data-save-membership="${m.id}">Guardar</button>
     </div>
-    <div class="detail-list" data-leaves-panel="${m.id}" hidden>
-      <div data-leaves-rows="${m.id}"></div>
-      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${m.id}">+ Baja temporal</button>
-    </div>
   `;
 }
 
-// A temporary leave ("baja temporal") always falls within one membership
-// period, unlike the period itself both dates are known up front, so
-// there's no "reopen" affordance — just correct the dates or delete it.
-function renderLeaveRow(l) {
+function renderLeaveEditPanel(l) {
   return `
-    <div class="detail-row" data-leave-row="${l.id}">
-      <span>${formatDate(l.start_date)} – ${formatDate(l.end_date)}${l.reason ? ` · ${escapeHtml(l.reason)}` : ''}</span>
-      <span>
-        <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${l.id}">Editar</button>
-        <button type="button" class="btn btn-danger btn-small" data-delete-leave="${l.id}">Borrar</button>
-      </span>
-    </div>
     <div class="edit-fields" data-edit-leave-panel="${l.id}" hidden>
       <div class="field-grid">
         <div class="field">
@@ -262,25 +246,70 @@ function renderLeaveRow(l) {
   `;
 }
 
-async function loadLeaves(membershipId, rowsContainer) {
-  rowsContainer.innerHTML = 'Cargando…';
-  try {
-    const leaves = await apiFetch(`/memberships/${membershipId}/leaves`);
-    rowsContainer.innerHTML = leaves.length
-      ? leaves.map(renderLeaveRow).join('')
-      : '<p>Sin bajas temporales.</p>';
-  } catch (err) {
-    rowsContainer.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+const eventLabels = {
+  alta: 'Alta',
+  baja: 'Baja',
+  leave_start: 'Inicio de baja temporal',
+  leave_end: 'Fin de baja temporal',
+};
+
+// Builds one flat, chronological list of events out of every membership
+// period and every temporary leave within it — a "baja temporal" always
+// belongs to exactly one period (see docs/architecture.md), so fetching
+// each period's leaves alongside it is enough to cover the whole history.
+async function buildTimelineEvents(memberships) {
+  const events = [];
+  for (const m of memberships) {
+    events.push({ date: m.start_date, type: 'alta', membership: m });
+    if (m.end_date) {
+      events.push({ date: m.end_date, type: 'baja', membership: m, reason: m.end_reason });
+    }
+    const leaves = await apiFetch(`/memberships/${m.id}/leaves`).catch(() => []);
+    for (const l of leaves) {
+      events.push({ date: l.start_date, type: 'leave_start', membership: m, leave: l, reason: l.reason });
+      events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
+    }
   }
+  events.sort((a, b) => b.date.localeCompare(a.date));
+  return events;
 }
 
-async function loadMemberships() {
-  const container = document.getElementById('memberships-list');
+function renderTimelineEvent(event) {
+  const reasonText = event.reason ? ` · ${escapeHtml(event.reason)}` : '';
+  let actions = '';
+  let panel = '';
+
+  if (event.type === 'alta') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${event.membership.id}">Editar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${event.membership.id}">+ Baja temporal</button>
+    `;
+    panel = renderMembershipEditPanel(event.membership);
+  } else if (event.type === 'leave_start') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${event.leave.id}">Editar</button>
+      <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
+    `;
+    panel = renderLeaveEditPanel(event.leave);
+  }
+
+  return `
+    <div class="detail-row">
+      <span>${formatDate(event.date)} — ${eventLabels[event.type]}${reasonText}</span>
+      <span>${actions}</span>
+    </div>
+    ${panel}
+  `;
+}
+
+async function loadTimeline() {
+  const container = document.getElementById('timeline-list');
   container.innerHTML = 'Cargando…';
   try {
-    const history = await apiFetch(`/users/${memberId}/memberships`);
-    container.innerHTML = history.length
-      ? history.map(renderMembershipRow).join('')
+    const memberships = await apiFetch(`/users/${memberId}/memberships`);
+    const events = await buildTimelineEvents(memberships);
+    container.innerHTML = events.length
+      ? events.map(renderTimelineEvent).join('')
       : '<p>Todavía no ha sido socio.</p>';
   } catch (err) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
@@ -297,29 +326,18 @@ document.getElementById('start-membership').addEventListener('click', async () =
       body: JSON.stringify({ start_date: startDate }),
     });
     showFeedback('Alta registrada.');
-    await loadMemberships();
+    await loadTimeline();
     await loadMember();
   } catch (err) {
     showError(err.message);
   }
 });
 
-document.getElementById('memberships-list').addEventListener('click', async (event) => {
+document.getElementById('timeline-list').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-edit-membership]');
   if (toggleButton) {
     const panel = document.querySelector(`[data-edit-membership-panel="${toggleButton.dataset.toggleEditMembership}"]`);
     panel.hidden = !panel.hidden;
-    return;
-  }
-
-  const toggleLeavesButton = event.target.closest('button[data-toggle-leaves]');
-  if (toggleLeavesButton) {
-    const membershipId = toggleLeavesButton.dataset.toggleLeaves;
-    const panel = document.querySelector(`[data-leaves-panel="${membershipId}"]`);
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) {
-      await loadLeaves(membershipId, panel.querySelector(`[data-leaves-rows="${membershipId}"]`));
-    }
     return;
   }
 
@@ -339,12 +357,10 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
         body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
       });
       showFeedback('Baja temporal registrada.');
-      const panel = document.querySelector(`[data-leaves-panel="${membershipId}"]`);
-      await loadLeaves(membershipId, panel.querySelector(`[data-leaves-rows="${membershipId}"]`));
+      await loadTimeline();
     } catch (err) {
-      showError(err.message);
-    } finally {
       addLeaveButton.disabled = false;
+      showError(err.message);
     }
     return;
   }
@@ -366,13 +382,12 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
       end_date: field('end_date'),
       reason: field('reason').trim() || null,
     };
-    const rowsContainer = editPanel.closest('[data-leaves-panel]').querySelector('[data-leaves-rows]');
 
     saveLeaveButton.disabled = true;
     try {
       await apiFetch(`/leaves/${leaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
       showFeedback('Baja temporal actualizada.');
-      await loadLeaves(rowsContainer.dataset.leavesRows, rowsContainer);
+      await loadTimeline();
     } catch (err) {
       saveLeaveButton.disabled = false;
       showError(err.message);
@@ -383,12 +398,10 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
   const deleteLeaveButton = event.target.closest('button[data-delete-leave]');
   if (deleteLeaveButton) {
     if (!confirm('¿Borrar esta baja temporal?')) return;
-    const rowsContainer = deleteLeaveButton.closest('[data-leaves-panel]').querySelector('[data-leaves-rows]');
-
     deleteLeaveButton.disabled = true;
     try {
       await apiFetch(`/leaves/${deleteLeaveButton.dataset.deleteLeave}`, { method: 'DELETE' });
-      await loadLeaves(rowsContainer.dataset.leavesRows, rowsContainer);
+      await loadTimeline();
     } catch (err) {
       deleteLeaveButton.disabled = false;
       showError(err.message);
@@ -411,7 +424,7 @@ document.getElementById('memberships-list').addEventListener('click', async (eve
     try {
       await apiFetch(`/memberships/${membershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
       showFeedback('Periodo actualizado.');
-      await loadMemberships();
+      await loadTimeline();
       await loadMember();
     } catch (err) {
       saveButton.disabled = false;
@@ -505,6 +518,6 @@ async function loadTransactions() {
 
 await loadRolesCatalog();
 loadMember();
-loadMemberships();
+loadTimeline();
 loadActivities();
 loadTransactions();
