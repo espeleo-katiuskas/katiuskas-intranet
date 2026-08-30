@@ -181,20 +181,20 @@ func decodeSessionToken(t *testing.T, rec *httptest.ResponseRecorder) string {
 // roles a session token resolves to — the only way to inspect an opaque
 // token from the outside, since (unlike the old JWT) there's nothing to
 // decode locally.
-func (s *testServer) me(t *testing.T, token string) (id int64, roleNames []string, status int) {
+func (s *testServer) me(t *testing.T, token string) (login string, roleNames []string, status int) {
 	t.Helper()
 	rec := s.getWithToken(t, "/api/v1/auth/me", token)
 	if rec.Code != http.StatusOK {
-		return 0, nil, rec.Code
+		return "", nil, rec.Code
 	}
 	var body struct {
-		ID    int64    `json:"id"`
+		Login string   `json:"login"`
 		Roles []string `json:"roles"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode /auth/me response %q: %v", rec.Body.String(), err)
 	}
-	return body.ID, body.Roles, rec.Code
+	return body.Login, body.Roles, rec.Code
 }
 
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
@@ -314,12 +314,12 @@ func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	}
 
 	sessionToken := decodeSessionToken(t, rec)
-	id, roleNames, status := s.me(t, sessionToken)
+	login, roleNames, status := s.me(t, sessionToken)
 	if status != http.StatusOK {
 		t.Fatalf("expected /auth/me to succeed with the issued token, got %d", status)
 	}
-	if id != user.ID {
-		t.Errorf("expected user id %d, got %d", user.ID, id)
+	if login != user.Login {
+		t.Errorf("expected user login %q, got %q", user.Login, login)
 	}
 	if len(roleNames) != 1 || roleNames[0] != "admin" {
 		t.Errorf("expected roles [admin], got %v", roleNames)
@@ -387,12 +387,12 @@ func TestConsumeMagicLinkCodeIssuesASession(t *testing.T) {
 	}
 
 	sessionToken := decodeSessionToken(t, rec)
-	id, _, status := s.me(t, sessionToken)
+	login, _, status := s.me(t, sessionToken)
 	if status != http.StatusOK {
 		t.Fatalf("expected /auth/me to succeed with the issued token, got %d", status)
 	}
-	if id != user.ID {
-		t.Errorf("expected user id %d, got %d", user.ID, id)
+	if login != user.Login {
+		t.Errorf("expected user login %q, got %q", user.Login, login)
 	}
 }
 
@@ -500,19 +500,19 @@ func TestMeReportsImpersonation(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		ID             int64 `json:"id"`
+		Login          string `json:"login"`
 		ImpersonatedBy *struct {
-			ID int64 `json:"id"`
+			Login string `json:"login"`
 		} `json:"impersonated_by"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode /auth/me response %q: %v", rec.Body.String(), err)
 	}
-	if body.ID != target.ID {
-		t.Errorf("expected id %d (the target), got %d", target.ID, body.ID)
+	if body.Login != target.Login {
+		t.Errorf("expected login %q (the target), got %q", target.Login, body.Login)
 	}
-	if body.ImpersonatedBy == nil || body.ImpersonatedBy.ID != admin.ID {
-		t.Fatalf("expected impersonated_by.id %d, got %v", admin.ID, body.ImpersonatedBy)
+	if body.ImpersonatedBy == nil || body.ImpersonatedBy.Login != admin.Login {
+		t.Fatalf("expected impersonated_by.login %q, got %v", admin.Login, body.ImpersonatedBy)
 	}
 }
 
@@ -557,12 +557,12 @@ func TestExitImpersonationEndsTheSessionAndRestoresTheAdmin(t *testing.T) {
 	if _, _, status := s.me(t, impersonationToken); status != http.StatusUnauthorized {
 		t.Errorf("expected the impersonation token to be revoked, got status %d", status)
 	}
-	id, _, status := s.me(t, body.Token)
+	login, _, status := s.me(t, body.Token)
 	if status != http.StatusOK {
 		t.Fatalf("expected the new token to work, got %d", status)
 	}
-	if id != admin.ID {
-		t.Errorf("expected the new token to resolve to the admin %d, got %d", admin.ID, id)
+	if login != admin.Login {
+		t.Errorf("expected the new token to resolve to the admin %q, got %q", admin.Login, login)
 	}
 }
 

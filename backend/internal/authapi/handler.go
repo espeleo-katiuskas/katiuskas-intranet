@@ -239,21 +239,27 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // itself (there's nothing to decode: it's opaque).
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
-	response := map[string]any{"id": user.ID, "roles": user.Roles}
+	login, err := h.users.LoginForUserID(r.Context(), user.ID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not resolve identity")
+		return
+	}
+	response := map[string]any{"login": login, "roles": user.Roles}
 	if user.ImpersonatedBy != nil {
 		response["impersonated_by"] = h.impersonatorSummary(r.Context(), *user.ImpersonatedBy)
 	}
 	httpapi.WriteJSON(w, http.StatusOK, response)
 }
 
-// impersonatorSummary is best-effort: the frontend banner still has an
-// id to show even if, say, the admin's own account was since deleted.
+// impersonatorSummary is best-effort: it still gives the frontend banner
+// something to show even if, say, the admin's own account was since
+// deleted (an empty object) — never a numeric id.
 func (h *Handler) impersonatorSummary(ctx context.Context, impersonatorID int64) map[string]any {
 	impersonator, err := h.users.Get(ctx, impersonatorID)
 	if err != nil {
-		return map[string]any{"id": impersonatorID}
+		return map[string]any{}
 	}
-	return map[string]any{"id": impersonator.ID, "first_name": impersonator.FirstName, "last_name": impersonator.LastName}
+	return map[string]any{"login": impersonator.Login, "first_name": impersonator.FirstName, "last_name": impersonator.LastName}
 }
 
 // ExitImpersonation ends the current impersonation session and hands
