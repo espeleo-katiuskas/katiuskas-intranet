@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentos — Club de Espeleología Katiuskas</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
+  <nav class="main-nav">
+    <a href="/">Inicio</a>
+    <a href="/members" data-roles="admin,board,member">Socios</a>
+    <a href="/activities">Actividades</a>
+    <a href="/inventory">Material</a>
+    <a href="/library" class="active">Documentos</a>
+    <a href="/profile">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <h1>Documentos</h1>
+  <p class="subtitle">
+    Estatutos, reglamentos, normativas, memorias de actividades y actas de reuniones del
+    club.
+  </p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <nav id="breadcrumbs" class="breadcrumbs"></nav>
+
+  <div id="directory-view">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
+        </thead>
+        <tbody id="entries-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="file-view" hidden>
+    <div class="section-header">
+      <h2 id="file-name"></h2>
+      <div class="panel-actions">
+        <button id="file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
+        <button id="file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+      </div>
+    </div>
+    <p class="subtitle" id="file-meta"></p>
+    <div id="file-preview"></div>
+  </div>
+</main>
+<script type="module" src="js/library.js"></script>
+<footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
+</body>
+</html>

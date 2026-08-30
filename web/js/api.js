@@ -86,6 +86,24 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+// Like apiFetch, but for an endpoint that returns raw bytes (a document
+// library file) instead of JSON — there's no session cookie this app
+// could rely on for a plain <a href>, so downloading or previewing a
+// file means fetching it with the Authorization header by hand and
+// working with the resulting Blob client-side.
+async function apiFetchBlob(path) {
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const response = await fetch(`${API_BASE}${path}`, { headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+  }
+  return response.blob();
+}
+
 function logout() {
   const current = token;
   localStorage.removeItem('token');
@@ -177,6 +195,7 @@ function resolvePickerId(entries, typedValue) {
 
 export {
   apiFetch,
+  apiFetchBlob,
   initSession,
   logout,
   currentUser,
