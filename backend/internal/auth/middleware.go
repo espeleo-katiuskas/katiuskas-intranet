@@ -49,6 +49,7 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid, expired, or revoked token")
 			return
 		}
+		httpapi.SetRequestUserID(r.Context(), user.ID)
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

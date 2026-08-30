@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
@@ -19,22 +20,53 @@ func (rec *statusRecorder) WriteHeader(status int) {
 	rec.ResponseWriter.WriteHeader(status)
 }
 
+type logFieldsKey struct{}
+
+// requestLogFields is a per-request mutable box for extra fields the
+// final "request" log line should include, filled in by middleware that
+// runs *after* RequestLogger but knows something it doesn't — namely
+// auth.RequireAuth, which resolves who's making the call. It works by
+// reference: RequestLogger puts a pointer to this box in the context
+// before dispatching, so a value set deep in the chain (on a request
+// built from r.WithContext, which RequestLogger's own r variable never
+// sees) is still visible once the chain returns, because it's the same
+// underlying struct being mutated, not a replaced context value.
+type requestLogFields struct {
+	UserID *int64
+}
+
+// SetRequestUserID records the authenticated user's id for the request
+// log line RequestLogger will write once the request finishes. A no-op
+// outside a request wrapped by RequestLogger (there's nothing to set).
+func SetRequestUserID(ctx context.Context, userID int64) {
+	if fields, ok := ctx.Value(logFieldsKey{}).(*requestLogFields); ok {
+		fields.UserID = &userID
+	}
+}
+
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		requestID := newRequestID()
 		w.Header().Set("X-Request-Id", requestID)
 
+		fields := &requestLogFields{}
+		r = r.WithContext(context.WithValue(r.Context(), logFieldsKey{}, fields))
+
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 
-		slog.Info("request",
+		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 			"request_id", requestID,
-		)
+		}
+		if fields.UserID != nil {
+			attrs = append(attrs, "user_id", *fields.UserID)
+		}
+		slog.Info("request", attrs...)
 	})
 }
 

@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"katiuskas-intranet/backend/internal/httpapi"
@@ -100,6 +103,32 @@ func TestRequireAuthSetsUserInContext(t *testing.T) {
 	}
 	if gotUser.ID != 7 || !gotUser.HasAnyRole("admin") {
 		t.Errorf("unexpected user in context: %+v", gotUser)
+	}
+}
+
+// TestRequireAuthRecordsTheUserForRequestLogging checks the wiring to
+// httpapi.SetRequestUserID end-to-end (through RequestLogger, whose
+// request-log-fields box is unexported and only reachable this way from
+// outside the httpapi package) rather than just that RequireAuth calls
+// some function — a real request through both middlewares is what
+// actually matters here: does the final log line name the caller.
+func TestRequireAuthRecordsTheUserForRequestLogging(t *testing.T) {
+	resolver := stubResolver{"valid-token": AuthenticatedUser{ID: 7, Roles: []string{"admin"}}}
+	a := NewAuthenticator(resolver)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(previous)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec := httptest.NewRecorder()
+	httpapi.RequestLogger(a.RequireAuth(next)).ServeHTTP(rec, req)
+
+	if !strings.Contains(buf.String(), "user_id=7") {
+		t.Errorf("expected the request log line to include user_id=7, got %q", buf.String())
 	}
 }
 
