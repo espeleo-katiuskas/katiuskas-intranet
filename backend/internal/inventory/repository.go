@@ -17,14 +17,14 @@ var (
 	ErrActivityRequired  = errors.New("loan and rental transactions must be linked to an activity")
 )
 
-// saleHasNoReturnConstraint is the CHECK constraint (see migration 00005)
+// saleHasNoReturnConstraint is the CHECK constraint (see migration 00006)
 // that keeps a sale from ever getting a returned_at date. ReturnTransaction
 // relies on it as the single source of truth for "is this returnable"
 // instead of duplicating the type check in Go.
 const saleHasNoReturnConstraint = "sale_has_no_return"
 
 // loanAndRentalRequireActivityConstraint is the CHECK constraint (see
-// migration 00010) requiring loan/rental transactions to name the
+// migration 00006) requiring loan/rental transactions to name the
 // activity they're for.
 const loanAndRentalRequireActivityConstraint = "loan_and_rental_require_activity"
 
