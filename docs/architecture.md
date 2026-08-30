@@ -88,19 +88,22 @@ en `backend/openapi/openapi.yaml`.
   `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`); que dos bajas del mismo periodo no
   se solapen sí lo garantiza `EXCLUDE USING gist`, igual que con los propios periodos.
   Rutas bajo `/memberships/{membershipID}/leaves` y `/leaves/{id}`, admin/board.
-- **`licenses`** — licencias federativas: zona (A, B, B1...) y modalidad (BASICA, PLUS...)
-  son texto libre, no un enum ni un catálogo gestionable — el club espera que aparezcan
-  valores nuevos con el tiempo, y escribir uno no debería necesitar una migración. De
-  carácter anual: válida desde `issued_date` hasta el 31 de diciembre de ese mismo año
-  (`valid_until`, calculado en Go a partir de `issued_date`, nunca almacenado — igual
-  que la "categoría" de `web/js/members.js`, no vale la pena guardar algo que se deriva
-  trivialmente de otro campo). Solo se le puede asignar una licencia a quien tenga ahora
-  mismo un periodo de `memberships` abierto (`memberships.Service.IsActiveMember`);
-  intentarlo con alguien que nunca ha sido socio o que ya ha causado baja devuelve 409
-  `not_active_member`. `users.Service` incorpora la licencia más reciente de cada
-  persona a `User` (`licenses.Service.LatestByUser`), igual que hace con el periodo de
-  socio más reciente. Rutas bajo `/users/{userID}/licenses`: `GET` abierto a la propia
-  persona o admin/board, `POST` solo admin/board.
+- **`licenses`** — licencias federativas: un `type` de texto libre, no un enum ni un
+  catálogo gestionable, y sobre todo *no* separado en zona + modalidad — los tipos
+  reales no se descomponen así ("FME", "Murciana", "A BASICA Infantil" no son zona +
+  modalidad). El club espera que aparezcan valores nuevos con el tiempo, y escribir uno
+  no debería necesitar una migración. De carácter anual: válida desde `issued_date`
+  hasta el 31 de diciembre de ese mismo año (`valid_until`, calculado en Go a partir de
+  `issued_date`, nunca almacenado — igual que la "categoría" de `web/js/members.js`, no
+  vale la pena guardar algo que se deriva trivialmente de otro campo). Solo se le puede
+  asignar una licencia a quien tenga ahora mismo un periodo de `memberships` abierto
+  (`memberships.Service.IsActiveMember`); intentarlo con alguien que nunca ha sido
+  socio o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service`
+  incorpora la licencia más reciente de cada persona a `User`
+  (`licenses.Service.LatestByUser`), igual que hace con el periodo de socio más
+  reciente. Rutas bajo `/users/{userID}/licenses`: `GET` abierto a la propia persona o
+  admin/board, `POST` solo admin/board. En `/member`, cada licencia aparece como un
+  evento más dentro del mismo timeline de altas y bajas, no en una sección aparte.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
   además puede apuntar de una vez a los participantes iniciales; editarla o cancelarla

@@ -425,9 +425,10 @@ paths:
         caused baja) can be assigned one. A license is annual: valid from
         issued_date through December 31 of that same year — the response
         includes that computed valid_until, but it isn't something the
-        caller sets. zone and modality are free text, not a fixed set
-        (e.g. zonas A/B/B1, modalidad BASICA/PLUS today, but the club
-        expects others over time).
+        caller sets. type is free text, not a fixed set: not just zona
+        A/B/B1 plus modalidad BASICA/PLUS, but combinations like "A
+        BASICA Infantil", or entirely different federations like "FME"
+        or "Murciana" — it doesn't decompose into separate fields.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: userID, in: path, required: true, schema: { type: integer } }
@@ -437,10 +438,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [zone, modality, issued_date]
+              required: [type, issued_date]
               properties:
-                zone: { type: string }
-                modality: { type: string }
+                type: { type: string }
                 issued_date: { type: string, format: date }
       responses:
         "201":
@@ -985,8 +985,7 @@ components:
           description: >
             End date of that same period, or null if it's still open
             (they're currently a member).
-        license_zone: { type: string, nullable: true }
-        license_modality: { type: string, nullable: true }
+        license_type: { type: string, nullable: true }
         license_issued_date: { type: string, format: date, nullable: true }
         license_valid_until:
           type: string
@@ -1077,12 +1076,12 @@ components:
       properties:
         id: { type: integer }
         user_id: { type: integer }
-        zone:
+        type:
           type: string
-          description: "Free text, not a fixed enum — e.g. A, B, B1 today, but the club expects others over time."
-        modality:
-          type: string
-          description: "Free text, not a fixed enum — e.g. BASICA, PLUS today, but the club expects others over time."
+          description: >
+            Free text, not a fixed enum and not split into a zone plus a
+            modality — e.g. "A BASICA", "B1 PLUS", "A BASICA Infantil",
+            "FME", "Murciana" are all valid as a single opaque string.
         issued_date: { type: string, format: date }
         valid_until:
           type: string

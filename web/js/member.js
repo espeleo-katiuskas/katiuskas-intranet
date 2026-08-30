@@ -251,12 +251,15 @@ const eventLabels = {
   baja: 'Baja',
   leave_start: 'Inicio de baja temporal',
   leave_end: 'Fin de baja temporal',
+  license: 'Licencia federativa',
 };
 
 // Builds one flat, chronological list of events out of every membership
-// period and every temporary leave within it — a "baja temporal" always
-// belongs to exactly one period (see docs/architecture.md), so fetching
-// each period's leaves alongside it is enough to cover the whole history.
+// period, every temporary leave within it (a "baja temporal" always
+// belongs to exactly one period — see docs/architecture.md), and every
+// federative license this person has ever been issued (those are scoped
+// to the person directly, not to any one period, even though issuing one
+// requires an active period at the time).
 async function buildTimelineEvents(memberships) {
   const events = [];
   for (const m of memberships) {
@@ -270,6 +273,12 @@ async function buildTimelineEvents(memberships) {
       events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
     }
   }
+
+  const licenses = await apiFetch(`/users/${memberId}/licenses`).catch(() => []);
+  for (const l of licenses) {
+    events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
+  }
+
   events.sort((a, b) => b.date.localeCompare(a.date));
   return events;
 }
@@ -516,44 +525,22 @@ async function loadTransactions() {
   }
 }
 
-function renderLicenseRow(l) {
-  return `
-    <div class="detail-row">
-      <span>${escapeHtml(l.zone)} · ${escapeHtml(l.modality)} — obtenida ${formatDate(l.issued_date)},
-        válida hasta ${formatDate(l.valid_until)}</span>
-    </div>
-  `;
-}
-
-async function loadLicenses() {
-  const container = document.getElementById('licenses-list');
-  container.innerHTML = 'Cargando…';
-  try {
-    const list = await apiFetch(`/users/${memberId}/licenses`);
-    container.innerHTML = list.length
-      ? list.map(renderLicenseRow).join('')
-      : '<p>Sin licencias federativas.</p>';
-  } catch (err) {
-    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
-  }
-}
-
+// A federative license shows up as just another event on the same
+// altas-y-bajas timeline (see buildTimelineEvents) rather than in a
+// section of its own.
 document.getElementById('add-license').addEventListener('click', async () => {
-  const zone = prompt('Zona (por ejemplo A, B, B1):');
-  if (!zone) return;
-  const modality = prompt('Modalidad (por ejemplo BASICA, PLUS):');
-  if (!modality) return;
+  const type = prompt('Tipo de licencia (por ejemplo "A BASICA", "B1 PLUS", "FME"...):');
+  if (!type) return;
   const issuedDate = prompt('Fecha de obtención (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
   if (!issuedDate) return;
 
   try {
     await apiFetch(`/users/${memberId}/licenses`, {
       method: 'POST',
-      body: JSON.stringify({ zone, modality, issued_date: issuedDate }),
+      body: JSON.stringify({ type, issued_date: issuedDate }),
     });
     showFeedback('Licencia registrada.');
-    await loadLicenses();
-    await loadMember();
+    await loadTimeline();
   } catch (err) {
     showError(err.message);
   }
@@ -562,6 +549,5 @@ document.getElementById('add-license').addEventListener('click', async () => {
 await loadRolesCatalog();
 loadMember();
 loadTimeline();
-loadLicenses();
 loadActivities();
 loadTransactions();

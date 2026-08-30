@@ -17,7 +17,7 @@ func TestServiceCreateRejectsSomeoneWhoWasNeverAMember(t *testing.T) {
 	person := testutil.InsertUser(t, tx, "")
 
 	_, err := svc.Create(context.Background(), licenses.CreateInput{
-		UserID: person.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2026-01-01"),
+		UserID: person.ID, Type: "A BASICA", IssuedDate: date("2026-01-01"),
 	})
 	if !errors.Is(err, licenses.ErrNotActiveMember) {
 		t.Errorf("expected ErrNotActiveMember, got %v", err)
@@ -41,7 +41,7 @@ func TestServiceCreateRejectsSomeoneWhoHasLeft(t *testing.T) {
 	}
 
 	_, err = svc.Create(ctx, licenses.CreateInput{
-		UserID: person.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2026-01-01"),
+		UserID: person.ID, Type: "A BASICA", IssuedDate: date("2026-01-01"),
 	})
 	if !errors.Is(err, licenses.ErrNotActiveMember) {
 		t.Errorf("expected ErrNotActiveMember, got %v", err)
@@ -60,7 +60,7 @@ func TestServiceCreateAllowsACurrentlyActiveMember(t *testing.T) {
 	}
 
 	l, err := svc.Create(ctx, licenses.CreateInput{
-		UserID: person.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2026-01-01"),
+		UserID: person.ID, Type: "A BASICA", IssuedDate: date("2026-01-01"),
 	})
 	if err != nil {
 		t.Fatalf("expected the license to be created, got %v", err)
@@ -94,10 +94,10 @@ func TestServiceLatestByUserReturnsTheMostRecentlyIssued(t *testing.T) {
 	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2025-01-01")}); err != nil {
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, Type: "A BASICA", IssuedDate: date("2025-01-01")}); err != nil {
 		t.Fatalf("create 2025 license: %v", err)
 	}
-	current, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, Zone: "B", Modality: "PLUS", IssuedDate: date("2026-01-01")})
+	current, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, Type: "B PLUS", IssuedDate: date("2026-01-01")})
 	if err != nil {
 		t.Fatalf("create 2026 license: %v", err)
 	}

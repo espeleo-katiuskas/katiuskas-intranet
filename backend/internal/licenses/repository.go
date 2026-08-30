@@ -24,11 +24,11 @@ func validUntil(issuedDate time.Time) time.Time {
 func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error) {
 	var l License
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO licenses (user_id, zone, modality, issued_date)
-		VALUES ($1,$2,$3,$4)
-		RETURNING id, user_id, zone, modality, issued_date, created_at
-	`, in.UserID, in.Zone, in.Modality, in.IssuedDate,
-	).Scan(&l.ID, &l.UserID, &l.Zone, &l.Modality, &l.IssuedDate, &l.CreatedAt)
+		INSERT INTO licenses (user_id, type, issued_date)
+		VALUES ($1,$2,$3)
+		RETURNING id, user_id, type, issued_date, created_at
+	`, in.UserID, in.Type, in.IssuedDate,
+	).Scan(&l.ID, &l.UserID, &l.Type, &l.IssuedDate, &l.CreatedAt)
 	if err != nil {
 		return l, err
 	}
@@ -38,7 +38,7 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error
 
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, zone, modality, issued_date, created_at
+		SELECT id, user_id, type, issued_date, created_at
 		FROM licenses WHERE user_id = $1 ORDER BY issued_date DESC
 	`, userID)
 	if err != nil {
@@ -49,7 +49,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, e
 	list := []License{}
 	for rows.Next() {
 		var l License
-		if err := rows.Scan(&l.ID, &l.UserID, &l.Zone, &l.Modality, &l.IssuedDate, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.UserID, &l.Type, &l.IssuedDate, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		l.ValidUntil = validUntil(l.IssuedDate)

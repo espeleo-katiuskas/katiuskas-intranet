@@ -23,7 +23,7 @@ func TestCreateComputesValidUntilAsDecember31(t *testing.T) {
 	user := testutil.InsertUser(t, tx, "")
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, Zone: "A", Modality: "PLUS", IssuedDate: date("2026-03-15"),
+		UserID: user.ID, Type: "A PLUS", IssuedDate: date("2026-03-15"),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -31,30 +31,31 @@ func TestCreateComputesValidUntilAsDecember31(t *testing.T) {
 	if l.UserID != user.ID {
 		t.Errorf("expected user id %d, got %d", user.ID, l.UserID)
 	}
-	if l.Zone != "A" || l.Modality != "PLUS" {
-		t.Errorf("expected zone A / modality PLUS, got %s / %s", l.Zone, l.Modality)
+	if l.Type != "A PLUS" {
+		t.Errorf("expected type %q, got %q", "A PLUS", l.Type)
 	}
 	if !l.ValidUntil.Equal(date("2026-12-31")) {
 		t.Errorf("expected valid_until 2026-12-31, got %v", l.ValidUntil)
 	}
 }
 
-func TestCreateAcceptsArbitraryZoneAndModality(t *testing.T) {
-	// Zone/modality are free text on purpose (see the migration comment):
-	// the club expects values beyond A/B/B1 and BASICA/PLUS to show up
-	// over time, so nothing here should reject an unfamiliar one.
+func TestCreateAcceptsArbitraryType(t *testing.T) {
+	// type is free text on purpose (see the migration comment): real
+	// license types don't decompose into a zone plus a modality ("FME",
+	// "Murciana", "A BASICA Infantil"), so nothing here should reject an
+	// unfamiliar one.
 	tx := testutil.NewTx(t)
 	repo := licenses.NewRepository(tx)
 	user := testutil.InsertUser(t, tx, "")
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, Zone: "C", Modality: "ELITE", IssuedDate: date("2026-01-01"),
+		UserID: user.ID, Type: "FME", IssuedDate: date("2026-01-01"),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if l.Zone != "C" || l.Modality != "ELITE" {
-		t.Errorf("expected zone C / modality ELITE, got %s / %s", l.Zone, l.Modality)
+	if l.Type != "FME" {
+		t.Errorf("expected type %q, got %q", "FME", l.Type)
 	}
 }
 
@@ -65,14 +66,14 @@ func TestListByUserOrdersNewestFirstAndScopesToTheUser(t *testing.T) {
 	other := testutil.InsertUser(t, tx, "")
 	ctx := context.Background()
 
-	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2026-01-01")}); err != nil {
+	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, Type: "A BASICA", IssuedDate: date("2026-01-01")}); err != nil {
 		t.Fatalf("create for other: %v", err)
 	}
-	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Zone: "A", Modality: "BASICA", IssuedDate: date("2025-02-01")})
+	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Type: "A BASICA", IssuedDate: date("2025-02-01")})
 	if err != nil {
 		t.Fatalf("create older: %v", err)
 	}
-	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Zone: "B", Modality: "PLUS", IssuedDate: date("2026-02-01")})
+	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, Type: "B1 PLUS", IssuedDate: date("2026-02-01")})
 	if err != nil {
 		t.Fatalf("create newer: %v", err)
 	}

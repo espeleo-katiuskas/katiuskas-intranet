@@ -51,16 +51,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Zone       string `json:"zone"`
-		Modality   string `json:"modality"`
+		Type       string `json:"type"`
 		IssuedDate string `json:"issued_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.Zone == "" || body.Modality == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "zone and modality are both required")
+	if body.Type == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "type is required")
 		return
 	}
 	issuedDate, err := time.Parse("2006-01-02", body.IssuedDate)
@@ -70,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l, err := h.service.Create(r.Context(), CreateInput{
-		UserID: userID, Zone: body.Zone, Modality: body.Modality, IssuedDate: issuedDate,
+		UserID: userID, Type: body.Type, IssuedDate: issuedDate,
 	})
 	if errors.Is(err, ErrNotActiveMember) {
 		httpapi.WriteError(w, http.StatusConflict, "not_active_member", err.Error())

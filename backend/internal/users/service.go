@@ -100,8 +100,7 @@ func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 		return user, err
 	}
 	if latestLicense != nil {
-		user.LicenseZone = &latestLicense.Zone
-		user.LicenseModality = &latestLicense.Modality
+		user.LicenseType = &latestLicense.Type
 		user.LicenseIssuedDate = &latestLicense.IssuedDate
 		user.LicenseValidUntil = &latestLicense.ValidUntil
 	}

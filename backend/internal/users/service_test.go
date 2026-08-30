@@ -136,8 +136,8 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if u.LicenseZone != nil {
-		t.Errorf("expected a brand-new person to have no license, got zone %v", u.LicenseZone)
+	if u.LicenseType != nil {
+		t.Errorf("expected a brand-new person to have no license, got type %v", u.LicenseType)
 	}
 
 	startDate, err := time.Parse("2006-01-02", "2020-01-01")
@@ -151,7 +151,7 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse issued date: %v", err)
 	}
-	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, Zone: "B1", Modality: "PLUS", IssuedDate: issuedDate}); err != nil {
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, Type: "B1 PLUS", IssuedDate: issuedDate}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 
@@ -159,11 +159,8 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if current.LicenseZone == nil || *current.LicenseZone != "B1" {
-		t.Errorf("expected license_zone B1, got %v", current.LicenseZone)
-	}
-	if current.LicenseModality == nil || *current.LicenseModality != "PLUS" {
-		t.Errorf("expected license_modality PLUS, got %v", current.LicenseModality)
+	if current.LicenseType == nil || *current.LicenseType != "B1 PLUS" {
+		t.Errorf("expected license_type %q, got %v", "B1 PLUS", current.LicenseType)
 	}
 	if current.LicenseIssuedDate == nil || !current.LicenseIssuedDate.Equal(issuedDate) {
 		t.Errorf("expected license_issued_date %v, got %v", issuedDate, current.LicenseIssuedDate)
