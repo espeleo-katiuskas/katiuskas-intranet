@@ -170,6 +170,13 @@ func (r *Repository) ListTransactionsByStatus(ctx context.Context, status Transa
 	return r.queryTransactions(ctx, `WHERE status = $1 ORDER BY transacted_at DESC`, status)
 }
 
+// ListTransactionsByUser returns every purchase, rental and loan a person
+// has ever made, regardless of status — the material history shown on
+// that person's page.
+func (r *Repository) ListTransactionsByUser(ctx context.Context, userID int64) ([]Transaction, error) {
+	return r.queryTransactions(ctx, `WHERE user_id = $1 ORDER BY transacted_at DESC`, userID)
+}
+
 func (r *Repository) queryTransactions(ctx context.Context, whereClause string, arg any) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,

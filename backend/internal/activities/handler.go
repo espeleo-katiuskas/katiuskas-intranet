@@ -29,6 +29,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
 	mux.Handle("DELETE /api/v1/activities/{id}/participants/{userID}", h.authenticator.Protect(h.leave))
+
+	mux.Handle("GET /api/v1/users/{userID}/activities", h.authenticator.Protect(h.listByUser))
 }
 
 // list defaults to every activity (paginated), matching how it always
@@ -145,6 +147,24 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// listByUser is open to any signed-in baseline user, not just admin/board
+// or the person themselves — who took part in an activity is already
+// visible to anyone via listParticipants, so this is just the same
+// information viewed from the other direction.
+func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+		return
+	}
+	list, err := h.service.ListByUser(r.Context(), userID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list activities")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) listParticipants(w http.ResponseWriter, r *http.Request) {

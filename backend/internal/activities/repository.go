@@ -123,6 +123,35 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activ
 	return list, rows.Err()
 }
 
+// ListByUser returns every activity where the given person is either the
+// leader or a participant, most recent first — the activity history
+// shown on that person's page.
+func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Activity, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT a.id, a.title, a.type, a.start_date, a.end_date, a.location,
+			a.description, a.difficulty, a.max_participants, a.status, a.leader_id
+		FROM activities a
+		LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+		WHERE a.leader_id = $1 OR ap.user_id = $1
+		ORDER BY a.start_date DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Activity{}
+	for rows.Next() {
+		var a Activity
+		if err := rows.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location,
+			&a.Description, &a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID); err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) GetByID(ctx context.Context, id int64) (Activity, error) {
 	var a Activity
 	err := r.pool.QueryRow(ctx, `

@@ -128,6 +128,51 @@ func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testin
 	}
 }
 
+func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	targetToken := tokenFor(t, authn, target.ID, "member")
+	otherToken := tokenFor(t, authn, other.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{"name": "Casco", "total_quantity": 5})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	price := 10.0
+	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, map[string]any{
+		"item_id": item.ID, "user_id": target.ID, "type": "sale", "quantity": 1, "price": price,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	path := fmt.Sprintf("/api/v1/users/%d/transactions", target.ID)
+	if rec := doRequest(mux, http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected another plain member to be forbidden, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodGet, path, targetToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected the person themselves to view their own history (200), got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(mux, http.MethodGet, path, boardToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected board to view anyone's history (200), got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []inventory.Transaction
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("expected 1 transaction, got %d", len(list))
+	}
+}
+
 func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")

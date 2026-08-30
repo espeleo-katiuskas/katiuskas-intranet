@@ -185,6 +185,38 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	}
 }
 
+func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	person := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	adminToken := tokenFor(t, authn, 1, "admin")
+	memberToken := tokenFor(t, authn, other.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "A", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"participant_user_ids": []int64{person.ID},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	path := fmt.Sprintf("/api/v1/users/%d/activities", person.ID)
+	// Not even admin/board — a plain member (who isn't the person in
+	// question) can still read it, same as listing an activity's
+	// participants requires nothing beyond the baseline.
+	rec = doRequest(mux, http.MethodGet, path, memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("expected 1 activity, got %d", len(list))
+	}
+}
+
 func TestHandlerUpdateAndCancelStillRequireAdminOrBoard(t *testing.T) {
 	mux, authn := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")

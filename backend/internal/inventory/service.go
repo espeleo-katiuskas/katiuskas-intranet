@@ -36,3 +36,7 @@ func (s *Service) ListTransactionsByItem(ctx context.Context, itemID int64) ([]T
 func (s *Service) ListTransactionsByStatus(ctx context.Context, status TransactionStatus) ([]Transaction, error) {
 	return s.repo.ListTransactionsByStatus(ctx, status)
 }
+
+func (s *Service) ListTransactionsByUser(ctx context.Context, userID int64) ([]Transaction, error) {
+	return s.repo.ListTransactionsByUser(ctx, userID)
+}

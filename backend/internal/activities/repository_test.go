@@ -274,6 +274,66 @@ func TestCreateRejectsUnknownParticipantWithoutCreatingActivity(t *testing.T) {
 	}
 }
 
+func TestListByUserIncludesLedAndParticipatedActivities(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	person := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+
+	led, err := repo.Create(ctx, activities.CreateInput{
+		Title: "Led", Type: activities.TypeCaving, StartDate: date("2026-02-01"), Location: "X", LeaderID: &person.ID,
+	})
+	if err != nil {
+		t.Fatalf("create led activity: %v", err)
+	}
+	joined, err := repo.Create(ctx, activities.CreateInput{
+		Title: "Joined", Type: activities.TypeCaving, StartDate: date("2026-01-01"), Location: "X",
+	})
+	if err != nil {
+		t.Fatalf("create joined activity: %v", err)
+	}
+	if err := repo.AddParticipant(ctx, joined.ID, person.ID); err != nil {
+		t.Fatalf("add participant: %v", err)
+	}
+	// Someone else's activity should never show up.
+	if _, err := repo.Create(ctx, activities.CreateInput{
+		Title: "Unrelated", Type: activities.TypeCaving, StartDate: date("2026-03-01"), Location: "X", LeaderID: &other.ID,
+	}); err != nil {
+		t.Fatalf("create unrelated activity: %v", err)
+	}
+
+	list, err := repo.ListByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 activities, got %d: %+v", len(list), list)
+	}
+	// Most recent first.
+	if list[0].ID != led.ID || list[1].ID != joined.ID {
+		t.Errorf("expected [%d, %d] newest first, got [%d, %d]", led.ID, joined.ID, list[0].ID, list[1].ID)
+	}
+}
+
+func TestListByUserReturnsEmptySliceNotNilWhenPersonHasNoHistory(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	person := testutil.InsertUser(t, tx, "")
+
+	list, err := repo.ListByUser(context.Background(), person.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if list == nil {
+		t.Errorf("expected an empty slice, got nil")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no activities, got %d", len(list))
+	}
+}
+
 func TestParticipants(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)

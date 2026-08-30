@@ -567,6 +567,50 @@ paths:
         "204": { description: Removed }
         "403": { description: A plain member tried to remove someone other than themselves. }
 
+  /users/{userID}/activities:
+    get:
+      summary: List a person's activity history
+      description: >
+        Every activity where this person is either the leader or a
+        participant, most recent first. Open to any signed-in baseline
+        user, not just admin/board or the person themselves — who took
+        part in an activity is already visible to anyone via GET
+        /activities/{id}/participants, so this is the same information
+        viewed from the other direction.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: This person's activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Activity" }
+
+  /users/{userID}/transactions:
+    get:
+      summary: List a person's material transaction history
+      description: >
+        Every purchase, rental and loan this person has ever made,
+        regardless of status. The person themselves can view their own;
+        anyone else needs admin, board, or the material role — a
+        transaction carries a price, so it's treated like
+        GET /transactions rather than activity participation.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: This person's transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+        "403": { description: Neither the person themselves nor admin/board/material. }
+
   /items:
     get:
       summary: List inventory items

@@ -84,6 +84,11 @@ en `backend/openapi/openapi.yaml`.
   opcional `material` (sembrado por la migración pero no de sistema: un club que no
   quiera esa distinción puede borrarlo y seguir usando `board`); dar de alta el propio
   material del catálogo sigue reservado a admin/board.
+- `GET /users/{userID}/activities` y `GET /users/{userID}/transactions` — el historial de
+  una persona visto desde su propia ficha, en vez de desde la actividad o la transacción.
+  El primero está tan abierto como `listParticipants` (cualquier persona autenticada);
+  el segundo exige ser la propia persona o tener `admin`, `board` o `material`, igual que
+  `GET /transactions`, porque una transacción lleva precio.
 
 ## Backend (`backend/`)
 
@@ -126,6 +131,11 @@ Páginas multi-vista clásicas (no una SPA), con un cliente `fetch` compartido
 (`web/js/api.js`) que añade el token (guardado en `localStorage`) a cada petición y, al
 cargar cada página, llama a `GET /auth/me` para confirmar que sigue siendo válido y
 saber qué roles tiene quien lo usa.
+
+Cada fila de la tabla de personas en `/members` enlaza a `/member?id=<id>`
+(`member.html`/`member.js`, solo admin/board): la ficha de esa persona, con sus datos
+editables y su historial de actividades y material, leído de
+`GET /users/{userID}/activities` y `GET /users/{userID}/transactions`.
 
 ## Cómo ejecutar en local
 

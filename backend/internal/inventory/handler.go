@@ -28,6 +28,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board", "material"))
+
+	mux.Handle("GET /api/v1/users/{userID}/transactions", h.authenticator.Protect(h.listTransactionsByUser))
 }
 
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +78,29 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 		status = TransactionActive
 	}
 	list, err := h.service.ListTransactionsByStatus(r.Context(), status)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list transactions")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// listTransactionsByUser lets a person see their own material history, or
+// admin/board/material see anyone's — the same self-or-those-roles check
+// memberships.listByUser uses, since a transaction carries a price and is
+// more sensitive than, say, activity participation.
+func (h *Handler) listTransactionsByUser(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	if !current.HasAnyRole("admin", "board", "material") && current.ID != userID {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only view their own material history")
+		return
+	}
+	list, err := h.service.ListTransactionsByUser(r.Context(), userID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list transactions")
 		return

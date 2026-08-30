@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Socio — Club de Espeleología Katiuskas</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
+  <nav class="main-nav">
+    <a href="/">Inicio</a>
+    <a href="/members" data-roles="admin,board">Socios</a>
+    <a href="/activities">Actividades</a>
+    <a href="/inventory">Material</a>
+    <a href="/profile">Mi perfil</a>
+    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+  </nav>
+</header>
+<main>
+  <p><a href="/members">&larr; Volver a socios</a></p>
+  <h1 id="member-name">Socio</h1>
+  <p class="subtitle" id="member-email"></p>
+  <p id="member-roles"></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="panel">
+    <h3>Datos</h3>
+    <form id="edit-member-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="em-first-name">Nombre</label>
+          <input id="em-first-name" name="first_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="em-last-name">Apellidos</label>
+          <input id="em-last-name" name="last_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="em-email">Email</label>
+          <input id="em-email" name="email" type="email" required>
+        </div>
+        <div class="field">
+          <label for="em-phone">Teléfono</label>
+          <input id="em-phone" name="phone" type="tel">
+        </div>
+        <div class="field">
+          <label for="em-national-id">DNI</label>
+          <input id="em-national-id" name="national_id" type="text">
+        </div>
+        <div class="field">
+          <label for="em-birth-date">Fecha de nacimiento</label>
+          <input id="em-birth-date" name="birth_date" type="date">
+        </div>
+        <div class="field span-2">
+          <label for="em-address">Dirección</label>
+          <input id="em-address" name="address" type="text">
+        </div>
+        <div class="field">
+          <label for="em-postal-code">Código postal</label>
+          <input id="em-postal-code" name="postal_code" type="text">
+        </div>
+        <div class="field">
+          <label for="em-city">Ciudad</label>
+          <input id="em-city" name="city" type="text">
+        </div>
+        <div class="field">
+          <label for="em-province">Provincia</label>
+          <input id="em-province" name="province" type="text">
+        </div>
+        <div class="field span-2">
+          <label for="em-emergency-contact">Contacto de emergencia</label>
+          <textarea id="em-emergency-contact" name="emergency_contact" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+
+  <h2>Actividades</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Título</th><th>Lugar</th><th>Tipo</th><th>Estado</th><th>Rol</th></tr>
+      </thead>
+      <tbody id="activities-table-body"></tbody>
+    </table>
+  </div>
+
+  <h2>Material</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Material</th><th>Tipo</th><th>Cantidad</th><th>Fecha</th><th>Vence / devuelto</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="transactions-table-body"></tbody>
+    </table>
+  </div>
+</main>
+<script type="module" src="js/member.js"></script>
+<footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>
+</body>
+</html>

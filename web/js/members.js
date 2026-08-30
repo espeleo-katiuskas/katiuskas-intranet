@@ -209,7 +209,7 @@ function renderUserRow(person) {
     : '<span class="badge">Nunca</span>';
   return `
     <tr>
-      <td>${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</td>
+      <td><a href="/member?id=${person.id}">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)}</a></td>
       <td>${escapeHtml(person.email)}</td>
       <td>${lastLogin}</td>
       <td>${renderRoleBadges(person)}${renderRoleAddControl(person)}</td>

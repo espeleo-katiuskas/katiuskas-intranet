@@ -255,6 +255,38 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	}
 }
 
+func TestListTransactionsByUser(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, repo, 5)
+	person := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: person.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
+	}); err != nil {
+		t.Fatalf("create loan for person: %v", err)
+	}
+	price := 10.0
+	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: other.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+	}); err != nil {
+		t.Fatalf("create sale for other: %v", err)
+	}
+
+	list, err := repo.ListTransactionsByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(list) != 1 || list[0].UserID != person.ID {
+		t.Fatalf("expected exactly this person's own transaction, got %+v", list)
+	}
+}
+
 func TestCreateTransactionRequiresActivityForLoanAndRental(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
