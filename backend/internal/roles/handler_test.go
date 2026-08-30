@@ -8,11 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
-	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
@@ -22,23 +20,19 @@ import (
 // setup (inserting users, looking up role ids) happens in the exact same
 // transaction the handler queries — a separate transaction wouldn't see
 // data this one hasn't committed yet.
-func newRolesTestServer(t *testing.T) (*http.ServeMux, *auth.Authenticator, *roles.Service, pgx.Tx) {
+func newRolesTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *roles.Service, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	service := roles.NewService(roles.NewRepository(tx))
-	authenticator := auth.NewAuthenticator("test-secret", time.Hour)
+	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
 	roles.NewHandler(service, authenticator).RegisterRoutes(mux)
-	return mux, authenticator, service, tx
+	return mux, resolver, service, tx
 }
 
-func rolesToken(t *testing.T, a *auth.Authenticator, id int64, roleNames ...string) string {
+func rolesToken(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
 	t.Helper()
-	token, err := a.IssueAccessToken(id, roleNames)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
-	return token
+	return testutil.TokenFor(resolver, id, roleNames...)
 }
 
 func rolesDoRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {

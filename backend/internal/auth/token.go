@@ -1,64 +1,48 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
-	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
-var ErrInvalidToken = errors.New("invalid or expired token")
+var ErrInvalidToken = errors.New("invalid, expired, or revoked token")
 
-// Claims are intentionally minimal: enough for the API to authorize a
-// request without a database round trip. The refresh token, not this
-// struct, is the source of truth for session validity.
-type Claims struct {
-	UserID int64    `json:"user_id"`
-	Roles  []string `json:"roles"`
-	jwt.RegisteredClaims
+// SessionResolver turns a raw bearer token into the user it belongs to.
+// The tokens package is the real implementation, backed by the database
+// (a token is opaque and revocable, so there's no way to check it without
+// one); this interface exists so this package doesn't need to depend on
+// that one.
+type SessionResolver interface {
+	Authenticate(ctx context.Context, rawToken, ip string) (AuthenticatedUser, error)
 }
 
 type Authenticator struct {
-	secret         []byte
-	accessTokenTTL time.Duration
+	resolver SessionResolver
 }
 
-func NewAuthenticator(secret string, accessTokenTTL time.Duration) *Authenticator {
-	return &Authenticator{secret: []byte(secret), accessTokenTTL: accessTokenTTL}
+func NewAuthenticator(resolver SessionResolver) *Authenticator {
+	return &Authenticator{resolver: resolver}
 }
 
-func (a *Authenticator) IssueAccessToken(userID int64, roles []string) (string, error) {
-	claims := Claims{
-		UserID: userID,
-		Roles:  roles,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.accessTokenTTL)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(a.secret)
-}
-
-func (a *Authenticator) ParseAccessToken(raw string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
-		return a.secret, nil
-	})
-	if err != nil || !token.Valid {
-		return nil, ErrInvalidToken
-	}
-	return claims, nil
-}
-
-// NewRefreshToken returns an opaque, high-entropy token. The caller is
-// responsible for persisting its hash and expiry.
-func NewRefreshToken() (string, error) {
+// NewOpaqueToken returns a random, high-entropy token. The caller is
+// responsible for persisting its hash and expiry — used for both session
+// tokens and magic-link tokens.
+func NewOpaqueToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// HashToken digests an opaque token so only the hash, never the token
+// itself, needs to be stored — a leaked database row can't be replayed
+// as a session or a sign-in link by itself.
+func HashToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }

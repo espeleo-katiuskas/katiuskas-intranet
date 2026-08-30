@@ -17,6 +17,7 @@ import (
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
+	"katiuskas-intranet/backend/internal/tokens"
 	"katiuskas-intranet/backend/internal/users"
 )
 
@@ -38,7 +39,7 @@ type testServer struct {
 	mux    *http.ServeMux
 	tx     pgx.Tx
 	users  *users.Service
-	auth   *auth.Authenticator
+	tokens *tokens.Service
 	mailer *capturingMailer
 }
 
@@ -46,23 +47,21 @@ func newTestServer(t *testing.T) *testServer {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	usersService := users.NewService(users.NewRepository(tx), rolesService)
-	authenticator := auth.NewAuthenticator("test-secret", time.Hour)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
 	mailer := &capturingMailer{}
 
-	handler := authapi.NewHandler(usersService, rolesService, authenticator, mailer, authapi.Options{
-		RefreshTTL:        time.Hour,
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, authapi.Options{
+		TokenTTL:          time.Hour,
 		MagicLinkTTL:      15 * time.Minute,
 		MagicLinkCooldown: time.Minute,
 		PublicBaseURL:     "http://localhost:8000",
 	})
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/auth/magic-link", handler.RequestMagicLink)
-	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", handler.ConsumeMagicLink)
-	mux.HandleFunc("POST /api/v1/auth/refresh", handler.Refresh)
-	mux.HandleFunc("POST /api/v1/auth/logout", handler.Logout)
+	handler.RegisterRoutes(mux)
 
-	return &testServer{mux: mux, tx: tx, users: usersService, auth: authenticator, mailer: mailer}
+	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer}
 }
 
 func (s *testServer) post(t *testing.T, path string, body any) *httptest.ResponseRecorder {
@@ -73,6 +72,17 @@ func (s *testServer) post(t *testing.T, path string, body any) *httptest.Respons
 	}
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func (s *testServer) getWithToken(t *testing.T, path, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)
 	return rec
@@ -96,18 +106,38 @@ func (s *testServer) requestAndExtractToken(t *testing.T, email, phone string) s
 	return m[1]
 }
 
-type tokenPair struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+func decodeSessionToken(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode session token from %q: %v", rec.Body.String(), err)
+	}
+	if body.Token == "" {
+		t.Fatalf("expected a non-empty token, got %q", rec.Body.String())
+	}
+	return body.Token
 }
 
-func decodeTokenPair(t *testing.T, rec *httptest.ResponseRecorder) tokenPair {
+// me hits the protected /auth/me endpoint to learn what identity and
+// roles a session token resolves to — the only way to inspect an opaque
+// token from the outside, since (unlike the old JWT) there's nothing to
+// decode locally.
+func (s *testServer) me(t *testing.T, token string) (id int64, roleNames []string, status int) {
 	t.Helper()
-	var pair tokenPair
-	if err := json.Unmarshal(rec.Body.Bytes(), &pair); err != nil {
-		t.Fatalf("decode token pair from %q: %v", rec.Body.String(), err)
+	rec := s.getWithToken(t, "/api/v1/auth/me", token)
+	if rec.Code != http.StatusOK {
+		return 0, nil, rec.Code
 	}
-	return pair
+	var body struct {
+		ID    int64    `json:"id"`
+		Roles []string `json:"roles"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode /auth/me response %q: %v", rec.Body.String(), err)
+	}
+	return body.ID, body.Roles, rec.Code
 }
 
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
@@ -187,22 +217,22 @@ func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 		t.Fatalf("assign role: %v", err)
 	}
 
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	pair := decodeTokenPair(t, rec)
-	claims, err := s.auth.ParseAccessToken(pair.AccessToken)
-	if err != nil {
-		t.Fatalf("parse issued access token: %v", err)
+	sessionToken := decodeSessionToken(t, rec)
+	id, roleNames, status := s.me(t, sessionToken)
+	if status != http.StatusOK {
+		t.Fatalf("expected /auth/me to succeed with the issued token, got %d", status)
 	}
-	if claims.UserID != user.ID {
-		t.Errorf("expected user id %d in the token, got %d", user.ID, claims.UserID)
+	if id != user.ID {
+		t.Errorf("expected user id %d, got %d", user.ID, id)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != "admin" {
-		t.Errorf("expected roles [admin] in the token, got %v", claims.Roles)
+	if len(roleNames) != 1 || roleNames[0] != "admin" {
+		t.Errorf("expected roles [admin], got %v", roleNames)
 	}
 }
 
@@ -215,19 +245,19 @@ func TestConsumeMagicLinkIssuesTheComputedMemberRole(t *testing.T) {
 		t.Fatalf("insert active membership: %v", err)
 	}
 
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	pair := decodeTokenPair(t, rec)
-	claims, err := s.auth.ParseAccessToken(pair.AccessToken)
-	if err != nil {
-		t.Fatalf("parse issued access token: %v", err)
+	sessionToken := decodeSessionToken(t, rec)
+	_, roleNames, status := s.me(t, sessionToken)
+	if status != http.StatusOK {
+		t.Fatalf("expected /auth/me to succeed with the issued token, got %d", status)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != "member" {
-		t.Errorf("expected roles [member] computed from the active membership, got %v", claims.Roles)
+	if len(roleNames) != 1 || roleNames[0] != "member" {
+		t.Errorf("expected roles [member] computed from the active membership, got %v", roleNames)
 	}
 }
 
@@ -242,52 +272,49 @@ func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 func TestConsumeMagicLinkTokenIsSingleUse(t *testing.T) {
 	s := newTestServer(t)
 	user := testutil.InsertUser(t, s.tx, "611222333")
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
 
-	first := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	first := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
 	if first.Code != http.StatusOK {
 		t.Fatalf("expected the first consumption to succeed, got %d", first.Code)
 	}
-	second := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	second := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
 	if second.Code != http.StatusUnauthorized {
 		t.Errorf("expected reusing the token to fail with 401, got %d", second.Code)
 	}
 }
 
-func TestRefreshRotatesTheToken(t *testing.T) {
+func TestMeRejectsMissingOrRevokedToken(t *testing.T) {
 	s := newTestServer(t)
-	user := testutil.InsertUser(t, s.tx, "611222333")
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
 
-	rec := s.post(t, "/api/v1/auth/refresh", map[string]string{"refresh_token": pair.RefreshToken})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	if _, _, status := s.me(t, ""); status != http.StatusUnauthorized {
+		t.Errorf("expected 401 with no token, got %d", status)
 	}
-	newPair := decodeTokenPair(t, rec)
-	if newPair.RefreshToken == pair.RefreshToken {
-		t.Errorf("expected refresh to rotate the token, got the same one back")
-	}
-
-	// The old refresh token must no longer work.
-	reuse := s.post(t, "/api/v1/auth/refresh", map[string]string{"refresh_token": pair.RefreshToken})
-	if reuse.Code != http.StatusUnauthorized {
-		t.Errorf("expected reusing a rotated-away refresh token to fail with 401, got %d", reuse.Code)
+	if _, _, status := s.me(t, "never-issued"); status != http.StatusUnauthorized {
+		t.Errorf("expected 401 for an unknown token, got %d", status)
 	}
 }
 
-func TestLogoutRevokesTheRefreshToken(t *testing.T) {
+func TestLogoutRevokesTheToken(t *testing.T) {
 	s := newTestServer(t)
 	user := testutil.InsertUser(t, s.tx, "611222333")
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	pair := decodeTokenPair(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}))
+	rolesService := roles.NewService(roles.NewRepository(s.tx))
+	if err := rolesService.AssignByName(context.Background(), user.ID, []string{"board"}); err != nil {
+		t.Fatalf("assign role: %v", err)
+	}
 
-	if rec := s.post(t, "/api/v1/auth/logout", map[string]string{"refresh_token": pair.RefreshToken}); rec.Code != http.StatusNoContent {
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+	sessionToken := decodeSessionToken(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken}))
+
+	if _, _, status := s.me(t, sessionToken); status != http.StatusOK {
+		t.Fatalf("expected the fresh token to work, got %d", status)
+	}
+
+	if rec := s.post(t, "/api/v1/auth/logout", map[string]string{"token": sessionToken}); rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rec.Code)
 	}
 
-	rec := s.post(t, "/api/v1/auth/refresh", map[string]string{"refresh_token": pair.RefreshToken})
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected refreshing after logout to fail with 401, got %d", rec.Code)
+	if _, _, status := s.me(t, sessionToken); status != http.StatusUnauthorized {
+		t.Errorf("expected the revoked token to be rejected, got %d", status)
 	}
 }

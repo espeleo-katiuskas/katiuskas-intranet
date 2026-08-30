@@ -108,18 +108,6 @@ func (s *Service) TouchLastLogin(ctx context.Context, userID int64, ip string) e
 	return s.repo.TouchLastLogin(ctx, userID, ip)
 }
 
-func (s *Service) SaveRefreshToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	return s.repo.SaveRefreshToken(ctx, userID, tokenHash, expiresAt)
-}
-
-func (s *Service) ResolveRefreshToken(ctx context.Context, tokenHash string) (int64, error) {
-	return s.repo.GetRefreshToken(ctx, tokenHash)
-}
-
-func (s *Service) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
-	return s.repo.RevokeRefreshToken(ctx, tokenHash)
-}
-
 func (s *Service) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
 	return s.repo.CreateMagicLinkToken(ctx, userID, tokenHash, expiresAt)
 }

@@ -38,15 +38,12 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return
 		}
-		claims, err := a.ParseAccessToken(token)
+		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r))
 		if err != nil {
-			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid, expired, or revoked token")
 			return
 		}
-		ctx := context.WithValue(r.Context(), userContextKey, AuthenticatedUser{
-			ID:    claims.UserID,
-			Roles: claims.Roles,
-		})
+		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

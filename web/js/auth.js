@@ -1,4 +1,4 @@
-import { setAccessTokenFromLogin } from './api.js';
+import { setToken } from './api.js';
 
 const API_BASE = '/api/v1';
 
@@ -29,8 +29,7 @@ async function consumeMagicLink(rawToken) {
       throw new Error('invalid token');
     }
     const data = await response.json();
-    setAccessTokenFromLogin(data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    setToken(data.token);
     window.location.href = '/';
   } catch {
     consumingMessage.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo a continuación.';

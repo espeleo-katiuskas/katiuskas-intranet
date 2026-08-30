@@ -10,9 +10,7 @@ import (
 type Config struct {
 	HTTPAddr          string
 	DatabaseURL       string
-	JWTSecret         string
-	AccessTokenTTL    time.Duration
-	RefreshTokenTTL   time.Duration
+	TokenTTL          time.Duration
 	MagicLinkTTL      time.Duration
 	MagicLinkCooldown time.Duration
 	// PublicBaseURL is where the frontend is served, used to build the
@@ -29,9 +27,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:          getEnv("HTTP_ADDR", ":8080"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		JWTSecret:         os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:    15 * time.Minute,
-		RefreshTokenTTL:   30 * 24 * time.Hour,
+		TokenTTL:          30 * 24 * time.Hour,
 		MagicLinkTTL:      15 * time.Minute,
 		MagicLinkCooldown: 60 * time.Second,
 		PublicBaseURL:     getEnv("PUBLIC_BASE_URL", "http://localhost:8000"),
@@ -43,9 +39,6 @@ func Load() (Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")
-	}
-	if cfg.JWTSecret == "" {
-		return cfg, fmt.Errorf("JWT_SECRET is required")
 	}
 	return cfg, nil
 }

@@ -6,10 +6,23 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"katiuskas-intranet/backend/internal/httpapi"
 )
+
+// stubResolver is a minimal SessionResolver for this package's own tests:
+// a fixed map from raw token to the user it resolves to, with anything
+// else rejected as ErrInvalidToken. The real, database-backed resolver
+// lives in the tokens package and has its own tests.
+type stubResolver map[string]AuthenticatedUser
+
+func (s stubResolver) Authenticate(_ context.Context, rawToken, _ string) (AuthenticatedUser, error) {
+	user, ok := s[rawToken]
+	if !ok {
+		return AuthenticatedUser{}, ErrInvalidToken
+	}
+	return user, nil
+}
 
 func TestHasAnyRole(t *testing.T) {
 	u := AuthenticatedUser{ID: 1, Roles: []string{"board", "member"}}
@@ -27,7 +40,7 @@ func TestHasAnyRole(t *testing.T) {
 }
 
 func TestRequireAuthRejectsMissingOrInvalidToken(t *testing.T) {
-	a := NewAuthenticator("secret", time.Minute)
+	a := NewAuthenticator(stubResolver{})
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
 
@@ -68,11 +81,8 @@ func TestRequireAuthRejectsMissingOrInvalidToken(t *testing.T) {
 }
 
 func TestRequireAuthSetsUserInContext(t *testing.T) {
-	a := NewAuthenticator("secret", time.Minute)
-	token, err := a.IssueAccessToken(7, []string{"admin"})
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
+	resolver := stubResolver{"valid-token": AuthenticatedUser{ID: 7, Roles: []string{"admin"}}}
+	a := NewAuthenticator(resolver)
 
 	var gotUser AuthenticatedUser
 	var gotOK bool
@@ -81,7 +91,7 @@ func TestRequireAuthSetsUserInContext(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer valid-token")
 	rec := httptest.NewRecorder()
 	a.RequireAuth(next).ServeHTTP(rec, req)
 
@@ -128,15 +138,13 @@ func TestRequireRole(t *testing.T) {
 }
 
 func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
-	a := NewAuthenticator("secret", time.Minute)
-	memberToken, err := a.IssueAccessToken(1, []string{"member"})
-	if err != nil {
-		t.Fatalf("issue member token: %v", err)
+	resolver := stubResolver{
+		"member-token":   AuthenticatedUser{ID: 1, Roles: []string{"member"}},
+		"admin-token":    AuthenticatedUser{ID: 2, Roles: []string{"admin"}},
+		"outsider-token": AuthenticatedUser{ID: 3, Roles: []string{"former_member"}},
+		"material-token": AuthenticatedUser{ID: 4, Roles: []string{"material"}},
 	}
-	adminToken, err := a.IssueAccessToken(2, []string{"admin"})
-	if err != nil {
-		t.Fatalf("issue admin token: %v", err)
-	}
+	a := NewAuthenticator(resolver)
 
 	ok := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
 	adminOnly := a.Protect(ok, "admin")
@@ -151,7 +159,7 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 
 	t.Run("authenticated but wrong role yields 403", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+memberToken)
+		req.Header.Set("Authorization", "Bearer member-token")
 		rec := httptest.NewRecorder()
 		adminOnly.ServeHTTP(rec, req)
 		if rec.Code != http.StatusForbidden {
@@ -161,7 +169,7 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 
 	t.Run("authenticated with the right role succeeds", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+adminToken)
+		req.Header.Set("Authorization", "Bearer admin-token")
 		rec := httptest.NewRecorder()
 		adminOnly.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -172,7 +180,7 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 	t.Run("no extra roles required still needs a baseline role", func(t *testing.T) {
 		open := a.Protect(ok)
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+memberToken)
+		req.Header.Set("Authorization", "Bearer member-token")
 		rec := httptest.NewRecorder()
 		open.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -182,12 +190,8 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 
 	t.Run("baseline applies even without a token role outside it", func(t *testing.T) {
 		open := a.Protect(ok)
-		outsiderToken, err := a.IssueAccessToken(3, []string{"former_member"})
-		if err != nil {
-			t.Fatalf("issue token: %v", err)
-		}
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+outsiderToken)
+		req.Header.Set("Authorization", "Bearer outsider-token")
 		rec := httptest.NewRecorder()
 		open.ServeHTTP(rec, req)
 		if rec.Code != http.StatusForbidden {
@@ -196,13 +200,9 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 	})
 
 	t.Run("baseline applies on top of a route's own specific roles", func(t *testing.T) {
-		materialToken, err := a.IssueAccessToken(4, []string{"material"})
-		if err != nil {
-			t.Fatalf("issue token: %v", err)
-		}
 		materialOnly := a.Protect(ok, "material")
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Authorization", "Bearer "+materialToken)
+		req.Header.Set("Authorization", "Bearer material-token")
 		rec := httptest.NewRecorder()
 		materialOnly.ServeHTTP(rec, req)
 		if rec.Code != http.StatusForbidden {

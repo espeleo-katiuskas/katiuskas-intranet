@@ -50,6 +50,13 @@ paths:
   /auth/magic-link/consume:
     post:
       summary: Exchange a magic-link token for a session
+      description: >
+        Issues a single opaque, revocable session token — there's no
+        separate short-lived access token and long-lived refresh token
+        pair. The token is used directly as the bearer credential on
+        every subsequent request until it's revoked (via /auth/logout or
+        by an admin, see DELETE /users/{userID}/tokens/{tokenID}) or it
+        expires.
       requestBody:
         required: true
         content:
@@ -61,47 +68,52 @@ paths:
                 token: { type: string }
       responses:
         "200":
-          description: Token pair issued
+          description: Session token issued
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TokenPair" }
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
         "401":
           description: The link is invalid, already used, or expired.
 
-  /auth/refresh:
-    post:
-      summary: Exchange a refresh token for a new token pair
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refresh_token]
-              properties:
-                refresh_token: { type: string }
-      responses:
-        "200":
-          description: New token pair issued
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TokenPair" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
   /auth/logout:
     post:
-      summary: Revoke a refresh token
+      summary: Revoke a session token
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [refresh_token]
+              required: [token]
               properties:
-                refresh_token: { type: string }
+                token: { type: string }
       responses:
         "204": { description: Session revoked }
+
+  /auth/me:
+    get:
+      summary: Identity and roles of the caller
+      description: >
+        Reports who the bearer token belongs to and what roles they
+        currently hold. Since the token is opaque, this is the only way
+        for a client to learn that — there's nothing to decode locally
+        the way a JWT could be. Costs no extra database round trip: it's
+        resolved by the same lookup that authenticated the request.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The caller's identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  roles: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /users:
     get:
@@ -295,6 +307,62 @@ paths:
             Either "admin" from the only remaining admin, or an automatic
             role (member/former_member), neither of which can be revoked
             this way.
+
+  /users/{userID}/tokens:
+    get:
+      summary: List a person's session tokens
+      description: >
+        Admin-only audit view of every session token ever issued to this
+        person, newest first, including expired and revoked ones. Never
+        exposes the token value itself (only its hash is stored, and
+        even that isn't returned) — just when it was created, when it
+        expires, whether and when it was revoked, and when and from
+        where it was last used.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: This person's tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Token" }
+
+  /users/{userID}/tokens/{tokenID}:
+    patch:
+      summary: Change a token's expiry
+      description: Admin-only. Lets a token be extended or shortened without revoking it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: tokenID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expires_at]
+              properties:
+                expires_at: { type: string, format: date-time }
+      responses:
+        "204": { description: Expiry updated }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Revoke a token
+      description: >
+        Admin-only. Idempotent: revoking an already-revoked token still
+        returns 204. Immediately ends that session — the next request
+        made with it gets 401.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer } }
+        - { name: tokenID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{userID}/memberships:
     get:
@@ -599,7 +667,10 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      description: >
+        An opaque session token issued by POST /auth/magic-link/consume,
+        not a JWT — it carries no information of its own, so the API
+        looks it up (and its holder's current roles) on every request.
 
   responses:
     Unauthorized:
@@ -617,11 +688,25 @@ components:
             code: { type: string }
             message: { type: string }
 
-    TokenPair:
+    Token:
       type: object
+      description: >
+        A session token as an admin sees it — never the token value
+        itself, only its metadata (see GET /users/{userID}/tokens).
       properties:
-        access_token: { type: string }
-        refresh_token: { type: string }
+        id: { type: integer }
+        user_id: { type: integer }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        last_used_ip:
+          type: string
+          nullable: true
+          description: >
+            X-Forwarded-For if present (the production deploy sits behind
+            a reverse proxy), otherwise the raw connection address.
+            Purely informational.
 
     Role:
       type: object

@@ -1,0 +1,101 @@
+package tokens
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"katiuskas-intranet/backend/internal/auth"
+	"katiuskas-intranet/backend/internal/httpapi"
+)
+
+type Handler struct {
+	service       *Service
+	authenticator *auth.Authenticator
+}
+
+func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
+	return &Handler{service: service, authenticator: authenticator}
+}
+
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/users/{userID}/tokens", h.authenticator.Protect(h.list, "admin"))
+	mux.Handle("PATCH /api/v1/users/{userID}/tokens/{tokenID}", h.authenticator.Protect(h.updateExpiry, "admin"))
+	mux.Handle("DELETE /api/v1/users/{userID}/tokens/{tokenID}", h.authenticator.Protect(h.revoke, "admin"))
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+		return
+	}
+	list, err := h.service.ListForUser(r.Context(), userID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list tokens")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
+	userID, tokenID, ok := h.pathIDs(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if body.ExpiresAt.IsZero() {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "expires_at is required")
+		return
+	}
+
+	err := h.service.UpdateExpiry(r.Context(), userID, tokenID, body.ExpiresAt)
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update token")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
+	userID, tokenID, ok := h.pathIDs(w, r)
+	if !ok {
+		return
+	}
+	err := h.service.Revoke(r.Context(), userID, tokenID)
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not revoke token")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) pathIDs(w http.ResponseWriter, r *http.Request) (userID, tokenID int64, ok bool) {
+	userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "user id must be numeric")
+		return 0, 0, false
+	}
+	tokenID, err = strconv.ParseInt(r.PathValue("tokenID"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "token id must be numeric")
+		return 0, 0, false
+	}
+	return userID, tokenID, true
+}

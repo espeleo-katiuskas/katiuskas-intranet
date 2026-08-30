@@ -17,6 +17,7 @@ import (
 	"katiuskas-intranet/backend/internal/memberships"
 	"katiuskas-intranet/backend/internal/platform/db"
 	"katiuskas-intranet/backend/internal/roles"
+	"katiuskas-intranet/backend/internal/tokens"
 	"katiuskas-intranet/backend/internal/users"
 )
 
@@ -38,13 +39,16 @@ func main() {
 	}
 	defer pool.Close()
 
-	authenticator := auth.NewAuthenticator(cfg.JWTSecret, cfg.AccessTokenTTL)
-
 	rolesRepo := roles.NewRepository(pool)
 	rolesService := roles.NewService(rolesRepo)
 
 	usersRepo := users.NewRepository(pool)
 	usersService := users.NewService(usersRepo, rolesService)
+
+	tokensRepo := tokens.NewRepository(pool)
+	tokensService := tokens.NewService(tokensRepo, rolesService)
+
+	authenticator := auth.NewAuthenticator(tokensService)
 
 	membershipsRepo := memberships.NewRepository(pool)
 	membershipsService := memberships.NewService(membershipsRepo)
@@ -58,14 +62,15 @@ func main() {
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth: authapi.NewHandler(usersService, rolesService, authenticator, mailer, authapi.Options{
-			RefreshTTL:        cfg.RefreshTokenTTL,
+		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, authapi.Options{
+			TokenTTL:          cfg.TokenTTL,
 			MagicLinkTTL:      cfg.MagicLinkTTL,
 			MagicLinkCooldown: cfg.MagicLinkCooldown,
 			PublicBaseURL:     cfg.PublicBaseURL,
 		}),
 		Users:       users.NewHandler(usersService, authenticator),
 		Roles:       roles.NewHandler(rolesService, authenticator),
+		Tokens:      tokens.NewHandler(tokensService, authenticator),
 		Memberships: memberships.NewHandler(membershipsService, authenticator),
 		Activities:  activities.NewHandler(activitiesService, authenticator),
 		Inventory:   inventory.NewHandler(inventoryService, authenticator),

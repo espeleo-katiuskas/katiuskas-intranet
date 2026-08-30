@@ -48,10 +48,15 @@ en `backend/openapi/openapi.yaml`.
   409). Se calculan al vuelo a partir de `memberships` —
   `roles.Repository.ListNamesForUser` es el único sitio que sabe cómo—: `member` si la
   persona tiene un periodo de socio activo ahora mismo, `former_member` si ha tenido
-  alguno antes pero ninguno activo hoy. Ese cálculo es lo que se firma en el JWT al
-  iniciar sesión, así que los permisos basados en "soy socio" siempre reflejan el
-  estado real de alta, no una etiqueta que alguien olvidó quitar.
-- **`refresh_tokens`** — sesiones de refresco, revocables.
+  alguno antes pero ninguno activo hoy. Ese cálculo es lo que resuelve cada petición
+  autenticada (ver más abajo), así que los permisos basados en "soy socio" siempre
+  reflejan el estado real de alta, no una etiqueta que alguien olvidó quitar.
+- **`tokens`** — el token de sesión de cada persona: opaco (hash SHA-256 guardado, nunca
+  el valor en claro), revocable, con `expires_at`, y `last_used_at`/`last_used_ip` (misma
+  lógica de `X-Forwarded-For` que `users.last_login_ip`) actualizados en cada petición
+  que lo usa. Un admin puede ver, re-caducar o revocar el token de cualquier persona —
+  `GET`/`PATCH`/`DELETE /users/{userID}/tokens[/{tokenID}]` —, pero nunca ver el valor
+  del token en sí, solo sus metadatos.
 - `GET /users/directory` — abierto a cualquier persona autenticada, devuelve solo id y
   nombre de quienes tienen acceso (nada de teléfono, dirección, DNI...). Existe para que
   un socio cualquiera pueda elegir participantes al crear una actividad sin que el API
@@ -79,13 +84,15 @@ en `backend/openapi/openapi.yaml`.
 ## Backend (`backend/`)
 
 Capas separadas por paquete: `internal/httpapi` (router y helpers HTTP), `internal/auth`
-(JWT, middleware de autenticación/autorización — ya no hay contraseñas que gestionar),
-`internal/mail` (envío de correo: registra el mensaje en el log si no hay `SMTP_HOST`
-configurado, lo manda de verdad si lo hay), `internal/authapi` (magic-link/refresh/logout)
-y un paquete por recurso de dominio (`users`, `roles`, `memberships`, `activities`,
-`inventory`), cada uno con `model.go` / `repository.go` (pgx) / `service.go` /
-`handler.go`. El dominio no depende de `net/http`; el handler es la única capa que sabe
-que existe HTTP.
+(middleware de autenticación/autorización — ya no hay contraseñas que gestionar; no sabe
+nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal/tokens`
+(el `SessionResolver` real: valida un token opaco contra la base de datos, calcula los
+roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
+correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
+verdad si lo hay), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
+dominio (`users`, `roles`, `memberships`, `activities`, `inventory`), cada uno con
+`model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
+de `net/http`; el handler es la única capa que sabe que existe HTTP.
 
 `auth.Authenticator.Protect`, el punto único por el que cada ruta se registra, exige
 siempre tener al menos uno de los roles `admin`, `board` o `member` — un suelo que se
@@ -95,10 +102,13 @@ admin, board o socio activo) no puede usar el API en absoluto, ni siquiera las r
 de material. Como `member` es automático (se calcula de tener una alta activa ahora
 mismo), esto también corta el acceso en el momento en que alguien deja de ser socio.
 
-Sesión: JWT de acceso de vida corta (15 min) + refresh token opaco persistido (hash
-SHA-256, no el token en claro) y revocable — pensado para que un cliente de terminal
-pueda mantener sesión sin cookies de navegador. Empezarla requiere primero un enlace de
-`/auth/magic-link` (15 min de validez, un solo uso).
+Sesión: un único token opaco y revocable (tabla `tokens`), sin par access/refresh — la
+seguridad extra de un token de acceso de vida corta no compensaba la complejidad, ni
+para el cliente ni para quien tuviera que operar contra el API a mano (scripts, un
+cliente de terminal). El token se usa directamente como credencial en cada petición;
+como es opaco, el cliente no puede leer nada de él — `GET /auth/me` es la forma de
+saber quién es y qué roles tiene la sesión actual. Empezarla requiere primero un enlace
+de `/auth/magic-link` (15 min de validez, un solo uso).
 
 `cmd/seed-admin` crea la primera cuenta `admin`: `POST /users` ya exige ese rol, así que
 sin este comando no habría forma de entrar en una base de datos recién migrada.
@@ -109,8 +119,9 @@ hay que pedir un enlace desde la página de acceso con `SEED_ADMIN_EMAIL` y
 ## Frontend (`web/`)
 
 Páginas multi-vista clásicas (no una SPA), con un cliente `fetch` compartido
-(`web/js/api.js`) que añade el token a cada petición y renueva la sesión al cargar cada
-página a partir del refresh token guardado en `localStorage`.
+(`web/js/api.js`) que añade el token (guardado en `localStorage`) a cada petición y, al
+cargar cada página, llama a `GET /auth/me` para confirmar que sigue siendo válido y
+saber qué roles tiene quien lo usa.
 
 ## Cómo ejecutar en local
 
@@ -119,7 +130,6 @@ docker compose up -d postgres
 export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
 make migrate-up          # requiere goose: https://github.com/pressly/goose
 make seed-admin          # crea la cuenta admin (sin contraseña: acceso por magic link)
-export JWT_SECRET=dev-secret
 make run                 # sirve la API en :8080
 ```
 

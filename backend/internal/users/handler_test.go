@@ -8,33 +8,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/roles"
 	"katiuskas-intranet/backend/internal/testutil"
 	"katiuskas-intranet/backend/internal/users"
 )
 
-func newTestServer(t *testing.T) (*http.ServeMux, *auth.Authenticator, *users.Service) {
+func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	usersService := users.NewService(users.NewRepository(tx), rolesService)
-	authenticator := auth.NewAuthenticator("test-secret", time.Hour)
+	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
 	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
-	return mux, authenticator, usersService
+	return mux, resolver, usersService
 }
 
-func tokenFor(t *testing.T, a *auth.Authenticator, id int64, roleNames ...string) string {
+func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
 	t.Helper()
-	token, err := a.IssueAccessToken(id, roleNames)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
-	return token
+	return testutil.TokenFor(resolver, id, roleNames...)
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {

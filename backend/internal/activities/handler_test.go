@@ -7,17 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"katiuskas-intranet/backend/internal/activities"
-	"katiuskas-intranet/backend/internal/auth"
 	"katiuskas-intranet/backend/internal/httpapi"
 	"katiuskas-intranet/backend/internal/testutil"
 )
 
-func newTestServer(t *testing.T) (*http.ServeMux, *auth.Authenticator) {
+func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver) {
 	mux, authenticator, _ := newTestServerWithTx(t)
 	return mux, authenticator
 }
@@ -25,23 +23,19 @@ func newTestServer(t *testing.T) (*http.ServeMux, *auth.Authenticator) {
 // newTestServerWithTx also returns the underlying transaction, for tests
 // that need to insert real user rows to satisfy a foreign key (e.g.
 // signing someone up as a participant).
-func newTestServerWithTx(t *testing.T) (*http.ServeMux, *auth.Authenticator, pgx.Tx) {
+func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
 	tx := testutil.NewTx(t)
 	service := activities.NewService(activities.NewRepository(tx))
-	authenticator := auth.NewAuthenticator("test-secret", time.Hour)
+	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
 	activities.NewHandler(service, authenticator).RegisterRoutes(mux)
-	return mux, authenticator, tx
+	return mux, resolver, tx
 }
 
-func tokenFor(t *testing.T, a *auth.Authenticator, id int64, roleNames ...string) string {
+func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
 	t.Helper()
-	token, err := a.IssueAccessToken(id, roleNames)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
-	return token
+	return testutil.TokenFor(resolver, id, roleNames...)
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {

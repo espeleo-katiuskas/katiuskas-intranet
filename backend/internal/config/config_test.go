@@ -4,25 +4,14 @@ import "testing"
 
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
-	t.Setenv("JWT_SECRET", "some-secret")
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected an error when DATABASE_URL is missing")
 	}
 }
 
-func TestLoadRequiresJWTSecret(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://localhost/test")
-	t.Setenv("JWT_SECRET", "")
-
-	if _, err := Load(); err == nil {
-		t.Fatal("expected an error when JWT_SECRET is missing")
-	}
-}
-
 func TestLoadAppliesDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
-	t.Setenv("JWT_SECRET", "some-secret")
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("SMTP_PORT", "")
@@ -47,7 +36,6 @@ func TestLoadAppliesDefaults(t *testing.T) {
 
 func TestLoadHonorsOverrides(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/test")
-	t.Setenv("JWT_SECRET", "some-secret")
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("PUBLIC_BASE_URL", "https://intranet.example")
 	t.Setenv("SMTP_HOST", "smtp.example.com")

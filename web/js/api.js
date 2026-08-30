@@ -1,46 +1,35 @@
-// Shared HTTP client used by every page. Keeps the access token in memory
-// only and relies on the refresh token (in localStorage) to restore a
-// session after a full page navigation, since this is a classic multi-page
-// site rather than a single-page app.
+// Shared HTTP client used by every page. Keeps the single session token
+// in localStorage (there's no separate access/refresh pair anymore, so
+// nothing needs restoring after a page navigation) and re-fetches the
+// signed-in identity from /auth/me on every page load, since an opaque
+// token has nothing a client can decode locally.
 const API_BASE = '/api/v1';
 
-let accessToken = null;
+let token = localStorage.getItem('token');
+let cachedUser = null;
 
 async function initSession() {
-  const ok = await refreshSession();
-  if (!ok) {
+  if (!token) {
     window.location.href = '/login';
-  }
-  return ok;
-}
-
-async function refreshSession() {
-  const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) {
     return false;
   }
-
-  const response = await fetch(`${API_BASE}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-  if (!response.ok) {
-    localStorage.removeItem('refresh_token');
+  try {
+    const me = await apiFetch('/auth/me');
+    cachedUser = { id: me.id, roles: me.roles ?? [] };
+    return true;
+  } catch {
+    localStorage.removeItem('token');
+    token = null;
+    window.location.href = '/login';
     return false;
   }
-
-  const data = await response.json();
-  accessToken = data.access_token;
-  localStorage.setItem('refresh_token', data.refresh_token);
-  return true;
 }
 
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
@@ -56,32 +45,25 @@ async function apiFetch(path, options = {}) {
 }
 
 function logout() {
-  const refreshToken = localStorage.getItem('refresh_token');
-  localStorage.removeItem('refresh_token');
-  accessToken = null;
-  if (refreshToken) {
+  const current = token;
+  localStorage.removeItem('token');
+  token = null;
+  cachedUser = null;
+  if (current) {
     fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ token: current }),
     }).catch(() => {});
   }
   window.location.href = '/login';
 }
 
-// Reads the (non-sensitive) user id and role names out of the access
-// token's payload, purely for client-side display and nav filtering. The
-// API is the actual authority on permissions.
+// Returns the identity and roles fetched by initSession(), purely for
+// client-side display and nav filtering. The API is the actual authority
+// on permissions.
 function currentUser() {
-  if (!accessToken) {
-    return null;
-  }
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1]));
-    return { id: payload.user_id, roles: payload.roles ?? [] };
-  } catch {
-    return null;
-  }
+  return cachedUser;
 }
 
 // Whether the given user holds at least one of the named roles.
@@ -100,8 +82,11 @@ function applyRoleVisibility() {
   });
 }
 
-function setAccessTokenFromLogin(token) {
-  accessToken = token;
+// Called right after consuming a magic link, when the frontend receives
+// its first (and only) session token for this sign-in.
+function setToken(raw) {
+  token = raw;
+  localStorage.setItem('token', raw);
 }
 
 // Escapes text before it's interpolated into an innerHTML template, since
@@ -152,7 +137,7 @@ export {
   currentUser,
   hasAnyRole,
   applyRoleVisibility,
-  setAccessTokenFromLogin,
+  setToken,
   escapeHtml,
   formatDate,
   pickerLabel,

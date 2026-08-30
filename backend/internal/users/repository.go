@@ -261,29 +261,6 @@ func (r *Repository) TouchLastLogin(ctx context.Context, userID int64, ip string
 	return err
 }
 
-func (r *Repository) SaveRefreshToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)
-	`, userID, tokenHash, expiresAt)
-	return err
-}
-
-func (r *Repository) GetRefreshToken(ctx context.Context, tokenHash string) (userID int64, err error) {
-	err = r.pool.QueryRow(ctx, `
-		SELECT user_id FROM refresh_tokens
-		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-	`, tokenHash).Scan(&userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrNotFound
-	}
-	return userID, err
-}
-
-func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1`, tokenHash)
-	return err
-}
-
 // CreateMagicLinkToken stores the hash of a freshly issued sign-in link.
 func (r *Repository) CreateMagicLinkToken(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
 	_, err := r.pool.Exec(ctx, `

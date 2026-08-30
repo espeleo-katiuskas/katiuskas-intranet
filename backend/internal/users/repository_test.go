@@ -251,46 +251,6 @@ func TestDeleteBlockedByReferences(t *testing.T) {
 	}
 }
 
-func TestRefreshTokenRoundTrip(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := users.NewRepository(tx)
-	ctx := context.Background()
-
-	user := testutil.InsertUser(t, tx, "")
-	if err := repo.SaveRefreshToken(ctx, user.ID, "hash-1", time.Now().Add(time.Hour)); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	gotID, err := repo.GetRefreshToken(ctx, "hash-1")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if gotID != user.ID {
-		t.Errorf("expected user id %d, got %d", user.ID, gotID)
-	}
-
-	if err := repo.RevokeRefreshToken(ctx, "hash-1"); err != nil {
-		t.Fatalf("revoke: %v", err)
-	}
-	if _, err := repo.GetRefreshToken(ctx, "hash-1"); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("expected a revoked token to be rejected, got %v", err)
-	}
-}
-
-func TestGetRefreshTokenRejectsExpired(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := users.NewRepository(tx)
-	ctx := context.Background()
-
-	user := testutil.InsertUser(t, tx, "")
-	if err := repo.SaveRefreshToken(ctx, user.ID, "expired-hash", time.Now().Add(-time.Hour)); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	if _, err := repo.GetRefreshToken(ctx, "expired-hash"); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("expected an expired token to be rejected, got %v", err)
-	}
-}
-
 func TestMagicLinkTokenLifecycle(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

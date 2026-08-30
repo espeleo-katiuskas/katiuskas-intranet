@@ -2,14 +2,6 @@ package httpapi
 
 import "net/http"
 
-// AuthHandler exposes the public, unauthenticated session endpoints.
-type AuthHandler interface {
-	RequestMagicLink(w http.ResponseWriter, r *http.Request)
-	ConsumeMagicLink(w http.ResponseWriter, r *http.Request)
-	Refresh(w http.ResponseWriter, r *http.Request)
-	Logout(w http.ResponseWriter, r *http.Request)
-}
-
 // ResourceHandler lets each domain package own and register its own routes,
 // including whatever auth/role protection each one needs.
 type ResourceHandler interface {
@@ -17,9 +9,10 @@ type ResourceHandler interface {
 }
 
 type Routes struct {
-	Auth        AuthHandler
+	Auth        ResourceHandler
 	Users       ResourceHandler
 	Roles       ResourceHandler
+	Tokens      ResourceHandler
 	Memberships ResourceHandler
 	Activities  ResourceHandler
 	Inventory   ResourceHandler
@@ -28,13 +21,10 @@ type Routes struct {
 func NewRouter(routes Routes) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /api/v1/auth/magic-link", routes.Auth.RequestMagicLink)
-	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", routes.Auth.ConsumeMagicLink)
-	mux.HandleFunc("POST /api/v1/auth/refresh", routes.Auth.Refresh)
-	mux.HandleFunc("POST /api/v1/auth/logout", routes.Auth.Logout)
-
+	routes.Auth.RegisterRoutes(mux)
 	routes.Users.RegisterRoutes(mux)
 	routes.Roles.RegisterRoutes(mux)
+	routes.Tokens.RegisterRoutes(mux)
 	routes.Memberships.RegisterRoutes(mux)
 	routes.Activities.RegisterRoutes(mux)
 	routes.Inventory.RegisterRoutes(mux)

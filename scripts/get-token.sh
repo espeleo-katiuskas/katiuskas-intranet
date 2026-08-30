@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Requests and consumes a magic-link sign-in against the local dev stack,
-# printing the resulting access/refresh tokens so they can be reused in
-# further curl calls.
+# printing the resulting session token so it can be reused in further
+# curl calls.
 #
 # Usage:
 #   scripts/get-token.sh <email> <phone>
@@ -126,16 +126,19 @@ response=$(curl -sf -X POST "$API_BASE/auth/magic-link/consume" \
   -H "Content-Type: application/json" \
   -d "$(python3 -c 'import json,sys; print(json.dumps({"token": sys.argv[1]}))' "$token")")
 
-access_token=$(python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])" <<<"$response")
-refresh_token=$(python3 -c "import json,sys; print(json.load(sys.stdin)['refresh_token'])" <<<"$response")
+session_token=$(python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" <<<"$response")
+
+# The token is opaque (nothing to decode locally, unlike the old JWT), so
+# ask the API itself who it belongs to. This can 403 — a person with no
+# admin/board/member role can still sign in, they just can't call any API
+# endpoint (including this one), so don't let that abort the script.
+me=$(curl -s "$API_BASE/auth/me" -H "Authorization: Bearer $session_token")
 roles=$(python3 -c "
-import base64, json, sys
-payload = sys.argv[1].split('.')[1]
-payload += '=' * (-len(payload) % 4)
-print(', '.join(json.loads(base64.urlsafe_b64decode(payload))['roles']))
-" "$access_token")
+import json, sys
+body = json.load(sys.stdin)
+print(', '.join(body['roles']) or '(none)' if 'roles' in body else '(no baseline role, so /auth/me itself is forbidden)')
+" <<<"$me")
 
 echo "Signed in as $email (roles: $roles)." >&2
 echo >&2
-echo "export ACCESS_TOKEN=$access_token"
-echo "export REFRESH_TOKEN=$refresh_token"
+echo "export TOKEN=$session_token"
