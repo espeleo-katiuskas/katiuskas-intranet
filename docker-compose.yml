@@ -5,8 +5,11 @@ services:
       POSTGRES_USER: intranet
       POSTGRES_PASSWORD: intranet
       POSTGRES_DB: intranet
+    # Bound to localhost only: this has dev-grade credentials and no TLS,
+    # so it must never be reachable from outside the host — use a proper
+    # reverse proxy (with real auth/TLS) if remote access is ever needed.
     ports:
-      - "64712:5432"
+      - "127.0.0.1:64712:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,8 +35,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Bound to localhost only: plain HTTP, no TLS — see the postgres
+    # service's comment above. Put a reverse proxy in front for anything
+    # beyond local use.
     ports:
-      - "64711:64711"
+      - "127.0.0.1:64711:64711"
     restart: unless-stopped
 
   web:
@@ -43,8 +49,9 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - api
+    # Bound to localhost only — same reasoning as the other two services.
     ports:
-      - "64710:64710"
+      - "127.0.0.1:64710:64710"
 
 volumes:
   postgres_data:
