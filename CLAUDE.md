@@ -15,11 +15,11 @@ Local stack (Postgres + API + Caddy-served frontend):
 ```sh
 docker compose up --build
 ```
-API on `:8080` (direct) / behind Caddy on `:8000` with `/api/*` proxied; frontend on `:8000`.
+API on `:64711` (direct) / behind Caddy on `:64710` with `/api/*` proxied; frontend on `:64710`.
 
 Migrations and first admin account (run once against a fresh database):
 ```sh
-export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
+export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
 make migrate-up      # goose, see db/migrations/
 make seed-admin      # idempotent; creates admin@club.test / 600000000 unless SEED_ADMIN_* overrides
 ```
@@ -30,7 +30,7 @@ link instead of emailing it — `docker compose logs api` or `scripts/get-token.
 Backend tests (from `backend/`):
 ```sh
 docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "CREATE DATABASE intranet_test;"
-export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet_test?sslmode=disable
+export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet_test?sslmode=disable
 go test ./...                                    # all packages
 go test ./internal/users/...                     # one package
 go test ./internal/users/... -run TestCreate      # one test

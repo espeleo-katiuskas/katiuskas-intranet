@@ -361,12 +361,12 @@ editables y su historial de actividades y material, leído de
 
 ```sh
 docker compose up -d postgres
-export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
+export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
 make migrate-up          # requiere goose: https://github.com/pressly/goose
 make seed-admin          # crea la cuenta admin (sin contraseña: acceso por magic link)
-make run                 # sirve la API en :8080
+make run                 # sirve la API en :64711
 ```
 
 El frontend es estático: se puede servir con cualquier servidor de ficheros apuntando a
-`web/` (o con `docker compose up` completo, que además levanta Caddy en `:8000`
+`web/` (o con `docker compose up` completo, que además levanta Caddy en `:64710`
 proxificando `/api/*` hacia el backend).

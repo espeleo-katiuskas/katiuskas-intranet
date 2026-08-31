@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: intranet
       POSTGRES_DB: intranet
     ports:
-      - "5433:5432"
+      - "64712:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,9 +18,9 @@ services:
   api:
     build: ./backend
     environment:
-      HTTP_ADDR: ":8080"
+      HTTP_ADDR: ":64711"
       DATABASE_URL: "postgres://intranet:intranet@postgres:5432/intranet?sslmode=disable"
-      PUBLIC_BASE_URL: "http://localhost:8000"
+      PUBLIC_BASE_URL: "http://localhost:64710"
       # Leave SMTP_HOST unset to log sign-in emails to `docker compose logs api`
       # instead of sending them for real.
       LIBRARY_ROOT: "/data/library"
@@ -33,7 +33,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "64711:64711"
     restart: unless-stopped
 
   web:
@@ -44,7 +44,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8000:8000"
+      - "64710:64710"
 
 volumes:
   postgres_data:

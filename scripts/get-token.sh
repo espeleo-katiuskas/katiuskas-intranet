@@ -19,7 +19,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-API_BASE="${API_BASE:-http://localhost:8000/api/v1}"
+API_BASE="${API_BASE:-http://localhost:64710/api/v1}"
 
 usage() {
   echo "Usage:" >&2

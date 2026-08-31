@@ -22,12 +22,12 @@ interfaz de las personas socias del club, está enteramente en español.
 docker compose up --build
 ```
 
-Esto levanta PostgreSQL, la API en `http://localhost:8080` y el frontend en
-`http://localhost:8000` (con `/api/*` proxificado hacia la API). Falta aplicar las
+Esto levanta PostgreSQL, la API en `http://localhost:64711` y el frontend en
+`http://localhost:64710` (con `/api/*` proxificado hacia la API). Falta aplicar las
 migraciones la primera vez:
 
 ```sh
-export DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet?sslmode=disable
+export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
 make migrate-up
 make seed-admin
 ```
@@ -39,7 +39,7 @@ teléfono `600000000`; para otros valores, exporta `SEED_ADMIN_EMAIL`, `SEED_ADM
 `SEED_ADMIN_FIRST_NAME` o `SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si
 el email ya existe, no hace nada.
 
-Para entrar, ve a `http://localhost:8000/login`, escribe ese email y ese teléfono, y
+Para entrar, ve a `http://localhost:64710/login`, escribe ese email y ese teléfono, y
 mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
@@ -49,7 +49,7 @@ Para desarrollo sin Docker, ver `docs/architecture.md`.
 
 ```sh
 docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "CREATE DATABASE intranet_test;"
-export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:5433/intranet_test?sslmode=disable
+export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet_test?sslmode=disable
 cd backend && go test ./...
 ```
 

@@ -30,7 +30,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const defaultTestDSN = "postgres://intranet:intranet@localhost:5433/intranet_test?sslmode=disable"
+const defaultTestDSN = "postgres://intranet:intranet@localhost:64712/intranet_test?sslmode=disable"
 
 // schemaLockKey is an arbitrary constant used as a Postgres advisory lock
 // so that concurrent test binaries (each Go package's tests run in their

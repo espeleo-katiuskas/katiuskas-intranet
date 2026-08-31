@@ -59,7 +59,7 @@ func newTestServer(t *testing.T) *testServer {
 		TokenTTL:          time.Hour,
 		MagicLinkTTL:      15 * time.Minute,
 		MagicLinkCooldown: time.Minute,
-		PublicBaseURL:     "http://localhost:8000",
+		PublicBaseURL:     "http://localhost:64710",
 	})
 
 	mux := http.NewServeMux()

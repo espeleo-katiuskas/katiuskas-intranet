@@ -21,10 +21,10 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.HTTPAddr != ":8080" {
-		t.Errorf("expected default HTTPAddr :8080, got %q", cfg.HTTPAddr)
+	if cfg.HTTPAddr != ":64711" {
+		t.Errorf("expected default HTTPAddr :64711, got %q", cfg.HTTPAddr)
 	}
-	if cfg.PublicBaseURL != "http://localhost:8000" {
+	if cfg.PublicBaseURL != "http://localhost:64710" {
 		t.Errorf("expected default PublicBaseURL, got %q", cfg.PublicBaseURL)
 	}
 	if cfg.SMTPPort != "587" {

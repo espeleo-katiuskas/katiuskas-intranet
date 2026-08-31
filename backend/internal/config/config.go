@@ -36,13 +36,13 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:              getEnv("HTTP_ADDR", ":8080"),
+		HTTPAddr:              getEnv("HTTP_ADDR", ":64711"),
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
 		TokenTTL:              30 * 24 * time.Hour,
 		MagicLinkTTL:          15 * time.Minute,
 		MagicLinkCooldown:     60 * time.Second,
 		ImpersonationTokenTTL: time.Hour,
-		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:8000"),
+		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),
 		SMTPHost:              os.Getenv("SMTP_HOST"),
 		SMTPPort:              getEnv("SMTP_PORT", "587"),
 		SMTPUsername:          os.Getenv("SMTP_USERNAME"),
