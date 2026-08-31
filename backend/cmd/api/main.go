@@ -1,4 +1,5 @@
-// Command api starts the Intranet REST API server.
+// Command api starts the Club de Espeleología Katiuskas intranet REST API
+// server.
 package main
 
 import (

@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **All code** (identifiers, comments, logs, API error messages): **English**.
 - **Documentation** (this file, `docs/`, `README.md`): Spanish or English, either is fine.
-- **Frontend** (`web/`): all user-visible text in **Spanish** — it's the interface for a
-  Spanish caving club. JS/HTML identifiers themselves stay in English.
+- **Frontend** (`web/`): all user-visible text in **Spanish** — it's the interface for
+  Club de Espeleología Katiuskas, a Spanish caving club. JS/HTML identifiers themselves
+  stay in English.
 
 ## Commands
 

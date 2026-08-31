@@ -1,10 +1,12 @@
 openapi: 3.0.3
 info:
-  title: Caving Club Intranet API
+  title: Club de Espeleología Katiuskas — Intranet API
   version: "1.0.0"
   description: >
-    REST API for the club intranet. Consumed by the web frontend today and
-    intended for a future mobile app and terminal client as well.
+    REST API for the intranet of Club de Espeleología Katiuskas, a caving
+    club (see [katiuskas.es](https://katiuskas.es/)). Consumed by the web
+    frontend today and intended for a future mobile app and terminal client
+    as well.
 
     Every endpoint below that requires bearerAuth requires the caller to
     hold at least one of admin, board, or member — this is a floor that
