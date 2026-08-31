@@ -54,24 +54,12 @@
           </select>
         </div>
         <div class="field">
-          <label for="na-location">Lugar</label>
-          <input id="na-location" name="location" type="text" required>
-        </div>
-        <div class="field">
           <label for="na-start-date">Fecha de inicio</label>
           <input id="na-start-date" name="start_date" type="date" required>
         </div>
         <div class="field">
-          <label for="na-end-date">Fecha de fin <span class="optional">(opcional)</span></label>
-          <input id="na-end-date" name="end_date" type="date">
-        </div>
-        <div class="field">
-          <label for="na-difficulty">Dificultad 1–5 <span class="optional">(opcional)</span></label>
-          <input id="na-difficulty" name="difficulty" type="number" min="1" max="5">
-        </div>
-        <div class="field">
-          <label for="na-max-participants">Plazas <span class="optional">(opcional)</span></label>
-          <input id="na-max-participants" name="max_participants" type="number" min="1">
+          <label for="na-end-date">Fecha de fin</label>
+          <input id="na-end-date" name="end_date" type="date" required>
         </div>
         <div class="field">
           <label for="na-visibility">Visibilidad</label>
@@ -110,7 +98,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Título</th><th>Lugar</th><th>Tipo</th><th>Organizador</th><th>Estado</th></tr>
+        <tr><th>Fecha</th><th>Título</th><th>Tipo</th><th>Organizador</th><th>Estado</th></tr>
       </thead>
       <tbody id="activities-list" class="clickable-rows"></tbody>
     </table>

@@ -1,5 +1,5 @@
-// Package activities manages club outings: date, place, description and the
-// members taking part in them.
+// Package activities manages club outings: start/end date, description
+// and the members taking part in them.
 package activities
 
 import "time"
@@ -38,16 +38,13 @@ const (
 )
 
 type Activity struct {
-	ID              int64      `json:"id"`
-	Title           string     `json:"title"`
-	Type            Type       `json:"type"`
-	StartDate       time.Time  `json:"start_date"`
-	EndDate         *time.Time `json:"end_date,omitempty"`
-	Location        string     `json:"location"`
-	Description     *string    `json:"description,omitempty"`
-	Difficulty      *int16     `json:"difficulty,omitempty"`
-	MaxParticipants *int32     `json:"max_participants,omitempty"`
-	Status          Status     `json:"status"`
+	ID          int64     `json:"id"`
+	Title       string    `json:"title"`
+	Type        Type      `json:"type"`
+	StartDate   time.Time `json:"start_date"`
+	EndDate     time.Time `json:"end_date"`
+	Description *string   `json:"description,omitempty"`
+	Status      Status    `json:"status"`
 	// LeaderID/LeaderLogin are the organizer: always set, to whoever
 	// created the activity (see Service.Create — never something the
 	// caller chooses), and the only person besides admin/board who can
@@ -63,16 +60,13 @@ type Activity struct {
 }
 
 type CreateInput struct {
-	Title           string
-	Type            Type
-	StartDate       time.Time
-	EndDate         *time.Time
-	Location        string
-	Description     *string
-	Difficulty      *int16
-	MaxParticipants *int32
-	LeaderID        int64
-	Visibility      Visibility
+	Title       string
+	Type        Type
+	StartDate   time.Time
+	EndDate     time.Time
+	Description *string
+	LeaderID    int64
+	Visibility  Visibility
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
@@ -83,7 +77,6 @@ type UpdateInput struct {
 	Type        *Type       `json:"type"`
 	Description *string     `json:"description"`
 	Status      *Status     `json:"status"`
-	Location    *string     `json:"location"`
 	Visibility  *Visibility `json:"visibility"`
 }
 

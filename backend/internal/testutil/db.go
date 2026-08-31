@@ -278,8 +278,8 @@ func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
 	leader := InsertUser(t, tx, "")
 	var id int64
 	err := tx.QueryRow(context.Background(), `
-		INSERT INTO activities (title, type, start_date, location, leader_id)
-		VALUES ('Test activity', 'caving', now(), 'Test location', $1)
+		INSERT INTO activities (title, type, start_date, end_date, leader_id)
+		VALUES ('Test activity', 'caving', now(), now(), $1)
 		RETURNING id
 	`, leader.ID).Scan(&id)
 	if err != nil {

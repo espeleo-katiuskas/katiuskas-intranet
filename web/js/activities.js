@@ -56,16 +56,17 @@ function leaderLabel(activity) {
   return leader ? `${leader.first_name} ${leader.last_name}` : activity.leader_login;
 }
 
-function renderActivity(activity) {
-  const dateLabel = activity.end_date
-    ? `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`
-    : formatDate(activity.start_date);
+function dateRangeLabel(activity) {
+  return activity.start_date === activity.end_date
+    ? formatDate(activity.start_date)
+    : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
+}
 
+function renderActivity(activity) {
   return `
     <tr data-activity-id="${activity.id}">
-      <td>${dateLabel}</td>
+      <td>${dateRangeLabel(activity)}</td>
       <td>${escapeHtml(activity.title)}</td>
-      <td>${escapeHtml(activity.location)}</td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
       <td>${escapeHtml(leaderLabel(activity))}</td>
       <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
@@ -96,10 +97,10 @@ async function loadActivities({ append = false } = {}) {
     loadedActivities = append ? loadedActivities.concat(page) : page;
     activitiesList.innerHTML = loadedActivities.length
       ? loadedActivities.map(renderActivity).join('')
-      : `<tr><td colspan="6">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
+      : `<tr><td colspan="5">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
     loadMoreButton.hidden = page.length < PAGE_SIZE;
   } catch {
-    activitiesList.innerHTML = '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
+    activitiesList.innerHTML = '<tr><td colspan="5">No se pudieron cargar las actividades.</td></tr>';
     loadMoreButton.hidden = true;
   }
 }
@@ -187,12 +188,9 @@ newActivityForm.addEventListener('submit', async (event) => {
   const body = {
     title: formData.get('title'),
     type: formData.get('type'),
-    location: formData.get('location'),
     start_date: formData.get('start_date'),
-    end_date: optional('end_date'),
+    end_date: formData.get('end_date'),
     description: optional('description'),
-    difficulty: optional('difficulty') ? Number(optional('difficulty')) : null,
-    max_participants: optional('max_participants') ? Number(optional('max_participants')) : null,
     visibility: formData.get('visibility'),
     participant_logins: Array.from(chosenParticipants.keys()),
   };

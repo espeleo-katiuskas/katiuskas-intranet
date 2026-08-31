@@ -471,7 +471,7 @@ func TestDeleteBlockedByReferences(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO activities (title, start_date, location, leader_id) VALUES ('Test trip', now(), 'Somewhere', $1)
+		INSERT INTO activities (title, start_date, end_date, leader_id) VALUES ('Test trip', now(), now(), $1)
 	`, created.ID)
 	if err != nil {
 		t.Fatalf("insert referencing activity: %v", err)

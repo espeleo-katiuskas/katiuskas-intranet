@@ -69,15 +69,18 @@ function applyManagementVisibility() {
   document.getElementById('cancel-activity').hidden = !canManage;
 }
 
+function dateRangeLabel(activity) {
+  return activity.start_date === activity.end_date
+    ? formatDate(activity.start_date)
+    : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
+}
+
 async function loadActivity() {
   try {
     const activity = await apiFetch(`/activities/${activityId}`);
-    const dateLabel = activity.end_date
-      ? `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`
-      : formatDate(activity.start_date);
     document.getElementById('activity-title').textContent = activity.title;
     document.getElementById('activity-meta').textContent =
-      `${dateLabel} · ${activity.location} · ${typeLabels[activity.type] ?? activity.type} · ` +
+      `${dateRangeLabel(activity)} · ${typeLabels[activity.type] ?? activity.type} · ` +
       `${statusLabels[activity.status] ?? activity.status} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
     document.getElementById('activity-description').textContent = activity.description ?? '';
 
@@ -90,7 +93,6 @@ async function loadActivity() {
     if (editForm) {
       editForm.title.value = activity.title;
       editForm.type.value = activity.type;
-      editForm.location.value = activity.location;
       editForm.status.value = activity.status;
       editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
@@ -107,7 +109,6 @@ editForm?.addEventListener('submit', async (event) => {
   const body = {
     title: formData.get('title'),
     type: formData.get('type'),
-    location: formData.get('location'),
     status: formData.get('status'),
     visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,

@@ -81,7 +81,7 @@ func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 	body := map[string]any{
 		// "social", not "caving": this test is about who may create an
 		// activity, not about the federation requirement.
-		"title": "Cena de fin de temporada", "type": "social", "location": "Cazorla", "start_date": "2026-09-15",
+		"title": "Cena de fin de temporada", "type": "social", "start_date": "2026-09-15", "end_date": "2026-09-15",
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
 	if rec.Code != http.StatusCreated {
@@ -99,7 +99,7 @@ func TestHandlerGet(t *testing.T) {
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -141,7 +141,7 @@ func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "Planned", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "Planned", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -188,7 +188,7 @@ func TestHandlerCreateWithParticipants(t *testing.T) {
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	body := map[string]any{
-		"title": "Cena de fin de temporada", "type": "social", "location": "Cazorla", "start_date": "2026-09-15",
+		"title": "Cena de fin de temporada", "type": "social", "start_date": "2026-09-15", "end_date": "2026-09-15",
 		"participant_logins": []string{},
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, body)
@@ -215,7 +215,7 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -249,7 +249,7 @@ func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 	memberToken := tokenFor(t, authn, other.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 		"participant_logins": []string{person.Login},
 	})
 	if rec.Code != http.StatusCreated {
@@ -279,7 +279,7 @@ func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 		"leader_id": 999999, // must be ignored: the organizer is always the caller
 	})
 	if rec.Code != http.StatusCreated {
@@ -304,7 +304,7 @@ func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -338,7 +338,7 @@ func TestHandlerUpdateCanChangeType(t *testing.T) {
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
-		"title": "A", "type": "training", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "training", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -370,7 +370,7 @@ func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
 	unfederatedToken := tokenFor(t, authn, unfederated.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "Sima", "type": "caving", "location": "X", "start_date": "2026-01-01",
+		"title": "Sima", "type": "caving", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create caving activity: %d: %s", rec.Code, rec.Body.String())
@@ -389,7 +389,7 @@ func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
 	}
 
 	rec = doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "Social", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "Social", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create social activity: %d: %s", rec.Code, rec.Body.String())
@@ -410,7 +410,7 @@ func TestHandlerCreateDefaultsToPublicVisibility(t *testing.T) {
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -435,7 +435,7 @@ func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
-		"title": "A", "type": "social", "visibility": "public", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "visibility": "public", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -471,7 +471,7 @@ func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *te
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
-		"title": "A", "type": "social", "visibility": "private", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "visibility": "private", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
@@ -512,7 +512,7 @@ func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
-		"title": "A", "type": "social", "location": "X", "start_date": "2026-01-01",
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())

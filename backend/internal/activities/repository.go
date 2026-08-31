@@ -26,14 +26,14 @@ const foreignKeyViolationCode = "23503"
 // activities led by different people, so the organizer's login is
 // joined in rather than resolved one at a time.
 const activitySelect = `
-	a.id, a.title, a.type, a.start_date, a.end_date, a.location, a.description,
-	a.difficulty, a.max_participants, a.status, a.leader_id, ul.login, a.visibility
+	a.id, a.title, a.type, a.start_date, a.end_date, a.description,
+	a.status, a.leader_id, ul.login, a.visibility
 	FROM activities a
 	JOIN users ul ON ul.id = a.leader_id`
 
 func scanActivity(row interface{ Scan(dest ...any) error }, a *Activity) error {
-	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location, &a.Description,
-		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
+	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description,
+		&a.Status, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
 }
 
 type Repository struct {
@@ -56,15 +56,11 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 
 	var a Activity
 	err = tx.QueryRow(ctx, `
-		INSERT INTO activities (title, type, start_date, end_date, location, description,
-			difficulty, max_participants, leader_id, visibility)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		RETURNING id, title, type, start_date, end_date, location, description,
-			difficulty, max_participants, status, leader_id, visibility
-	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Location, in.Description,
-		in.Difficulty, in.MaxParticipants, in.LeaderID, in.Visibility,
-	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Location, &a.Description,
-		&a.Difficulty, &a.MaxParticipants, &a.Status, &a.LeaderID, &a.Visibility)
+		INSERT INTO activities (title, type, start_date, end_date, description, leader_id, visibility)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		RETURNING id, title, type, start_date, end_date, description, status, leader_id, visibility
+	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Description, in.LeaderID, in.Visibility,
+	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Status, &a.LeaderID, &a.Visibility)
 	if err != nil {
 		return Activity{}, err
 	}
@@ -189,15 +185,12 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.Status != nil {
 		a.Status = *in.Status
 	}
-	if in.Location != nil {
-		a.Location = *in.Location
-	}
 	if in.Visibility != nil {
 		a.Visibility = *in.Visibility
 	}
 	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, type=$2, description=$3, status=$4, location=$5, visibility=$6 WHERE id=$7
-	`, a.Title, a.Type, a.Description, a.Status, a.Location, a.Visibility, id)
+		UPDATE activities SET title=$1, type=$2, description=$3, status=$4, visibility=$5 WHERE id=$6
+	`, a.Title, a.Type, a.Description, a.Status, a.Visibility, id)
 	return a, err
 }
 

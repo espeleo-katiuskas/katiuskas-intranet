@@ -1647,11 +1647,8 @@ components:
         title: { type: string }
         type: { type: string, enum: [caving, canyoning, training, social, other] }
         start_date: { type: string, format: date }
-        end_date: { type: string, format: date, nullable: true }
-        location: { type: string }
+        end_date: { type: string, format: date }
         description: { type: string, nullable: true }
-        difficulty: { type: integer, nullable: true }
-        max_participants: { type: integer, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
         leader_login:
           type: string
@@ -1670,16 +1667,16 @@ components:
 
     CreateActivityInput:
       type: object
-      required: [title, start_date, location]
+      required: [title, start_date, end_date]
       properties:
         title: { type: string }
         type: { type: string, enum: [caving, canyoning, training, social, other], default: caving }
         start_date: { type: string, format: date }
-        end_date: { type: string, format: date, nullable: true }
-        location: { type: string }
+        end_date:
+          type: string
+          format: date
+          description: Must not be earlier than start_date.
         description: { type: string, nullable: true }
-        difficulty: { type: integer, nullable: true }
-        max_participants: { type: integer, nullable: true }
         visibility: { type: string, enum: [public, private], default: public }
         participant_logins:
           type: array
@@ -1697,7 +1694,6 @@ components:
         type: { type: string, enum: [caving, canyoning, training, social, other] }
         description: { type: string, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
-        location: { type: string }
         visibility: { type: string, enum: [public, private] }
 
     Participant:

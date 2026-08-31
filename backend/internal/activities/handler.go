@@ -90,11 +90,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Title             string     `json:"title"`
 		Type              Type       `json:"type"`
 		StartDate         string     `json:"start_date"`
-		EndDate           *string    `json:"end_date"`
-		Location          string     `json:"location"`
+		EndDate           string     `json:"end_date"`
 		Description       *string    `json:"description"`
-		Difficulty        *int16     `json:"difficulty"`
-		MaxParticipants   *int32     `json:"max_participants"`
 		Visibility        Visibility `json:"visibility"`
 		ParticipantLogins []string   `json:"participant_logins"`
 	}
@@ -107,14 +104,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
 		return
 	}
-	var endDate *time.Time
-	if body.EndDate != nil {
-		d, err := time.Parse("2006-01-02", *body.EndDate)
-		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
-			return
-		}
-		endDate = &d
+	endDate, err := time.Parse("2006-01-02", body.EndDate)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
+		return
 	}
 	if body.Type == "" {
 		body.Type = TypeCaving
@@ -134,8 +127,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	current, _ := auth.UserFromContext(r.Context())
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
-		Location: body.Location, Description: body.Description, Difficulty: body.Difficulty,
-		MaxParticipants: body.MaxParticipants, LeaderID: current.ID, Visibility: body.Visibility,
+		Description: body.Description, LeaderID: current.ID, Visibility: body.Visibility,
 		ParticipantUserIDs: participantIDs,
 	})
 	if errors.Is(err, ErrParticipantNotFound) {
