@@ -12,12 +12,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"katiuskas-intranet/backend/internal/licenses"
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/roles"
-	"katiuskas-intranet/backend/internal/testutil"
-	"katiuskas-intranet/backend/internal/tokens"
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *tokens.Service, pgx.Tx) {

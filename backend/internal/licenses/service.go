@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 )
 
 var (

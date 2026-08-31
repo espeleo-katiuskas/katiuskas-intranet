@@ -18,11 +18,11 @@ import (
 	"log/slog"
 	"os"
 
-	"katiuskas-intranet/backend/internal/licenses"
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/platform/db"
-	"katiuskas-intranet/backend/internal/roles"
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func main() {

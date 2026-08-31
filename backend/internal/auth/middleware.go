@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
 type contextKey string

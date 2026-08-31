@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/testutil"
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func TestCreate(t *testing.T) {

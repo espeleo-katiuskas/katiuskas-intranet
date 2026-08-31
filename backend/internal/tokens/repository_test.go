@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/testutil"
-	"katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
 )
 
 func TestCreateAndAuthenticateRoundTrip(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"katiuskas-intranet/backend/internal/licenses"
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 )
 
 type Service struct {

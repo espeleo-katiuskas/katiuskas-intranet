@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
-	"katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 )
 
 // ErrWrongUser means the token exists but doesn't belong to the user id

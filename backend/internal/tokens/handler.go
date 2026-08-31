@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
-	"katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
 // UserLookup resolves a login into the numeric id it names. This

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 )
 
 // FakeResolver is an in-memory auth.SessionResolver, so handler tests

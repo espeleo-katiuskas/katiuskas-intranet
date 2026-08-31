@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/library"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver) {

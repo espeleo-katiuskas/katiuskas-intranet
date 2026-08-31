@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/roles"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 func newService(t *testing.T) (*roles.Service, testUserFactory) {

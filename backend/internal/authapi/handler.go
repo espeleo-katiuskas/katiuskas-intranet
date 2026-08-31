@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
-	"katiuskas-intranet/backend/internal/httpapi"
-	"katiuskas-intranet/backend/internal/mail"
-	"katiuskas-intranet/backend/internal/roles"
-	"katiuskas-intranet/backend/internal/tokens"
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 // Options are the settings that shape magic-link emails: how long a link

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/licenses"
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 func TestServiceCreateRejectsSomeoneWhoWasNeverAMember(t *testing.T) {

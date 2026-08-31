@@ -1,4 +1,4 @@
-module katiuskas-intranet/backend
+module github.com/espeleo-katiuskas/katiuskas-intranet/backend
 
 go 1.22
 

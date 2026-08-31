@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 )
 
 // ErrNotFederated means one of the given participants doesn't currently

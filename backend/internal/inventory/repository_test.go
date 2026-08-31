@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/inventory"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 func createItem(t *testing.T, repo *inventory.Repository, quantity int32) inventory.Item {

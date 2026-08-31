@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/library"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
 )
 
 // newTestService sets up a small tree under a fresh t.TempDir():

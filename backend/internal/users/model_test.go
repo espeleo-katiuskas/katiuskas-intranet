@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func TestForMemberListingComputesAgeCategoryFromBirthDate(t *testing.T) {

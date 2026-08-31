@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/board"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 func date(s string) time.Time {

@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"katiuskas-intranet/backend/internal/httpapi"
-	"katiuskas-intranet/backend/internal/licenses"
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/roles"
-	"katiuskas-intranet/backend/internal/testutil"
-	"katiuskas-intranet/backend/internal/users"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service) {

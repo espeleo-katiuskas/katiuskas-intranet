@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
 // stubResolver is a minimal SessionResolver for this package's own tests:

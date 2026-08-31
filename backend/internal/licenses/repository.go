@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"katiuskas-intranet/backend/internal/platform/db"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
 var (

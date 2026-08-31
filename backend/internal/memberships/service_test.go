@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"katiuskas-intranet/backend/internal/memberships"
-	"katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
 // fakeNumberAssigner stands in for users.Service in tests that only care

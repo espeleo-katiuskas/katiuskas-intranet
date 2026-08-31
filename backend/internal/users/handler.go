@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"katiuskas-intranet/backend/internal/auth"
-	"katiuskas-intranet/backend/internal/httpapi"
-	"katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 )
 
 type Handler struct {
