@@ -93,6 +93,8 @@ async function loadActivity() {
     if (editForm) {
       editForm.title.value = activity.title;
       editForm.type.value = activity.type;
+      editForm.start_date.value = activity.start_date.slice(0, 10);
+      editForm.end_date.value = activity.end_date.slice(0, 10);
       editForm.status.value = activity.status;
       editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
@@ -109,6 +111,8 @@ editForm?.addEventListener('submit', async (event) => {
   const body = {
     title: formData.get('title'),
     type: formData.get('type'),
+    start_date: formData.get('start_date'),
+    end_date: formData.get('end_date'),
     status: formData.get('status'),
     visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,

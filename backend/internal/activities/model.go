@@ -73,11 +73,13 @@ type CreateInput struct {
 }
 
 type UpdateInput struct {
-	Title       *string     `json:"title"`
-	Type        *Type       `json:"type"`
-	Description *string     `json:"description"`
-	Status      *Status     `json:"status"`
-	Visibility  *Visibility `json:"visibility"`
+	Title       *string
+	Type        *Type
+	StartDate   *time.Time
+	EndDate     *time.Time
+	Description *string
+	Status      *Status
+	Visibility  *Visibility
 }
 
 type Participant struct {

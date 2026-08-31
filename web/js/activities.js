@@ -56,16 +56,11 @@ function leaderLabel(activity) {
   return leader ? `${leader.first_name} ${leader.last_name}` : activity.leader_login;
 }
 
-function dateRangeLabel(activity) {
-  return activity.start_date === activity.end_date
-    ? formatDate(activity.start_date)
-    : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
-}
-
 function renderActivity(activity) {
   return `
     <tr data-activity-id="${activity.id}">
-      <td>${dateRangeLabel(activity)}</td>
+      <td>${formatDate(activity.start_date)}</td>
+      <td>${formatDate(activity.end_date)}</td>
       <td>${escapeHtml(activity.title)}</td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
       <td>${escapeHtml(leaderLabel(activity))}</td>
@@ -97,10 +92,10 @@ async function loadActivities({ append = false } = {}) {
     loadedActivities = append ? loadedActivities.concat(page) : page;
     activitiesList.innerHTML = loadedActivities.length
       ? loadedActivities.map(renderActivity).join('')
-      : `<tr><td colspan="5">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
+      : `<tr><td colspan="6">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
     loadMoreButton.hidden = page.length < PAGE_SIZE;
   } catch {
-    activitiesList.innerHTML = '<tr><td colspan="5">No se pudieron cargar las actividades.</td></tr>';
+    activitiesList.innerHTML = '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
     loadMoreButton.hidden = true;
   }
 }

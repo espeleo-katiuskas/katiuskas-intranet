@@ -753,17 +753,12 @@ if (impersonateButton) {
 const activityTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 const activityStatusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
-function activityDateRangeLabel(activity) {
-  return activity.start_date === activity.end_date
-    ? formatDate(activity.start_date)
-    : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
-}
-
 function renderActivityRow(activity) {
   const role = activity.leader_login === memberLogin ? 'Responsable' : 'Participante';
   return `
     <tr>
-      <td>${activityDateRangeLabel(activity)}</td>
+      <td>${formatDate(activity.start_date)}</td>
+      <td>${formatDate(activity.end_date)}</td>
       <td><a href="/activity?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
       <td>${activityTypeLabels[activity.type] ?? activity.type}</td>
       <td><span class="badge status-${activity.status}">${activityStatusLabels[activity.status] ?? activity.status}</span></td>
@@ -778,9 +773,9 @@ async function loadActivities() {
     const activities = await apiFetch(`/users/${memberLogin}/activities`);
     tableBody.innerHTML = activities.length
       ? activities.map(renderActivityRow).join('')
-      : '<tr><td colspan="5">Todavía no ha participado en ninguna actividad.</td></tr>';
+      : '<tr><td colspan="6">Todavía no ha participado en ninguna actividad.</td></tr>';
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el historial de actividades.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el historial de actividades.</td></tr>';
   }
 }
 

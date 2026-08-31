@@ -191,10 +191,38 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can edit this activity")
 		return
 	}
-	var in UpdateInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	var body struct {
+		Title       *string     `json:"title"`
+		Type        *Type       `json:"type"`
+		StartDate   *string     `json:"start_date"`
+		EndDate     *string     `json:"end_date"`
+		Description *string     `json:"description"`
+		Status      *Status     `json:"status"`
+		Visibility  *Visibility `json:"visibility"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
+	}
+	in := UpdateInput{
+		Title: body.Title, Type: body.Type, Description: body.Description,
+		Status: body.Status, Visibility: body.Visibility,
+	}
+	if body.StartDate != nil {
+		d, err := time.Parse("2006-01-02", *body.StartDate)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
+			return
+		}
+		in.StartDate = &d
+	}
+	if body.EndDate != nil {
+		d, err := time.Parse("2006-01-02", *body.EndDate)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
+			return
+		}
+		in.EndDate = &d
 	}
 	a, err := h.service.Update(r.Context(), id, in)
 	if errors.Is(err, ErrNotFound) {

@@ -362,6 +362,48 @@ func TestHandlerUpdateCanChangeType(t *testing.T) {
 	}
 }
 
+func TestHandlerUpdateCanChangeDates(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "training", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{
+		"start_date": "2026-02-01", "end_date": "2026-02-03",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update dates: %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !updated.StartDate.Equal(date("2026-02-01")) || !updated.EndDate.Equal(date("2026-02-03")) {
+		t.Errorf("expected updated dates, got start %v end %v", updated.StartDate, updated.EndDate)
+	}
+
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"start_date": "not-a-date"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for a malformed start_date, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"end_date": "2026-01-01"})
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected the DB CHECK constraint to reject end_date before start_date, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
 	admin := testutil.InsertUser(t, tx, "")

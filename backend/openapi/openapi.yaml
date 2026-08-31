@@ -1692,6 +1692,11 @@ components:
       properties:
         title: { type: string }
         type: { type: string, enum: [caving, canyoning, training, social, other] }
+        start_date: { type: string, format: date }
+        end_date:
+          type: string
+          format: date
+          description: Must not be earlier than start_date (or the resulting start_date, if both are sent together).
         description: { type: string, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
         visibility: { type: string, enum: [public, private] }
