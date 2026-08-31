@@ -91,15 +91,11 @@ function renderItemRow(item) {
 
 function renderTransactionDetail(t) {
   const canReturn = canManageTransactions && t.status === 'active' && t.type !== 'sale';
-  const dueOrReturned = t.returned_at
-    ? ` · devuelto ${formatDate(t.returned_at)}`
-    : t.due_date
-      ? ` · vence ${formatDate(t.due_date)}`
-      : '';
+  const returned = t.returned_at ? ` · devuelto ${formatDate(t.returned_at)}` : '';
   return `
     <div class="detail-row">
       <span>${typeLabels[t.type] ?? t.type} · Socio ${t.user_login} · cantidad ${t.quantity} ·
-        ${formatDate(t.transacted_at)}${dueOrReturned} ·
+        ${formatDate(t.transacted_at)}${returned} ·
         <span class="badge">${txStatusLabels[t.status] ?? t.status}</span></span>
       ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : ''}
     </div>
@@ -117,8 +113,9 @@ async function loadItems() {
     if (canManageTransactions) {
       const select = document.getElementById('nt-item');
       select.innerHTML = items
-        .map((item) => `<option value="${item.id}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
+        .map((item) => `<option value="${item.id}" data-item-type="${item.item_type}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
         .join('');
+      updateTransactionQuantityVisibility?.();
     }
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
@@ -174,7 +171,7 @@ function renderActiveTransactionRow(t) {
       <td>Socio ${t.user_login}</td>
       <td>${typeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
-      <td>${t.due_date ? formatDate(t.due_date) : '—'}</td>
+      <td>${formatDate(t.transacted_at)}</td>
       <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : '—'}</td>
     </tr>
   `;
@@ -327,14 +324,13 @@ if (canManageTransactions) {
     .catch(() => showError('No se pudo cargar la lista de actividades.'));
 
   const typeSelect = document.getElementById('nt-type');
-  const dueDateField = document.getElementById('nt-due-date-field');
-  const priceField = document.getElementById('nt-price-field');
   const activityField = document.getElementById('nt-activity-field');
+  const itemSelect = document.getElementById('nt-item');
+  const quantityField = document.getElementById('nt-quantity-field');
+  const quantityInput = document.getElementById('nt-quantity');
 
   function updateTransactionFieldsVisibility() {
     const type = typeSelect.value;
-    dueDateField.hidden = type === 'sale';
-    priceField.hidden = type === 'loan';
     // Loans and rentals always happen as part of an activity; a sale
     // doesn't (see the loan_and_rental_require_activity constraint).
     activityField.hidden = type === 'sale';
@@ -342,6 +338,16 @@ if (canManageTransactions) {
   }
   typeSelect.addEventListener('change', updateTransactionFieldsVisibility);
   updateTransactionFieldsVisibility();
+
+  // rope/bag are individually tracked (always total_quantity 1), so
+  // there's no quantity to choose once one of those is selected.
+  function updateTransactionQuantityVisibility() {
+    const selected = itemSelect.selectedOptions[0];
+    const isSingleUnit = selected?.dataset.itemType === 'rope' || selected?.dataset.itemType === 'bag';
+    quantityField.hidden = isSingleUnit;
+    if (isSingleUnit) quantityInput.value = '1';
+  }
+  itemSelect.addEventListener('change', updateTransactionQuantityVisibility);
 
   const newTransactionForm = document.getElementById('new-transaction-form');
   newTransactionForm.addEventListener('submit', async (event) => {
@@ -368,8 +374,7 @@ if (canManageTransactions) {
       login: userLogin,
       type,
       quantity: Number(formData.get('quantity')) || 1,
-      due_date: type !== 'sale' ? formData.get('due_date') || null : null,
-      price: type !== 'loan' && formData.get('price') ? Number(formData.get('price')) : null,
+      transacted_at: formData.get('transacted_at') || null,
       activity_id: activityId,
     };
 
@@ -380,6 +385,7 @@ if (canManageTransactions) {
       showFeedback('Transacción registrada.');
       newTransactionForm.reset();
       updateTransactionFieldsVisibility();
+      updateTransactionQuantityVisibility();
       await loadItems();
       await loadActiveTransactions();
     } catch (err) {

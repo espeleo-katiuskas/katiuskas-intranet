@@ -160,18 +160,38 @@ func (r *Repository) CreateTransaction(ctx context.Context, in CreateTransaction
 	}
 	defer tx.Rollback(ctx)
 
-	if in.Type == TransactionLoan {
-		var loanable bool
-		err := tx.QueryRow(ctx, `SELECT loanable FROM inventory_items WHERE id = $1`, in.ItemID).Scan(&loanable)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Transaction{}, ErrInsufficientStock
-		}
-		if err != nil {
-			return Transaction{}, err
-		}
+	var itemType ItemType
+	var loanable bool
+	var rentalPrice, salePrice *float64
+	err = tx.QueryRow(ctx, `
+		SELECT item_type, loanable, rental_price_per_week, sale_price FROM inventory_items WHERE id = $1
+	`, in.ItemID).Scan(&itemType, &loanable, &rentalPrice, &salePrice)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Transaction{}, ErrInsufficientStock
+	}
+	if err != nil {
+		return Transaction{}, err
+	}
+
+	// rope and bag are individually tracked (always total_quantity 1);
+	// picking any other quantity for them makes no sense.
+	if itemType == ItemTypeRope || itemType == ItemTypeBag {
+		in.Quantity = 1
+	}
+
+	// Price is never given by the caller — it's always the item's own
+	// catalog price for that kind of transaction, and always nil for a
+	// loan (which is free).
+	var price *float64
+	switch in.Type {
+	case TransactionLoan:
 		if !loanable {
 			return Transaction{}, ErrNotLoanable
 		}
+	case TransactionRental:
+		price = rentalPrice
+	case TransactionSale:
+		price = salePrice
 	}
 
 	tag, err := tx.Exec(ctx, `
@@ -195,12 +215,12 @@ func (r *Repository) CreateTransaction(ctx context.Context, in CreateTransaction
 
 	var t Transaction
 	err = tx.QueryRow(ctx, `
-		INSERT INTO item_transactions (item_id, user_id, type, quantity, due_date, price, recorded_by, activity_id)
+		INSERT INTO item_transactions (item_id, user_id, type, quantity, transacted_at, price, recorded_by, activity_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		RETURNING id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
+		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id
-	`, in.ItemID, in.UserID, in.Type, in.Quantity, in.DueDate, in.Price, in.RecordedBy, in.ActivityID,
-	).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt, &t.DueDate,
+	`, in.ItemID, in.UserID, in.Type, in.Quantity, in.TransactedAt, price, in.RecordedBy, in.ActivityID,
+	).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt,
 		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == loanAndRentalRequireActivityConstraint {
@@ -226,9 +246,9 @@ func (r *Repository) ReturnTransaction(ctx context.Context, id int64) (Transacti
 	err = tx.QueryRow(ctx, `
 		UPDATE item_transactions SET returned_at = now(), status = 'completed'
 		WHERE id = $1 AND status = 'active'
-		RETURNING id, item_id, user_id, type, quantity, transacted_at, due_date, returned_at,
+		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id
-	`, id).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt, &t.DueDate,
+	`, id).Scan(&t.ID, &t.ItemID, &t.UserID, &t.Type, &t.Quantity, &t.TransactedAt,
 		&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.ActivityID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == saleHasNoReturnConstraint {
@@ -274,7 +294,7 @@ func (r *Repository) ListTransactionsByUser(ctx context.Context, userID int64) (
 // single-row RETURNING writes below have to.
 func (r *Repository) queryTransactions(ctx context.Context, whereClause string, arg any) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT it.id, it.item_id, it.user_id, u.login, it.type, it.quantity, it.transacted_at, it.due_date,
+		SELECT it.id, it.item_id, it.user_id, u.login, it.type, it.quantity, it.transacted_at,
 			it.returned_at, it.price, it.status, it.recorded_by, ru.login, it.activity_id
 		FROM item_transactions it
 		JOIN users u ON u.id = it.user_id
@@ -289,7 +309,7 @@ func (r *Repository) queryTransactions(ctx context.Context, whereClause string, 
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(&t.ID, &t.ItemID, &t.UserID, &t.UserLogin, &t.Type, &t.Quantity, &t.TransactedAt,
-			&t.DueDate, &t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.RecordedByLogin, &t.ActivityID); err != nil {
+			&t.ReturnedAt, &t.Price, &t.Status, &t.RecordedBy, &t.RecordedByLogin, &t.ActivityID); err != nil {
 			return nil, err
 		}
 		list = append(list, t)

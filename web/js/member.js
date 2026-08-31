@@ -803,18 +803,14 @@ function itemLabel(item) {
 
 function renderTransactionRow(t, itemsById) {
   const item = itemsById[t.item_id];
-  const dueOrReturned = t.returned_at
-    ? `Devuelto ${formatDate(t.returned_at)}`
-    : t.due_date
-      ? `Vence ${formatDate(t.due_date)}`
-      : '—';
+  const returned = t.returned_at ? `Devuelto ${formatDate(t.returned_at)}` : '—';
   return `
     <tr>
       <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
       <td>${transactionTypeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
       <td>${formatDate(t.transacted_at)}</td>
-      <td>${dueOrReturned}</td>
+      <td>${returned}</td>
       <td><span class="badge">${transactionStatusLabels[t.status] ?? t.status}</span></td>
     </tr>
   `;

@@ -1,6 +1,9 @@
 package inventory
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Service struct {
 	repo *Repository
@@ -25,6 +28,9 @@ func (s *Service) ListMaterialCategories(ctx context.Context) ([]MaterialCategor
 func (s *Service) CreateTransaction(ctx context.Context, in CreateTransactionInput) (Transaction, error) {
 	if in.Quantity <= 0 {
 		in.Quantity = 1
+	}
+	if in.TransactedAt.IsZero() {
+		in.TransactedAt = time.Now()
 	}
 	return s.repo.CreateTransaction(ctx, in)
 }

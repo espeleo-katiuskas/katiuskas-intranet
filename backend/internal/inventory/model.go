@@ -149,11 +149,13 @@ type Transaction struct {
 	// people across a single listing) or, for the two writes that use
 	// INSERT/UPDATE ... RETURNING (no JOIN available there), by the
 	// handler afterward — see licenses.Handler for the same split.
-	UserLogin       string            `json:"user_login"`
-	Type            TransactionType   `json:"type"`
-	Quantity        int32             `json:"quantity"`
+	UserLogin string          `json:"user_login"`
+	Type      TransactionType `json:"type"`
+	Quantity  int32           `json:"quantity"`
+	// TransactedAt defaults to today (see CreateTransactionInput) but
+	// can be backdated — whoever logs the transaction may be doing so
+	// after the fact.
 	TransactedAt    time.Time         `json:"transacted_at"`
-	DueDate         *time.Time        `json:"due_date,omitempty"`
 	ReturnedAt      *time.Time        `json:"returned_at,omitempty"`
 	Price           *float64          `json:"price,omitempty"`
 	Status          TransactionStatus `json:"status"`
@@ -164,13 +166,16 @@ type Transaction struct {
 	ActivityID *int64 `json:"activity_id,omitempty"`
 }
 
+// CreateTransactionInput has no Price field: it's never given by the
+// caller, since it's always the item's own catalog price for that kind
+// of transaction (and always nil for a loan) — see
+// Repository.CreateTransaction.
 type CreateTransactionInput struct {
-	ItemID     int64
-	UserID     int64
-	Type       TransactionType
-	Quantity   int32
-	DueDate    *time.Time
-	Price      *float64
-	RecordedBy *int64
-	ActivityID *int64
+	ItemID       int64
+	UserID       int64
+	Type         TransactionType
+	Quantity     int32
+	TransactedAt time.Time
+	RecordedBy   *int64
+	ActivityID   *int64
 }

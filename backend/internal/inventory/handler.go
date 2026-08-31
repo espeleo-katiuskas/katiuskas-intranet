@@ -195,13 +195,12 @@ func (h *Handler) listTransactionsByUser(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ItemID     int64           `json:"item_id"`
-		Login      string          `json:"login"`
-		Type       TransactionType `json:"type"`
-		Quantity   int32           `json:"quantity"`
-		DueDate    *string         `json:"due_date"`
-		Price      *float64        `json:"price"`
-		ActivityID *int64          `json:"activity_id"`
+		ItemID       int64           `json:"item_id"`
+		Login        string          `json:"login"`
+		Type         TransactionType `json:"type"`
+		Quantity     int32           `json:"quantity"`
+		TransactedAt *string         `json:"transacted_at"`
+		ActivityID   *int64          `json:"activity_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -212,20 +211,20 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
 		return
 	}
-	var dueDate *time.Time
-	if body.DueDate != nil {
-		d, err := time.Parse("2006-01-02", *body.DueDate)
+	transactedAt := time.Now()
+	if body.TransactedAt != nil && *body.TransactedAt != "" {
+		d, err := time.Parse("2006-01-02", *body.TransactedAt)
 		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "due_date must be YYYY-MM-DD")
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "transacted_at must be YYYY-MM-DD")
 			return
 		}
-		dueDate = &d
+		transactedAt = d
 	}
 	current, _ := auth.UserFromContext(r.Context())
 	recordedBy := current.ID
 	t, err := h.service.CreateTransaction(r.Context(), CreateTransactionInput{
 		ItemID: body.ItemID, UserID: userID, Type: body.Type, Quantity: body.Quantity,
-		DueDate: dueDate, Price: body.Price, RecordedBy: &recordedBy, ActivityID: body.ActivityID,
+		TransactedAt: transactedAt, RecordedBy: &recordedBy, ActivityID: body.ActivityID,
 	})
 	if errors.Is(err, ErrInsufficientStock) {
 		httpapi.WriteError(w, http.StatusConflict, "insufficient_stock", err.Error())

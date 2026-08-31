@@ -68,13 +68,18 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 // gearItemBody is a valid POST /items body for a gear item — the shape
 // most of these handler tests just need to exist, not exercise the
 // per-type rope/bag/gear rules themselves.
+// rental_price_per_week/sale_price are set so tests can create a
+// rental or sale transaction against this item without needing to give
+// a price themselves — it's always taken from the item now.
 func gearItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
 	t.Helper()
 	return map[string]any{
-		"item_type":      "gear",
-		"description":    "Casco",
-		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
-		"total_quantity": totalQuantity,
+		"item_type":             "gear",
+		"description":           "Casco",
+		"category_id":           testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"total_quantity":        totalQuantity,
+		"rental_price_per_week": 10.0,
+		"sale_price":            25.0,
 	}
 }
 
@@ -166,9 +171,8 @@ func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
-	price := 10.0
 	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, map[string]any{
-		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1, "price": price,
+		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())

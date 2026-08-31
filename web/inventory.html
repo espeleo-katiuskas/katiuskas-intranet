@@ -136,7 +136,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Material</th><th>Socio</th><th>Tipo</th><th>Cantidad</th><th>Vencimiento</th><th></th></tr>
+          <tr><th>Material</th><th>Socio</th><th>Tipo</th><th>Cantidad</th><th>Fecha</th><th></th></tr>
         </thead>
         <tbody id="active-transactions-table-body"></tbody>
       </table>
@@ -170,19 +170,16 @@
               <option value="sale">Venta</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" id="nt-quantity-field">
             <label for="nt-quantity">Cantidad</label>
             <input id="nt-quantity" name="quantity" type="number" min="1" value="1">
           </div>
-          <div class="field" id="nt-due-date-field">
-            <label for="nt-due-date">Fecha de devolución prevista</label>
-            <input id="nt-due-date" name="due_date" type="date">
-          </div>
-          <div class="field" id="nt-price-field" hidden>
-            <label for="nt-price">Precio</label>
-            <input id="nt-price" name="price" type="number" min="0" step="0.01">
+          <div class="field">
+            <label for="nt-transacted-at">Fecha <span class="optional">(opcional, hoy por defecto)</span></label>
+            <input id="nt-transacted-at" name="transacted_at" type="date">
           </div>
         </div>
+        <p class="hint">El precio (si aplica) es siempre el indicado en el material — no se puede cambiar aquí.</p>
         <div class="panel-actions">
           <button type="submit" class="btn btn-primary">Registrar transacción</button>
         </div>

@@ -12,13 +12,18 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
+// createItem's rental/sale prices are set so tests can create a rental
+// or sale transaction without needing to give a price themselves — it's
+// always taken from the item now (see Repository.CreateTransaction).
 func createItem(t *testing.T, tx pgx.Tx, repo *inventory.Repository, quantity int32) inventory.Item {
 	t.Helper()
 	description := "Casco Petzl Boreo"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	rentalPrice, salePrice := 10.0, 25.0
 	item, err := repo.CreateItem(context.Background(), inventory.CreateItemInput{
 		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
 		TotalQuantity: quantity, Loanable: true,
+		RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
 	if err != nil {
 		t.Fatalf("create item: %v", err)
@@ -55,10 +60,9 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 	item := createItem(t, tx, repo, 3)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
-	due := time.Now().AddDate(0, 0, 7)
 
 	txn, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1, DueDate: &due,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -100,10 +104,9 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
-	price := 25.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -194,10 +197,9 @@ func TestReturnTransactionRefusesSales(t *testing.T) {
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
-	price := 25.0
 
 	sale, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
@@ -224,9 +226,8 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
-	price := 10.0
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1,
 		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create rental: %v", err)
@@ -276,9 +277,8 @@ func TestListTransactionsByUser(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create loan for person: %v", err)
 	}
-	price := 10.0
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: other.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: other.ID, Type: inventory.TransactionSale, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create sale for other: %v", err)
 	}
@@ -314,10 +314,9 @@ func TestCreateTransactionRentalRequiresActivity(t *testing.T) {
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertUser(t, tx, "")
-	price := 10.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1,
 	}); !errors.Is(err, inventory.ErrActivityRequired) {
 		t.Errorf("expected ErrActivityRequired for a rental without an activity, got %v", err)
 	}
@@ -330,10 +329,9 @@ func TestCreateTransactionSaleDoesNotRequireActivity(t *testing.T) {
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
-	price := 25.0
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
-		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1, Price: &price,
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1,
 	}); err != nil {
 		t.Errorf("expected a sale without an activity to succeed, got %v", err)
 	}
@@ -616,5 +614,122 @@ func TestListMaterialCategories(t *testing.T) {
 	}
 	if len(categories) == 0 {
 		t.Error("expected the seeded material categories to be listed")
+	}
+}
+
+func TestTransactionQuantityForcedToOneForRopeAndBag(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-100"
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+	year := int32(2024)
+	length := int32(60)
+
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
+		TotalQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create rope: %v", err)
+	}
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	// A rope only ever has 1 unit available, so asking for 5 would
+	// already fail as insufficient stock even without the override —
+	// what this actually checks is that the resulting transaction's
+	// own quantity is forced to 1, not whatever was requested.
+	txn, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 5,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+	if txn.Quantity != 1 {
+		t.Errorf("expected quantity forced to 1 for a rope, got %d", txn.Quantity)
+	}
+}
+
+func TestTransactionPriceIsAlwaysTakenFromTheItem(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	// createItem sets rental_price_per_week 10.0 and sale_price 25.0.
+	item := createItem(t, tx, repo, 5)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rental, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionRental, Quantity: 1,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create rental: %v", err)
+	}
+	if rental.Price == nil || *rental.Price != 10.0 {
+		t.Errorf("expected rental price 10.0 from the item, got %+v", rental.Price)
+	}
+
+	sale, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionSale, Quantity: 1,
+	})
+	if err != nil {
+		t.Fatalf("create sale: %v", err)
+	}
+	if sale.Price == nil || *sale.Price != 25.0 {
+		t.Errorf("expected sale price 25.0 from the item, got %+v", sale.Price)
+	}
+
+	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+	if loan.Price != nil {
+		t.Errorf("expected a loan to always have a nil price, got %+v", loan.Price)
+	}
+}
+
+func TestTransactionDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 5)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	// The zero-value TransactedAt default lives in Service, not
+	// Repository — exercise it through the service.
+	service := inventory.NewService(repo)
+	today, err := service.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create transaction: %v", err)
+	}
+	if today.TransactedAt.Format("2006-01-02") != time.Now().Format("2006-01-02") {
+		t.Errorf("expected transacted_at to default to today, got %v", today.TransactedAt)
+	}
+
+	backdated := time.Now().AddDate(0, 0, -5)
+	past, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1, TransactedAt: backdated,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create backdated transaction: %v", err)
+	}
+	if past.TransactedAt.Format("2006-01-02") != backdated.Format("2006-01-02") {
+		t.Errorf("expected backdated transacted_at to round-trip, got %v want %v", past.TransactedAt, backdated)
 	}
 }

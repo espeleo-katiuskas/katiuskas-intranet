@@ -1203,8 +1203,13 @@ paths:
       description: >
         Requires the admin, board, or material role. activity_id is
         required for loan and rental (never for sale) — a member is
-        always borrowing or renting gear *for* something. recorded_by_login
-        (the caller) is set automatically, never chosen by the caller.
+        always borrowing or renting gear *for* something.
+        recorded_by_login (the caller) is set automatically, never
+        chosen by the caller — same for price, which always comes from
+        the item's own rental_price_per_week/sale_price (null for a
+        loan), never from the request body. quantity is forced to 1 for
+        a rope or bag item, since they're individually tracked
+        (always total_quantity 1).
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -1216,9 +1221,8 @@ paths:
                 item_id: { type: integer }
                 login: { type: string, description: "The person the transaction is for." }
                 type: { type: string, enum: [loan, rental, sale] }
-                quantity: { type: integer, default: 1 }
-                due_date: { type: string, format: date, nullable: true }
-                price: { type: number, nullable: true }
+                quantity: { type: integer, default: 1, description: Forced to 1 for a rope or bag item. }
+                transacted_at: { type: string, format: date, description: Defaults to today; can be backdated. }
                 activity_id: { type: integer, nullable: true }
       responses:
         "201":
@@ -1821,11 +1825,16 @@ components:
         item_id: { type: integer }
         user_login: { type: string }
         type: { type: string, enum: [loan, rental, sale] }
-        quantity: { type: integer }
-        transacted_at: { type: string, format: date-time }
-        due_date: { type: string, format: date, nullable: true }
+        quantity: { type: integer, description: Always 1 for a rope or bag item. }
+        transacted_at: { type: string, format: date, description: Defaults to today at creation; can be backdated. }
         returned_at: { type: string, format: date, nullable: true }
-        price: { type: number, nullable: true }
+        price:
+          type: number
+          nullable: true
+          description: >
+            Always the item's own rental_price_per_week (rental) or
+            sale_price (sale) at the time of the transaction; always
+            null for a loan.
         status: { type: string, enum: [active, completed, overdue, cancelled] }
         recorded_by_login: { type: string, nullable: true }
         activity_id:
