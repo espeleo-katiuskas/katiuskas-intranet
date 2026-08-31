@@ -55,6 +55,10 @@ const typeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
 const txStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
 
 let itemsById = {};
+// Reassigned below when canManageTransactions is true; loadItems() (run
+// unconditionally) calls it every time the item picker is repopulated,
+// so it has to exist at module scope even when there's nothing to do.
+let updateTransactionQuantityVisibility = () => {};
 
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); gear may have no known brand/model at all, so its
@@ -115,7 +119,7 @@ async function loadItems() {
       select.innerHTML = items
         .map((item) => `<option value="${item.id}" data-item-type="${item.item_type}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
         .join('');
-      updateTransactionQuantityVisibility?.();
+      updateTransactionQuantityVisibility();
     }
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
@@ -341,12 +345,12 @@ if (canManageTransactions) {
 
   // rope/bag are individually tracked (always total_quantity 1), so
   // there's no quantity to choose once one of those is selected.
-  function updateTransactionQuantityVisibility() {
+  updateTransactionQuantityVisibility = function () {
     const selected = itemSelect.selectedOptions[0];
     const isSingleUnit = selected?.dataset.itemType === 'rope' || selected?.dataset.itemType === 'bag';
     quantityField.hidden = isSingleUnit;
     if (isSingleUnit) quantityInput.value = '1';
-  }
+  };
   itemSelect.addEventListener('change', updateTransactionQuantityVisibility);
 
   const newTransactionForm = document.getElementById('new-transaction-form');
