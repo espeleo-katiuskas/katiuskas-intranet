@@ -797,7 +797,7 @@ function itemLabel(item) {
     const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [item.category_name, brandModel || null];
+  const parts = [item.category_name, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 

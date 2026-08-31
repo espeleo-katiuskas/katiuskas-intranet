@@ -60,6 +60,16 @@ let itemsById = {};
 // so it has to exist at module scope even when there's nothing to do.
 let updateTransactionQuantityVisibility = () => {};
 
+// Populated from /users/directory (see the canManageTransactions block
+// below) so transaction rows can show a person's name instead of their
+// bare login.
+let directoryByLogin = {};
+
+function personLabel(login) {
+  const person = directoryByLogin[login];
+  return person ? `${person.first_name} ${person.last_name}` : login;
+}
+
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); gear may have no known brand/model at all, so its
 // category — always set — anchors the label instead.
@@ -73,7 +83,7 @@ function itemLabel(item) {
     const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [item.category_name, brandModel || null];
+  const parts = [item.category_name, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
@@ -98,7 +108,7 @@ function renderTransactionDetail(t) {
   const returned = t.returned_at ? ` · devuelto ${formatDate(t.returned_at)}` : '';
   return `
     <div class="detail-row">
-      <span>${typeLabels[t.type] ?? t.type} · Socio ${t.user_login} · cantidad ${t.quantity} ·
+      <span>${typeLabels[t.type] ?? t.type} · Socio ${escapeHtml(personLabel(t.user_login))} · cantidad ${t.quantity} ·
         ${formatDate(t.transacted_at)}${returned} ·
         <span class="badge">${txStatusLabels[t.status] ?? t.status}</span></span>
       ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : ''}
@@ -172,7 +182,7 @@ function renderActiveTransactionRow(t) {
   return `
     <tr>
       <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
-      <td>Socio ${t.user_login}</td>
+      <td>${escapeHtml(personLabel(t.user_login))}</td>
       <td>${typeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
       <td>${formatDate(t.transacted_at)}</td>
@@ -305,8 +315,9 @@ let activityEntries = [];
 if (canManageTransactions) {
   const userInput = document.getElementById('nt-user');
   const userOptions = document.getElementById('nt-user-options');
-  apiFetch('/users/directory')
+  const directoryLoaded = apiFetch('/users/directory')
     .then((people) => {
+      directoryByLogin = Object.fromEntries(people.map((person) => [person.login, person]));
       userEntries = people
         .slice()
         .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
@@ -399,6 +410,9 @@ if (canManageTransactions) {
     }
   });
 
+  // Awaited so the "Socio" column has names to show on first paint
+  // instead of falling back to the bare login until a re-render happens.
+  await directoryLoaded;
   loadActiveTransactions();
 }
 
