@@ -42,7 +42,7 @@ func TestServiceCreateWithNoRolesGrantsNothing(t *testing.T) {
 	svc, _ := newUsersService(t)
 	ctx := context.Background()
 
-	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestServiceCreateRejectsAutomaticRoleInRoleNames(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), RoleNames: []string{"member"},
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"member"},
 	})
 	if !errors.Is(err, roles.ErrAutomaticRole) {
 		t.Errorf("expected roles.ErrAutomaticRole, got %v", err)
@@ -68,7 +68,7 @@ func TestServiceCreateWithExplicitRoles(t *testing.T) {
 	ctx := context.Background()
 
 	u, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), RoleNames: []string{"material"},
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"material"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -84,7 +84,7 @@ func TestServiceCreateWithUnknownRoleFailsButKeepsThePerson(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 
 	_, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, RoleNames: []string{"does-not-exist"},
+		FirstName: "A", LastName: "B", Email: strPtr(email), RoleNames: []string{"does-not-exist"},
 	})
 	if !errors.Is(err, roles.ErrNotFound) {
 		t.Fatalf("expected roles.ErrNotFound, got %v", err)
@@ -103,7 +103,7 @@ func TestServiceReportsLatestMembershipDates(t *testing.T) {
 	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
-	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestServiceReportsFirstAltaAcrossMultipleMembershipPeriods(t *testing.T) {
 	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
-	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestServiceReportsOnLeave(t *testing.T) {
 	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
-	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.
 	svc, _, membershipsService, _, _ := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
-	first, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: testutil.UniqueEmail(t)})
+	first, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create first: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestServiceAssignsMembershipNumberOnFirstAltaAndKeepsItOnRejoin(t *testing.
 	firstNumber := *withNumber.MembershipNumber
 
 	// A second person's first alta gets the next number.
-	second, err := svc.Create(ctx, users.CreateInput{FirstName: "B", LastName: "Two", Email: testutil.UniqueEmail(t)})
+	second, err := svc.Create(ctx, users.CreateInput{FirstName: "B", LastName: "Two", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	svc, _, membershipsService, licensesService, tx := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
-	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestServiceDeleteBlocksTheLastAdmin(t *testing.T) {
 	ctx := context.Background()
 
 	admin, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Solo", LastName: "Admin", Email: testutil.UniqueEmail(t), RoleNames: []string{"admin"},
+		FirstName: "Solo", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
@@ -374,13 +374,13 @@ func TestServiceDeleteAllowsRemovingAnAdminWhenAnotherRemains(t *testing.T) {
 	ctx := context.Background()
 
 	first, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "First", LastName: "Admin", Email: testutil.UniqueEmail(t), RoleNames: []string{"admin"},
+		FirstName: "First", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create first admin: %v", err)
 	}
 	if _, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Second", LastName: "Admin", Email: testutil.UniqueEmail(t), RoleNames: []string{"admin"},
+		FirstName: "Second", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
 	}); err != nil {
 		t.Fatalf("create second admin: %v", err)
 	}
@@ -399,7 +399,7 @@ func mustID(t *testing.T, svc *users.Service, email string) int64 {
 		t.Fatalf("list: %v", err)
 	}
 	for _, u := range list {
-		if u.Email == email {
+		if u.Email != nil && *u.Email == email {
 			return u.ID
 		}
 	}

@@ -35,8 +35,9 @@ type Member struct {
 	// Email/Phone are only ever populated by ListActive, joined in from
 	// users — any signed-in member can see them here (cargo + how to
 	// reach the current Junta Directiva), same as admin/board already
-	// could through the person's own profile.
-	Email     string     `json:"email,omitempty"`
+	// could through the person's own profile. Both are optional: not
+	// everyone on the board necessarily has an email on file.
+	Email     *string    `json:"email,omitempty"`
 	Phone     *string    `json:"phone,omitempty"`
 	Position  Position   `json:"position"`
 	StartDate time.Time  `json:"start_date"`

@@ -84,10 +84,12 @@ func (r *Repository) emailTakenByAnotherUser(ctx context.Context, excludeID int6
 }
 
 func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
-	if taken, err := r.emailTakenByAnotherUser(ctx, 0, in.Email); err != nil {
-		return User{}, err
-	} else if taken {
-		return User{}, ErrDuplicate
+	if in.Email != nil {
+		if taken, err := r.emailTakenByAnotherUser(ctx, 0, *in.Email); err != nil {
+			return User{}, err
+		} else if taken {
+			return User{}, ErrDuplicate
+		}
 	}
 	login, err := r.generateLogin(ctx, in.FirstName, in.LastName)
 	if err != nil {
@@ -272,8 +274,8 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 		u.LastName = *in.LastName
 	}
 	if in.Email != nil {
-		u.Email = *in.Email
-		if taken, err := r.emailTakenByAnotherUser(ctx, id, u.Email); err != nil {
+		u.Email = in.Email
+		if taken, err := r.emailTakenByAnotherUser(ctx, id, *in.Email); err != nil {
 			return u, err
 		} else if taken {
 			return u, ErrDuplicate
@@ -283,7 +285,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 		u.NationalID = in.NationalID
 	}
 	if in.BirthDate != nil {
-		u.BirthDate = in.BirthDate
+		u.BirthDate = *in.BirthDate
 	}
 	if in.Gender != nil {
 		u.Gender = in.Gender

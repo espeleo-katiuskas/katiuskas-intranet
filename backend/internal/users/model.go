@@ -27,22 +27,18 @@ const (
 // ageCategoryFor buckets a birth date into a caving-club-style age
 // category, based on the age the person turns *this calendar year* (not
 // their exact age today) — child up to 13, teen 14-17, adult 18 and up.
-// An unknown birth date means an unknown category, not a guess. Exists
-// so MemberListing can show a coarse age bracket without exposing the
-// exact birth date it's computed from — see ForMemberListing.
-func ageCategoryFor(birthDate *time.Time) *AgeCategory {
-	if birthDate == nil {
-		return nil
-	}
+// Exists so MemberListing can show a coarse age bracket without exposing
+// the exact birth date it's computed from — see ForMemberListing.
+func ageCategoryFor(birthDate time.Time) AgeCategory {
 	ageThisYear := time.Now().Year() - birthDate.Year()
-	category := AgeCategoryAdult
 	switch {
 	case ageThisYear <= 13:
-		category = AgeCategoryChild
+		return AgeCategoryChild
 	case ageThisYear <= 17:
-		category = AgeCategoryTeen
+		return AgeCategoryTeen
+	default:
+		return AgeCategoryAdult
 	}
-	return &category
 }
 
 type User struct {
@@ -57,7 +53,7 @@ type User struct {
 	FirstName  string     `json:"first_name"`
 	LastName   string     `json:"last_name"`
 	NationalID *string    `json:"national_id,omitempty"`
-	BirthDate  *time.Time `json:"birth_date,omitempty"`
+	BirthDate  time.Time  `json:"birth_date"`
 	Gender     *Gender    `json:"gender,omitempty"`
 	// Email and Phone can each hold more than one value, space-separated
 	// (like EmergencyContact already allows) — someone with a personal
@@ -66,8 +62,10 @@ type User struct {
 	// Repository.FindActiveByEmailAndPhone); one email still can't
 	// belong to two different people (Repository enforces that in Go,
 	// since the database can no longer express it as a plain column
-	// constraint once it's not a single atomic value).
-	Email            string  `json:"email"`
+	// constraint once it's not a single atomic value). Email is
+	// optional — someone with none on file simply can never receive a
+	// magic link, the same way someone with no phone already couldn't.
+	Email            *string `json:"email,omitempty"`
 	Phone            *string `json:"phone,omitempty"`
 	Address          *string `json:"address,omitempty"`
 	PostalCode       *string `json:"postal_code,omitempty"`
@@ -115,9 +113,9 @@ type CreateInput struct {
 	FirstName        string     `json:"first_name"`
 	LastName         string     `json:"last_name"`
 	NationalID       *string    `json:"national_id"`
-	BirthDate        *time.Time `json:"birth_date"`
+	BirthDate        time.Time  `json:"birth_date"`
 	Gender           *Gender    `json:"gender"`
-	Email            string     `json:"email"`
+	Email            *string    `json:"email"`
 	Phone            *string    `json:"phone"`
 	Address          *string    `json:"address"`
 	PostalCode       *string    `json:"postal_code"`
@@ -177,14 +175,14 @@ type DirectoryEntry struct {
 // the coarse bracket is enough to know at a glance without revealing
 // everyone's exact birth date.
 type MemberListing struct {
-	Login               string       `json:"login"`
-	FirstName           string       `json:"first_name"`
-	LastName            string       `json:"last_name"`
-	Gender              *Gender      `json:"gender,omitempty"`
-	AgeCategory         *AgeCategory `json:"age_category,omitempty"`
-	MembershipNumber    *int         `json:"membership_number,omitempty"`
-	MembershipStartDate *time.Time   `json:"membership_start_date,omitempty"`
-	MembershipEndDate   *time.Time   `json:"membership_end_date,omitempty"`
+	Login               string      `json:"login"`
+	FirstName           string      `json:"first_name"`
+	LastName            string      `json:"last_name"`
+	Gender              *Gender     `json:"gender,omitempty"`
+	AgeCategory         AgeCategory `json:"age_category"`
+	MembershipNumber    *int        `json:"membership_number,omitempty"`
+	MembershipStartDate *time.Time  `json:"membership_start_date,omitempty"`
+	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
 }
 
 // ForMemberListing narrows a full User down to what MemberListing

@@ -16,7 +16,7 @@ func TestCreate(t *testing.T) {
 	phone := "611222333"
 
 	u, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "Ana", LastName: "Espeleo", Email: testutil.UniqueEmail(t), Phone: &phone,
+		FirstName: "Ana", LastName: "Espeleo", Email: strPtr(testutil.UniqueEmail(t)), Phone: &phone,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -34,10 +34,10 @@ func TestCreateDuplicateEmailRejected(t *testing.T) {
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
 
-	if _, err := repo.Create(context.Background(), users.CreateInput{FirstName: "A", LastName: "B", Email: email}); err != nil {
+	if _, err := repo.Create(context.Background(), users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(email)}); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	_, err := repo.Create(context.Background(), users.CreateInput{FirstName: "C", LastName: "D", Email: email})
+	_, err := repo.Create(context.Background(), users.CreateInput{FirstName: "C", LastName: "D", Email: strPtr(email)})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
 	}
@@ -49,12 +49,12 @@ func TestCreateDuplicateNationalIDRejected(t *testing.T) {
 	nationalID := "12345678A"
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), NationalID: &nationalID,
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), NationalID: &nationalID,
 	}); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
 	_, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t), NationalID: &nationalID,
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t)), NationalID: &nationalID,
 	})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
@@ -67,7 +67,7 @@ func TestCreateAndUpdateGender(t *testing.T) {
 	female := users.GenderFemale
 
 	created, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t), Gender: &female,
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Gender: &female,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -91,7 +91,7 @@ func TestCreateWithoutGenderLeavesItNil(t *testing.T) {
 	repo := users.NewRepository(tx)
 
 	created, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t),
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -110,11 +110,11 @@ func TestMembershipNumberMustBeUnique(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	a, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	a, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create a: %v", err)
 	}
-	b, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t)})
+	b, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create b: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestMembershipNumberCannotBeNegative(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestEnsureMembershipNumberAssignsNextAfterHighest(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	first, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	first, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create first: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestEnsureMembershipNumberAssignsNextAfterHighest(t *testing.T) {
 		t.Fatal("expected a membership number to be assigned")
 	}
 
-	second, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t)})
+	second, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestEnsureMembershipNumberIsANoOpOnceAlreadySet(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	u, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestGetByEmail(t *testing.T) {
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
 
-	created, err := repo.Create(context.Background(), users.CreateInput{FirstName: "A", LastName: "B", Email: email})
+	created, err := repo.Create(context.Background(), users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(email)})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestGetByEmailMatchesAnyOfSeveralEmails(t *testing.T) {
 	secondary := testutil.UniqueEmail(t)
 
 	created, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: primary + " " + secondary,
+		FirstName: "A", LastName: "B", Email: strPtr(primary + " " + secondary),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -265,10 +265,10 @@ func TestList(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: testutil.UniqueEmail(t)}); err != nil {
+	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "One", Email: strPtr(testutil.UniqueEmail(t))}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "B", LastName: "Two", Email: testutil.UniqueEmail(t)}); err != nil {
+	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "B", LastName: "Two", Email: strPtr(testutil.UniqueEmail(t))}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -291,7 +291,7 @@ func TestFindActiveByEmailAndPhoneMatchesRegardlessOfPhoneFormatting(t *testing.
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600-111-222"),
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("600-111-222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestFindActiveByEmailAndPhoneMatchesRegardlessOfPhoneFormatting(t *testing.
 	if err != nil {
 		t.Fatalf("expected a match despite different phone formatting, got %v", err)
 	}
-	if found.Email != email {
+	if found.Email == nil || *found.Email != email {
 		t.Errorf("unexpected match: %+v", found)
 	}
 }
@@ -311,7 +311,7 @@ func TestFindActiveByEmailAndPhoneMatchesAnyOfSeveralPhones(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222 622333444"),
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("600111222 622333444"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestFindActiveByEmailAndPhoneMatchesAnyOfSeveralEmails(t *testing.T) {
 	secondary := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: strPtr("600111222"),
+		FirstName: "A", LastName: "B", Email: strPtr(primary + " " + secondary), Phone: strPtr("600111222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestFindActiveByEmailAndPhoneRejectsWrongPhone(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email, Phone: strPtr("600111222"),
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("600111222"),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestFindActiveByEmailAndPhoneRejectsWhenNoPhoneOnFile(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 
 	if _, err := repo.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: email,
+		FirstName: "A", LastName: "B", Email: strPtr(email),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestUpdate(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -402,10 +402,10 @@ func TestUpdateEmailToADuplicateIsRejected(t *testing.T) {
 	ctx := context.Background()
 
 	taken := testutil.UniqueEmail(t)
-	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: taken}); err != nil {
+	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(taken)}); err != nil {
 		t.Fatalf("create first: %v", err)
 	}
-	second, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t)})
+	second, err := repo.Create(ctx, users.CreateInput{FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
@@ -425,12 +425,12 @@ func TestCreateRejectsWhenOneOfSeveralEmailsIsAlreadyTaken(t *testing.T) {
 	ctx := context.Background()
 
 	taken := testutil.UniqueEmail(t)
-	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: taken}); err != nil {
+	if _, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(taken)}); err != nil {
 		t.Fatalf("create first: %v", err)
 	}
 
 	_, err := repo.Create(ctx, users.CreateInput{
-		FirstName: "C", LastName: "D", Email: testutil.UniqueEmail(t) + " " + taken,
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t) + " " + taken),
 	})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
@@ -442,7 +442,7 @@ func TestDelete(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -466,7 +466,7 @@ func TestDeleteBlockedByReferences(t *testing.T) {
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
 
-	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: testutil.UniqueEmail(t)})
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -700,14 +700,14 @@ func TestListDirectoryIncludesEveryone(t *testing.T) {
 	ctx := context.Background()
 
 	withPhone, err := repo.Create(ctx, users.CreateInput{
-		FirstName: "Ana", LastName: "Con teléfono", Email: testutil.UniqueEmail(t),
+		FirstName: "Ana", LastName: "Con teléfono", Email: strPtr(testutil.UniqueEmail(t)),
 		Phone: strPtr("600111222"),
 	})
 	if err != nil {
 		t.Fatalf("create with phone: %v", err)
 	}
 	withoutPhone, err := repo.Create(ctx, users.CreateInput{
-		FirstName: "Bea", LastName: "Sin teléfono", Email: testutil.UniqueEmail(t),
+		FirstName: "Bea", LastName: "Sin teléfono", Email: strPtr(testutil.UniqueEmail(t)),
 	})
 	if err != nil {
 		t.Fatalf("create without phone: %v", err)

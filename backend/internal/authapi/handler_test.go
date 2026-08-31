@@ -226,7 +226,7 @@ func TestRequestMagicLinkSendsToAllOfSeveralEmails(t *testing.T) {
 	phone := "611222333"
 
 	if _, err := s.users.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: primary + " " + secondary, Phone: &phone, RoleNames: []string{"admin"},
+		FirstName: "A", LastName: "B", Email: strPtr(primary + " " + secondary), Phone: &phone, RoleNames: []string{"admin"},
 	}); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -607,3 +607,5 @@ func TestLogoutRevokesTheToken(t *testing.T) {
 		t.Errorf("expected the revoked token to be rejected, got %d", status)
 	}
 }
+
+func strPtr(s string) *string { return &s }

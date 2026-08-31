@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -52,6 +53,12 @@ func main() {
 	phone := getEnv("SEED_ADMIN_PHONE", "600000000")
 	firstName := getEnv("SEED_ADMIN_FIRST_NAME", "Admin")
 	lastName := getEnv("SEED_ADMIN_LAST_NAME", "Club")
+	birthDateRaw := getEnv("SEED_ADMIN_BIRTH_DATE", "1970-01-01")
+	birthDate, err := time.Parse("2006-01-02", birthDateRaw)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "SEED_ADMIN_BIRTH_DATE must be YYYY-MM-DD: %v\n", err)
+		os.Exit(1)
+	}
 
 	if _, err := repo.GetByEmail(ctx, email); err == nil {
 		slog.Info("admin account already exists, nothing to do", "email", email)
@@ -64,7 +71,8 @@ func main() {
 	_, err = service.Create(ctx, users.CreateInput{
 		FirstName: firstName,
 		LastName:  lastName,
-		Email:     email,
+		BirthDate: birthDate,
+		Email:     &email,
 		Phone:     &phone,
 		RoleNames: []string{"admin"},
 	})

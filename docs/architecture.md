@@ -98,6 +98,12 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   (`Repository.FindActiveByEmailAndPhone`); como el espacio pasa a separar varios
   teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
   "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
+  `birth_date` es obligatorio (`NOT NULL`, migración `00010_users_birth_date_email.sql`)
+  — toda persona en la tabla necesita uno, no solo para calcular la "categoría". `email`,
+  en cambio, es opcional — a quien no tenga ninguno registrado simplemente no le llega
+  nunca un enlace de acceso, igual que a quien no tiene teléfono; los únicos campos
+  realmente obligatorios al crear una persona son nombre, apellidos y fecha de
+  nacimiento.
   `login` (`text UNIQUE NOT NULL`, migración `00009_users_login.sql`) es el único
   identificador de una persona que cruza el API — ninguna respuesta ni ruta expone jamás
   el id numérico interno. Se genera solo al crear a la persona: nombre y apellidos

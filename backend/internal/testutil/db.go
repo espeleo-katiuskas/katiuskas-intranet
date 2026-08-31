@@ -258,7 +258,8 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 
 	var id int64
 	err := tx.QueryRow(ctx, `
-		INSERT INTO users (first_name, last_name, email, phone, login) VALUES ('Test', 'User', $1, $2, $3)
+		INSERT INTO users (first_name, last_name, email, phone, login, birth_date)
+		VALUES ('Test', 'User', $1, $2, $3, '1990-01-01')
 		RETURNING id
 	`, email, phoneArg, login).Scan(&id)
 	if err != nil {

@@ -67,11 +67,11 @@ func TestHandlerGetSelfVersusOthers(t *testing.T) {
 	mux, authn, svc := newTestServer(t)
 	ctx := context.Background()
 
-	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: testutil.UniqueEmail(t)})
+	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	other, err := svc.Create(ctx, users.CreateInput{FirstName: "O", LastName: "Ther", Email: testutil.UniqueEmail(t)})
+	other, err := svc.Create(ctx, users.CreateInput{FirstName: "O", LastName: "Ther", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create other: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 		t.Fatalf("parse birth date: %v", err)
 	}
 	if _, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Target", LastName: "Person", Email: testutil.UniqueEmail(t), NationalID: &nationalID, BirthDate: &birthDate,
+		FirstName: "Target", LastName: "Person", Email: strPtr(testutil.UniqueEmail(t)), NationalID: &nationalID, BirthDate: birthDate,
 	}); err != nil {
 		t.Fatalf("create target: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestHandlerCreateAndDeleteRequireAdminNotBoard(t *testing.T) {
 		t.Errorf("expected board creating a person to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	target, err := svc.Create(ctx, users.CreateInput{FirstName: "T", LastName: "Arget", Email: testutil.UniqueEmail(t)})
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "T", LastName: "Arget", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create target: %v", err)
 	}
@@ -192,11 +192,46 @@ func TestHandlerCreateWithoutPhoneSucceeds(t *testing.T) {
 	adminToken := tokenFor(t, authn, 1, "admin")
 
 	body := map[string]any{
-		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t),
+		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t), "birth_date": "2000-01-01",
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Symmetric to TestHandlerCreateWithoutPhoneSucceeds: email is optional
+// too now — someone with neither on file just can never be matched by
+// FindActiveByEmailAndPhone, so they can never sign in, but they can
+// still exist in the club's records.
+func TestHandlerCreateWithoutEmailSucceeds(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	adminToken := tokenFor(t, authn, 1, "admin")
+
+	body := map[string]any{
+		"first_name": "A", "last_name": "B", "birth_date": "2000-01-01",
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Unlike email and phone, birth_date is required — every person on file
+// needs one now, not just to compute age_category.
+func TestHandlerCreateRequiresBirthDate(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	adminToken := tokenFor(t, authn, 1, "admin")
+
+	body := map[string]any{
+		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t),
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a missing birth_date, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_date" {
+		t.Errorf("expected error code invalid_date, got %q", code)
 	}
 }
 
@@ -205,7 +240,7 @@ func TestHandlerCreateRejectsUnknownRole(t *testing.T) {
 	adminToken := tokenFor(t, authn, 1, "admin")
 
 	body := map[string]any{
-		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t),
+		"first_name": "A", "last_name": "B", "email": testutil.UniqueEmail(t), "birth_date": "2000-01-01",
 		"role_names": []string{"not-a-real-role"},
 	}
 	rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body)
@@ -222,7 +257,7 @@ func TestHandlerDeleteCannotTargetSelf(t *testing.T) {
 	ctx := context.Background()
 
 	admin, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Self", LastName: "Admin", Email: testutil.UniqueEmail(t), RoleNames: []string{"admin"},
+		FirstName: "Self", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
@@ -243,7 +278,7 @@ func TestHandlerDeleteBlocksTheLastAdminEndToEnd(t *testing.T) {
 	ctx := context.Background()
 
 	solo, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Solo", LastName: "Admin", Email: testutil.UniqueEmail(t), RoleNames: []string{"admin"},
+		FirstName: "Solo", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
@@ -266,7 +301,7 @@ func TestHandlerDirectoryIsOpenToAnyAuthenticatedUserButHidesPersonalData(t *tes
 
 	phone := "600111222"
 	person, err := svc.Create(ctx, users.CreateInput{
-		FirstName: "Directory", LastName: "Entry", Email: testutil.UniqueEmail(t),
+		FirstName: "Directory", LastName: "Entry", Email: strPtr(testutil.UniqueEmail(t)),
 		Phone: &phone,
 	})
 	if err != nil {
@@ -298,11 +333,11 @@ func TestHandlerUpdateSelfVersusOthers(t *testing.T) {
 	mux, authn, svc := newTestServer(t)
 	ctx := context.Background()
 
-	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: testutil.UniqueEmail(t)})
+	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	other, err := svc.Create(ctx, users.CreateInput{FirstName: "O", LastName: "Ther", Email: testutil.UniqueEmail(t)})
+	other, err := svc.Create(ctx, users.CreateInput{FirstName: "O", LastName: "Ther", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create other: %v", err)
 	}
@@ -335,7 +370,7 @@ func TestHandlerUpdateRestrictsFieldsForNonAdminSelfEdit(t *testing.T) {
 	mux, authn, svc := newTestServer(t)
 	ctx := context.Background()
 
-	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: testutil.UniqueEmail(t)})
+	member, err := svc.Create(ctx, users.CreateInput{FirstName: "M", LastName: "Ember", Email: strPtr(testutil.UniqueEmail(t))})
 	if err != nil {
 		t.Fatalf("create member: %v", err)
 	}

@@ -93,10 +93,10 @@ editForm.addEventListener('submit', async (event) => {
   const body = {
     first_name: formData.get('first_name'),
     last_name: formData.get('last_name'),
-    email: formData.get('email'),
+    birth_date: formData.get('birth_date'),
+    email: optional('email'),
     phone: optional('phone'),
     national_id: optional('national_id'),
-    birth_date: optional('birth_date'),
     gender: optional('gender'),
     address: optional('address'),
     postal_code: optional('postal_code'),

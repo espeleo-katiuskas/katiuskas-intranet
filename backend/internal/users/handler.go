@@ -72,9 +72,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		FirstName        string   `json:"first_name"`
 		LastName         string   `json:"last_name"`
 		NationalID       *string  `json:"national_id"`
-		BirthDate        *string  `json:"birth_date"`
+		BirthDate        string   `json:"birth_date"`
 		Gender           *Gender  `json:"gender"`
-		Email            string   `json:"email"`
+		Email            *string  `json:"email"`
 		Phone            *string  `json:"phone"`
 		Address          *string  `json:"address"`
 		PostalCode       *string  `json:"postal_code"`
@@ -88,9 +88,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	birthDate, err := parseOptionalDate(body.BirthDate)
+	birthDate, err := time.Parse("2006-01-02", body.BirthDate)
 	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date must be YYYY-MM-DD")
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "birth_date is required and must be YYYY-MM-DD")
 		return
 	}
 

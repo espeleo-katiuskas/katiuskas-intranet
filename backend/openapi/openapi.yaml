@@ -1375,15 +1375,19 @@ components:
         first_name: { type: string }
         last_name: { type: string }
         national_id: { type: string, nullable: true }
-        birth_date: { type: string, format: date, nullable: true }
+        birth_date: { type: string, format: date, description: "Required — every person on file needs one." }
         gender: { $ref: "#/components/schemas/Gender" }
         email:
           type: string
+          nullable: true
           description: >
-            One or more email addresses, space-separated. Signing in and
-            a magic link going out both work against any one of them. An
-            individual address still can't belong to two different
-            people, even as one of several on the same record.
+            One or more email addresses, space-separated, or absent
+            entirely. Signing in and a magic link going out both work
+            against any one of them; someone with none on file can never
+            receive a magic link, the same way someone with no phone
+            already couldn't. An individual address still can't belong
+            to two different people, even as one of several on the same
+            record.
         phone:
           type: string
           nullable: true
@@ -1489,7 +1493,6 @@ components:
         age_category:
           type: string
           enum: [child, teen, adult]
-          nullable: true
           description: >
             A coarse age bracket computed from birth_date (child up to 13,
             teen 14-17, adult 18+, based on the age turned this calendar
@@ -1510,9 +1513,9 @@ components:
       allOf:
         - $ref: "#/components/schemas/UpdateUserInput"
         - type: object
-          required: [first_name, last_name, email]
+          required: [first_name, last_name, birth_date]
           properties:
-            email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
+            birth_date: { type: string, format: date, description: "Required — see the User schema." }
             role_names:
               type: array
               items: { type: string }
@@ -1541,9 +1544,9 @@ components:
             left alone.
         first_name: { type: string, description: "Admin-only to change." }
         last_name: { type: string, description: "Admin-only to change." }
-        email: { type: string, description: "One or more addresses, space-separated — see the User schema." }
+        email: { type: string, nullable: true, description: "One or more addresses, space-separated — see the User schema." }
         national_id: { type: string, nullable: true, description: "Admin-only to change." }
-        birth_date: { type: string, format: date, nullable: true, description: "Admin-only to change." }
+        birth_date: { type: string, format: date, description: "Admin-only to change." }
         gender: { allOf: [{ $ref: "#/components/schemas/Gender" }], description: "Admin-only to change." }
         phone: { type: string, nullable: true, description: "One or more numbers, space-separated — see the User schema." }
         address: { type: string, nullable: true }
