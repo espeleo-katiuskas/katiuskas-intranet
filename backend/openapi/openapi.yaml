@@ -1750,7 +1750,9 @@ components:
         rope and bag are individually tracked physical objects — brand,
         model and code are always known, total_quantity is always 1, and
         they carry type-specific fields (rope_type/diameter_mm/
-        manufacture_year for rope, capacity_liters for bag). gear is a
+        manufacture_year for rope, bag_type/capacity_liters for bag —
+        bag_type extends rope_type's caving/canyoning split with two
+        purpose-based kinds, quick and special). gear is a
         fungible stock item filed under a category from
         GET /material-categories; brand/model may be unknown, but
         description and category_id are always set. rentable/sellable
@@ -1781,6 +1783,7 @@ components:
         rope_type: { type: string, enum: [caving, canyoning], nullable: true, description: "rope only." }
         diameter_mm: { type: number, nullable: true, description: "rope only, in millimetres." }
         manufacture_year: { type: integer, nullable: true, description: "rope only." }
+        bag_type: { type: string, enum: [caving, canyoning, quick, special], nullable: true, description: "bag only." }
         capacity_liters: { type: number, nullable: true, description: "bag only." }
         category_id: { type: integer, nullable: true, description: "gear only — an id from GET /material-categories." }
         category_name: { type: string, nullable: true, description: "gear only — resolved alongside category_id." }
@@ -1805,6 +1808,7 @@ components:
         rope_type: { type: string, enum: [caving, canyoning], description: Required for rope. }
         diameter_mm: { type: number, description: "Required for rope, in millimetres." }
         manufacture_year: { type: integer, description: Required for rope. }
+        bag_type: { type: string, enum: [caving, canyoning, quick, special], description: Required for bag. }
         capacity_liters: { type: number, description: Required for bag. }
         category_id: { type: integer, description: Required for gear — an id from GET /material-categories. }
 

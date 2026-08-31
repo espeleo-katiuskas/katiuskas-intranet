@@ -49,6 +49,7 @@ const itemStatusLabels = {
 
 const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
+const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
 const typeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
 const txStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
@@ -65,7 +66,7 @@ function itemLabel(item) {
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
-    const parts = [brandModel || null, `${item.capacity_liters} L`];
+    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   const parts = [item.category_name, brandModel || null];
@@ -208,7 +209,7 @@ if (isAdmin) {
   // Only rope/bag/gear-specific controls toggle required — the fields
   // shared by every type (acquired_at, prices, loanable) stay as they
   // are regardless of item_type.
-  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-capacity-liters', 'ni-category'];
+  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-bag-type', 'ni-capacity-liters', 'ni-category'];
 
   function updateItemTypeFieldsVisibility() {
     const type = itemTypeSelect.value;
@@ -268,6 +269,7 @@ if (isAdmin) {
       body.diameter_mm = Number(formData.get('diameter_mm'));
       body.manufacture_year = Number(formData.get('manufacture_year'));
     } else if (type === 'bag') {
+      body.bag_type = formData.get('bag_type');
       body.capacity_liters = Number(formData.get('capacity_liters'));
     } else {
       body.category_id = Number(formData.get('category_id'));

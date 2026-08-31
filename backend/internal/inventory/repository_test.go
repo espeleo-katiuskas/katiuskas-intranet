@@ -398,17 +398,21 @@ func TestCreateBagItem(t *testing.T) {
 	ctx := context.Background()
 
 	brand, model, code := "Petzl", "Bulldozer", "S-017"
+	bagType := inventory.BagTypeCaving
 	capacity := 45.0
 
 	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
 		Type: inventory.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
-		CapacityLiters: &capacity, TotalQuantity: 1, Loanable: true,
+		BagType: &bagType, CapacityLiters: &capacity, TotalQuantity: 1, Loanable: true,
 	})
 	if err != nil {
 		t.Fatalf("create bag: %v", err)
 	}
 	if item.CapacityLiters == nil || *item.CapacityLiters != 45.0 {
 		t.Errorf("expected capacity 45L, got %+v", item.CapacityLiters)
+	}
+	if item.BagType == nil || *item.BagType != inventory.BagTypeCaving {
+		t.Errorf("expected bag_type caving, got %+v", item.BagType)
 	}
 }
 
@@ -466,6 +470,23 @@ func TestCreateRopeRejectsMissingBrandModelCode(t *testing.T) {
 		ManufactureYear: &year, TotalQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing brand/model/code")
+	}
+}
+
+func TestCreateBagRejectsMissingBagType(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Petzl", "Bulldozer", "S-018"
+	capacity := 45.0
+
+	// Violates bag_requires_bag_type.
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+		CapacityLiters: &capacity, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for a bag missing bag_type")
 	}
 }
 

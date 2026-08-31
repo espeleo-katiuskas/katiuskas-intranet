@@ -782,6 +782,7 @@ async function loadActivities() {
 const transactionTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
 const transactionStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
+const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); gear may have no known brand/model at all, so its
@@ -793,7 +794,7 @@ function itemLabel(item) {
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
-    const parts = [brandModel || null, `${item.capacity_liters} L`];
+    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   const parts = [item.category_name, brandModel || null];

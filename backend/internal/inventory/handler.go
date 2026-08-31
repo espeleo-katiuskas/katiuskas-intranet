@@ -87,6 +87,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		RopeType           *RopeType `json:"rope_type"`
 		DiameterMM         *float64  `json:"diameter_mm"`
 		ManufactureYear    *int32    `json:"manufacture_year"`
+		BagType            *BagType  `json:"bag_type"`
 		CapacityLiters     *float64  `json:"capacity_liters"`
 		CategoryID         *int64    `json:"category_id"`
 	}
@@ -120,7 +121,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		Description: body.Description, AcquiredAt: acquiredAt, TotalQuantity: totalQuantity,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
-		CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
+		BagType: body.BagType, CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
 	})
 	if errors.Is(err, ErrCategoryNotFound) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_category", err.Error())

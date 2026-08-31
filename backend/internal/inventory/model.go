@@ -38,6 +38,19 @@ const (
 	RopeTypeCanyoning RopeType = "canyoning"
 )
 
+// BagType is a saca's kind: the same caving/canyoning split as
+// RopeType, plus two purpose-based kinds that don't map to a
+// discipline — quick (a bag kept ready for fast access) and special
+// (anything else purpose-built).
+type BagType string
+
+const (
+	BagTypeCaving    BagType = "caving"
+	BagTypeCanyoning BagType = "canyoning"
+	BagTypeQuick     BagType = "quick"
+	BagTypeSpecial   BagType = "special"
+)
+
 // MaterialCategory is one entry in the gear category catalog — kept in
 // the database rather than a Go enum, the same license_types pattern
 // (licenses.LicenseType), so the list can grow with an INSERT instead
@@ -97,6 +110,7 @@ type Item struct {
 	DiameterMM      *float64  `json:"diameter_mm,omitempty"`
 	ManufactureYear *int32    `json:"manufacture_year,omitempty"`
 	// Bag-only.
+	BagType        *BagType `json:"bag_type,omitempty"`
 	CapacityLiters *float64 `json:"capacity_liters,omitempty"`
 	// Gear-only. CategoryID is the catalog id; CategoryName is resolved
 	// alongside it (see Repository.queryItems/CreateItem), the same
@@ -119,6 +133,7 @@ type CreateItemInput struct {
 	RopeType           *RopeType
 	DiameterMM         *float64
 	ManufactureYear    *int32
+	BagType            *BagType
 	CapacityLiters     *float64
 	CategoryID         *int64
 }
