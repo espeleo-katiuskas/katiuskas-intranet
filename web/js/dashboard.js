@@ -1,8 +1,25 @@
-import { initSession, logout, applyRoleVisibility, apiFetch, escapeHtml } from './api.js';
+import { initSession, logout, applyRoleVisibility, apiFetch, escapeHtml, currentUser } from './api.js';
 
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+
+const genderedGreeting = { male: 'Bienvenido', female: 'Bienvenida' };
+
+// Falls back to the gender-neutral "Bienvenido/a" already in the static
+// markup if gender was never recorded (see users.Gender — nullable, no
+// default) or the profile fetch fails.
+async function loadWelcomeHeading() {
+  try {
+    const profile = await apiFetch(`/users/${currentUser().login}`);
+    const greeting = genderedGreeting[profile.gender] ?? 'Bienvenido/a';
+    document.getElementById('welcome-heading').textContent = `${greeting}, ${profile.first_name}`;
+  } catch {
+    // Keep the static fallback.
+  }
+}
+
+loadWelcomeHeading();
 
 const positionLabels = {
   president: 'Presidente',
