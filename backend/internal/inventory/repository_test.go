@@ -6,14 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
-func createItem(t *testing.T, repo *inventory.Repository, quantity int32) inventory.Item {
+func createItem(t *testing.T, tx pgx.Tx, repo *inventory.Repository, quantity int32) inventory.Item {
 	t.Helper()
+	description := "Casco Petzl Boreo"
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	item, err := repo.CreateItem(context.Background(), inventory.CreateItemInput{
-		Name: "Casco Petzl Boreo", TotalQuantity: quantity,
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		TotalQuantity: quantity, Loanable: true,
 	})
 	if err != nil {
 		t.Fatalf("create item: %v", err)
@@ -25,7 +30,7 @@ func TestCreateAndListItems(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
 
-	item := createItem(t, repo, 3)
+	item := createItem(t, tx, repo, 3)
 	if item.AvailableQuantity != 3 || item.TotalQuantity != 3 {
 		t.Errorf("expected a freshly created item to start fully available, got %+v", item)
 	}
@@ -47,7 +52,7 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 3)
+	item := createItem(t, tx, repo, 3)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 	due := time.Now().AddDate(0, 0, 7)
@@ -77,7 +82,7 @@ func TestLoanRejectedWhenInsufficientStock(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 1)
+	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
 
 	_, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -93,7 +98,7 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 1)
+	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
@@ -120,7 +125,7 @@ func TestReturnTransactionRestoresStock(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 2)
+	item := createItem(t, tx, repo, 2)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
@@ -164,7 +169,7 @@ func TestReturnTransactionNotFoundOrAlreadyClosed(t *testing.T) {
 		t.Errorf("expected ErrNotFound for an unknown transaction, got %v", err)
 	}
 
-	item := createItem(t, repo, 1)
+	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 	loan, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -187,7 +192,7 @@ func TestReturnTransactionRefusesSales(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 1)
+	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
@@ -208,7 +213,7 @@ func TestListTransactionsByItemAndStatus(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 5)
+	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
@@ -260,7 +265,7 @@ func TestListTransactionsByUser(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 5)
+	item := createItem(t, tx, repo, 5)
 	person := testutil.InsertUser(t, tx, "")
 	other := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
@@ -292,7 +297,7 @@ func TestCreateTransactionRequiresActivityForLoanAndRental(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 5)
+	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertUser(t, tx, "")
 
 	if _, err := repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
@@ -307,7 +312,7 @@ func TestCreateTransactionRentalRequiresActivity(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 5)
+	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertUser(t, tx, "")
 	price := 10.0
 
@@ -323,7 +328,7 @@ func TestCreateTransactionSaleDoesNotRequireActivity(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 1)
+	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertUser(t, tx, "")
 	price := 25.0
 
@@ -339,7 +344,7 @@ func TestCreateTransactionStoresActivityID(t *testing.T) {
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	item := createItem(t, repo, 5)
+	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertUser(t, tx, "")
 	activityID := testutil.InsertActivity(t, tx)
 
@@ -352,5 +357,219 @@ func TestCreateTransactionStoresActivityID(t *testing.T) {
 	}
 	if txn.ActivityID == nil || *txn.ActivityID != activityID {
 		t.Errorf("expected activity id %d to round-trip, got %v", activityID, txn.ActivityID)
+	}
+}
+
+func TestCreateRopeItem(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-042"
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+	year := int32(2024)
+
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year,
+		TotalQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create rope: %v", err)
+	}
+	if item.Type != inventory.ItemTypeRope || item.TotalQuantity != 1 || item.AvailableQuantity != 1 {
+		t.Errorf("expected a single-unit rope item, got %+v", item)
+	}
+	if item.RopeType == nil || *item.RopeType != inventory.RopeTypeCaving {
+		t.Errorf("expected rope_type caving, got %+v", item.RopeType)
+	}
+	if item.DiameterMM == nil || *item.DiameterMM != 9.5 {
+		t.Errorf("expected diameter 9.5mm, got %+v", item.DiameterMM)
+	}
+	if item.CategoryID != nil {
+		t.Errorf("expected no category for a rope, got %+v", item.CategoryID)
+	}
+}
+
+func TestCreateBagItem(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Petzl", "Bulldozer", "S-017"
+	capacity := 45.0
+
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+		CapacityLiters: &capacity, TotalQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create bag: %v", err)
+	}
+	if item.CapacityLiters == nil || *item.CapacityLiters != 45.0 {
+		t.Errorf("expected capacity 45L, got %+v", item.CapacityLiters)
+	}
+}
+
+// Each mismatched-fields scenario below gets its own transaction: a
+// CHECK violation aborts the whole Postgres transaction, so a second
+// query on the same tx (even an unrelated category lookup) would fail
+// with "current transaction is aborted" instead of the outcome under
+// test.
+
+func TestCreateRopeRejectsMissingManufactureYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-043"
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+
+	// Violates rope_requires_rope_fields.
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		RopeType: &ropeType, DiameterMM: &diameter, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for a rope missing manufacture_year")
+	}
+}
+
+func TestCreateGearRejectsMissingCategory(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	// Violates gear_requires_category.
+	description := "Casco"
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for gear missing category_id")
+	}
+}
+
+func TestCreateRopeRejectsMissingBrandModelCode(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+	year := int32(2024)
+
+	// Violates rope_and_bag_require_brand_model and
+	// rope_and_bag_require_code.
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, RopeType: &ropeType, DiameterMM: &diameter,
+		ManufactureYear: &year, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for a rope missing brand/model/code")
+	}
+}
+
+func TestCreateGearRejectsMissingDescription(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	// Violates gear_requires_description.
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, CategoryID: &categoryID, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for gear missing description")
+	}
+}
+
+func TestCreateRopeAndBagAreForcedToSingleQuantity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-044"
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+	year := int32(2024)
+
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year,
+		TotalQuantity: 3, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error creating a rope with total_quantity > 1")
+	}
+}
+
+func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	description := "Casco"
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	rentalPrice, salePrice := 5.0, 30.0
+
+	withoutPrices, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		TotalQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create item without prices: %v", err)
+	}
+	if withoutPrices.Rentable || withoutPrices.Sellable {
+		t.Errorf("expected neither rentable nor sellable with no prices set, got %+v", withoutPrices)
+	}
+
+	withPrices, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		TotalQuantity: 1, Loanable: true, RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
+	})
+	if err != nil {
+		t.Fatalf("create item with prices: %v", err)
+	}
+	if !withPrices.Rentable || !withPrices.Sellable {
+		t.Errorf("expected both rentable and sellable once prices are set, got %+v", withPrices)
+	}
+}
+
+func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	description := "Casco"
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		TotalQuantity: 1, Loanable: false,
+	})
+	if err != nil {
+		t.Fatalf("create non-loanable item: %v", err)
+	}
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	_, err = repo.CreateTransaction(ctx, inventory.CreateTransactionInput{
+		ItemID: item.ID, UserID: user.ID, Type: inventory.TransactionLoan, Quantity: 1,
+		ActivityID: &activityID,
+	})
+	if !errors.Is(err, inventory.ErrNotLoanable) {
+		t.Errorf("expected ErrNotLoanable, got %v", err)
+	}
+}
+
+func TestListMaterialCategories(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	categories, err := repo.ListMaterialCategories(ctx)
+	if err != nil {
+		t.Fatalf("list material categories: %v", err)
+	}
+	if len(categories) == 0 {
+		t.Error("expected the seeded material categories to be listed")
 	}
 }

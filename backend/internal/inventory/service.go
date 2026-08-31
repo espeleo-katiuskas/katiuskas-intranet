@@ -18,6 +18,10 @@ func (s *Service) ListItems(ctx context.Context) ([]Item, error) {
 	return s.repo.ListItems(ctx)
 }
 
+func (s *Service) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
+	return s.repo.ListMaterialCategories(ctx)
+}
+
 func (s *Service) CreateTransaction(ctx context.Context, in CreateTransactionInput) (Transaction, error) {
 	if in.Quantity <= 0 {
 		in.Quantity = 1

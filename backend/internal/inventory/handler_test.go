@@ -65,13 +65,26 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return body.Error.Code
 }
 
+// gearItemBody is a valid POST /items body for a gear item — the shape
+// most of these handler tests just need to exist, not exercise the
+// per-type rope/bag/gear rules themselves.
+func gearItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
+	t.Helper()
+	return map[string]any{
+		"item_type":      "gear",
+		"description":    "Casco",
+		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"total_quantity": totalQuantity,
+	}
+}
+
 func TestHandlerCreateItemRequiresAdminOrBoard(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
+	mux, authn, tx := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
 	materialToken := tokenFor(t, authn, 2, "material")
 	boardToken := tokenFor(t, authn, 3, "board")
 
-	body := map[string]any{"name": "Casco", "total_quantity": 1}
+	body := gearItemBody(t, tx, 1)
 	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", memberToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a member to be forbidden from creating an item, got %d", rec.Code)
 	}
@@ -98,7 +111,7 @@ func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testin
 	materialMemberToken := tokenFor(t, authn, materialMemberUser.ID, "material", "member")
 	memberToken := tokenFor(t, authn, memberUser.ID, "member")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{"name": "Casco", "total_quantity": 5})
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -145,7 +158,7 @@ func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	targetToken := tokenFor(t, authn, target.ID, "member")
 	otherToken := tokenFor(t, authn, other.ID, "member")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{"name": "Casco", "total_quantity": 5})
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -185,7 +198,7 @@ func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{"name": "Casco", "total_quantity": 5})
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -202,5 +215,90 @@ func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	}
 	if code := errorCode(t, rec); code != "activity_required" {
 		t.Errorf("expected error code activity_required, got %q", code)
+	}
+}
+
+func TestHandlerCreateItemRejectsInvalidItemType(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "not-a-type", "total_quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an invalid item_type, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_item_type" {
+		t.Errorf("expected error code invalid_item_type, got %q", code)
+	}
+}
+
+func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "gear", "description": "Casco", "category_id": 999999, "total_quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unknown category_id, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "unknown_category" {
+		t.Errorf("expected error code unknown_category, got %q", code)
+	}
+}
+
+func TestHandlerCreateTransactionRejectsLoanOfNonLoanableItem(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "gear", "description": "Casco",
+		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"total_quantity": 1, "loanable": false,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	if item.Loanable {
+		t.Fatalf("expected the created item to be non-loanable, got %+v", item)
+	}
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	body := map[string]any{
+		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
+	}
+	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for a loan of a non-loanable item, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "not_loanable" {
+		t.Errorf("expected error code not_loanable, got %q", code)
+	}
+}
+
+func TestHandlerListMaterialCategoriesRequiresAdminOrBoard(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+	boardToken := tokenFor(t, authn, 2, "board")
+
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", memberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member to be forbidden from listing material categories, got %d", rec.Code)
+	}
+	rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", boardToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected board to list material categories, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var categories []inventory.MaterialCategory
+	if err := json.Unmarshal(rec.Body.Bytes(), &categories); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(categories) == 0 {
+		t.Error("expected the seeded material categories to be listed")
 	}
 }

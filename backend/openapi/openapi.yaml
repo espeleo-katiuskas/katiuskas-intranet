@@ -1136,13 +1136,37 @@ paths:
                 items: { $ref: "#/components/schemas/Item" }
     post:
       summary: Add an item to the catalog
+      description: Requires the admin or board role.
       security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateItemInput" }
       responses:
         "201":
           description: Item created
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "400":
+          description: invalid_item_type, invalid_date, or unknown_category (category_id isn't in the catalog).
+
+  /material-categories:
+    get:
+      summary: List the gear category catalog
+      description: >
+        Requires the admin or board role, matching POST /items: the
+        catalog only exists to populate the "new item" form's category
+        picker for gear items.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MaterialCategory" }
 
   /items/{id}/transactions:
     get:
@@ -1207,7 +1231,7 @@ paths:
         "404":
           description: The given login doesn't belong to anyone.
         "409":
-          description: Not enough available quantity
+          description: insufficient_stock (not enough available quantity), or not_loanable (the item's loanable flag is false) for a loan.
 
   /transactions/{id}/return:
     patch:
@@ -1709,19 +1733,80 @@ components:
         role: { type: string, enum: [leader, participant] }
         confirmed: { type: boolean }
 
-    Item:
+    MaterialCategory:
       type: object
+      description: >
+        One entry in the gear category catalog (see GET
+        /material-categories) — mosquetones, spits, placas, maillones,
+        iluminación... kept in the database rather than a fixed enum, so
+        the list can grow with an INSERT instead of a code deploy.
       properties:
         id: { type: integer }
         name: { type: string }
-        description: { type: string, nullable: true }
-        category: { type: string, nullable: true }
+
+    Item:
+      type: object
+      description: >
+        rope and bag are individually tracked physical objects — brand,
+        model and code are always known, total_quantity is always 1, and
+        they carry type-specific fields (rope_type/diameter_mm/
+        manufacture_year for rope, capacity_liters for bag). gear is a
+        fungible stock item filed under a category from
+        GET /material-categories; brand/model may be unknown, but
+        description and category_id are always set. rentable/sellable
+        are computed from whether rental_price_per_week/sale_price is
+        set — loanable is a separate flag, since a loan carries no price
+        to derive that from.
+      properties:
+        id: { type: integer }
+        item_type: { type: string, enum: [rope, bag, gear] }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
         code: { type: string, nullable: true }
+        description:
+          type: string
+          nullable: true
+          description: >
+            Required for gear. Doubles as "Observaciones" in the
+            frontend for rope/bag, where it's optional.
+        acquired_at: { type: string, format: date, nullable: true }
         total_quantity: { type: integer }
         available_quantity: { type: integer }
         status: { type: string, enum: [available, on_loan, rented, sold, maintenance, retired] }
+        loanable: { type: boolean }
+        rentable: { type: boolean, description: "Computed: true iff rental_price_per_week is set." }
+        sellable: { type: boolean, description: "Computed: true iff sale_price is set." }
         rental_price_per_week: { type: number, nullable: true }
         sale_price: { type: number, nullable: true }
+        rope_type: { type: string, enum: [caving, canyoning], nullable: true, description: "rope only." }
+        diameter_mm: { type: number, nullable: true, description: "rope only, in millimetres." }
+        manufacture_year: { type: integer, nullable: true, description: "rope only." }
+        capacity_liters: { type: number, nullable: true, description: "bag only." }
+        category_id: { type: integer, nullable: true, description: "gear only — an id from GET /material-categories." }
+        category_name: { type: string, nullable: true, description: "gear only — resolved alongside category_id." }
+
+    CreateItemInput:
+      type: object
+      required: [item_type]
+      properties:
+        item_type: { type: string, enum: [rope, bag, gear] }
+        brand: { type: string, description: Required for rope/bag. }
+        model: { type: string, description: Required for rope/bag. }
+        code: { type: string, description: Required for rope/bag. }
+        description: { type: string, description: Required for gear. }
+        acquired_at: { type: string, format: date }
+        total_quantity:
+          type: integer
+          default: 1
+          description: Must be 1 for rope/bag — enforced by a DB CHECK constraint.
+        loanable: { type: boolean, default: true }
+        rental_price_per_week: { type: number }
+        sale_price: { type: number }
+        rope_type: { type: string, enum: [caving, canyoning], description: Required for rope. }
+        diameter_mm: { type: number, description: "Required for rope, in millimetres." }
+        manufacture_year: { type: integer, description: Required for rope. }
+        capacity_liters: { type: number, description: Required for bag. }
+        category_id: { type: integer, description: Required for gear — an id from GET /material-categories. }
 
     Transaction:
       type: object

@@ -36,20 +36,55 @@
     <form id="new-item-form">
       <div class="field-grid">
         <div class="field">
-          <label for="ni-name">Nombre</label>
-          <input id="ni-name" name="name" type="text" required>
+          <label for="ni-item-type">Tipo</label>
+          <select id="ni-item-type" name="item_type" required>
+            <option value="rope">Cuerda</option>
+            <option value="bag">Saca</option>
+            <option value="gear">Material general</option>
+          </select>
         </div>
-        <div class="field">
-          <label for="ni-category">Categoría <span class="optional">(opcional)</span></label>
-          <input id="ni-category" name="category" type="text">
+        <div class="field" data-item-type-field="rope,bag">
+          <label for="ni-brand">Marca</label>
+          <input id="ni-brand" name="brand" type="text">
         </div>
-        <div class="field">
-          <label for="ni-code">Código <span class="optional">(opcional)</span></label>
+        <div class="field" data-item-type-field="rope,bag">
+          <label for="ni-model">Modelo</label>
+          <input id="ni-model" name="model" type="text">
+        </div>
+        <div class="field" data-item-type-field="rope,bag">
+          <label for="ni-code">Código</label>
           <input id="ni-code" name="code" type="text">
         </div>
-        <div class="field">
+        <div class="field" data-item-type-field="rope">
+          <label for="ni-rope-type">Tipo de cuerda</label>
+          <select id="ni-rope-type" name="rope_type">
+            <option value="caving">Espeleología</option>
+            <option value="canyoning">Cañones</option>
+          </select>
+        </div>
+        <div class="field" data-item-type-field="rope">
+          <label for="ni-diameter-mm">Diámetro (mm)</label>
+          <input id="ni-diameter-mm" name="diameter_mm" type="number" min="0" step="0.1">
+        </div>
+        <div class="field" data-item-type-field="rope">
+          <label for="ni-manufacture-year">Año de fabricación</label>
+          <input id="ni-manufacture-year" name="manufacture_year" type="number" min="1900" step="1">
+        </div>
+        <div class="field" data-item-type-field="bag">
+          <label for="ni-capacity-liters">Capacidad (L)</label>
+          <input id="ni-capacity-liters" name="capacity_liters" type="number" min="0" step="0.1">
+        </div>
+        <div class="field" data-item-type-field="gear">
+          <label for="ni-category">Categoría</label>
+          <select id="ni-category" name="category_id"></select>
+        </div>
+        <div class="field" data-item-type-field="gear">
           <label for="ni-total-quantity">Cantidad</label>
           <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
+        </div>
+        <div class="field">
+          <label for="ni-acquired-at">Fecha de adquisición <span class="optional">(opcional)</span></label>
+          <input id="ni-acquired-at" name="acquired_at" type="date">
         </div>
         <div class="field">
           <label for="ni-rental-price">Precio de alquiler / semana <span class="optional">(opcional)</span></label>
@@ -59,8 +94,11 @@
           <label for="ni-sale-price">Precio de venta <span class="optional">(opcional)</span></label>
           <input id="ni-sale-price" name="sale_price" type="number" min="0" step="0.01">
         </div>
+        <div class="field">
+          <label for="ni-loanable"><input id="ni-loanable" name="loanable" type="checkbox" checked> Se puede prestar</label>
+        </div>
         <div class="field span-2">
-          <label for="ni-description">Descripción <span class="optional">(opcional)</span></label>
+          <label for="ni-description"><span data-item-type-field="gear">Descripción</span><span data-item-type-field="rope,bag">Observaciones <span class="optional">(opcional)</span></span></label>
           <textarea id="ni-description" name="description"></textarea>
         </div>
       </div>
@@ -74,7 +112,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Material</th><th>Categoría</th><th>Disponible</th><th>Estado</th><th></th></tr>
+        <tr><th>Tipo</th><th>Material</th><th>Código</th><th>Disponible</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody id="items-table-body"></tbody>
     </table>

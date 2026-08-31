@@ -311,3 +311,16 @@ func LicenseTypeID(t *testing.T, tx pgx.Tx, name string) int64 {
 	}
 	return id
 }
+
+// MaterialCategoryID looks up a catalog material category's id by name
+// (seeded by migration 00013: "Mosquetones", "Spits", "Placas",
+// "Maillones", "Iluminación").
+func MaterialCategoryID(t *testing.T, tx pgx.Tx, name string) int64 {
+	t.Helper()
+	var id int64
+	err := tx.QueryRow(context.Background(), `SELECT id FROM material_categories WHERE name = $1`, name).Scan(&id)
+	if err != nil {
+		t.Fatalf("look up material category %q: %v", name, err)
+	}
+	return id
+}

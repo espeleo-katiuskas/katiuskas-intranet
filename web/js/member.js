@@ -781,9 +781,27 @@ async function loadActivities() {
 
 const transactionTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
 const transactionStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
+const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
+
+// A rope/bag is identified by brand+model (plus its type-specific
+// attributes); gear may have no known brand/model at all, so its
+// category — always set — anchors the label instead.
+function itemLabel(item) {
+  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
+  if (item.item_type === 'rope') {
+    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  if (item.item_type === 'bag') {
+    const parts = [brandModel || null, `${item.capacity_liters} L`];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  const parts = [item.category_name, brandModel || null];
+  return escapeHtml(parts.filter(Boolean).join(' — '));
+}
 
 function renderTransactionRow(t, itemsById) {
-  const itemName = itemsById[t.item_id]?.name;
+  const item = itemsById[t.item_id];
   const dueOrReturned = t.returned_at
     ? `Devuelto ${formatDate(t.returned_at)}`
     : t.due_date
@@ -791,7 +809,7 @@ function renderTransactionRow(t, itemsById) {
       : '—';
   return `
     <tr>
-      <td>${itemName ? escapeHtml(itemName) : `Material n.º ${t.item_id}`}</td>
+      <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
       <td>${transactionTypeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
       <td>${formatDate(t.transacted_at)}</td>

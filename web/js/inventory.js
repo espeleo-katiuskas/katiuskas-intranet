@@ -47,22 +47,43 @@ const itemStatusLabels = {
   retired: 'De baja',
 };
 
+const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
+const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
+
 const typeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
 const txStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
 
 let itemsById = {};
 
+// A rope/bag is identified by brand+model (plus its type-specific
+// attributes); gear may have no known brand/model at all, so its
+// category — always set — anchors the label instead.
+function itemLabel(item) {
+  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
+  if (item.item_type === 'rope') {
+    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  if (item.item_type === 'bag') {
+    const parts = [brandModel || null, `${item.capacity_liters} L`];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  const parts = [item.category_name, brandModel || null];
+  return escapeHtml(parts.filter(Boolean).join(' — '));
+}
+
 function renderItemRow(item) {
   return `
     <tr>
-      <td>${escapeHtml(item.name)}</td>
-      <td>${escapeHtml(item.category) || '—'}</td>
+      <td>${itemTypeLabels[item.item_type] ?? item.item_type}</td>
+      <td>${itemLabel(item)}</td>
+      <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
       <td><button type="button" class="btn btn-secondary btn-small" data-toggle-item-transactions="${item.id}">Movimientos</button></td>
     </tr>
     <tr data-item-transactions-row="${item.id}" hidden>
-      <td colspan="5"><div class="detail-list" data-item-transactions-panel="${item.id}"></div></td>
+      <td colspan="6"><div class="detail-list" data-item-transactions-panel="${item.id}"></div></td>
     </tr>
   `;
 }
@@ -91,13 +112,15 @@ async function loadItems() {
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     tableBody.innerHTML = items.length
       ? items.map(renderItemRow).join('')
-      : '<tr><td colspan="5">Todavía no hay material dado de alta.</td></tr>';
+      : '<tr><td colspan="6">Todavía no hay material dado de alta.</td></tr>';
     if (canManageTransactions) {
       const select = document.getElementById('nt-item');
-      select.innerHTML = items.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+      select.innerHTML = items
+        .map((item) => `<option value="${item.id}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
+        .join('');
     }
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el material.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
   }
 }
 
@@ -142,11 +165,11 @@ async function handleReturn(button) {
 }
 
 function renderActiveTransactionRow(t) {
-  const itemName = itemsById[t.item_id]?.name;
+  const item = itemsById[t.item_id];
   const canReturn = canManageTransactions && t.type !== 'sale';
   return `
     <tr>
-      <td>${itemName ? escapeHtml(itemName) : `Material n.º ${t.item_id}`}</td>
+      <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
       <td>Socio ${t.user_login}</td>
       <td>${typeLabels[t.type] ?? t.type}</td>
       <td>${t.quantity}</td>
@@ -178,6 +201,37 @@ document.getElementById('active-transactions-table-body')?.addEventListener('cli
 if (isAdmin) {
   const newItemPanel = document.getElementById('new-item-panel');
   const newItemForm = document.getElementById('new-item-form');
+  const itemTypeSelect = document.getElementById('ni-item-type');
+  const descriptionField = document.getElementById('ni-description');
+  const categorySelect = document.getElementById('ni-category');
+
+  // Only rope/bag/gear-specific controls toggle required — the fields
+  // shared by every type (acquired_at, prices, loanable) stay as they
+  // are regardless of item_type.
+  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-capacity-liters', 'ni-category'];
+
+  function updateItemTypeFieldsVisibility() {
+    const type = itemTypeSelect.value;
+    document.querySelectorAll('[data-item-type-field]').forEach((el) => {
+      el.hidden = !el.dataset.itemTypeField.split(',').includes(type);
+    });
+    for (const id of requiredWhenVisible) {
+      const input = document.getElementById(id);
+      input.required = !input.closest('[data-item-type-field]').hidden;
+    }
+    // description is the required "Descripción" for gear, and the
+    // optional "Observaciones" for rope/bag — see the two toggled
+    // label spans above the textarea.
+    descriptionField.required = type === 'gear';
+  }
+  itemTypeSelect.addEventListener('change', updateItemTypeFieldsVisibility);
+  updateItemTypeFieldsVisibility();
+
+  apiFetch('/material-categories')
+    .then((categories) => {
+      categorySelect.innerHTML = categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    })
+    .catch(() => showError('No se pudo cargar la lista de categorías.'));
 
   document.getElementById('toggle-new-item').addEventListener('click', () => {
     newItemPanel.hidden = !newItemPanel.hidden;
@@ -186,23 +240,39 @@ if (isAdmin) {
   document.getElementById('cancel-new-item').addEventListener('click', () => {
     newItemForm.reset();
     newItemPanel.hidden = true;
+    updateItemTypeFieldsVisibility();
   });
 
   newItemForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const formData = new FormData(newItemForm);
+    const type = formData.get('item_type');
     const optionalText = (key) => formData.get(key)?.toString().trim() || null;
     const optionalNumber = (key) => (formData.get(key) ? Number(formData.get(key)) : null);
 
     const body = {
-      name: formData.get('name'),
+      item_type: type,
       description: optionalText('description'),
-      category: optionalText('category'),
-      code: optionalText('code'),
-      total_quantity: Number(formData.get('total_quantity')) || 1,
+      acquired_at: optionalText('acquired_at'),
       rental_price_per_week: optionalNumber('rental_price_per_week'),
       sale_price: optionalNumber('sale_price'),
+      loanable: formData.get('loanable') === 'on',
     };
+    if (type === 'rope' || type === 'bag') {
+      body.brand = formData.get('brand');
+      body.model = formData.get('model');
+      body.code = formData.get('code');
+    }
+    if (type === 'rope') {
+      body.rope_type = formData.get('rope_type');
+      body.diameter_mm = Number(formData.get('diameter_mm'));
+      body.manufacture_year = Number(formData.get('manufacture_year'));
+    } else if (type === 'bag') {
+      body.capacity_liters = Number(formData.get('capacity_liters'));
+    } else {
+      body.category_id = Number(formData.get('category_id'));
+      body.total_quantity = Number(formData.get('total_quantity')) || 1;
+    }
 
     const submitButton = newItemForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
@@ -211,6 +281,7 @@ if (isAdmin) {
       showFeedback('Material creado.');
       newItemForm.reset();
       newItemPanel.hidden = true;
+      updateItemTypeFieldsVisibility();
       await loadItems();
     } catch (err) {
       showError(err.message);

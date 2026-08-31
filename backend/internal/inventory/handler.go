@@ -38,6 +38,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board"))
 	mux.Handle("GET /api/v1/items/{id}/transactions", h.authenticator.Protect(h.listItemTransactions))
 
+	// material-categories is admin/board-only, matching create: the
+	// catalog only exists to populate the "new item" form's category
+	// picker for gear items.
+	mux.Handle("GET /api/v1/material-categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board"))
+
 	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/transactions/{id}/return", h.authenticator.Protect(h.returnTransaction, "admin", "board", "material"))
@@ -68,20 +73,73 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
-	var in CreateItemInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	var body struct {
+		Type               ItemType  `json:"item_type"`
+		Brand              *string   `json:"brand"`
+		Model              *string   `json:"model"`
+		Code               *string   `json:"code"`
+		Description        *string   `json:"description"`
+		AcquiredAt         *string   `json:"acquired_at"`
+		TotalQuantity      int32     `json:"total_quantity"`
+		Loanable           *bool     `json:"loanable"`
+		RentalPricePerWeek *float64  `json:"rental_price_per_week"`
+		SalePrice          *float64  `json:"sale_price"`
+		RopeType           *RopeType `json:"rope_type"`
+		DiameterMM         *float64  `json:"diameter_mm"`
+		ManufactureYear    *int32    `json:"manufacture_year"`
+		CapacityLiters     *float64  `json:"capacity_liters"`
+		CategoryID         *int64    `json:"category_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if in.TotalQuantity <= 0 {
-		in.TotalQuantity = 1
+	if body.Type != ItemTypeRope && body.Type != ItemTypeBag && body.Type != ItemTypeGear {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_type", "item_type must be rope, bag or gear")
+		return
 	}
-	item, err := h.service.CreateItem(r.Context(), in)
+	var acquiredAt *time.Time
+	if body.AcquiredAt != nil && *body.AcquiredAt != "" {
+		d, err := time.Parse("2006-01-02", *body.AcquiredAt)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "acquired_at must be YYYY-MM-DD")
+			return
+		}
+		acquiredAt = &d
+	}
+	loanable := true
+	if body.Loanable != nil {
+		loanable = *body.Loanable
+	}
+	totalQuantity := body.TotalQuantity
+	if totalQuantity <= 0 {
+		totalQuantity = 1
+	}
+	item, err := h.service.CreateItem(r.Context(), CreateItemInput{
+		Type: body.Type, Brand: body.Brand, Model: body.Model, Code: body.Code,
+		Description: body.Description, AcquiredAt: acquiredAt, TotalQuantity: totalQuantity,
+		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
+		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
+		CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
+	})
+	if errors.Is(err, ErrCategoryNotFound) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_category", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create item")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) listMaterialCategories(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListMaterialCategories(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list material categories")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) listItemTransactions(w http.ResponseWriter, r *http.Request) {
@@ -173,6 +231,10 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrActivityRequired) {
 		httpapi.WriteError(w, http.StatusBadRequest, "activity_required", err.Error())
+		return
+	}
+	if errors.Is(err, ErrNotLoanable) {
+		httpapi.WriteError(w, http.StatusConflict, "not_loanable", err.Error())
 		return
 	}
 	if err != nil {

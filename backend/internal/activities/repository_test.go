@@ -103,8 +103,11 @@ func TestListActive(t *testing.T) {
 		t.Fatalf("mark completed: %v", err)
 	}
 	user := testutil.InsertUser(t, tx, "")
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	var itemID int64
-	if err := tx.QueryRow(ctx, `INSERT INTO inventory_items (name) VALUES ('Test item') RETURNING id`).Scan(&itemID); err != nil {
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO inventory_items (item_type, description, category_id) VALUES ('gear', 'Test item', $1) RETURNING id
+	`, categoryID).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
 	}
 	if _, err := tx.Exec(ctx, `

@@ -15,7 +15,17 @@ var (
 	ErrInsufficientStock = errors.New("not enough available quantity")
 	ErrCannotReturnSale  = errors.New("sale transactions cannot be returned")
 	ErrActivityRequired  = errors.New("loan and rental transactions must be linked to an activity")
+	// ErrNotLoanable means the item's loanable flag is false — see
+	// Item.Loanable.
+	ErrNotLoanable = errors.New("this item cannot be loaned")
+	// ErrCategoryNotFound means the given category_id isn't in the
+	// material_categories catalog.
+	ErrCategoryNotFound = errors.New("material category not found")
 )
+
+// categoryFKViolationCode is the foreign-key violation Postgres raises
+// when CreateItem is given a category_id absent from material_categories.
+const categoryFKViolationCode = "23503"
 
 // saleHasNoReturnConstraint is the CHECK constraint (see migration 00006)
 // that keeps a sale from ever getting a returned_at date. ReturnTransaction
@@ -36,26 +46,72 @@ func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 
+// itemSelect/scanItem are shared by every query that returns one or more
+// Item rows other than CreateItem's INSERT ... RETURNING (which can't
+// JOIN against the row it just wrote — see CreateItem's own follow-up
+// query for the category name).
+const itemSelect = `
+	i.id, i.item_type, i.brand, i.model, i.code, i.description, i.acquired_at,
+	i.total_quantity, i.available_quantity, i.status, i.loanable,
+	i.rental_price_per_week, i.sale_price,
+	i.rope_type, i.diameter_mm, i.manufacture_year, i.capacity_liters,
+	i.category_id, mc.name
+	FROM inventory_items i
+	LEFT JOIN material_categories mc ON mc.id = i.category_id`
+
+func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
+	if err := row.Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description, &it.AcquiredAt,
+		&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.Loanable,
+		&it.RentalPricePerWeek, &it.SalePrice,
+		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.CapacityLiters,
+		&it.CategoryID, &it.CategoryName,
+	); err != nil {
+		return err
+	}
+	it.Rentable = it.RentalPricePerWeek != nil
+	it.Sellable = it.SalePrice != nil
+	return nil
+}
+
 func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {
 	var it Item
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO inventory_items (name, description, category, code, total_quantity,
-			available_quantity, rental_price_per_week, sale_price)
-		VALUES ($1,$2,$3,$4,$5,$5,$6,$7)
-		RETURNING id, name, description, category, code, total_quantity, available_quantity,
-			status, rental_price_per_week, sale_price
-	`, in.Name, in.Description, in.Category, in.Code, in.TotalQuantity,
-		in.RentalPricePerWeek, in.SalePrice,
-	).Scan(&it.ID, &it.Name, &it.Description, &it.Category, &it.Code, &it.TotalQuantity,
-		&it.AvailableQuantity, &it.Status, &it.RentalPricePerWeek, &it.SalePrice)
-	return it, err
+		INSERT INTO inventory_items (item_type, brand, model, code, description, acquired_at,
+			total_quantity, available_quantity, loanable, rental_price_per_week, sale_price,
+			rope_type, diameter_mm, manufacture_year, capacity_liters, category_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		RETURNING id, item_type, brand, model, code, description, acquired_at,
+			total_quantity, available_quantity, status, loanable, rental_price_per_week, sale_price,
+			rope_type, diameter_mm, manufacture_year, capacity_liters, category_id
+	`, in.Type, in.Brand, in.Model, in.Code, in.Description, in.AcquiredAt,
+		in.TotalQuantity, in.Loanable, in.RentalPricePerWeek, in.SalePrice,
+		in.RopeType, in.DiameterMM, in.ManufactureYear, in.CapacityLiters, in.CategoryID,
+	).Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description, &it.AcquiredAt,
+		&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.Loanable, &it.RentalPricePerWeek, &it.SalePrice,
+		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.CapacityLiters, &it.CategoryID)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == categoryFKViolationCode {
+		return Item{}, ErrCategoryNotFound
+	}
+	if err != nil {
+		return it, err
+	}
+	if it.CategoryID != nil {
+		var name string
+		if err := r.pool.QueryRow(ctx, `SELECT name FROM material_categories WHERE id = $1`, *it.CategoryID).Scan(&name); err != nil {
+			return it, err
+		}
+		it.CategoryName = &name
+	}
+	it.Rentable = it.RentalPricePerWeek != nil
+	it.Sellable = it.SalePrice != nil
+	return it, nil
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, description, category, code, total_quantity, available_quantity,
-			status, rental_price_per_week, sale_price
-		FROM inventory_items ORDER BY name
+		SELECT `+itemSelect+`
+		ORDER BY i.item_type, i.brand, i.model, i.id
 	`)
 	if err != nil {
 		return nil, err
@@ -65,12 +121,31 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	list := []Item{}
 	for rows.Next() {
 		var it Item
-		if err := rows.Scan(&it.ID, &it.Name, &it.Description, &it.Category, &it.Code,
-			&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.RentalPricePerWeek,
-			&it.SalePrice); err != nil {
+		if err := scanItem(rows, &it); err != nil {
 			return nil, err
 		}
 		list = append(list, it)
+	}
+	return list, rows.Err()
+}
+
+// ListMaterialCategories returns the gear category catalog (migration
+// 00013) — every entry, in name order, for the "new item" form's
+// category picker.
+func (r *Repository) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM material_categories ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []MaterialCategory{}
+	for rows.Next() {
+		var c MaterialCategory
+		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
 	}
 	return list, rows.Err()
 }
@@ -84,6 +159,20 @@ func (r *Repository) CreateTransaction(ctx context.Context, in CreateTransaction
 		return Transaction{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	if in.Type == TransactionLoan {
+		var loanable bool
+		err := tx.QueryRow(ctx, `SELECT loanable FROM inventory_items WHERE id = $1`, in.ItemID).Scan(&loanable)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Transaction{}, ErrInsufficientStock
+		}
+		if err != nil {
+			return Transaction{}, err
+		}
+		if !loanable {
+			return Transaction{}, ErrNotLoanable
+		}
+	}
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE inventory_items SET available_quantity = available_quantity - $1
