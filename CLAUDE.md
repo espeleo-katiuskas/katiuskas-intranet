@@ -25,8 +25,9 @@ make migrate-up      # goose, see db/migrations/
 make seed-admin      # idempotent; creates admin@club.test / 600000000 unless SEED_ADMIN_* overrides
 ```
 There are no passwords: sign-in is a magic link. With `SMTP_HOST` unset, the API logs the
-link instead of emailing it — `docker compose logs api` or `scripts/get-token.sh <email>
-<phone>` to fetch one for local testing without copy-pasting from logs.
+link instead of emailing it — `docker compose logs api`, or `scripts/get-token.sh <login>`
+to mint a session token directly in the database for local testing, bypassing the magic-link
+flow entirely.
 
 Backend tests (from `backend/`):
 ```sh
