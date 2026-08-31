@@ -312,6 +312,11 @@ if (isAdmin) {
 let userEntries = [];
 let activityEntries = [];
 
+// Awaited before loadActiveTransactions() below, so itemsById is
+// populated (and the "Material" column can show a real label instead
+// of falling back to "Material n.º …") by the time it renders.
+await loadItems();
+
 if (canManageTransactions) {
   const userInput = document.getElementById('nt-user');
   const userOptions = document.getElementById('nt-user-options');
@@ -363,6 +368,7 @@ if (canManageTransactions) {
     if (isSingleUnit) quantityInput.value = '1';
   };
   itemSelect.addEventListener('change', updateTransactionQuantityVisibility);
+  updateTransactionQuantityVisibility();
 
   const newTransactionForm = document.getElementById('new-transaction-form');
   newTransactionForm.addEventListener('submit', async (event) => {
@@ -415,5 +421,3 @@ if (canManageTransactions) {
   await directoryLoaded;
   loadActiveTransactions();
 }
-
-loadItems();
