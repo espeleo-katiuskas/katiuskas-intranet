@@ -109,6 +109,7 @@ type Item struct {
 	RopeType        *RopeType `json:"rope_type,omitempty"`
 	DiameterMM      *float64  `json:"diameter_mm,omitempty"`
 	ManufactureYear *int32    `json:"manufacture_year,omitempty"`
+	LengthM         *int32    `json:"length_m,omitempty"`
 	// Bag-only.
 	BagType        *BagType `json:"bag_type,omitempty"`
 	CapacityLiters *float64 `json:"capacity_liters,omitempty"`
@@ -133,6 +134,7 @@ type CreateItemInput struct {
 	RopeType           *RopeType
 	DiameterMM         *float64
 	ManufactureYear    *int32
+	LengthM            *int32
 	BagType            *BagType
 	CapacityLiters     *float64
 	CategoryID         *int64

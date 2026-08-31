@@ -369,10 +369,11 @@ func TestCreateRopeItem(t *testing.T) {
 	ropeType := inventory.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
+	length := int32(60)
 
 	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
 		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
-		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		TotalQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -386,6 +387,9 @@ func TestCreateRopeItem(t *testing.T) {
 	}
 	if item.DiameterMM == nil || *item.DiameterMM != 9.5 {
 		t.Errorf("expected diameter 9.5mm, got %+v", item.DiameterMM)
+	}
+	if item.LengthM == nil || *item.LengthM != 60 {
+		t.Errorf("expected length 60m, got %+v", item.LengthM)
 	}
 	if item.CategoryID != nil {
 		t.Errorf("expected no category for a rope, got %+v", item.CategoryID)
@@ -437,6 +441,25 @@ func TestCreateRopeRejectsMissingManufactureYear(t *testing.T) {
 		RopeType: &ropeType, DiameterMM: &diameter, TotalQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing manufacture_year")
+	}
+}
+
+func TestCreateRopeRejectsMissingLengthM(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-043b"
+	ropeType := inventory.RopeTypeCaving
+	diameter := 9.5
+	year := int32(2024)
+
+	// Violates rope_requires_rope_fields.
+	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, TotalQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for a rope missing length_m")
 	}
 }
 
@@ -513,10 +536,11 @@ func TestCreateRopeAndBagAreForcedToSingleQuantity(t *testing.T) {
 	ropeType := inventory.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
+	length := int32(60)
 
 	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
 		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
-		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year,
+		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		TotalQuantity: 3, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error creating a rope with total_quantity > 1")

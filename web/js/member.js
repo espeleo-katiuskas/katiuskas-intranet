@@ -790,7 +790,7 @@ const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: '
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
-    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year];
+    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {

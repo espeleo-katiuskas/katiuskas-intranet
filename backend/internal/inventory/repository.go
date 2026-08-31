@@ -54,7 +54,7 @@ const itemSelect = `
 	i.id, i.item_type, i.brand, i.model, i.code, i.description, i.acquired_at,
 	i.total_quantity, i.available_quantity, i.status, i.loanable,
 	i.rental_price_per_week, i.sale_price,
-	i.rope_type, i.diameter_mm, i.manufacture_year, i.bag_type, i.capacity_liters,
+	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters,
 	i.category_id, mc.name
 	FROM inventory_items i
 	LEFT JOIN material_categories mc ON mc.id = i.category_id`
@@ -63,7 +63,7 @@ func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
 	if err := row.Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description, &it.AcquiredAt,
 		&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.Loanable,
 		&it.RentalPricePerWeek, &it.SalePrice,
-		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.BagType, &it.CapacityLiters,
+		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters,
 		&it.CategoryID, &it.CategoryName,
 	); err != nil {
 		return err
@@ -78,17 +78,17 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO inventory_items (item_type, brand, model, code, description, acquired_at,
 			total_quantity, available_quantity, loanable, rental_price_per_week, sale_price,
-			rope_type, diameter_mm, manufacture_year, bag_type, capacity_liters, category_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			rope_type, diameter_mm, manufacture_year, length_m, bag_type, capacity_liters, category_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		RETURNING id, item_type, brand, model, code, description, acquired_at,
 			total_quantity, available_quantity, status, loanable, rental_price_per_week, sale_price,
-			rope_type, diameter_mm, manufacture_year, bag_type, capacity_liters, category_id
+			rope_type, diameter_mm, manufacture_year, length_m, bag_type, capacity_liters, category_id
 	`, in.Type, in.Brand, in.Model, in.Code, in.Description, in.AcquiredAt,
 		in.TotalQuantity, in.Loanable, in.RentalPricePerWeek, in.SalePrice,
-		in.RopeType, in.DiameterMM, in.ManufactureYear, in.BagType, in.CapacityLiters, in.CategoryID,
+		in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM, in.BagType, in.CapacityLiters, in.CategoryID,
 	).Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description, &it.AcquiredAt,
 		&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.Loanable, &it.RentalPricePerWeek, &it.SalePrice,
-		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.BagType, &it.CapacityLiters, &it.CategoryID)
+		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters, &it.CategoryID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == categoryFKViolationCode {
 		return Item{}, ErrCategoryNotFound

@@ -62,7 +62,7 @@ let itemsById = {};
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
-    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year];
+    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
@@ -209,7 +209,7 @@ if (isAdmin) {
   // Only rope/bag/gear-specific controls toggle required — the fields
   // shared by every type (acquired_at, prices, loanable) stay as they
   // are regardless of item_type.
-  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-bag-type', 'ni-capacity-liters', 'ni-category'];
+  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-length-m', 'ni-bag-type', 'ni-capacity-liters', 'ni-category'];
 
   function updateItemTypeFieldsVisibility() {
     const type = itemTypeSelect.value;
@@ -268,6 +268,7 @@ if (isAdmin) {
       body.rope_type = formData.get('rope_type');
       body.diameter_mm = Number(formData.get('diameter_mm'));
       body.manufacture_year = Number(formData.get('manufacture_year'));
+      body.length_m = Number(formData.get('length_m'));
     } else if (type === 'bag') {
       body.bag_type = formData.get('bag_type');
       body.capacity_liters = Number(formData.get('capacity_liters'));
