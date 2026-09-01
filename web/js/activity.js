@@ -319,14 +319,22 @@ async function loadItems() {
   }
 }
 
+// A loan's quantity can come back in pieces (30 mosquetones lent for
+// the trip might return 10 one day, 20 the next) — the quantity input
+// defaults to everything still outstanding but can be edited down for
+// a partial return, same control as the material page.
 function renderActivityLoanRow(m) {
   const item = itemsById[m.item_id];
+  const outstanding = m.quantity - m.returned_quantity;
   return `
     <tr>
       <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
       <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
-      <td>${m.quantity}</td>
-      <td><button type="button" class="btn btn-secondary btn-small" data-return-loan="${m.id}">Registrar devolución</button></td>
+      <td>${outstanding} / ${m.quantity}</td>
+      <td>
+        <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
+        <button type="button" class="btn btn-secondary btn-small" data-return-loan="${m.id}">Devolver</button>
+      </td>
     </tr>
   `;
 }
@@ -355,8 +363,10 @@ document.getElementById('activity-loans-table-body')?.addEventListener('click', 
   const button = event.target.closest('button[data-return-loan]');
   if (!button) return;
   button.disabled = true;
+  const quantityInput = document.querySelector(`[data-return-quantity="${button.dataset.returnLoan}"]`);
+  const body = quantityInput ? { quantity: Number(quantityInput.value) } : {};
   try {
-    await apiFetch(`/movements/${button.dataset.returnLoan}/return`, { method: 'PATCH' });
+    await apiFetch(`/movements/${button.dataset.returnLoan}/return`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Devolución registrada.');
     await loadActivityLoans();
   } catch (err) {

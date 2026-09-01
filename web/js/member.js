@@ -788,9 +788,19 @@ function itemLabel(item) {
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
+// A loan/rental's quantity can come back in pieces (30 mosquetones
+// lent for a trip might return 10 one day, 20 the next) — this shows
+// the running Y/X count while it's still partial, and the date once
+// everything's back.
+function returnedText(m) {
+  if (m.returned_at) return `Devuelto el ${formatDate(m.returned_at)}`;
+  if (m.returned_quantity > 0) return `${m.returned_quantity}/${m.quantity} devueltos`;
+  return '—';
+}
+
 function renderMovementRow(m, itemsById) {
   const item = itemsById[m.item_id];
-  const returned = m.returned_at ? `Devuelto ${formatDate(m.returned_at)}` : '—';
+  const returned = returnedText(m);
   return `
     <tr>
       <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
