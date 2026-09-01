@@ -118,15 +118,23 @@ function renderItemRow(item) {
   `;
 }
 
+// Only loan and rental are ever returnable — a sale (or acquisition/
+// loss/abandonment/retirement) is settled the moment it's recorded, so
+// this checks the type itself rather than just status: a stray 'active'
+// sale row (from before movements existed, say) still shouldn't offer
+// a return button.
+function isReturnable(m) {
+  return m.type === 'loan' || m.type === 'rental';
+}
+
 function renderMovementDetail(m) {
-  const canReturn = canManageMovements && m.status === 'active';
+  const canReturn = canManageMovements && isReturnable(m) && m.status === 'active';
   const returned = m.returned_at ? ` · devuelto ${formatDate(m.returned_at)}` : '';
   const who = m.user_login ? ` · Socio ${escapeHtml(personLabel(m.user_login))}` : '';
   const notes = m.notes ? ` · ${escapeHtml(m.notes)}` : '';
   return `
     <div class="detail-row">
-      <span>${typeLabels[m.type] ?? m.type}${who} · cantidad ${m.quantity} ·
-        ${formatDate(m.transacted_at)}${returned}${notes} ·
+      <span>${formatDate(m.transacted_at)} · ${typeLabels[m.type] ?? m.type}${who} · cantidad ${m.quantity}${returned}${notes} ·
         <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span></span>
       ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : ''}
     </div>
@@ -195,18 +203,14 @@ async function handleReturn(button) {
 
 function renderActiveMovementRow(m) {
   const item = itemsById[m.item_id];
-  // Every row here comes from /movements?status=active, and only loan
-  // and rental ever reach that status — everything else settles
-  // immediately when recorded — so there's no type check needed beyond
-  // the role check.
-  const canReturn = canManageMovements;
+  const canReturn = canManageMovements && isReturnable(m);
   return `
     <tr>
+      <td>${formatDate(m.transacted_at)}</td>
       <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
       <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
       <td>${typeLabels[m.type] ?? m.type}</td>
       <td>${m.quantity}</td>
-      <td>${formatDate(m.transacted_at)}</td>
       <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : '—'}</td>
     </tr>
   `;
@@ -215,7 +219,10 @@ function renderActiveMovementRow(m) {
 async function loadActiveMovements() {
   const tableBody = document.getElementById('active-movements-table-body');
   try {
-    const movements = await apiFetch('/movements?status=active');
+    // A sale (or acquisition/loss/abandonment/retirement) is never
+    // really "active" — only loan/rental can be — so this filters
+    // defensively in case stray data ever says otherwise.
+    const movements = (await apiFetch('/movements?status=active')).filter(isReturnable);
     tableBody.innerHTML = movements.length
       ? movements.map(renderActiveMovementRow).join('')
       : '<tr><td colspan="6">No hay movimientos activos.</td></tr>';
