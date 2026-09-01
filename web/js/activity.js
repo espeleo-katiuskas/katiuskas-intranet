@@ -383,6 +383,10 @@ loanItemInput?.addEventListener('input', updateLoanQuantityVisibility);
 
 document.getElementById('new-loan-form')?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  // event.currentTarget reverts to null once dispatch finishes, which
+  // happens before the `await apiFetch(...)` below resolves — capture
+  // it now, not after.
+  const form = event.currentTarget;
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
   if (!itemId) {
     showError('Elige un material de la lista.');
@@ -412,12 +416,12 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
     notes: notesInput.value.trim() || null,
   };
 
-  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  const submitButton = form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
     await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Préstamo registrado.');
-    event.currentTarget.reset();
+    form.reset();
     updateLoanQuantityVisibility();
     await loadActivityLoans();
   } catch (err) {
