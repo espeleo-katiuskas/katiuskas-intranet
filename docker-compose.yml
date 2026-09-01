@@ -27,11 +27,16 @@ services:
       # Leave SMTP_HOST unset to log sign-in emails to `docker compose logs api`
       # instead of sending them for real.
       LIBRARY_ROOT: "/data/library"
+      USER_FILES_ROOT: "/data/user-files"
     volumes:
       # Club documents (estatutos, actas...) for every socio to browse —
       # drop files straight into ./library on the host, no rebuild or
       # restart needed. Created automatically on first run if missing.
       - ./library:/data/library
+      # Per-person documents (a scanned DNI, a signed waiver...) — drop
+      # files into ./user-files/<login>/ on the host, one subdirectory
+      # per login, same no-rebuild-needed story as ./library above.
+      - ./user-files:/data/user-files
     depends_on:
       postgres:
         condition: service_healthy

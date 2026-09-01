@@ -32,6 +32,12 @@ type Config struct {
 	// the container, populated by whoever deploys the club's documents,
 	// never written to by the API itself.
 	LibraryRoot string
+	// UserFilesRoot is the directory internal/userfiles serves each
+	// person's own documents from, one subdirectory per login — same
+	// deployment story as LibraryRoot (mounted read-only, populated by
+	// whoever deploys the club's documents, never written to by the API
+	// itself), just scoped per person instead of one shared tree.
+	UserFilesRoot string
 }
 
 func Load() (Config, error) {
@@ -49,6 +55,7 @@ func Load() (Config, error) {
 		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:              os.Getenv("SMTP_FROM"),
 		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
+		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")

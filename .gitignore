@@ -7,3 +7,5 @@ backend/.env
 # Real club documents (estatutos, actas...) bind-mounted into the api
 # container for local dev — never meant to live in the repo itself.
 /library/
+# Real per-person documents, same reasoning as /library above.
+/user-files/

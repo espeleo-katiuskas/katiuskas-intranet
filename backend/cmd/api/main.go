@@ -22,6 +22,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
@@ -76,6 +77,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	userFilesService, err := userfiles.NewService(cfg.UserFilesRoot)
+	if err != nil {
+		slog.Error("set up user files", "error", err, "root", cfg.UserFilesRoot)
+		os.Exit(1)
+	}
+
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	router := httpapi.NewRouter(httpapi.Routes{
@@ -94,6 +101,7 @@ func main() {
 		Inventory:   inventory.NewHandler(inventoryService, authenticator, usersService),
 		Board:       board.NewHandler(boardService, authenticator, usersService),
 		Library:     library.NewHandler(libraryService, authenticator),
+		UserFiles:   userfiles.NewHandler(userFilesService, authenticator, usersService),
 	})
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)

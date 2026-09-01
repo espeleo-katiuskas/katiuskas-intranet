@@ -1195,6 +1195,71 @@ paths:
                 items: { $ref: "#/components/schemas/Movement" }
         "403": { description: Neither the person themselves nor admin/board/material. }
 
+  /users/{login}/files:
+    get:
+      summary: List a directory inside a person's own files
+      description: >
+        Browses this person's own personal documents (a scanned DNI, a
+        signed waiver, medical paperwork...) — a plain directory tree on
+        disk (config.UserFilesRoot), one subdirectory per login, not
+        anything stored in the database. Unlike GET /library, this is
+        *not* open to every baseline role: only the person themselves,
+        or admin/board, may browse it (403 forbidden otherwise) — a
+        login that doesn't belong to anyone at all is 404 instead. path
+        defaults to that person's own root when omitted; every path is
+        resolved and checked against that root server-side, so one that
+        tries to escape it (a "..", an absolute path, a symlink pointing
+        outside) either lands back inside it or is rejected — see the
+        UserFileListing schema and 400 invalid_path below. Dotfiles are
+        never listed. A person with no subdirectory of their own yet —
+        the common case, until someone drops a file in for them — gets
+        an empty listing at their own root rather than a 404.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: login, in: path, required: true, schema: { type: string } }
+        - name: path
+          in: query
+          schema: { type: string, default: "" }
+          description: Slash-separated path, relative to this person's own root.
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserFileListing" }
+        "400":
+          description: invalid_path (escapes this person's own root) or not_a_directory (path names a file).
+        "403": { description: Neither the person themselves nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users/{login}/files/file:
+    get:
+      summary: Read or download one of a person's own files
+      description: >
+        Streams a document's raw bytes with a best-effort Content-Type,
+        same as GET /library/file — supports HTTP Range requests, and
+        the same path resolution, root confinement, and
+        self-or-admin/board access check as GET /users/{login}/files.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: login, in: path, required: true, schema: { type: string } }
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+          description: Slash-separated file path, relative to this person's own root.
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: When "1", sets Content-Disposition to attachment (a Save dialog) instead of inline.
+      responses:
+        "200":
+          description: The file's raw content.
+        "400":
+          description: invalid_path (escapes this person's own root) or not_a_file (path names a directory).
+        "403": { description: Neither the person themselves nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /items:
     get:
       summary: List inventory items
@@ -2072,4 +2137,30 @@ components:
         entries:
           type: array
           items: { $ref: "#/components/schemas/LibraryEntry" }
+          description: Subdirectories first, then files, both alphabetical. Dotfiles never appear.
+
+    UserFileEntry:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [dir, file] }
+        size:
+          type: integer
+          description: Bytes. Omitted for a directory.
+        modified_at: { type: string, format: date-time }
+
+    UserFileListing:
+      type: object
+      properties:
+        path:
+          type: string
+          description: >
+            The requested path, root-relative *within this person's own
+            files* (never including their login), normalized (no
+            leading/trailing slash, "" for their own root) — echoed back
+            so the frontend can build breadcrumbs without re-deriving it
+            from what it originally sent.
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/UserFileEntry" }
           description: Subdirectories first, then files, both alphabetical. Dotfiles never appear.

@@ -61,6 +61,11 @@ Club documents (estatutos, actas...) shown at `/library`: drop files into `./lib
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no
 rebuild, no restart, nothing through the API itself. That directory is gitignored.
 
+Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`:
+drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,
+auto-create, gitignored, no rebuild/restart story as `./library` above), one subdirectory
+per login.
+
 ## Architecture
 
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
@@ -69,9 +74,10 @@ panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`
 split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain
 layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
 owns and registers its own routes via `RegisterRoutes(mux)`, wired together in
-`cmd/api/main.go`. **`internal/library`** is the one exception to this shape: it serves a
-read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
-`repository.go` — `service.go` works directly against the filesystem, resolving and
+`cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**, see below) is the
+one exception to this shape: it serves a read-only document tree from disk
+(`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go` works
+directly against the filesystem, resolving and
 validating every caller-given path against root before touching disk (`Service.resolve`),
 since there's no database constraint to lean on for that instead.
 
@@ -181,6 +187,18 @@ attachment with `?download=1`, with HTTP Range support via `http.ServeContent`. 
 open to any baseline role and read-only — nothing here lets a caller upload, rename, or
 delete anything.
 
+**Per-person files** (`internal/userfiles`): the same read-only, filesystem-backed model as
+the document library, one subdirectory per login instead of one shared tree — a scanned
+DNI, a signed waiver, medical paperwork. `GET /users/{login}/files[?path=...]` and
+`GET /users/{login}/files/file?path=...` mirror `/library`'s own listing/streaming shape
+exactly (including `?download=1` and Range support), but are *not* open to every baseline
+role: only that person themselves, or admin/board, may see them (403 otherwise) — checked
+inline in the handler (`Handler.resolveAccess`), the same self-or-privileged pattern
+`memberships.Handler.listByUser`/`inventory.Handler.listMovementsByUser` use, since who may
+see a specific person's files isn't a fixed role list the way `/library`'s is. A login with
+no subdirectory of its own yet — most people, until someone drops a file in for them — gets
+an empty listing at their own root rather than a 404.
+
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
 `TestUser` `InsertUser` returns carries a `Login` too, for tests exercising a
@@ -190,8 +208,11 @@ so handler tests in every *other* package can mint bearer tokens for arbitrary
 users/roles without hitting the real `tokens` table (only the `auth` and `tokens`
 packages' own tests exercise real session mechanics; `auth`'s internal tests use a local
 stub instead of `testutil`, since `testutil` imports `auth` and an internal test file
-can't import back). `internal/library` needs none of this — its tests build a `Service`
-directly on a `t.TempDir()` tree, no Postgres involved at all.
+can't import back). `internal/library` (and `internal/userfiles`, structured the same way)
+needs none of the Postgres fixtures — each package's own `service_test.go` builds a
+`Service` directly on a `t.TempDir()` tree, no Postgres involved at all; only their
+`handler_test.go`s reach for `FakeResolver`/`TokenFor` to mint bearer tokens for the
+role/self checks their routes enforce.
 
 **Migrations** (`db/migrations/`, goose-numbered): kept squashed to the *current* schema
 shape, not the historical sequence of changes — no renamed columns, no lossy "down"
