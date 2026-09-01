@@ -14,7 +14,7 @@ import (
 var (
 	ErrNotFound          = errors.New("item or movement not found")
 	ErrInsufficientStock = errors.New("not enough available quantity")
-	ErrActivityRequired  = errors.New("loan and rental movements must be linked to an activity")
+	ErrActivityRequired  = errors.New("loan movements must be linked to an activity")
 	// ErrNotLoanable means the item's loanable flag is false — see
 	// Item.Loanable.
 	ErrNotLoanable = errors.New("this item cannot be loaned")
@@ -35,9 +35,9 @@ var (
 const categoryFKViolationCode = "23503"
 
 // activityRequiredConstraint is the CHECK constraint (see migration
-// 00017) requiring loan/rental movements to name the activity they're
-// for.
-const activityRequiredConstraint = "activity_required_for_loan_and_rental"
+// 00013) requiring a loan to name the activity it's for. Rental's
+// activity is optional — a rental doesn't always happen as part of one.
+const activityRequiredConstraint = "activity_required_for_loan"
 
 type Repository struct {
 	pool db.PGX

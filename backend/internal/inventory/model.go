@@ -188,8 +188,9 @@ type Movement struct {
 	Status          MovementStatus `json:"status"`
 	RecordedBy      *int64         `json:"-"`
 	RecordedByLogin *string        `json:"recorded_by_login,omitempty"`
-	// ActivityID is required for loan and rental (they always happen as
-	// part of an activity) and optional for every other type.
+	// ActivityID is required for loan (it always happens as part of an
+	// activity) and optional for every other type, rental included — a
+	// rental isn't always tied to one specific activity.
 	ActivityID *int64 `json:"activity_id,omitempty"`
 	// Notes is free text, mainly useful on loss/abandonment/retirement
 	// to say why ("cuerda gastada", "se quedó instalada en la sima X").

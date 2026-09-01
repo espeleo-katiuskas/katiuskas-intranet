@@ -567,7 +567,7 @@ func TestListMovementsByUser(t *testing.T) {
 	}
 }
 
-func TestCreateMovementRequiresActivityForLoanAndRental(t *testing.T) {
+func TestCreateMovementRequiresActivityForLoan(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
@@ -582,7 +582,9 @@ func TestCreateMovementRequiresActivityForLoanAndRental(t *testing.T) {
 	}
 }
 
-func TestCreateMovementRentalRequiresActivity(t *testing.T) {
+// A rental isn't always tied to one specific activity the way a loan
+// always is.
+func TestCreateMovementRentalDoesNotRequireActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
@@ -592,8 +594,8 @@ func TestCreateMovementRentalRequiresActivity(t *testing.T) {
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
-	}); !errors.Is(err, inventory.ErrActivityRequired) {
-		t.Errorf("expected ErrActivityRequired for a rental without an activity, got %v", err)
+	}); err != nil {
+		t.Errorf("expected a rental without an activity to succeed, got %v", err)
 	}
 }
 

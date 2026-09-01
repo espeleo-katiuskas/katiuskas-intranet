@@ -1214,9 +1214,10 @@ paths:
         (stock permanently gone with no sale behind it, or gear taken
         out of service) never have a recipient at all — giving one is
         rejected (recipient_not_allowed), not just ignored. activity_id
-        is required for loan and rental (optional for everything else)
-        — a member is always borrowing or renting gear *for* something.
-        recorded_by_login (the caller) is set automatically, never
+        is required for loan (optional for everything else, rental
+        included — a rental isn't always tied to one specific activity
+        the way a loan always is). recorded_by_login (the caller) is
+        set automatically, never
         chosen by the caller — same for price, which always comes from
         the item's own rental_price_per_week/sale_price (null except
         for rental/sale), never from the request body. quantity is
@@ -1264,7 +1265,7 @@ paths:
             invalid_type, login_required (loan/rental without a
             login), recipient_not_allowed (a login given for
             acquisition/loss/abandonment/retirement), or
-            activity_required (loan/rental without activity_id).
+            activity_required (loan without activity_id).
         "404":
           description: The given login doesn't belong to anyone.
         "409":
@@ -1901,7 +1902,7 @@ components:
         activity_id:
           type: integer
           nullable: true
-          description: Required for loan and rental; optional otherwise.
+          description: Required for loan; optional otherwise, rental included.
         notes:
           type: string
           nullable: true
