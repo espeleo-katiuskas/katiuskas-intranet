@@ -68,19 +68,21 @@ func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int6
 // list defaults to every activity (paginated), matching how it always
 // worked; passing ?status=active switches to only the ones still needing
 // attention (see Repository.ListActive) — with years of history piling
-// up, that's what most callers actually want day to day.
+// up, that's what most callers actually want day to day. ?order=asc
+// sorts oldest-first instead of the newest-first default.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	ascending := r.URL.Query().Get("order") == "asc"
 
 	var (
 		list []Activity
 		err  error
 	)
 	if r.URL.Query().Get("status") == "active" {
-		list, err = h.service.ListActive(r.Context(), limit, offset)
+		list, err = h.service.ListActive(r.Context(), limit, offset, ascending)
 	} else {
-		list, err = h.service.List(r.Context(), limit, offset)
+		list, err = h.service.List(r.Context(), limit, offset, ascending)
 	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list activities")

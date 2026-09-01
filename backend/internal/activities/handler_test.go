@@ -776,3 +776,49 @@ func TestHandlerDeleteHolidayNotFound(t *testing.T) {
 		t.Errorf("expected 404 for an unknown holiday id, got %d", rec.Code)
 	}
 }
+
+// The list defaults to newest-first (unchanged); ?order=asc switches
+// to oldest-first, for the activities list page.
+func TestHandlerListOrderDefaultsToDescendingAndCanBeAscending(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	token := tokenFor(t, authn, leader.ID, "member")
+
+	older := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
+		"title": "Older", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if older.Code != http.StatusCreated {
+		t.Fatalf("create older: %d: %s", older.Code, older.Body.String())
+	}
+	newer := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
+		"title": "Newer", "type": "social", "start_date": "2026-02-01", "end_date": "2026-02-01",
+	})
+	if newer.Code != http.StatusCreated {
+		t.Fatalf("create newer: %d: %s", newer.Code, newer.Body.String())
+	}
+	var olderActivity, newerActivity activities.Activity
+	if err := json.Unmarshal(older.Body.Bytes(), &olderActivity); err != nil {
+		t.Fatalf("decode older: %v", err)
+	}
+	if err := json.Unmarshal(newer.Body.Bytes(), &newerActivity); err != nil {
+		t.Fatalf("decode newer: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/activities", token, nil)
+	var descending []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &descending); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if descending[0].ID != newerActivity.ID || descending[1].ID != olderActivity.ID {
+		t.Errorf("expected newest first by default, got [%d, %d]", descending[0].ID, descending[1].ID)
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/activities?order=asc", token, nil)
+	var ascending []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &ascending); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if ascending[0].ID != olderActivity.ID || ascending[1].ID != newerActivity.ID {
+		t.Errorf("expected oldest first with order=asc, got [%d, %d]", ascending[0].ID, ascending[1].ID)
+	}
+}

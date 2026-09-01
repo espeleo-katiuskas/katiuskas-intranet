@@ -49,18 +49,18 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	return s.repo.Create(ctx, in)
 }
 
-func (s *Service) List(ctx context.Context, limit, offset int) ([]Activity, error) {
+func (s *Service) List(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	return s.repo.List(ctx, limit, offset)
+	return s.repo.List(ctx, limit, offset, ascending)
 }
 
-func (s *Service) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
+func (s *Service) ListActive(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	return s.repo.ListActive(ctx, limit, offset)
+	return s.repo.ListActive(ctx, limit, offset, ascending)
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (Activity, error) {

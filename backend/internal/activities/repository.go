@@ -38,6 +38,17 @@ const activitySelect = `
 	FROM activities a
 	JOIN users ul ON ul.id = a.leader_id`
 
+// sortDirection returns a literal "ASC"/"DESC" to splice into an ORDER
+// BY clause — safe to interpolate (unlike the bool it's derived from,
+// nothing here ever comes from raw user input) since it's always one of
+// these two fixed strings.
+func sortDirection(ascending bool) string {
+	if ascending {
+		return "ASC"
+	}
+	return "DESC"
+}
+
 func scanActivity(row interface{ Scan(dest ...any) error }, a *Activity) error {
 	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description,
 		&a.Status, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
@@ -88,10 +99,10 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 	return a, tx.Commit(ctx)
 }
 
-func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, error) {
+func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+activitySelect+`
-		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
+		ORDER BY a.start_date `+sortDirection(ascending)+` LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
 		return nil, err
@@ -114,12 +125,12 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 // has a loan or rental linked to it that hasn't been returned. With
 // activities piling up for years, this is what the club actually wants
 // to see day to day — List still exists for browsing the full history.
-func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
+func (r *Repository) ListActive(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN item_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
 		WHERE a.status = 'planned' OR t.id IS NOT NULL
-		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
+		ORDER BY a.start_date `+sortDirection(ascending)+` LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
 		return nil, err

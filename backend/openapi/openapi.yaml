@@ -926,12 +926,16 @@ paths:
         attention: not yet completed/cancelled, or completed but still
         with a loan/rental linked to it that hasn't been returned — the
         practical "what matters right now" view once years of history
-        pile up.
+        pile up. Pass order=asc to sort oldest-first instead.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: status
           in: query
           schema: { type: string, enum: [active] }
+        - name: order
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+          description: asc sorts oldest-first; anything else (including omitted) is newest-first.
         - { name: limit, in: query, schema: { type: integer } }
         - { name: offset, in: query, schema: { type: integer } }
       responses:

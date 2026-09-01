@@ -66,12 +66,44 @@ func TestList(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	list, err := repo.List(ctx, 50, 0)
+	list, err := repo.List(ctx, 50, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	if len(list) != 2 {
 		t.Fatalf("expected 2 activities, got %d", len(list))
+	}
+}
+
+func TestListSortOrder(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
+
+	older, err := repo.Create(ctx, activities.CreateInput{Title: "Older", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID})
+	if err != nil {
+		t.Fatalf("create older: %v", err)
+	}
+	newer, err := repo.Create(ctx, activities.CreateInput{Title: "Newer", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-02-01"), EndDate: date("2026-02-01"), LeaderID: leader.ID})
+	if err != nil {
+		t.Fatalf("create newer: %v", err)
+	}
+
+	descending, err := repo.List(ctx, 50, 0, false)
+	if err != nil {
+		t.Fatalf("list descending: %v", err)
+	}
+	if descending[0].ID != newer.ID || descending[1].ID != older.ID {
+		t.Errorf("expected newest first by default, got [%d, %d]", descending[0].ID, descending[1].ID)
+	}
+
+	ascending, err := repo.List(ctx, 50, 0, true)
+	if err != nil {
+		t.Fatalf("list ascending: %v", err)
+	}
+	if ascending[0].ID != older.ID || ascending[1].ID != newer.ID {
+		t.Errorf("expected oldest first with ascending=true, got [%d, %d]", ascending[0].ID, ascending[1].ID)
 	}
 }
 
@@ -125,7 +157,7 @@ func TestListActive(t *testing.T) {
 		t.Fatalf("cancel: %v", err)
 	}
 
-	list, err := repo.ListActive(ctx, 50, 0)
+	list, err := repo.ListActive(ctx, 50, 0, false)
 	if err != nil {
 		t.Fatalf("list active: %v", err)
 	}
@@ -152,7 +184,7 @@ func TestListActive(t *testing.T) {
 // crashes trying to render it.
 func TestListReturnsEmptySliceNotNilWhenThereAreNoActivities(t *testing.T) {
 	repo := activities.NewRepository(testutil.NewTx(t))
-	list, err := repo.List(context.Background(), 50, 0)
+	list, err := repo.List(context.Background(), 50, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -319,7 +351,7 @@ func TestCreateRejectsUnknownParticipantWithoutCreatingActivity(t *testing.T) {
 		t.Fatalf("expected ErrParticipantNotFound, got %v", err)
 	}
 
-	list, err := repo.List(ctx, 50, 0)
+	list, err := repo.List(ctx, 50, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
