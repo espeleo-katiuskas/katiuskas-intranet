@@ -65,14 +65,14 @@ const visibilityLabels = { public: 'Pública', private: 'Privada' };
 const editForm = document.getElementById('edit-activity-form');
 
 // Toggles every management-only control (edit panel, "+ Participante"
-// row, "Zona de peligro") according to canManage — mirrors what
-// data-roles/applyRoleVisibility does for static, role-only elements,
-// but for something only knowable after this specific activity loads.
+// row) according to canManage — mirrors what data-roles/
+// applyRoleVisibility does for static, role-only elements, but for
+// something only knowable after this specific activity loads.
+// Cancelling is just editing and setting status to "cancelada" (see
+// the edit form's Estado field) — no separate action for it.
 function applyManagementVisibility() {
   document.getElementById('edit-activity-panel').hidden = !canManage;
   document.getElementById('add-participant-row').hidden = !canAddOthers;
-  document.getElementById('danger-zone-header').hidden = !canManage;
-  document.getElementById('cancel-activity').hidden = !canManage;
 }
 
 function dateRangeLabel(activity) {
@@ -151,20 +151,6 @@ editForm?.addEventListener('submit', async (event) => {
     showError(err.message);
   } finally {
     submitButton.disabled = false;
-  }
-});
-
-document.getElementById('cancel-activity')?.addEventListener('click', async () => {
-  if (!confirm('¿Cancelar esta actividad?')) return;
-  const button = document.getElementById('cancel-activity');
-  button.disabled = true;
-  try {
-    await apiFetch(`/activities/${activityId}`, { method: 'DELETE' });
-    showFeedback('Actividad cancelada.');
-    await loadActivity();
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
   }
 });
 
