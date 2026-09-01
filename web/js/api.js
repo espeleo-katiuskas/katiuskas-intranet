@@ -86,6 +86,26 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+// Like apiFetch, but for a multipart/form-data body (a file upload) —
+// the browser has to set its own Content-Type header with the
+// multipart boundary itself, so this must never set one the way
+// apiFetch's own Content-Type: application/json does.
+async function apiFetchForm(path, formData, options = {}) {
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const response = await fetch(`${API_BASE}${path}`, { method: options.method || 'POST', headers, body: formData });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  return response.json();
+}
+
 // Like apiFetch, but for an endpoint that returns raw bytes (a document
 // library file) instead of JSON — there's no session cookie this app
 // could rely on for a plain <a href>, so downloading or previewing a
@@ -196,6 +216,7 @@ function resolvePickerId(entries, typedValue) {
 export {
   apiFetch,
   apiFetchBlob,
+  apiFetchForm,
   initSession,
   logout,
   currentUser,

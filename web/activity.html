@@ -147,6 +147,40 @@
     </form>
   </div>
 
+  <div class="section-header">
+    <h2>Memoria</h2>
+  </div>
+  <div class="detail-list" id="memoria-list"></div>
+  <div class="panel" id="memoria-add-panel" hidden>
+    <h3>Añadir a la memoria</h3>
+    <form id="memoria-add-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="memoria-type">Tipo</label>
+          <select id="memoria-type">
+            <option value="text">Texto</option>
+            <option value="file">Fichero</option>
+          </select>
+        </div>
+        <div class="field span-2">
+          <label for="memoria-title">Título</label>
+          <input id="memoria-title" type="text" required>
+        </div>
+        <div class="field span-2" id="memoria-description-field">
+          <label for="memoria-description">Descripción</label>
+          <textarea id="memoria-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
+        </div>
+        <div class="field span-2" id="memoria-file-field" hidden>
+          <label for="memoria-file">Fichero</label>
+          <input id="memoria-file" type="file">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary btn-small">Añadir</button>
+      </div>
+    </form>
+  </div>
+
 </main>
 <script type="module" src="js/activity.js"></script>
 <footer class="site-footer">Club de Espeleología Katiuskas · más información en <a href="https://katiuskas.es/" target="_blank" rel="noopener">katiuskas.es</a></footer>

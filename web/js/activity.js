@@ -5,12 +5,15 @@ import {
   currentUser,
   hasAnyRole,
   apiFetch,
+  apiFetchBlob,
+  apiFetchForm,
   escapeHtml,
   formatDate,
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
 } from './api.js';
+import { renderMarkdown } from './markdown.js';
 
 await initSession();
 applyRoleVisibility();
@@ -32,6 +35,15 @@ let canManage = isAdmin;
 // Handler.join on the backend for the same split.
 let canJoinSelf = true;
 let canAddOthers = isAdmin;
+// Set once loadParticipants() resolves. Combined with canManage (the
+// organizer always counts too, even before/without a participant row
+// of their own — see activityresources.Handler.requireContributor on
+// the backend) this decides who may contribute to or reorder the
+// memoria (see canContributeToMemoria below).
+let isParticipant = false;
+function canContributeToMemoria() {
+  return canManage || isParticipant;
+}
 // Registering/returning a loan is gated the same way as on the
 // material page (admin/board/material) — independent of canManage,
 // since a plain member leading their own activity still can't touch
@@ -202,6 +214,7 @@ async function loadParticipants() {
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
+    isParticipant = alreadyIn;
     document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
     document.getElementById('leave-activity').hidden = !alreadyIn;
 
@@ -463,8 +476,246 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
   }
 });
 
+// A memoria entry is either a text one (title + Markdown/plain-text
+// description, see activityresources.ResourceText on the backend) or
+// an uploaded file (title + the file itself, typically a photo or a
+// PDF). Reading is open to everyone with baseline access to this page;
+// contributing (adding, reordering) requires canContributeToMemoria();
+// editing or deleting one specific resource is narrower still — only
+// its own author, or admin/board, even for someone else who took part
+// in the same activity.
+let memoriaResources = [];
+
+function canEditMemoriaResource(res) {
+  return isAdmin || res.author_login === viewer?.login;
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderMemoriaBody(res) {
+  if (res.type === 'text') {
+    return `<div class="document-text">${renderMarkdown(res.description ?? '')}</div>`;
+  }
+  return `<p><a href="#" data-memoria-file="${res.id}">${escapeHtml(res.file_name ?? res.title)}</a> <span class="hint">(${formatFileSize(res.file_size)})</span></p>`;
+}
+
+function renderMemoriaRow(res, index) {
+  const canEdit = canEditMemoriaResource(res);
+  const canReorder = canContributeToMemoria();
+  return `
+    <div class="detail-row memoria-resource" data-memoria-row="${res.id}">
+      <div class="memoria-resource-body">
+        <strong>${escapeHtml(res.title)}</strong>
+        <span class="subtitle">${escapeHtml(personLabel(res.author_login))} · ${formatDate(res.created_at)}</span>
+        ${renderMemoriaBody(res)}
+      </div>
+      <span class="memoria-actions">
+        ${canReorder && index > 0 ? `<button type="button" class="btn btn-secondary btn-small" data-memoria-move-up="${res.id}">↑</button>` : ''}
+        ${canReorder && index < memoriaResources.length - 1 ? `<button type="button" class="btn btn-secondary btn-small" data-memoria-move-down="${res.id}">↓</button>` : ''}
+        ${canEdit ? `<button type="button" class="btn btn-secondary btn-small" data-memoria-edit="${res.id}">Editar</button>` : ''}
+        ${canEdit ? `<button type="button" class="btn btn-danger btn-small" data-memoria-delete="${res.id}">Borrar</button>` : ''}
+      </span>
+    </div>
+  `;
+}
+
+async function loadMemoria() {
+  const container = document.getElementById('memoria-list');
+  if (!container) return;
+  try {
+    memoriaResources = await apiFetch(`/activities/${activityId}/resources`);
+    container.innerHTML = memoriaResources.length
+      ? memoriaResources.map((res, i) => renderMemoriaRow(res, i)).join('')
+      : '<p>Todavía no hay nada en la memoria de esta actividad.</p>';
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+  const addPanel = document.getElementById('memoria-add-panel');
+  if (addPanel) addPanel.hidden = !canContributeToMemoria();
+}
+
+function startMemoriaEdit(id) {
+  const res = memoriaResources.find((r) => r.id === id);
+  const row = document.querySelector(`[data-memoria-row="${id}"]`);
+  if (!res || !row) return;
+  row.querySelector('.memoria-resource-body').innerHTML = `
+    <div class="field">
+      <label>Título</label>
+      <input type="text" value="${escapeHtml(res.title)}" data-memoria-edit-title>
+    </div>
+    ${res.type === 'text' ? `
+    <div class="field">
+      <label>Descripción</label>
+      <textarea data-memoria-edit-description>${escapeHtml(res.description ?? '')}</textarea>
+    </div>` : ''}
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" data-memoria-save="${id}">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-memoria-cancel="${id}">Cancelar</button>
+    </div>
+  `;
+}
+
+async function moveMemoriaResource(id, direction) {
+  const index = memoriaResources.findIndex((r) => r.id === id);
+  const swapWith = index + direction;
+  if (index === -1 || swapWith < 0 || swapWith >= memoriaResources.length) return;
+  const ids = memoriaResources.map((r) => r.id);
+  [ids[index], ids[swapWith]] = [ids[swapWith], ids[index]];
+  try {
+    await apiFetch(`/activities/${activityId}/resources/order`, { method: 'PUT', body: JSON.stringify({ resource_ids: ids }) });
+    await loadMemoria();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+document.getElementById('memoria-list')?.addEventListener('click', async (event) => {
+  const fileLink = event.target.closest('a[data-memoria-file]');
+  if (fileLink) {
+    event.preventDefault();
+    const id = fileLink.dataset.memoriaFile;
+    const res = memoriaResources.find((r) => String(r.id) === id);
+    try {
+      const blob = await apiFetchBlob(`/activities/${activityId}/resources/${id}/file`);
+      downloadBlob(blob, res?.file_name ?? 'fichero');
+    } catch (err) {
+      showError(err.message);
+    }
+    return;
+  }
+
+  const upButton = event.target.closest('button[data-memoria-move-up]');
+  if (upButton) {
+    await moveMemoriaResource(Number(upButton.dataset.memoriaMoveUp), -1);
+    return;
+  }
+  const downButton = event.target.closest('button[data-memoria-move-down]');
+  if (downButton) {
+    await moveMemoriaResource(Number(downButton.dataset.memoriaMoveDown), 1);
+    return;
+  }
+
+  const editButton = event.target.closest('button[data-memoria-edit]');
+  if (editButton) {
+    startMemoriaEdit(Number(editButton.dataset.memoriaEdit));
+    return;
+  }
+
+  const deleteButton = event.target.closest('button[data-memoria-delete]');
+  if (deleteButton) {
+    if (!confirm('¿Borrar este elemento de la memoria?')) return;
+    try {
+      await apiFetch(`/activities/${activityId}/resources/${deleteButton.dataset.memoriaDelete}`, { method: 'DELETE' });
+      await loadMemoria();
+    } catch (err) {
+      showError(err.message);
+    }
+    return;
+  }
+
+  const saveButton = event.target.closest('button[data-memoria-save]');
+  if (saveButton) {
+    const id = saveButton.dataset.memoriaSave;
+    const row = document.querySelector(`[data-memoria-row="${id}"]`);
+    const body = { title: row.querySelector('[data-memoria-edit-title]').value.trim() };
+    const descriptionInput = row.querySelector('[data-memoria-edit-description]');
+    if (descriptionInput) {
+      body.description = descriptionInput.value.trim();
+    }
+    try {
+      await apiFetch(`/activities/${activityId}/resources/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await loadMemoria();
+    } catch (err) {
+      showError(err.message);
+    }
+    return;
+  }
+
+  const cancelButton = event.target.closest('button[data-memoria-cancel]');
+  if (cancelButton) {
+    await loadMemoria();
+  }
+});
+
+const memoriaTypeSelect = document.getElementById('memoria-type');
+const memoriaDescriptionField = document.getElementById('memoria-description-field');
+const memoriaFileField = document.getElementById('memoria-file-field');
+
+function updateMemoriaFormVisibility() {
+  if (!memoriaTypeSelect) return;
+  const isText = memoriaTypeSelect.value === 'text';
+  memoriaDescriptionField.hidden = !isText;
+  memoriaFileField.hidden = isText;
+}
+memoriaTypeSelect?.addEventListener('change', updateMemoriaFormVisibility);
+updateMemoriaFormVisibility();
+
+document.getElementById('memoria-add-form')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const title = document.getElementById('memoria-title').value.trim();
+  if (!title) {
+    showError('El título es obligatorio.');
+    return;
+  }
+  const formData = new FormData();
+  formData.set('type', memoriaTypeSelect.value);
+  formData.set('title', title);
+  if (memoriaTypeSelect.value === 'text') {
+    const description = document.getElementById('memoria-description').value.trim();
+    if (!description) {
+      showError('La descripción es obligatoria para una entrada de texto.');
+      return;
+    }
+    formData.set('description', description);
+  } else {
+    const fileInput = document.getElementById('memoria-file');
+    if (!fileInput.files.length) {
+      showError('Elige un fichero.');
+      return;
+    }
+    formData.set('file', fileInput.files[0]);
+  }
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetchForm(`/activities/${activityId}/resources`, formData);
+    showFeedback('Añadido a la memoria.');
+    form.reset();
+    updateMemoriaFormVisibility();
+    await loadMemoria();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
 await loadDirectory();
 await loadActivity();
-loadParticipants();
+await loadParticipants();
 await loadItems();
 loadActivityLoans();
+loadMemoria();
