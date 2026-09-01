@@ -104,6 +104,10 @@ async function loadActivity() {
       editForm.status.value = activity.status;
       editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
+      const leaderInput = document.getElementById('ea-leader');
+      if (leaderInput) {
+        leaderInput.value = personEntries.find((e) => e.id === activity.leader_login)?.label ?? activity.leader_login;
+      }
     }
   } catch (err) {
     document.getElementById('activity-title').textContent = 'No se ha podido cargar esta actividad.';
@@ -123,6 +127,19 @@ editForm?.addEventListener('submit', async (event) => {
     visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,
   };
+
+  // Only present at all for admin/board (see data-roles on the field) —
+  // reassigning the organizer is narrower than canManage, which the
+  // current leader also satisfies.
+  const leaderInput = document.getElementById('ea-leader');
+  if (leaderInput && leaderInput.value.trim()) {
+    const leaderLogin = resolvePickerId(personEntries, leaderInput.value);
+    if (!leaderLogin) {
+      showError('Elige un organizador de la lista.');
+      return;
+    }
+    body.leader_login = leaderLogin;
+  }
 
   const submitButton = editForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
@@ -167,6 +184,8 @@ async function loadDirectory() {
       .map((person) => ({ id: person.login, label: `${person.first_name} ${person.last_name} #${person.login}` }));
     const loanUserOptions = document.getElementById('loan-user-options');
     if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(personEntries);
+    const leaderOptions = document.getElementById('ea-leader-options');
+    if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
   } catch {
     directoryByLogin = {};
     personEntries = [];

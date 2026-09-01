@@ -163,6 +163,8 @@ participantChips.addEventListener('click', (event) => {
 // instead of falling back to "Socio n.º …" until a re-render happens.
 await loadDirectory();
 participantOptions.innerHTML = renderPickerOptions(personEntries);
+const leaderOptions = document.getElementById('na-leader-options');
+if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
 
 document.getElementById('toggle-new-activity').addEventListener('click', () => {
   newActivityPanel.hidden = !newActivityPanel.hidden;
@@ -189,6 +191,18 @@ newActivityForm.addEventListener('submit', async (event) => {
     visibility: formData.get('visibility'),
     participant_logins: Array.from(chosenParticipants.keys()),
   };
+
+  // Only present at all for admin/board (see data-roles on the field);
+  // left blank, the organizer defaults to the caller as always.
+  const leaderInput = document.getElementById('na-leader');
+  if (leaderInput && leaderInput.value.trim()) {
+    const leaderLogin = resolvePickerId(personEntries, leaderInput.value);
+    if (!leaderLogin) {
+      showError('Elige un organizador de la lista, o déjalo vacío.');
+      return;
+    }
+    body.leader_login = leaderLogin;
+  }
 
   const submitButton = newActivityForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;

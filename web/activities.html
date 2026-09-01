@@ -68,6 +68,11 @@
             <option value="private">Privada</option>
           </select>
         </div>
+        <div class="field" data-roles="admin,board">
+          <label for="na-leader">Organizador <span class="optional">(opcional, tú por defecto)</span></label>
+          <input id="na-leader" type="text" list="na-leader-options" autocomplete="off" placeholder="Escribe un nombre…">
+          <datalist id="na-leader-options"></datalist>
+        </div>
         <div class="field span-2">
           <label for="na-description">Descripción <span class="optional">(opcional)</span></label>
           <textarea id="na-description" name="description"></textarea>
