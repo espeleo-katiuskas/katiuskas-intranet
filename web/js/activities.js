@@ -343,6 +343,11 @@ toggleCalendarButton.addEventListener('click', async () => {
   const showingCalendar = calendarViewContainer.hidden;
   calendarViewContainer.hidden = !showingCalendar;
   listView.hidden = showingCalendar;
+  // "Ver todas / Ver solo activas" only affects the list — the
+  // calendar always shows every non-cancelled activity in the year, so
+  // it'd be misleading to leave that button up while the calendar's
+  // the one on screen.
+  toggleFilterButton.hidden = showingCalendar;
   toggleCalendarButton.textContent = showingCalendar ? 'Ver lista' : 'Ver calendario';
   if (showingCalendar && !calendarLoaded) {
     await loadCalendar();
