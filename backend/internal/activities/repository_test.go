@@ -475,3 +475,63 @@ func TestParticipants(t *testing.T) {
 		t.Errorf("expected only userB left, got %+v", list)
 	}
 }
+
+func TestCreateAndDeleteHoliday(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.CreateHoliday(ctx, date("2026-04-06"), "Lunes de Pascua")
+	if err != nil {
+		t.Fatalf("create holiday: %v", err)
+	}
+	if created.ID == 0 {
+		t.Errorf("expected a generated id, got %+v", created)
+	}
+
+	list, err := repo.ListHolidays(ctx, 2026)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	found := false
+	for _, h := range list {
+		if h.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the created holiday to be listed, got %+v", list)
+	}
+
+	if err := repo.DeleteHoliday(ctx, created.ID); err != nil {
+		t.Fatalf("delete holiday: %v", err)
+	}
+	list, err = repo.ListHolidays(ctx, 2026)
+	if err != nil {
+		t.Fatalf("list after delete: %v", err)
+	}
+	for _, h := range list {
+		if h.ID == created.ID {
+			t.Errorf("expected the deleted holiday to be gone, still found %+v", h)
+		}
+	}
+}
+
+func TestCreateHolidayRejectsDuplicateDate(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	// 2026-01-01 is already seeded (migration 00014).
+	if _, err := repo.CreateHoliday(ctx, date("2026-01-01"), "Duplicado"); !errors.Is(err, activities.ErrDuplicateHoliday) {
+		t.Errorf("expected ErrDuplicateHoliday, got %v", err)
+	}
+}
+
+func TestDeleteHolidayNotFound(t *testing.T) {
+	repo := activities.NewRepository(testutil.NewTx(t))
+
+	if err := repo.DeleteHoliday(context.Background(), 999999); !errors.Is(err, activities.ErrHolidayNotFound) {
+		t.Errorf("expected ErrHolidayNotFound, got %v", err)
+	}
+}

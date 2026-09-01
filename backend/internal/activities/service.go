@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 )
@@ -99,4 +100,12 @@ func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Activity, err
 
 func (s *Service) ListHolidays(ctx context.Context, year int) ([]Holiday, error) {
 	return s.repo.ListHolidays(ctx, year)
+}
+
+func (s *Service) CreateHoliday(ctx context.Context, date time.Time, name string) (Holiday, error) {
+	return s.repo.CreateHoliday(ctx, date, name)
+}
+
+func (s *Service) DeleteHoliday(ctx context.Context, id int64) error {
+	return s.repo.DeleteHoliday(ctx, id)
 }

@@ -1117,10 +1117,7 @@ paths:
       description: >
         Backs the activities calendar view, which marks these alongside
         weekends (computed client-side from the date, no table needed
-        for those). Open to any baseline role — not sensitive. There's
-        no endpoint to create or remove one; the list is grown with a
-        plain INSERT, the same catalog-table pattern
-        material_categories/license_types already use.
+        for those). Open to any baseline role — not sensitive.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: year
@@ -1135,6 +1132,40 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Holiday" }
+    post:
+      summary: Add a holiday
+      description: Requires the admin or board role.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, name]
+              properties:
+                date: { type: string, format: date }
+                name: { type: string }
+      responses:
+        "201":
+          description: Holiday created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Holiday" }
+        "400": { description: invalid_date, or invalid_name (empty). }
+        "409": { description: duplicate_holiday — that date already has one. }
+
+  /holidays/{id}:
+    delete:
+      summary: Remove a holiday
+      description: >
+        Requires the admin or board role. There's no update endpoint —
+        correcting one is just deleting and re-adding it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Holiday deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/movements:
     get:

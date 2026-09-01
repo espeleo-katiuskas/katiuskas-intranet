@@ -97,9 +97,9 @@ type Participant struct {
 
 // Holiday is a club holiday — the calendar view (see GET /holidays)
 // marks these alongside weekends (computed from the date itself, no
-// table needed for those). There's no API to manage this list, the
-// same catalog-table-grown-by-INSERT pattern
-// inventory.MaterialCategory and licenses.LicenseType already use.
+// table needed for those). admin/board can add or remove one (see
+// Handler.createHoliday/deleteHoliday); there's no update, since
+// correcting one is just deleting and re-adding it.
 type Holiday struct {
 	ID   int64     `json:"id"`
 	Date time.Time `json:"date"`

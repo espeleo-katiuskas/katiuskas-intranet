@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -16,9 +17,15 @@ var (
 	// doesn't exist. Create rejects the whole activity rather than
 	// creating it with a partial participant list.
 	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
+	// ErrHolidayNotFound means the given holiday id doesn't exist.
+	ErrHolidayNotFound = errors.New("holiday not found")
+	// ErrDuplicateHoliday means a holiday already exists on that date —
+	// see the holidays.date UNIQUE constraint.
+	ErrDuplicateHoliday = errors.New("a holiday already exists on that date")
 )
 
 const foreignKeyViolationCode = "23503"
+const uniqueViolationCode = "23505"
 
 // activitySelect is appended to every query that returns one or more
 // Activity rows other than Create's INSERT ... RETURNING (which can't
@@ -289,4 +296,27 @@ func (r *Repository) ListHolidays(ctx context.Context, year int) ([]Holiday, err
 		list = append(list, h)
 	}
 	return list, rows.Err()
+}
+
+func (r *Repository) CreateHoliday(ctx context.Context, date time.Time, name string) (Holiday, error) {
+	h := Holiday{Date: date, Name: name}
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO holidays (date, name) VALUES ($1,$2) RETURNING id
+	`, date, name).Scan(&h.ID)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		return Holiday{}, ErrDuplicateHoliday
+	}
+	return h, err
+}
+
+func (r *Repository) DeleteHoliday(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM holidays WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrHolidayNotFound
+	}
+	return nil
 }

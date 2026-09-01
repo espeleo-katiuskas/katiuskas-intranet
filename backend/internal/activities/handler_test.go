@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -704,5 +705,74 @@ func TestHandlerListHolidaysIsOpenToAnyBaselineUser(t *testing.T) {
 	}
 	if len(list) == 0 {
 		t.Error("expected the seeded 2026 holidays to be listed")
+	}
+}
+
+func TestHandlerCreateHolidayRequiresAdminOrBoard(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+	boardToken := tokenFor(t, authn, 2, "board")
+
+	body := map[string]any{"date": "2026-04-06", "name": "Lunes de Pascua"}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", memberToken, body); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member to be forbidden from creating a holiday, got %d", rec.Code)
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", boardToken, body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected board to create a holiday, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Holiday
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Name != "Lunes de Pascua" {
+		t.Errorf("expected name %q, got %q", "Lunes de Pascua", created.Name)
+	}
+}
+
+func TestHandlerCreateHolidayRejectsDuplicateDate(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	// 2026-01-01 is already seeded (migration 00014).
+	rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", boardToken, map[string]any{
+		"date": "2026-01-01", "name": "Duplicado",
+	})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for a duplicate holiday date, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "duplicate_holiday" {
+		t.Errorf("expected error code duplicate_holiday, got %q", code)
+	}
+}
+
+func TestHandlerDeleteHolidayRequiresAdminOrBoard(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+	boardToken := tokenFor(t, authn, 2, "board")
+
+	var holidayID int64
+	if err := tx.QueryRow(context.Background(), `
+		INSERT INTO holidays (date, name) VALUES ('2026-04-06', 'Lunes de Pascua') RETURNING id
+	`).Scan(&holidayID); err != nil {
+		t.Fatalf("insert holiday: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/holidays/%d", holidayID)
+	if rec := doRequest(mux, http.MethodDelete, path, memberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member to be forbidden from deleting a holiday, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, boardToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected board to delete the holiday, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerDeleteHolidayNotFound(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/holidays/999999", boardToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for an unknown holiday id, got %d", rec.Code)
 	}
 }

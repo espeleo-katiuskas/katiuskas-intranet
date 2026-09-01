@@ -48,6 +48,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/activities", h.authenticator.Protect(h.listByUser))
 
 	mux.Handle("GET /api/v1/holidays", h.authenticator.Protect(h.listHolidays))
+	mux.Handle("POST /api/v1/holidays", h.authenticator.Protect(h.createHoliday, "admin", "board"))
+	mux.Handle("DELETE /api/v1/holidays/{id}", h.authenticator.Protect(h.deleteHoliday, "admin", "board"))
 }
 
 // resolveUserLogin looks up the numeric id behind a {login} path
@@ -433,4 +435,51 @@ func (h *Handler) listHolidays(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) createHoliday(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Date string `json:"date"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	date, err := time.Parse("2006-01-02", body.Date)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "date must be YYYY-MM-DD")
+		return
+	}
+	if body.Name == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_name", "name is required")
+		return
+	}
+	holiday, err := h.service.CreateHoliday(r.Context(), date, body.Name)
+	if errors.Is(err, ErrDuplicateHoliday) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_holiday", err.Error())
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create holiday")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusCreated, holiday)
+}
+
+func (h *Handler) deleteHoliday(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if err := h.service.DeleteHoliday(r.Context(), id); err != nil {
+		if errors.Is(err, ErrHolidayNotFound) {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "holiday not found")
+			return
+		}
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete holiday")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
