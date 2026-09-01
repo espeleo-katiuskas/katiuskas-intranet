@@ -18,10 +18,11 @@ document.getElementById('logout-button').addEventListener('click', logout);
 
 const user = currentUser();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
-// Managing material transactions (loans, rentals, sales, returns) is open
-// to admin/board plus the optional "material" role — item CRUD stays
-// admin/board-only, so this is deliberately a separate check from isAdmin.
-const canManageTransactions = hasAnyRole(user, ['admin', 'board', 'material']);
+// Managing material movements (loans, rentals, sales, acquisitions,
+// losses, abandonments, retirements, returns) is open to admin/board
+// plus the optional "material" role — item CRUD stays admin/board-only,
+// so this is deliberately a separate check from isAdmin.
+const canManageMovements = hasAnyRole(user, ['admin', 'board', 'material']);
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');
@@ -43,6 +44,8 @@ const itemStatusLabels = {
   on_loan: 'Prestado',
   rented: 'Alquilado',
   sold: 'Vendido',
+  lost: 'Perdido',
+  abandoned: 'Abandonado',
   maintenance: 'En mantenimiento',
   retired: 'De baja',
 };
@@ -51,17 +54,29 @@ const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
-const typeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
-const txStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
+const typeLabels = {
+  loan: 'Préstamo',
+  rental: 'Alquiler',
+  sale: 'Venta',
+  acquisition: 'Adquisición',
+  loss: 'Pérdida',
+  abandonment: 'Abandono',
+  retirement: 'Retirada',
+};
+// Movement types with a recipient — everything else (acquisition, loss,
+// abandonment, retirement) has no socio, though loss/abandonment can
+// still carry one when it's known who was carrying the item.
+const recipientRequiredTypes = new Set(['loan', 'rental', 'sale']);
+const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 
 let itemsById = {};
-// Reassigned below when canManageTransactions is true; loadItems() (run
+// Reassigned below when canManageMovements is true; loadItems() (run
 // unconditionally) calls it every time the item picker is repopulated,
 // so it has to exist at module scope even when there's nothing to do.
-let updateTransactionQuantityVisibility = () => {};
+let updateMovementQuantityVisibility = () => {};
 
-// Populated from /users/directory (see the canManageTransactions block
-// below) so transaction rows can show a person's name instead of their
+// Populated from /users/directory (see the canManageMovements block
+// below) so movement rows can show a person's name instead of their
 // bare login.
 let directoryByLogin = {};
 
@@ -95,23 +110,25 @@ function renderItemRow(item) {
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
-      <td><button type="button" class="btn btn-secondary btn-small" data-toggle-item-transactions="${item.id}">Movimientos</button></td>
+      <td><button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button></td>
     </tr>
-    <tr data-item-transactions-row="${item.id}" hidden>
-      <td colspan="6"><div class="detail-list" data-item-transactions-panel="${item.id}"></div></td>
+    <tr data-item-movements-row="${item.id}" hidden>
+      <td colspan="6"><div class="detail-list" data-item-movements-panel="${item.id}"></div></td>
     </tr>
   `;
 }
 
-function renderTransactionDetail(t) {
-  const canReturn = canManageTransactions && t.status === 'active' && t.type !== 'sale';
-  const returned = t.returned_at ? ` · devuelto ${formatDate(t.returned_at)}` : '';
+function renderMovementDetail(m) {
+  const canReturn = canManageMovements && m.status === 'active';
+  const returned = m.returned_at ? ` · devuelto ${formatDate(m.returned_at)}` : '';
+  const who = m.user_login ? ` · Socio ${escapeHtml(personLabel(m.user_login))}` : '';
+  const notes = m.notes ? ` · ${escapeHtml(m.notes)}` : '';
   return `
     <div class="detail-row">
-      <span>${typeLabels[t.type] ?? t.type} · Socio ${escapeHtml(personLabel(t.user_login))} · cantidad ${t.quantity} ·
-        ${formatDate(t.transacted_at)}${returned} ·
-        <span class="badge">${txStatusLabels[t.status] ?? t.status}</span></span>
-      ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : ''}
+      <span>${typeLabels[m.type] ?? m.type}${who} · cantidad ${m.quantity} ·
+        ${formatDate(m.transacted_at)}${returned}${notes} ·
+        <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span></span>
+      ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : ''}
     </div>
   `;
 }
@@ -124,12 +141,12 @@ async function loadItems() {
     tableBody.innerHTML = items.length
       ? items.map(renderItemRow).join('')
       : '<tr><td colspan="6">Todavía no hay material dado de alta.</td></tr>';
-    if (canManageTransactions) {
+    if (canManageMovements) {
       const select = document.getElementById('nt-item');
       select.innerHTML = items
         .map((item) => `<option value="${item.id}" data-item-type="${item.item_type}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
         .join('');
-      updateTransactionQuantityVisibility();
+      updateMovementQuantityVisibility();
     }
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
@@ -137,18 +154,18 @@ async function loadItems() {
 }
 
 document.getElementById('items-table-body').addEventListener('click', async (event) => {
-  const toggleButton = event.target.closest('button[data-toggle-item-transactions]');
+  const toggleButton = event.target.closest('button[data-toggle-item-movements]');
   if (toggleButton) {
-    const itemId = toggleButton.dataset.toggleItemTransactions;
-    const row = document.querySelector(`[data-item-transactions-row="${itemId}"]`);
+    const itemId = toggleButton.dataset.toggleItemMovements;
+    const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
     row.hidden = !row.hidden;
     if (!row.hidden) {
-      const panel = row.querySelector(`[data-item-transactions-panel="${itemId}"]`);
+      const panel = row.querySelector(`[data-item-movements-panel="${itemId}"]`);
       panel.innerHTML = 'Cargando…';
       try {
-        const transactions = await apiFetch(`/items/${itemId}/transactions`);
-        panel.innerHTML = transactions.length
-          ? transactions.map(renderTransactionDetail).join('')
+        const movements = await apiFetch(`/items/${itemId}/movements`);
+        panel.innerHTML = movements.length
+          ? movements.map(renderMovementDetail).join('')
           : '<p>Todavía no tiene movimientos.</p>';
       } catch (err) {
         panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
@@ -166,44 +183,48 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
 async function handleReturn(button) {
   button.disabled = true;
   try {
-    await apiFetch(`/transactions/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
     showFeedback('Devolución registrada.');
     await loadItems();
-    if (isAdmin) await loadActiveTransactions();
+    if (isAdmin) await loadActiveMovements();
   } catch (err) {
     button.disabled = false;
     showError(err.message);
   }
 }
 
-function renderActiveTransactionRow(t) {
-  const item = itemsById[t.item_id];
-  const canReturn = canManageTransactions && t.type !== 'sale';
+function renderActiveMovementRow(m) {
+  const item = itemsById[m.item_id];
+  // Every row here comes from /movements?status=active, and only loan
+  // and rental ever reach that status — everything else settles
+  // immediately when recorded — so there's no type check needed beyond
+  // the role check.
+  const canReturn = canManageMovements;
   return `
     <tr>
-      <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
-      <td>${escapeHtml(personLabel(t.user_login))}</td>
-      <td>${typeLabels[t.type] ?? t.type}</td>
-      <td>${t.quantity}</td>
-      <td>${formatDate(t.transacted_at)}</td>
-      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${t.id}">Registrar devolución</button>` : '—'}</td>
+      <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
+      <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
+      <td>${typeLabels[m.type] ?? m.type}</td>
+      <td>${m.quantity}</td>
+      <td>${formatDate(m.transacted_at)}</td>
+      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : '—'}</td>
     </tr>
   `;
 }
 
-async function loadActiveTransactions() {
-  const tableBody = document.getElementById('active-transactions-table-body');
+async function loadActiveMovements() {
+  const tableBody = document.getElementById('active-movements-table-body');
   try {
-    const transactions = await apiFetch('/transactions?status=active');
-    tableBody.innerHTML = transactions.length
-      ? transactions.map(renderActiveTransactionRow).join('')
+    const movements = await apiFetch('/movements?status=active');
+    tableBody.innerHTML = movements.length
+      ? movements.map(renderActiveMovementRow).join('')
       : '<tr><td colspan="6">No hay movimientos activos.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar los movimientos.</td></tr>';
   }
 }
 
-document.getElementById('active-transactions-table-body')?.addEventListener('click', async (event) => {
+document.getElementById('active-movements-table-body')?.addEventListener('click', async (event) => {
   const returnButton = event.target.closest('button[data-return]');
   if (returnButton) {
     await handleReturn(returnButton);
@@ -312,12 +333,12 @@ if (isAdmin) {
 let userEntries = [];
 let activityEntries = [];
 
-// Awaited before loadActiveTransactions() below, so itemsById is
-// populated (and the "Material" column can show a real label instead
-// of falling back to "Material n.º …") by the time it renders.
+// Awaited before loadActiveMovements() below, so itemsById is populated
+// (and the "Material" column can show a real label instead of falling
+// back to "Material n.º …") by the time it renders.
 await loadItems();
 
-if (canManageTransactions) {
+if (canManageMovements) {
   const userInput = document.getElementById('nt-user');
   const userOptions = document.getElementById('nt-user-options');
   const directoryLoaded = apiFetch('/users/directory')
@@ -345,39 +366,52 @@ if (canManageTransactions) {
 
   const typeSelect = document.getElementById('nt-type');
   const activityField = document.getElementById('nt-activity-field');
+  const userOptionalHint = document.getElementById('nt-user-optional-hint');
   const itemSelect = document.getElementById('nt-item');
   const quantityField = document.getElementById('nt-quantity-field');
   const quantityInput = document.getElementById('nt-quantity');
 
-  function updateTransactionFieldsVisibility() {
+  function updateMovementFieldsVisibility() {
     const type = typeSelect.value;
-    // Loans and rentals always happen as part of an activity; a sale
-    // doesn't (see the loan_and_rental_require_activity constraint).
-    activityField.hidden = type === 'sale';
-    activityInput.required = type !== 'sale';
+    // Loans and rentals always happen as part of an activity (see the
+    // activity_required_for_loan_and_rental constraint); every other
+    // type leaves it optional.
+    const requiresActivity = type === 'loan' || type === 'rental';
+    activityField.hidden = !requiresActivity;
+    activityInput.required = requiresActivity;
+    // loan/rental/sale exchange the item with a specific socio;
+    // acquisition/loss/abandonment/retirement don't, though a socio can
+    // still be given for loss/abandonment when it's known who had it.
+    userOptionalHint.hidden = recipientRequiredTypes.has(type);
   }
-  typeSelect.addEventListener('change', updateTransactionFieldsVisibility);
-  updateTransactionFieldsVisibility();
+  typeSelect.addEventListener('change', updateMovementFieldsVisibility);
+  updateMovementFieldsVisibility();
 
-  // rope/bag are individually tracked (always total_quantity 1), so
+  // rope/bag are individually tracked (always exactly one unit), so
   // there's no quantity to choose once one of those is selected.
-  updateTransactionQuantityVisibility = function () {
+  updateMovementQuantityVisibility = function () {
     const selected = itemSelect.selectedOptions[0];
     const isSingleUnit = selected?.dataset.itemType === 'rope' || selected?.dataset.itemType === 'bag';
     quantityField.hidden = isSingleUnit;
     if (isSingleUnit) quantityInput.value = '1';
   };
-  itemSelect.addEventListener('change', updateTransactionQuantityVisibility);
-  updateTransactionQuantityVisibility();
+  itemSelect.addEventListener('change', updateMovementQuantityVisibility);
+  updateMovementQuantityVisibility();
 
-  const newTransactionForm = document.getElementById('new-transaction-form');
-  newTransactionForm.addEventListener('submit', async (event) => {
+  const newMovementForm = document.getElementById('new-movement-form');
+  newMovementForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const formData = new FormData(newTransactionForm);
+    const formData = new FormData(newMovementForm);
     const type = formData.get('type');
 
-    const userLogin = resolvePickerId(userEntries, userInput.value);
-    if (!userLogin) {
+    let userLogin = null;
+    if (userInput.value.trim()) {
+      userLogin = resolvePickerId(userEntries, userInput.value);
+      if (!userLogin) {
+        showError('Elige un socio de la lista, o déjalo vacío.');
+        return;
+      }
+    } else if (recipientRequiredTypes.has(type)) {
       showError('Elige un socio de la lista.');
       return;
     }
@@ -397,18 +431,19 @@ if (canManageTransactions) {
       quantity: Number(formData.get('quantity')) || 1,
       transacted_at: formData.get('transacted_at') || null,
       activity_id: activityId,
+      notes: formData.get('notes')?.toString().trim() || null,
     };
 
-    const submitButton = newTransactionForm.querySelector('button[type="submit"]');
+    const submitButton = newMovementForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     try {
-      await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Transacción registrada.');
-      newTransactionForm.reset();
-      updateTransactionFieldsVisibility();
-      updateTransactionQuantityVisibility();
+      await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
+      showFeedback('Movimiento registrado.');
+      newMovementForm.reset();
+      updateMovementFieldsVisibility();
+      updateMovementQuantityVisibility();
       await loadItems();
-      await loadActiveTransactions();
+      await loadActiveMovements();
     } catch (err) {
       showError(err.message);
     } finally {
@@ -419,5 +454,5 @@ if (canManageTransactions) {
   // Awaited so the "Socio" column has names to show on first paint
   // instead of falling back to the bare login until a re-render happens.
   await directoryLoaded;
-  loadActiveTransactions();
+  loadActiveMovements();
 }

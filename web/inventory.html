@@ -138,23 +138,23 @@
         <thead>
           <tr><th>Material</th><th>Socio</th><th>Tipo</th><th>Cantidad</th><th>Fecha</th><th></th></tr>
         </thead>
-        <tbody id="active-transactions-table-body"></tbody>
+        <tbody id="active-movements-table-body"></tbody>
       </table>
     </div>
 
     <div class="section-header">
-      <h2>Nueva transacción</h2>
+      <h2>Nuevo movimiento</h2>
     </div>
     <div class="panel">
-      <form id="new-transaction-form">
+      <form id="new-movement-form">
         <div class="field-grid">
           <div class="field">
             <label for="nt-item">Material</label>
             <select id="nt-item" name="item_id" required></select>
           </div>
-          <div class="field">
-            <label for="nt-user">Socio</label>
-            <input id="nt-user" type="text" list="nt-user-options" autocomplete="off" required placeholder="Escribe un nombre…">
+          <div class="field" id="nt-user-field">
+            <label for="nt-user">Socio <span class="optional" id="nt-user-optional-hint">(opcional para este tipo de movimiento)</span></label>
+            <input id="nt-user" type="text" list="nt-user-options" autocomplete="off" placeholder="Escribe un nombre…">
             <datalist id="nt-user-options"></datalist>
           </div>
           <div class="field" id="nt-activity-field">
@@ -168,6 +168,10 @@
               <option value="loan" selected>Préstamo</option>
               <option value="rental">Alquiler</option>
               <option value="sale">Venta</option>
+              <option value="acquisition">Adquisición</option>
+              <option value="loss">Pérdida</option>
+              <option value="abandonment">Abandono</option>
+              <option value="retirement">Retirada</option>
             </select>
           </div>
           <div class="field" id="nt-quantity-field">
@@ -178,10 +182,14 @@
             <label for="nt-transacted-at">Fecha <span class="optional">(opcional, hoy por defecto)</span></label>
             <input id="nt-transacted-at" name="transacted_at" type="date">
           </div>
+          <div class="field span-2">
+            <label for="nt-notes">Notas <span class="optional">(opcional)</span></label>
+            <input id="nt-notes" name="notes" type="text" placeholder="Motivo, contexto…">
+          </div>
         </div>
         <p class="hint">El precio (si aplica) es siempre el indicado en el material — no se puede cambiar aquí.</p>
         <div class="panel-actions">
-          <button type="submit" class="btn btn-primary">Registrar transacción</button>
+          <button type="submit" class="btn btn-primary">Registrar movimiento</button>
         </div>
       </form>
     </div>

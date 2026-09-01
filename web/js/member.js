@@ -779,8 +779,12 @@ async function loadActivities() {
   }
 }
 
-const transactionTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
-const transactionStatusLabels = { active: 'Activa', completed: 'Completada', overdue: 'Vencida', cancelled: 'Cancelada' };
+// Only loan/rental/sale ever have a recipient, so this person's own
+// movement history (GET /users/{login}/movements) never contains an
+// acquisition, loss, abandonment or retirement — no labels needed here
+// for those.
+const movementTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
+const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
@@ -801,31 +805,31 @@ function itemLabel(item) {
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
-function renderTransactionRow(t, itemsById) {
-  const item = itemsById[t.item_id];
-  const returned = t.returned_at ? `Devuelto ${formatDate(t.returned_at)}` : '—';
+function renderMovementRow(m, itemsById) {
+  const item = itemsById[m.item_id];
+  const returned = m.returned_at ? `Devuelto ${formatDate(m.returned_at)}` : '—';
   return `
     <tr>
-      <td>${item ? itemLabel(item) : `Material n.º ${t.item_id}`}</td>
-      <td>${transactionTypeLabels[t.type] ?? t.type}</td>
-      <td>${t.quantity}</td>
-      <td>${formatDate(t.transacted_at)}</td>
+      <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
+      <td>${movementTypeLabels[m.type] ?? m.type}</td>
+      <td>${m.quantity}</td>
+      <td>${formatDate(m.transacted_at)}</td>
       <td>${returned}</td>
-      <td><span class="badge">${transactionStatusLabels[t.status] ?? t.status}</span></td>
+      <td><span class="badge">${movementStatusLabels[m.status] ?? m.status}</span></td>
     </tr>
   `;
 }
 
-async function loadTransactions() {
-  const tableBody = document.getElementById('transactions-table-body');
+async function loadMovements() {
+  const tableBody = document.getElementById('movements-table-body');
   try {
-    const [items, transactions] = await Promise.all([
+    const [items, movements] = await Promise.all([
       apiFetch('/items').catch(() => []),
-      apiFetch(`/users/${memberLogin}/transactions`),
+      apiFetch(`/users/${memberLogin}/movements`),
     ]);
     const itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
-    tableBody.innerHTML = transactions.length
-      ? transactions.map((t) => renderTransactionRow(t, itemsById)).join('')
+    tableBody.innerHTML = movements.length
+      ? movements.map((m) => renderMovementRow(m, itemsById)).join('')
       : '<tr><td colspan="6">Todavía no tiene movimientos de material.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el historial de material.</td></tr>';
@@ -937,4 +941,4 @@ await loadLicenseTypesCatalog();
 loadMember();
 loadTimeline();
 loadActivities();
-loadTransactions();
+loadMovements();
