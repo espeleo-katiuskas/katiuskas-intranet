@@ -207,7 +207,7 @@ function renderMovementAddForm(item) {
           <input type="text" list="mv-user-options" autocomplete="off" data-mv-user placeholder="Escribe un nombre…">
         </div>
         <div class="field" data-mv-activity-field>
-          <label>Actividad</label>
+          <label>Actividad <span class="optional">(opcional)</span></label>
           <input type="text" list="mv-activity-options" autocomplete="off" data-mv-activity placeholder="Escribe para buscar…">
         </div>
         ${isSingleUnit ? '' : `
@@ -230,14 +230,15 @@ function renderMovementAddForm(item) {
 
 function updateMovementFormVisibility(form) {
   const type = form.querySelector('[data-mv-type]').value;
-  // Rental always happens as part of an activity (see the
-  // activity_required_for_loan_and_rental constraint) — loan would too,
-  // but it's never an option in this form (see movementTypeOptions).
-  // Every other type leaves the activity optional.
-  const requiresActivity = type === 'rental';
+  // A rental can optionally be tied to an activity (a loan always is,
+  // but loan is never an option in this form — see
+  // movementTypeOptions); every other type has no such notion at all,
+  // so the field only ever shows for rental.
   const activityField = form.querySelector('[data-mv-activity-field]');
-  activityField.hidden = !requiresActivity;
-  form.querySelector('[data-mv-activity]').required = requiresActivity;
+  const activityInput = form.querySelector('[data-mv-activity]');
+  activityField.hidden = type !== 'rental';
+  if (activityField.hidden) activityInput.value = '';
+  activityInput.required = false;
 
   // Acquisition/loss/abandonment/retirement never have a recipient —
   // the field is hidden outright (and cleared) rather than just left
@@ -343,10 +344,10 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
     return;
   }
   let activityId = null;
-  if (!activityField.hidden) {
+  if (!activityField.hidden && activityInput.value.trim()) {
     activityId = resolvePickerId(activityEntries, activityInput.value);
     if (!activityId) {
-      showError('Elige una actividad de la lista.');
+      showError('Elige una actividad de la lista, o déjalo vacío.');
       return;
     }
   }
