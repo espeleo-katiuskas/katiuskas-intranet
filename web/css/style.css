@@ -547,25 +547,6 @@ button.link-button {
   flex-wrap: wrap;
 }
 
-/* A small standalone number input paired with a "Devolver"/"Registrar
-   devolución" button — outside any .field, so it needs its own look. */
-.quantity-input {
-  width: 4.5em;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-family: inherit;
-  background: var(--surface);
-  color: var(--ink);
-}
-
-.return-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .breadcrumbs {
   margin: 16px 0;
   color: var(--ink-muted);

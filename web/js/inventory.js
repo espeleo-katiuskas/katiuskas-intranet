@@ -55,8 +55,8 @@ const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
 // Every movement type, for display — loans still show up in an item's
-// history and in "movimientos activos" even though they're no longer
-// created from this page (see movementTypeOptions below).
+// history even though they're no longer created from this page (see
+// movementTypeOptions below).
 const typeLabels = {
   loan: 'Préstamo',
   rental: 'Alquiler',
@@ -65,26 +65,28 @@ const typeLabels = {
   loss: 'Pérdida',
   abandonment: 'Abandono',
   retirement: 'Retirada',
+  return: 'Devolución',
 };
 // A loan is always tied to an activity, and it's the activity page
 // (where the participants and the trip context already are) that
-// registers those now — see js/activity.js. This form offers
-// everything else.
+// registers those now — see js/activity.js. return is the other side
+// of a loan and *is* offered here: material can come back in pieces
+// (30 mosquetones lent for a trip might return 10 one day, 20 the
+// next), each its own call against the same item and activity.
 const movementTypeOptions = Object.entries(typeLabels).filter(([type]) => type !== 'loan');
-// Rental always needs a socio; sale's is optional; acquisition, loss,
-// abandonment and retirement never get one at all — the "Socio" field
-// is hidden outright for those, not just left empty.
+// Rental always needs a socio; loan, sale and return's are optional;
+// acquisition, loss, abandonment and retirement never get one at all —
+// the "Socio" field is hidden outright for those, not just left empty.
 const recipientRequiredTypes = new Set(['rental']);
 const recipientForbiddenTypes = new Set(['acquisition', 'loss', 'abandonment', 'retirement']);
 const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 
-// Only loan and rental are ever returnable — a sale (or acquisition/
-// loss/abandonment/retirement) is settled the moment it's recorded, so
-// this checks the type itself rather than just status: a stray 'active'
-// sale row (from before movements existed, say) still shouldn't offer
-// a return button.
+// Only rental is ever returned via PATCH .../return, and always all at
+// once — a loan's own "returned" state is the sum of separate 'return'
+// movements against the same item and activity instead (see
+// movementTypeOptions above), not a flag closed on the loan itself.
 function isReturnable(m) {
-  return m.type === 'loan' || m.type === 'rental';
+  return m.type === 'rental';
 }
 
 let allItems = [];
@@ -169,39 +171,18 @@ function renderItemRow(item) {
   `;
 }
 
-// A loan/rental's quantity can come back in pieces (30 mosquetones
-// lent for a trip might return 10 one day, 20 the next), so this shows
-// prestados/devueltos/pendientes instead of a single "cantidad", plus
-// a link to the day-by-day return log once there's at least one.
 function renderMovementDetail(m) {
   const canReturn = canManageMovements && isReturnable(m) && m.status === 'active';
-  const outstanding = m.quantity - m.returned_quantity;
+  const returned = m.returned_at ? ` · devuelto ${formatDate(m.returned_at)}` : '';
   const who = m.user_login ? ` · Socio ${escapeHtml(personLabel(m.user_login))}` : '';
   const notes = m.notes ? ` · ${escapeHtml(m.notes)}` : '';
-  const quantityText = isReturnable(m)
-    ? `prestados ${m.quantity} · devueltos ${m.returned_quantity} · pendientes ${outstanding}`
-    : `cantidad ${m.quantity}`;
-  const fullyReturned = m.returned_at ? ` · completado el ${formatDate(m.returned_at)}` : '';
-  const returnsToggle = m.returned_quantity > 0
-    ? ` · <button type="button" class="link-button" data-toggle-movement-returns="${m.id}">Ver devoluciones (${m.returned_quantity})</button>`
-    : '';
   return `
     <div class="detail-row">
-      <span>${formatDate(m.transacted_at)} · ${typeLabels[m.type] ?? m.type}${who} · ${quantityText}${fullyReturned}${notes} ·
-        <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span>${returnsToggle}</span>
-      ${canReturn ? `
-        <span class="return-control">
-          <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
-          <button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>
-        </span>` : ''}
+      <span>${formatDate(m.transacted_at)} · ${typeLabels[m.type] ?? m.type}${who} · cantidad ${m.quantity}${returned}${notes} ·
+        <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span></span>
+      ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : ''}
     </div>
-    ${m.returned_quantity > 0 ? `<div class="detail-list" data-movement-returns-panel="${m.id}" hidden></div>` : ''}
   `;
-}
-
-function renderMovementReturnDetail(r) {
-  const who = r.recorded_by_login ? ` · ${escapeHtml(personLabel(r.recorded_by_login))}` : '';
-  return `<div class="detail-row"><span>${formatDate(r.returned_at)} · ${r.quantity}${who}</span></div>`;
 }
 
 // One inline "add movement" form per item, rendered into that item's
@@ -228,7 +209,7 @@ function renderMovementAddForm(item) {
           <input type="text" list="mv-user-options" autocomplete="off" data-mv-user placeholder="Escribe un nombre…">
         </div>
         <div class="field" data-mv-activity-field>
-          <label>Actividad <span class="optional">(opcional)</span></label>
+          <label>Actividad <span class="optional" data-mv-activity-hint>(opcional)</span></label>
           <input type="text" list="mv-activity-options" autocomplete="off" data-mv-activity placeholder="Escribe para buscar…">
         </div>
         ${isSingleUnit ? '' : `
@@ -253,13 +234,17 @@ function updateMovementFormVisibility(form) {
   const type = form.querySelector('[data-mv-type]').value;
   // A rental can optionally be tied to an activity (a loan always is,
   // but loan is never an option in this form — see
-  // movementTypeOptions); every other type has no such notion at all,
-  // so the field only ever shows for rental.
+  // movementTypeOptions). return is the other side of a loan and is
+  // always required to name the same activity it's returning material
+  // against — Repository.CreateMovement validates it against how much
+  // of that item this activity still has outstanding. Every other type
+  // has no such notion at all, so the field only shows for those two.
   const activityField = form.querySelector('[data-mv-activity-field]');
   const activityInput = form.querySelector('[data-mv-activity]');
-  activityField.hidden = type !== 'rental';
+  activityField.hidden = type !== 'rental' && type !== 'return';
   if (activityField.hidden) activityInput.value = '';
-  activityInput.required = false;
+  activityInput.required = type === 'return';
+  form.querySelector('[data-mv-activity-hint]').hidden = activityInput.required;
 
   // Acquisition/loss/abandonment/retirement never have a recipient —
   // the field is hidden outright (and cleared) rather than just left
@@ -313,6 +298,7 @@ async function loadItems() {
     allItems = await apiFetch('/items');
     itemsById = Object.fromEntries(allItems.map((item) => [item.id, item]));
     renderFilteredItems();
+    renderLoanedMaterial();
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
   }
@@ -329,36 +315,11 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
     return;
   }
 
-  const returnsToggle = event.target.closest('button[data-toggle-movement-returns]');
-  if (returnsToggle) {
-    await toggleMovementReturns(returnsToggle);
-    return;
-  }
-
   const returnButton = event.target.closest('button[data-return]');
   if (returnButton) {
     await handleReturn(returnButton);
   }
 });
-
-// Fetches and shows the day-by-day return history behind a movement's
-// returned_quantity — 10 mosquetones back one day, 20 the next, each
-// its own row here.
-async function toggleMovementReturns(button) {
-  const panel = document.querySelector(`[data-movement-returns-panel="${button.dataset.toggleMovementReturns}"]`);
-  const opening = panel.hidden;
-  panel.hidden = !panel.hidden;
-  if (!opening) return;
-  panel.innerHTML = 'Cargando…';
-  try {
-    const returns = await apiFetch(`/movements/${button.dataset.toggleMovementReturns}/returns`);
-    panel.innerHTML = returns.length
-      ? returns.map(renderMovementReturnDetail).join('')
-      : '<p>Todavía no hay devoluciones registradas.</p>';
-  } catch (err) {
-    panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
-  }
-}
 
 document.getElementById('items-table-body').addEventListener('change', (event) => {
   const select = event.target.closest('[data-mv-type]');
@@ -396,6 +357,9 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
       showError('Elige una actividad de la lista, o déjalo vacío.');
       return;
     }
+  } else if (type === 'return') {
+    showError('Elige una actividad de la lista: una devolución siempre va asociada a la actividad para la que se prestó el material.');
+    return;
   }
 
   const body = {
@@ -423,20 +387,16 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
   }
 });
 
+// Only ever reached for a rental — the sole type still returned this
+// way, always all at once (see isReturnable).
 async function handleReturn(button) {
   button.disabled = true;
   // If this return button lives inside an item's expanded movements
   // panel, remember which item so it can be reopened after the
   // reload below wipes the whole items table.
   const itemId = button.closest('[data-item-movements-panel]')?.dataset.itemMovementsPanel;
-  // Paired quantity input, wherever this button renders (the item's own
-  // movement detail, or the movimientos activos table) — defaults to
-  // everything outstanding, but can be edited down for a partial
-  // return.
-  const quantityInput = document.querySelector(`[data-return-quantity="${button.dataset.return}"]`);
-  const body = quantityInput ? { quantity: Number(quantityInput.value) } : {};
   try {
-    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
     showFeedback('Devolución registrada.');
     await loadItems();
     if (itemId) await expandItemMovements(Number(itemId));
@@ -450,18 +410,14 @@ async function handleReturn(button) {
 function renderActiveMovementRow(m) {
   const item = itemsById[m.item_id];
   const canReturn = canManageMovements && isReturnable(m);
-  const outstanding = m.quantity - m.returned_quantity;
   return `
     <tr>
       <td>${formatDate(m.transacted_at)}</td>
       <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
       <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
       <td>${typeLabels[m.type] ?? m.type}</td>
-      <td>${outstanding} / ${m.quantity}</td>
-      <td>${canReturn ? `
-        <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
-        <button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Devolver</button>
-      ` : '—'}</td>
+      <td>${m.quantity}</td>
+      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Devolver</button>` : '—'}</td>
     </tr>
   `;
 }
@@ -470,8 +426,9 @@ async function loadActiveMovements() {
   const tableBody = document.getElementById('active-movements-table-body');
   try {
     // A sale (or acquisition/loss/abandonment/retirement) is never
-    // really "active" — only loan/rental can be — so this filters
-    // defensively in case stray data ever says otherwise.
+    // really "active", and a loan settles immediately too — only
+    // rental can be — so this filters defensively in case stray data
+    // ever says otherwise.
     const movements = (await apiFetch('/movements?status=active')).filter(isReturnable);
     tableBody.innerHTML = movements.length
       ? movements.map(renderActiveMovementRow).join('')
@@ -486,6 +443,41 @@ document.getElementById('active-movements-table-body')?.addEventListener('click'
   if (returnButton) {
     await handleReturn(returnButton);
   }
+});
+
+function renderLoanedMaterialRow(item) {
+  return `
+    <tr>
+      <td>${itemLabel(item)}</td>
+      <td>${item.outstanding_loan_quantity}</td>
+      <td><button type="button" class="btn btn-secondary btn-small" data-view-loaned-item="${item.id}">Ver movimientos</button></td>
+    </tr>
+  `;
+}
+
+// Every loan's own outstanding balance, summed across every activity —
+// what's actually out with someone right now, regardless of which trip
+// it went out for. Read-only here: a return is registered against a
+// specific item's own inline form (with the activity it's for), same
+// as any other movement.
+function renderLoanedMaterial() {
+  const tableBody = document.getElementById('loaned-material-table-body');
+  if (!tableBody) return;
+  const loaned = allItems.filter((item) => item.outstanding_loan_quantity > 0);
+  tableBody.innerHTML = loaned.length
+    ? loaned.map(renderLoanedMaterialRow).join('')
+    : '<tr><td colspan="3">No hay material prestado pendiente de devolver.</td></tr>';
+}
+
+document.getElementById('loaned-material-table-body')?.addEventListener('click', async (event) => {
+  const viewButton = event.target.closest('button[data-view-loaned-item]');
+  if (!viewButton) return;
+  const itemId = Number(viewButton.dataset.viewLoanedItem);
+  const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
+  if (!row) return;
+  row.hidden = false;
+  await expandItemMovements(itemId);
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
 if (isAdmin) {

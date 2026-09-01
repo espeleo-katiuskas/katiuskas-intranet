@@ -766,7 +766,7 @@ async function loadActivities() {
 // movement history (GET /users/{login}/movements) never contains an
 // acquisition, loss, abandonment or retirement — no labels needed here
 // for those.
-const movementTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta' };
+const movementTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta', return: 'Devolución' };
 const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
@@ -788,14 +788,12 @@ function itemLabel(item) {
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
-// A loan/rental's quantity can come back in pieces (30 mosquetones
-// lent for a trip might return 10 one day, 20 the next) — this shows
-// the running Y/X count while it's still partial, and the date once
-// everything's back.
+// Only a rental ever carries a returned_at — a loan's own "returned"
+// state is the sum of separate 'return' movements (visible as their
+// own rows in this same history) against the same item and activity,
+// not a flag on the loan itself.
 function returnedText(m) {
-  if (m.returned_at) return `Devuelto el ${formatDate(m.returned_at)}`;
-  if (m.returned_quantity > 0) return `${m.returned_quantity}/${m.quantity} devueltos`;
-  return '—';
+  return m.returned_at ? `Devuelto el ${formatDate(m.returned_at)}` : '—';
 }
 
 function renderMovementRow(m, itemsById) {

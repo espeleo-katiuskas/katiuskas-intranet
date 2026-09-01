@@ -106,15 +106,22 @@
   <div class="table-wrap" data-roles="admin,board,material">
     <table>
       <thead>
-        <tr><th>Material</th><th>Socio</th><th>Pendiente / total</th><th></th></tr>
+        <tr><th>Material</th><th>Pendiente</th><th>Total prestado</th><th></th></tr>
       </thead>
       <tbody id="activity-loans-table-body"></tbody>
     </table>
   </div>
   <div class="panel" data-roles="admin,board,material">
-    <h3>Registrar préstamo</h3>
+    <h3>Registrar préstamo o devolución</h3>
     <form id="new-loan-form">
       <div class="field-grid">
+        <div class="field">
+          <label for="loan-type">Tipo</label>
+          <select id="loan-type">
+            <option value="loan">Préstamo</option>
+            <option value="return">Devolución</option>
+          </select>
+        </div>
         <div class="field">
           <label for="loan-item">Material</label>
           <input id="loan-item" type="text" list="loan-item-options" autocomplete="off" placeholder="Escribe para buscar…">
@@ -135,7 +142,7 @@
         </div>
       </div>
       <div class="panel-actions">
-        <button type="submit" class="btn btn-primary btn-small">Registrar préstamo</button>
+        <button type="submit" class="btn btn-primary btn-small" id="loan-submit">Registrar préstamo</button>
       </div>
     </form>
   </div>

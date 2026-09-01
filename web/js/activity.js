@@ -319,65 +319,60 @@ async function loadItems() {
   }
 }
 
-// A loan's quantity can come back in pieces (30 mosquetones lent for
-// the trip might return 10 one day, 20 the next) — the quantity input
-// defaults to everything still outstanding but can be edited down for
-// a partial return, same control as the material page.
-function renderActivityLoanRow(m) {
-  const item = itemsById[m.item_id];
-  const outstanding = m.quantity - m.returned_quantity;
+// Sums this activity's loan and return movements per item — a return
+// isn't linked to any one specific loan row, so what's still
+// outstanding is always every loan minus every return for that item,
+// not a per-movement "returned_quantity" (see
+// Repository.CreateMovement on the backend).
+function aggregateActivityLoans(movements) {
+  const byItem = new Map();
+  for (const m of movements) {
+    if (m.type !== 'loan' && m.type !== 'return') continue;
+    const totals = byItem.get(m.item_id) ?? { loaned: 0, returned: 0 };
+    if (m.type === 'loan') totals.loaned += m.quantity;
+    else totals.returned += m.quantity;
+    byItem.set(m.item_id, totals);
+  }
+  return byItem;
+}
+
+function renderActivityLoanRow(itemId, totals) {
+  const item = itemsById[itemId];
+  const outstanding = totals.loaned - totals.returned;
   return `
     <tr>
-      <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
-      <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
-      <td>${outstanding} / ${m.quantity}</td>
-      <td>
-        <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
-        <button type="button" class="btn btn-secondary btn-small" data-return-loan="${m.id}">Devolver</button>
-      </td>
+      <td>${item ? itemLabel(item) : `Material n.º ${itemId}`}</td>
+      <td>${outstanding}</td>
+      <td>${totals.loaned}</td>
+      <td>${outstanding > 0 ? `<button type="button" class="btn btn-secondary btn-small" data-prefill-return="${itemId}">Devolver</button>` : '—'}</td>
     </tr>
   `;
 }
 
-// There's no server-side "loans for this activity" filter, so this
-// fetches every active loan/rental and keeps only this activity's
-// loans client-side — the same club-wide scale (hundreds of items, not
-// movements) that made a plain <select> for material stop being usable
-// hasn't hit movement volume yet.
+// GET /movements?activity_id= returns every movement tied to this
+// activity — chiefly loan and return, which is what this list is built
+// from; anything else that happens to share this activity_id (a
+// rental, say) is simply ignored here.
 async function loadActivityLoans() {
   if (!canManageMovements) return;
   const tableBody = document.getElementById('activity-loans-table-body');
   if (!tableBody) return;
   try {
-    const movements = (await apiFetch('/movements?status=active'))
-      .filter((m) => m.type === 'loan' && m.activity_id === activityId);
-    tableBody.innerHTML = movements.length
-      ? movements.map(renderActivityLoanRow).join('')
+    const movements = await apiFetch(`/movements?activity_id=${activityId}`);
+    const byItem = [...aggregateActivityLoans(movements)].filter(([, totals]) => totals.loaned > 0);
+    tableBody.innerHTML = byItem.length
+      ? byItem.map(([itemId, totals]) => renderActivityLoanRow(itemId, totals)).join('')
       : '<tr><td colspan="4">No hay material prestado para esta actividad.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los préstamos.</td></tr>';
   }
 }
 
-document.getElementById('activity-loans-table-body')?.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-return-loan]');
-  if (!button) return;
-  button.disabled = true;
-  const quantityInput = document.querySelector(`[data-return-quantity="${button.dataset.returnLoan}"]`);
-  const body = quantityInput ? { quantity: Number(quantityInput.value) } : {};
-  try {
-    await apiFetch(`/movements/${button.dataset.returnLoan}/return`, { method: 'PATCH', body: JSON.stringify(body) });
-    showFeedback('Devolución registrada.');
-    await loadActivityLoans();
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
-  }
-});
-
+const loanTypeSelect = document.getElementById('loan-type');
 const loanItemInput = document.getElementById('loan-item');
 const loanQuantityField = document.getElementById('loan-quantity-field');
 const loanQuantityInput = document.getElementById('loan-quantity');
+const loanSubmitButton = document.getElementById('loan-submit');
 
 // rope/bag are individually tracked (always exactly one unit), so
 // there's no quantity to choose once one of those is picked.
@@ -391,19 +386,45 @@ function updateLoanQuantityVisibility() {
 }
 loanItemInput?.addEventListener('input', updateLoanQuantityVisibility);
 
+function updateLoanSubmitLabel() {
+  if (!loanTypeSelect || !loanSubmitButton) return;
+  loanSubmitButton.textContent = loanTypeSelect.value === 'return' ? 'Registrar devolución' : 'Registrar préstamo';
+}
+loanTypeSelect?.addEventListener('change', updateLoanSubmitLabel);
+
+// Clicking "Devolver" on a row above jumps straight to the shared form
+// with this item and "Devolución" preselected, instead of a separate
+// per-row quantity control — the quantity to return still needs typing
+// in (it can be less than everything outstanding), so this only saves
+// picking the item and type by hand.
+document.getElementById('activity-loans-table-body')?.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-prefill-return]');
+  if (!button || !loanItemInput) return;
+  const itemId = Number(button.dataset.prefillReturn);
+  const entry = itemEntries.find((e) => e.id === itemId);
+  if (!entry) return;
+  if (loanTypeSelect) loanTypeSelect.value = 'return';
+  updateLoanSubmitLabel();
+  loanItemInput.value = entry.label;
+  updateLoanQuantityVisibility();
+  document.getElementById('new-loan-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  loanQuantityInput?.focus();
+});
+
 document.getElementById('new-loan-form')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   // event.currentTarget reverts to null once dispatch finishes, which
   // happens before the `await apiFetch(...)` below resolves — capture
   // it now, not after.
   const form = event.currentTarget;
+  const type = loanTypeSelect ? loanTypeSelect.value : 'loan';
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
   if (!itemId) {
     showError('Elige un material de la lista.');
     return;
   }
-  // Optional — a loan's mandatory link is this activity, not
-  // necessarily one specific person.
+  // Optional either way — a loan or return's mandatory link is this
+  // activity, not necessarily one specific person.
   const userInput = document.getElementById('loan-user');
   let login = null;
   if (userInput.value.trim()) {
@@ -418,7 +439,7 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
   const body = {
     item_id: itemId,
     login,
-    type: 'loan',
+    type,
     quantity: loanQuantityField.hidden ? 1 : Number(loanQuantityInput.value) || 1,
     activity_id: activityId,
     // No date field in this form — always today (transacted_at left
@@ -430,9 +451,10 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
   submitButton.disabled = true;
   try {
     await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
-    showFeedback('Préstamo registrado.');
+    showFeedback(type === 'return' ? 'Devolución registrada.' : 'Préstamo registrado.');
     form.reset();
     updateLoanQuantityVisibility();
+    updateLoanSubmitLabel();
     await loadActivityLoans();
   } catch (err) {
     showError(err.message);
