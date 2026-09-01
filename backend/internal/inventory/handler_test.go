@@ -331,9 +331,37 @@ func TestHandlerCreateMovementRejectsInvalidType(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateMovementRequiresLoginForSale(t *testing.T) {
+func TestHandlerCreateMovementRequiresLoginForLoan(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "loan", "quantity": 1, "activity_id": activityID,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a loan without a login, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "login_required" {
+		t.Errorf("expected error code login_required, got %q", code)
+	}
+}
+
+// A sale's recipient is optional now — not every sale is tied to a
+// socio.
+func TestHandlerCreateMovementAllowsSaleWithoutLogin(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
@@ -347,11 +375,35 @@ func TestHandlerCreateMovementRequiresLoginForSale(t *testing.T) {
 	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "sale", "quantity": 1,
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for a sale without a login, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for a sale without a login, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if code := errorCode(t, rec); code != "login_required" {
-		t.Errorf("expected error code login_required, got %q", code)
+}
+
+// Acquisition, loss, abandonment and retirement never have a
+// recipient — giving one is rejected outright, not just ignored.
+func TestHandlerCreateMovementRejectsLoginForAcquisition(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+	user := testutil.InsertUser(t, tx, "")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": user.Login, "type": "acquisition", "quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an acquisition with a login, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "recipient_not_allowed" {
+		t.Errorf("expected error code recipient_not_allowed, got %q", code)
 	}
 }
 

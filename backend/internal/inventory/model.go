@@ -62,12 +62,13 @@ type MaterialCategory struct {
 	Name string `json:"name"`
 }
 
-// MovementType is either an exchange with a specific person (loan,
-// rental, sale — each requires a UserID) or a stock-level change with
-// no recipient: acquisition brings new units in, loss/abandonment/
-// retirement permanently take units out (lost in the field, left
-// behind on a trip, or decommissioned). See Repository.CreateMovement
-// for how each type affects an item's computed quantities and status.
+// MovementType is either an exchange with a specific person — loan and
+// rental always require a UserID, sale's is optional — or a stock-level
+// change that never has one at all: acquisition brings new units in,
+// loss/abandonment/retirement permanently take units out (lost in the
+// field, left behind on a trip, or decommissioned). See
+// Repository.CreateMovement for how each type affects an item's
+// computed quantities and status.
 type MovementType string
 
 const (
@@ -166,9 +167,9 @@ type CreateItemInput struct {
 type Movement struct {
 	ID     int64 `json:"id"`
 	ItemID int64 `json:"item_id"`
-	// UserID/UserLogin are nil for acquisition, loss, abandonment and
-	// retirement, which have no recipient — see MovementType. They're
-	// always set for loan/rental/sale.
+	// UserID/UserLogin are always nil for acquisition, loss, abandonment
+	// and retirement, which never have a recipient — see MovementType.
+	// They're always set for loan/rental, and optional for sale.
 	UserID *int64 `json:"-"`
 	// UserLogin/RecordedByLogin are filled in either by
 	// Repository.queryMovements' JOIN (which can span many different

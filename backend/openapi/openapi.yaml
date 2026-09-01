@@ -1207,15 +1207,15 @@ paths:
     post:
       summary: Record a movement against an item
       description: >
-        Requires the admin, board, or material role. loan, rental and
-        sale exchange the item with a specific person and require
-        login; acquisition (new stock in), loss, abandonment and
-        retirement (stock permanently gone with no sale behind it, or
-        gear taken out of service) have no recipient — login may be
-        omitted for those, though it can still be given for loss/
-        abandonment to record who was carrying the item. activity_id is
-        required for loan and rental (optional for everything else) — a
-        member is always borrowing or renting gear *for* something.
+        Requires the admin, board, or material role. loan and rental
+        exchange the item with a specific person and require login;
+        sale's login is optional — not every sale is tied to a socio.
+        acquisition (new stock in), loss, abandonment and retirement
+        (stock permanently gone with no sale behind it, or gear taken
+        out of service) never have a recipient at all — giving one is
+        rejected (recipient_not_allowed), not just ignored. activity_id
+        is required for loan and rental (optional for everything else)
+        — a member is always borrowing or renting gear *for* something.
         recorded_by_login (the caller) is set automatically, never
         chosen by the caller — same for price, which always comes from
         the item's own rental_price_per_week/sale_price (null except
@@ -1239,8 +1239,10 @@ paths:
                 login:
                   type: string
                   description: >
-                    The movement's recipient. Required for loan/rental/
-                    sale; optional (and rarely meaningful) otherwise.
+                    The movement's recipient. Required for loan/rental;
+                    optional for sale; rejected outright
+                    (recipient_not_allowed) for acquisition/loss/
+                    abandonment/retirement.
                 type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
                 quantity: { type: integer, default: 1, description: Forced to 1 for a rope or bag item. }
                 transacted_at: { type: string, format: date, description: Defaults to today; can be backdated. }
@@ -1258,7 +1260,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Movement" }
         "400":
-          description: invalid_type, login_required (loan/rental/sale without a login), or activity_required (loan/rental without activity_id).
+          description: >
+            invalid_type, login_required (loan/rental without a
+            login), recipient_not_allowed (a login given for
+            acquisition/loss/abandonment/retirement), or
+            activity_required (loan/rental without activity_id).
         "404":
           description: The given login doesn't belong to anyone.
         "409":
@@ -1871,15 +1877,14 @@ components:
     Movement:
       type: object
       description: >
-        loan, rental and sale exchange the item with a specific person
-        (user_login always set). acquisition (new stock in), loss,
-        abandonment and retirement have no recipient — user_login is
-        usually absent for those, though loss/abandonment can still
-        carry one when it's known who was carrying the item.
+        loan and rental exchange the item with a specific person
+        (user_login always set); sale's is optional. acquisition (new
+        stock in), loss, abandonment and retirement never have a
+        recipient at all — user_login is always absent for those.
       properties:
         id: { type: integer }
         item_id: { type: integer }
-        user_login: { type: string, nullable: true, description: "Absent for acquisition/loss/abandonment/retirement unless a recipient was given." }
+        user_login: { type: string, nullable: true, description: "Always set for loan/rental, optionally for sale, always absent for acquisition/loss/abandonment/retirement." }
         type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
         quantity: { type: integer, description: Always 1 for a rope or bag item. }
         transacted_at: { type: string, format: date, description: Defaults to today at creation; can be backdated. }

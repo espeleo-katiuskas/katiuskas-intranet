@@ -23,12 +23,24 @@ type UserLookup interface {
 	LoginForUserID(ctx context.Context, id int64) (string, error)
 }
 
-// recipientRequiredTypes are the movement types that exchange an item
-// with a specific person and so must name one — see MovementType.
+// recipientRequiredTypes are the movement types that always exchange
+// the item with a specific person and so must name one — see
+// MovementType. Sale's recipient is optional (neither required nor
+// forbidden — see recipientForbiddenTypes below for the types that
+// forbid one outright).
 var recipientRequiredTypes = map[MovementType]bool{
 	MovementLoan:   true,
 	MovementRental: true,
-	MovementSale:   true,
+}
+
+// recipientForbiddenTypes are the movement types that never have a
+// recipient at all: acquisition, loss, abandonment and retirement are
+// stock-level changes, not exchanges with a person.
+var recipientForbiddenTypes = map[MovementType]bool{
+	MovementAcquisition: true,
+	MovementLoss:        true,
+	MovementAbandonment: true,
+	MovementRetirement:  true,
 }
 
 var validMovementTypes = map[MovementType]bool{
@@ -230,7 +242,11 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if recipientRequiredTypes[body.Type] && body.Login == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "login_required", "loan, rental and sale movements require a login")
+		httpapi.WriteError(w, http.StatusBadRequest, "login_required", "loan and rental movements require a login")
+		return
+	}
+	if recipientForbiddenTypes[body.Type] && body.Login != "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "recipient_not_allowed", "acquisition, loss, abandonment and retirement movements have no recipient")
 		return
 	}
 	var userID *int64

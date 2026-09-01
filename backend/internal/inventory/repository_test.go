@@ -336,6 +336,45 @@ func TestMovementsWithoutRecipientHaveNilUserLogin(t *testing.T) {
 	}
 }
 
+// The handler already rejects a login for these types before ever
+// reaching the repository, but the recipient_only_for_loan_rental_sale
+// CHECK (migration 00019) is the actual source of truth — this exercises
+// it directly.
+func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 1)
+	user := testutil.InsertUser(t, tx, "")
+
+	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementAcquisition, Quantity: 1,
+	}); err == nil {
+		t.Error("expected an error giving a recipient to an acquisition")
+	}
+}
+
+// Sale's recipient is optional — unlike loan/rental, omitting it
+// doesn't fail.
+func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 1)
+
+	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, Type: inventory.MovementSale, Quantity: 1,
+	})
+	if err != nil {
+		t.Fatalf("create sale without a recipient: %v", err)
+	}
+	if m.UserID != nil {
+		t.Errorf("expected no recipient, got %+v", m.UserID)
+	}
+}
+
 func TestMovementNotesRoundTrip(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
