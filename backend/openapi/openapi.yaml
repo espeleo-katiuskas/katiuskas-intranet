@@ -330,7 +330,7 @@ paths:
           description: >
             Cannot delete: this account is the caller's own, or the person is
             still referenced by an activity they led or an inventory
-            transaction they're party to.
+            movement they're party to.
 
   /roles:
     get:
@@ -1100,26 +1100,28 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Activity" }
 
-  /users/{login}/transactions:
+  /users/{login}/movements:
     get:
-      summary: List a person's material transaction history
+      summary: List a person's material movement history
       description: >
         Every purchase, rental and loan this person has ever made,
-        regardless of status. The person themselves can view their own;
-        anyone else needs admin, board, or the material role — a
-        transaction carries a price, so it's treated like
-        GET /transactions rather than activity participation.
+        regardless of status (acquisition/loss/abandonment/retirement
+        movements have no recipient, so they never appear here). The
+        person themselves can view their own; anyone else needs admin,
+        board, or the material role — a movement can carry a price, so
+        it's treated like GET /movements rather than activity
+        participation.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
-          description: This person's transactions
+          description: This person's movements
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Transaction" }
+                items: { $ref: "#/components/schemas/Movement" }
         "403": { description: Neither the person themselves nor admin/board/material. }
 
   /items:
@@ -1149,7 +1151,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         "400":
-          description: invalid_item_type, invalid_date, or unknown_category (category_id isn't in the catalog).
+          description: >
+            invalid_item_type, invalid_date, unknown_category
+            (category_id isn't in the catalog), or single_unit_item
+            (total_quantity above 1 for a rope or bag — they're always
+            exactly one individually-tracked object).
 
   /material-categories:
     get:
@@ -1168,88 +1174,120 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MaterialCategory" }
 
-  /items/{id}/transactions:
+  /items/{id}/movements:
     get:
-      summary: List an item's transaction history
+      summary: List an item's movement history
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
-          description: Transactions for this item
+          description: Movements for this item
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Transaction" }
+                items: { $ref: "#/components/schemas/Movement" }
 
-  /transactions:
+  /movements:
     get:
-      summary: List transactions (defaults to active ones)
+      summary: List movements (defaults to active ones)
       description: Requires the admin, board, or material role.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string } }
       responses:
         "200":
-          description: Transactions
+          description: Movements
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Transaction" }
+                items: { $ref: "#/components/schemas/Movement" }
     post:
-      summary: Open a loan, rental or sale
+      summary: Record a movement against an item
       description: >
-        Requires the admin, board, or material role. activity_id is
-        required for loan and rental (never for sale) — a member is
-        always borrowing or renting gear *for* something.
+        Requires the admin, board, or material role. loan, rental and
+        sale exchange the item with a specific person and require
+        login; acquisition (new stock in), loss, abandonment and
+        retirement (stock permanently gone with no sale behind it, or
+        gear taken out of service) have no recipient — login may be
+        omitted for those, though it can still be given for loss/
+        abandonment to record who was carrying the item. activity_id is
+        required for loan and rental (optional for everything else) — a
+        member is always borrowing or renting gear *for* something.
         recorded_by_login (the caller) is set automatically, never
         chosen by the caller — same for price, which always comes from
-        the item's own rental_price_per_week/sale_price (null for a
-        loan), never from the request body. quantity is forced to 1 for
-        a rope or bag item, since they're individually tracked
-        (always total_quantity 1).
+        the item's own rental_price_per_week/sale_price (null except
+        for rental/sale), never from the request body. quantity is
+        forced to 1 for a rope or bag item, since they're individually
+        tracked (always exactly one unit); acquisition is rejected
+        outright for them (single_unit_item) — a new rope or saca is a
+        new item, not more stock on an existing one.
+        total_quantity/available_quantity on the item are always
+        recomputed from its movement history, never stored, so they can
+        never drift from what this endpoint actually recorded.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
           application/json:
             schema:
               type: object
-              required: [item_id, login, type]
+              required: [item_id, type]
               properties:
                 item_id: { type: integer }
-                login: { type: string, description: "The person the transaction is for." }
-                type: { type: string, enum: [loan, rental, sale] }
+                login:
+                  type: string
+                  description: >
+                    The movement's recipient. Required for loan/rental/
+                    sale; optional (and rarely meaningful) otherwise.
+                type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
                 quantity: { type: integer, default: 1, description: Forced to 1 for a rope or bag item. }
                 transacted_at: { type: string, format: date, description: Defaults to today; can be backdated. }
                 activity_id: { type: integer, nullable: true }
+                notes:
+                  type: string
+                  nullable: true
+                  description: >
+                    Free text, mainly useful on loss/abandonment/
+                    retirement to say why.
       responses:
         "201":
-          description: Transaction created
+          description: Movement created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Transaction" }
+              schema: { $ref: "#/components/schemas/Movement" }
         "400":
-          description: activity_id is missing for a loan or rental.
+          description: invalid_type, login_required (loan/rental/sale without a login), or activity_required (loan/rental without activity_id).
         "404":
           description: The given login doesn't belong to anyone.
         "409":
-          description: insufficient_stock (not enough available quantity), or not_loanable (the item's loanable flag is false) for a loan.
+          description: >
+            insufficient_stock (not enough available quantity),
+            not_loanable (the item's loanable flag is false) for a
+            loan, or single_unit_item (an acquisition against a rope or
+            bag item).
 
-  /transactions/{id}/return:
+  /movements/{id}/return:
     patch:
       summary: Close an active loan or rental
-      description: Requires the admin, board, or material role.
+      description: >
+        Requires the admin, board, or material role. Only loan and
+        rental ever reach status active (every other type settles
+        immediately when recorded), so returning anything else — or an
+        unknown id, or an already-closed movement — is reported the
+        same way: not_found.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
-          description: Closed transaction
+          description: Closed movement
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Transaction" }
+              schema: { $ref: "#/components/schemas/Movement" }
+        "404":
+          description: not_found — no active loan or rental with this id.
 
   /library:
     get:
@@ -1762,7 +1800,11 @@ components:
         description and category_id are always set. rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
-        to derive that from.
+        to derive that from. total_quantity/available_quantity are
+        always computed from this item's own movement history (see
+        GET /items/{id}/movements) rather than stored, so there's no
+        acquired_at here either — it's the transacted_at of the item's
+        first acquisition movement, visible in that same history.
       properties:
         id: { type: integer }
         item_type: { type: string, enum: [rope, bag, gear] }
@@ -1775,10 +1817,9 @@ components:
           description: >
             Required for gear. Doubles as "Observaciones" in the
             frontend for rope/bag, where it's optional.
-        acquired_at: { type: string, format: date, nullable: true }
-        total_quantity: { type: integer }
-        available_quantity: { type: integer }
-        status: { type: string, enum: [available, on_loan, rented, sold, maintenance, retired] }
+        total_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
+        available_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
+        status: { type: string, enum: [available, on_loan, rented, sold, lost, abandoned, maintenance, retired] }
         loanable: { type: boolean }
         rentable: { type: boolean, description: "Computed: true iff rental_price_per_week is set." }
         sellable: { type: boolean, description: "Computed: true iff sale_price is set." }
@@ -1802,11 +1843,20 @@ components:
         model: { type: string, description: Required for rope/bag. }
         code: { type: string, description: Required for rope/bag. }
         description: { type: string, description: Required for gear. }
-        acquired_at: { type: string, format: date }
+        acquired_at:
+          type: string
+          format: date
+          description: >
+            Backdates the item's first (and, for rope/bag, only)
+            acquisition movement. Defaults to today.
         total_quantity:
           type: integer
           default: 1
-          description: Must be 1 for rope/bag — enforced by a DB CHECK constraint.
+          description: >
+            How many units to start with — recorded as the item's
+            first acquisition movement. Must be 1 for rope/bag
+            (single_unit_item otherwise); more can be added to gear
+            later via POST /movements with type acquisition.
         loanable: { type: boolean, default: true }
         rental_price_per_week: { type: number }
         sale_price: { type: number }
@@ -1818,13 +1868,19 @@ components:
         capacity_liters: { type: number, description: Required for bag. }
         category_id: { type: integer, description: Required for gear — an id from GET /material-categories. }
 
-    Transaction:
+    Movement:
       type: object
+      description: >
+        loan, rental and sale exchange the item with a specific person
+        (user_login always set). acquisition (new stock in), loss,
+        abandonment and retirement have no recipient — user_login is
+        usually absent for those, though loss/abandonment can still
+        carry one when it's known who was carrying the item.
       properties:
         id: { type: integer }
         item_id: { type: integer }
-        user_login: { type: string }
-        type: { type: string, enum: [loan, rental, sale] }
+        user_login: { type: string, nullable: true, description: "Absent for acquisition/loss/abandonment/retirement unless a recipient was given." }
+        type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
         quantity: { type: integer, description: Always 1 for a rope or bag item. }
         transacted_at: { type: string, format: date, description: Defaults to today at creation; can be backdated. }
         returned_at: { type: string, format: date, nullable: true }
@@ -1833,14 +1889,20 @@ components:
           nullable: true
           description: >
             Always the item's own rental_price_per_week (rental) or
-            sale_price (sale) at the time of the transaction; always
-            null for a loan.
-        status: { type: string, enum: [active, completed, overdue, cancelled] }
+            sale_price (sale) at the time of the movement; always null
+            otherwise.
+        status: { type: string, enum: [active, completed, overdue, cancelled], description: "active only for an unreturned loan/rental; every other type is completed immediately." }
         recorded_by_login: { type: string, nullable: true }
         activity_id:
           type: integer
           nullable: true
-          description: Required for loan and rental; always null for a sale.
+          description: Required for loan and rental; optional otherwise.
+        notes:
+          type: string
+          nullable: true
+          description: >
+            Free text, mainly useful on loss/abandonment/retirement to
+            say why.
 
     LibraryEntry:
       type: object
