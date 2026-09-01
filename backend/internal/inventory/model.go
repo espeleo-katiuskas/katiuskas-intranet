@@ -1,5 +1,5 @@
 // Package inventory manages club gear available for loan, rental or sale,
-// and every transaction recorded against it.
+// and every movement recorded against it.
 package inventory
 
 import "time"
@@ -11,6 +11,8 @@ const (
 	ItemOnLoan      ItemStatus = "on_loan"
 	ItemRented      ItemStatus = "rented"
 	ItemSold        ItemStatus = "sold"
+	ItemLost        ItemStatus = "lost"
+	ItemAbandoned   ItemStatus = "abandoned"
 	ItemMaintenance ItemStatus = "maintenance"
 	ItemRetired     ItemStatus = "retired"
 )
@@ -60,21 +62,31 @@ type MaterialCategory struct {
 	Name string `json:"name"`
 }
 
-type TransactionType string
+// MovementType is either an exchange with a specific person (loan,
+// rental, sale — each requires a UserID) or a stock-level change with
+// no recipient: acquisition brings new units in, loss/abandonment/
+// retirement permanently take units out (lost in the field, left
+// behind on a trip, or decommissioned). See Repository.CreateMovement
+// for how each type affects an item's computed quantities and status.
+type MovementType string
 
 const (
-	TransactionLoan   TransactionType = "loan"
-	TransactionRental TransactionType = "rental"
-	TransactionSale   TransactionType = "sale"
+	MovementLoan        MovementType = "loan"
+	MovementRental      MovementType = "rental"
+	MovementSale        MovementType = "sale"
+	MovementAcquisition MovementType = "acquisition"
+	MovementLoss        MovementType = "loss"
+	MovementAbandonment MovementType = "abandonment"
+	MovementRetirement  MovementType = "retirement"
 )
 
-type TransactionStatus string
+type MovementStatus string
 
 const (
-	TransactionActive    TransactionStatus = "active"
-	TransactionCompleted TransactionStatus = "completed"
-	TransactionOverdue   TransactionStatus = "overdue"
-	TransactionCancelled TransactionStatus = "cancelled"
+	MovementActive    MovementStatus = "active"
+	MovementCompleted MovementStatus = "completed"
+	MovementOverdue   MovementStatus = "overdue"
+	MovementCancelled MovementStatus = "cancelled"
 )
 
 type Item struct {
@@ -91,8 +103,14 @@ type Item struct {
 	// identifies an item with no known brand/model) and doubles as
 	// "Observaciones" in the frontend for rope/bag, where it's optional
 	// — same field underneath, just labelled differently per type.
-	Description       *string    `json:"description,omitempty"`
-	AcquiredAt        *time.Time `json:"acquired_at,omitempty"`
+	Description *string `json:"description,omitempty"`
+	// TotalQuantity/AvailableQuantity are never stored — they're
+	// computed from this item's own movement history (see the
+	// inventory_item_quantities view and Repository.itemSelect), so
+	// they can never drift from what actually happened. There's no
+	// AcquiredAt field for the same reason: it's the transacted_at of
+	// this item's first 'acquisition' movement, visible in its
+	// movement history instead of being duplicated here.
 	TotalQuantity     int32      `json:"total_quantity"`
 	AvailableQuantity int32      `json:"available_quantity"`
 	Status            ItemStatus `json:"status"`
@@ -121,13 +139,18 @@ type Item struct {
 }
 
 type CreateItemInput struct {
-	Type               ItemType
-	Brand              *string
-	Model              *string
-	Code               *string
-	Description        *string
+	Type        ItemType
+	Brand       *string
+	Model       *string
+	Code        *string
+	Description *string
+	// InitialQuantity is how many units the item starts with — recorded
+	// as its first 'acquisition' movement rather than stored on the
+	// item row (see Repository.CreateItem). AcquiredAt backdates that
+	// movement; a nil value defaults it to today, same as any other
+	// movement.
+	InitialQuantity    int32
 	AcquiredAt         *time.Time
-	TotalQuantity      int32
 	Loanable           bool
 	RentalPricePerWeek *float64
 	SalePrice          *float64
@@ -140,42 +163,49 @@ type CreateItemInput struct {
 	CategoryID         *int64
 }
 
-type Transaction struct {
+type Movement struct {
 	ID     int64 `json:"id"`
 	ItemID int64 `json:"item_id"`
-	UserID int64 `json:"-"`
+	// UserID/UserLogin are nil for acquisition, loss, abandonment and
+	// retirement, which have no recipient — see MovementType. They're
+	// always set for loan/rental/sale.
+	UserID *int64 `json:"-"`
 	// UserLogin/RecordedByLogin are filled in either by
-	// Repository.queryTransactions' JOIN (which can span many different
+	// Repository.queryMovements' JOIN (which can span many different
 	// people across a single listing) or, for the two writes that use
 	// INSERT/UPDATE ... RETURNING (no JOIN available there), by the
 	// handler afterward — see licenses.Handler for the same split.
-	UserLogin string          `json:"user_login"`
-	Type      TransactionType `json:"type"`
-	Quantity  int32           `json:"quantity"`
-	// TransactedAt defaults to today (see CreateTransactionInput) but
-	// can be backdated — whoever logs the transaction may be doing so
-	// after the fact.
-	TransactedAt    time.Time         `json:"transacted_at"`
-	ReturnedAt      *time.Time        `json:"returned_at,omitempty"`
-	Price           *float64          `json:"price,omitempty"`
-	Status          TransactionStatus `json:"status"`
-	RecordedBy      *int64            `json:"-"`
-	RecordedByLogin *string           `json:"recorded_by_login,omitempty"`
+	UserLogin *string      `json:"user_login,omitempty"`
+	Type      MovementType `json:"type"`
+	Quantity  int32        `json:"quantity"`
+	// TransactedAt defaults to today (see CreateMovementInput) but can
+	// be backdated — whoever logs the movement may be doing so after
+	// the fact.
+	TransactedAt    time.Time      `json:"transacted_at"`
+	ReturnedAt      *time.Time     `json:"returned_at,omitempty"`
+	Price           *float64       `json:"price,omitempty"`
+	Status          MovementStatus `json:"status"`
+	RecordedBy      *int64         `json:"-"`
+	RecordedByLogin *string        `json:"recorded_by_login,omitempty"`
 	// ActivityID is required for loan and rental (they always happen as
-	// part of an activity) and left unset for a sale.
+	// part of an activity) and optional for every other type.
 	ActivityID *int64 `json:"activity_id,omitempty"`
+	// Notes is free text, mainly useful on loss/abandonment/retirement
+	// to say why ("cuerda gastada", "se quedó instalada en la sima X").
+	Notes *string `json:"notes,omitempty"`
 }
 
-// CreateTransactionInput has no Price field: it's never given by the
+// CreateMovementInput has no Price field: it's never given by the
 // caller, since it's always the item's own catalog price for that kind
-// of transaction (and always nil for a loan) — see
-// Repository.CreateTransaction.
-type CreateTransactionInput struct {
+// of movement (and always nil except for rental/sale) — see
+// Repository.CreateMovement.
+type CreateMovementInput struct {
 	ItemID       int64
-	UserID       int64
-	Type         TransactionType
+	UserID       *int64
+	Type         MovementType
 	Quantity     int32
 	TransactedAt time.Time
 	RecordedBy   *int64
 	ActivityID   *int64
+	Notes        *string
 }

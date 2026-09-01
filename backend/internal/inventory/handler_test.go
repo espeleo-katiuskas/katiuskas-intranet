@@ -69,7 +69,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 // most of these handler tests just need to exist, not exercise the
 // per-type rope/bag/gear rules themselves.
 // rental_price_per_week/sale_price are set so tests can create a
-// rental or sale transaction against this item without needing to give
+// rental or sale movement against this item without needing to give
 // a price themselves — it's always taken from the item now.
 func gearItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
 	t.Helper()
@@ -105,7 +105,7 @@ func TestHandlerCreateItemRequiresAdminOrBoard(t *testing.T) {
 // on every route, on top of whatever else that route requires — so
 // "material" alone, without also being a current member (or admin/
 // board), isn't enough for the material endpoints either.
-func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T) {
+func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardUser := testutil.InsertUser(t, tx, "")
 	materialOnlyUser := testutil.InsertUser(t, tx, "")
@@ -130,31 +130,31 @@ func TestHandlerTransactionsAllowMaterialPlusMemberButNotMaterialAlone(t *testin
 	body := map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", memberToken, body); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a plain member to be forbidden from creating a transaction, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", memberToken, body); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a plain member to be forbidden from creating a movement, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", materialOnlyToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", materialOnlyToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected \"material\" alone (no admin/board/member) to be forbidden, got %d", rec.Code)
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", materialMemberToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", materialMemberToken, body)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected material+member to create a transaction, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected material+member to create a movement, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var txn inventory.Transaction
-	if err := json.Unmarshal(rec.Body.Bytes(), &txn); err != nil {
-		t.Fatalf("decode transaction: %v", err)
+	var m inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode movement: %v", err)
 	}
-	returnPath := fmt.Sprintf("/api/v1/transactions/%d/return", txn.ID)
+	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", m.ID)
 	if rec := doRequest(mux, http.MethodPatch, returnPath, memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a plain member to be forbidden from returning a transaction, got %d", rec.Code)
+		t.Errorf("expected a plain member to be forbidden from returning a movement, got %d", rec.Code)
 	}
 	if rec := doRequest(mux, http.MethodPatch, returnPath, materialMemberToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected material+member to register a return, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
+func TestHandlerListMovementsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardUser := testutil.InsertUser(t, tx, "")
 	target := testutil.InsertUser(t, tx, "")
@@ -171,14 +171,14 @@ func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("create movement: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	path := fmt.Sprintf("/api/v1/users/%s/transactions", target.Login)
+	path := fmt.Sprintf("/api/v1/users/%s/movements", target.Login)
 	if rec := doRequest(mux, http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected another plain member to be forbidden, got %d", rec.Code)
 	}
@@ -189,16 +189,16 @@ func TestHandlerListTransactionsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected board to view anyone's history (200), got %d: %s", rec.Code, rec.Body.String())
 	}
-	var list []inventory.Transaction
+	var list []inventory.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(list) != 1 {
-		t.Errorf("expected 1 transaction, got %d", len(list))
+		t.Errorf("expected 1 movement, got %d", len(list))
 	}
 }
 
-func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
+func TestHandlerCreateMovementRequiresActivityForLoan(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
@@ -213,7 +213,7 @@ func TestHandlerCreateTransactionRequiresActivityForLoan(t *testing.T) {
 	user := testutil.InsertUser(t, tx, "")
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for a loan without an activity, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -252,7 +252,7 @@ func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateTransactionRejectsLoanOfNonLoanableItem(t *testing.T) {
+func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
@@ -277,7 +277,7 @@ func TestHandlerCreateTransactionRejectsLoanOfNonLoanableItem(t *testing.T) {
 	body := map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/transactions", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for a loan of a non-loanable item, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -304,5 +304,113 @@ func TestHandlerListMaterialCategoriesRequiresAdminOrBoard(t *testing.T) {
 	}
 	if len(categories) == 0 {
 		t.Error("expected the seeded material categories to be listed")
+	}
+}
+
+func TestHandlerCreateMovementRejectsInvalidType(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "not-a-type", "quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an invalid movement type, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_type" {
+		t.Errorf("expected error code invalid_type, got %q", code)
+	}
+}
+
+func TestHandlerCreateMovementRequiresLoginForSale(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "sale", "quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a sale without a login, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "login_required" {
+		t.Errorf("expected error code login_required, got %q", code)
+	}
+}
+
+// Acquisition, loss, abandonment and retirement have no recipient — a
+// board member can log one without naming any socio.
+func TestHandlerCreateMovementAllowsAcquisitionWithoutLogin(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	notes := "restock tras inventario"
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "acquisition", "quantity": 3, "notes": notes,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for an acquisition without a login, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var m inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode movement: %v", err)
+	}
+	if m.Notes == nil || *m.Notes != notes {
+		t.Errorf("expected notes to round-trip, got %+v", m.Notes)
+	}
+}
+
+func TestHandlerCreateMovementRejectsAcquisitionOnRope(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-500",
+		"rope_type": "caving", "diameter_mm": 9.5, "manufacture_year": 2024, "length_m": 60,
+		"total_quantity": 1,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create rope: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "acquisition", "quantity": 1,
+	})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for an acquisition on a rope, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "single_unit_item" {
+		t.Errorf("expected error code single_unit_item, got %q", code)
 	}
 }

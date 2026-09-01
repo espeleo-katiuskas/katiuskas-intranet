@@ -111,10 +111,10 @@ func TestListActive(t *testing.T) {
 		t.Fatalf("insert item: %v", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO item_transactions (item_id, user_id, type, activity_id, status)
+		INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
 		VALUES ($1, $2, 'loan', $3, 'active')
 	`, itemID, user.ID, completedWithMaterial.ID); err != nil {
-		t.Fatalf("insert transaction: %v", err)
+		t.Fatalf("insert movement: %v", err)
 	}
 
 	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})

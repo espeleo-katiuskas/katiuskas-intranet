@@ -25,28 +25,28 @@ func (s *Service) ListMaterialCategories(ctx context.Context) ([]MaterialCategor
 	return s.repo.ListMaterialCategories(ctx)
 }
 
-func (s *Service) CreateTransaction(ctx context.Context, in CreateTransactionInput) (Transaction, error) {
+func (s *Service) CreateMovement(ctx context.Context, in CreateMovementInput) (Movement, error) {
 	if in.Quantity <= 0 {
 		in.Quantity = 1
 	}
 	if in.TransactedAt.IsZero() {
 		in.TransactedAt = time.Now()
 	}
-	return s.repo.CreateTransaction(ctx, in)
+	return s.repo.CreateMovement(ctx, in)
 }
 
-func (s *Service) ReturnTransaction(ctx context.Context, id int64) (Transaction, error) {
-	return s.repo.ReturnTransaction(ctx, id)
+func (s *Service) ReturnMovement(ctx context.Context, id int64) (Movement, error) {
+	return s.repo.ReturnMovement(ctx, id)
 }
 
-func (s *Service) ListTransactionsByItem(ctx context.Context, itemID int64) ([]Transaction, error) {
-	return s.repo.ListTransactionsByItem(ctx, itemID)
+func (s *Service) ListMovementsByItem(ctx context.Context, itemID int64) ([]Movement, error) {
+	return s.repo.ListMovementsByItem(ctx, itemID)
 }
 
-func (s *Service) ListTransactionsByStatus(ctx context.Context, status TransactionStatus) ([]Transaction, error) {
-	return s.repo.ListTransactionsByStatus(ctx, status)
+func (s *Service) ListMovementsByStatus(ctx context.Context, status MovementStatus) ([]Movement, error) {
+	return s.repo.ListMovementsByStatus(ctx, status)
 }
 
-func (s *Service) ListTransactionsByUser(ctx context.Context, userID int64) ([]Transaction, error) {
-	return s.repo.ListTransactionsByUser(ctx, userID)
+func (s *Service) ListMovementsByUser(ctx context.Context, userID int64) ([]Movement, error) {
+	return s.repo.ListMovementsByUser(ctx, userID)
 }

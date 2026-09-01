@@ -110,7 +110,7 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Activity, e
 func (r *Repository) ListActive(ctx context.Context, limit, offset int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
-		LEFT JOIN item_transactions t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
+		LEFT JOIN item_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
 		WHERE a.status = 'planned' OR t.id IS NOT NULL
 		ORDER BY a.start_date DESC LIMIT $1 OFFSET $2
 	`, limit, offset)
