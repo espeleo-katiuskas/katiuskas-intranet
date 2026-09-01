@@ -7,6 +7,7 @@ import {
   apiFetch,
   formatDate,
 } from './api.js';
+import { initUserFilesBrowser } from './userFiles.js';
 
 await initSession();
 applyRoleVisibility();
@@ -120,3 +121,6 @@ editForm.addEventListener('submit', async (event) => {
 });
 
 loadProfile();
+if (user) {
+  initUserFilesBrowser(user.login);
+}

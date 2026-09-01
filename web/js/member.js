@@ -9,6 +9,7 @@ import {
   formatDate,
   setToken,
 } from './api.js';
+import { initUserFilesBrowser } from './userFiles.js';
 
 await initSession();
 applyRoleVisibility();
@@ -933,3 +934,4 @@ loadMember();
 loadTimeline();
 loadActivities();
 loadMovements();
+initUserFilesBrowser(memberLogin);
