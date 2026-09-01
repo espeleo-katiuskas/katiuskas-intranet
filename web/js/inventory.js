@@ -140,10 +140,20 @@ function itemSearchText(item) {
   ].filter(Boolean).join(' '));
 }
 
+// Rope/bag show their item type ("Cuerda"/"Saca"); gear shows its
+// category instead ("Mosquetones"...) — "Material" alone would be true
+// of every gear row and say nothing useful for telling them apart.
+function itemTypeColumn(item) {
+  if (item.item_type === 'gear') {
+    return escapeHtml(item.category_name ?? itemTypeLabels.gear);
+  }
+  return itemTypeLabels[item.item_type] ?? item.item_type;
+}
+
 function renderItemRow(item) {
   return `
     <tr>
-      <td>${itemTypeLabels[item.item_type] ?? item.item_type}</td>
+      <td>${itemTypeColumn(item)}</td>
       <td>${itemLabel(item)}</td>
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
