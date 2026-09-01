@@ -105,8 +105,11 @@ function personLabel(login) {
 
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); gear may have no known brand/model at all, so its
-// category — always set — anchors the label instead.
-function itemLabel(item) {
+// category — always set — anchors the label instead. includeCategory
+// is false only in the items table, where the Tipo column already
+// shows a gear item's category (see itemTypeColumn) and repeating it
+// here would be redundant.
+function itemLabel(item, { includeCategory = true } = {}) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
     const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
@@ -116,7 +119,7 @@ function itemLabel(item) {
     const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [item.category_name, brandModel || null, item.description || null];
+  const parts = [includeCategory ? item.category_name : null, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
@@ -154,7 +157,7 @@ function renderItemRow(item) {
   return `
     <tr>
       <td>${itemTypeColumn(item)}</td>
-      <td>${itemLabel(item)}</td>
+      <td>${itemLabel(item, { includeCategory: false })}</td>
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
