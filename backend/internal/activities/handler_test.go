@@ -687,3 +687,22 @@ func TestHandlerUpdateRejectsLeaderChangingLeader(t *testing.T) {
 		t.Fatalf("expected 403 for the organizer reassigning their own activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Any baseline role can see the holidays list — it's what lets the
+// calendar view mark them, not sensitive data.
+func TestHandlerListHolidaysIsOpenToAnyBaselineUser(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/holidays?year=2026", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []activities.Holiday
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) == 0 {
+		t.Error("expected the seeded 2026 holidays to be listed")
+	}
+}

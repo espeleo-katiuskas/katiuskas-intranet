@@ -94,3 +94,14 @@ type Participant struct {
 	Role       string `json:"role"`
 	Confirmed  bool   `json:"confirmed"`
 }
+
+// Holiday is a club holiday — the calendar view (see GET /holidays)
+// marks these alongside weekends (computed from the date itself, no
+// table needed for those). There's no API to manage this list, the
+// same catalog-table-grown-by-INSERT pattern
+// inventory.MaterialCategory and licenses.LicenseType already use.
+type Holiday struct {
+	ID   int64     `json:"id"`
+	Date time.Time `json:"date"`
+	Name string    `json:"name"`
+}

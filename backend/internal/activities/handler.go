@@ -46,6 +46,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/activities/{id}/participants/{login}", h.authenticator.Protect(h.leave))
 
 	mux.Handle("GET /api/v1/users/{login}/activities", h.authenticator.Protect(h.listByUser))
+
+	mux.Handle("GET /api/v1/holidays", h.authenticator.Protect(h.listHolidays))
 }
 
 // resolveUserLogin looks up the numeric id behind a {login} path
@@ -417,4 +419,18 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// listHolidays backs the activities calendar view. year defaults to
+// every year on file when omitted or not a number — there are few
+// enough holidays overall that returning everything is a fine default,
+// not something worth a 400 over.
+func (h *Handler) listHolidays(w http.ResponseWriter, r *http.Request) {
+	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
+	list, err := h.service.ListHolidays(r.Context(), year)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list holidays")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }

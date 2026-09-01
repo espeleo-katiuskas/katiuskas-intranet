@@ -261,3 +261,32 @@ func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]
 	}
 	return list, rows.Err()
 }
+
+// ListHolidays returns every holiday in the given year, in date order —
+// year <= 0 means every year on file instead. Backs the calendar view;
+// there's no per-caller filtering here, holidays aren't sensitive.
+func (r *Repository) ListHolidays(ctx context.Context, year int) ([]Holiday, error) {
+	var rows pgx.Rows
+	var err error
+	if year > 0 {
+		rows, err = r.pool.Query(ctx, `
+			SELECT id, date, name FROM holidays WHERE EXTRACT(YEAR FROM date) = $1 ORDER BY date
+		`, year)
+	} else {
+		rows, err = r.pool.Query(ctx, `SELECT id, date, name FROM holidays ORDER BY date`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Holiday{}
+	for rows.Next() {
+		var h Holiday
+		if err := rows.Scan(&h.ID, &h.Date, &h.Name); err != nil {
+			return nil, err
+		}
+		list = append(list, h)
+	}
+	return list, rows.Err()
+}

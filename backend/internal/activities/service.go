@@ -96,3 +96,7 @@ func (s *Service) ListParticipants(ctx context.Context, activityID int64) ([]Par
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Activity, error) {
 	return s.repo.ListByUser(ctx, userID)
 }
+
+func (s *Service) ListHolidays(ctx context.Context, year int) ([]Holiday, error) {
+	return s.repo.ListHolidays(ctx, year)
+}

@@ -1111,6 +1111,31 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Activity" }
 
+  /holidays:
+    get:
+      summary: List club holidays
+      description: >
+        Backs the activities calendar view, which marks these alongside
+        weekends (computed client-side from the date, no table needed
+        for those). Open to any baseline role — not sensitive. There's
+        no endpoint to create or remove one; the list is grown with a
+        plain INSERT, the same catalog-table pattern
+        material_categories/license_types already use.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: year
+          in: query
+          schema: { type: integer }
+          description: Defaults to every year on file when omitted.
+      responses:
+        "200":
+          description: Holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Holiday" }
+
   /users/{login}/movements:
     get:
       summary: List a person's material movement history
@@ -1806,6 +1831,13 @@ components:
         user_login: { type: string }
         role: { type: string, enum: [leader, participant] }
         confirmed: { type: boolean }
+
+    Holiday:
+      type: object
+      properties:
+        id: { type: integer }
+        date: { type: string, format: date }
+        name: { type: string }
 
     MaterialCategory:
       type: object

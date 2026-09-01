@@ -390,6 +390,48 @@ func TestListByUserReturnsEmptySliceNotNilWhenPersonHasNoHistory(t *testing.T) {
 	}
 }
 
+// year 2026 is seeded by migration 00014; this only needs one more row
+// in a different year to prove filtering actually happens rather than
+// just returning everything.
+func TestListHolidaysFiltersByYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+
+	if _, err := tx.Exec(ctx, `INSERT INTO holidays (date, name) VALUES ('2027-01-01', 'Año Nuevo 2027')`); err != nil {
+		t.Fatalf("insert extra holiday: %v", err)
+	}
+
+	list2026, err := repo.ListHolidays(ctx, 2026)
+	if err != nil {
+		t.Fatalf("list 2026: %v", err)
+	}
+	if len(list2026) == 0 {
+		t.Error("expected the seeded 2026 holidays to be listed")
+	}
+	for _, h := range list2026 {
+		if h.Date.Year() != 2026 {
+			t.Errorf("expected only 2026 holidays, got %+v", h)
+		}
+	}
+
+	list2027, err := repo.ListHolidays(ctx, 2027)
+	if err != nil {
+		t.Fatalf("list 2027: %v", err)
+	}
+	if len(list2027) != 1 || list2027[0].Name != "Año Nuevo 2027" {
+		t.Errorf("expected exactly the inserted 2027 holiday, got %+v", list2027)
+	}
+
+	all, err := repo.ListHolidays(ctx, 0)
+	if err != nil {
+		t.Fatalf("list all years: %v", err)
+	}
+	if len(all) != len(list2026)+1 {
+		t.Errorf("expected year<=0 to return every year, got %d want %d", len(all), len(list2026)+1)
+	}
+}
+
 func TestParticipants(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
