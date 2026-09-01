@@ -54,20 +54,27 @@ const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
-const movementTypeOptions = [
-  ['loan', 'Préstamo'],
-  ['rental', 'Alquiler'],
-  ['sale', 'Venta'],
-  ['acquisition', 'Adquisición'],
-  ['loss', 'Pérdida'],
-  ['abandonment', 'Abandono'],
-  ['retirement', 'Retirada'],
-];
-const typeLabels = Object.fromEntries(movementTypeOptions);
-// Loan and rental always need a socio; sale's is optional; acquisition,
-// loss, abandonment and retirement never get one at all — the "Socio"
-// field is hidden outright for those, not just left empty.
-const recipientRequiredTypes = new Set(['loan', 'rental']);
+// Every movement type, for display — loans still show up in an item's
+// history and in "movimientos activos" even though they're no longer
+// created from this page (see movementTypeOptions below).
+const typeLabels = {
+  loan: 'Préstamo',
+  rental: 'Alquiler',
+  sale: 'Venta',
+  acquisition: 'Adquisición',
+  loss: 'Pérdida',
+  abandonment: 'Abandono',
+  retirement: 'Retirada',
+};
+// A loan is always tied to an activity, and it's the activity page
+// (where the participants and the trip context already are) that
+// registers those now — see js/activity.js. This form offers
+// everything else.
+const movementTypeOptions = Object.entries(typeLabels).filter(([type]) => type !== 'loan');
+// Rental always needs a socio; sale's is optional; acquisition, loss,
+// abandonment and retirement never get one at all — the "Socio" field
+// is hidden outright for those, not just left empty.
+const recipientRequiredTypes = new Set(['rental']);
 const recipientForbiddenTypes = new Set(['acquisition', 'loss', 'abandonment', 'retirement']);
 const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 
@@ -195,10 +202,6 @@ function renderMovementAddForm(item) {
           <label>Cantidad</label>
           <input type="number" min="1" value="1" data-mv-quantity>
         </div>`}
-        <div class="field">
-          <label>Fecha <span class="optional">(opcional, hoy por defecto)</span></label>
-          <input type="date" data-mv-date>
-        </div>
         <div class="field span-2">
           <label>Notas <span class="optional">(opcional)</span></label>
           <input type="text" data-mv-notes placeholder="Motivo, contexto…">
@@ -214,10 +217,11 @@ function renderMovementAddForm(item) {
 
 function updateMovementFormVisibility(form) {
   const type = form.querySelector('[data-mv-type]').value;
-  // Loans and rentals always happen as part of an activity (see the
-  // activity_required_for_loan_and_rental constraint); every other
-  // type leaves it optional.
-  const requiresActivity = type === 'loan' || type === 'rental';
+  // Rental always happens as part of an activity (see the
+  // activity_required_for_loan_and_rental constraint) — loan would too,
+  // but it's never an option in this form (see movementTypeOptions).
+  // Every other type leaves the activity optional.
+  const requiresActivity = type === 'rental';
   const activityField = form.querySelector('[data-mv-activity-field]');
   activityField.hidden = !requiresActivity;
   form.querySelector('[data-mv-activity]').required = requiresActivity;
@@ -312,7 +316,6 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
   const activityField = form.querySelector('[data-mv-activity-field]');
   const activityInput = form.querySelector('[data-mv-activity]');
   const quantityInput = form.querySelector('[data-mv-quantity]');
-  const dateInput = form.querySelector('[data-mv-date]');
   const notesInput = form.querySelector('[data-mv-notes]');
 
   let userLogin = null;
@@ -340,7 +343,8 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
     login: userLogin,
     type,
     quantity: quantityInput ? Number(quantityInput.value) || 1 : 1,
-    transacted_at: dateInput.value || null,
+    // No date field in this form — always today (transacted_at left
+    // unset defaults to now() server-side).
     activity_id: activityId,
     notes: notesInput.value.trim() || null,
   };
