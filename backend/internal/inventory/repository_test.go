@@ -355,8 +355,8 @@ func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
 	}
 }
 
-// Sale's recipient is optional — unlike loan/rental, omitting it
-// doesn't fail.
+// Sale's recipient is optional — unlike rental, omitting it doesn't
+// fail.
 func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
@@ -369,6 +369,27 @@ func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("create sale without a recipient: %v", err)
+	}
+	if m.UserID != nil {
+		t.Errorf("expected no recipient, got %+v", m.UserID)
+	}
+}
+
+// A loan's recipient is optional too — the activity it's tied to is
+// the mandatory link, not necessarily one specific person.
+func TestCreateMovementLoanRecipientIsOptional(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 1)
+	activityID := testutil.InsertActivity(t, tx)
+
+	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, Type: inventory.MovementLoan, Quantity: 1, ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan without a recipient: %v", err)
 	}
 	if m.UserID != nil {
 		t.Errorf("expected no recipient, got %+v", m.UserID)

@@ -25,11 +25,10 @@ type UserLookup interface {
 
 // recipientRequiredTypes are the movement types that always exchange
 // the item with a specific person and so must name one — see
-// MovementType. Sale's recipient is optional (neither required nor
-// forbidden — see recipientForbiddenTypes below for the types that
-// forbid one outright).
+// MovementType. Loan and sale's recipients are optional (neither
+// required nor forbidden — see recipientForbiddenTypes below for the
+// types that forbid one outright).
 var recipientRequiredTypes = map[MovementType]bool{
-	MovementLoan:   true,
 	MovementRental: true,
 }
 
@@ -242,7 +241,7 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if recipientRequiredTypes[body.Type] && body.Login == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "login_required", "loan and rental movements require a login")
+		httpapi.WriteError(w, http.StatusBadRequest, "login_required", "rental movements require a login")
 		return
 	}
 	if recipientForbiddenTypes[body.Type] && body.Login != "" {

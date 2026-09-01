@@ -331,9 +331,36 @@ func TestHandlerCreateMovementRejectsInvalidType(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateMovementRequiresLoginForLoan(t *testing.T) {
+func TestHandlerCreateMovementRequiresLoginForRental(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "type": "rental", "quantity": 1,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a rental without a login, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "login_required" {
+		t.Errorf("expected error code login_required, got %q", code)
+	}
+}
+
+// A loan's recipient is optional now — the activity it's tied to is
+// the mandatory link, not necessarily one specific person.
+func TestHandlerCreateMovementAllowsLoanWithoutLogin(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	activityID := testutil.InsertActivity(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
@@ -348,11 +375,8 @@ func TestHandlerCreateMovementRequiresLoginForLoan(t *testing.T) {
 	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "loan", "quantity": 1, "activity_id": activityID,
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for a loan without a login, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if code := errorCode(t, rec); code != "login_required" {
-		t.Errorf("expected error code login_required, got %q", code)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for a loan without a login, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
