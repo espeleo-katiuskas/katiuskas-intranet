@@ -79,7 +79,7 @@ let offset = 0;
 let loadedActivities = [];
 
 function activityQuery() {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), order: 'asc' });
   if (showingActive) {
     params.set('status', 'active');
   }
@@ -324,12 +324,15 @@ async function loadCalendar() {
   calendarTodayYearButton.hidden = calendarYear === THIS_YEAR;
   calendarView.innerHTML = 'Cargando…';
   try {
-    // The 100 most recent activities overall — plenty for a single
-    // year's calendar at this club's actual scale; there's no
-    // date-range filter on GET /activities to ask for just one year.
+    // The 100 most recent activities overall (order=desc explicit here
+    // regardless of the list view's own oldest-first default, since
+    // "most recent" is what actually matters when this 100-item cap
+    // has to leave something out) — plenty for a single year's
+    // calendar at this club's actual scale; there's no date-range
+    // filter on GET /activities to ask for just one year.
     const [holidays, activityPage] = await Promise.all([
       apiFetch(`/holidays?year=${calendarYear}`),
-      apiFetch('/activities?limit=100'),
+      apiFetch('/activities?limit=100&order=desc'),
     ]);
     const yearActivities = activityPage.filter((a) => {
       const start = a.start_date.slice(0, 4);
