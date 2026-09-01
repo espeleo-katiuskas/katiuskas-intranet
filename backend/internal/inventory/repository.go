@@ -28,6 +28,9 @@ var (
 	// own individual code already make a second unit meaningless; a
 	// new one is a new item, not more stock on this one).
 	ErrSingleUnitItem = errors.New("rope and bag items are always a single unit")
+	// ErrInvalidReturnQuantity means a return's quantity was zero,
+	// negative, or more than what's still outstanding on the movement.
+	ErrInvalidReturnQuantity = errors.New("return quantity must be positive and not exceed what's still outstanding")
 )
 
 // categoryFKViolationCode is the foreign-key violation Postgres raises
@@ -343,13 +346,17 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	return m, tx.Commit(ctx)
 }
 
-// ReturnMovement closes an active loan or rental, again inside a single
-// transaction. Only loan/rental ever reach status 'active' (every other
-// type is 'completed' the moment it's recorded — see CreateMovement),
-// so this naturally refuses to "return" a sale, acquisition, loss,
-// abandonment or retirement the same way it refuses an already-returned
-// or unknown id: ErrNotFound.
-func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, error) {
+// ReturnMovement records one return event against an active loan or
+// rental, inside a single transaction. quantity defaults to whatever's
+// still outstanding (a full return, same one-call behavior as before
+// this existed) when nil; given explicitly, it can be less — a partial
+// return — leaving the movement active for a further one later.
+// Only loan/rental ever reach status 'active' (every other type is
+// 'completed' the moment it's recorded — see CreateMovement), so this
+// naturally refuses to return a sale, acquisition, loss, abandonment or
+// retirement the same way it refuses an already-fully-returned or
+// unknown id: ErrNotFound.
+func (r *Repository) ReturnMovement(ctx context.Context, id int64, quantity *int32, returnedAt time.Time, recordedBy *int64) (Movement, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Movement{}, err
@@ -358,24 +365,81 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, er
 
 	var m Movement
 	err = tx.QueryRow(ctx, `
-		UPDATE item_movements SET returned_at = now(), status = 'completed'
-		WHERE id = $1 AND status = 'active'
-		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
+		SELECT id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id, notes
+		FROM item_movements WHERE id = $1 AND status = 'active' FOR UPDATE
 	`, id).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
 		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return m, ErrNotFound
+		return Movement{}, ErrNotFound
 	}
 	if err != nil {
-		return m, err
+		return Movement{}, err
 	}
 
-	if _, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
-		return m, err
+	var alreadyReturned int32
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(quantity), 0) FROM movement_returns WHERE movement_id = $1
+	`, id).Scan(&alreadyReturned); err != nil {
+		return Movement{}, err
+	}
+
+	outstanding := m.Quantity - alreadyReturned
+	returnQuantity := outstanding
+	if quantity != nil {
+		returnQuantity = *quantity
+	}
+	if returnQuantity <= 0 || returnQuantity > outstanding {
+		return Movement{}, ErrInvalidReturnQuantity
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO movement_returns (movement_id, quantity, returned_at, recorded_by) VALUES ($1,$2,$3,$4)
+	`, id, returnQuantity, returnedAt, recordedBy); err != nil {
+		return Movement{}, err
+	}
+	m.ReturnedQuantity = alreadyReturned + returnQuantity
+
+	if m.ReturnedQuantity == m.Quantity {
+		if err := tx.QueryRow(ctx, `
+			UPDATE item_movements SET returned_at = $2, status = 'completed' WHERE id = $1
+			RETURNING returned_at, status
+		`, id, returnedAt).Scan(&m.ReturnedAt, &m.Status); err != nil {
+			return Movement{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
+			return Movement{}, err
+		}
 	}
 
 	return m, tx.Commit(ctx)
+}
+
+// ListMovementReturns returns every return event recorded against a
+// movement, oldest first — the day-by-day history behind its
+// ReturnedQuantity.
+func (r *Repository) ListMovementReturns(ctx context.Context, movementID int64) ([]MovementReturn, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT mr.id, mr.movement_id, mr.quantity, mr.returned_at, mr.recorded_by, ru.login
+		FROM movement_returns mr
+		LEFT JOIN users ru ON ru.id = mr.recorded_by
+		WHERE mr.movement_id = $1
+		ORDER BY mr.returned_at, mr.id
+	`, movementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []MovementReturn{}
+	for rows.Next() {
+		var mr MovementReturn
+		if err := rows.Scan(&mr.ID, &mr.MovementID, &mr.Quantity, &mr.ReturnedAt, &mr.RecordedBy, &mr.RecordedByLogin); err != nil {
+			return nil, err
+		}
+		list = append(list, mr)
+	}
+	return list, rows.Err()
 }
 
 func (r *Repository) ListMovementsByItem(ctx context.Context, itemID int64) ([]Movement, error) {
@@ -403,7 +467,8 @@ func (r *Repository) ListMovementsByUser(ctx context.Context, userID int64) ([]M
 func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg any) ([]Movement, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.item_id, m.user_id, u.login, m.type, m.quantity, m.transacted_at,
-			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes
+			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes,
+			COALESCE((SELECT SUM(quantity) FROM movement_returns WHERE movement_id = m.id), 0)
 		FROM item_movements m
 		LEFT JOIN users u ON u.id = m.user_id
 		LEFT JOIN users ru ON ru.id = m.recorded_by
@@ -417,7 +482,8 @@ func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg
 	for rows.Next() {
 		var m Movement
 		if err := rows.Scan(&m.ID, &m.ItemID, &m.UserID, &m.UserLogin, &m.Type, &m.Quantity, &m.TransactedAt,
-			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes); err != nil {
+			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes,
+			&m.ReturnedQuantity); err != nil {
 			return nil, err
 		}
 		list = append(list, m)

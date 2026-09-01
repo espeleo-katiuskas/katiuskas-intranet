@@ -182,12 +182,20 @@ type Movement struct {
 	// TransactedAt defaults to today (see CreateMovementInput) but can
 	// be backdated — whoever logs the movement may be doing so after
 	// the fact.
-	TransactedAt    time.Time      `json:"transacted_at"`
-	ReturnedAt      *time.Time     `json:"returned_at,omitempty"`
-	Price           *float64       `json:"price,omitempty"`
-	Status          MovementStatus `json:"status"`
-	RecordedBy      *int64         `json:"-"`
-	RecordedByLogin *string        `json:"recorded_by_login,omitempty"`
+	TransactedAt time.Time `json:"transacted_at"`
+	// ReturnedAt is when this movement was *fully* settled — the sum of
+	// its MovementReturn history (see GET /movements/{id}/returns)
+	// reached Quantity. Still nil while partially returned. Loan/rental
+	// only; always nil for every other type.
+	ReturnedAt *time.Time `json:"returned_at,omitempty"`
+	// ReturnedQuantity is that same sum, kept up to date on every partial
+	// or full return — Quantity-ReturnedQuantity is what's still
+	// outstanding. Always 0 for a type that isn't loan/rental.
+	ReturnedQuantity int32          `json:"returned_quantity"`
+	Price            *float64       `json:"price,omitempty"`
+	Status           MovementStatus `json:"status"`
+	RecordedBy       *int64         `json:"-"`
+	RecordedByLogin  *string        `json:"recorded_by_login,omitempty"`
 	// ActivityID is required for loan (it always happens as part of an
 	// activity) and optional for every other type, rental included — a
 	// rental isn't always tied to one specific activity.
@@ -210,4 +218,17 @@ type CreateMovementInput struct {
 	RecordedBy   *int64
 	ActivityID   *int64
 	Notes        *string
+}
+
+// MovementReturn is one return event against a loan or rental — 30
+// mosquetones lent for a trip might come back as two of these, 10 one
+// day and 20 the next, rather than a single all-or-nothing return. See
+// Repository.ReturnMovement.
+type MovementReturn struct {
+	ID              int64     `json:"id"`
+	MovementID      int64     `json:"movement_id"`
+	Quantity        int32     `json:"quantity"`
+	ReturnedAt      time.Time `json:"returned_at"`
+	RecordedBy      *int64    `json:"-"`
+	RecordedByLogin *string   `json:"recorded_by_login,omitempty"`
 }

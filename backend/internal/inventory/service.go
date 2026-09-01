@@ -35,8 +35,15 @@ func (s *Service) CreateMovement(ctx context.Context, in CreateMovementInput) (M
 	return s.repo.CreateMovement(ctx, in)
 }
 
-func (s *Service) ReturnMovement(ctx context.Context, id int64) (Movement, error) {
-	return s.repo.ReturnMovement(ctx, id)
+func (s *Service) ReturnMovement(ctx context.Context, id int64, quantity *int32, returnedAt time.Time, recordedBy *int64) (Movement, error) {
+	if returnedAt.IsZero() {
+		returnedAt = time.Now()
+	}
+	return s.repo.ReturnMovement(ctx, id, quantity, returnedAt, recordedBy)
+}
+
+func (s *Service) ListMovementReturns(ctx context.Context, movementID int64) ([]MovementReturn, error) {
+	return s.repo.ListMovementReturns(ctx, movementID)
 }
 
 func (s *Service) ListMovementsByItem(ctx context.Context, itemID int64) ([]Movement, error) {

@@ -75,6 +75,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
+	mux.Handle("GET /api/v1/movements/{id}/returns", h.authenticator.Protect(h.listMovementReturns))
 
 	mux.Handle("GET /api/v1/users/{login}/movements", h.authenticator.Protect(h.listMovementsByUser))
 }
@@ -301,15 +302,46 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
+// returnMovement records one return event, defaulting to a full return
+// (whatever's still outstanding) when the body is empty or omits
+// quantity — the same one-call behavior this endpoint always had.
+// Giving a smaller quantity is a partial return: 30 mosquetones lent
+// for a trip can come back as 10 one day and 20 the next, each its own
+// call here, leaving the movement active until the last one closes it.
 func (h *Handler) returnMovement(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
-	m, err := h.service.ReturnMovement(r.Context(), id)
+	var body struct {
+		Quantity   *int32  `json:"quantity"`
+		ReturnedAt *string `json:"returned_at"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+			return
+		}
+	}
+	returnedAt := time.Now()
+	if body.ReturnedAt != nil && *body.ReturnedAt != "" {
+		d, err := time.Parse("2006-01-02", *body.ReturnedAt)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "returned_at must be YYYY-MM-DD")
+			return
+		}
+		returnedAt = d
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	recordedBy := current.ID
+	m, err := h.service.ReturnMovement(r.Context(), id, body.Quantity, returnedAt, &recordedBy)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "active movement not found")
+		return
+	}
+	if errors.Is(err, ErrInvalidReturnQuantity) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_quantity", err.Error())
 		return
 	}
 	if err != nil {
@@ -321,10 +353,27 @@ func (h *Handler) returnMovement(w http.ResponseWriter, r *http.Request) {
 			m.UserLogin = &login
 		}
 	}
-	if m.RecordedBy != nil {
-		if login, err := h.users.LoginForUserID(r.Context(), *m.RecordedBy); err == nil {
-			m.RecordedByLogin = &login
-		}
+	if recordedByLogin, err := h.users.LoginForUserID(r.Context(), recordedBy); err == nil {
+		m.RecordedByLogin = &recordedByLogin
 	}
 	httpapi.WriteJSON(w, http.StatusOK, m)
+}
+
+// listMovementReturns backs the return history shown alongside a
+// movement's ReturnedQuantity — open to any baseline role, matching
+// GET /items/{id}/movements. Repository.ListMovementReturns already
+// joins in recorded_by_login, unlike the single-row RETURNING writes
+// above that have to resolve it afterward.
+func (h *Handler) listMovementReturns(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	list, err := h.service.ListMovementReturns(r.Context(), id)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list returns")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }

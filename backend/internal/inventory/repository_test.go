@@ -432,7 +432,7 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 		t.Fatalf("create loan: %v", err)
 	}
 
-	returned, err := repo.ReturnMovement(ctx, loan.ID)
+	returned, err := repo.ReturnMovement(ctx, loan.ID, nil, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("return: %v", err)
 	}
@@ -455,12 +455,209 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 	}
 }
 
+// 30 mosquetones lent for a trip might come back as 10 one day and 20
+// the next — a partial return leaves the movement active, with only
+// the outstanding remainder still counted against the item's
+// available_quantity.
+func TestReturnMovementPartialReturnLeavesMovementActive(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 30)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 30,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+
+	ten := int32(10)
+	returned, err := repo.ReturnMovement(ctx, loan.ID, &ten, time.Now(), nil)
+	if err != nil {
+		t.Fatalf("partial return: %v", err)
+	}
+	if returned.Status != inventory.MovementActive {
+		t.Errorf("expected the movement to stay active after a partial return, got %q", returned.Status)
+	}
+	if returned.ReturnedQuantity != 10 {
+		t.Errorf("expected returned_quantity 10, got %d", returned.ReturnedQuantity)
+	}
+	if returned.ReturnedAt != nil {
+		t.Errorf("expected returned_at to stay nil until fully returned, got %v", returned.ReturnedAt)
+	}
+
+	items, err := repo.ListItems(ctx)
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	// 30 total, 20 still out on loan.
+	if items[0].AvailableQuantity != 10 {
+		t.Errorf("expected available quantity 10 (30 total - 20 outstanding), got %d", items[0].AvailableQuantity)
+	}
+}
+
+// The second partial return that brings the total returned up to the
+// full loaned quantity is what finally closes the movement.
+func TestReturnMovementMultiplePartialReturnsComplete(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 30)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 30,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+
+	ten := int32(10)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &ten, time.Now(), nil); err != nil {
+		t.Fatalf("first partial return: %v", err)
+	}
+	twenty := int32(20)
+	final, err := repo.ReturnMovement(ctx, loan.ID, &twenty, time.Now(), nil)
+	if err != nil {
+		t.Fatalf("second partial return: %v", err)
+	}
+	if final.Status != inventory.MovementCompleted {
+		t.Errorf("expected the movement to be completed, got %q", final.Status)
+	}
+	if final.ReturnedQuantity != 30 {
+		t.Errorf("expected returned_quantity 30, got %d", final.ReturnedQuantity)
+	}
+	if final.ReturnedAt == nil {
+		t.Errorf("expected returned_at to be set once fully returned")
+	}
+
+	items, err := repo.ListItems(ctx)
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	if items[0].AvailableQuantity != 30 {
+		t.Errorf("expected available quantity restored to 30, got %d", items[0].AvailableQuantity)
+	}
+	if items[0].Status != inventory.ItemAvailable {
+		t.Errorf("expected status available again, got %q", items[0].Status)
+	}
+
+	// A third return attempt has nothing left outstanding to return.
+	if _, err := repo.ReturnMovement(ctx, loan.ID, nil, time.Now(), nil); !errors.Is(err, inventory.ErrNotFound) {
+		t.Errorf("expected ErrNotFound returning an already-completed movement, got %v", err)
+	}
+}
+
+func TestReturnMovementRejectsOverReturn(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 5)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 5,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+
+	six := int32(6)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &six, time.Now(), nil); !errors.Is(err, inventory.ErrInvalidReturnQuantity) {
+		t.Errorf("expected ErrInvalidReturnQuantity returning more than was loaned, got %v", err)
+	}
+}
+
+func TestReturnMovementRejectsZeroOrNegativeQuantity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 5)
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 5,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+
+	zero := int32(0)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &zero, time.Now(), nil); !errors.Is(err, inventory.ErrInvalidReturnQuantity) {
+		t.Errorf("expected ErrInvalidReturnQuantity for a zero quantity, got %v", err)
+	}
+	negative := int32(-1)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &negative, time.Now(), nil); !errors.Is(err, inventory.ErrInvalidReturnQuantity) {
+		t.Errorf("expected ErrInvalidReturnQuantity for a negative quantity, got %v", err)
+	}
+}
+
+// The per-day history behind ReturnedQuantity — what the club actually
+// needs recorded when a loan comes back in pieces.
+func TestListMovementReturns(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 30)
+	user := testutil.InsertUser(t, tx, "")
+	recorder := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 30,
+		ActivityID: &activityID,
+	})
+	if err != nil {
+		t.Fatalf("create loan: %v", err)
+	}
+
+	firstDay := time.Now().AddDate(0, 0, -1)
+	ten := int32(10)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &ten, firstDay, &recorder.ID); err != nil {
+		t.Fatalf("first partial return: %v", err)
+	}
+	secondDay := time.Now()
+	twenty := int32(20)
+	if _, err := repo.ReturnMovement(ctx, loan.ID, &twenty, secondDay, &recorder.ID); err != nil {
+		t.Fatalf("second partial return: %v", err)
+	}
+
+	returns, err := repo.ListMovementReturns(ctx, loan.ID)
+	if err != nil {
+		t.Fatalf("list movement returns: %v", err)
+	}
+	if len(returns) != 2 {
+		t.Fatalf("expected 2 return events, got %d: %+v", len(returns), returns)
+	}
+	if returns[0].Quantity != 10 || returns[1].Quantity != 20 {
+		t.Errorf("expected [10, 20] in date order, got [%d, %d]", returns[0].Quantity, returns[1].Quantity)
+	}
+	if returns[0].RecordedByLogin == nil || *returns[0].RecordedByLogin != recorder.Login {
+		t.Errorf("expected recorded_by_login %q, got %+v", recorder.Login, returns[0].RecordedByLogin)
+	}
+}
+
 func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)
 	ctx := context.Background()
 
-	if _, err := repo.ReturnMovement(ctx, 999999); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, 999999, nil, time.Now(), nil); !errors.Is(err, inventory.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for an unknown movement, got %v", err)
 	}
 
@@ -474,10 +671,10 @@ func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
-	if _, err := repo.ReturnMovement(ctx, loan.ID); err != nil {
+	if _, err := repo.ReturnMovement(ctx, loan.ID, nil, time.Now(), nil); err != nil {
 		t.Fatalf("first return: %v", err)
 	}
-	if _, err := repo.ReturnMovement(ctx, loan.ID); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, loan.ID, nil, time.Now(), nil); !errors.Is(err, inventory.ErrNotFound) {
 		t.Errorf("expected ErrNotFound returning an already-closed movement, got %v", err)
 	}
 }
@@ -500,7 +697,7 @@ func TestReturnMovementRefusesNonReturnableTypes(t *testing.T) {
 		t.Fatalf("create sale: %v", err)
 	}
 
-	if _, err := repo.ReturnMovement(ctx, sale.ID); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, sale.ID, nil, time.Now(), nil); !errors.Is(err, inventory.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -545,7 +742,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 		t.Fatalf("expected 2 active movements, got %d", len(active))
 	}
 
-	if _, err := repo.ReturnMovement(ctx, loan.ID); err != nil {
+	if _, err := repo.ReturnMovement(ctx, loan.ID, nil, time.Now(), nil); err != nil {
 		t.Fatalf("return loan: %v", err)
 	}
 	active, err = repo.ListMovementsByStatus(ctx, inventory.MovementActive)

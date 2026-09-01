@@ -490,3 +490,146 @@ func TestHandlerCreateMovementRejectsAcquisitionOnRope(t *testing.T) {
 		t.Errorf("expected error code single_unit_item, got %q", code)
 	}
 }
+
+// 30 mosquetones lent for a trip can come back as 10 one day and 20
+// the next — each its own PATCH .../return call with an explicit
+// quantity, the first leaving the movement active.
+func TestHandlerReturnMovementSupportsPartialQuantity(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 30))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 30, "activity_id": activityID,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create loan: %d: %s", rec.Code, rec.Body.String())
+	}
+	var loan inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &loan); err != nil {
+		t.Fatalf("decode loan: %v", err)
+	}
+
+	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", loan.ID)
+	rec = doRequest(mux, http.MethodPatch, returnPath, boardToken, map[string]any{"quantity": 10})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first partial return: %d: %s", rec.Code, rec.Body.String())
+	}
+	var afterFirst inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &afterFirst); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if afterFirst.Status != inventory.MovementActive || afterFirst.ReturnedQuantity != 10 {
+		t.Fatalf("expected active with returned_quantity 10, got %+v", afterFirst)
+	}
+
+	rec = doRequest(mux, http.MethodPatch, returnPath, boardToken, map[string]any{"quantity": 20})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second partial return: %d: %s", rec.Code, rec.Body.String())
+	}
+	var afterSecond inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &afterSecond); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if afterSecond.Status != inventory.MovementCompleted || afterSecond.ReturnedQuantity != 30 {
+		t.Fatalf("expected completed with returned_quantity 30, got %+v", afterSecond)
+	}
+}
+
+func TestHandlerReturnMovementRejectsOverReturn(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 5, "activity_id": activityID,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create loan: %d: %s", rec.Code, rec.Body.String())
+	}
+	var loan inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &loan); err != nil {
+		t.Fatalf("decode loan: %v", err)
+	}
+
+	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", loan.ID)
+	rec = doRequest(mux, http.MethodPatch, returnPath, boardToken, map[string]any{"quantity": 6})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 returning more than was loaned, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_quantity" {
+		t.Errorf("expected error code invalid_quantity, got %q", code)
+	}
+}
+
+// Any baseline role can see a movement's return history — same as
+// GET /items/{id}/movements, not gated to admin/board/material.
+func TestHandlerListMovementReturnsIsOpenToAnyBaselineUser(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	memberUser := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, memberUser.ID, "member")
+	user := testutil.InsertUser(t, tx, "")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 30))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 30, "activity_id": activityID,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create loan: %d: %s", rec.Code, rec.Body.String())
+	}
+	var loan inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &loan); err != nil {
+		t.Fatalf("decode loan: %v", err)
+	}
+
+	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", loan.ID)
+	if rec := doRequest(mux, http.MethodPatch, returnPath, boardToken, map[string]any{"quantity": 10}); rec.Code != http.StatusOK {
+		t.Fatalf("partial return: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	returnsPath := fmt.Sprintf("/api/v1/movements/%d/returns", loan.ID)
+	rec = doRequest(mux, http.MethodGet, returnsPath, memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a plain member to list returns, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var returns []inventory.MovementReturn
+	if err := json.Unmarshal(rec.Body.Bytes(), &returns); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(returns) != 1 || returns[0].Quantity != 10 {
+		t.Errorf("expected a single return of quantity 10, got %+v", returns)
+	}
+}

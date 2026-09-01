@@ -1350,24 +1350,69 @@ paths:
 
   /movements/{id}/return:
     patch:
-      summary: Close an active loan or rental
+      summary: Record a return against an active loan or rental
       description: >
-        Requires the admin, board, or material role. Only loan and
-        rental ever reach status active (every other type settles
-        immediately when recorded), so returning anything else — or an
-        unknown id, or an already-closed movement — is reported the
-        same way: not_found.
+        Requires the admin, board, or material role. Records one return
+        event (see GET .../returns) and adds it to the movement's
+        returned_quantity. With no body, or quantity omitted, it
+        returns everything still outstanding and closes the movement
+        (the same one-call behavior this endpoint always had). Giving a
+        smaller quantity is a partial return — 30 mosquetones lent for
+        a trip might come back as 10 one day and 20 the next, each its
+        own call here — which leaves the movement active
+        (returned_quantity going up, returned_at staying null) until a
+        later call brings returned_quantity up to quantity, at which
+        point returned_at is set and status becomes completed. Only
+        loan and rental ever reach status active (every other type
+        settles immediately when recorded), so returning anything else
+        — or an unknown id, or an already-fully-returned movement — is
+        reported the same way: not_found.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  description: Defaults to everything still outstanding.
+                returned_at:
+                  type: string
+                  format: date
+                  description: Defaults to today; can be backdated.
+      responses:
+        "200":
+          description: Updated movement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Movement" }
+        "400":
+          description: invalid_quantity — zero, negative, or more than what's still outstanding.
+        "404":
+          description: not_found — no active loan or rental with this id.
+
+  /movements/{id}/returns:
+    get:
+      summary: List a movement's return history
+      description: >
+        Every return event recorded against this movement (see PATCH
+        .../return), oldest first — the day-by-day breakdown behind its
+        returned_quantity. Open to any baseline role, same as
+        GET /items/{id}/movements.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
-          description: Closed movement
+          description: Return events
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Movement" }
-        "404":
-          description: not_found — no active loan or rental with this id.
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MovementReturn" }
 
   /library:
     get:
@@ -1983,7 +2028,19 @@ components:
         type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
         quantity: { type: integer, description: Always 1 for a rope or bag item. }
         transacted_at: { type: string, format: date, description: Defaults to today at creation; can be backdated. }
-        returned_at: { type: string, format: date, nullable: true }
+        returned_at:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            When this movement was *fully* settled — returned_quantity
+            reached quantity. Still null while partially returned.
+        returned_quantity:
+          type: integer
+          description: >
+            Sum of every return recorded against this movement so far
+            (see GET .../returns) — quantity minus this is what's still
+            outstanding. Always 0 for a type that isn't loan/rental.
         price:
           type: number
           nullable: true
@@ -2003,6 +2060,19 @@ components:
           description: >
             Free text, mainly useful on loss/abandonment/retirement to
             say why.
+
+    MovementReturn:
+      type: object
+      description: >
+        One return event against a loan or rental (see PATCH
+        /movements/{id}/return) — 30 mosquetones lent for a trip might
+        come back as two of these, 10 one day and 20 the next.
+      properties:
+        id: { type: integer }
+        movement_id: { type: integer }
+        quantity: { type: integer }
+        returned_at: { type: string, format: date }
+        recorded_by_login: { type: string, nullable: true }
 
     LibraryEntry:
       type: object
