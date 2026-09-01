@@ -187,7 +187,7 @@ function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
-      <span><a href="/member?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · responsable' : ''}</span>
+      <span><a href="/member?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · organizador' : ''}</span>
       ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;

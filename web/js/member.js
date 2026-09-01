@@ -737,7 +737,7 @@ const activityTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', tra
 const activityStatusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
 function renderActivityRow(activity) {
-  const role = activity.leader_login === memberLogin ? 'Responsable' : 'Participante';
+  const role = activity.leader_login === memberLogin ? 'Organizador' : 'Participante';
   return `
     <tr>
       <td>${formatDate(activity.start_date)}</td>
