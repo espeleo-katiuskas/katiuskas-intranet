@@ -37,9 +37,10 @@ go test ./...                                    # all packages
 go test ./internal/users/...                     # one package
 go test ./internal/users/... -run TestCreate      # one test
 ```
-Every package touching Postgres (all but `auth`, `config`, `mail`, `httpapi`) runs against
-a real test database — no mocked data access, since Postgres constraints (exclusion,
-foreign keys, uniqueness) are part of what's under test. `internal/testutil.NewTx`
+Every package touching Postgres (all but `auth`, `config`, `mail`, `httpapi`, `library`,
+`userfiles`) runs against a real test database — no mocked data access, since Postgres
+constraints (exclusion, foreign keys, uniqueness) are part of what's under test.
+`internal/testutil.NewTx`
 migrates once and hands each test its own transaction, rolled back on cleanup. Without
 `TEST_DATABASE_URL` reachable, those tests `t.Skip` instead of failing.
 

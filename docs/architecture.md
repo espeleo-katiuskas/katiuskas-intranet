@@ -118,7 +118,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   (`UserLookup`, con `UserIDForLogin`/`LoginForUserID`) que `*users.Service` satisface de
   forma estructural — no pueden importar `users` directamente, porque `users` ya importa
   a varios de ellos (`roles`, `memberships`, `licenses`). Un listado que puede mezclar a
-  varias personas a la vez (`GET /transactions`, `GET /activities`...) resuelve el login
+  varias personas a la vez (`GET /movements`, `GET /activities`...) resuelve el login
   con un `JOIN` SQL contra `users` en vez de una consulta por fila; una escritura de una
   sola fila con `INSERT`/`UPDATE ... RETURNING` (que no admite `JOIN`) lo resuelve a
   partir de un login que el handler ya tiene a mano, o con una llamada de vuelta a
@@ -257,7 +257,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   login de sus rutas `/users/{login}/...` a un id, no para nada relacionado con el rol
   automático. Rutas bajo
   `/users/{login}/board-members` (`GET` propia persona o admin/board, `POST` solo
-  admin/board), `GET /board-members` (la Junta Directiva actual), y
+  admin), `GET /board-members` (la Junta Directiva actual, abierta también a member), y
   `PATCH /board-members/{id}` para corregir cargo o fechas. En `/member`, un cargo
   aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas.
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
@@ -278,23 +278,49 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   siempre; en una privada solo el organizador, board o admin pueden dar de alta a un
   participante — ni siquiera un socio cualquiera puede apuntarse a sí mismo sin que uno de
   esos tres lo haga por él (`Handler.join`, que consulta `leader_id` y `visibility` antes
-  de delegar en `Service.Join`).
-- **`inventory_items`** / **`item_transactions`** — catálogo de material y sus movimientos
-  (`loan`, `rental`, `sale`), modelados en una única tabla con un discriminador de tipo
-  en vez de tres tablas paralelas, con `CHECK` que impide, por ejemplo, una venta con
-  fecha de devolución. El alquiler se tarifica por semana (`rental_price_per_week`), no
-  por día. Un préstamo o un alquiler siempre va vinculado a una actividad
-  (`item_transactions.activity_id`, exigido por otro `CHECK`); una venta no lo necesita,
-  porque el material sale del inventario del club para siempre, actividad o no. Crear o
-  modificar una transacción de material requiere el rol `admin`, `board` o el rol
-  opcional `material` (sembrado por la migración pero no de sistema: un club que no
-  quiera esa distinción puede borrarlo y seguir usando `board`); dar de alta el propio
-  material del catálogo sigue reservado a admin/board.
-- `GET /users/{login}/activities` y `GET /users/{login}/transactions` — el historial de
-  una persona visto desde su propia ficha, en vez de desde la actividad o la transacción.
-  El primero está tan abierto como `listParticipants` (cualquier persona autenticada);
-  el segundo exige ser la propia persona o tener `admin`, `board` o `material`, igual que
-  `GET /transactions`, porque una transacción lleva precio.
+  de delegar en `Service.Join`). `GET /activities?status=active` filtra a lo que todavía
+  necesita atención (no planificada/cancelada, o completada pero con préstamo aún
+  pendiente de devolver) en vez de todo el histórico; `?order=asc` cambia el orden por
+  defecto (más reciente primero) a más antigua primero. **`holidays`** — festivos fijos
+  del calendario del club, tabla propia sin relación con `activity_participants` pero
+  gestionada por el mismo paquete `activities`/`activities.Handler` (`GET /holidays`
+  abierto a baseline, `POST`/`DELETE` admin/board) — usada solo por la vista de calendario
+  del frontend.
+- **`inventory_items`** / **`item_movements`** — catálogo de material y sus movimientos,
+  modelados en una única tabla con un discriminador de tipo (`type`) en vez de una tabla
+  por tipo, con `CHECK`s que impiden combinaciones sin sentido (una venta con fecha de
+  devolución, por ejemplo). Un `inventory_items.item_type` distingue tres formas: `rope`
+  y `bag` son objetos físicos individuales, cada uno con su propio código y siempre
+  `total_quantity` 1 (dar de alta una segunda cuerda es dar de alta un ítem nuevo, no
+  sumar unidades a uno existente), con campos propios de su tipo (`rope_type`/
+  `diameter_mm`/`manufacture_year`/`length_m` para cuerda; `bag_type`/`capacity_liters`
+  para saca); `gear` es material genérico, archivado bajo una categoría del catálogo
+  `material_categories` (`GET /material-categories`, admin/board — igual que
+  `license_types`, guardado en base de datos en vez de un enum de Go, para que la lista
+  pueda crecer sin desplegar código). `item_movements.type` tiene ocho valores: `loan`,
+  `rental`, `sale`, `acquisition` (nueva existencia entra al inventario),
+  `loss`/`abandonment`/`retirement` (existencia sale para siempre, sin venta detrás) y
+  `return`, la devolución de un préstamo. El alquiler se tarifica por semana
+  (`rental_price_per_week`), no por día, y sigue cerrando con
+  `returned_at`/`status='active'→'completed'` de una sola vez —
+  `PATCH /movements/{id}/return` solo se aplica a un alquiler abierto. Un préstamo o una
+  devolución siempre van vinculados a una actividad (`item_movements.activity_id`,
+  exigido por otro `CHECK`); una devolución no está ligada a ningún préstamo concreto —
+  se valida en Go contra cuánto de ese material tiene esa actividad todavía pendiente
+  (`SUM(loan.quantity) − SUM(return.quantity)` para el mismo `item_id`/`activity_id`),
+  lo que permite, por ejemplo, prestar 10 mosquetones y luego 15 más, y devolver 20
+  seguido de los 5 restantes, sin que cada devolución tenga que casar con un préstamo
+  concreto. `total_quantity`/`available_quantity`/`outstanding_loan_quantity` de cada
+  ítem nunca se guardan — se recalculan siempre desde su propio historial de movimientos
+  (`inventory_item_quantities`, una vista). Crear o modificar un movimiento requiere el
+  rol `admin`, `board` o el rol opcional `material` (sembrado por la migración pero no de
+  sistema: un club que no quiera esa distinción puede borrarlo y seguir usando `board`);
+  dar de alta el propio material del catálogo sigue reservado a admin/board.
+- `GET /users/{login}/activities` y `GET /users/{login}/movements` — el historial de una
+  persona visto desde su propia ficha, en vez de desde la actividad o el movimiento. El
+  primero está tan abierto como `listParticipants` (cualquier persona autenticada); el
+  segundo exige ser la propia persona o tener `admin`, `board` o `material`, igual que
+  `GET /movements`, porque un movimiento puede llevar precio.
 - **`internal/library`** — biblioteca de documentos del club (estatutos, reglamentos,
   normativas, memorias de actividades, actas de reuniones...): un árbol de directorios en
   disco (`config.LibraryRoot`, montado de solo lectura en el contenedor desde `./library`
@@ -312,6 +338,18 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   bajo una raíz sintética `/` antes de limpiarla (el mismo truco que usa el propio
   `net/http.FileServer`), y un symlink que apunte fuera del árbol se detecta resolviéndolo
   y comprobando que el destino real sigue dentro de la raíz.
+- **`internal/userfiles`** — el mismo modelo que `internal/library` (árbol en disco,
+  `config.UserFilesRoot`, montado desde `./user-files` en el host, sin PostgreSQL de por
+  medio), pero con un subdirectorio por login en vez de un árbol único compartido: los
+  documentos propios de cada persona (DNI escaneado, una autorización firmada...).
+  `GET /users/{login}/files[?path=…]` y `GET /users/{login}/files/file?path=…` calcan la
+  forma de `/library`/`/library/file` (mismo listado, `?download=1`, soporte de Range),
+  pero, a diferencia de la biblioteca, no están abiertas a cualquier rol baseline: solo
+  la propia persona o admin/board pueden verlas (403 en cualquier otro caso), comprobado
+  dentro del propio handler igual que `memberships.listByUser`/
+  `inventory.listMovementsByUser`. Una persona sin subdirectorio propio todavía — el caso
+  normal, hasta que alguien le deja algún fichero — ve un listado vacío en su propia raíz
+  en vez de un 404.
 
 ## Backend (`backend/`)
 
@@ -324,10 +362,11 @@ correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo mand
 verdad si lo hay), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
-de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` es
-la única excepción a ese patrón de capas: como no hay nada en PostgreSQL, no tiene
-`repository.go` — `service.go` trabaja directamente contra el sistema de archivos (ver
-más arriba).
+de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e
+`internal/userfiles` son la excepción a ese patrón de capas: como no hay nada en
+PostgreSQL detrás de ninguno de los dos, ninguno tiene `repository.go` —
+`service.go` trabaja directamente contra el sistema de archivos en ambos (ver más
+arriba).
 
 `auth.Authenticator.Protect`, el punto único por el que cada ruta se registra, exige
 siempre tener al menos uno de los roles `admin`, `board` o `member` — un suelo que se
@@ -360,8 +399,11 @@ saber qué roles tiene quien lo usa.
 
 Cada fila de la tabla de personas en `/members` enlaza a `/member?login=<login>`
 (`member.html`/`member.js`, solo admin/board): la ficha de esa persona, con sus datos
-editables y su historial de actividades y material, leído de
-`GET /users/{login}/activities` y `GET /users/{login}/transactions`.
+editables, su historial de actividades y material (`GET /users/{login}/activities` y
+`GET /users/{login}/movements`) y sus ficheros propios (`GET /users/{login}/files`,
+`web/js/userFiles.js` — el mismo visor embebido, con las mismas migas de pan y
+previsualización, aparece también en `/profile` para que cada socio vea los suyos).
+`/library` es la biblioteca de documentos del club, abierta a cualquier rol baseline.
 
 ## Cómo ejecutar en local
 

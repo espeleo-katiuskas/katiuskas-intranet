@@ -53,8 +53,9 @@ export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet_t
 cd backend && go test ./...
 ```
 
-Cada paquete que toca PostgreSQL (todos menos `auth`, `config`, `mail` y `httpapi`, que son
-lógica pura) usa una base de datos de pruebas real — no hay mocks del acceso a datos, las
+Cada paquete que toca PostgreSQL (todos menos `auth`, `config`, `mail`, `httpapi`,
+`library` y `userfiles` — los dos últimos sirven ficheros del disco, no de la base de
+datos) usa una base de datos de pruebas real — no hay mocks del acceso a datos, las
 restricciones de PostgreSQL (solapes, claves foráneas, uniqueness) son parte de lo que se
 prueba. `internal/testutil` aplica las migraciones una sola vez y le da a cada test su
 propia transacción, deshecha al terminar, así que los tests no interfieren entre sí. Sin
