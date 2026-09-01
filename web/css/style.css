@@ -610,6 +610,19 @@ button.link-button {
   vertical-align: -1px;
 }
 
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 4px;
+}
+
+.calendar-year-label {
+  font-weight: 600;
+  min-width: 3.5em;
+  text-align: center;
+}
+
 .calendar-legend-non-working {
   background: #f3dcda;
   border: 1px solid var(--danger);

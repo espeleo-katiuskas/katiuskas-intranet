@@ -232,7 +232,8 @@ const MONTH_NAMES = [
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
 const WEEKDAY_NAMES = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-const CALENDAR_YEAR = new Date().getFullYear();
+const THIS_YEAR = new Date().getFullYear();
+let calendarYear = THIS_YEAR;
 
 function isoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -288,20 +289,20 @@ function renderCalendarDay(date, info) {
 }
 
 function renderCalendarMonth(month, dayInfo) {
-  const firstOfMonth = new Date(CALENDAR_YEAR, month, 1);
+  const firstOfMonth = new Date(calendarYear, month, 1);
   // getDay() is 0 = Sunday..6 = Saturday; the week here starts Monday.
   const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
-  const daysInMonth = new Date(CALENDAR_YEAR, month + 1, 0).getDate();
+  const daysInMonth = new Date(calendarYear, month + 1, 0).getDate();
 
   const blanks = Array.from({ length: leadingBlanks }, () => '<div class="calendar-day calendar-day-empty"></div>').join('');
   const days = Array.from({ length: daysInMonth }, (_, i) => {
-    const date = new Date(CALENDAR_YEAR, month, i + 1);
+    const date = new Date(calendarYear, month, i + 1);
     return renderCalendarDay(date, dayInfo[isoDate(date)]);
   }).join('');
 
   return `
     <div class="calendar-month">
-      <h3>${MONTH_NAMES[month]} ${CALENDAR_YEAR}</h3>
+      <h3>${MONTH_NAMES[month]} ${calendarYear}</h3>
       <div class="calendar-grid">
         ${WEEKDAY_NAMES.map((w) => `<div class="calendar-weekday">${w}</div>`).join('')}
         ${blanks}${days}
@@ -314,26 +315,29 @@ const calendarViewContainer = document.getElementById('calendar-view-container')
 const calendarView = document.getElementById('calendar-view');
 const listView = document.getElementById('list-view');
 const toggleCalendarButton = document.getElementById('toggle-calendar-view');
-let calendarLoaded = false;
+const calendarYearLabel = document.getElementById('calendar-year-label');
+const calendarTodayYearButton = document.getElementById('calendar-today-year');
+let calendarOpened = false;
 
 async function loadCalendar() {
+  calendarYearLabel.textContent = String(calendarYear);
+  calendarTodayYearButton.hidden = calendarYear === THIS_YEAR;
   calendarView.innerHTML = 'Cargando…';
   try {
     // The 100 most recent activities overall — plenty for a single
     // year's calendar at this club's actual scale; there's no
-    // date-range filter on GET /activities to ask for just this year.
+    // date-range filter on GET /activities to ask for just one year.
     const [holidays, activityPage] = await Promise.all([
-      apiFetch(`/holidays?year=${CALENDAR_YEAR}`),
+      apiFetch(`/holidays?year=${calendarYear}`),
       apiFetch('/activities?limit=100'),
     ]);
     const yearActivities = activityPage.filter((a) => {
       const start = a.start_date.slice(0, 4);
       const end = a.end_date.slice(0, 4);
-      return start <= String(CALENDAR_YEAR) && end >= String(CALENDAR_YEAR);
+      return start <= String(calendarYear) && end >= String(calendarYear);
     });
     const dayInfo = buildCalendarDayInfo(yearActivities, holidays);
     calendarView.innerHTML = Array.from({ length: 12 }, (_, month) => renderCalendarMonth(month, dayInfo)).join('');
-    calendarLoaded = true;
   } catch (err) {
     calendarView.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
@@ -349,9 +353,25 @@ toggleCalendarButton.addEventListener('click', async () => {
   // the one on screen.
   toggleFilterButton.hidden = showingCalendar;
   toggleCalendarButton.textContent = showingCalendar ? 'Ver lista' : 'Ver calendario';
-  if (showingCalendar && !calendarLoaded) {
+  if (showingCalendar && !calendarOpened) {
+    calendarOpened = true;
     await loadCalendar();
   }
+});
+
+document.getElementById('calendar-prev-year').addEventListener('click', async () => {
+  calendarYear -= 1;
+  await loadCalendar();
+});
+
+document.getElementById('calendar-next-year').addEventListener('click', async () => {
+  calendarYear += 1;
+  await loadCalendar();
+});
+
+calendarTodayYearButton.addEventListener('click', async () => {
+  calendarYear = THIS_YEAR;
+  await loadCalendar();
 });
 
 loadActivities();
