@@ -711,23 +711,6 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
   }
 });
 
-// "Borrar persona" has data-roles="admin" — DELETE /users/{login} is
-// admin-only now, so board never has this button to begin with.
-if (isRealAdmin) {
-  document.getElementById('delete-member').addEventListener('click', async () => {
-    if (!confirm('¿Borrar a esta persona? Se perderá su ficha, su acceso y su historial de socio.')) return;
-    const button = document.getElementById('delete-member');
-    button.disabled = true;
-    try {
-      await apiFetch(`/users/${memberLogin}`, { method: 'DELETE' });
-      window.location.href = '/members';
-    } catch (err) {
-      button.disabled = false;
-      showError(err.message);
-    }
-  });
-}
-
 // Impersonating yourself is rejected by the API anyway, but there's no
 // reason to even offer it on your own page.
 const impersonateButton = document.getElementById('impersonate-button');
