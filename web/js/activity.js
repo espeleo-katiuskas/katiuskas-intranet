@@ -388,11 +388,16 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
     showError('Elige un material de la lista.');
     return;
   }
+  // Optional — a loan's mandatory link is this activity, not
+  // necessarily one specific person.
   const userInput = document.getElementById('loan-user');
-  const login = resolvePickerId(personEntries, userInput.value);
-  if (!login) {
-    showError('Elige un socio de la lista.');
-    return;
+  let login = null;
+  if (userInput.value.trim()) {
+    login = resolvePickerId(personEntries, userInput.value);
+    if (!login) {
+      showError('Elige un socio de la lista, o déjalo vacío.');
+      return;
+    }
   }
   const notesInput = document.getElementById('loan-notes');
 
