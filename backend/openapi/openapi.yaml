@@ -1262,11 +1262,19 @@ paths:
 
   /movements:
     get:
-      summary: List movements (defaults to active ones)
-      description: Requires the admin, board, or material role.
+      summary: List movements (defaults to active ones, or by activity)
+      description: >
+        Requires the admin, board, or material role. With no
+        activity_id, lists by status (default active — in practice only
+        ever rentals, since loan/return always settle immediately).
+        With activity_id, lists every movement tied to that activity
+        instead (status is ignored) — chiefly loan and return, which is
+        what the activity page's own material listing is built from,
+        computing what's still outstanding item by item client-side.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string } }
+        - { name: activity_id, in: query, schema: { type: integer } }
       responses:
         "200":
           description: Movements
@@ -1279,28 +1287,34 @@ paths:
       summary: Record a movement against an item
       description: >
         Requires the admin, board, or material role. rental exchanges
-        the item with a specific person and requires login; loan and
-        sale's logins are optional — a loan's mandatory link is the
-        activity it's part of (see activity_id below), not necessarily
-        one specific person, and not every sale is tied to a socio
-        either. acquisition (new stock in), loss, abandonment and
-        retirement (stock permanently gone with no sale behind it, or
-        gear taken out of service) never have a recipient at all —
-        giving one is rejected (recipient_not_allowed), not just
-        ignored. activity_id is required for loan (optional for
-        everything else, rental included — a rental isn't always tied
-        to one specific activity the way a loan always is).
-        recorded_by_login (the caller) is set automatically, never
-        chosen by the caller — same for price, which always comes from
-        the item's own rental_price_per_week/sale_price (null except
-        for rental/sale), never from the request body. quantity is
-        forced to 1 for a rope or bag item, since they're individually
-        tracked (always exactly one unit); acquisition is rejected
-        outright for them (single_unit_item) — a new rope or saca is a
-        new item, not more stock on an existing one.
-        total_quantity/available_quantity on the item are always
-        recomputed from its movement history, never stored, so they can
-        never drift from what this endpoint actually recorded.
+        the item with a specific person and requires login; loan,
+        sale and return's logins are optional — a loan or return's
+        mandatory link is the activity it's part of (see activity_id
+        below), not necessarily one specific person, and not every sale
+        is tied to a socio either. acquisition (new stock in), loss,
+        abandonment and retirement (stock permanently gone with no sale
+        behind it, or gear taken out of service) never have a recipient
+        at all — giving one is rejected (recipient_not_allowed), not
+        just ignored. activity_id is required for loan and return
+        (optional for everything else, rental included — a rental isn't
+        always tied to one specific activity the way a loan always is).
+        return isn't linked to any one specific loan row — it's
+        validated against how much of that item this activity still has
+        outstanding overall (every loan minus every return, for that
+        item and activity together): lending 10 then 15 more, then
+        returning 20 followed by the remaining 5, is a perfectly valid
+        sequence. recorded_by_login (the caller) is set automatically,
+        never chosen by the caller — same for price, which always comes
+        from the item's own rental_price_per_week/sale_price (null
+        except for rental/sale), never from the request body. quantity
+        is forced to 1 for a rope or bag item, since they're
+        individually tracked (always exactly one unit); acquisition is
+        rejected outright for them (single_unit_item) — a new rope or
+        saca is a new item, not more stock on an existing one.
+        total_quantity/available_quantity/outstanding_loan_quantity on
+        the item are always recomputed from its movement history, never
+        stored, so they can never drift from what this endpoint
+        actually recorded.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -1314,13 +1328,16 @@ paths:
                   type: string
                   description: >
                     The movement's recipient. Required for rental;
-                    optional for loan/sale; rejected outright
+                    optional for loan/sale/return; rejected outright
                     (recipient_not_allowed) for acquisition/loss/
                     abandonment/retirement.
-                type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
+                type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement, return] }
                 quantity: { type: integer, default: 1, description: Forced to 1 for a rope or bag item. }
                 transacted_at: { type: string, format: date, description: Defaults to today; can be backdated. }
-                activity_id: { type: integer, nullable: true }
+                activity_id:
+                  type: integer
+                  nullable: true
+                  description: Required for loan and return; optional otherwise.
                 notes:
                   type: string
                   nullable: true
@@ -1338,81 +1355,41 @@ paths:
             invalid_type, login_required (rental without a login),
             recipient_not_allowed (a login given for
             acquisition/loss/abandonment/retirement), or
-            activity_required (loan without activity_id).
+            activity_required (loan or return without activity_id).
         "404":
           description: The given login doesn't belong to anyone.
         "409":
           description: >
             insufficient_stock (not enough available quantity),
             not_loanable (the item's loanable flag is false) for a
-            loan, or single_unit_item (an acquisition against a rope or
-            bag item).
+            loan, single_unit_item (an acquisition against a rope or
+            bag item), or return_exceeds_loaned (a return larger than
+            what this item still has outstanding for this activity).
 
   /movements/{id}/return:
     patch:
-      summary: Record a return against an active loan or rental
+      summary: Record a return against an active rental
       description: >
-        Requires the admin, board, or material role. Records one return
-        event (see GET .../returns) and adds it to the movement's
-        returned_quantity. With no body, or quantity omitted, it
-        returns everything still outstanding and closes the movement
-        (the same one-call behavior this endpoint always had). Giving a
-        smaller quantity is a partial return — 30 mosquetones lent for
-        a trip might come back as 10 one day and 20 the next, each its
-        own call here — which leaves the movement active
-        (returned_quantity going up, returned_at staying null) until a
-        later call brings returned_quantity up to quantity, at which
-        point returned_at is set and status becomes completed. Only
-        loan and rental ever reach status active (every other type
-        settles immediately when recorded), so returning anything else
-        — or an unknown id, or an already-fully-returned movement — is
-        reported the same way: not_found.
+        Requires the admin, board, or material role. Closes an active
+        rental — the only type that still reaches status active (every
+        other type, loan included, settles the moment it's recorded) —
+        always all of it at once; there's no partial rental return. A
+        loan's return is a separate 'return' movement instead
+        (POST /movements, type return), validated per item and activity
+        rather than closing any one loan row. Returning anything else —
+        or an unknown id, or an already-closed movement — is reported
+        the same way: not_found.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                quantity:
-                  type: integer
-                  description: Defaults to everything still outstanding.
-                returned_at:
-                  type: string
-                  format: date
-                  description: Defaults to today; can be backdated.
       responses:
         "200":
           description: Updated movement
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Movement" }
-        "400":
-          description: invalid_quantity — zero, negative, or more than what's still outstanding.
         "404":
-          description: not_found — no active loan or rental with this id.
-
-  /movements/{id}/returns:
-    get:
-      summary: List a movement's return history
-      description: >
-        Every return event recorded against this movement (see PATCH
-        .../return), oldest first — the day-by-day breakdown behind its
-        returned_quantity. Open to any baseline role, same as
-        GET /items/{id}/movements.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
-      responses:
-        "200":
-          description: Return events
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/MovementReturn" }
+          description: not_found — no active rental with this id.
 
   /library:
     get:
@@ -1946,11 +1923,12 @@ components:
         description and category_id are always set. rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
-        to derive that from. total_quantity/available_quantity are
-        always computed from this item's own movement history (see
-        GET /items/{id}/movements) rather than stored, so there's no
-        acquired_at here either — it's the transacted_at of the item's
-        first acquisition movement, visible in that same history.
+        to derive that from. total_quantity/available_quantity/
+        outstanding_loan_quantity are always computed from this item's
+        own movement history (see GET /items/{id}/movements) rather
+        than stored, so there's no acquired_at here either — it's the
+        transacted_at of the item's first acquisition movement, visible
+        in that same history.
       properties:
         id: { type: integer }
         item_type: { type: string, enum: [rope, bag, gear] }
@@ -1964,7 +1942,19 @@ components:
             Required for gear. Doubles as "Observaciones" in the
             frontend for rope/bag, where it's optional.
         total_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
-        available_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
+        available_quantity:
+          type: integer
+          description: >
+            Computed from this item's movement history — never stored.
+            Already reflects any outstanding loan and any open rental,
+            same as every other stock-reducing movement.
+        outstanding_loan_quantity:
+          type: integer
+          description: >
+            How much of this item is currently out on some loan, across
+            every activity, with nothing (yet) returned against it —
+            every loan minus every return. What "material prestado" is
+            built from.
         status: { type: string, enum: [available, on_loan, rented, sold, lost, abandoned, maintenance, retired] }
         loanable: { type: boolean }
         rentable: { type: boolean, description: "Computed: true iff rental_price_per_week is set." }
@@ -2018,14 +2008,17 @@ components:
       type: object
       description: >
         rental exchanges the item with a specific person (user_login
-        always set); loan and sale's are optional. acquisition (new
-        stock in), loss, abandonment and retirement never have a
-        recipient at all — user_login is always absent for those.
+        always set); loan, sale and return's are optional. acquisition
+        (new stock in), loss, abandonment and retirement never have a
+        recipient at all — user_login is always absent for those. A
+        loan's own "returned" state isn't tracked on the loan itself —
+        it's the sum of separate return movements against the same item
+        and activity (see GET /movements?activity_id=).
       properties:
         id: { type: integer }
         item_id: { type: integer }
-        user_login: { type: string, nullable: true, description: "Always set for rental, optionally for loan/sale, always absent for acquisition/loss/abandonment/retirement." }
-        type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement] }
+        user_login: { type: string, nullable: true, description: "Always set for rental, optionally for loan/sale/return, always absent for acquisition/loss/abandonment/retirement." }
+        type: { type: string, enum: [loan, rental, sale, acquisition, loss, abandonment, retirement, return] }
         quantity: { type: integer, description: Always 1 for a rope or bag item. }
         transacted_at: { type: string, format: date, description: Defaults to today at creation; can be backdated. }
         returned_at:
@@ -2033,14 +2026,9 @@ components:
           format: date
           nullable: true
           description: >
-            When this movement was *fully* settled — returned_quantity
-            reached quantity. Still null while partially returned.
-        returned_quantity:
-          type: integer
-          description: >
-            Sum of every return recorded against this movement so far
-            (see GET .../returns) — quantity minus this is what's still
-            outstanding. Always 0 for a type that isn't loan/rental.
+            When an active rental was closed via PATCH
+            .../return — rental only, always all-or-nothing. Always
+            null for every other type, loan included.
         price:
           type: number
           nullable: true
@@ -2048,31 +2036,18 @@ components:
             Always the item's own rental_price_per_week (rental) or
             sale_price (sale) at the time of the movement; always null
             otherwise.
-        status: { type: string, enum: [active, completed, overdue, cancelled], description: "active only for an unreturned loan/rental; every other type is completed immediately." }
+        status: { type: string, enum: [active, completed, overdue, cancelled], description: "active only for an unreturned rental; every other type, loan included, is completed immediately." }
         recorded_by_login: { type: string, nullable: true }
         activity_id:
           type: integer
           nullable: true
-          description: Required for loan; optional otherwise, rental included.
+          description: Required for loan and return; optional otherwise, rental included.
         notes:
           type: string
           nullable: true
           description: >
             Free text, mainly useful on loss/abandonment/retirement to
             say why.
-
-    MovementReturn:
-      type: object
-      description: >
-        One return event against a loan or rental (see PATCH
-        /movements/{id}/return) — 30 mosquetones lent for a trip might
-        come back as two of these, 10 one day and 20 the next.
-      properties:
-        id: { type: integer }
-        movement_id: { type: integer }
-        quantity: { type: integer }
-        returned_at: { type: string, format: date }
-        recorded_by_login: { type: string, nullable: true }
 
     LibraryEntry:
       type: object

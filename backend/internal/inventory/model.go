@@ -64,11 +64,12 @@ type MaterialCategory struct {
 
 // MovementType is either an exchange with a specific person — rental
 // always requires a UserID, loan and sale's are optional — or a
-// stock-level change that never has one at all: acquisition brings new
-// units in, loss/abandonment/retirement permanently take units out
-// (lost in the field, left behind on a trip, or decommissioned). See
-// Repository.CreateMovement for how each type affects an item's
-// computed quantities and status.
+// stock-level change that never has one at all: acquisition and return
+// both bring units back into available_quantity (new stock in, or
+// loaned stock coming back), loss/abandonment/retirement permanently
+// take units out (lost in the field, left behind on a trip, or
+// decommissioned). See Repository.CreateMovement for how each type
+// affects an item's computed quantities and status.
 type MovementType string
 
 const (
@@ -79,6 +80,13 @@ const (
 	MovementLoss        MovementType = "loss"
 	MovementAbandonment MovementType = "abandonment"
 	MovementRetirement  MovementType = "retirement"
+	// MovementReturn is loaned material coming back — always tied to
+	// the activity it was loaned for (like loan itself), validated
+	// against how much of that item is still outstanding *for that
+	// activity* rather than against any one specific loan movement
+	// (see Repository.CreateMovement). Rental has no equivalent: it
+	// still closes all at once via ReturnedAt/Status.
+	MovementReturn MovementType = "return"
 )
 
 type MovementStatus string
@@ -105,16 +113,23 @@ type Item struct {
 	// "Observaciones" in the frontend for rope/bag, where it's optional
 	// — same field underneath, just labelled differently per type.
 	Description *string `json:"description,omitempty"`
-	// TotalQuantity/AvailableQuantity are never stored — they're
-	// computed from this item's own movement history (see the
-	// inventory_item_quantities view and Repository.itemSelect), so
-	// they can never drift from what actually happened. There's no
-	// AcquiredAt field for the same reason: it's the transacted_at of
-	// this item's first 'acquisition' movement, visible in its
-	// movement history instead of being duplicated here.
-	TotalQuantity     int32      `json:"total_quantity"`
-	AvailableQuantity int32      `json:"available_quantity"`
-	Status            ItemStatus `json:"status"`
+	// TotalQuantity/AvailableQuantity/OutstandingLoanQuantity are never
+	// stored — they're computed from this item's own movement history
+	// (see the inventory_item_quantities view and
+	// Repository.itemSelect), so they can never drift from what
+	// actually happened. There's no AcquiredAt field for the same
+	// reason: it's the transacted_at of this item's first 'acquisition'
+	// movement, visible in its movement history instead of being
+	// duplicated here.
+	TotalQuantity int32 `json:"total_quantity"`
+	// AvailableQuantity already reflects any outstanding loan (it's
+	// subtracted, same as a rental) — OutstandingLoanQuantity is that
+	// same loaned-and-not-yet-returned amount surfaced on its own,
+	// summed across every activity, since it's what "material
+	// prestado" is built from.
+	AvailableQuantity       int32      `json:"available_quantity"`
+	OutstandingLoanQuantity int32      `json:"outstanding_loan_quantity"`
+	Status                  ItemStatus `json:"status"`
 	// Loanable says whether this item can be loaned out at all —
 	// Rentable/Sellable below need no such flag, since they're fully
 	// determined by whether a price is set, but a loan carries no price
@@ -183,22 +198,21 @@ type Movement struct {
 	// be backdated — whoever logs the movement may be doing so after
 	// the fact.
 	TransactedAt time.Time `json:"transacted_at"`
-	// ReturnedAt is when this movement was *fully* settled — the sum of
-	// its MovementReturn history (see GET /movements/{id}/returns)
-	// reached Quantity. Still nil while partially returned. Loan/rental
-	// only; always nil for every other type.
-	ReturnedAt *time.Time `json:"returned_at,omitempty"`
-	// ReturnedQuantity is that same sum, kept up to date on every partial
-	// or full return — Quantity-ReturnedQuantity is what's still
-	// outstanding. Always 0 for a type that isn't loan/rental.
-	ReturnedQuantity int32          `json:"returned_quantity"`
-	Price            *float64       `json:"price,omitempty"`
-	Status           MovementStatus `json:"status"`
-	RecordedBy       *int64         `json:"-"`
-	RecordedByLogin  *string        `json:"recorded_by_login,omitempty"`
-	// ActivityID is required for loan (it always happens as part of an
-	// activity) and optional for every other type, rental included — a
-	// rental isn't always tied to one specific activity.
+	// ReturnedAt is when a rental was closed out — rental only, always
+	// all-or-nothing (there's no partial rental return), and always nil
+	// for every other type, loan included: a loan's "returned" state is
+	// the sum of separate 'return' movements against the same item and
+	// activity, not a flag on the loan itself.
+	ReturnedAt      *time.Time     `json:"returned_at,omitempty"`
+	Price           *float64       `json:"price,omitempty"`
+	Status          MovementStatus `json:"status"`
+	RecordedBy      *int64         `json:"-"`
+	RecordedByLogin *string        `json:"recorded_by_login,omitempty"`
+	// ActivityID is required for loan and return (both always happen as
+	// part of an activity — a return is validated against how much of
+	// this item that activity still has outstanding) and optional for
+	// every other type, rental included — a rental isn't always tied to
+	// one specific activity.
 	ActivityID *int64 `json:"activity_id,omitempty"`
 	// Notes is free text, mainly useful on loss/abandonment/retirement
 	// to say why ("cuerda gastada", "se quedó instalada en la sima X").
@@ -218,17 +232,4 @@ type CreateMovementInput struct {
 	RecordedBy   *int64
 	ActivityID   *int64
 	Notes        *string
-}
-
-// MovementReturn is one return event against a loan or rental — 30
-// mosquetones lent for a trip might come back as two of these, 10 one
-// day and 20 the next, rather than a single all-or-nothing return. See
-// Repository.ReturnMovement.
-type MovementReturn struct {
-	ID              int64     `json:"id"`
-	MovementID      int64     `json:"movement_id"`
-	Quantity        int32     `json:"quantity"`
-	ReturnedAt      time.Time `json:"returned_at"`
-	RecordedBy      *int64    `json:"-"`
-	RecordedByLogin *string   `json:"recorded_by_login,omitempty"`
 }

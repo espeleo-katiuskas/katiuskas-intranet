@@ -142,11 +142,34 @@ func TestListActive(t *testing.T) {
 	`, categoryID).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
 	}
+	// A loan is always 'completed' the moment it's recorded — what
+	// makes it "still out" is that nothing has returned it yet, not its
+	// own status (see Repository.ListActive).
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
-		VALUES ($1, $2, 'loan', $3, 'active')
+		VALUES ($1, $2, 'loan', $3, 'completed')
 	`, itemID, user.ID, completedWithMaterial.ID); err != nil {
 		t.Fatalf("insert movement: %v", err)
+	}
+
+	completedFullyReturned, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, loan fully returned", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
+	if err != nil {
+		t.Fatalf("create completed with returned loan: %v", err)
+	}
+	if _, err := repo.Update(ctx, completedFullyReturned.ID, activities.UpdateInput{Status: &completed}); err != nil {
+		t.Fatalf("mark completed: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
+		VALUES ($1, $2, 'loan', $3, 'completed')
+	`, itemID, user.ID, completedFullyReturned.ID); err != nil {
+		t.Fatalf("insert loan: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO item_movements (item_id, type, quantity, activity_id, status)
+		VALUES ($1, 'return', 1, $2, 'completed')
+	`, itemID, completedFullyReturned.ID); err != nil {
+		t.Fatalf("insert return: %v", err)
 	}
 
 	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
@@ -173,6 +196,9 @@ func TestListActive(t *testing.T) {
 	}
 	if got[completedNoMaterial.ID] {
 		t.Error("expected a completed activity with nothing pending to not be active")
+	}
+	if got[completedFullyReturned.ID] {
+		t.Error("expected a completed activity whose loan was fully returned to not be active")
 	}
 	if got[cancelled.ID] {
 		t.Error("expected a cancelled activity to not be active")

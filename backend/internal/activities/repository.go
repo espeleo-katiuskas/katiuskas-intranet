@@ -122,14 +122,23 @@ func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool
 
 // ListActive returns activities that still need attention: anything not
 // yet completed or cancelled, plus anything (even completed) that still
-// has a loan or rental linked to it that hasn't been returned. With
-// activities piling up for years, this is what the club actually wants
-// to see day to day — List still exists for browsing the full history.
+// has a rental linked to it that hasn't been returned, or a loan whose
+// activity still has some of that item outstanding (every loan minus
+// every return, summed per item — a loan's own status is always
+// 'completed' the moment it's recorded, so it can't be checked the same
+// way a rental's open status is). With activities piling up for years,
+// this is what the club actually wants to see day to day — List still
+// exists for browsing the full history.
 func (r *Repository) ListActive(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN item_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
-		WHERE a.status = 'planned' OR t.id IS NOT NULL
+		WHERE a.status = 'planned' OR t.id IS NOT NULL OR EXISTS (
+			SELECT 1 FROM item_movements m
+			WHERE m.activity_id = a.id AND m.type IN ('loan', 'return')
+			GROUP BY m.item_id
+			HAVING SUM(CASE WHEN m.type = 'loan' THEN m.quantity ELSE -m.quantity END) > 0
+		)
 		ORDER BY a.start_date `+sortDirection(ascending)+` LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {

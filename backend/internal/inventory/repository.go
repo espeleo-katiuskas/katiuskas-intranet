@@ -14,7 +14,7 @@ import (
 var (
 	ErrNotFound          = errors.New("item or movement not found")
 	ErrInsufficientStock = errors.New("not enough available quantity")
-	ErrActivityRequired  = errors.New("loan movements must be linked to an activity")
+	ErrActivityRequired  = errors.New("loan and return movements must be linked to an activity")
 	// ErrNotLoanable means the item's loanable flag is false — see
 	// Item.Loanable.
 	ErrNotLoanable = errors.New("this item cannot be loaned")
@@ -28,9 +28,10 @@ var (
 	// own individual code already make a second unit meaningless; a
 	// new one is a new item, not more stock on this one).
 	ErrSingleUnitItem = errors.New("rope and bag items are always a single unit")
-	// ErrInvalidReturnQuantity means a return's quantity was zero,
-	// negative, or more than what's still outstanding on the movement.
-	ErrInvalidReturnQuantity = errors.New("return quantity must be positive and not exceed what's still outstanding")
+	// ErrReturnExceedsLoaned means a 'return' movement's quantity is
+	// more than this item still has outstanding *for that activity* —
+	// see Repository.CreateMovement.
+	ErrReturnExceedsLoaned = errors.New("cannot return more than is currently on loan for this activity")
 )
 
 // categoryFKViolationCode is the foreign-key violation Postgres raises
@@ -38,9 +39,10 @@ var (
 const categoryFKViolationCode = "23503"
 
 // activityRequiredConstraint is the CHECK constraint (see migration
-// 00013) requiring a loan to name the activity it's for. Rental's
-// activity is optional — a rental doesn't always happen as part of one.
-const activityRequiredConstraint = "activity_required_for_loan"
+// 00017) requiring a loan or return to name the activity it's for.
+// Rental's activity is optional — a rental doesn't always happen as
+// part of one.
+const activityRequiredConstraint = "activity_required_for_loan_and_return"
 
 type Repository struct {
 	pool db.PGX
@@ -54,13 +56,13 @@ func NewRepository(pool db.PGX) *Repository {
 // Item rows other than CreateItem's INSERT ... RETURNING (which can't
 // JOIN against the row it just wrote — see CreateItem's own follow-up
 // queries for the category name and computed quantities).
-// inventory_item_quantities (migration 00018) computes total/available
+// inventory_item_quantities computes total/available/outstanding-loan
 // quantity from this item's own movement history, so they can never
-// drift from what actually happened the way a stored, manually-updated
-// pair of columns could.
+// drift from what actually happened the way stored, manually-updated
+// columns could.
 const itemSelect = `
 	i.id, i.item_type, i.brand, i.model, i.code, i.description,
-	q.total_quantity, q.available_quantity, i.status, i.loanable,
+	q.total_quantity, q.available_quantity, q.outstanding_loan_quantity, i.status, i.loanable,
 	i.rental_price_per_week, i.sale_price,
 	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters,
 	i.category_id, mc.name
@@ -70,7 +72,7 @@ const itemSelect = `
 
 func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
 	if err := row.Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description,
-		&it.TotalQuantity, &it.AvailableQuantity, &it.Status, &it.Loanable,
+		&it.TotalQuantity, &it.AvailableQuantity, &it.OutstandingLoanQuantity, &it.Status, &it.Loanable,
 		&it.RentalPricePerWeek, &it.SalePrice,
 		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters,
 		&it.CategoryID, &it.CategoryName,
@@ -212,19 +214,20 @@ func isTerminalItemStatus(s ItemStatus) bool {
 
 // affectsItemStatus reports whether a movement type can change an
 // item's overall status: draining the last unit (sale/loss/abandonment/
-// retirement) or restocking a depleted one (acquisition). Loan/rental
-// are temporary and never touch it here — ReturnMovement resets status
-// to available on its own once one comes back.
+// retirement) or restocking a depleted one (acquisition or a loan
+// coming back via return). Rental is temporary and never touches it
+// here — ReturnMovement resets status to available on its own once one
+// comes back.
 func affectsItemStatus(t MovementType) bool {
 	_, terminal := itemStatusForMovement[t]
-	return terminal || t == MovementAcquisition
+	return terminal || t == MovementAcquisition || t == MovementReturn
 }
 
 // syncItemStatusAfterMovement keeps Item.Status in step with a movement
 // that changed the item's stock level for good: draining the last unit
 // sets a terminal status (sold/lost/abandoned/retired), and restocking
-// a depleted item via a further acquisition clears it back to
-// available. Loan/rental never reach here — they're temporary, and
+// a depleted item via a further acquisition or return clears it back
+// to available. Rental never reaches here — it's temporary, and
 // ReturnMovement already resets status to available on its own.
 func (r *Repository) syncItemStatusAfterMovement(ctx context.Context, tx pgx.Tx, itemID int64, movementType MovementType) error {
 	var available int32
@@ -241,7 +244,7 @@ func (r *Repository) syncItemStatusAfterMovement(ctx context.Context, tx pgx.Tx,
 		_, err := tx.Exec(ctx, `UPDATE inventory_items SET status = $1 WHERE id = $2`, newStatus, itemID)
 		return err
 	}
-	if movementType == MovementAcquisition && available > 0 && isTerminalItemStatus(status) {
+	if (movementType == MovementAcquisition || movementType == MovementReturn) && available > 0 && isTerminalItemStatus(status) {
 		_, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, itemID)
 		return err
 	}
@@ -299,8 +302,29 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		price = salePrice
 	}
 
-	// Every type except acquisition consumes existing stock.
-	if in.Type != MovementAcquisition {
+	switch in.Type {
+	case MovementAcquisition:
+		// No check — adds new stock the club now owns.
+	case MovementReturn:
+		// A return isn't linked to any one specific loan row — it's
+		// validated against how much of this item that activity still
+		// has outstanding overall (every loan minus every return, for
+		// that item and activity together).
+		if in.ActivityID == nil {
+			return Movement{}, ErrActivityRequired
+		}
+		var outstandingForActivity int32
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(CASE WHEN type = 'loan' THEN quantity ELSE -quantity END), 0)
+			FROM item_movements WHERE item_id = $1 AND activity_id = $2 AND type IN ('loan', 'return')
+		`, in.ItemID, *in.ActivityID).Scan(&outstandingForActivity); err != nil {
+			return Movement{}, err
+		}
+		if in.Quantity > outstandingForActivity {
+			return Movement{}, ErrReturnExceedsLoaned
+		}
+	default:
+		// Every other type consumes existing available stock.
 		var available int32
 		if err := tx.QueryRow(ctx, `
 			SELECT available_quantity FROM inventory_item_quantities WHERE item_id = $1
@@ -312,11 +336,13 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		}
 	}
 
-	// Loan and rental stay open until returned; everything else is
-	// settled the moment it's recorded — there's nothing further to
-	// happen to an acquisition, sale, loss, abandonment or retirement.
+	// Rental stays open until returned (see ReturnMovement); every
+	// other type — loan and return included — is settled the moment
+	// it's recorded. A loan's own "returned" state is no longer tracked
+	// on the loan itself; it's the sum of separate 'return' movements
+	// for the same item and activity.
 	status := MovementCompleted
-	if in.Type == MovementLoan || in.Type == MovementRental {
+	if in.Type == MovementRental {
 		status = MovementActive
 	}
 
@@ -346,17 +372,13 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	return m, tx.Commit(ctx)
 }
 
-// ReturnMovement records one return event against an active loan or
-// rental, inside a single transaction. quantity defaults to whatever's
-// still outstanding (a full return, same one-call behavior as before
-// this existed) when nil; given explicitly, it can be less — a partial
-// return — leaving the movement active for a further one later.
-// Only loan/rental ever reach status 'active' (every other type is
-// 'completed' the moment it's recorded — see CreateMovement), so this
-// naturally refuses to return a sale, acquisition, loss, abandonment or
-// retirement the same way it refuses an already-fully-returned or
-// unknown id: ErrNotFound.
-func (r *Repository) ReturnMovement(ctx context.Context, id int64, quantity *int32, returnedAt time.Time, recordedBy *int64) (Movement, error) {
+// ReturnMovement closes an active rental — the only type that still
+// reaches status 'active' (every other type is 'completed' the moment
+// it's recorded — see CreateMovement), always all of it at once. A
+// loan's return is a separate 'return' movement instead (see
+// CreateMovement), validated per item and activity rather than closing
+// any one loan row.
+func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Movement{}, err
@@ -365,9 +387,10 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64, quantity *int
 
 	var m Movement
 	err = tx.QueryRow(ctx, `
-		SELECT id, item_id, user_id, type, quantity, transacted_at, returned_at,
+		UPDATE item_movements SET returned_at = now(), status = 'completed'
+		WHERE id = $1 AND status = 'active'
+		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id, notes
-		FROM item_movements WHERE id = $1 AND status = 'active' FOR UPDATE
 	`, id).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
 		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -377,69 +400,11 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64, quantity *int
 		return Movement{}, err
 	}
 
-	var alreadyReturned int32
-	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(SUM(quantity), 0) FROM movement_returns WHERE movement_id = $1
-	`, id).Scan(&alreadyReturned); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
 		return Movement{}, err
-	}
-
-	outstanding := m.Quantity - alreadyReturned
-	returnQuantity := outstanding
-	if quantity != nil {
-		returnQuantity = *quantity
-	}
-	if returnQuantity <= 0 || returnQuantity > outstanding {
-		return Movement{}, ErrInvalidReturnQuantity
-	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO movement_returns (movement_id, quantity, returned_at, recorded_by) VALUES ($1,$2,$3,$4)
-	`, id, returnQuantity, returnedAt, recordedBy); err != nil {
-		return Movement{}, err
-	}
-	m.ReturnedQuantity = alreadyReturned + returnQuantity
-
-	if m.ReturnedQuantity == m.Quantity {
-		if err := tx.QueryRow(ctx, `
-			UPDATE item_movements SET returned_at = $2, status = 'completed' WHERE id = $1
-			RETURNING returned_at, status
-		`, id, returnedAt).Scan(&m.ReturnedAt, &m.Status); err != nil {
-			return Movement{}, err
-		}
-		if _, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
-			return Movement{}, err
-		}
 	}
 
 	return m, tx.Commit(ctx)
-}
-
-// ListMovementReturns returns every return event recorded against a
-// movement, oldest first — the day-by-day history behind its
-// ReturnedQuantity.
-func (r *Repository) ListMovementReturns(ctx context.Context, movementID int64) ([]MovementReturn, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT mr.id, mr.movement_id, mr.quantity, mr.returned_at, mr.recorded_by, ru.login
-		FROM movement_returns mr
-		LEFT JOIN users ru ON ru.id = mr.recorded_by
-		WHERE mr.movement_id = $1
-		ORDER BY mr.returned_at, mr.id
-	`, movementID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	list := []MovementReturn{}
-	for rows.Next() {
-		var mr MovementReturn
-		if err := rows.Scan(&mr.ID, &mr.MovementID, &mr.Quantity, &mr.ReturnedAt, &mr.RecordedBy, &mr.RecordedByLogin); err != nil {
-			return nil, err
-		}
-		list = append(list, mr)
-	}
-	return list, rows.Err()
 }
 
 func (r *Repository) ListMovementsByItem(ctx context.Context, itemID int64) ([]Movement, error) {
@@ -452,10 +417,19 @@ func (r *Repository) ListMovementsByStatus(ctx context.Context, status MovementS
 
 // ListMovementsByUser returns every purchase, rental and loan a person
 // has ever made, regardless of status — the material history shown on
-// that person's page. Acquisition/loss/abandonment/retirement rows have
-// no user_id, so they never match here.
+// that person's page. Acquisition/loss/abandonment/retirement/return
+// rows have no user_id, so they never match here.
 func (r *Repository) ListMovementsByUser(ctx context.Context, userID int64) ([]Movement, error) {
 	return r.queryMovements(ctx, `WHERE m.user_id = $1 ORDER BY m.transacted_at DESC`, userID)
+}
+
+// ListMovementsByActivity returns every movement tied to an activity —
+// loan and return chief among them, since that's the pairing that's
+// validated against each other (see CreateMovement) rather than
+// tracked via a link between specific rows. Backs the activity page's
+// "material prestado" (grouped and summed client-side, item by item).
+func (r *Repository) ListMovementsByActivity(ctx context.Context, activityID int64) ([]Movement, error) {
+	return r.queryMovements(ctx, `WHERE m.activity_id = $1 ORDER BY m.transacted_at DESC`, activityID)
 }
 
 // queryMovements joins in the login of both the movement's recipient
@@ -467,8 +441,7 @@ func (r *Repository) ListMovementsByUser(ctx context.Context, userID int64) ([]M
 func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg any) ([]Movement, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.item_id, m.user_id, u.login, m.type, m.quantity, m.transacted_at,
-			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes,
-			COALESCE((SELECT SUM(quantity) FROM movement_returns WHERE movement_id = m.id), 0)
+			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes
 		FROM item_movements m
 		LEFT JOIN users u ON u.id = m.user_id
 		LEFT JOIN users ru ON ru.id = m.recorded_by
@@ -482,8 +455,7 @@ func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg
 	for rows.Next() {
 		var m Movement
 		if err := rows.Scan(&m.ID, &m.ItemID, &m.UserID, &m.UserLogin, &m.Type, &m.Quantity, &m.TransactedAt,
-			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes,
-			&m.ReturnedQuantity); err != nil {
+			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes); err != nil {
 			return nil, err
 		}
 		list = append(list, m)
