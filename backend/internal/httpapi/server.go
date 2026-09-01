@@ -9,17 +9,18 @@ type ResourceHandler interface {
 }
 
 type Routes struct {
-	Auth        ResourceHandler
-	Users       ResourceHandler
-	Roles       ResourceHandler
-	Tokens      ResourceHandler
-	Memberships ResourceHandler
-	Licenses    ResourceHandler
-	Activities  ResourceHandler
-	Inventory   ResourceHandler
-	Board       ResourceHandler
-	Library     ResourceHandler
-	UserFiles   ResourceHandler
+	Auth              ResourceHandler
+	Users             ResourceHandler
+	Roles             ResourceHandler
+	Tokens            ResourceHandler
+	Memberships       ResourceHandler
+	Licenses          ResourceHandler
+	Activities        ResourceHandler
+	Inventory         ResourceHandler
+	Board             ResourceHandler
+	Library           ResourceHandler
+	UserFiles         ResourceHandler
+	ActivityResources ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
@@ -36,6 +37,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Board.RegisterRoutes(mux)
 	routes.Library.RegisterRoutes(mux)
 	routes.UserFiles.RegisterRoutes(mux)
+	routes.ActivityResources.RegisterRoutes(mux)
 
 	return Recoverer(RequestLogger(mux))
 }

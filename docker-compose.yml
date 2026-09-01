@@ -28,6 +28,7 @@ services:
       # instead of sending them for real.
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
+      ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
     volumes:
       # Club documents (estatutos, actas...) for every socio to browse —
       # drop files straight into ./library on the host, no rebuild or
@@ -37,6 +38,12 @@ services:
       # files into ./user-files/<login>/ on the host, one subdirectory
       # per login, same no-rebuild-needed story as ./library above.
       - ./user-files:/data/user-files
+      # A memoria's uploaded files (photos, PDFs...) — unlike the two
+      # above, these arrive exclusively through the API (POST
+      # /activities/{id}/resources), never by hand, so a named volume
+      # is a better fit than a host bind mount: nobody needs host-side
+      # access to browse or drop files into it directly.
+      - activity_resources_data:/data/activity-resources
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,3 +67,4 @@ services:
 
 volumes:
   postgres_data:
+  activity_resources_data:

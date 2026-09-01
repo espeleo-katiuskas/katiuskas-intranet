@@ -1093,6 +1093,190 @@ paths:
         "204": { description: Removed }
         "403": { description: A plain member tried to remove someone other than themselves. }
 
+  /activities/{id}/resources:
+    get:
+      summary: List an activity's memoria
+      description: >
+        Every resource contributed to this activity's write-up, in
+        memoria order (ActivityResource.position — see PUT
+        .../resources/order). Open to any baseline role, same as the
+        rest of an activity's own data — not restricted to whoever took
+        part in it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: This activity's resources, in memoria order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ActivityResource" }
+    post:
+      summary: Add a resource to an activity's memoria
+      description: >
+        Requires admin, board, this activity's own organizer, or anyone
+        who took part in it (activity_participants, any role) — a plain
+        member with no connection to the activity gets 403. Always
+        multipart/form-data, never plain JSON, since a file resource has
+        to carry an actual upload: type (text|file), title (both),
+        description (text only), file (file only, capped at 25 MiB). A
+        text resource is simply a multipart request with no file part in
+        it, rather than a separate endpoint per type. content_type is
+        taken from the upload itself (falling back to guessing from the
+        filename's extension, then application/octet-stream), never
+        given by the caller directly; position is always appended after
+        whatever the activity's current highest one is.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, title]
+              properties:
+                type: { type: string, enum: [text, file] }
+                title: { type: string }
+                description: { type: string, description: Required for type=text; rejected for type=file. }
+                file: { type: string, format: binary, description: Required for type=file; rejected for type=text. }
+      responses:
+        "201":
+          description: Resource created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityResource" }
+        "400":
+          description: >
+            invalid_type, title_required, description_required (type=text
+            with no description), or file_required (type=file with no
+            file part).
+        "403": { description: Neither admin/board, the organizer, nor a participant. }
+        "404": { description: Activity not found. }
+        "413": { description: file_too_large — over the 25 MiB limit. }
+
+  /activities/{id}/resources/order:
+    put:
+      summary: Reorder an activity's memoria
+      description: >
+        Replaces the whole memoria's order in one call — send every
+        resource id currently in this activity's memoria, in the new
+        order; resource_ids must be exactly that activity's current set
+        (same members, no more, no fewer) or the call is rejected rather
+        than silently dropping or ignoring stray ids, so a client working
+        from a stale list has to reload and retry instead of clobbering
+        positions with an order that no longer matches what's actually
+        there. Same access as POST .../resources (organizer, participant,
+        or admin/board).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_ids]
+              properties:
+                resource_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200":
+          description: This activity's resources, in their new memoria order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ActivityResource" }
+        "403": { description: Neither admin/board, the organizer, nor a participant. }
+        "404": { description: Activity not found. }
+        "409": { description: reorder_mismatch — resource_ids doesn't match this activity's current resources exactly. }
+
+  /activities/{id}/resources/{resourceID}:
+    get:
+      summary: Get one memoria resource
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The resource
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityResource" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Edit a memoria resource's title or description
+      description: >
+        Requires this resource's own author, or admin/board — a
+        participant who didn't contribute this particular resource can't
+        edit it, even though they could contribute their own. Only
+        title (either type) and description (text type only) can be
+        changed; there's no way to replace a file resource's actual
+        bytes through this endpoint — delete it and add a new one
+        instead.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+      responses:
+        "200":
+          description: Updated resource
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityResource" }
+        "400": { description: description_not_allowed — description given for a type=file resource. }
+        "403": { description: Neither this resource's own author nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Remove a memoria resource
+      description: >
+        Requires this resource's own author, or admin/board — same
+        restriction as PATCH. Removes the file from disk too, for a
+        type=file resource.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Neither this resource's own author nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /activities/{id}/resources/{resourceID}/file:
+    get:
+      summary: Read or download a memoria resource's file
+      description: >
+        Streams a type=file resource's raw bytes — not_a_file for a
+        type=text resource, which never has one. Same
+        inline-by-default/?download=1/Content-Type behavior as
+        GET /library/file and GET /users/{login}/files/file, open to any
+        baseline role (same as GET .../resources above).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceID, in: path, required: true, schema: { type: integer } }
+        - name: download
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: When "1", sets Content-Disposition to attachment (a Save dialog) instead of inline.
+      responses:
+        "200": { description: The file's raw content. }
+        "400": { description: not_a_file — this resource is type=text. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /users/{login}/activities:
     get:
       summary: List a person's activity history
@@ -1962,6 +2146,37 @@ components:
         id: { type: integer }
         date: { type: string, format: date }
         name: { type: string }
+
+    ActivityResource:
+      type: object
+      description: >
+        One entry in an activity's memoria — either a text entry
+        (description set, file fields absent) or an uploaded file
+        (file_name/file_size/content_type set, description absent),
+        never a mix of both; the database's own CHECK constraints
+        (migration 00018) are the actual source of truth for that, not
+        this schema.
+      properties:
+        id: { type: integer }
+        activity_id: { type: integer }
+        type: { type: string, enum: [text, file] }
+        author_login:
+          type: string
+          description: Whoever contributed this resource — not necessarily the activity's own organizer.
+        title: { type: string }
+        description: { type: string, nullable: true, description: type=text only. }
+        file_name: { type: string, nullable: true, description: type=file only — the original uploaded filename. }
+        file_size: { type: integer, nullable: true, description: type=file only, in bytes. }
+        content_type: { type: string, nullable: true, description: type=file only. }
+        position:
+          type: integer
+          description: >
+            This resource's place in the memoria page, a dense 1..N per
+            activity — see PUT /activities/{id}/resources/order.
+        created_at:
+          type: string
+          format: date-time
+          description: When this resource was added. Fixed at creation — there's no way to backdate or edit it afterward.
 
     MaterialCategory:
       type: object

@@ -534,6 +534,40 @@ func TestParticipants(t *testing.T) {
 	}
 }
 
+// IsParticipant only ever looks at activity_participants — Create
+// doesn't add the organizer there unless their own login is also given
+// as one of the initial participant_logins (see Handler.create), so a
+// leader with no such row of their own correctly reads as false here;
+// callers that need "attended, organizer included" (like
+// activityresources's contribution check) also compare against
+// Activity.LeaderID themselves.
+func TestIsParticipant(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
+
+	activity, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID})
+	if err != nil {
+		t.Fatalf("create activity: %v", err)
+	}
+	participant := testutil.InsertUser(t, tx, "")
+	stranger := testutil.InsertUser(t, tx, "")
+	if err := repo.AddParticipant(ctx, activity.ID, participant.ID); err != nil {
+		t.Fatalf("add participant: %v", err)
+	}
+
+	if is, err := repo.IsParticipant(ctx, activity.ID, leader.ID); err != nil || is {
+		t.Errorf("expected the leader (no participant row of their own here) to read as false, got %v, err %v", is, err)
+	}
+	if is, err := repo.IsParticipant(ctx, activity.ID, participant.ID); err != nil || !is {
+		t.Errorf("expected the participant to be found, got %v, err %v", is, err)
+	}
+	if is, err := repo.IsParticipant(ctx, activity.ID, stranger.ID); err != nil || is {
+		t.Errorf("expected the stranger not to be a participant, got %v, err %v", is, err)
+	}
+}
+
 func TestCreateAndDeleteHoliday(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)

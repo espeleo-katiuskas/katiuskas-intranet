@@ -169,6 +169,36 @@ may add a participant at all, not just who may join: public works as it always h
 can sign themselves up, admin/board can add anyone else); private restricts adding
 *anyone* — self included — to the organizer, board, or admin (`Handler.join`).
 
+**Activity resources / memoria** (`internal/activityresources`): after a trip, whoever
+took part in it writes up its memoria as an ordered list of resources — either a text
+entry (title + a plain-text/Markdown `description`) or an uploaded file (title + the file
+itself, typically a photo or PDF), discriminated by `activity_resources.type` and kept
+consistent with a set of `CHECK` constraints (migration `00018_activity_resources.sql`),
+the same "description only for text, file fields only for file" shape `item_movements`
+already uses for its own type-specific fields. Metadata lives in Postgres
+(`Repository`); a file resource's bytes live on disk instead
+(`Storage`, `config.ActivityResourcesRoot` — a *named Docker volume*, not a host bind
+mount like `library`/`userfiles`, since files arrive exclusively through
+`POST /activities/{id}/resources` rather than being dropped in by hand), keyed by the
+row's own id rather than any caller-given path, so unlike `library`/`userfiles` there's no
+directory tree to browse and no path-escape risk to guard against. That same `POST` is
+always `multipart/form-data`, even for a text resource (just one with no file part), since
+a file resource has to carry an actual upload — capped at 25 MiB
+(`activityresources.maxUploadSize`). Every resource has a `position`, a dense `1..N` per
+activity that a fresh one is appended after; `PUT /activities/{id}/resources/order`
+replaces the whole order at once from a caller-given list of every resource id (rejecting
+anything short of an exact match, `reorder_mismatch`, rather than reconciling a partial or
+stale one) instead of a move-this-one-item endpoint that would have to shuffle the rest
+itself. Reading (`GET`) is open to any baseline role, same as the rest of an activity's own
+data; contributing (`POST`, the reorder `PUT`) requires admin/board, the activity's own
+organizer, or anyone signed up in `activity_participants` (`Handler.requireContributor`) —
+note the organizer isn't automatically a participant row unless they happened to list
+themselves when creating the activity (see `activities.Repository.Create`), so this checks
+`Activity.LeaderID` *and* `activities.Service.IsParticipant` separately, not just the
+latter; editing or deleting a specific resource (`PATCH`/`DELETE`) is narrower still —
+only that resource's own author, or admin/board, even for someone else who took part in
+the same activity.
+
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
 than a Go enum, so the list can grow with an `INSERT` instead of a deploy. Its `is_other`

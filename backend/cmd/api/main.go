@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
@@ -83,6 +84,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	activityResourcesStorage, err := activityresources.NewStorage(cfg.ActivityResourcesRoot)
+	if err != nil {
+		slog.Error("set up activity resources storage", "error", err, "root", cfg.ActivityResourcesRoot)
+		os.Exit(1)
+	}
+	activityResourcesRepo := activityresources.NewRepository(pool)
+	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
+
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	router := httpapi.NewRouter(httpapi.Routes{
@@ -92,16 +101,17 @@ func main() {
 			MagicLinkCooldown: cfg.MagicLinkCooldown,
 			PublicBaseURL:     cfg.PublicBaseURL,
 		}),
-		Users:       users.NewHandler(usersService, authenticator),
-		Roles:       roles.NewHandler(rolesService, authenticator, usersService),
-		Tokens:      tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
-		Memberships: memberships.NewHandler(membershipsService, authenticator, usersService),
-		Licenses:    licenses.NewHandler(licensesService, authenticator, usersService),
-		Activities:  activities.NewHandler(activitiesService, authenticator, usersService),
-		Inventory:   inventory.NewHandler(inventoryService, authenticator, usersService),
-		Board:       board.NewHandler(boardService, authenticator, usersService),
-		Library:     library.NewHandler(libraryService, authenticator),
-		UserFiles:   userfiles.NewHandler(userFilesService, authenticator, usersService),
+		Users:             users.NewHandler(usersService, authenticator),
+		Roles:             roles.NewHandler(rolesService, authenticator, usersService),
+		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
+		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService),
+		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService),
+		Activities:        activities.NewHandler(activitiesService, authenticator, usersService),
+		Inventory:         inventory.NewHandler(inventoryService, authenticator, usersService),
+		Board:             board.NewHandler(boardService, authenticator, usersService),
+		Library:           library.NewHandler(libraryService, authenticator),
+		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
+		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService),
 	})
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)

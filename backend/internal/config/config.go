@@ -38,6 +38,13 @@ type Config struct {
 	// whoever deploys the club's documents, never written to by the API
 	// itself), just scoped per person instead of one shared tree.
 	UserFilesRoot string
+	// ActivityResourcesRoot is the directory internal/activityresources
+	// saves a memoria's uploaded files to, one subdirectory per activity
+	// — unlike LibraryRoot/UserFilesRoot, this one *is* written to by
+	// the API itself (an actual upload endpoint, not a read-only,
+	// drop-in-by-hand tree), so it's backed by a named Docker volume
+	// rather than a host bind mount (see docker-compose.yml).
+	ActivityResourcesRoot string
 }
 
 func Load() (Config, error) {
@@ -56,6 +63,7 @@ func Load() (Config, error) {
 		SMTPFrom:              os.Getenv("SMTP_FROM"),
 		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
 		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
+		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")

@@ -266,6 +266,19 @@ func (r *Repository) RemoveParticipant(ctx context.Context, activityID, userID i
 	return err
 }
 
+// IsParticipant reports whether userID is signed up for activityID in
+// any role (leader included — the organizer's own row in
+// activity_participants has role='leader', so they count as having
+// attended too). Used by internal/activityresources to decide who may
+// contribute a memoria entry.
+func (r *Repository) IsParticipant(ctx context.Context, activityID, userID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM activity_participants WHERE activity_id = $1 AND user_id = $2)
+	`, activityID, userID).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]Participant, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT ap.activity_id, ap.user_id, u.login, ap.role, ap.confirmed

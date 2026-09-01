@@ -94,6 +94,10 @@ func (s *Service) ListParticipants(ctx context.Context, activityID int64) ([]Par
 	return s.repo.ListParticipants(ctx, activityID)
 }
 
+func (s *Service) IsParticipant(ctx context.Context, activityID, userID int64) (bool, error) {
+	return s.repo.IsParticipant(ctx, activityID, userID)
+}
+
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Activity, error) {
 	return s.repo.ListByUser(ctx, userID)
 }
