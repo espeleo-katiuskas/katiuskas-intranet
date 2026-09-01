@@ -169,18 +169,39 @@ function renderItemRow(item) {
   `;
 }
 
+// A loan/rental's quantity can come back in pieces (30 mosquetones
+// lent for a trip might return 10 one day, 20 the next), so this shows
+// prestados/devueltos/pendientes instead of a single "cantidad", plus
+// a link to the day-by-day return log once there's at least one.
 function renderMovementDetail(m) {
   const canReturn = canManageMovements && isReturnable(m) && m.status === 'active';
-  const returned = m.returned_at ? ` · devuelto ${formatDate(m.returned_at)}` : '';
+  const outstanding = m.quantity - m.returned_quantity;
   const who = m.user_login ? ` · Socio ${escapeHtml(personLabel(m.user_login))}` : '';
   const notes = m.notes ? ` · ${escapeHtml(m.notes)}` : '';
+  const quantityText = isReturnable(m)
+    ? `prestados ${m.quantity} · devueltos ${m.returned_quantity} · pendientes ${outstanding}`
+    : `cantidad ${m.quantity}`;
+  const fullyReturned = m.returned_at ? ` · completado el ${formatDate(m.returned_at)}` : '';
+  const returnsToggle = m.returned_quantity > 0
+    ? ` · <button type="button" class="link-button" data-toggle-movement-returns="${m.id}">Ver devoluciones (${m.returned_quantity})</button>`
+    : '';
   return `
     <div class="detail-row">
-      <span>${formatDate(m.transacted_at)} · ${typeLabels[m.type] ?? m.type}${who} · cantidad ${m.quantity}${returned}${notes} ·
-        <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span></span>
-      ${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : ''}
+      <span>${formatDate(m.transacted_at)} · ${typeLabels[m.type] ?? m.type}${who} · ${quantityText}${fullyReturned}${notes} ·
+        <span class="badge">${movementStatusLabels[m.status] ?? m.status}</span>${returnsToggle}</span>
+      ${canReturn ? `
+        <span class="return-control">
+          <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
+          <button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>
+        </span>` : ''}
     </div>
+    ${m.returned_quantity > 0 ? `<div class="detail-list" data-movement-returns-panel="${m.id}" hidden></div>` : ''}
   `;
+}
+
+function renderMovementReturnDetail(r) {
+  const who = r.recorded_by_login ? ` · ${escapeHtml(personLabel(r.recorded_by_login))}` : '';
+  return `<div class="detail-row"><span>${formatDate(r.returned_at)} · ${r.quantity}${who}</span></div>`;
 }
 
 // One inline "add movement" form per item, rendered into that item's
@@ -308,11 +329,36 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
     return;
   }
 
+  const returnsToggle = event.target.closest('button[data-toggle-movement-returns]');
+  if (returnsToggle) {
+    await toggleMovementReturns(returnsToggle);
+    return;
+  }
+
   const returnButton = event.target.closest('button[data-return]');
   if (returnButton) {
     await handleReturn(returnButton);
   }
 });
+
+// Fetches and shows the day-by-day return history behind a movement's
+// returned_quantity — 10 mosquetones back one day, 20 the next, each
+// its own row here.
+async function toggleMovementReturns(button) {
+  const panel = document.querySelector(`[data-movement-returns-panel="${button.dataset.toggleMovementReturns}"]`);
+  const opening = panel.hidden;
+  panel.hidden = !panel.hidden;
+  if (!opening) return;
+  panel.innerHTML = 'Cargando…';
+  try {
+    const returns = await apiFetch(`/movements/${button.dataset.toggleMovementReturns}/returns`);
+    panel.innerHTML = returns.length
+      ? returns.map(renderMovementReturnDetail).join('')
+      : '<p>Todavía no hay devoluciones registradas.</p>';
+  } catch (err) {
+    panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
 
 document.getElementById('items-table-body').addEventListener('change', (event) => {
   const select = event.target.closest('[data-mv-type]');
@@ -383,8 +429,14 @@ async function handleReturn(button) {
   // panel, remember which item so it can be reopened after the
   // reload below wipes the whole items table.
   const itemId = button.closest('[data-item-movements-panel]')?.dataset.itemMovementsPanel;
+  // Paired quantity input, wherever this button renders (the item's own
+  // movement detail, or the movimientos activos table) — defaults to
+  // everything outstanding, but can be edited down for a partial
+  // return.
+  const quantityInput = document.querySelector(`[data-return-quantity="${button.dataset.return}"]`);
+  const body = quantityInput ? { quantity: Number(quantityInput.value) } : {};
   try {
-    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Devolución registrada.');
     await loadItems();
     if (itemId) await expandItemMovements(Number(itemId));
@@ -398,14 +450,18 @@ async function handleReturn(button) {
 function renderActiveMovementRow(m) {
   const item = itemsById[m.item_id];
   const canReturn = canManageMovements && isReturnable(m);
+  const outstanding = m.quantity - m.returned_quantity;
   return `
     <tr>
       <td>${formatDate(m.transacted_at)}</td>
       <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
       <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
       <td>${typeLabels[m.type] ?? m.type}</td>
-      <td>${m.quantity}</td>
-      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Registrar devolución</button>` : '—'}</td>
+      <td>${outstanding} / ${m.quantity}</td>
+      <td>${canReturn ? `
+        <input type="number" min="1" max="${outstanding}" value="${outstanding}" class="quantity-input" data-return-quantity="${m.id}">
+        <button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Devolver</button>
+      ` : '—'}</td>
     </tr>
   `;
 }
