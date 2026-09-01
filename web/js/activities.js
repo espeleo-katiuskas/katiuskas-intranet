@@ -222,4 +222,131 @@ newActivityForm.addEventListener('submit', async (event) => {
   }
 });
 
+// Calendar view: the whole current year, month by month, with weekends
+// and club holidays marked (same tint — hovering a day shows whether
+// it's a holiday, and its name, in the native tooltip) and any day with
+// an activity showing its title(s), so it's clear at a glance which
+// activity days land on a holiday/weekend and which don't.
+const MONTH_NAMES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+const WEEKDAY_NAMES = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const CALENDAR_YEAR = new Date().getFullYear();
+
+function isoDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// One entry per date (YYYY-MM-DD) that's a holiday and/or has at least
+// one activity touching it (an activity "touches" every day from its
+// start_date to its end_date, not just the start).
+function buildCalendarDayInfo(activityList, holidays) {
+  const days = {};
+  const dayFor = (key) => (days[key] ??= { holidayName: null, activities: [] });
+
+  for (const holiday of holidays) {
+    dayFor(holiday.date.slice(0, 10)).holidayName = holiday.name;
+  }
+  for (const activity of activityList) {
+    if (activity.status === 'cancelled') continue;
+    let cursor = new Date(`${activity.start_date.slice(0, 10)}T00:00:00`);
+    const end = new Date(`${activity.end_date.slice(0, 10)}T00:00:00`);
+    while (cursor <= end) {
+      dayFor(isoDate(cursor)).activities.push(activity);
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+    }
+  }
+  return days;
+}
+
+function renderCalendarDay(date, info) {
+  const key = isoDate(date);
+  const weekday = date.getDay(); // 0 = Sunday
+  const isWeekend = weekday === 0 || weekday === 6;
+  const isToday = key === isoDate(new Date());
+  const activities = info?.activities ?? [];
+
+  const classes = ['calendar-day'];
+  if (isWeekend || info?.holidayName) classes.push('calendar-day-non-working');
+  if (isToday) classes.push('calendar-day-today');
+
+  const titleParts = [info?.holidayName ? `Festivo: ${info.holidayName}` : isWeekend ? 'Fin de semana' : null];
+  const shown = activities.slice(0, 2);
+  const rest = activities.length - shown.length;
+  const chips = shown
+    .map((a) => `<a class="calendar-day-activity" href="/activity?id=${a.id}" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</a>`)
+    .join('');
+  const more = rest > 0 ? `<span class="calendar-day-more">+${rest} más</span>` : '';
+
+  return `
+    <div class="${classes.join(' ')}" title="${escapeHtml(titleParts.filter(Boolean).join(' · '))}">
+      <span class="calendar-day-number">${date.getDate()}</span>
+      ${chips}${more}
+    </div>
+  `;
+}
+
+function renderCalendarMonth(month, dayInfo) {
+  const firstOfMonth = new Date(CALENDAR_YEAR, month, 1);
+  // getDay() is 0 = Sunday..6 = Saturday; the week here starts Monday.
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
+  const daysInMonth = new Date(CALENDAR_YEAR, month + 1, 0).getDate();
+
+  const blanks = Array.from({ length: leadingBlanks }, () => '<div class="calendar-day calendar-day-empty"></div>').join('');
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const date = new Date(CALENDAR_YEAR, month, i + 1);
+    return renderCalendarDay(date, dayInfo[isoDate(date)]);
+  }).join('');
+
+  return `
+    <div class="calendar-month">
+      <h3>${MONTH_NAMES[month]} ${CALENDAR_YEAR}</h3>
+      <div class="calendar-grid">
+        ${WEEKDAY_NAMES.map((w) => `<div class="calendar-weekday">${w}</div>`).join('')}
+        ${blanks}${days}
+      </div>
+    </div>
+  `;
+}
+
+const calendarViewContainer = document.getElementById('calendar-view-container');
+const calendarView = document.getElementById('calendar-view');
+const listView = document.getElementById('list-view');
+const toggleCalendarButton = document.getElementById('toggle-calendar-view');
+let calendarLoaded = false;
+
+async function loadCalendar() {
+  calendarView.innerHTML = 'Cargando…';
+  try {
+    // The 100 most recent activities overall — plenty for a single
+    // year's calendar at this club's actual scale; there's no
+    // date-range filter on GET /activities to ask for just this year.
+    const [holidays, activityPage] = await Promise.all([
+      apiFetch(`/holidays?year=${CALENDAR_YEAR}`),
+      apiFetch('/activities?limit=100'),
+    ]);
+    const yearActivities = activityPage.filter((a) => {
+      const start = a.start_date.slice(0, 4);
+      const end = a.end_date.slice(0, 4);
+      return start <= String(CALENDAR_YEAR) && end >= String(CALENDAR_YEAR);
+    });
+    const dayInfo = buildCalendarDayInfo(yearActivities, holidays);
+    calendarView.innerHTML = Array.from({ length: 12 }, (_, month) => renderCalendarMonth(month, dayInfo)).join('');
+    calendarLoaded = true;
+  } catch (err) {
+    calendarView.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+toggleCalendarButton.addEventListener('click', async () => {
+  const showingCalendar = calendarViewContainer.hidden;
+  calendarViewContainer.hidden = !showingCalendar;
+  listView.hidden = showingCalendar;
+  toggleCalendarButton.textContent = showingCalendar ? 'Ver lista' : 'Ver calendario';
+  if (showingCalendar && !calendarLoaded) {
+    await loadCalendar();
+  }
+});
+
 loadActivities();

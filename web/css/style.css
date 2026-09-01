@@ -589,3 +589,124 @@ button.link-button {
   margin-top: 16px;
   border-radius: 6px;
 }
+
+/* Activities calendar view */
+
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 10px 0 4px;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.calendar-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.calendar-legend-non-working {
+  background: #f3dcda;
+  border: 1px solid var(--danger);
+}
+
+.calendar-legend-activity {
+  background: var(--accent);
+}
+
+.calendar-legend-today {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+
+.calendar-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.calendar-month {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--surface);
+}
+
+.calendar-month h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-weekday {
+  font-size: 0.68rem;
+  color: var(--ink-muted);
+  text-align: center;
+  padding-bottom: 3px;
+}
+
+.calendar-day {
+  min-height: 40px;
+  border-radius: 4px;
+  padding: 2px 2px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.calendar-day.calendar-day-empty {
+  background: transparent;
+}
+
+.calendar-day-number {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.calendar-day.calendar-day-non-working {
+  background: #f3dcda;
+}
+
+.calendar-day.calendar-day-today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.calendar-day-activity {
+  display: block;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-top: 1px;
+  font-size: 0.6rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.calendar-day-activity:hover {
+  filter: brightness(1.1);
+}
+
+.calendar-day-more {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--ink-muted);
+  padding: 0 3px;
+}

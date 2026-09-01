@@ -96,20 +96,39 @@
 
   <div class="section-header">
     <h2>Actividades</h2>
-    <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
+    <span>
+      <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
+      <button id="toggle-calendar-view" type="button" class="btn btn-secondary btn-small">Ver calendario</button>
+    </span>
   </div>
 
-  <p class="hint">Haz clic en una actividad para ver todos sus detalles, apuntarte o gestionarla.</p>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Inicio</th><th>Fin</th><th>Título</th><th>Tipo</th><th>Organizador</th><th>Estado</th></tr>
-      </thead>
-      <tbody id="activities-list" class="clickable-rows"></tbody>
-    </table>
+  <div id="list-view">
+    <p class="hint">Haz clic en una actividad para ver todos sus detalles, apuntarte o gestionarla.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Inicio</th><th>Fin</th><th>Título</th><th>Tipo</th><th>Organizador</th><th>Estado</th></tr>
+        </thead>
+        <tbody id="activities-list" class="clickable-rows"></tbody>
+      </table>
+    </div>
+    <div class="panel-actions">
+      <button id="load-more-activities" type="button" class="btn btn-secondary btn-small" hidden>Cargar más</button>
+    </div>
   </div>
-  <div class="panel-actions">
-    <button id="load-more-activities" type="button" class="btn btn-secondary btn-small" hidden>Cargar más</button>
+
+  <div id="calendar-view-container" hidden>
+    <p class="hint">
+      Fin de semana o festivo en rojo (pasa el ratón por encima de un festivo para ver su
+      nombre); los días con alguna actividad muestran su título — haz clic para ver los
+      detalles.
+    </p>
+    <div class="calendar-legend">
+      <span><span class="calendar-legend-swatch calendar-legend-non-working"></span>Fin de semana / festivo</span>
+      <span><span class="calendar-legend-swatch calendar-legend-activity"></span>Actividad</span>
+      <span><span class="calendar-legend-swatch calendar-legend-today"></span>Hoy</span>
+    </div>
+    <div id="calendar-view" class="calendar-view"></div>
   </div>
 </main>
 <script type="module" src="js/activities.js"></script>
