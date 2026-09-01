@@ -134,6 +134,11 @@ p.subtitle {
   overflow-x: auto;
 }
 
+#item-search-field {
+  max-width: 22rem;
+  margin-bottom: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

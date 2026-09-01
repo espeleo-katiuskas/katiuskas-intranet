@@ -122,6 +122,11 @@
     </form>
   </div>
 
+  <div class="field" id="item-search-field">
+    <label for="item-search">Buscar material</label>
+    <input id="item-search" type="search" autocomplete="off" placeholder="Marca, modelo, código, tipo, categoría…">
+  </div>
+
   <div class="table-wrap">
     <table>
       <thead>
@@ -130,6 +135,12 @@
       <tbody id="items-table-body"></tbody>
     </table>
   </div>
+
+  <!-- Shared by every item's inline "add movement" form (see
+       js/inventory.js renderMovementAddForm) — one set of options, many
+       inputs pointing at it via list="…". -->
+  <datalist id="mv-user-options"></datalist>
+  <datalist id="mv-activity-options"></datalist>
 
   <div data-roles="admin,board,material">
     <h2>Movimientos activos</h2>
@@ -140,58 +151,6 @@
         </thead>
         <tbody id="active-movements-table-body"></tbody>
       </table>
-    </div>
-
-    <div class="section-header">
-      <h2>Nuevo movimiento</h2>
-    </div>
-    <div class="panel">
-      <form id="new-movement-form">
-        <div class="field-grid">
-          <div class="field">
-            <label for="nt-item">Material</label>
-            <select id="nt-item" name="item_id" required></select>
-          </div>
-          <div class="field" id="nt-user-field">
-            <label for="nt-user">Socio <span class="optional" id="nt-user-optional-hint">(opcional para este tipo de movimiento)</span></label>
-            <input id="nt-user" type="text" list="nt-user-options" autocomplete="off" placeholder="Escribe un nombre…">
-            <datalist id="nt-user-options"></datalist>
-          </div>
-          <div class="field" id="nt-activity-field">
-            <label for="nt-activity">Actividad</label>
-            <input id="nt-activity" type="text" list="nt-activity-options" autocomplete="off" placeholder="Escribe para buscar…">
-            <datalist id="nt-activity-options"></datalist>
-          </div>
-          <div class="field">
-            <label for="nt-type">Tipo</label>
-            <select id="nt-type" name="type">
-              <option value="loan" selected>Préstamo</option>
-              <option value="rental">Alquiler</option>
-              <option value="sale">Venta</option>
-              <option value="acquisition">Adquisición</option>
-              <option value="loss">Pérdida</option>
-              <option value="abandonment">Abandono</option>
-              <option value="retirement">Retirada</option>
-            </select>
-          </div>
-          <div class="field" id="nt-quantity-field">
-            <label for="nt-quantity">Cantidad</label>
-            <input id="nt-quantity" name="quantity" type="number" min="1" value="1">
-          </div>
-          <div class="field">
-            <label for="nt-transacted-at">Fecha <span class="optional">(opcional, hoy por defecto)</span></label>
-            <input id="nt-transacted-at" name="transacted_at" type="date">
-          </div>
-          <div class="field span-2">
-            <label for="nt-notes">Notas <span class="optional">(opcional)</span></label>
-            <input id="nt-notes" name="notes" type="text" placeholder="Motivo, contexto…">
-          </div>
-        </div>
-        <p class="hint">El precio (si aplica) es siempre el indicado en el material — no se puede cambiar aquí.</p>
-        <div class="panel-actions">
-          <button type="submit" class="btn btn-primary">Registrar movimiento</button>
-        </div>
-      </form>
     </div>
   </div>
 </main>

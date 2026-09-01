@@ -54,31 +54,41 @@ const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
 
-const typeLabels = {
-  loan: 'Préstamo',
-  rental: 'Alquiler',
-  sale: 'Venta',
-  acquisition: 'Adquisición',
-  loss: 'Pérdida',
-  abandonment: 'Abandono',
-  retirement: 'Retirada',
-};
+const movementTypeOptions = [
+  ['loan', 'Préstamo'],
+  ['rental', 'Alquiler'],
+  ['sale', 'Venta'],
+  ['acquisition', 'Adquisición'],
+  ['loss', 'Pérdida'],
+  ['abandonment', 'Abandono'],
+  ['retirement', 'Retirada'],
+];
+const typeLabels = Object.fromEntries(movementTypeOptions);
 // Movement types with a recipient — everything else (acquisition, loss,
 // abandonment, retirement) has no socio, though loss/abandonment can
 // still carry one when it's known who was carrying the item.
 const recipientRequiredTypes = new Set(['loan', 'rental', 'sale']);
 const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 
+// Only loan and rental are ever returnable — a sale (or acquisition/
+// loss/abandonment/retirement) is settled the moment it's recorded, so
+// this checks the type itself rather than just status: a stray 'active'
+// sale row (from before movements existed, say) still shouldn't offer
+// a return button.
+function isReturnable(m) {
+  return m.type === 'loan' || m.type === 'rental';
+}
+
+let allItems = [];
 let itemsById = {};
-// Reassigned below when canManageMovements is true; loadItems() (run
-// unconditionally) calls it every time the item picker is repopulated,
-// so it has to exist at module scope even when there's nothing to do.
-let updateMovementQuantityVisibility = () => {};
 
 // Populated from /users/directory (see the canManageMovements block
 // below) so movement rows can show a person's name instead of their
-// bare login.
+// bare login, and so the shared #mv-user-options datalist has entries
+// for every inline "add movement" form.
 let directoryByLogin = {};
+let userEntries = [];
+let activityEntries = [];
 
 function personLabel(login) {
   const person = directoryByLogin[login];
@@ -102,6 +112,26 @@ function itemLabel(item) {
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
+// Accent-insensitive substring match — "cañones" and "canones" should
+// both find the same items, and there'll be enough material (300+
+// expected) that a plain <select> stops being usable for finding one.
+function normalizeForSearch(value) {
+  return (value ?? '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function itemSearchText(item) {
+  return normalizeForSearch([
+    itemTypeLabels[item.item_type],
+    item.brand,
+    item.model,
+    item.code,
+    item.description,
+    item.category_name,
+    ropeTypeLabels[item.rope_type],
+    bagTypeLabels[item.bag_type],
+  ].filter(Boolean).join(' '));
+}
+
 function renderItemRow(item) {
   return `
     <tr>
@@ -118,15 +148,6 @@ function renderItemRow(item) {
   `;
 }
 
-// Only loan and rental are ever returnable — a sale (or acquisition/
-// loss/abandonment/retirement) is settled the moment it's recorded, so
-// this checks the type itself rather than just status: a stray 'active'
-// sale row (from before movements existed, say) still shouldn't offer
-// a return button.
-function isReturnable(m) {
-  return m.type === 'loan' || m.type === 'rental';
-}
-
 function renderMovementDetail(m) {
   const canReturn = canManageMovements && isReturnable(m) && m.status === 'active';
   const returned = m.returned_at ? ` · devuelto ${formatDate(m.returned_at)}` : '';
@@ -141,21 +162,106 @@ function renderMovementDetail(m) {
   `;
 }
 
+// One inline "add movement" form per item, rendered into that item's
+// own expanded panel — there's no separate "nuevo movimiento" section
+// with its own material picker any more, since with 300+ items a
+// second search-to-find-the-item step would just duplicate the one
+// above. Rope/bag skip the quantity field entirely (always exactly one
+// unit — the server forces it anyway); every input reads/writes
+// through data- attributes rather than ids, since several of these
+// forms can exist in the DOM at once.
+function renderMovementAddForm(item) {
+  const isSingleUnit = item.item_type === 'rope' || item.item_type === 'bag';
+  return `
+    <form class="panel movement-add-form" data-new-movement-form="${item.id}">
+      <div class="field-grid">
+        <div class="field">
+          <label>Tipo</label>
+          <select data-mv-type>
+            ${movementTypeOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" data-mv-user-field>
+          <label>Socio <span class="optional" data-mv-user-hint>(opcional para este tipo de movimiento)</span></label>
+          <input type="text" list="mv-user-options" autocomplete="off" data-mv-user placeholder="Escribe un nombre…">
+        </div>
+        <div class="field" data-mv-activity-field>
+          <label>Actividad</label>
+          <input type="text" list="mv-activity-options" autocomplete="off" data-mv-activity placeholder="Escribe para buscar…">
+        </div>
+        ${isSingleUnit ? '' : `
+        <div class="field">
+          <label>Cantidad</label>
+          <input type="number" min="1" value="1" data-mv-quantity>
+        </div>`}
+        <div class="field">
+          <label>Fecha <span class="optional">(opcional, hoy por defecto)</span></label>
+          <input type="date" data-mv-date>
+        </div>
+        <div class="field span-2">
+          <label>Notas <span class="optional">(opcional)</span></label>
+          <input type="text" data-mv-notes placeholder="Motivo, contexto…">
+        </div>
+      </div>
+      <p class="hint">El precio (si aplica) es siempre el indicado en el material.</p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary btn-small">Registrar movimiento</button>
+      </div>
+    </form>
+  `;
+}
+
+function updateMovementFormVisibility(form) {
+  const type = form.querySelector('[data-mv-type]').value;
+  // Loans and rentals always happen as part of an activity (see the
+  // activity_required_for_loan_and_rental constraint); every other
+  // type leaves it optional.
+  const requiresActivity = type === 'loan' || type === 'rental';
+  const activityField = form.querySelector('[data-mv-activity-field]');
+  activityField.hidden = !requiresActivity;
+  form.querySelector('[data-mv-activity]').required = requiresActivity;
+  form.querySelector('[data-mv-user-hint]').hidden = recipientRequiredTypes.has(type);
+}
+
+// Fetches and renders one item's movement history plus (if allowed) its
+// inline add-movement form. Called both when a row's "Movimientos"
+// toggle opens it, and to restore that same open state after an action
+// (add/return) forces the whole table to reload.
+async function expandItemMovements(itemId) {
+  const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
+  if (!row) return; // filtered out of the current search results
+  row.hidden = false;
+  const panel = row.querySelector(`[data-item-movements-panel="${itemId}"]`);
+  panel.innerHTML = 'Cargando…';
+  try {
+    const movements = await apiFetch(`/items/${itemId}/movements`);
+    const item = itemsById[itemId];
+    const list = movements.length ? movements.map(renderMovementDetail).join('') : '<p>Todavía no tiene movimientos.</p>';
+    panel.innerHTML = list + (canManageMovements && item ? renderMovementAddForm(item) : '');
+    const form = panel.querySelector('form[data-new-movement-form]');
+    if (form) updateMovementFormVisibility(form);
+  } catch (err) {
+    panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderFilteredItems() {
+  const query = normalizeForSearch(document.getElementById('item-search').value);
+  const filtered = query ? allItems.filter((item) => itemSearchText(item).includes(query)) : allItems;
+  const tableBody = document.getElementById('items-table-body');
+  tableBody.innerHTML = filtered.length
+    ? filtered.map(renderItemRow).join('')
+    : `<tr><td colspan="6">${allItems.length ? 'Ningún material coincide con la búsqueda.' : 'Todavía no hay material dado de alta.'}</td></tr>`;
+}
+
+document.getElementById('item-search').addEventListener('input', renderFilteredItems);
+
 async function loadItems() {
   const tableBody = document.getElementById('items-table-body');
   try {
-    const items = await apiFetch('/items');
-    itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
-    tableBody.innerHTML = items.length
-      ? items.map(renderItemRow).join('')
-      : '<tr><td colspan="6">Todavía no hay material dado de alta.</td></tr>';
-    if (canManageMovements) {
-      const select = document.getElementById('nt-item');
-      select.innerHTML = items
-        .map((item) => `<option value="${item.id}" data-item-type="${item.item_type}">${itemTypeLabels[item.item_type] ?? item.item_type} — ${itemLabel(item)}</option>`)
-        .join('');
-      updateMovementQuantityVisibility();
-    }
+    allItems = await apiFetch('/items');
+    itemsById = Object.fromEntries(allItems.map((item) => [item.id, item]));
+    renderFilteredItems();
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
   }
@@ -164,21 +270,11 @@ async function loadItems() {
 document.getElementById('items-table-body').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-item-movements]');
   if (toggleButton) {
-    const itemId = toggleButton.dataset.toggleItemMovements;
+    const itemId = Number(toggleButton.dataset.toggleItemMovements);
     const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
+    const opening = row.hidden;
     row.hidden = !row.hidden;
-    if (!row.hidden) {
-      const panel = row.querySelector(`[data-item-movements-panel="${itemId}"]`);
-      panel.innerHTML = 'Cargando…';
-      try {
-        const movements = await apiFetch(`/items/${itemId}/movements`);
-        panel.innerHTML = movements.length
-          ? movements.map(renderMovementDetail).join('')
-          : '<p>Todavía no tiene movimientos.</p>';
-      } catch (err) {
-        panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
-      }
-    }
+    if (opening) await expandItemMovements(itemId);
     return;
   }
 
@@ -188,13 +284,81 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
   }
 });
 
+document.getElementById('items-table-body').addEventListener('change', (event) => {
+  const select = event.target.closest('[data-mv-type]');
+  if (select) updateMovementFormVisibility(select.closest('form'));
+});
+
+document.getElementById('items-table-body').addEventListener('submit', async (event) => {
+  const form = event.target.closest('form[data-new-movement-form]');
+  if (!form) return;
+  event.preventDefault();
+
+  const itemId = Number(form.dataset.newMovementForm);
+  const type = form.querySelector('[data-mv-type]').value;
+  const userInput = form.querySelector('[data-mv-user]');
+  const activityField = form.querySelector('[data-mv-activity-field]');
+  const activityInput = form.querySelector('[data-mv-activity]');
+  const quantityInput = form.querySelector('[data-mv-quantity]');
+  const dateInput = form.querySelector('[data-mv-date]');
+  const notesInput = form.querySelector('[data-mv-notes]');
+
+  let userLogin = null;
+  if (userInput.value.trim()) {
+    userLogin = resolvePickerId(userEntries, userInput.value);
+    if (!userLogin) {
+      showError('Elige un socio de la lista, o déjalo vacío.');
+      return;
+    }
+  } else if (recipientRequiredTypes.has(type)) {
+    showError('Elige un socio de la lista.');
+    return;
+  }
+  let activityId = null;
+  if (!activityField.hidden) {
+    activityId = resolvePickerId(activityEntries, activityInput.value);
+    if (!activityId) {
+      showError('Elige una actividad de la lista.');
+      return;
+    }
+  }
+
+  const body = {
+    item_id: itemId,
+    login: userLogin,
+    type,
+    quantity: quantityInput ? Number(quantityInput.value) || 1 : 1,
+    transacted_at: dateInput.value || null,
+    activity_id: activityId,
+    notes: notesInput.value.trim() || null,
+  };
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
+    showFeedback('Movimiento registrado.');
+    await loadItems();
+    await expandItemMovements(itemId);
+    await loadActiveMovements();
+  } catch (err) {
+    showError(err.message);
+    submitButton.disabled = false;
+  }
+});
+
 async function handleReturn(button) {
   button.disabled = true;
+  // If this return button lives inside an item's expanded movements
+  // panel, remember which item so it can be reopened after the
+  // reload below wipes the whole items table.
+  const itemId = button.closest('[data-item-movements-panel]')?.dataset.itemMovementsPanel;
   try {
     await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
     showFeedback('Devolución registrada.');
     await loadItems();
-    if (isAdmin) await loadActiveMovements();
+    if (itemId) await expandItemMovements(Number(itemId));
+    if (canManageMovements) await loadActiveMovements();
   } catch (err) {
     button.disabled = false;
     showError(err.message);
@@ -333,21 +497,15 @@ if (isAdmin) {
   });
 }
 
-// Both socios and activities pile up over time, so a plain <select> stops
-// being usable — these are text inputs backed by a <datalist> instead,
-// searchable as you type. See pickerLabel/renderPickerOptions/
-// resolvePickerId in api.js.
-let userEntries = [];
-let activityEntries = [];
-
-// Awaited before loadActiveMovements() below, so itemsById is populated
-// (and the "Material" column can show a real label instead of falling
-// back to "Material n.º …") by the time it renders.
+// Awaited before the socio/activity directories below (harmless either
+// order, but keeps the item table the first thing on screen).
 await loadItems();
 
 if (canManageMovements) {
-  const userInput = document.getElementById('nt-user');
-  const userOptions = document.getElementById('nt-user-options');
+  // Both socios and activities pile up over time, so a plain <select>
+  // stops being usable — these shared datalists back a text input in
+  // every item's inline add-movement form instead, searchable as you
+  // type. See pickerLabel/renderPickerOptions/resolvePickerId in api.js.
   const directoryLoaded = apiFetch('/users/directory')
     .then((people) => {
       directoryByLogin = Object.fromEntries(people.map((person) => [person.login, person]));
@@ -355,108 +513,19 @@ if (canManageMovements) {
         .slice()
         .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
         .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
-      userOptions.innerHTML = renderPickerOptions(userEntries);
+      document.getElementById('mv-user-options').innerHTML = renderPickerOptions(userEntries);
     })
     .catch(() => showError('No se pudo cargar la lista de socios.'));
 
-  const activityInput = document.getElementById('nt-activity');
-  const activityOptions = document.getElementById('nt-activity-options');
   apiFetch('/activities?status=active')
     .then((activities) => {
       activityEntries = activities.map((activity) => ({
         id: activity.id,
         label: pickerLabel(`${formatDate(activity.start_date)} — ${activity.title}`, activity.id),
       }));
-      activityOptions.innerHTML = renderPickerOptions(activityEntries);
+      document.getElementById('mv-activity-options').innerHTML = renderPickerOptions(activityEntries);
     })
     .catch(() => showError('No se pudo cargar la lista de actividades.'));
-
-  const typeSelect = document.getElementById('nt-type');
-  const activityField = document.getElementById('nt-activity-field');
-  const userOptionalHint = document.getElementById('nt-user-optional-hint');
-  const itemSelect = document.getElementById('nt-item');
-  const quantityField = document.getElementById('nt-quantity-field');
-  const quantityInput = document.getElementById('nt-quantity');
-
-  function updateMovementFieldsVisibility() {
-    const type = typeSelect.value;
-    // Loans and rentals always happen as part of an activity (see the
-    // activity_required_for_loan_and_rental constraint); every other
-    // type leaves it optional.
-    const requiresActivity = type === 'loan' || type === 'rental';
-    activityField.hidden = !requiresActivity;
-    activityInput.required = requiresActivity;
-    // loan/rental/sale exchange the item with a specific socio;
-    // acquisition/loss/abandonment/retirement don't, though a socio can
-    // still be given for loss/abandonment when it's known who had it.
-    userOptionalHint.hidden = recipientRequiredTypes.has(type);
-  }
-  typeSelect.addEventListener('change', updateMovementFieldsVisibility);
-  updateMovementFieldsVisibility();
-
-  // rope/bag are individually tracked (always exactly one unit), so
-  // there's no quantity to choose once one of those is selected.
-  updateMovementQuantityVisibility = function () {
-    const selected = itemSelect.selectedOptions[0];
-    const isSingleUnit = selected?.dataset.itemType === 'rope' || selected?.dataset.itemType === 'bag';
-    quantityField.hidden = isSingleUnit;
-    if (isSingleUnit) quantityInput.value = '1';
-  };
-  itemSelect.addEventListener('change', updateMovementQuantityVisibility);
-  updateMovementQuantityVisibility();
-
-  const newMovementForm = document.getElementById('new-movement-form');
-  newMovementForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const formData = new FormData(newMovementForm);
-    const type = formData.get('type');
-
-    let userLogin = null;
-    if (userInput.value.trim()) {
-      userLogin = resolvePickerId(userEntries, userInput.value);
-      if (!userLogin) {
-        showError('Elige un socio de la lista, o déjalo vacío.');
-        return;
-      }
-    } else if (recipientRequiredTypes.has(type)) {
-      showError('Elige un socio de la lista.');
-      return;
-    }
-    let activityId = null;
-    if (!activityField.hidden) {
-      activityId = resolvePickerId(activityEntries, activityInput.value);
-      if (!activityId) {
-        showError('Elige una actividad de la lista.');
-        return;
-      }
-    }
-
-    const body = {
-      item_id: Number(formData.get('item_id')),
-      login: userLogin,
-      type,
-      quantity: Number(formData.get('quantity')) || 1,
-      transacted_at: formData.get('transacted_at') || null,
-      activity_id: activityId,
-      notes: formData.get('notes')?.toString().trim() || null,
-    };
-
-    const submitButton = newMovementForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    try {
-      await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Movimiento registrado.');
-      newMovementForm.reset();
-      updateMovementFieldsVisibility();
-      updateMovementQuantityVisibility();
-      await loadItems();
-      await loadActiveMovements();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      submitButton.disabled = false;
-    }
-  });
 
   // Awaited so the "Socio" column has names to show on first paint
   // instead of falling back to the bare login until a re-render happens.
