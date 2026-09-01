@@ -95,6 +95,46 @@
     <button type="button" id="add-participant" class="btn btn-secondary btn-small">+ Participante</button>
   </div>
 
+  <div class="section-header" data-roles="admin,board,material">
+    <h2>Material prestado</h2>
+  </div>
+  <div class="table-wrap" data-roles="admin,board,material">
+    <table>
+      <thead>
+        <tr><th>Material</th><th>Socio</th><th>Cantidad</th><th></th></tr>
+      </thead>
+      <tbody id="activity-loans-table-body"></tbody>
+    </table>
+  </div>
+  <div class="panel" data-roles="admin,board,material">
+    <h3>Registrar préstamo</h3>
+    <form id="new-loan-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="loan-item">Material</label>
+          <input id="loan-item" type="text" list="loan-item-options" autocomplete="off" placeholder="Escribe para buscar…">
+          <datalist id="loan-item-options"></datalist>
+        </div>
+        <div class="field">
+          <label for="loan-user">Socio</label>
+          <input id="loan-user" type="text" list="loan-user-options" autocomplete="off" placeholder="Escribe un nombre…">
+          <datalist id="loan-user-options"></datalist>
+        </div>
+        <div class="field" id="loan-quantity-field">
+          <label for="loan-quantity">Cantidad</label>
+          <input id="loan-quantity" type="number" min="1" value="1">
+        </div>
+        <div class="field span-2">
+          <label for="loan-notes">Notas <span class="optional">(opcional)</span></label>
+          <input id="loan-notes" type="text" placeholder="Motivo, contexto…">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary btn-small">Registrar préstamo</button>
+      </div>
+    </form>
+  </div>
+
   <div class="section-header" id="danger-zone-header" hidden>
     <h2>Zona de peligro</h2>
   </div>

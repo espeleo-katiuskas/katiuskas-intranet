@@ -7,6 +7,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  pickerLabel,
   renderPickerOptions,
   resolvePickerId,
 } from './api.js';
@@ -31,6 +32,11 @@ let canManage = isAdmin;
 // Handler.join on the backend for the same split.
 let canJoinSelf = true;
 let canAddOthers = isAdmin;
+// Registering/returning a loan is gated the same way as on the
+// material page (admin/board/material) — independent of canManage,
+// since a plain member leading their own activity still can't touch
+// inventory movements.
+const canManageMovements = hasAnyRole(viewer, ['admin', 'board', 'material']);
 
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!activityId) {
@@ -159,15 +165,21 @@ async function loadDirectory() {
       .slice()
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
       .map((person) => ({ id: person.login, label: `${person.first_name} ${person.last_name} #${person.login}` }));
+    const loanUserOptions = document.getElementById('loan-user-options');
+    if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(personEntries);
   } catch {
     directoryByLogin = {};
     personEntries = [];
   }
 }
 
+function personLabel(login) {
+  const person = directoryByLogin[login];
+  return person ? `${person.first_name} ${person.last_name}` : login;
+}
+
 function renderParticipantRow(p) {
-  const person = directoryByLogin[p.user_login];
-  const name = person ? `${person.first_name} ${person.last_name}` : p.user_login;
+  const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
       <span><a href="/member?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · responsable' : ''}</span>
@@ -251,6 +263,162 @@ document.getElementById('participants-list').addEventListener('click', async (ev
   }
 });
 
+// A loan is always tied to an activity, and it's common for one trip
+// to have plenty of gear going out — this section lets admin/board/
+// material register (and return) those loans right here instead of
+// hunting the item down on the material page. Item type/rope/bag
+// labels are duplicated from js/inventory.js and js/member.js, the
+// same way those two already duplicate them from each other.
+const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
+const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
+const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
+
+function itemLabel(item) {
+  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
+  if (item.item_type === 'rope') {
+    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  if (item.item_type === 'bag') {
+    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
+    return escapeHtml(parts.filter(Boolean).join(' · '));
+  }
+  const parts = [item.category_name, brandModel || null, item.description || null];
+  return escapeHtml(parts.filter(Boolean).join(' — '));
+}
+
+// Plain-text counterpart of itemLabel for the picker's <option> values —
+// renderPickerOptions/pickerLabel already escape it, so this must not.
+function itemPickerText(item) {
+  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
+  const typeLabel = itemTypeLabels[item.item_type] ?? item.item_type;
+  const parts = item.item_type === 'gear'
+    ? [typeLabel, item.category_name, brandModel || null, item.description || null]
+    : [typeLabel, brandModel || null, item.code];
+  return parts.filter(Boolean).join(' · ');
+}
+
+let itemsById = {};
+let itemEntries = [];
+
+async function loadItems() {
+  if (!canManageMovements) return;
+  const optionsEl = document.getElementById('loan-item-options');
+  try {
+    const items = await apiFetch('/items');
+    itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
+    itemEntries = items.map((item) => ({ id: item.id, label: pickerLabel(itemPickerText(item), item.id) }));
+    if (optionsEl) optionsEl.innerHTML = renderPickerOptions(itemEntries);
+  } catch {
+    showError('No se pudo cargar la lista de material.');
+  }
+}
+
+function renderActivityLoanRow(m) {
+  const item = itemsById[m.item_id];
+  return `
+    <tr>
+      <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
+      <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
+      <td>${m.quantity}</td>
+      <td><button type="button" class="btn btn-secondary btn-small" data-return-loan="${m.id}">Registrar devolución</button></td>
+    </tr>
+  `;
+}
+
+// There's no server-side "loans for this activity" filter, so this
+// fetches every active loan/rental and keeps only this activity's
+// loans client-side — the same club-wide scale (hundreds of items, not
+// movements) that made a plain <select> for material stop being usable
+// hasn't hit movement volume yet.
+async function loadActivityLoans() {
+  if (!canManageMovements) return;
+  const tableBody = document.getElementById('activity-loans-table-body');
+  if (!tableBody) return;
+  try {
+    const movements = (await apiFetch('/movements?status=active'))
+      .filter((m) => m.type === 'loan' && m.activity_id === activityId);
+    tableBody.innerHTML = movements.length
+      ? movements.map(renderActivityLoanRow).join('')
+      : '<tr><td colspan="4">No hay material prestado para esta actividad.</td></tr>';
+  } catch {
+    tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los préstamos.</td></tr>';
+  }
+}
+
+document.getElementById('activity-loans-table-body')?.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-return-loan]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/movements/${button.dataset.returnLoan}/return`, { method: 'PATCH' });
+    showFeedback('Devolución registrada.');
+    await loadActivityLoans();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
+const loanItemInput = document.getElementById('loan-item');
+const loanQuantityField = document.getElementById('loan-quantity-field');
+const loanQuantityInput = document.getElementById('loan-quantity');
+
+// rope/bag are individually tracked (always exactly one unit), so
+// there's no quantity to choose once one of those is picked.
+function updateLoanQuantityVisibility() {
+  if (!loanItemInput) return;
+  const itemId = resolvePickerId(itemEntries, loanItemInput.value);
+  const item = itemId != null ? itemsById[itemId] : null;
+  const isSingleUnit = item?.item_type === 'rope' || item?.item_type === 'bag';
+  loanQuantityField.hidden = isSingleUnit;
+  if (isSingleUnit) loanQuantityInput.value = '1';
+}
+loanItemInput?.addEventListener('input', updateLoanQuantityVisibility);
+
+document.getElementById('new-loan-form')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const itemId = resolvePickerId(itemEntries, loanItemInput.value);
+  if (!itemId) {
+    showError('Elige un material de la lista.');
+    return;
+  }
+  const userInput = document.getElementById('loan-user');
+  const login = resolvePickerId(personEntries, userInput.value);
+  if (!login) {
+    showError('Elige un socio de la lista.');
+    return;
+  }
+  const notesInput = document.getElementById('loan-notes');
+
+  const body = {
+    item_id: itemId,
+    login,
+    type: 'loan',
+    quantity: loanQuantityField.hidden ? 1 : Number(loanQuantityInput.value) || 1,
+    activity_id: activityId,
+    // No date field in this form — always today (transacted_at left
+    // unset defaults to now() server-side).
+    notes: notesInput.value.trim() || null,
+  };
+
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
+    showFeedback('Préstamo registrado.');
+    event.currentTarget.reset();
+    updateLoanQuantityVisibility();
+    await loadActivityLoans();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
 await loadDirectory();
 await loadActivity();
 loadParticipants();
+await loadItems();
+loadActivityLoans();
