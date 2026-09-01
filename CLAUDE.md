@@ -149,8 +149,11 @@ details) and may only edit their own contact fields (`email`, `phone`, `address`
 anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
 
 **Activities**: every activity has a mandatory `leader_id` (exposed as `leader_login`; the
-organizer, always set to whoever creates it — never chosen by the caller) who, along with
-admin/board, is the only one who can edit or cancel it (`Handler.canManage`). Its `type`
+organizer, defaulting to whoever creates it) who, along with admin/board, is the only one
+who can edit or cancel it (`Handler.canManage`). admin/board can instead name someone else
+as `leader_login` at creation time, or reassign an existing activity's organizer via
+`PATCH` — the current organizer can't do either for themselves, even though they can edit
+every other field. Its `type`
 (`caving`/`canyoning`/`training`/`social`/`other`) gates a federation check: joining — or
 being named as an initial participant at creation time — a `caving`/`canyoning` activity
 requires a currently valid federative license (`licenses.Service.IsCurrentlyFederated`),

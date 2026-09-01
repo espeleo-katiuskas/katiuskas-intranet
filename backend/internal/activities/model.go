@@ -45,10 +45,12 @@ type Activity struct {
 	EndDate     time.Time `json:"end_date"`
 	Description *string   `json:"description,omitempty"`
 	Status      Status    `json:"status"`
-	// LeaderID/LeaderLogin are the organizer: always set, to whoever
-	// created the activity (see Service.Create — never something the
-	// caller chooses), and the only person besides admin/board who can
-	// edit or cancel it.
+	// LeaderID/LeaderLogin are the organizer: always set, defaulting to
+	// whoever creates the activity — admin/board can instead name
+	// someone else at creation time, or reassign it afterward (see
+	// Handler.create/Handler.update; a plain member can't do either).
+	// The leader is the only person besides admin/board who can edit or
+	// cancel their own activity.
 	LeaderID    int64  `json:"-"`
 	LeaderLogin string `json:"leader_login"`
 	// Visibility gates who may add participants: anyone can join a
@@ -80,6 +82,9 @@ type UpdateInput struct {
 	Description *string
 	Status      *Status
 	Visibility  *Visibility
+	// LeaderID reassigns the organizer — admin/board only, see
+	// Handler.update.
+	LeaderID *int64
 }
 
 type Participant struct {

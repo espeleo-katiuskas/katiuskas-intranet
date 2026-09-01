@@ -294,6 +294,47 @@ func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
 	}
 }
 
+// Board (and admin) can name someone else as the organizer right at
+// creation time instead of always leading it themselves.
+func TestHandlerCreateAllowsBoardToChooseADifferentLeader(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	board := testutil.InsertUser(t, tx, "")
+	organizer := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, board.ID, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", boardToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"leader_login": organizer.Login,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.LeaderLogin != organizer.Login {
+		t.Errorf("expected leader_login %q, got %q", organizer.Login, created.LeaderLogin)
+	}
+}
+
+// A plain member can't hand their own new activity off to someone else
+// — leader_login is board/admin only.
+func TestHandlerCreateRejectsMemberChoosingADifferentLeader(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, person.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"leader_login": other.Login,
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a member choosing a different organizer, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	leader := testutil.InsertUser(t, tx, "")
@@ -575,5 +616,74 @@ func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
 	}
 	if updated.Visibility != activities.VisibilityPrivate {
 		t.Errorf("expected visibility to change to private, got %q", updated.Visibility)
+	}
+}
+
+// Board (and admin) can reassign an activity's organizer after the
+// fact — the whole point being that leadership doesn't have to stay
+// stuck with whoever happened to create it.
+func TestHandlerUpdateAllowsBoardToChangeLeader(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	newLeader := testutil.InsertUser(t, tx, "")
+	board := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	boardToken := tokenFor(t, authn, board.ID, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	rec = doRequest(mux, http.MethodPatch, path, boardToken, map[string]any{"leader_login": newLeader.Login})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update leader: %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.LeaderLogin != newLeader.Login {
+		t.Errorf("expected leader_login %q, got %q", newLeader.Login, updated.LeaderLogin)
+	}
+
+	// The old leader lost canManage the moment they stopped being the
+	// leader — even though editing other fields is otherwise allowed
+	// for "the organizer".
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"title": "New"}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected the ex-organizer to lose manage access, got %d", rec.Code)
+	}
+}
+
+// The organizer can edit their own activity's other fields, but can't
+// hand it off to someone else themselves — only admin/board can.
+func TestHandlerUpdateRejectsLeaderChangingLeader(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"leader_login": other.Login})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for the organizer reassigning their own activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

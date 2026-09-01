@@ -194,10 +194,23 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.Visibility != nil {
 		a.Visibility = *in.Visibility
 	}
+	if in.LeaderID != nil {
+		a.LeaderID = *in.LeaderID
+	}
 	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, status=$6, visibility=$7 WHERE id=$8
-	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Status, a.Visibility, id)
-	return a, err
+		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, status=$6, visibility=$7, leader_id=$8 WHERE id=$9
+	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Status, a.Visibility, a.LeaderID, id)
+	if err != nil {
+		return a, err
+	}
+	if in.LeaderID != nil {
+		// a.LeaderLogin still holds the *previous* leader's login — it
+		// came from GetByID's JOIN before leader_id changed above.
+		if err := r.pool.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, a.LeaderID).Scan(&a.LeaderLogin); err != nil {
+			return a, err
+		}
+	}
+	return a, nil
 }
 
 func (r *Repository) Cancel(ctx context.Context, id int64) error {

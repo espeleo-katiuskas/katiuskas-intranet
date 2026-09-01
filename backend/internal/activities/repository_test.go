@@ -196,6 +196,44 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// LeaderLogin has to come back correct too, not just LeaderID — it's
+// resolved from the *new* leader, not left over from the GetByID join
+// done before leader_id changed.
+func TestUpdateCanReassignLeader(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
+	newLeader := testutil.InsertUser(t, tx, "")
+
+	created, err := repo.Create(ctx, activities.CreateInput{
+		Title: "A", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic,
+		StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := repo.Update(ctx, created.ID, activities.UpdateInput{LeaderID: &newLeader.ID})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.LeaderID != newLeader.ID {
+		t.Errorf("expected leader_id %d, got %d", newLeader.ID, updated.LeaderID)
+	}
+	if updated.LeaderLogin != newLeader.Login {
+		t.Errorf("expected leader_login %q, got %q", newLeader.Login, updated.LeaderLogin)
+	}
+
+	found, err := repo.GetByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("get by id: %v", err)
+	}
+	if found.LeaderID != newLeader.ID || found.LeaderLogin != newLeader.Login {
+		t.Errorf("expected the reassignment to persist, got %+v", found)
+	}
+}
+
 func TestCancel(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)

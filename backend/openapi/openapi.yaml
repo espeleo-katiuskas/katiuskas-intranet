@@ -947,9 +947,10 @@ paths:
       description: >
         Any authenticated person can create an activity (there's no role
         restriction here, unlike update/cancel) and sign up its initial
-        participants in the same call. The organizer (leader_login) is
-        always set to the caller — it can't be chosen in the request
-        body.
+        participants in the same call. The organizer (leader_login)
+        defaults to the caller; admin/board can instead name someone
+        else via leader_login in the request body — anyone else who
+        tries gets a 403.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -963,6 +964,10 @@ paths:
               schema: { $ref: "#/components/schemas/Activity" }
         "400":
           description: One of the given participant_logins doesn't exist.
+        "403":
+          description: leader_login was given by someone who isn't admin/board.
+        "404":
+          description: leader_login doesn't belong to anyone.
         "409":
           description: >
             not_federated — the activity is caving or canyoning and one of
@@ -985,7 +990,9 @@ paths:
       summary: Update an activity
       description: >
         Only the activity's organizer (leader_login), or admin/board, may
-        update it — anyone else gets a 403.
+        update it — anyone else gets a 403. leader_login itself
+        (reassigning the organizer) is narrower still: admin/board
+        only, even for the current organizer.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -999,8 +1006,12 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
-        "403": { description: Only the organizer, board, or admin can update this activity. }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "403":
+          description: >
+            forbidden — not the organizer, board, or admin; or
+            leader_login was given by someone who isn't admin/board.
+        "404":
+          description: The activity doesn't exist, or leader_login doesn't belong to anyone.
     delete:
       summary: Cancel an activity
       description: >
@@ -1726,8 +1737,11 @@ components:
         leader_login:
           type: string
           description: >
-            The organizer: always the person who created the activity, and
-            the only one besides admin/board who can update or cancel it.
+            The organizer: defaults to whoever created the activity, but
+            admin/board can choose someone else at creation time or
+            reassign it later (see POST/PATCH). The current organizer is
+            the only one besides admin/board who can update or cancel
+            the activity, but can't reassign it themselves.
         visibility:
           type: string
           enum: [public, private]
@@ -1759,6 +1773,11 @@ components:
             activity. If type is caving or canyoning, every one of them
             must currently hold a valid federative license, or the whole
             call is rejected with 409 not_federated.
+        leader_login:
+          type: string
+          description: >
+            The organizer. Defaults to the caller; naming anyone else
+            here is admin/board only (403 otherwise).
 
     UpdateActivityInput:
       type: object
@@ -1773,6 +1792,12 @@ components:
         description: { type: string, nullable: true }
         status: { type: string, enum: [planned, completed, cancelled] }
         visibility: { type: string, enum: [public, private] }
+        leader_login:
+          type: string
+          description: >
+            Reassigns the organizer. admin/board only — even the
+            current organizer can't change this on their own activity
+            (403 otherwise).
 
     Participant:
       type: object

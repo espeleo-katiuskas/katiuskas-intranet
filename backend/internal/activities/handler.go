@@ -94,6 +94,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Description       *string    `json:"description"`
 		Visibility        Visibility `json:"visibility"`
 		ParticipantLogins []string   `json:"participant_logins"`
+		LeaderLogin       *string    `json:"leader_login"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -125,9 +126,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		participantIDs = append(participantIDs, id)
 	}
 	current, _ := auth.UserFromContext(r.Context())
+	leaderID := current.ID
+	// A member creating an activity always leads it themselves; only
+	// admin/board can name someone else as the organizer instead.
+	if body.LeaderLogin != nil {
+		if !current.HasAnyRole("admin", "board") {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only admin or board can choose a different organizer")
+			return
+		}
+		id, err := h.users.UserIDForLogin(r.Context(), *body.LeaderLogin)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "leader not found")
+			return
+		}
+		leaderID = id
+	}
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
-		Description: body.Description, LeaderID: current.ID, Visibility: body.Visibility,
+		Description: body.Description, LeaderID: leaderID, Visibility: body.Visibility,
 		ParticipantUserIDs: participantIDs,
 	})
 	if errors.Is(err, ErrParticipantNotFound) {
@@ -142,7 +158,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create activity")
 		return
 	}
-	if leaderLogin, err := h.users.LoginForUserID(r.Context(), current.ID); err == nil {
+	if leaderLogin, err := h.users.LoginForUserID(r.Context(), leaderID); err == nil {
 		a.LeaderLogin = leaderLogin
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, a)
@@ -199,6 +215,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Description *string     `json:"description"`
 		Status      *Status     `json:"status"`
 		Visibility  *Visibility `json:"visibility"`
+		LeaderLogin *string     `json:"leader_login"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -207,6 +224,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	in := UpdateInput{
 		Title: body.Title, Type: body.Type, Description: body.Description,
 		Status: body.Status, Visibility: body.Visibility,
+	}
+	// Reassigning the organizer is admin/board only — unlike every other
+	// field here, the current leader can't do this for their own
+	// activity (they could otherwise hand it off to dodge canManage).
+	if body.LeaderLogin != nil {
+		current, _ := auth.UserFromContext(r.Context())
+		if !current.HasAnyRole("admin", "board") {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only admin or board can change an activity's organizer")
+			return
+		}
+		leaderID, err := h.users.UserIDForLogin(r.Context(), *body.LeaderLogin)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "leader not found")
+			return
+		}
+		in.LeaderID = &leaderID
 	}
 	if body.StartDate != nil {
 		d, err := time.Parse("2006-01-02", *body.StartDate)
