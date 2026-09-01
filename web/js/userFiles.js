@@ -97,12 +97,18 @@ function downloadBlob(blob, filename) {
 // initUserFilesBrowser wires up a fixed set of element ids (uf-*, see
 // profile.html/member.html) to browse and preview the given login's
 // files. Safe to call on a page that doesn't have that markup — it
-// simply does nothing.
-function initUserFilesBrowser(login) {
+// simply does nothing. hideWhenEmpty hides the whole #uf-section
+// wrapper (if present) when this person's own root has no files at
+// all yet — profile.html uses this so "Mis ficheros" doesn't show up
+// as an empty section for the common case of nobody having dropped
+// anything in; member.html leaves it off, since admin/board still want
+// to see the (empty) section to know there's nothing there.
+function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
   const breadcrumbsEl = document.getElementById('uf-breadcrumbs');
   const directoryView = document.getElementById('uf-directory-view');
   const fileView = document.getElementById('uf-file-view');
   const entriesList = document.getElementById('uf-entries-list');
+  const section = document.getElementById('uf-section');
   if (!breadcrumbsEl || !directoryView || !fileView || !entriesList) return;
 
   function showError(message) {
@@ -146,6 +152,9 @@ function initUserFilesBrowser(login) {
     entriesList.innerHTML = '<tr><td colspan="3">Cargando…</td></tr>';
     try {
       const listing = await apiFetch(`/users/${login}/files?path=${encodeURIComponent(dirPath)}`);
+      if (hideWhenEmpty && section && dirPath === '') {
+        section.hidden = listing.entries.length === 0;
+      }
       entriesList.innerHTML = listing.entries.length
         ? listing.entries.map((entry) => renderEntryRow(listing.path, entry)).join('')
         : '<tr><td colspan="3">Todavía no hay ficheros aquí.</td></tr>';

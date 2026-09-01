@@ -94,37 +94,40 @@
     </form>
   </div>
 
-  <h2>Historial como socio</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Alta</th><th>Baja</th></tr></thead>
-      <tbody id="memberships-table-body"></tbody>
-    </table>
-  </div>
-
-  <h2>Mis ficheros</h2>
-  <p class="subtitle">Documentos personales que la Junta Directiva te haya adjuntado (DNI, autorizaciones, seguros...).</p>
-  <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
-  <div id="uf-directory-view">
+  <div id="memberships-section" hidden>
+    <h2>Historial como socio</h2>
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
-        </thead>
-        <tbody id="uf-entries-list"></tbody>
+        <thead><tr><th>Alta</th><th>Baja</th></tr></thead>
+        <tbody id="memberships-table-body"></tbody>
       </table>
     </div>
   </div>
-  <div id="uf-file-view" hidden>
-    <div class="section-header">
-      <h3 id="uf-file-name"></h3>
-      <div class="panel-actions">
-        <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
-        <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+
+  <div id="uf-section" hidden>
+    <h2>Mis ficheros</h2>
+    <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
+    <div id="uf-directory-view">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
+          </thead>
+          <tbody id="uf-entries-list"></tbody>
+        </table>
       </div>
     </div>
-    <p class="subtitle" id="uf-file-meta"></p>
-    <div id="uf-file-preview"></div>
+    <div id="uf-file-view" hidden>
+      <div class="section-header">
+        <h3 id="uf-file-name"></h3>
+        <div class="panel-actions">
+          <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
+          <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+        </div>
+      </div>
+      <p class="subtitle" id="uf-file-meta"></p>
+      <div id="uf-file-preview"></div>
+    </div>
   </div>
 </main>
 <script type="module" src="js/profile.js"></script>

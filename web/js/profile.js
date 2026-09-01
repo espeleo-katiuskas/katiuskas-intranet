@@ -70,17 +70,15 @@ async function loadProfile() {
     }
 
     const memberships = await apiFetch(`/users/${user.login}/memberships`);
-    const tableBody = document.getElementById('memberships-table-body');
-    tableBody.innerHTML = memberships.length
-      ? memberships
-          .map((membership) => `
-            <tr>
-              <td>${formatDate(membership.start_date)}</td>
-              <td>${membership.end_date ? formatDate(membership.end_date) : 'Activa'}</td>
-            </tr>
-          `)
-          .join('')
-      : '<tr><td colspan="2">Todavía no has sido socio.</td></tr>';
+    document.getElementById('memberships-section').hidden = memberships.length === 0;
+    document.getElementById('memberships-table-body').innerHTML = memberships
+      .map((membership) => `
+        <tr>
+          <td>${formatDate(membership.start_date)}</td>
+          <td>${membership.end_date ? formatDate(membership.end_date) : 'Activa'}</td>
+        </tr>
+      `)
+      .join('');
   } catch {
     document.getElementById('profile-email').textContent = 'No se ha podido cargar tu perfil.';
   }
@@ -122,5 +120,5 @@ editForm.addEventListener('submit', async (event) => {
 
 loadProfile();
 if (user) {
-  initUserFilesBrowser(user.login);
+  initUserFilesBrowser(user.login, { hideWhenEmpty: true });
 }
