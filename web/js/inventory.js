@@ -64,10 +64,11 @@ const movementTypeOptions = [
   ['retirement', 'Retirada'],
 ];
 const typeLabels = Object.fromEntries(movementTypeOptions);
-// Movement types with a recipient — everything else (acquisition, loss,
-// abandonment, retirement) has no socio, though loss/abandonment can
-// still carry one when it's known who was carrying the item.
-const recipientRequiredTypes = new Set(['loan', 'rental', 'sale']);
+// Loan and rental always need a socio; sale's is optional; acquisition,
+// loss, abandonment and retirement never get one at all — the "Socio"
+// field is hidden outright for those, not just left empty.
+const recipientRequiredTypes = new Set(['loan', 'rental']);
+const recipientForbiddenTypes = new Set(['acquisition', 'loss', 'abandonment', 'retirement']);
 const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
 
 // Only loan and rental are ever returnable — a sale (or acquisition/
@@ -182,7 +183,7 @@ function renderMovementAddForm(item) {
           </select>
         </div>
         <div class="field" data-mv-user-field>
-          <label>Socio <span class="optional" data-mv-user-hint>(opcional para este tipo de movimiento)</span></label>
+          <label>Socio <span class="optional" data-mv-user-hint>(opcional)</span></label>
           <input type="text" list="mv-user-options" autocomplete="off" data-mv-user placeholder="Escribe un nombre…">
         </div>
         <div class="field" data-mv-activity-field>
@@ -220,7 +221,18 @@ function updateMovementFormVisibility(form) {
   const activityField = form.querySelector('[data-mv-activity-field]');
   activityField.hidden = !requiresActivity;
   form.querySelector('[data-mv-activity]').required = requiresActivity;
-  form.querySelector('[data-mv-user-hint]').hidden = recipientRequiredTypes.has(type);
+
+  // Acquisition/loss/abandonment/retirement never have a recipient —
+  // the field is hidden outright (and cleared) rather than just left
+  // optional, matching recipient_only_for_loan_rental_sale.
+  const userField = form.querySelector('[data-mv-user-field]');
+  const userInput = form.querySelector('[data-mv-user]');
+  const forbidsRecipient = recipientForbiddenTypes.has(type);
+  userField.hidden = forbidsRecipient;
+  if (forbidsRecipient) userInput.value = '';
+  const requiresRecipient = recipientRequiredTypes.has(type);
+  userInput.required = requiresRecipient;
+  form.querySelector('[data-mv-user-hint]').hidden = requiresRecipient || forbidsRecipient;
 }
 
 // Fetches and renders one item's movement history plus (if allowed) its
