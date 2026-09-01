@@ -14,6 +14,16 @@
   box-sizing: border-box;
 }
 
+/* The browser's own [hidden] { display: none } rule lives in the
+   lowest-priority (user-agent) origin, so any author rule setting
+   display on the same element — .btn's display: inline-flex, say —
+   silently wins and leaves a "hidden" element visible. This reasserts
+   it at author-with-!important, the only thing that reliably beats an
+   arbitrary future .whatever { display: ... } rule too. */
+[hidden] {
+  display: none !important;
+}
+
 .impersonation-banner {
   display: flex;
   align-items: center;
@@ -451,10 +461,6 @@ button.link-button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.field[hidden] {
-  display: none;
 }
 
 .field.span-2 {
