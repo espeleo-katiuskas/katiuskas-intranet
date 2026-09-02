@@ -76,11 +76,19 @@ function cargoFor(person) {
   return (person.roles ?? []).filter((name) => !automaticRoleNames.has(name)).map(roleLabel).join(', ');
 }
 
+// Just the catalog fetch, no DOM — used by both loadRoles() below (the
+// admin/board-only roles table + "nueva persona" checkboxes) and, for
+// everyone else, only to know which role names are automatic, for
+// cargoFor.
+async function loadRolesCatalog() {
+  allRoles = await apiFetch('/roles');
+  automaticRoleNames = new Set(allRoles.filter((r) => r.is_automatic).map((r) => r.name));
+}
+
 async function loadRoles() {
   const tableBody = document.getElementById('roles-table-body');
   try {
-    allRoles = await apiFetch('/roles');
-    automaticRoleNames = new Set(allRoles.filter((r) => r.is_automatic).map((r) => r.name));
+    await loadRolesCatalog();
     tableBody.innerHTML = allRoles
       .map((role) => `
         <tr>
@@ -112,9 +120,9 @@ async function loadRoles() {
   }
 }
 
-// GET /board-members is open to any baseline role, but this is only
-// ever loaded (and the "Cargo" column only ever offered) for admin/
-// board — see FULL_COLUMNS/MEMBER_COLUMNS below.
+// GET /board-members is open to any baseline role — loaded for
+// everyone now, since the "Cargo" column is offered in both
+// FULL_COLUMNS and MEMBER_COLUMNS below.
 async function loadBoardPositions() {
   try {
     const boardMembers = await apiFetch('/board-members');
@@ -411,7 +419,7 @@ const FULL_COLUMNS = [
   { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false },
 ];
 
-// GET /users only sends a plain member these six fields for anyone but
+// GET /users only sends a plain member these fields for anyone but
 // themselves (see users.MemberListing) — the rest of FULL_COLUMNS would
 // just render as "—" for every row, so they're not offered at all.
 const MEMBER_COLUMNS = [
@@ -428,6 +436,14 @@ const MEMBER_COLUMNS = [
     value: memberCategoryFor,
     render: (person) => memberCategoryFor(person) ?? '—',
     compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
+  },
+  {
+    key: 'cargo',
+    label: 'Cargo',
+    default: true,
+    value: cargoFor,
+    render: (person) => cargoFor(person) || '—',
+    compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
   },
 ];
 
@@ -662,8 +678,19 @@ if (isRealAdmin) {
   });
 }
 
+// Both feed the "Cargo" column, needed for admin/board and a plain
+// member alike now — loadRoles() also renders the admin/board-only
+// roles table and "nueva persona" checkboxes, so only that half is
+// gated to isAdmin.
 if (isAdmin) {
   await loadRoles();
-  await loadBoardPositions();
+} else {
+  try {
+    await loadRolesCatalog();
+  } catch {
+    // Cargo just won't resolve non-automatic roles if this fails — not
+    // worth blocking the rest of the page over.
+  }
 }
+await loadBoardPositions();
 loadUsers();

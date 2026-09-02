@@ -209,10 +209,15 @@ paths:
     get:
       summary: List users
       description: >
-        admin/board get every field (User, below); a plain member gets
-        everyone on the list too, but only MemberListing's much narrower
-        view — no DNI, address, contact info, or anything else that
-        isn't already effectively public knowledge inside the club.
+        admin/board get every field (User, below) for everyone on file.
+        A plain member gets MemberListing's much narrower view instead —
+        no DNI, address, contact info, or anything else that isn't
+        already effectively public knowledge inside the club — and only
+        for people who are or have been a socio (a non-nil
+        membership_start_date); someone who's never had a membership
+        period at all (an admin-only account, say) is left out of a
+        plain member's own listing entirely, even though admin/board
+        still see them.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: limit, in: query, schema: { type: integer } }
@@ -335,7 +340,14 @@ paths:
   /roles:
     get:
       summary: List every role
-      description: admin/board only — the catalog itself, read-only.
+      description: >
+        Open to any baseline role (admin/board/member) — the catalog
+        itself is just organizational labels, read-only here regardless
+        of who's asking. A plain member's own "Cargo" column on
+        /members is built from this (is_automatic tells an automatic
+        role like member/former_member/board apart from one that's
+        actually a distinct label to show) plus their own
+        MemberListing.roles.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -1898,10 +1910,12 @@ components:
       type: object
       description: >
         What GET /users returns to a caller who's a plain member (not
-        admin or board) — for every person on the list, not just
-        themselves. Just enough to see who's a socio, since when, and to
-        whom; everything else User exposes (DNI, address, contact info,
-        license, roles...) is left out entirely.
+        admin or board) — for every person who is or has been a socio,
+        not just themselves (someone with no membership period at all
+        is left out of this listing entirely — see GET /users). Just
+        enough to see who's a socio, since when, to whom, and which
+        roles/cargo they hold; everything else User exposes (DNI,
+        address, contact info, license...) is left out entirely.
       properties:
         login: { type: string }
         first_name: { type: string }
@@ -1918,6 +1932,10 @@ components:
         membership_number: { type: integer, minimum: 0, nullable: true }
         membership_start_date: { type: string, format: date, nullable: true }
         membership_end_date: { type: string, format: date, nullable: true }
+        roles:
+          type: array
+          items: { type: string }
+          description: Same role names as User.roles.
 
     DirectoryEntry:
       type: object

@@ -32,8 +32,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 // list is the only place a plain member can see anyone's data besides
 // their own: admin/board get the full picture, everyone else gets
-// MemberListing's narrower view of every person (not just themselves) —
-// see its doc comment for exactly what that includes.
+// MemberListing's narrower view — and only of people who are or have
+// been a socio (a non-nil MembershipStartDate), not everyone on file —
+// see MemberListing's own doc comment for exactly what that includes.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -45,9 +46,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 	current, _ := auth.UserFromContext(r.Context())
 	if !current.HasAnyRole("admin", "board") {
-		restricted := make([]MemberListing, len(list))
-		for i, u := range list {
-			restricted[i] = u.ForMemberListing()
+		restricted := make([]MemberListing, 0, len(list))
+		for _, u := range list {
+			if u.MembershipStartDate == nil {
+				continue
+			}
+			restricted = append(restricted, u.ForMemberListing())
 		}
 		httpapi.WriteJSON(w, http.StatusOK, restricted)
 		return

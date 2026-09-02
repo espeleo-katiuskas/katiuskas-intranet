@@ -48,13 +48,13 @@ type User struct {
 	// and path parameter that used to carry a numeric id now carries
 	// this instead. ID stays on the struct because the Go layer still
 	// needs it for foreign keys and permission checks.
-	ID         int64      `json:"-"`
-	Login      string     `json:"login"`
-	FirstName  string     `json:"first_name"`
-	LastName   string     `json:"last_name"`
-	NationalID *string    `json:"national_id,omitempty"`
-	BirthDate  time.Time  `json:"birth_date"`
-	Gender     *Gender    `json:"gender,omitempty"`
+	ID         int64     `json:"-"`
+	Login      string    `json:"login"`
+	FirstName  string    `json:"first_name"`
+	LastName   string    `json:"last_name"`
+	NationalID *string   `json:"national_id,omitempty"`
+	BirthDate  time.Time `json:"birth_date"`
+	Gender     *Gender   `json:"gender,omitempty"`
 	// Email and Phone can each hold more than one value, space-separated
 	// (like EmergencyContact already allows) — someone with a personal
 	// and a work address, say. Signing in, and a magic link going out,
@@ -110,18 +110,18 @@ type User struct {
 }
 
 type CreateInput struct {
-	FirstName        string     `json:"first_name"`
-	LastName         string     `json:"last_name"`
-	NationalID       *string    `json:"national_id"`
-	BirthDate        time.Time  `json:"birth_date"`
-	Gender           *Gender    `json:"gender"`
-	Email            *string    `json:"email"`
-	Phone            *string    `json:"phone"`
-	Address          *string    `json:"address"`
-	PostalCode       *string    `json:"postal_code"`
-	City             *string    `json:"city"`
-	Province         *string    `json:"province"`
-	EmergencyContact *string    `json:"emergency_contact"`
+	FirstName        string    `json:"first_name"`
+	LastName         string    `json:"last_name"`
+	NationalID       *string   `json:"national_id"`
+	BirthDate        time.Time `json:"birth_date"`
+	Gender           *Gender   `json:"gender"`
+	Email            *string   `json:"email"`
+	Phone            *string   `json:"phone"`
+	Address          *string   `json:"address"`
+	PostalCode       *string   `json:"postal_code"`
+	City             *string   `json:"city"`
+	Province         *string   `json:"province"`
+	EmergencyContact *string   `json:"emergency_contact"`
 	// RoleNames are assigned in the same call. Doesn't need — and can't
 	// include — "member", "former_member", or "board": those are
 	// automatic, derived from membership/board history instead of
@@ -170,10 +170,14 @@ type DirectoryEntry struct {
 // MemberListing is what GET /users returns to a caller who's a plain
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside
-// the club — just enough to see who's a socio, since when, and to whom.
-// AgeCategory stands in for BirthDate itself, which isn't exposed here:
-// the coarse bracket is enough to know at a glance without revealing
-// everyone's exact birth date.
+// the club — just enough to see who's a socio, since when, to whom, and
+// which roles/cargo they hold. AgeCategory stands in for BirthDate
+// itself, which isn't exposed here: the coarse bracket is enough to
+// know at a glance without revealing everyone's exact birth date.
+// Handler.list also only ever includes people who are or have been a
+// socio in this listing at all — someone who's never had a membership
+// period (an admin-only account, say) isn't something a plain member
+// needs to see here.
 type MemberListing struct {
 	Login               string      `json:"login"`
 	FirstName           string      `json:"first_name"`
@@ -183,6 +187,7 @@ type MemberListing struct {
 	MembershipNumber    *int        `json:"membership_number,omitempty"`
 	MembershipStartDate *time.Time  `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
+	Roles               []string    `json:"roles"`
 }
 
 // ForMemberListing narrows a full User down to what MemberListing
@@ -198,5 +203,6 @@ func (u User) ForMemberListing() MemberListing {
 		MembershipNumber:    u.MembershipNumber,
 		MembershipStartDate: u.MembershipStartDate,
 		MembershipEndDate:   u.MembershipEndDate,
+		Roles:               u.Roles,
 	}
 }

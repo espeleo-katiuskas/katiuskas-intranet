@@ -32,10 +32,13 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 }
 
 // Assigning or revoking a role is data about a person, same as their
-// profile fields — board can list the catalog (read-only) but not touch
-// who holds what.
+// profile fields — only admin can touch who holds what. The catalog
+// itself is just organizational labels, open to any baseline role
+// (read-only) so a plain member's own "Cargo" column on /members can
+// tell an automatic role (member/former_member/board) apart from one
+// that's actually a distinct label to show.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /api/v1/roles", h.authenticator.Protect(h.list, "admin", "board"))
+	mux.Handle("GET /api/v1/roles", h.authenticator.Protect(h.list))
 	mux.Handle("POST /api/v1/roles", h.authenticator.Protect(h.create, "admin"))
 	mux.Handle("DELETE /api/v1/roles/{id}", h.authenticator.Protect(h.delete, "admin"))
 

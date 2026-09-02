@@ -87,6 +87,18 @@ func TestHandlerListAllowsBoard(t *testing.T) {
 	}
 }
 
+// The catalog itself (unlike assigning/revoking) is just organizational
+// labels — open to a plain member too, so their own "Cargo" column on
+// /members can tell an automatic role apart from a real one.
+func TestHandlerListAllowsMember(t *testing.T) {
+	mux, authn, _, _ := newRolesTestServer(t)
+	memberToken := rolesToken(t, authn, 1, "member")
+
+	if rec := rolesDoRequest(mux, http.MethodGet, "/api/v1/roles", memberToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected a plain member to be able to list roles, got %d", rec.Code)
+	}
+}
+
 func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
 	target := testutil.InsertUser(t, tx, "")

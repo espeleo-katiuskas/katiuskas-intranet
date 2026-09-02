@@ -150,10 +150,20 @@ licenses, roles) but can only write activities and material — every person-dat
 role-assignment, license, and Junta Directiva write endpoint rejects board even though it
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
-bucketed from — membership number, alta/baja dates; no DNI, contact info, license, or role
-details) and may only edit their own contact fields (`email`, `phone`, `address`,
+bucketed from — membership number, alta/baja dates, and `roles`; no DNI, contact info, or
+license details) and may only edit their own contact fields (`email`, `phone`, `address`,
 `postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
 anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
+`GET /users` also only ever includes people who are or have been a socio (a non-nil
+`membership_start_date`) in a plain member's own listing — someone with no membership
+period at all (an admin-only account, say) is left out of it entirely, even though
+admin/board still see them (`Handler.list`). The role catalog itself (`GET /roles`) is
+open to any baseline role, read-only regardless of who's asking — assigning/revoking one
+is still admin-only — since it's just organizational labels, and a plain member's own
+"Cargo" column on `/members` needs `is_automatic` from it to tell an automatic role
+(`member`/`former_member`/`board`) apart from one that's actually a distinct label to
+show (`web/js/members.js`'s `cargoFor`, shared by `FULL_COLUMNS` and `MEMBER_COLUMNS`
+alike now).
 
 **Activities**: every activity has a mandatory `leader_id` (exposed as `leader_login`; the
 organizer, defaulting to whoever creates it) who, along with admin/board, is the only one

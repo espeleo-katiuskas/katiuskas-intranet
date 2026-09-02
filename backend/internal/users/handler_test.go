@@ -19,6 +19,15 @@ import (
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service) {
+	mux, resolver, usersService, _ := newTestServerWithMemberships(t)
+	return mux, resolver, usersService
+}
+
+// newTestServerWithMemberships is newTestServer, but also returns the
+// memberships.Service backing it — for the few tests that need to give
+// someone an actual alta, since GET /users only shows a plain member
+// people who are or have been a socio (see Handler.list).
+func newTestServerWithMemberships(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service, *memberships.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
@@ -28,7 +37,7 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.
 
 	mux := http.NewServeMux()
 	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
-	return mux, resolver, usersService
+	return mux, resolver, usersService, membershipsService
 }
 
 func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -119,7 +128,7 @@ func TestHandlerListRequiresABaselineRole(t *testing.T) {
 // only MemberListing's fields — board and admin still get the full
 // picture.
 func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.T) {
-	mux, authn, svc := newTestServer(t)
+	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
 	ctx := context.Background()
 
 	nationalID := "12345678A"
@@ -127,10 +136,17 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 	if err != nil {
 		t.Fatalf("parse birth date: %v", err)
 	}
-	if _, err := svc.Create(ctx, users.CreateInput{
+	target, err := svc.Create(ctx, users.CreateInput{
 		FirstName: "Target", LastName: "Person", Email: strPtr(testutil.UniqueEmail(t)), NationalID: &nationalID, BirthDate: birthDate,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create target: %v", err)
+	}
+	// A plain member only ever sees people who are or have been a
+	// socio (see Handler.list) — give Target an alta so this test still
+	// exercises the field restriction it's actually about.
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: birthDate}); err != nil {
+		t.Fatalf("create membership: %v", err)
 	}
 
 	memberToken := tokenFor(t, authn, 1, "member")
@@ -158,6 +174,83 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(nationalID)) {
 		t.Errorf("expected board to still see national_id, got %s", rec.Body.String())
+	}
+}
+
+// A plain member's own listing includes MemberListing.Roles now (not
+// just admin/board's full User) — this is what a "Cargo" column on
+// /members is built from client-side.
+func TestHandlerListIncludesRolesForAPlainMember(t *testing.T) {
+	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
+	ctx := context.Background()
+
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "Has", LastName: "Roles", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now()}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// target now has an open membership period, so "member" (automatic)
+	// is already part of their live-computed roles.
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"roles":["member"]`)) {
+		t.Errorf("expected a plain member's listing to include roles, got %s", rec.Body.String())
+	}
+}
+
+// GET /users only ever shows a plain member people who are or have
+// been a socio — someone who's never had a membership period at all
+// (an admin-only account, say) is hidden from that listing entirely,
+// even though admin/board still see them.
+func TestHandlerListHidesPeopleWhoHaveNeverBeenAMemberFromAPlainMember(t *testing.T) {
+	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
+	ctx := context.Background()
+
+	neverMember, err := svc.Create(ctx, users.CreateInput{FirstName: "Never", LastName: "Member", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create never-member: %v", err)
+	}
+	pastMember, err := svc.Create(ctx, users.CreateInput{FirstName: "Past", LastName: "Member", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create past member: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: pastMember.ID, StartDate: time.Now().AddDate(-1, 0, 0)}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	logins := map[string]bool{}
+	for _, p := range list {
+		logins[p["login"].(string)] = true
+	}
+	if logins[neverMember.Login] {
+		t.Errorf("expected someone who's never been a member to be hidden from a plain member's listing, got %+v", list)
+	}
+	if !logins[pastMember.Login] {
+		t.Errorf("expected a past member to still be visible, got %+v", list)
+	}
+
+	adminToken := tokenFor(t, authn, 2, "admin")
+	rec = doRequest(mux, http.MethodGet, "/api/v1/users", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(neverMember.Login)) {
+		t.Errorf("expected admin to still see someone who's never been a member")
 	}
 }
 
