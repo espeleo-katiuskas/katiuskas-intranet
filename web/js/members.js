@@ -241,11 +241,11 @@ const genderLabels = { male: 'Masculino', female: 'Femenino' };
 
 // A caving-club-style age category, based on the age a person turns
 // *this calendar year* (not today's exact age) — infantil up to 13,
-// juvenil 14–17, mayores 18 and up. Unknown birth_date means unknown
-// category, not a guess.
+// juvenil 14–17, mayores 18 and up. birth_date is mandatory
+// (users.CreateInput/db NOT NULL) — nobody in the system can lack one,
+// so there's no "unknown category" case to handle here.
 const CATEGORY_ORDER = ['Infantil', 'Juvenil', 'Mayores'];
 function categoryFor(person) {
-  if (!person.birth_date) return null;
   const ageThisYear = new Date().getFullYear() - new Date(person.birth_date).getFullYear();
   if (ageThisYear <= 13) return 'Infantil';
   if (ageThisYear <= 17) return 'Juvenil';
@@ -254,12 +254,13 @@ function categoryFor(person) {
 
 // A plain member's listing doesn't include birth_date (see
 // users.MemberListing) — just the already-bucketed age_category the API
-// computes from it (child/teen/adult), so this maps that instead of
+// computes from it (child/teen/adult, always present, same guarantee as
+// categoryFor's own birth_date above), so this maps that instead of
 // deriving it locally like categoryFor does for the full listing.
 const AGE_CATEGORY_LABELS = { child: 'Infantil', teen: 'Juvenil', adult: 'Mayores' };
 const AGE_CATEGORY_ORDER = ['child', 'teen', 'adult'];
 function memberCategoryFor(person) {
-  return person.age_category ? AGE_CATEGORY_LABELS[person.age_category] : null;
+  return AGE_CATEGORY_LABELS[person.age_category];
 }
 
 // A person's membership status for filtering purposes isn't just the
@@ -313,20 +314,20 @@ const FULL_FILTERS = [
   {
     key: 'category',
     label: 'Categoría',
-    options: [...CATEGORY_ORDER, 'Sin categoría'],
-    value: (p) => categoryFor(p) ?? 'Sin categoría',
+    options: [...CATEGORY_ORDER],
+    value: categoryFor,
   },
 ];
 
-// GET /users only gives a plain member first_name/last_name/gender/
+// GET /users gives a plain member first_name/last_name/gender/
 // membership_number/membership_start_date/membership_end_date/
-// on_leave/roles (see users.MemberListing) — no birth_date to derive
-// "categoría" from, so that filter isn't offered here. membership_status
-// reuses the exact same membershipStatusFor/membershipStatusLabels as
-// FULL_FILTERS (on_leave is there now too), minus "Nunca ha sido
-// socio": GET /users never actually sends a plain member anyone who's
-// never been a socio in the first place, so that option would always
-// be empty.
+// on_leave/age_category/roles (see users.MemberListing) — enough to
+// offer the same filters as FULL_FILTERS, just built from
+// memberCategoryFor instead of categoryFor (age_category, not
+// birth_date, is what's actually there). membership_status drops
+// "Nunca ha sido socio": GET /users never actually sends a plain
+// member anyone who's never been a socio in the first place, so that
+// option would always be empty.
 const MEMBER_FILTERS = [
   {
     key: 'gender',
@@ -339,6 +340,12 @@ const MEMBER_FILTERS = [
     label: 'Tipo de socio',
     options: [membershipStatusLabels.active, membershipStatusLabels.on_leave, membershipStatusLabels.former],
     value: (p) => membershipStatusLabels[membershipStatusFor(p)],
+  },
+  {
+    key: 'category',
+    label: 'Categoría',
+    options: [...CATEGORY_ORDER],
+    value: memberCategoryFor,
   },
 ];
 
@@ -409,7 +416,7 @@ const FULL_COLUMNS = [
     label: 'Categoría',
     default: false,
     value: categoryFor,
-    render: (person) => categoryFor(person) ?? '—',
+    render: categoryFor,
     compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
   },
   { ...membershipStatusColumn },
@@ -439,7 +446,7 @@ const MEMBER_COLUMNS = [
     label: 'Categoría',
     default: false,
     value: memberCategoryFor,
-    render: (person) => memberCategoryFor(person) ?? '—',
+    render: memberCategoryFor,
     compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
   },
   { ...membershipStatusColumn },
