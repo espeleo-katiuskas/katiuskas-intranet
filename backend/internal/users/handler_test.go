@@ -204,6 +204,39 @@ func TestHandlerListIncludesRolesForAPlainMember(t *testing.T) {
 	}
 }
 
+// A plain member's own listing includes MemberListing.OnLeave now too —
+// so their own "Tipo de socio" column/filter can tell "baja temporal"
+// apart from "activo", the same as admin/board's already could.
+func TestHandlerListIncludesOnLeaveForAPlainMember(t *testing.T) {
+	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
+	ctx := context.Background()
+
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "On", LastName: "Leave", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	membership, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().AddDate(0, -1, 0)})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	leaveStart := time.Now().AddDate(0, 0, -1)
+	leaveEnd := time.Now().AddDate(0, 0, 1)
+	if _, err := membershipsService.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: membership.ID, StartDate: leaveStart, EndDate: leaveEnd,
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"on_leave":true`)) {
+		t.Errorf("expected a plain member's listing to include on_leave, got %s", rec.Body.String())
+	}
+}
+
 // GET /users only ever shows a plain member people who are or have
 // been a socio — someone who's never had a membership period at all
 // (an admin-only account, say) is hidden from that listing entirely,

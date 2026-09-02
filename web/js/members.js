@@ -279,6 +279,18 @@ function membershipStatusFor(person) {
 }
 const MEMBERSHIP_STATUS_ORDER = ['active', 'on_leave', 'former', 'none'];
 
+// Shared between FULL_COLUMNS and MEMBER_COLUMNS — a plain member's own
+// MemberListing carries membership_start_date/end_date/on_leave same as
+// User does, so this column works identically for both.
+const membershipStatusColumn = {
+  key: 'membership_status',
+  label: 'Tipo de socio',
+  default: true,
+  value: (p) => membershipStatusLabels[membershipStatusFor(p)],
+  render: (person) => membershipStatusLabels[membershipStatusFor(person)],
+  compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
+};
+
 // Row filters narrow which people show, independent of which columns are
 // visible — same show/hide idea as COLUMNS, but for rows. Each groups
 // people into a fixed, known-in-advance set of values (not derived from
@@ -307,10 +319,14 @@ const FULL_FILTERS = [
 ];
 
 // GET /users only gives a plain member first_name/last_name/gender/
-// membership_number/membership_start_date/membership_end_date (see
-// users.MemberListing) — no on_leave or birth_date to derive "baja
-// temporal" or "categoría" from, so their filters stick to what's
-// actually there.
+// membership_number/membership_start_date/membership_end_date/
+// on_leave/roles (see users.MemberListing) — no birth_date to derive
+// "categoría" from, so that filter isn't offered here. membership_status
+// reuses the exact same membershipStatusFor/membershipStatusLabels as
+// FULL_FILTERS (on_leave is there now too), minus "Nunca ha sido
+// socio": GET /users never actually sends a plain member anyone who's
+// never been a socio in the first place, so that option would always
+// be empty.
 const MEMBER_FILTERS = [
   {
     key: 'gender',
@@ -321,12 +337,8 @@ const MEMBER_FILTERS = [
   {
     key: 'membership_status',
     label: 'Tipo de socio',
-    options: ['Activo', 'Ex-socio', 'Nunca ha sido socio'],
-    value: (p) => {
-      if (!p.membership_start_date) return 'Nunca ha sido socio';
-      if (p.membership_end_date) return 'Ex-socio';
-      return 'Activo';
-    },
+    options: [membershipStatusLabels.active, membershipStatusLabels.on_leave, membershipStatusLabels.former],
+    value: (p) => membershipStatusLabels[membershipStatusFor(p)],
   },
 ];
 
@@ -400,14 +412,7 @@ const FULL_COLUMNS = [
     render: (person) => categoryFor(person) ?? '—',
     compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
   },
-  {
-    key: 'membership_status',
-    label: 'Tipo de socio',
-    default: true,
-    value: (p) => membershipStatusLabels[membershipStatusFor(p)],
-    render: (person) => membershipStatusLabels[membershipStatusFor(person)],
-    compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
-  },
+  { ...membershipStatusColumn },
   {
     key: 'cargo',
     label: 'Cargo',
@@ -437,6 +442,7 @@ const MEMBER_COLUMNS = [
     render: (person) => memberCategoryFor(person) ?? '—',
     compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
   },
+  { ...membershipStatusColumn },
   {
     key: 'cargo',
     label: 'Cargo',

@@ -97,8 +97,11 @@ type User struct {
 	MembershipEndDate   *time.Time `json:"membership_end_date,omitempty"`
 	// OnLeave is only ever true alongside a currently-active membership
 	// (nil MembershipEndDate): whether today falls within one of their
-	// temporary leave windows, which a "member" role alone can't tell —
-	// a leave never touches the membership period it belongs to.
+	// temporary leave windows — a leave never touches the membership
+	// period it belongs to. Also exposed on MemberListing (see
+	// ForMemberListing), so a plain member's own "membership_status"
+	// can tell "baja temporal" apart from "activo" too, not just
+	// admin/board.
 	OnLeave bool `json:"on_leave"`
 	// License* reflect the person's most recently issued federative
 	// license (see licenses.Service.LatestByUser) — not settable through
@@ -170,14 +173,15 @@ type DirectoryEntry struct {
 // MemberListing is what GET /users returns to a caller who's a plain
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside
-// the club — just enough to see who's a socio, since when, to whom, and
-// which roles/cargo they hold. AgeCategory stands in for BirthDate
-// itself, which isn't exposed here: the coarse bracket is enough to
-// know at a glance without revealing everyone's exact birth date.
-// Handler.list also only ever includes people who are or have been a
-// socio in this listing at all — someone who's never had a membership
-// period (an admin-only account, say) isn't something a plain member
-// needs to see here.
+// the club — just enough to see who's a socio, since when, to whom,
+// whether they're currently on a temporary leave, and which
+// roles/cargo they hold. AgeCategory stands in for BirthDate itself,
+// which isn't exposed here: the coarse bracket is enough to know at a
+// glance without revealing everyone's exact birth date. Handler.list
+// also only ever includes people who are or have been a socio in this
+// listing at all — someone who's never had a membership period (an
+// admin-only account, say) isn't something a plain member needs to see
+// here.
 type MemberListing struct {
 	Login               string      `json:"login"`
 	FirstName           string      `json:"first_name"`
@@ -187,6 +191,7 @@ type MemberListing struct {
 	MembershipNumber    *int        `json:"membership_number,omitempty"`
 	MembershipStartDate *time.Time  `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
+	OnLeave             bool        `json:"on_leave"`
 	Roles               []string    `json:"roles"`
 }
 
@@ -203,6 +208,7 @@ func (u User) ForMemberListing() MemberListing {
 		MembershipNumber:    u.MembershipNumber,
 		MembershipStartDate: u.MembershipStartDate,
 		MembershipEndDate:   u.MembershipEndDate,
+		OnLeave:             u.OnLeave,
 		Roles:               u.Roles,
 	}
 }

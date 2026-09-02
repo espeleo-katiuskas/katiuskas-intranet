@@ -1913,9 +1913,10 @@ components:
         admin or board) — for every person who is or has been a socio,
         not just themselves (someone with no membership period at all
         is left out of this listing entirely — see GET /users). Just
-        enough to see who's a socio, since when, to whom, and which
-        roles/cargo they hold; everything else User exposes (DNI,
-        address, contact info, license...) is left out entirely.
+        enough to see who's a socio, since when, to whom, whether
+        they're currently on a temporary leave, and which roles/cargo
+        they hold; everything else User exposes (DNI, address, contact
+        info, license...) is left out entirely.
       properties:
         login: { type: string }
         first_name: { type: string }
@@ -1932,6 +1933,9 @@ components:
         membership_number: { type: integer, minimum: 0, nullable: true }
         membership_start_date: { type: string, format: date, nullable: true }
         membership_end_date: { type: string, format: date, nullable: true }
+        on_leave:
+          type: boolean
+          description: Same meaning as User.on_leave — only ever true alongside a currently-active membership.
         roles:
           type: array
           items: { type: string }
