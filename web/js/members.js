@@ -45,12 +45,42 @@ function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
 
+// Same friendly labels as member.js/dashboard.js — kept in sync there
+// since neither file is big enough yet to justify sharing them through
+// api.js.
+const positionLabels = {
+  president: 'Presidente',
+  vice_president: 'Vicepresidente',
+  secretary: 'Secretario',
+  treasurer: 'Tesorero',
+  member_at_large: 'Vocal',
+};
+
 let allRoles = [];
+// Role names is_automatic=true (member/former_member/board — see
+// db/migrations/00003_roles.sql) never belong in the "Cargo" column:
+// they're computed from alta/baja and board-term history, not
+// something anyone actually holds as a distinct position or label.
+let automaticRoleNames = new Set();
+// Filled by loadBoardPositions() — login → their current board
+// position, for whoever is on the board right now.
+let boardPositionByLogin = {};
+
+// A person's "cargo": their current board position if they have one,
+// otherwise whichever non-automatic roles they hold (admin, or any
+// custom role an admin created) — never both, since holding a board
+// position already implies being on the Junta Directiva.
+function cargoFor(person) {
+  const position = boardPositionByLogin[person.login];
+  if (position) return positionLabels[position] ?? position;
+  return (person.roles ?? []).filter((name) => !automaticRoleNames.has(name)).map(roleLabel).join(', ');
+}
 
 async function loadRoles() {
   const tableBody = document.getElementById('roles-table-body');
   try {
     allRoles = await apiFetch('/roles');
+    automaticRoleNames = new Set(allRoles.filter((r) => r.is_automatic).map((r) => r.name));
     tableBody.innerHTML = allRoles
       .map((role) => `
         <tr>
@@ -79,6 +109,18 @@ async function loadRoles() {
     }
   } catch {
     tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los roles.</td></tr>';
+  }
+}
+
+// GET /board-members is open to any baseline role, but this is only
+// ever loaded (and the "Cargo" column only ever offered) for admin/
+// board — see FULL_COLUMNS/MEMBER_COLUMNS below.
+async function loadBoardPositions() {
+  try {
+    const boardMembers = await apiFetch('/board-members');
+    boardPositionByLogin = Object.fromEntries(boardMembers.map((m) => [m.user_login, m.position]));
+  } catch {
+    boardPositionByLogin = {};
   }
 }
 
@@ -358,6 +400,14 @@ const FULL_COLUMNS = [
     render: (person) => membershipStatusLabels[membershipStatusFor(person)],
     compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
   },
+  {
+    key: 'cargo',
+    label: 'Cargo',
+    default: true,
+    value: cargoFor,
+    render: (person) => cargoFor(person) || '—',
+    compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
+  },
   { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false },
 ];
 
@@ -614,5 +664,6 @@ if (isRealAdmin) {
 
 if (isAdmin) {
   await loadRoles();
+  await loadBoardPositions();
 }
 loadUsers();
