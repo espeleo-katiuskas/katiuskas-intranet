@@ -36,20 +36,26 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
-  número de socio, fecha de alta y de baja) para todo el mundo, no solo para sí mismo.
-  `age_category` (child/teen/adult, calculado con `ageCategoryFor` a partir de
-  `birth_date`) sustituye a la fecha de nacimiento exacta, que no se expone aquí — el
-  tramo basta para lo que hace falta ver de un vistazo sin revelar la fecha de
-  nacimiento de nadie. `users.Handler.
-  list` decide qué forma devolver según el rol de quien pregunta — no hay una ruta
-  aparte. También puede ver `GET /board-members` (la Junta Directiva actual, con cargo,
-  teléfono y correo — esa ruta es la única, aparte de las de admin/board, abierta a
-  member). Sobre su propio registro, puede seguir editando datos de contacto —
-  email, phone, address, postal_code, city, province, emergency_contact — pero no
-  nombre, apellidos, DNI, fecha de nacimiento ni género: `users.Handler.update`
-  rechaza con 403 `restricted_fields` cualquier intento de tocar esos campos si quien
-  llama no es admin, en vez de ignorarlos en silencio. `GET /users/{login}` (la ficha
-  completa) sigue reservado a admin/board o a la propia persona, sin cambios.
+  número de socio, fecha de alta y de baja, y `roles`) — y solo de quien es o ha sido
+  socio (`membership_start_date` no nulo); a quien nunca ha tenido un alta (una cuenta
+  solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este listado para
+  member, aunque admin/board lo sigan viendo. `age_category` (child/teen/adult,
+  calculado con `ageCategoryFor` a partir de `birth_date`) sustituye a la fecha de
+  nacimiento exacta, que no se expone aquí — el tramo basta para lo que hace falta ver
+  de un vistazo sin revelar la fecha de nacimiento de nadie. `users.Handler.list` decide
+  qué forma devolver según el rol de quien pregunta — no hay una ruta aparte. También
+  puede ver `GET /board-members` (la Junta Directiva actual, con cargo, teléfono y
+  correo) y ahora también `GET /roles` (el catálogo — de solo lectura para cualquiera,
+  aunque asignar o quitar un rol sigue siendo cosa exclusiva de admin): combinando
+  `roles` de su propia ficha con `is_automatic` del catálogo, `web/js/members.js`
+  calcula la columna "Cargo" (cargo actual en la Junta, o si no tiene, sus roles no
+  automáticos) igual para member que para admin/board. Sobre su propio registro, puede
+  seguir editando datos de contacto — email, phone, address, postal_code, city,
+  province, emergency_contact — pero no nombre, apellidos, DNI, fecha de nacimiento ni
+  género: `users.Handler.update` rechaza con 403 `restricted_fields` cualquier intento
+  de tocar esos campos si quien llama no es admin, en vez de ignorarlos en silencio.
+  `GET /users/{login}` (la ficha completa) sigue reservado a admin/board o a la propia
+  persona, sin cambios.
 
 En el frontend, `/members` ahora es visible para member además de admin/board: la
 lista de columnas y los filtros se reducen a lo que `MemberListing` realmente trae
