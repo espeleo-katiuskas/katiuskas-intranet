@@ -292,6 +292,11 @@ const membershipStatusColumn = {
   compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
 };
 
+// Same reasoning — a plain member's own MemberListing carries
+// license_type too now (just the type, not the issued/valid-until
+// dates admin/board still get).
+const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false };
+
 // Row filters narrow which people show, independent of which columns are
 // visible — same show/hide idea as COLUMNS, but for rows. Each groups
 // people into a fixed, known-in-advance set of values (not derived from
@@ -428,7 +433,7 @@ const FULL_COLUMNS = [
     render: (person) => cargoFor(person) || '—',
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
   },
-  { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false },
+  { ...licenseTypeColumn },
 ];
 
 // GET /users only sends a plain member these fields for anyone but
@@ -458,6 +463,7 @@ const MEMBER_COLUMNS = [
     render: (person) => cargoFor(person) || '—',
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
   },
+  { ...licenseTypeColumn },
 ];
 
 const COLUMNS = isAdmin ? FULL_COLUMNS : MEMBER_COLUMNS;

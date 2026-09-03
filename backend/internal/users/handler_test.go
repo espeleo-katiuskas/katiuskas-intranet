@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -38,6 +40,24 @@ func newTestServerWithMemberships(t *testing.T) (*http.ServeMux, testutil.FakeRe
 	mux := http.NewServeMux()
 	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
 	return mux, resolver, usersService, membershipsService
+}
+
+// newTestServerWithLicenses is newTestServerWithMemberships, but also
+// returns the licenses.Service and the underlying tx (needed for
+// testutil.LicenseTypeID) — for the one test that needs to assign
+// someone a license, since GET /users only shows a plain member
+// license_type, not the fuller license history admin/board get.
+func newTestServerWithLicenses(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service, *memberships.Service, *licenses.Service, pgx.Tx) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+
+	mux := http.NewServeMux()
+	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
+	return mux, resolver, usersService, membershipsService, licensesService, tx
 }
 
 func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -234,6 +254,38 @@ func TestHandlerListIncludesOnLeaveForAPlainMember(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"on_leave":true`)) {
 		t.Errorf("expected a plain member's listing to include on_leave, got %s", rec.Body.String())
+	}
+}
+
+// A plain member's own listing includes MemberListing.LicenseType now
+// too (just the type — not license_issued_date/license_valid_until,
+// which stay admin/board-only).
+func TestHandlerListIncludesLicenseTypeForAPlainMember(t *testing.T) {
+	mux, authn, svc, membershipsService, licensesService, tx := newTestServerWithLicenses(t)
+	ctx := context.Background()
+
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "Has", LastName: "License", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now()}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	licenseTypeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: target.ID, LicenseTypeID: licenseTypeID, IssuedDate: time.Now()}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"license_type":"A BASICA"`)) {
+		t.Errorf("expected a plain member's listing to include license_type, got %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("license_issued_date")) {
+		t.Errorf("expected a plain member's listing to still hide license_issued_date, got %s", rec.Body.String())
 	}
 }
 

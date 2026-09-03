@@ -106,6 +106,8 @@ type User struct {
 	// License* reflect the person's most recently issued federative
 	// license (see licenses.Service.LatestByUser) — not settable through
 	// this package, only through POST /users/{login}/licenses.
+	// LicenseType alone (not LicenseIssuedDate/LicenseValidUntil) is also
+	// exposed on MemberListing (see ForMemberListing).
 	LicenseType       *string    `json:"license_type,omitempty"`
 	LicenseIssuedDate *time.Time `json:"license_issued_date,omitempty"`
 	LicenseValidUntil *time.Time `json:"license_valid_until,omitempty"`
@@ -174,14 +176,15 @@ type DirectoryEntry struct {
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside
 // the club — just enough to see who's a socio, since when, to whom,
-// whether they're currently on a temporary leave, and which
-// roles/cargo they hold. AgeCategory stands in for BirthDate itself,
-// which isn't exposed here: the coarse bracket is enough to know at a
-// glance without revealing everyone's exact birth date. Handler.list
-// also only ever includes people who are or have been a socio in this
-// listing at all — someone who's never had a membership period (an
-// admin-only account, say) isn't something a plain member needs to see
-// here.
+// whether they're currently on a temporary leave, which roles/cargo
+// they hold, and which kind of federative license they have (just the
+// type — LicenseIssuedDate/LicenseValidUntil stay admin/board-only).
+// AgeCategory stands in for BirthDate itself, which isn't exposed
+// here: the coarse bracket is enough to know at a glance without
+// revealing everyone's exact birth date. Handler.list also only ever
+// includes people who are or have been a socio in this listing at all
+// — someone who's never had a membership period (an admin-only
+// account, say) isn't something a plain member needs to see here.
 type MemberListing struct {
 	Login               string      `json:"login"`
 	FirstName           string      `json:"first_name"`
@@ -193,6 +196,7 @@ type MemberListing struct {
 	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
 	OnLeave             bool        `json:"on_leave"`
 	Roles               []string    `json:"roles"`
+	LicenseType         *string     `json:"license_type,omitempty"`
 }
 
 // ForMemberListing narrows a full User down to what MemberListing
@@ -208,6 +212,7 @@ func (u User) ForMemberListing() MemberListing {
 		MembershipNumber:    u.MembershipNumber,
 		MembershipStartDate: u.MembershipStartDate,
 		MembershipEndDate:   u.MembershipEndDate,
+		LicenseType:         u.LicenseType,
 		OnLeave:             u.OnLeave,
 		Roles:               u.Roles,
 	}

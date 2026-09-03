@@ -1914,9 +1914,11 @@ components:
         not just themselves (someone with no membership period at all
         is left out of this listing entirely — see GET /users). Just
         enough to see who's a socio, since when, to whom, whether
-        they're currently on a temporary leave, and which roles/cargo
-        they hold; everything else User exposes (DNI, address, contact
-        info, license...) is left out entirely.
+        they're currently on a temporary leave, which roles/cargo they
+        hold, and which kind of federative license they have (just the
+        type — license_issued_date/license_valid_until stay admin/
+        board-only); everything else User exposes (DNI, address,
+        contact info...) is left out entirely.
       properties:
         login: { type: string }
         first_name: { type: string }
@@ -1940,6 +1942,13 @@ components:
           type: array
           items: { type: string }
           description: Same role names as User.roles.
+        license_type:
+          type: string
+          nullable: true
+          description: >
+            Just the type of this person's most recently issued
+            federative license (same value as User.license_type) — the
+            dates it was issued/valid until stay admin/board-only.
 
     DirectoryEntry:
       type: object

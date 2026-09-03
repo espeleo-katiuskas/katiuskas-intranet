@@ -36,8 +36,10 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
-  número de socio, fecha de alta y de baja, `on_leave`, y `roles`) — y solo de quien es
-  o ha sido socio (`membership_start_date` no nulo); a quien nunca ha tenido un alta
+  número de socio, fecha de alta y de baja, `on_leave`, `roles`, y `license_type` — solo
+  el tipo de la licencia federativa más reciente, nunca su fecha de obtención ni de
+  validez, que siguen reservadas a admin/board) — y solo de quien es o ha sido socio
+  (`membership_start_date` no nulo); a quien nunca ha tenido un alta
   (una cuenta solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este
   listado para member, aunque admin/board lo sigan viendo. `age_category` (child/teen/
   adult, calculado con `ageCategoryFor` a partir de `birth_date`) sustituye a la fecha
