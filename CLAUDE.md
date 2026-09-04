@@ -29,9 +29,12 @@ link instead of emailing it — `docker compose logs api`, or `scripts/get-token
 to mint a session token directly in the database for local testing, bypassing the magic-link
 flow entirely.
 
-Production deployment (self-hosted, own domain, automatic HTTPS via Let's Encrypt): see
-`docs/deployment.md`, `docker-compose.production.yml`, `.env.production.example`,
-`deploy/Caddyfile.production`. `scripts/get-token.sh` is dev-only — never use it there.
+Production deployment (self-hosted, behind a reverse proxy the host already runs for
+TLS): see `docs/deployment.md`, `docker-compose.production.yml`,
+`.env.production.example`. `scripts/get-token.sh` is dev-only — never use it there. For a
+disk-constrained host, `docs/deployment-no-docker.md` covers the same deploy without
+Docker — native PostgreSQL/Caddy plus systemd-managed Go binaries cross-compiled
+elsewhere and copied over.
 
 Backend tests (from `backend/`):
 ```sh

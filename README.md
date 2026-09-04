@@ -9,7 +9,8 @@ información sobre el club en [katiuskas.es](https://katiuskas.es/).
 - `web/` — páginas web (HTML + JS) para socios y directiva.
 - `docs/architecture.md` — arquitectura y decisiones de diseño.
 - `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo junto.
-- `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con HTTPS.
+- `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con Docker.
+- `docs/deployment-no-docker.md` — lo mismo sin Docker, para un servidor con poco disco.
 
 ## Idioma
 

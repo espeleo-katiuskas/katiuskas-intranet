@@ -7,6 +7,11 @@ escucha en texto plano solo en `127.0.0.1:64710` (igual que en desarrollo), y es
 reverse proxy ya existente en la máquina el que le reenvía el tráfico del dominio que
 elijas. Pensada para una prueba inicial con un número reducido de personas.
 
+Requiere Docker en la máquina. Si el disco es limitado y prefieres no pagar el coste de
+Docker (el motor más las imágenes de PostgreSQL/Caddy/Go), ver en su lugar
+[`docs/deployment-no-docker.md`](deployment-no-docker.md), la misma idea con procesos
+nativos gestionados por `systemd`.
+
 Todo lo que sigue lo ejecutas tú directamente en la máquina de destino — no hay ningún
 paso de despliegue automático (ni CI/CD, ni redeploy en cada `git push`). Lo único
 "automático" es que los contenedores se reinician solos si se caen o si la máquina
