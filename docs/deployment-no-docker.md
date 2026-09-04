@@ -11,11 +11,14 @@ de Go instalado, ni siquiera durante una actualización.
 Escrita para Debian/Ubuntu (`apt`); en otra distribución cambian los nombres de paquete y
 el gestor (`dnf`, `pacman`...), pero la estructura es la misma.
 
-Igual que en el despliegue con Docker: el servidor ya tiene su propio reverse proxy
-(Caddy u otro) gestionando HTTPS para varios dominios, así que aquí el Caddy local vuelve
-a escuchar solo en `127.0.0.1:64710`, en texto plano, y es ese reverse proxy existente
-quien le reenvía el tráfico del dominio elegido — exactamente el mismo punto de entrada
-que en la guía con Docker, solo que sin contenedores.
+Si el servidor ya tiene su propio Caddy gestionando HTTPS para otros dominios (el caso
+más habitual), no hace falta instalar uno nuevo ni levantar un proxy interno intermedio:
+basta con añadir un sitio más a ese mismo Caddy (ver el paso 5), que sirve el frontend
+desde disco y hace de reverse proxy hacia la API en `127.0.0.1:64711` — el mismo Caddy
+que ya usas para lo demás. Si en cambio el reverse proxy existente es otra cosa (nginx,
+Traefik...) que no puede servir ficheros estáticos y reenviar `/api/*` con la misma
+facilidad, el paso 5 explica también la alternativa de un Caddy local propio en
+`127.0.0.1:64710` — el mismo punto de entrada que usa la guía con Docker.
 
 ## Resumen de la máquina de destino
 
@@ -176,7 +179,43 @@ sudo systemctl status katiuskas-api
 reinicie solo si el proceso cae — el equivalente exacto de `restart: unless-stopped` en la
 versión con Docker.
 
-## 5. Caddy (proxy interno + estáticos, solo en localhost)
+## 5. Caddy
+
+### Ya tienes Caddy en la máquina (caso habitual)
+
+No instales un segundo Caddy ni un proxy interno de por medio: añade un bloque de sitio
+más a tu `Caddyfile` existente (o al fichero que importe, si usas `import` para separar
+sitios), con el dominio real de la intranet. Ese mismo Caddy sirve el frontend desde
+disco, hace de reverse proxy hacia la API, y gestiona el HTTPS de este dominio exactamente
+igual que ya hace con tus otros sitios:
+
+```
+intranet.tudominio.org {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:64711
+	}
+	handle {
+		root * /opt/katiuskas-intranet/web
+		try_files {path} {path}.html
+		file_server
+	}
+}
+```
+
+```sh
+sudo systemctl reload caddy
+```
+
+Si ese Caddy corre como un usuario que no puede leer `/opt/katiuskas-intranet/web`
+(propiedad de `katiuskas`), dale acceso de lectura, por ejemplo añadiendo a ese usuario al
+grupo `katiuskas`, o con permisos `o+rX` en `/opt/katiuskas-intranet/web`.
+
+### Si el reverse proxy existente no es Caddy (nginx, Traefik...)
+
+Si tu reverse proxy no sirve ficheros estáticos y reenvía `/api/*` con la misma
+facilidad, instala un Caddy local dedicado solo para esto, escuchando en
+`127.0.0.1:64710`, y haz que tu reverse proxy existente le reenvíe el tráfico del dominio
+— el mismo punto de entrada que usa la guía con Docker:
 
 ```sh
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -210,15 +249,9 @@ EOF
 sudo systemctl reload caddy
 ```
 
-Por último, en tu reverse proxy existente de la máquina (fuera de este repositorio),
-añade un sitio para el dominio elegido que reenvíe a `http://127.0.0.1:64710` — el mismo
-paso que en `docs/deployment.md`, por ejemplo con otro Caddy:
-
-```
-intranet.tudominio.org {
-	reverse_proxy 127.0.0.1:64710
-}
-```
+Luego, en tu reverse proxy existente (fuera de este repositorio), añade un sitio para el
+dominio elegido que reenvíe a `http://127.0.0.1:64710` — el mismo paso que en
+`docs/deployment.md`.
 
 ## Actualizar a una versión nueva
 
@@ -264,8 +297,8 @@ directorios normales — cópialos como cualquier otro fichero del sistema.
 - `api.env` contiene la contraseña de PostgreSQL — `chmod 600`, propiedad de `katiuskas`,
   nunca en el repositorio.
 - Ni PostgreSQL ni la API escuchan en ninguna interfaz externa: PostgreSQL solo acepta
-  conexiones locales, `HTTP_ADDR` está fijado a `127.0.0.1:64711`, y el Caddy local a
-  `127.0.0.1:64710` — todo el tráfico externo pasa antes por el reverse proxy existente
-  de la máquina, igual que con Docker.
+  conexiones locales y `HTTP_ADDR` está fijado a `127.0.0.1:64711` — todo el tráfico
+  externo pasa antes por Caddy (el tuyo ya existente, o uno local en `127.0.0.1:64710`
+  si usas otro reverse proxy — ver paso 5), igual que con Docker.
 - **No uses `scripts/get-token.sh`** aquí: además de ser solo para desarrollo, depende
   del stack de `docker compose` local, que ni siquiera existe en este despliegue.
