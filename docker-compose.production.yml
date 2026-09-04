@@ -1,6 +1,7 @@
-# Self-hosted production stack for a single machine with a real domain
-# already pointed at its public IP. See docs/deployment.md for the full
-# setup guide — this file alone is not meant to be self-explanatory.
+# Self-hosted production stack, for a machine that already runs its own
+# Caddy (or other reverse proxy) terminating TLS for several domains. See
+# docs/deployment.md for the full setup guide — this file alone is not
+# meant to be self-explanatory.
 #
 # Usage:
 #   cp .env.production.example .env   # then fill in real values
@@ -10,11 +11,13 @@
 #   docker compose -f docker-compose.production.yml up -d
 #
 # Unlike docker-compose.yml (local dev), postgres and the api are not
-# published to the host at all — only Caddy's 80/443 are, and it's the only
-# way in from outside the machine. All three long-running services restart
-# automatically on crash or host reboot (restart: unless-stopped); deploying
-# a new version after this initial setup is still a manual step (see
-# docs/deployment.md).
+# published to the host at all. web (Caddy, plain HTTP, no ACME/TLS of its
+# own — that's the host's reverse proxy job) is bound to 127.0.0.1:64710
+# only, same as in dev: point the host's own reverse proxy at
+# http://127.0.0.1:64710 for the domain you want this intranet on. All
+# three long-running services restart automatically on crash or host
+# reboot (restart: unless-stopped); deploying a new version after this
+# initial setup is still a manual step (see docs/deployment.md).
 
 services:
   postgres:
@@ -60,20 +63,14 @@ services:
 
   web:
     image: caddy:2-alpine
-    environment:
-      DOMAIN: "${DOMAIN:?Set DOMAIN in .env}"
-      ACME_EMAIL: "${ACME_EMAIL:?Set ACME_EMAIL in .env}"
     volumes:
       - ./web:/srv:ro
-      - ./deploy/Caddyfile.production:/etc/caddy/Caddyfile:ro
-      # Caddy's own state: issued certificates (data) and its config
-      # cache (config) — named volumes so a container replacement doesn't
-      # re-request a certificate from Let's Encrypt every time.
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    # Plain HTTP, bound to localhost only — same Caddyfile as dev
+    # (docker-compose.yml). TLS is the host's own reverse proxy's job, not
+    # this container's; see docs/deployment.md.
     ports:
-      - "80:80"
-      - "443:443"
+      - "127.0.0.1:64710:64710"
     depends_on:
       - api
     restart: unless-stopped
@@ -119,5 +116,3 @@ services:
 volumes:
   postgres_data:
   activity_resources_data:
-  caddy_data:
-  caddy_config:

@@ -1,8 +1,11 @@
 # Despliegue en producción (máquina propia)
 
-Guía para poner la intranet en marcha en una máquina propia (no en un servicio de nube),
-con HTTPS automático vía Let's Encrypt para un dominio real que ya apunte a esa máquina.
-Pensada para una prueba inicial con un número reducido de personas.
+Guía para poner la intranet en marcha en una máquina propia (no en un servicio de nube)
+que ya tiene su propio reverse proxy (Caddy u otro) gestionando HTTPS para varios
+dominios. El stack de la intranet no gestiona TLS ni certificados: el contenedor `web`
+escucha en texto plano solo en `127.0.0.1:64710` (igual que en desarrollo), y es el
+reverse proxy ya existente en la máquina el que le reenvía el tráfico del dominio que
+elijas. Pensada para una prueba inicial con un número reducido de personas.
 
 Todo lo que sigue lo ejecutas tú directamente en la máquina de destino — no hay ningún
 paso de despliegue automático (ni CI/CD, ni redeploy en cada `git push`). Lo único
@@ -15,14 +18,14 @@ nueva](#actualizar-a-una-versión-nueva) más abajo.
 
 - Docker y el plugin `docker compose` instalados en la máquina (`docker compose version`).
   No hace falta Go, goose, ni nada más — todo lo demás corre dentro de contenedores.
-- Un dominio propio con un registro **A** (o **AAAA**) apuntando ya a la IP pública de
-  esta máquina. Let's Encrypt necesita poder validar ese dominio antes de emitir el
-  certificado, así que el DNS debe estar propagado antes de arrancar el stack.
-- Puertos **80** y **443** abiertos y reenviados a esta máquina (80 para la validación
-  ACME y la redirección a HTTPS, 443 para el tráfico real). Ningún otro puerto necesita
-  estar expuesto a Internet: a diferencia de `docker-compose.yml` (desarrollo local),
-  `docker-compose.production.yml` no publica ni PostgreSQL ni la API directamente — solo
-  Caddy, que es el único punto de entrada.
+- Un reverse proxy ya funcionando en la máquina (el mismo Caddy que uses para tus otros
+  dominios, por ejemplo) capaz de servir HTTPS para el dominio que quieras usar aquí y
+  reenviar ese tráfico a `http://127.0.0.1:64710`. Ese reverse proxy es responsabilidad
+  tuya, fuera de este repositorio — aquí solo se documenta a qué puerto apuntarlo.
+- Ningún puerto de este stack necesita abrirse directamente a Internet:
+  `docker-compose.production.yml` no publica PostgreSQL ni la API, y `web` (Caddy) solo
+  escucha en `127.0.0.1:64710`, igual que en desarrollo — nada llega desde fuera de la
+  máquina sin pasar antes por tu reverse proxy.
 
 ## Primer despliegue
 
@@ -60,15 +63,27 @@ sin más) que compilan el backend hasta su fase intermedia con el toolchain de G
 módulos de Go. `seed-admin` es idempotente: si el email ya existe, no hace nada, así que
 volver a ejecutarlo por error no tiene efecto.
 
-Comprueba que todo ha arrancado y que Caddy ha conseguido el certificado:
+Comprueba que todo ha arrancado y que responde en localhost:
 
 ```sh
 docker compose -f docker-compose.production.yml ps
-docker compose -f docker-compose.production.yml logs web | grep -i certificate
+curl -I http://127.0.0.1:64710/
 ```
 
-Con eso `https://<tu-dominio>` debería servir el frontend, y `https://<tu-dominio>/api/*`
-la API.
+Por último, añade un sitio a tu reverse proxy existente para el dominio elegido (el mismo
+que pusiste en `DOMAIN`) que reenvíe a `http://127.0.0.1:64710`. Por ejemplo, si ese
+reverse proxy es también Caddy, bastaría un bloque como:
+
+```
+intranet.tudominio.org {
+	reverse_proxy 127.0.0.1:64710
+}
+```
+
+en la configuración de ese Caddy (fuera de este repositorio), recargando su configuración
+después. Con eso `https://<tu-dominio>` debería servir el frontend, y
+`https://<tu-dominio>/api/*` la API — el propio Caddy interno del stack (`web`) ya reenvía
+`/api/*` hacia la API.
 
 ## Primer inicio de sesión
 
@@ -138,5 +153,6 @@ directorio del proyecto — compruébalo con `docker volume ls` si no coincide).
 - `POSTGRES_PASSWORD` no necesita recordarse ni compartirse — solo la usan entre sí los
   contenedores `api` y `postgres` — así que puede (y debe) ser un valor largo y aleatorio.
 - Ni PostgreSQL ni la API quedan expuestos directamente a Internet en
-  `docker-compose.production.yml`: todo el tráfico externo pasa por Caddy, que es el
-  único servicio con puertos publicados (80/443).
+  `docker-compose.production.yml`: `web` es el único servicio con un puerto publicado, y
+  solo en `127.0.0.1:64710` — todo el tráfico externo tiene que pasar antes por el
+  reverse proxy de la máquina.
