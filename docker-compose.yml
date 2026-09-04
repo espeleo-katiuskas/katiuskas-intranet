@@ -17,6 +17,7 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   api:
     build: ./backend
@@ -64,6 +65,7 @@ services:
     # Bound to localhost only — same reasoning as the other two services.
     ports:
       - "127.0.0.1:64710:64710"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

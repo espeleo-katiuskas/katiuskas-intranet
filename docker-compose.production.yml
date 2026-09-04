@@ -1,0 +1,123 @@
+# Self-hosted production stack for a single machine with a real domain
+# already pointed at its public IP. See docs/deployment.md for the full
+# setup guide — this file alone is not meant to be self-explanatory.
+#
+# Usage:
+#   cp .env.production.example .env   # then fill in real values
+#   docker compose -f docker-compose.production.yml up -d postgres
+#   docker compose -f docker-compose.production.yml --profile tools run --rm migrate
+#   docker compose -f docker-compose.production.yml --profile tools run --rm seed-admin
+#   docker compose -f docker-compose.production.yml up -d
+#
+# Unlike docker-compose.yml (local dev), postgres and the api are not
+# published to the host at all — only Caddy's 80/443 are, and it's the only
+# way in from outside the machine. All three long-running services restart
+# automatically on crash or host reboot (restart: unless-stopped); deploying
+# a new version after this initial setup is still a manual step (see
+# docs/deployment.md).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: intranet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: intranet
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intranet -d intranet"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    environment:
+      HTTP_ADDR: ":64711"
+      DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
+      PUBLIC_BASE_URL: "https://${DOMAIN:?Set DOMAIN in .env}"
+      # Leave the four SMTP_* vars unset in .env to log sign-in emails to
+      # `docker compose -f docker-compose.production.yml logs api` instead
+      # of sending them for real — fine for an initial small-scale trial.
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      LIBRARY_ROOT: "/data/library"
+      USER_FILES_ROOT: "/data/user-files"
+      ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
+    volumes:
+      - ./library:/data/library
+      - ./user-files:/data/user-files
+      - activity_resources_data:/data/activity-resources
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: "${DOMAIN:?Set DOMAIN in .env}"
+      ACME_EMAIL: "${ACME_EMAIL:?Set ACME_EMAIL in .env}"
+    volumes:
+      - ./web:/srv:ro
+      - ./deploy/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      # Caddy's own state: issued certificates (data) and its config
+      # cache (config) — named volumes so a container replacement doesn't
+      # re-request a certificate from Let's Encrypt every time.
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # One-off tasks, not part of the running stack (profiles: [tools] keeps
+  # `docker compose up` from starting them). Both build the same image as
+  # `api` up through its "build" stage only — full Go toolchain and source
+  # tree, no need for Go or goose installed on the host. See
+  # docs/deployment.md for when to run each one.
+  migrate:
+    build:
+      context: ./backend
+      target: build
+    environment:
+      DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
+    volumes:
+      - ./db:/db:ro
+    working_dir: /src
+    # Pinned to v3.22.1: the newest goose release that still supports the
+    # Go 1.22 toolchain backend/Dockerfile's build stage uses — a newer
+    # `@latest` will fail to compile against it.
+    entrypoint: ["sh", "-c", "go run github.com/pressly/goose/v3/cmd/goose@v3.22.1 -dir /db/migrations postgres \"$$DATABASE_URL\" up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  seed-admin:
+    build:
+      context: ./backend
+      target: build
+    environment:
+      DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
+      SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:?Set SEED_ADMIN_EMAIL in .env}"
+      SEED_ADMIN_PHONE: "${SEED_ADMIN_PHONE:?Set SEED_ADMIN_PHONE in .env}"
+    working_dir: /src
+    entrypoint: ["go", "run", "./cmd/seed-admin"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+volumes:
+  postgres_data:
+  activity_resources_data:
+  caddy_data:
+  caddy_config:

@@ -29,6 +29,10 @@ link instead of emailing it — `docker compose logs api`, or `scripts/get-token
 to mint a session token directly in the database for local testing, bypassing the magic-link
 flow entirely.
 
+Production deployment (self-hosted, own domain, automatic HTTPS via Let's Encrypt): see
+`docs/deployment.md`, `docker-compose.production.yml`, `.env.production.example`,
+`deploy/Caddyfile.production`. `scripts/get-token.sh` is dev-only — never use it there.
+
 Backend tests (from `backend/`):
 ```sh
 docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "CREATE DATABASE intranet_test;"
