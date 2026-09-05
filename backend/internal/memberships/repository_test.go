@@ -490,3 +490,44 @@ func TestIsOnLeave(t *testing.T) {
 		t.Error("expected a leave that already ended to not report on leave")
 	}
 }
+
+func TestWasMemberOn(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	ctx := context.Background()
+
+	currentlyActive := testutil.InsertUser(t, tx, "")
+	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: currentlyActive.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if was, err := repo.WasMemberOn(ctx, currentlyActive.ID, time.Now()); err != nil {
+		t.Fatalf("WasMemberOn: %v", err)
+	} else if !was {
+		t.Error("expected a currently open membership to cover today")
+	}
+
+	hasLeft := testutil.InsertUser(t, tx, "")
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: hasLeft.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	pastEnd := date("2024-01-01")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &pastEnd}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, date("2023-06-01")); err != nil {
+		t.Fatalf("WasMemberOn: %v", err)
+	} else if !was {
+		t.Error("expected a date inside the now-closed period to still count")
+	}
+	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, time.Now()); err != nil {
+		t.Fatalf("WasMemberOn: %v", err)
+	} else if was {
+		t.Error("expected today, after the period closed, to not count")
+	}
+	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, date("2019-01-01")); err != nil {
+		t.Fatalf("WasMemberOn: %v", err)
+	} else if was {
+		t.Error("expected a date before the period started to not count")
+	}
+}

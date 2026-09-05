@@ -624,7 +624,7 @@ paths:
             given for a type that isn't "Otra").
         "403": { description: Only admin can assign a license. }
         "409":
-          description: not_active_member — this person doesn't currently have an open membership period.
+          description: not_active_member — this person didn't have an open membership period on issued_date.
 
   /licenses/{id}:
     patch:

@@ -4,8 +4,10 @@
 // issued. "Otra" is the catalog's escape hatch — its IsOther flag is
 // true — and requires OtherDetail to say which license it actually is.
 // A license is annual: valid from IssuedDate through December 31 of
-// that same year. Only someone who currently has an open membership
-// period can be assigned one; see Service.Create.
+// that same year. Only someone who had an open membership period on
+// IssuedDate itself can be assigned one — not necessarily right now, so
+// a license from while someone was a socio can still be recorded after
+// they've since caused baja; see Service.Create.
 package licenses
 
 import "time"

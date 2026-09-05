@@ -9,10 +9,12 @@ import (
 )
 
 var (
-	// ErrNotActiveMember means the target person doesn't currently have
-	// an open membership period — only someone who hasn't caused baja
-	// can be assigned a federative license.
-	ErrNotActiveMember = errors.New("only a currently active member can be assigned a federative license")
+	// ErrNotActiveMember means the target person didn't have an open
+	// membership period on the license's own issued_date — someone can
+	// still be assigned a license from while they were a socio even
+	// after having since caused baja, as long as they actually were one
+	// on that date.
+	ErrNotActiveMember = errors.New("the person must have had an active membership on the license's issued date")
 	// ErrOtherDetailRequired means the chosen license type is the
 	// catalog's "Otra" escape hatch, which must say which license it is.
 	ErrOtherDetailRequired = errors.New(`other_detail is required when the license type is "Otra"`)
@@ -53,11 +55,11 @@ func normalizeOtherDetail(licenseType LicenseType, otherDetail *string) (*string
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
-	active, err := s.memberships.IsActiveMember(ctx, in.UserID)
+	wasMember, err := s.memberships.WasMemberOn(ctx, in.UserID, in.IssuedDate)
 	if err != nil {
 		return License{}, err
 	}
-	if !active {
+	if !wasMember {
 		return License{}, ErrNotActiveMember
 	}
 

@@ -1,6 +1,9 @@
 package memberships
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // MembershipNumberAssigner is implemented by users.Service. memberships
 // can't import the users package — users already imports memberships for
@@ -58,8 +61,8 @@ func (s *Service) ListActive(ctx context.Context) ([]Membership, error) {
 	return s.repo.ListActive(ctx)
 }
 
-func (s *Service) IsActiveMember(ctx context.Context, userID int64) (bool, error) {
-	return s.repo.IsActiveMember(ctx, userID)
+func (s *Service) WasMemberOn(ctx context.Context, userID int64, date time.Time) (bool, error) {
+	return s.repo.WasMemberOn(ctx, userID, date)
 }
 
 func (s *Service) IsOnLeave(ctx context.Context, userID int64) (bool, error) {

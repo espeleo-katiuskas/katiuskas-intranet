@@ -241,9 +241,11 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
   almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
   algo que se deriva trivialmente de otro campo). Solo se le puede asignar una licencia a
-  quien tenga ahora mismo un periodo de `memberships` abierto
-  (`memberships.Service.IsActiveMember`); intentarlo con alguien que nunca ha sido socio
-  o que ya ha causado baja devuelve 409 `not_active_member`. `users.Service` incorpora la
+  quien tuviera un periodo de `memberships` abierto en la fecha de `issued_date` de esa
+  licencia — no necesariamente ahora mismo (`memberships.Service.WasMemberOn`), así que
+  una licencia de cuando alguien sí era socio se puede dar de alta después de que haya
+  causado baja. Intentarlo con una fecha que nunca cayó dentro de ningún periodo de socio
+  devuelve 409 `not_active_member`. `users.Service` incorpora la
   licencia más reciente de cada persona a `User` (`licenses.Service.LatestByUser`), igual
   que hace con el periodo de socio más reciente. Rutas bajo `/users/{login}/licenses`:
   `GET` abierto a la propia persona o admin/board, `POST` solo admin;

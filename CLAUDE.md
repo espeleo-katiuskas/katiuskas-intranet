@@ -224,8 +224,13 @@ escape-hatch entry ("Otra") requires an `other_detail` string saying which licen
 actually is; every other entry forbids one (shared validation:
 `licenses.normalizeOtherDetail`, used by both `Create` and `Update`).
 `PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license without
-re-checking active-membership status the way `POST` does — that gate is for assigning a
-*new* license, not fixing a typo on one someone already has.
+re-checking membership status the way `POST` does — that gate is for assigning a
+*new* license, not fixing a typo on one someone already has. `POST`'s own gate
+(`memberships.Repository.WasMemberOn`) checks membership as of the license's own
+`issued_date`, not "right now" — assigning, after the fact, a license from a period when
+someone genuinely was a socio must still work even if they've since caused baja; only a
+date that never fell inside any of their membership periods is rejected
+(`ErrNotActiveMember`, HTTP 409 `not_active_member`).
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host

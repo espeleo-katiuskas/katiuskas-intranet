@@ -109,14 +109,18 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	return list, rows.Err()
 }
 
-// IsActiveMember reports whether userID currently has an open membership
-// period — used to gate anything that should only apply to someone who
-// hasn't caused baja, like assigning a federative license.
-func (r *Repository) IsActiveMember(ctx context.Context, userID int64) (bool, error) {
+// WasMemberOn reports whether userID had an open membership period
+// covering date — used to gate assigning a federative license: not to
+// "is this person a member right now", but to "were they a member on
+// the day this license says it was issued", so a license from while
+// someone was still a socio can still be recorded after they've since
+// caused baja. Pass time.Now() for the "currently a member" question
+// itself.
+func (r *Repository) WasMemberOn(ctx context.Context, userID int64, date time.Time) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM memberships WHERE user_id = $1 AND period @> CURRENT_DATE)
-	`, userID).Scan(&exists)
+		SELECT EXISTS(SELECT 1 FROM memberships WHERE user_id = $1 AND period @> $2::date)
+	`, userID, date).Scan(&exists)
 	return exists, err
 }
 

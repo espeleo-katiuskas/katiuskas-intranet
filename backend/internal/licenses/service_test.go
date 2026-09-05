@@ -50,6 +50,38 @@ func TestServiceCreateRejectsSomeoneWhoHasLeft(t *testing.T) {
 	}
 }
 
+// TestServiceCreateAllowsALicenseDatedDuringAPastMembershipPeriod covers
+// the case Create must not reject: someone who was a socio when the
+// license was actually issued, even though they've since caused baja
+// and aren't a member right now.
+func TestServiceCreateAllowsALicenseDatedDuringAPastMembershipPeriod(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	m, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	pastEnd := date("2024-01-01")
+	if _, err := membershipsService.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &pastEnd}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+
+	l, err := svc.Create(ctx, licenses.CreateInput{
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2023-06-01"),
+	})
+	if err != nil {
+		t.Fatalf("expected the license to be created despite the person no longer being a member, got %v", err)
+	}
+	if l.UserID != person.ID {
+		t.Errorf("expected user id %d, got %d", person.ID, l.UserID)
+	}
+}
+
 func TestServiceCreateAllowsACurrentlyActiveMember(t *testing.T) {
 	tx := testutil.NewTx(t)
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
