@@ -44,7 +44,7 @@ function showError(message) {
 
 // Same friendly labels as members.js — kept in sync there since neither
 // file is big enough yet to justify sharing them through api.js.
-const knownRoleLabels = { admin: 'Administración', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
+const knownRoleLabels = { admin: 'Administrador', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
 function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
