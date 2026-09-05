@@ -13,12 +13,14 @@ CREATE TYPE item_status AS ENUM (
 );
 
 -- Every movement type either exchanges the item with a specific person
--- (loan and rental always name one, sale optionally does) or changes
--- its stock level with no recipient at all: acquisition brings new
--- units in, loss/abandonment/retirement permanently take units out
--- (lost in the field, left behind on a trip, or decommissioned).
+-- (rental always names one, sale optionally does) or changes its stock
+-- level with no recipient at all: acquisition and return bring units
+-- in (return being the other side of an earlier loan), loan sends units
+-- out without a required recipient of its own, and
+-- loss/abandonment/retirement permanently take units out (lost in the
+-- field, left behind on a trip, or decommissioned).
 CREATE TYPE movement_type AS ENUM (
-    'loan', 'rental', 'sale', 'acquisition', 'loss', 'abandonment', 'retirement'
+    'loan', 'rental', 'sale', 'acquisition', 'loss', 'abandonment', 'retirement', 'return'
 );
 CREATE TYPE movement_status AS ENUM ('active', 'completed', 'overdue', 'cancelled');
 
@@ -81,11 +83,19 @@ CREATE TABLE inventory_items (
     CONSTRAINT rope_and_bag_require_code CHECK (item_type = 'gear' OR code IS NOT NULL)
 );
 
+-- A loan sends units out without settling anything about them itself
+-- (see the view below); it's returned later via one or more separate
+-- 'return' movements, symmetric with acquisition, rather than the
+-- movement tracking its own returned state. Only rental still closes
+-- with a single all-or-nothing returned_at/status, since a rental is
+-- always with one specific person for a fixed window rather than an
+-- open-ended pool an activity's participants draw from and return to.
 CREATE TABLE item_movements (
     id             bigserial PRIMARY KEY,
     item_id        bigint NOT NULL REFERENCES inventory_items(id),
-    -- Nil for acquisition/loss/abandonment/retirement, which never
-    -- have a recipient. Always set for loan/rental; optional for sale.
+    -- Nil for acquisition/loss/abandonment/retirement/return, which
+    -- never have a recipient, and for loan, which no longer requires
+    -- one either. Always set for rental; optional for sale.
     user_id        bigint REFERENCES users(id),
     type           movement_type NOT NULL,
     quantity       integer NOT NULL DEFAULT 1,
@@ -99,20 +109,20 @@ CREATE TABLE item_movements (
     price          numeric(10,2),
     status         movement_status NOT NULL DEFAULT 'active',
     recorded_by    bigint REFERENCES users(id),
-    -- Required for loan and rental (always part of an activity);
+    -- Required for loan and return (always part of an activity);
     -- optional for everything else.
     activity_id    bigint REFERENCES activities(id),
     -- Free text, mainly useful on loss/abandonment/retirement to say
     -- why.
     notes          text,
-    CONSTRAINT recipient_required_for_loan_and_rental CHECK (
-        type NOT IN ('loan', 'rental') OR user_id IS NOT NULL
+    CONSTRAINT activity_required_for_loan_and_return CHECK (
+        type NOT IN ('loan', 'return') OR activity_id IS NOT NULL
     ),
-    CONSTRAINT recipient_only_for_loan_rental_sale CHECK (
-        type IN ('loan', 'rental', 'sale') OR user_id IS NULL
+    CONSTRAINT recipient_required_for_rental CHECK (
+        type <> 'rental' OR user_id IS NOT NULL
     ),
-    CONSTRAINT activity_required_for_loan_and_rental CHECK (
-        type NOT IN ('loan', 'rental') OR activity_id IS NOT NULL
+    CONSTRAINT recipient_only_for_loan_rental_sale_and_return CHECK (
+        type IN ('loan', 'rental', 'sale', 'return') OR user_id IS NULL
     ),
     CONSTRAINT price_required_for_rental_and_sale CHECK (
         type NOT IN ('rental', 'sale') OR price IS NOT NULL
@@ -120,20 +130,26 @@ CREATE TABLE item_movements (
     CONSTRAINT price_only_for_rental_and_sale CHECK (
         type IN ('rental', 'sale') OR price IS NULL
     ),
-    CONSTRAINT returnable_only_for_loan_and_rental CHECK (
-        type IN ('loan', 'rental') OR returned_at IS NULL
+    -- Loan's "returned" state is the sum of separate 'return' rows
+    -- against its activity/item, not a flag on the loan itself.
+    CONSTRAINT returnable_only_for_rental CHECK (
+        type = 'rental' OR returned_at IS NULL
     )
 );
 
 CREATE INDEX idx_item_movements_item_id ON item_movements(item_id);
 CREATE INDEX idx_item_movements_user_id ON item_movements(user_id);
 
--- total_quantity/available_quantity are never stored — they're always
--- computed from an item's own movement history, so they can never
--- drift from what actually happened. total_quantity is everything
--- ever acquired minus everything that left for good (sold, lost,
--- abandoned, retired); available_quantity is the same, further
--- reduced by whatever's currently out on an unreturned loan or rental.
+-- total_quantity/available_quantity/outstanding_loan_quantity are never
+-- stored — they're always computed from an item's own movement history,
+-- so they can never drift from what actually happened. total_quantity is
+-- everything ever acquired minus everything that left for good (sold,
+-- lost, abandoned, retired). available_quantity is the same, further
+-- reduced by whatever's currently out on a loan (added back by a
+-- matching 'return') or an unreturned rental. outstanding_loan_quantity
+-- is how much of this item is currently out on some loan, across every
+-- activity, with nothing (yet) returned against it — what "material
+-- prestado" is built from.
 CREATE VIEW inventory_item_quantities AS
 SELECT
     i.id AS item_id,
@@ -143,11 +159,16 @@ SELECT
         ELSE 0
     END), 0) AS total_quantity,
     COALESCE(SUM(CASE
-        WHEN m.type = 'acquisition' THEN m.quantity
-        WHEN m.type IN ('sale', 'loss', 'abandonment', 'retirement') THEN -m.quantity
-        WHEN m.type IN ('loan', 'rental') AND m.returned_at IS NULL THEN -m.quantity
+        WHEN m.type IN ('acquisition', 'return') THEN m.quantity
+        WHEN m.type IN ('sale', 'loss', 'abandonment', 'retirement', 'loan') THEN -m.quantity
+        WHEN m.type = 'rental' AND m.returned_at IS NULL THEN -m.quantity
         ELSE 0
-    END), 0) AS available_quantity
+    END), 0) AS available_quantity,
+    COALESCE(SUM(CASE
+        WHEN m.type = 'loan' THEN m.quantity
+        WHEN m.type = 'return' THEN -m.quantity
+        ELSE 0
+    END), 0) AS outstanding_loan_quantity
 FROM inventory_items i
 LEFT JOIN item_movements m ON m.item_id = i.id
 GROUP BY i.id;

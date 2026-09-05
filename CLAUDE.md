@@ -135,7 +135,7 @@ losing membership, or a board term ending, revokes access on the very next reque
 stale role to clean up.
 
 **Login is the only external identifier for a person**: `users.login` (`text UNIQUE NOT
-NULL`, migration `00009_users_login.sql`) is generated automatically at creation — first
+NULL`, migration `00002_users.sql`) is generated automatically at creation — first
 and last name slugified (accents stripped, `users.slugify`) and dot-joined, with a numeric
 suffix on collision (`users.Repository.generateLogin`) — and admin-editable afterward via
 `PATCH /users/{login}` (format-checked, `ErrInvalidLogin` on a bad one; `ErrDuplicate` if
@@ -191,7 +191,7 @@ can sign themselves up, admin/board can add anyone else); private restricts addi
 took part in it writes up its memoria as an ordered list of resources — either a text
 entry (title + a plain-text/Markdown `description`) or an uploaded file (title + the file
 itself, typically a photo or PDF), discriminated by `activity_resources.type` and kept
-consistent with a set of `CHECK` constraints (migration `00018_activity_resources.sql`),
+consistent with a set of `CHECK` constraints (migration `00010_activity_resources.sql`),
 the same "description only for text, file fields only for file" shape `item_movements`
 already uses for its own type-specific fields. Metadata lives in Postgres
 (`Repository`); a file resource's bytes live on disk instead

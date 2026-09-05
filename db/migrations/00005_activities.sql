@@ -9,11 +9,8 @@ CREATE TABLE activities (
     title             text NOT NULL,
     type              activity_type NOT NULL DEFAULT 'caving',
     start_date        date NOT NULL,
-    end_date          date,
-    location          text NOT NULL,
+    end_date          date NOT NULL,
     description       text,
-    difficulty        smallint,
-    max_participants  integer,
     status            activity_status NOT NULL DEFAULT 'planned',
     -- The organizer: always set, to whoever created the activity (see
     -- activities.Service.Create — never something the caller chooses),
@@ -25,8 +22,7 @@ CREATE TABLE activities (
     -- enforced in activities.Handler.join, not here.
     visibility        activity_visibility NOT NULL DEFAULT 'public',
     created_at        timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT end_not_before_start
-        CHECK (end_date IS NULL OR end_date >= start_date)
+    CONSTRAINT end_not_before_start CHECK (end_date >= start_date)
 );
 
 CREATE TABLE activity_participants (

@@ -18,9 +18,13 @@ CREATE TABLE users (
     first_name         text NOT NULL,
     last_name          text NOT NULL,
     national_id        text UNIQUE,
-    birth_date         date,
+    -- Always required — age_category, and the club's own paperwork,
+    -- need it.
+    birth_date         date NOT NULL,
     gender             gender,
-    email              text NOT NULL,
+    -- Optional: someone with no email on file simply can never receive
+    -- a magic link, the same way someone with no phone already couldn't.
+    email              text,
     phone              text,
     address            text,
     postal_code        text,
@@ -37,7 +41,14 @@ CREATE TABLE users (
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
     last_login_at      timestamptz,
-    last_login_ip      text
+    last_login_ip      text,
+    -- The only externally visible identifier for this person — used in
+    -- URLs, and as the name of their private-document directory (see
+    -- internal/userfiles). Generated automatically at creation
+    -- (first_name.last_name, slugified, with a numeric suffix on
+    -- collision — see users.Repository.generateLogin) and only
+    -- editable afterward by an admin.
+    login              text NOT NULL UNIQUE
 );
 
 CREATE UNIQUE INDEX idx_users_membership_number ON users(membership_number) WHERE membership_number IS NOT NULL;
@@ -51,7 +62,7 @@ CREATE TABLE tokens (
     revoked_at       timestamptz,
     last_used_at     timestamptz,
     last_used_ip     text,
-    -- Set only on a token minted by POST /users/{userID}/impersonate:
+    -- Set only on a token minted by POST /users/{login}/impersonate:
     -- which admin is behind this session. Everything else about the
     -- token — user_id, roles resolution, expiry — is exactly like a
     -- normal one, so the impersonated session naturally can only do
