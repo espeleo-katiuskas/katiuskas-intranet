@@ -195,25 +195,25 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Login            *string `json:"login"`
-		FirstName        *string `json:"first_name"`
-		LastName         *string `json:"last_name"`
-		Email            *string `json:"email"`
-		NationalID       *string `json:"national_id"`
-		BirthDate        *string `json:"birth_date"`
-		Gender           *Gender `json:"gender"`
-		Phone            *string `json:"phone"`
-		Address          *string `json:"address"`
-		PostalCode       *string `json:"postal_code"`
-		City             *string `json:"city"`
-		Province         *string `json:"province"`
-		EmergencyContact *string `json:"emergency_contact"`
+		Login            *string          `json:"login"`
+		FirstName        *string          `json:"first_name"`
+		LastName         *string          `json:"last_name"`
+		BirthDate        *string          `json:"birth_date"`
+		Email            Nullable[string] `json:"email"`
+		NationalID       Nullable[string] `json:"national_id"`
+		Gender           Nullable[Gender] `json:"gender"`
+		Phone            Nullable[string] `json:"phone"`
+		Address          Nullable[string] `json:"address"`
+		PostalCode       Nullable[string] `json:"postal_code"`
+		City             Nullable[string] `json:"city"`
+		Province         Nullable[string] `json:"province"`
+		EmergencyContact Nullable[string] `json:"emergency_contact"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if !isAdmin && (body.Login != nil || body.FirstName != nil || body.LastName != nil || body.NationalID != nil || body.BirthDate != nil || body.Gender != nil) {
+	if !isAdmin && (body.Login != nil || body.FirstName != nil || body.LastName != nil || body.NationalID.Set || body.BirthDate != nil || body.Gender.Set) {
 		httpapi.WriteError(w, http.StatusForbidden, "restricted_fields",
 			"you can only edit email, phone, address, postal_code, city, province, and emergency_contact")
 		return

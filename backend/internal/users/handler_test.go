@@ -541,6 +541,38 @@ func TestHandlerUpdateSelfVersusOthers(t *testing.T) {
 	}
 }
 
+// TestHandlerUpdateClearsAFieldSentAsExplicitNullOverHTTP is the
+// handler-level version of the reported bug: a PATCH body with
+// "phone": null (what the frontend actually sends when someone empties
+// the field) must clear it, not be silently equivalent to leaving
+// "phone" out of the body entirely.
+func TestHandlerUpdateClearsAFieldSentAsExplicitNullOverHTTP(t *testing.T) {
+	mux, authn, svc := newTestServer(t)
+	ctx := context.Background()
+
+	member, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "M", LastName: "Ember", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s", member.Login), memberToken,
+		map[string]any{"phone": nil})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	reloaded, err := svc.Get(ctx, member.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if reloaded.Phone != nil {
+		t.Errorf("expected phone to be cleared, still got %q", *reloaded.Phone)
+	}
+}
+
 // Self-service edits — the only kind left for anyone but admin — are
 // limited to contact fields: name, national ID, birth date, and gender
 // stay off-limits even on your own record.

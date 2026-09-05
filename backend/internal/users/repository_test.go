@@ -77,7 +77,7 @@ func TestCreateAndUpdateGender(t *testing.T) {
 	}
 
 	male := users.GenderMale
-	updated, err := repo.Update(context.Background(), created.ID, users.UpdateInput{Gender: &male})
+	updated, err := repo.Update(context.Background(), created.ID, users.UpdateInput{Gender: users.Nullable[users.Gender]{Set: true, Value: &male}})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	newCity := "Alcalá de Henares"
-	updated, err := repo.Update(ctx, created.ID, users.UpdateInput{City: &newCity})
+	updated, err := repo.Update(ctx, created.ID, users.UpdateInput{City: users.Nullable[string]{Set: true, Value: &newCity}})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -502,6 +502,71 @@ func TestUpdate(t *testing.T) {
 	}
 	if updated.FirstName != "A" {
 		t.Errorf("expected untouched fields to survive an update, got first_name %q", updated.FirstName)
+	}
+}
+
+// TestUpdateClearsAnOptionalFieldWhenExplicitlySentAsNull reproduces the
+// reported bug: PATCH said it worked, but a cleared phone (or any other
+// optional field) stayed on file, because a zero-value UpdateInput field
+// was indistinguishable from one whose key was simply never in the body.
+func TestUpdateClearsAnOptionalFieldWhenExplicitlySentAsNull(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := repo.Update(ctx, created.ID, users.UpdateInput{
+		Phone: users.Nullable[string]{Set: true, Value: nil},
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Phone != nil {
+		t.Errorf("expected phone to be cleared, still got %q", *updated.Phone)
+	}
+
+	// Fetching fresh confirms it was actually persisted, not just
+	// reflected in the in-memory return value.
+	reloaded, err := repo.GetByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if reloaded.Phone != nil {
+		t.Errorf("expected phone to stay cleared after reloading, got %q", *reloaded.Phone)
+	}
+}
+
+// TestUpdateLeavesAnOptionalFieldAloneWhenItsKeyIsAbsent is the other
+// half of the same fix: a field that's simply not part of the PATCH
+// body (Set left false) must still survive untouched, the way it always
+// did — only an explicit null clears it.
+func TestUpdateLeavesAnOptionalFieldAloneWhenItsKeyIsAbsent(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	newCity := "Alcalá de Henares"
+	updated, err := repo.Update(ctx, created.ID, users.UpdateInput{
+		City: users.Nullable[string]{Set: true, Value: &newCity},
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Phone == nil || *updated.Phone != "611222333" {
+		t.Errorf("expected phone to survive untouched since its key was absent, got %+v", updated.Phone)
 	}
 }
 
@@ -519,7 +584,7 @@ func TestUpdateEmailToADuplicateIsRejected(t *testing.T) {
 		t.Fatalf("create second: %v", err)
 	}
 
-	_, err = repo.Update(ctx, second.ID, users.UpdateInput{Email: &taken})
+	_, err = repo.Update(ctx, second.ID, users.UpdateInput{Email: users.Nullable[string]{Set: true, Value: &taken}})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
 	}

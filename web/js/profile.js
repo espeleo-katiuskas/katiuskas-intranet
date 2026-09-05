@@ -40,11 +40,11 @@ async function loadProfile() {
   try {
     const profile = await apiFetch(`/users/${user.login}`);
     document.getElementById('profile-name').textContent = `${profile.first_name} ${profile.last_name}`;
-    document.getElementById('profile-email').textContent = profile.email;
+    document.getElementById('profile-email').textContent = profile.email ?? '';
 
     editForm.first_name.value = profile.first_name;
     editForm.last_name.value = profile.last_name;
-    editForm.email.value = profile.email;
+    editForm.email.value = profile.email ?? '';
     editForm.phone.value = profile.phone ?? '';
     editForm.national_id.value = profile.national_id ?? '';
     editForm.birth_date.value = profile.birth_date ? profile.birth_date.slice(0, 10) : '';

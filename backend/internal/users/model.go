@@ -7,7 +7,39 @@
 // auth packages).
 package users
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+// Nullable represents a PATCH body field that's absent (Set is false —
+// UpdateInput leaves the column untouched), explicitly null (Set is
+// true, Value is nil — clear the column), or given a value (Set is
+// true, Value is non-nil). A plain *T can't tell "the key was never in
+// the JSON body" apart from "the key was sent as null": encoding/json
+// decodes both into a nil pointer, and — this is what Set relies on —
+// never even calls UnmarshalJSON for a key that's missing entirely.
+// Without this, clearing an optional field like phone or email over the
+// API silently did nothing: the frontend always sends the whole form
+// back, including an explicit null for whatever the person emptied out.
+type Nullable[T any] struct {
+	Set   bool
+	Value *T
+}
+
+func (n *Nullable[T]) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	n.Value = &v
+	return nil
+}
 
 type Gender string
 
@@ -153,19 +185,24 @@ type UpdateInput struct {
 	// blast radius than a wrong phone number. Auto-generated at creation
 	// time (see Repository.generateLogin); this is only for correcting
 	// or deliberately changing one afterward.
-	Login            *string    `json:"login"`
-	FirstName        *string    `json:"first_name"`
-	LastName         *string    `json:"last_name"`
-	Email            *string    `json:"email"`
-	NationalID       *string    `json:"national_id"`
-	BirthDate        *time.Time `json:"birth_date"`
-	Gender           *Gender    `json:"gender"`
-	Phone            *string    `json:"phone"`
-	Address          *string    `json:"address"`
-	PostalCode       *string    `json:"postal_code"`
-	City             *string    `json:"city"`
-	Province         *string    `json:"province"`
-	EmergencyContact *string    `json:"emergency_contact"`
+	Login     *string    `json:"login"`
+	FirstName *string    `json:"first_name"`
+	LastName  *string    `json:"last_name"`
+	BirthDate *time.Time `json:"birth_date"`
+	// Email, NationalID, Gender, and every contact field below are
+	// Nullable rather than a plain pointer, so a PATCH can actually
+	// clear one (explicit JSON null) instead of that being
+	// indistinguishable from not mentioning the field at all — see
+	// Nullable's own doc comment.
+	Email            Nullable[string] `json:"email"`
+	NationalID       Nullable[string] `json:"national_id"`
+	Gender           Nullable[Gender] `json:"gender"`
+	Phone            Nullable[string] `json:"phone"`
+	Address          Nullable[string] `json:"address"`
+	PostalCode       Nullable[string] `json:"postal_code"`
+	City             Nullable[string] `json:"city"`
+	Province         Nullable[string] `json:"province"`
+	EmergencyContact Nullable[string] `json:"emergency_contact"`
 }
 
 // DirectoryEntry is the bare minimum needed to let any member pick a

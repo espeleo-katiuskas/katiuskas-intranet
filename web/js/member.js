@@ -180,7 +180,7 @@ async function loadMember() {
   try {
     const person = await apiFetch(`/users/${memberLogin}`);
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
-    document.getElementById('member-email').textContent = person.email;
+    document.getElementById('member-email').textContent = person.email ?? '';
     document.getElementById('member-number').textContent = person.membership_number != null
       ? `N.º de socio: ${person.membership_number}`
       : 'Sin número de socio todavía.';
@@ -191,7 +191,7 @@ async function loadMember() {
 
     editForm.first_name.value = person.first_name;
     editForm.last_name.value = person.last_name;
-    editForm.email.value = person.email;
+    editForm.email.value = person.email ?? '';
     editForm.phone.value = person.phone ?? '';
     editForm.national_id.value = person.national_id ?? '';
     editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';

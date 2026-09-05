@@ -336,40 +336,42 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.LastName != nil {
 		u.LastName = *in.LastName
 	}
-	if in.Email != nil {
-		u.Email = in.Email
-		if taken, err := r.emailTakenByAnotherUser(ctx, id, *in.Email); err != nil {
-			return u, err
-		} else if taken {
-			return u, ErrDuplicate
+	if in.Email.Set {
+		u.Email = in.Email.Value
+		if in.Email.Value != nil {
+			if taken, err := r.emailTakenByAnotherUser(ctx, id, *in.Email.Value); err != nil {
+				return u, err
+			} else if taken {
+				return u, ErrDuplicate
+			}
 		}
 	}
-	if in.NationalID != nil {
-		u.NationalID = in.NationalID
+	if in.NationalID.Set {
+		u.NationalID = in.NationalID.Value
 	}
 	if in.BirthDate != nil {
 		u.BirthDate = *in.BirthDate
 	}
-	if in.Gender != nil {
-		u.Gender = in.Gender
+	if in.Gender.Set {
+		u.Gender = in.Gender.Value
 	}
-	if in.Phone != nil {
-		u.Phone = in.Phone
+	if in.Phone.Set {
+		u.Phone = in.Phone.Value
 	}
-	if in.Address != nil {
-		u.Address = in.Address
+	if in.Address.Set {
+		u.Address = in.Address.Value
 	}
-	if in.PostalCode != nil {
-		u.PostalCode = in.PostalCode
+	if in.PostalCode.Set {
+		u.PostalCode = in.PostalCode.Value
 	}
-	if in.City != nil {
-		u.City = in.City
+	if in.City.Set {
+		u.City = in.City.Value
 	}
-	if in.Province != nil {
-		u.Province = in.Province
+	if in.Province.Set {
+		u.Province = in.Province.Value
 	}
-	if in.EmergencyContact != nil {
-		u.EmergencyContact = in.EmergencyContact
+	if in.EmergencyContact.Set {
+		u.EmergencyContact = in.EmergencyContact.Value
 	}
 
 	_, err = r.pool.Exec(ctx, `
