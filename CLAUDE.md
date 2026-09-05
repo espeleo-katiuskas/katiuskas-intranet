@@ -251,21 +251,41 @@ an empty listing at their own root rather than a 404.
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API
 (https://core.telegram.org/bots/api) — plain `net/http`/`encoding/json`, no SDK
 dependency, matching the "no muchas dependencias" ask this package was built to satisfy.
-Currently used for exactly one thing: `LogHandler` wraps the root `slog.Handler` in
-`cmd/api/main.go` and forwards every record at `slog.LevelError` or above (panics,
-JSON-encode failures — see `httpapi.RequestLogger`/`middleware.go`) to a Telegram group
-or channel, in addition to (never instead of) logging it normally — so someone not
-tailing `docker compose logs api` still finds out when something breaks. The forwarded
-message is plain text, not JSON, and carries no timestamp: level, message, then each
-attribute as `key: value` — deliberately readable at a glance on a phone rather than a
-log line. A multi-line attribute (a panic's full goroutine stack trace, chiefly) is
-trimmed to its first few lines before forwarding (`summarize`, `maxAttrLines`); the
-untrimmed value still reaches the wrapped handler and stdout exactly as before —
-trimming only affects what Telegram sees. Configured via
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`; unset, it falls back to `NoopSender` (logs
-instead of sending), the same optional-with-a-console-fallback shape `internal/mail`
-already uses for SMTP. No account linking, no receiving messages, no OTP-via-Telegram
-yet — those are a separate, larger piece of future work, not built here.
+Configured via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`; unset, `Sender` falls back to
+`NoopSender` (logs instead of sending), the same optional-with-a-console-fallback shape
+`internal/mail` already uses for SMTP. Every message is plain text, not JSON, and
+carries no timestamp — deliberately readable at a glance on a phone rather than a log
+line. No account linking, no receiving messages, no OTP-via-Telegram yet — those are a
+separate, larger piece of future work, not built here. Three things currently send to
+it, all independent of each other and all fire-and-forget (their own goroutine, a bounded
+timeout, a background context detached from the request/statement that triggered them —
+so a slow or unreachable Telegram API never adds latency anywhere):
+- `LogHandler` wraps the root `slog.Handler` in `cmd/api/main.go` and forwards every
+  record at `slog.LevelError` or above (panics, JSON-encode failures — see
+  `httpapi.RequestLogger`/`middleware.go`) in addition to (never instead of) logging it
+  normally. Each attribute is sent as `key: value`; a multi-line one (a panic's full
+  goroutine stack trace, chiefly) is trimmed to its first few lines (`summarize`,
+  `maxAttrLines`) — the untrimmed value still reaches stdout, trimming only affects what
+  Telegram sees.
+- `authapi.Handler.notifyLogin` sends "🔑 Login: `<login>` (`<ip>`)" once a magic-link
+  consume (either the link or the code) successfully issues a session — the *only* part
+  that's synchronous is resolving the login from the user id, on the request's own
+  context, right alongside `TouchLastLogin`; only the actual network call to Telegram is
+  deferred to a goroutine (a background goroutine independently touching the database
+  isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
+  `internal/authapi/handler_test.go`'s `capturingNotifier`).
+- `db.NotifyingPGX` (`internal/platform/db/notify.go`) wraps whatever `db.PGX` a
+  repository was going to use, sending "[DB] `<operation>` `<table>`" for every
+  successful `INSERT`/`UPDATE`/`DELETE` it classifies from the SQL text itself
+  (`classifyMutation` — a `RETURNING` write goes through `QueryRow`, never `Exec`, so
+  detection can't rely on which method was called). `Begin` returns a `notifyingTx` that
+  keeps applying the same hook inside a transaction a repository opened itself
+  (activities, inventory, activityresources), including a nested `Begin` — a repository
+  never knows the difference, same as it never knows pool from transaction (see
+  `db.PGX`'s own doc comment). Wired in `cmd/api/main.go` only when
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` are actually set — every repository would
+  otherwise fall through to `NoopSender`'s own info log on literally every write, which
+  is fine once per login or error but far too noisy per statement.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the

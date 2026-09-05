@@ -371,11 +371,17 @@ nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal
 (el `SessionResolver` real: valida un token opaco contra la base de datos, calcula los
 roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
 correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
-verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram,
-sin dependencias — solo `net/http`/`encoding/json` — usado hoy para reenviar los logs de
-nivel error a un grupo o canal si hay `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`
-configurados; sin ellos, igual que `mail`, se limita a registrar el mensaje en el log),
-`internal/authapi` (magic-link/logout/me) y un paquete por recurso de
+verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram, sin
+dependencias — solo `net/http`/`encoding/json` —, usado hoy para tres avisos
+independientes y "fire-and-forget" que nunca añaden latencia a lo que los dispara: los
+logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), y un aviso
+de cada mutación en la base de datos (`db.NotifyingPGX`, un wrapper de `db.PGX` que
+detecta INSERT/UPDATE/DELETE por el propio texto SQL, sin tocar ningún repositorio — ver
+`CLAUDE.md` para el detalle de los tres). Los tres dependen de tener
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados; sin ellos, los dos primeros
+caen a registrar el mensaje en el log (igual que `mail` sin `SMTP_HOST`), y el aviso de
+mutaciones directamente no se activa, para no generar una línea de log por cada
+escritura), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e

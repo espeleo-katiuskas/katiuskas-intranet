@@ -27,8 +27,9 @@ services:
       PUBLIC_BASE_URL: "http://localhost:64710"
       # Leave SMTP_HOST unset to log sign-in emails to `docker compose logs api`
       # instead of sending them for real. Same story for
-      # TELEGRAM_BOT_TOKEN/TELEGRAM_LOG_CHAT_ID: unset, error-level logs
-      # just log normally instead of also being forwarded to Telegram.
+      # TELEGRAM_BOT_TOKEN/TELEGRAM_LOG_CHAT_ID: unset, error-level logs,
+      # logins, and database mutations all just log normally instead of
+      # also being forwarded to Telegram.
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"

@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
@@ -54,31 +56,45 @@ func main() {
 	}
 	defer pool.Close()
 
-	rolesRepo := roles.NewRepository(pool)
+	// Only wrapped when Telegram is actually configured — otherwise every
+	// single database write in the app would fall through to
+	// NoopSender's own "not sent" info log, which is fine once per
+	// login or error but far too noisy per statement.
+	var conn db.PGX = pool
+	if cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "" {
+		conn = db.NewNotifyingPGX(pool, func(ctx context.Context, operation, table string) {
+			text := fmt.Sprintf("[DB] %s %s", strings.ToUpper(operation), table)
+			if err := telegramSender.Send(ctx, text); err != nil {
+				slog.Error("notify db mutation to telegram", "error", err)
+			}
+		})
+	}
+
+	rolesRepo := roles.NewRepository(conn)
 	rolesService := roles.NewService(rolesRepo)
 
-	membershipsRepo := memberships.NewRepository(pool)
+	membershipsRepo := memberships.NewRepository(conn)
 	membershipsService := memberships.NewService(membershipsRepo)
 
-	boardRepo := board.NewRepository(pool)
+	boardRepo := board.NewRepository(conn)
 	boardService := board.NewService(boardRepo)
 
-	licensesRepo := licenses.NewRepository(pool)
+	licensesRepo := licenses.NewRepository(conn)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
 
-	usersRepo := users.NewRepository(pool)
+	usersRepo := users.NewRepository(conn)
 	usersService := users.NewService(usersRepo, rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(usersService)
 
-	tokensRepo := tokens.NewRepository(pool)
+	tokensRepo := tokens.NewRepository(conn)
 	tokensService := tokens.NewService(tokensRepo, rolesService)
 
 	authenticator := auth.NewAuthenticator(tokensService)
 
-	activitiesRepo := activities.NewRepository(pool)
+	activitiesRepo := activities.NewRepository(conn)
 	activitiesService := activities.NewService(activitiesRepo, licensesService)
 
-	inventoryRepo := inventory.NewRepository(pool)
+	inventoryRepo := inventory.NewRepository(conn)
 	inventoryService := inventory.NewService(inventoryRepo)
 
 	libraryService, err := library.NewService(cfg.LibraryRoot)
@@ -98,13 +114,13 @@ func main() {
 		slog.Error("set up activity resources storage", "error", err, "root", cfg.ActivityResourcesRoot)
 		os.Exit(1)
 	}
-	activityResourcesRepo := activityresources.NewRepository(pool)
+	activityResourcesRepo := activityresources.NewRepository(conn)
 	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
 
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, authapi.Options{
+		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, authapi.Options{
 			TokenTTL:          cfg.TokenTTL,
 			MagicLinkTTL:      cfg.MagicLinkTTL,
 			MagicLinkCooldown: cfg.MagicLinkCooldown,

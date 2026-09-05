@@ -140,8 +140,10 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 #SMTP_FROM=intranet@tudominio.org
 # Deja las dos TELEGRAM_* comentadas para no usar Telegram: los errores
 # inesperados del API solo se registran en `journalctl -u katiuskas-api`,
-# igual que hasta ahora. Rellénalas para que además se envíen a un grupo o
-# canal de Telegram.
+# igual que hasta ahora, sin aviso de logins ni de cambios en la base de
+# datos. Rellénalas para enviar las tres cosas a un grupo o canal de
+# Telegram: errores, un aviso por cada inicio de sesión, y un aviso por
+# cada alta/modificación/baja en la base de datos.
 #TELEGRAM_BOT_TOKEN=
 #TELEGRAM_LOG_CHAT_ID=
 EOF

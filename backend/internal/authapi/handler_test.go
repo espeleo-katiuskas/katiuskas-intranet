@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,12 +39,47 @@ func (m *capturingMailer) Send(_ context.Context, to, subject, body string) erro
 	return nil
 }
 
+// capturingNotifier stands in for telegram.Sender so tests can inspect
+// what would have been sent, the same way capturingMailer does for
+// email. Safe for concurrent use: the handler's own Telegram call runs
+// on a goroutine of its own (see Handler.notifyLogin), so a test reading
+// these fields has to synchronize with it — see waitForMessage.
+type capturingNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (n *capturingNotifier) Send(_ context.Context, text string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.sent = append(n.sent, text)
+	return nil
+}
+
+func (n *capturingNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		n.mu.Lock()
+		if len(n.sent) > 0 {
+			msg := n.sent[0]
+			n.mu.Unlock()
+			return msg
+		}
+		n.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a message to be sent")
+	return ""
+}
+
 type testServer struct {
-	mux    *http.ServeMux
-	tx     pgx.Tx
-	users  *users.Service
-	tokens *tokens.Service
-	mailer *capturingMailer
+	mux      *http.ServeMux
+	tx       pgx.Tx
+	users    *users.Service
+	tokens   *tokens.Service
+	mailer   *capturingMailer
+	notifier *capturingNotifier
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -54,8 +91,9 @@ func newTestServer(t *testing.T) *testServer {
 	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
 	authenticator := auth.NewAuthenticator(tokensService)
 	mailer := &capturingMailer{}
+	notifier := &capturingNotifier{}
 
-	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, authapi.Options{
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, authapi.Options{
 		TokenTTL:          time.Hour,
 		MagicLinkTTL:      15 * time.Minute,
 		MagicLinkCooldown: time.Minute,
@@ -65,7 +103,7 @@ func newTestServer(t *testing.T) *testServer {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer}
+	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer, notifier: notifier}
 }
 
 func (s *testServer) post(t *testing.T, path string, body any) *httptest.ResponseRecorder {
@@ -348,6 +386,22 @@ func TestConsumeMagicLinkIssuesTheComputedMemberRole(t *testing.T) {
 	}
 	if len(roleNames) != 1 || roleNames[0] != "member" {
 		t.Errorf("expected roles [member] computed from the active membership, got %v", roleNames)
+	}
+}
+
+func TestConsumeMagicLinkNotifiesTelegramOfTheLogin(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := s.notifier.waitForMessage(t)
+	if !strings.Contains(msg, user.Login) {
+		t.Errorf("expected the notification to mention %q, got %q", user.Login, msg)
 	}
 }
 

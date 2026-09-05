@@ -19,6 +19,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
@@ -40,11 +41,12 @@ type Handler struct {
 	tokens        *tokens.Service
 	authenticator *auth.Authenticator
 	mailer        mail.Sender
+	notifier      telegram.Sender
 	opts          Options
 }
 
-func NewHandler(usersService *users.Service, rolesService *roles.Service, tokensService *tokens.Service, authenticator *auth.Authenticator, mailer mail.Sender, opts Options) *Handler {
-	return &Handler{users: usersService, roles: rolesService, tokens: tokensService, authenticator: authenticator, mailer: mailer, opts: opts}
+func NewHandler(usersService *users.Service, rolesService *roles.Service, tokensService *tokens.Service, authenticator *auth.Authenticator, mailer mail.Sender, notifier telegram.Sender, opts Options) *Handler {
+	return &Handler{users: usersService, roles: rolesService, tokens: tokensService, authenticator: authenticator, mailer: mailer, notifier: notifier, opts: opts}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -217,8 +219,33 @@ func (h *Handler) issueSessionAndRespond(w http.ResponseWriter, r *http.Request,
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")
 		return
 	}
-	_ = h.users.TouchLastLogin(r.Context(), userID, httpapi.ClientIP(r))
+	ip := httpapi.ClientIP(r)
+	_ = h.users.TouchLastLogin(r.Context(), userID, ip)
+	h.notifyLogin(r.Context(), userID, ip)
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": sessionToken})
+}
+
+// notifyLogin pings Telegram about a successful sign-in. The login
+// lookup runs synchronously on the request's own context, alongside
+// every other database call this handler makes — a background goroutine
+// touching the database independently of the request isn't safe against
+// a request-scoped transaction (every handler test shares one). Only the
+// network call to Telegram itself, the actually slow and unreliable
+// part, runs on its own goroutine with a bounded timeout and its own
+// background context, exactly like telegram.LogHandler.
+func (h *Handler) notifyLogin(ctx context.Context, userID int64, ip string) {
+	login, err := h.users.LoginForUserID(ctx, userID)
+	if err != nil {
+		login = fmt.Sprintf("user #%d", userID)
+	}
+	text := fmt.Sprintf("🔑 Login: %s (%s)", login, ip)
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.notifier.Send(sendCtx, text); err != nil {
+			slog.Error("notify login to telegram", "error", err)
+		}
+	}()
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
