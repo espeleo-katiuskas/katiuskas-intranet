@@ -255,7 +255,13 @@ Currently used for exactly one thing: `LogHandler` wraps the root `slog.Handler`
 `cmd/api/main.go` and forwards every record at `slog.LevelError` or above (panics,
 JSON-encode failures — see `httpapi.RequestLogger`/`middleware.go`) to a Telegram group
 or channel, in addition to (never instead of) logging it normally — so someone not
-tailing `docker compose logs api` still finds out when something breaks. Configured via
+tailing `docker compose logs api` still finds out when something breaks. The forwarded
+message is plain text, not JSON, and carries no timestamp: level, message, then each
+attribute as `key: value` — deliberately readable at a glance on a phone rather than a
+log line. A multi-line attribute (a panic's full goroutine stack trace, chiefly) is
+trimmed to its first few lines before forwarding (`summarize`, `maxAttrLines`); the
+untrimmed value still reaches the wrapped handler and stdout exactly as before —
+trimming only affects what Telegram sees. Configured via
 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`; unset, it falls back to `NoopSender` (logs
 instead of sending), the same optional-with-a-console-fallback shape `internal/mail`
 already uses for SMTP. No account linking, no receiving messages, no OTP-via-Telegram

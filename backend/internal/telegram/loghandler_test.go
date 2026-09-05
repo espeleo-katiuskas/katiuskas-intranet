@@ -88,3 +88,44 @@ func TestLogHandlerWithAttrsCarriesAttrsIntoForwardedMessages(t *testing.T) {
 		t.Errorf("forwarded message missing attrs from With(): %q", msg)
 	}
 }
+
+func TestLogHandlerSummarizesLongMultilineAttrsLikeAStackTrace(t *testing.T) {
+	var out bytes.Buffer
+	sender := &fakeSender{}
+	handler := NewLogHandler(slog.NewTextHandler(&out, nil), sender, slog.LevelError)
+	logger := slog.New(handler)
+
+	stack := strings.Join([]string{
+		"goroutine 1 [running]:",
+		"main.a()",
+		"\t/app/main.go:10",
+		"main.b()",
+		"\t/app/main.go:20",
+		"main.c()",
+		"\t/app/main.go:30",
+		"main.main()",
+		"\t/app/main.go:40",
+	}, "\n")
+	logger.Error("panic recovered", "stack", stack)
+
+	msg := sender.waitForMessage(t)
+	if strings.Count(msg, "\n") >= strings.Count(stack, "\n") {
+		t.Errorf("expected the forwarded stack to be trimmed, got the full thing: %q", msg)
+	}
+	if !strings.Contains(msg, "more lines omitted") {
+		t.Errorf("expected a note about omitted lines, got: %q", msg)
+	}
+	if !strings.Contains(msg, "goroutine 1 [running]:") {
+		t.Errorf("expected the top of the stack to still be present, got: %q", msg)
+	}
+	if !strings.Contains(out.String(), "/app/main.go:40") {
+		t.Errorf("wrapped handler should still get the untrimmed stack: %q", out.String())
+	}
+}
+
+func TestSummarizeLeavesShortValuesUnchanged(t *testing.T) {
+	short := "line one\nline two"
+	if got := summarize(short); got != short {
+		t.Errorf("summarize(%q) = %q, want unchanged", short, got)
+	}
+}

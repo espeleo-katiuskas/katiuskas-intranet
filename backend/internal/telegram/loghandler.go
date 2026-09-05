@@ -57,10 +57,10 @@ func (h *LogHandler) forward(record slog.Record) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] %s", record.Level, record.Message)
 	for _, a := range h.attrs {
-		fmt.Fprintf(&b, "\n%s: %s", a.Key, a.Value)
+		fmt.Fprintf(&b, "\n%s: %s", a.Key, summarize(a.Value.String()))
 	}
 	record.Attrs(func(a slog.Attr) bool {
-		fmt.Fprintf(&b, "\n%s: %s", a.Key, a.Value)
+		fmt.Fprintf(&b, "\n%s: %s", a.Key, summarize(a.Value.String()))
 		return true
 	})
 
@@ -69,4 +69,20 @@ func (h *LogHandler) forward(record slog.Record) {
 	if err := h.sender.Send(ctx, b.String()); err != nil {
 		fmt.Fprintf(os.Stderr, "telegram: forward log record: %v\n", err)
 	}
+}
+
+// maxAttrLines bounds how much of a multi-line attribute value (chiefly
+// a panic's full goroutine stack trace — see httpapi/middleware.go) goes
+// into a Telegram message: just enough to see where things broke, not a
+// wall of text. The full value is unaffected everywhere else — this only
+// trims what gets forwarded here.
+const maxAttrLines = 6
+
+func summarize(value string) string {
+	lines := strings.Split(value, "\n")
+	if len(lines) <= maxAttrLines {
+		return value
+	}
+	omitted := len(lines) - maxAttrLines
+	return strings.Join(lines[:maxAttrLines], "\n") + fmt.Sprintf("\n… (%d more lines omitted)", omitted)
 }
