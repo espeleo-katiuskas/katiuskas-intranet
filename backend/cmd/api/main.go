@@ -4,11 +4,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
@@ -57,45 +55,31 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Only wrapped when Telegram is actually configured — otherwise every
-	// single database write in the app would fall through to
-	// NoopSender's own "not sent" info log, which is fine once per
-	// login or error but far too noisy per statement.
-	var conn db.PGX = pool
-	if cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "" {
-		conn = db.NewNotifyingPGX(pool, func(ctx context.Context, operation, table string) {
-			text := fmt.Sprintf("[DB] %s %s", strings.ToUpper(operation), table)
-			if err := telegramSender.Send(ctx, text); err != nil {
-				slog.Error("notify db mutation to telegram", "error", err)
-			}
-		})
-	}
-
-	rolesRepo := roles.NewRepository(conn)
+	rolesRepo := roles.NewRepository(pool)
 	rolesService := roles.NewService(rolesRepo)
 
-	membershipsRepo := memberships.NewRepository(conn)
+	membershipsRepo := memberships.NewRepository(pool)
 	membershipsService := memberships.NewService(membershipsRepo)
 
-	boardRepo := board.NewRepository(conn)
+	boardRepo := board.NewRepository(pool)
 	boardService := board.NewService(boardRepo)
 
-	licensesRepo := licenses.NewRepository(conn)
+	licensesRepo := licenses.NewRepository(pool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
 
-	usersRepo := users.NewRepository(conn)
+	usersRepo := users.NewRepository(pool)
 	usersService := users.NewService(usersRepo, rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(usersService)
 
-	tokensRepo := tokens.NewRepository(conn)
+	tokensRepo := tokens.NewRepository(pool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)
 
 	authenticator := auth.NewAuthenticator(tokensService)
 
-	activitiesRepo := activities.NewRepository(conn)
+	activitiesRepo := activities.NewRepository(pool)
 	activitiesService := activities.NewService(activitiesRepo, licensesService)
 
-	inventoryRepo := inventory.NewRepository(conn)
+	inventoryRepo := inventory.NewRepository(pool)
 	inventoryService := inventory.NewService(inventoryRepo)
 
 	libraryService, err := library.NewService(cfg.LibraryRoot)
@@ -115,10 +99,20 @@ func main() {
 		slog.Error("set up activity resources storage", "error", err, "root", cfg.ActivityResourcesRoot)
 		os.Exit(1)
 	}
-	activityResourcesRepo := activityresources.NewRepository(conn)
+	activityResourcesRepo := activityresources.NewRepository(pool)
 	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
 
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+
+	// Only set when Telegram is actually configured — otherwise every
+	// single POST/PUT/PATCH/DELETE would fall through to NoopSender's own
+	// "not sent" info log, which is fine once per login or error but far
+	// too noisy per API call. nil disables NotifyMutatingCalls entirely.
+	telegramConfigured := cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != ""
+	var mutationNotifier httpapi.MutationNotifier
+	if telegramConfigured {
+		mutationNotifier = telegramSender
+	}
 
 	router := httpapi.NewRouter(httpapi.Routes{
 		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, authapi.Options{
@@ -138,13 +132,13 @@ func main() {
 		Library:           library.NewHandler(libraryService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService),
-	})
+	}, mutationNotifier)
 
-	// Same gate as the database-mutation notifier above: reacting to
-	// Telegram messages is pointless without a bot token, and every
-	// linking attempt has to reach the log channel (see
-	// telegrambot.Bot.notifyChannel), so both need to be configured.
-	if cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "" {
+	// Same gate as mutationNotifier above: reacting to Telegram messages
+	// is pointless without a bot token, and every linking attempt has to
+	// reach the log channel (see telegrambot.Bot.notifyChannel), so both
+	// need to be configured.
+	if telegramConfigured {
 		bot := telegrambot.New(telegram.NewClient(cfg.TelegramBotToken), usersService, telegramSender)
 		go bot.Run(ctx)
 	}

@@ -279,23 +279,27 @@ never adds latency anywhere):
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
-- `db.NotifyingPGX` (`internal/platform/db/notify.go`) wraps whatever `db.PGX` a
-  repository was going to use, sending "[DB] `<operation>` `<table>`" for every
-  successful `INSERT`/`UPDATE`/`DELETE` it classifies from the SQL text itself
-  (`classifyMutation` — a `RETURNING` write goes through `QueryRow`, never `Exec`, so
-  detection can't rely on which method was called). `Begin` returns a `notifyingTx` that
-  keeps applying the same hook inside a transaction a repository opened itself
-  (activities, inventory, activityresources), including a nested `Begin` — a repository
-  never knows the difference, same as it never knows pool from transaction (see
-  `db.PGX`'s own doc comment). Wired in `cmd/api/main.go` only when
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` are actually set — every repository would
-  otherwise fall through to `NoopSender`'s own info log on literally every write, which
-  is fine once per login or error but far too noisy per statement.
+- `httpapi.NotifyMutatingCalls` (`internal/httpapi/notify.go`) sends
+  "[API] `<method>` `<path>` -> `<status>`" for every `POST`/`PUT`/`PATCH`/`DELETE`
+  request, once it completes, regardless of status — a failed write is still worth
+  knowing about. Sits between `RequestLogger` and the mux (`httpapi.NewRouter`'s second
+  parameter, `MutationNotifier` — a local one-method interface `telegram.Sender`
+  satisfies structurally, so `httpapi` never imports `internal/telegram`). This replaced
+  an earlier attempt at a database-level `db.NotifyingPGX` wrapper: it fired on every
+  request regardless of method, since `tokens.Repository` touches `last_used_at` on every
+  authenticated call — an `UPDATE tokens` the club never actually cared to see, and by far
+  the most frequent mutation in the app. Reacting to the HTTP method instead means only
+  calls that *intend* to change something get reported, and doing it in `httpapi` rather
+  than by wrapping `db.PGX` means nothing about how a handler talks to Postgres matters
+  here at all. `cmd/api/main.go` passes `nil` for `MutationNotifier` unless
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` are both set — a `nil` notifier disables the
+  middleware outright rather than falling through to `NoopSender`'s own info log on every
+  write, which would still be too noisy per call.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather
   than only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook —
   no public HTTPS endpoint to expose or coordinate with a reverse proxy, works the same
   behind NAT or with no domain at all) in a loop started with `go bot.Run(ctx)` from
-  `cmd/api/main.go`, gated on the same two env vars as `db.NotifyingPGX` (every linking
+  `cmd/api/main.go`, gated on the same two env vars as `httpapi.NotifyMutatingCalls` (every linking
   attempt has to reach the log channel, so a bot with no channel configured can't do its
   job anyway). Any message from a chat `users.HasTelegramChatID` doesn't yet recognize
   gets a greeting plus a "share your contact" keyboard button
@@ -307,7 +311,7 @@ never adds latency anywhere):
   calls `users.Repository.SetTelegramChatID` and confirms; no match replies saying so.
   Either way, `Bot.notifyChannel` reports the attempt to the log channel — who sent it,
   the phone number, and whether it matched — the same "tell the club everything, matched
-  or not" spirit as `db.NotifyingPGX`. `users.User.TelegramChatID` is deliberately left
+  or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
   `HasTelegramChatID`/`FindByPhoneSuffix` directly, never through a generic `Get`.

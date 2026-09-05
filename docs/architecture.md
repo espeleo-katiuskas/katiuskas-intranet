@@ -375,8 +375,11 @@ verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Tel
 dependencias — solo `net/http`/`encoding/json` —, usado hoy para cuatro avisos
 independientes y "fire-and-forget" que nunca añaden latencia a lo que los dispara: los
 logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), un aviso de
-cada mutación en la base de datos (`db.NotifyingPGX`, un wrapper de `db.PGX` que detecta
-INSERT/UPDATE/DELETE por el propio texto SQL, sin tocar ningún repositorio), y —el único
+cada llamada al API que sea POST/PUT/PATCH/DELETE (`httpapi.NotifyMutatingCalls`, en el
+propio router — no un wrapper de la base de datos: la primera versión de esto avisaba de
+cada cambio en la base de datos en vez de cada llamada, y como tocar la fecha del último
+uso de un token es en sí un UPDATE, avisaba en cada petición autenticada, no solo en las
+que de verdad cambiaban algo), y —el único
 que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
 si alguien desconocido escribe al bot, le pide que comparta su contacto, y si el teléfono
 compartido coincide con el de un socio (`users.Repository.FindByPhoneSuffix`, que hace

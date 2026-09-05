@@ -28,9 +28,9 @@ services:
       # Leave SMTP_HOST unset to log sign-in emails to `docker compose logs api`
       # instead of sending them for real. Same story for
       # TELEGRAM_BOT_TOKEN/TELEGRAM_LOG_CHAT_ID: unset, error-level logs,
-      # logins, and database mutations all just log normally instead of
-      # also being forwarded to Telegram, and the bot (internal/telegrambot)
-      # never starts polling at all.
+      # logins, and POST/PUT/PATCH/DELETE API calls all just log normally
+      # instead of also being forwarded to Telegram, and the bot
+      # (internal/telegrambot) never starts polling at all.
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"

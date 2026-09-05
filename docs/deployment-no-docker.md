@@ -141,10 +141,10 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 # Deja las dos TELEGRAM_* comentadas para no usar Telegram en absoluto:
 # los errores inesperados del API solo se registran en
 # `journalctl -u katiuskas-api`, igual que hasta ahora, sin aviso de
-# logins ni de cambios en la base de datos, y el bot no reacciona a nadie
-# que le escriba. Rellénalas para activarlo todo: errores, un aviso por
-# cada inicio de sesión, un aviso por cada alta/modificación/baja en la
-# base de datos, y el bot pidiendo el contacto a quien le escriba sin
+# logins ni de llamadas al API, y el bot no reacciona a nadie que le
+# escriba. Rellénalas para activarlo todo: errores, un aviso por cada
+# inicio de sesión, un aviso por cada llamada al API que sea
+# POST/PUT/PATCH/DELETE, y el bot pidiendo el contacto a quien le escriba sin
 # estar ya vinculado para asociar su cuenta de Telegram con su teléfono.
 #TELEGRAM_BOT_TOKEN=
 #TELEGRAM_LOG_CHAT_ID=
