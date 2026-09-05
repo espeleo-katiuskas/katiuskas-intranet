@@ -22,6 +22,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
@@ -36,6 +37,14 @@ func main() {
 		slog.Error("load config", "error", err)
 		os.Exit(1)
 	}
+
+	// Rebuilt now that cfg is available, so every subsequent slog call
+	// (including ones below) also gets forwarded to Telegram on error —
+	// only "load config" above, which can't reach cfg by definition,
+	// misses out.
+	telegramSender := telegram.NewSenderFromConfig(cfg.TelegramBotToken, cfg.TelegramLogChatID)
+	logger = slog.New(telegram.NewLogHandler(logger.Handler(), telegramSender, slog.LevelError))
+	slog.SetDefault(logger)
 
 	ctx := context.Background()
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)

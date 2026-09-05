@@ -27,6 +27,15 @@ type Config struct {
 	SMTPUsername  string
 	SMTPPassword  string
 	SMTPFrom      string
+	// TelegramBotToken/TelegramLogChatID configure forwarding the API's
+	// own error-level logs to a Telegram group or channel (see
+	// internal/telegram.LogHandler) — same optional, logs-instead-of-
+	// sending-when-unset story as SMTP above. TelegramLogChatID is
+	// whatever Telegram itself uses to address that chat: a negative
+	// number for a group/supergroup, or "@name" for a public
+	// channel/group's username.
+	TelegramBotToken  string
+	TelegramLogChatID string
 	// LibraryRoot is the directory the internal/library package serves
 	// club documents (estatutos, actas...) from — mounted read-only into
 	// the container, populated by whoever deploys the club's documents,
@@ -61,6 +70,8 @@ func Load() (Config, error) {
 		SMTPUsername:          os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:              os.Getenv("SMTP_FROM"),
+		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramLogChatID:     os.Getenv("TELEGRAM_LOG_CHAT_ID"),
 		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
 		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
 		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),

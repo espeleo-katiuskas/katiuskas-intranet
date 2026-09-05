@@ -138,6 +138,12 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 #SMTP_USERNAME=
 #SMTP_PASSWORD=
 #SMTP_FROM=intranet@tudominio.org
+# Deja las dos TELEGRAM_* comentadas para no usar Telegram: los errores
+# inesperados del API solo se registran en `journalctl -u katiuskas-api`,
+# igual que hasta ahora. Rellénalas para que además se envíen a un grupo o
+# canal de Telegram.
+#TELEGRAM_BOT_TOKEN=
+#TELEGRAM_LOG_CHAT_ID=
 EOF
 sudo chown katiuskas:katiuskas /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env

@@ -248,6 +248,19 @@ see a specific person's files isn't a fixed role list the way `/library`'s is. A
 no subdirectory of its own yet — most people, until someone drops a file in for them — gets
 an empty listing at their own root rather than a 404.
 
+**Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API
+(https://core.telegram.org/bots/api) — plain `net/http`/`encoding/json`, no SDK
+dependency, matching the "no muchas dependencias" ask this package was built to satisfy.
+Currently used for exactly one thing: `LogHandler` wraps the root `slog.Handler` in
+`cmd/api/main.go` and forwards every record at `slog.LevelError` or above (panics,
+JSON-encode failures — see `httpapi.RequestLogger`/`middleware.go`) to a Telegram group
+or channel, in addition to (never instead of) logging it normally — so someone not
+tailing `docker compose logs api` still finds out when something breaks. Configured via
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`; unset, it falls back to `NoopSender` (logs
+instead of sending), the same optional-with-a-console-fallback shape `internal/mail`
+already uses for SMTP. No account linking, no receiving messages, no OTP-via-Telegram
+yet — those are a separate, larger piece of future work, not built here.
+
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
 `TestUser` `InsertUser` returns carries a `Login` too, for tests exercising a
