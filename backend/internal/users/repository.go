@@ -250,6 +250,61 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 	return u, err
 }
 
+// FindByPhoneSuffix looks up a person by phone the way a Telegram
+// "share contact" does it, not the way FindActiveByEmailAndPhone does:
+// Telegram always includes the country code (e.g. "34611222333"), while
+// a phone on file here never does (see users.CreateInput and every
+// SEED_ADMIN_PHONE default), so an exact digits match would never work.
+// Matching is a suffix check in both directions instead — good enough
+// for a 9-digit Spanish mobile number, not a general phone-number
+// library. digits must already be stripped to only digits by the
+// caller; empty always misses rather than matching every phone on file.
+// A phone shared by more than one person (each phone field is itself
+// space-separated, so this isn't even the only way to be ambiguous)
+// returns whichever one sorts first by id — rare enough not to need
+// anything smarter.
+func (r *Repository) FindByPhoneSuffix(ctx context.Context, digits string) (User, error) {
+	var u User
+	if digits == "" {
+		return u, ErrNotFound
+	}
+	err := scanUser(r.pool.QueryRow(ctx, `
+		SELECT `+userSelect+`
+		FROM users u
+		WHERE EXISTS (
+			SELECT 1 FROM unnest(string_to_array(u.phone, ' ')) AS candidate
+			WHERE length(regexp_replace(candidate, '\D', '', 'g')) >= 6
+				AND (
+					$1 LIKE '%' || regexp_replace(candidate, '\D', '', 'g')
+					OR regexp_replace(candidate, '\D', '', 'g') LIKE '%' || $1
+				)
+		)
+		ORDER BY u.id
+		LIMIT 1
+	`, digits), &u)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
+
+// SetTelegramChatID records which Telegram chat is this person's own,
+// once internal/telegrambot has matched a shared contact's phone number
+// against them.
+func (r *Repository) SetTelegramChatID(ctx context.Context, userID, chatID int64) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET telegram_chat_id = $1 WHERE id = $2`, chatID, userID)
+	return err
+}
+
+// HasTelegramChatID reports whether some person has already linked this
+// Telegram chat — internal/telegrambot only greets a chat it doesn't
+// recognize yet.
+func (r *Repository) HasTelegramChatID(ctx context.Context, chatID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE telegram_chat_id = $1)`, chatID).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {
 	u, err := r.GetByID(ctx, id)
 	if err != nil {

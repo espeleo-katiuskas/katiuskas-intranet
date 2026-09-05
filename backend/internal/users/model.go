@@ -112,6 +112,11 @@ type User struct {
 	LicenseIssuedDate *time.Time `json:"license_issued_date,omitempty"`
 	LicenseValidUntil *time.Time `json:"license_valid_until,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
+	// TelegramChatID is set once this person links their Telegram account
+	// by sharing their contact with the club's bot and it matches one of
+	// the phones above (see internal/telegrambot) — never settable
+	// through the regular API, and never exposed in any response.
+	TelegramChatID *int64 `json:"-"`
 }
 
 type CreateInput struct {

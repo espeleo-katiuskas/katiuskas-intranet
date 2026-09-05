@@ -51,7 +51,8 @@ services:
       SMTP_FROM: "${SMTP_FROM:-}"
       # Leave both unset in .env to skip Telegram entirely — error-level
       # logs, logins, and database mutations all just log normally
-      # instead of also being forwarded to a Telegram group/channel.
+      # instead of also being forwarded to a Telegram group/channel, and
+      # the bot (internal/telegrambot) never starts polling at all.
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_LOG_CHAT_ID: "${TELEGRAM_LOG_CHAT_ID:-}"
       LIBRARY_ROOT: "/data/library"

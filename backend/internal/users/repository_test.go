@@ -373,6 +373,94 @@ func TestFindActiveByEmailAndPhoneRejectsWhenNoPhoneOnFile(t *testing.T) {
 	}
 }
 
+func TestFindByPhoneSuffixMatchesAPhoneWithACountryCodePrefix(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	found, err := repo.FindByPhoneSuffix(context.Background(), "34611222333")
+	if err != nil {
+		t.Fatalf("expected a match despite the extra country code, got %v", err)
+	}
+	if found.ID != created.ID {
+		t.Errorf("matched the wrong person: %+v", found)
+	}
+}
+
+func TestFindByPhoneSuffixMatchesAnyOfSeveralPhones(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("600111222 622333444"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := repo.FindByPhoneSuffix(context.Background(), "34622333444"); err != nil {
+		t.Errorf("expected a match against the second phone, got %v", err)
+	}
+}
+
+func TestFindByPhoneSuffixRejectsWrongPhone(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := repo.FindByPhoneSuffix(context.Background(), "34600000000"); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("expected ErrNotFound for a mismatched phone, got %v", err)
+	}
+}
+
+func TestFindByPhoneSuffixRejectsEmptyDigits(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+
+	if _, err := repo.FindByPhoneSuffix(context.Background(), ""); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("expected ErrNotFound for empty digits, got %v", err)
+	}
+}
+
+func TestSetAndHasTelegramChatID(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	created, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if has, err := repo.HasTelegramChatID(context.Background(), 999); err != nil || has {
+		t.Fatalf("expected no chat linked yet, got has=%v err=%v", has, err)
+	}
+
+	if err := repo.SetTelegramChatID(context.Background(), created.ID, 999); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	has, err := repo.HasTelegramChatID(context.Background(), 999)
+	if err != nil || !has {
+		t.Fatalf("expected the chat to be linked, got has=%v err=%v", has, err)
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

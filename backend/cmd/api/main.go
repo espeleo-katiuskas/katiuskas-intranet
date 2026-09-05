@@ -25,6 +25,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegrambot"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
@@ -138,6 +139,15 @@ func main() {
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService),
 	})
+
+	// Same gate as the database-mutation notifier above: reacting to
+	// Telegram messages is pointless without a bot token, and every
+	// linking attempt has to reach the log channel (see
+	// telegrambot.Bot.notifyChannel), so both need to be configured.
+	if cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "" {
+		bot := telegrambot.New(telegram.NewClient(cfg.TelegramBotToken), usersService, telegramSender)
+		go bot.Run(ctx)
+	}
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, router); err != nil {

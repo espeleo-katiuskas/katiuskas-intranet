@@ -177,6 +177,18 @@ func (s *Service) FindActiveByEmailAndPhone(ctx context.Context, email, phone st
 	return s.repo.FindActiveByEmailAndPhone(ctx, email, phone)
 }
 
+func (s *Service) FindByPhoneSuffix(ctx context.Context, digits string) (User, error) {
+	return s.repo.FindByPhoneSuffix(ctx, digits)
+}
+
+func (s *Service) SetTelegramChatID(ctx context.Context, userID, chatID int64) error {
+	return s.repo.SetTelegramChatID(ctx, userID, chatID)
+}
+
+func (s *Service) HasTelegramChatID(ctx context.Context, chatID int64) (bool, error) {
+	return s.repo.HasTelegramChatID(ctx, chatID)
+}
+
 func (s *Service) TouchLastLogin(ctx context.Context, userID int64, ip string) error {
 	return s.repo.TouchLastLogin(ctx, userID, ip)
 }

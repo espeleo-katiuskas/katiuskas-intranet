@@ -372,16 +372,22 @@ nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal
 roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
 correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
 verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram, sin
-dependencias — solo `net/http`/`encoding/json` —, usado hoy para tres avisos
+dependencias — solo `net/http`/`encoding/json` —, usado hoy para cuatro avisos
 independientes y "fire-and-forget" que nunca añaden latencia a lo que los dispara: los
-logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), y un aviso
-de cada mutación en la base de datos (`db.NotifyingPGX`, un wrapper de `db.PGX` que
-detecta INSERT/UPDATE/DELETE por el propio texto SQL, sin tocar ningún repositorio — ver
-`CLAUDE.md` para el detalle de los tres). Los tres dependen de tener
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados; sin ellos, los dos primeros
-caen a registrar el mensaje en el log (igual que `mail` sin `SMTP_HOST`), y el aviso de
-mutaciones directamente no se activa, para no generar una línea de log por cada
-escritura), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
+logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), un aviso de
+cada mutación en la base de datos (`db.NotifyingPGX`, un wrapper de `db.PGX` que detecta
+INSERT/UPDATE/DELETE por el propio texto SQL, sin tocar ningún repositorio), y —el único
+que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
+si alguien desconocido escribe al bot, le pide que comparta su contacto, y si el teléfono
+compartido coincide con el de un socio (`users.Repository.FindByPhoneSuffix`, que hace
+coincidir el prefijo de país que Telegram siempre añade) vincula su `telegram_chat_id` y
+se lo confirma; si no coincide, se lo dice; en ambos casos avisa al canal de quién lo ha
+intentado, con qué teléfono, y si coincidía o no (ver `CLAUDE.md` para el detalle de los
+cuatro). Los cuatro dependen de tener `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`
+configurados; sin ellos, los dos primeros caen a registrar el mensaje en el log (igual
+que `mail` sin `SMTP_HOST`), y ni el aviso de mutaciones ni el bot se activan siquiera,
+para no generar una línea de log por cada escritura ni un bot que no podría avisar al
+canal de nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e

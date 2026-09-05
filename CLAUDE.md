@@ -255,11 +255,16 @@ Configured via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`; unset, `Sender` fall
 `NoopSender` (logs instead of sending), the same optional-with-a-console-fallback shape
 `internal/mail` already uses for SMTP. Every message is plain text, not JSON, and
 carries no timestamp — deliberately readable at a glance on a phone rather than a log
-line. No account linking, no receiving messages, no OTP-via-Telegram yet — those are a
-separate, larger piece of future work, not built here. Three things currently send to
-it, all independent of each other and all fire-and-forget (their own goroutine, a bounded
-timeout, a background context detached from the request/statement that triggered them —
-so a slow or unreachable Telegram API never adds latency anywhere):
+line. `bot.go` adds the general, not-chat-specific pieces this package's own `Sender`/
+`BotSender` don't need — `Client.SendMessage`/`SendMessageRequestingContact` (to whichever
+chat, not just the fixed log one) and `Client.GetUpdates` (long-polling, see
+`internal/telegrambot` below) — kept separate from, and never refactored to share code
+with, `BotSender`'s own already-shipped, already-tested HTTP-call logic. No OTP-via-
+Telegram login yet — that's a separate, larger piece of future work, not built here.
+Four things currently talk to Telegram, all independent of each other and all
+fire-and-forget (their own goroutine, a bounded timeout, a background context detached
+from the request/statement that triggered them — so a slow or unreachable Telegram API
+never adds latency anywhere):
 - `LogHandler` wraps the root `slog.Handler` in `cmd/api/main.go` and forwards every
   record at `slog.LevelError` or above (panics, JSON-encode failures — see
   `httpapi.RequestLogger`/`middleware.go`) in addition to (never instead of) logging it
@@ -286,6 +291,26 @@ so a slow or unreachable Telegram API never adds latency anywhere):
   `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` are actually set — every repository would
   otherwise fall through to `NoopSender`'s own info log on literally every write, which
   is fine once per login or error but far too noisy per statement.
+- `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather
+  than only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook —
+  no public HTTPS endpoint to expose or coordinate with a reverse proxy, works the same
+  behind NAT or with no domain at all) in a loop started with `go bot.Run(ctx)` from
+  `cmd/api/main.go`, gated on the same two env vars as `db.NotifyingPGX` (every linking
+  attempt has to reach the log channel, so a bot with no channel configured can't do its
+  job anyway). Any message from a chat `users.HasTelegramChatID` doesn't yet recognize
+  gets a greeting plus a "share your contact" keyboard button
+  (`Client.SendMessageRequestingContact`); a shared contact's phone number is matched
+  against `users.phone` via `users.Repository.FindByPhoneSuffix` — a *suffix* match, not
+  the exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests,
+  because Telegram always includes the country code (`"34611222333"`) while a phone on
+  file here never does (see `CreateInput`/every `SEED_ADMIN_PHONE` default). A match
+  calls `users.Repository.SetTelegramChatID` and confirms; no match replies saying so.
+  Either way, `Bot.notifyChannel` reports the attempt to the log channel — who sent it,
+  the phone number, and whether it matched — the same "tell the club everything, matched
+  or not" spirit as `db.NotifyingPGX`. `users.User.TelegramChatID` is deliberately left
+  out of `userSelect`/`scanUser` (the query every other `users` method uses) since
+  nothing else needs it yet — checking or reading it always goes through
+  `HasTelegramChatID`/`FindByPhoneSuffix` directly, never through a generic `Get`.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
