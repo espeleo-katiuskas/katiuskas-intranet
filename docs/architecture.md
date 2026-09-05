@@ -374,8 +374,9 @@ nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal
 roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
 correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
 verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram, sin
-dependencias — solo `net/http`/`encoding/json` —, usado hoy para cuatro avisos
-independientes y "fire-and-forget" que nunca añaden latencia a lo que los dispara: los
+dependencias — solo `net/http`/`encoding/json` —, usado hoy para cinco avisos
+independientes. Cuatro son "fire-and-forget" y nunca añaden latencia a lo que los
+dispara: los
 logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), un aviso de
 cada llamada al API que sea POST/PUT/PATCH/DELETE (`httpapi.NotifyMutatingCalls`, en el
 propio router — no un wrapper de la base de datos: la primera versión de esto avisaba de
@@ -389,12 +390,16 @@ que el prefijo de país que Telegram siempre añade sea el de España — nunca 
 sufijo, que dejaría a un "+33666777888" francés hacerse pasar por un "666777888" español,
 ya que comparten todos los dígitos salvo el prefijo) vincula su `telegram_chat_id` y
 se lo confirma; si no coincide, se lo dice; en ambos casos avisa al canal de quién lo ha
-intentado, con qué teléfono, y si coincidía o no (ver `CLAUDE.md` para el detalle de los
-cuatro). Los cuatro dependen de tener `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`
-configurados; sin ellos, los dos primeros caen a registrar el mensaje en el log (igual
-que `mail` sin `SMTP_HOST`), y ni el aviso de mutaciones ni el bot se activan siquiera,
-para no generar una línea de log por cada escritura ni un bot que no podría avisar al
-canal de nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
+intentado, con qué teléfono, y si coincidía o no. El quinto es la excepción a
+"fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
+servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
+el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada
+perceptible (ver `CLAUDE.md` para el detalle de los cinco). Los dos primeros (logs de
+error, login) y el de arranque son incondicionales — sin `TELEGRAM_BOT_TOKEN`/
+`TELEGRAM_LOG_CHAT_ID` configurados, caen a registrar el mensaje en el log (igual que
+`mail` sin `SMTP_HOST`) — pero ni el aviso de mutaciones ni el bot se activan siquiera
+sin esas variables, para no generar una línea de log por cada escritura ni un bot que no
+podría avisar al canal de nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e

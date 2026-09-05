@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
@@ -142,6 +143,17 @@ func main() {
 		bot := telegrambot.New(telegram.NewClient(cfg.TelegramBotToken), usersService, telegramSender)
 		go bot.Run(ctx)
 	}
+
+	// Unconditional, same as the login/error-log notifications — this
+	// only fires once per process start (not once per request, unlike
+	// mutationNotifier/the bot above), so falling through to
+	// NoopSender's own info log when Telegram isn't configured is no
+	// noisier than logging it directly would have been anyway.
+	startupCtx, cancelStartup := context.WithTimeout(ctx, 10*time.Second)
+	if err := telegramSender.Send(startupCtx, "🚀 API started"); err != nil {
+		slog.Error("notify api startup to telegram", "error", err)
+	}
+	cancelStartup()
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, router); err != nil {

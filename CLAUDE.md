@@ -266,10 +266,10 @@ chat, not just the fixed log one) and `Client.GetUpdates` (long-polling, see
 `internal/telegrambot` below) — kept separate from, and never refactored to share code
 with, `BotSender`'s own already-shipped, already-tested HTTP-call logic. No OTP-via-
 Telegram login yet — that's a separate, larger piece of future work, not built here.
-Four things currently talk to Telegram, all independent of each other and all
+Five things currently talk to Telegram, all independent of each other. Four are
 fire-and-forget (their own goroutine, a bounded timeout, a background context detached
 from the request/statement that triggered them — so a slow or unreachable Telegram API
-never adds latency anywhere):
+never adds latency anywhere); the fifth (startup) is the one exception, described below:
 - `LogHandler` wraps the root `slog.Handler` in `cmd/api/main.go` and forwards every
   record at `slog.LevelError` or above (panics, JSON-encode failures — see
   `httpapi.RequestLogger`/`middleware.go`) in addition to (never instead of) logging it
@@ -324,6 +324,14 @@ never adds latency anywhere):
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
   `HasTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
+- `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
+  the one notification that isn't fire-and-forget: it's a single call at process
+  startup, not something on any request or statement's critical path, so blocking on it
+  (bounded to 10s, same timeout every other notification uses for its own goroutine)
+  costs nothing a user could ever notice. Still unconditional rather than gated like
+  `httpapi.NotifyMutatingCalls`/the bot — a restart is rare enough that falling through
+  to `NoopSender`'s own info log when Telegram isn't configured is no noisier than
+  logging it directly would've been anyway.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
