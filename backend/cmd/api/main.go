@@ -111,12 +111,22 @@ func main() {
 	// too noisy per API call. nil disables NotifyMutatingCalls entirely.
 	telegramConfigured := cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != ""
 	var mutationNotifier httpapi.MutationNotifier
+	// telegramClient is shared between authapi (DMing a magic link to
+	// whoever has linked their account) and the bot below — a linked
+	// telegram_chat_id can only exist at all because the bot processed a
+	// contact share while running, so gating this on the same "fully
+	// configured" flag the bot itself uses, rather than just the token,
+	// costs nothing in practice.
+	var telegramClient authapi.TelegramMessenger
+	var botClient *telegram.Client
 	if telegramConfigured {
 		mutationNotifier = telegramSender
+		botClient = telegram.NewClient(cfg.TelegramBotToken)
+		telegramClient = botClient
 	}
 
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, authapi.Options{
+		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
 			TokenTTL:          cfg.TokenTTL,
 			MagicLinkTTL:      cfg.MagicLinkTTL,
 			MagicLinkCooldown: cfg.MagicLinkCooldown,
@@ -140,7 +150,7 @@ func main() {
 	// reach the log channel (see telegrambot.Bot.notifyChannel), so both
 	// need to be configured.
 	if telegramConfigured {
-		bot := telegrambot.New(telegram.NewClient(cfg.TelegramBotToken), usersService, telegramSender)
+		bot := telegrambot.New(botClient, usersService, telegramSender)
 		go bot.Run(ctx)
 	}
 

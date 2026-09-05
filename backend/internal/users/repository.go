@@ -304,6 +304,19 @@ func (r *Repository) SetTelegramChatID(ctx context.Context, userID, chatID int64
 	return err
 }
 
+// TelegramChatIDForUser returns the Telegram chat this person has
+// linked, or nil if they never have (see SetTelegramChatID) — used to
+// also DM them a magic link/login code alongside the email, for
+// whoever we can reach that way.
+func (r *Repository) TelegramChatIDForUser(ctx context.Context, userID int64) (*int64, error) {
+	var chatID *int64
+	err := r.pool.QueryRow(ctx, `SELECT telegram_chat_id FROM users WHERE id = $1`, userID).Scan(&chatID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return chatID, err
+}
+
 // HasTelegramChatID reports whether some person has already linked this
 // Telegram chat — internal/telegrambot only greets a chat it doesn't
 // recognize yet.

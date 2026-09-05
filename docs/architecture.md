@@ -156,7 +156,10 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   no deseado. `POST /auth/magic-link/consume-code` identifica a la persona por
   email+teléfono igual que la propia petición (el código por sí solo es demasiado corto
   para servir de clave de búsqueda) y responde siempre con el mismo 401 genérico,
-  también por no distinguir casos desde fuera.
+  también por no distinguir casos desde fuera. Si la persona tiene su cuenta de Telegram
+  vinculada (ver más abajo), recibe el mismo enlace y código por Telegram además del
+  correo — nunca en su lugar, así que quien no lo tenga vinculado, o si ese envío falla,
+  sigue teniendo el correo.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente
@@ -374,10 +377,12 @@ nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal
 roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
 correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
 verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram, sin
-dependencias — solo `net/http`/`encoding/json` —, usado hoy para cinco avisos
-independientes. Cuatro son "fire-and-forget" y nunca añaden latencia a lo que los
+dependencias — solo `net/http`/`encoding/json` —, usado hoy para seis avisos
+independientes. Cinco son "fire-and-forget" y nunca añaden latencia a lo que los
 dispara: los
-logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), un aviso de
+logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), el mismo
+enlace y código del magic-link también por DM de Telegram a quien tenga la cuenta
+vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso de
 cada llamada al API que sea POST/PUT/PATCH/DELETE (`httpapi.NotifyMutatingCalls`, en el
 propio router — no un wrapper de la base de datos: la primera versión de esto avisaba de
 cada cambio en la base de datos en vez de cada llamada, y como tocar la fecha del último
@@ -390,16 +395,18 @@ que el prefijo de país que Telegram siempre añade sea el de España — nunca 
 sufijo, que dejaría a un "+33666777888" francés hacerse pasar por un "666777888" español,
 ya que comparten todos los dígitos salvo el prefijo) vincula su `telegram_chat_id` y
 se lo confirma; si no coincide, se lo dice; en ambos casos avisa al canal de quién lo ha
-intentado, con qué teléfono, y si coincidía o no. El quinto es la excepción a
+intentado, con qué teléfono, y si coincidía o no. El sexto es la excepción a
 "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
 servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
 el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada
-perceptible (ver `CLAUDE.md` para el detalle de los cinco). Los dos primeros (logs de
-error, login) y el de arranque son incondicionales — sin `TELEGRAM_BOT_TOKEN`/
-`TELEGRAM_LOG_CHAT_ID` configurados, caen a registrar el mensaje en el log (igual que
-`mail` sin `SMTP_HOST`) — pero ni el aviso de mutaciones ni el bot se activan siquiera
-sin esas variables, para no generar una línea de log por cada escritura ni un bot que no
-podría avisar al canal de nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
+perceptible (ver `CLAUDE.md` para el detalle de los seis). Los tres primeros (logs de
+error, login, magic-link por Telegram) y el de arranque son incondicionales — sin
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados, caen a registrar el mensaje en
+el log (igual que `mail` sin `SMTP_HOST`) o, en el caso del magic-link por Telegram,
+simplemente no se intenta (nadie puede tener `telegram_chat_id` sin el bot corriendo) —
+pero ni el aviso de mutaciones ni el bot se activan siquiera sin esas variables, para no
+generar una línea de log por cada escritura ni un bot que no podría avisar al canal de
+nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
 dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e

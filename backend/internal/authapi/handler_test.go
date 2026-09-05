@@ -73,13 +73,63 @@ func (n *capturingNotifier) waitForMessage(t *testing.T) string {
 	return ""
 }
 
+// capturingTelegramClient stands in for authapi.TelegramMessenger so
+// tests can inspect what DM would have been sent, and to which chat —
+// unlike capturingNotifier (the fixed log channel), this one records
+// per-chat_id, the way Handler.notifyMagicLinkViaTelegram actually sends.
+type capturingTelegramClient struct {
+	mu   sync.Mutex
+	sent []struct {
+		chatID int64
+		text   string
+	}
+}
+
+func (c *capturingTelegramClient) SendMessage(_ context.Context, chatID int64, text string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sent = append(c.sent, struct {
+		chatID int64
+		text   string
+	}{chatID, text})
+	return nil
+}
+
+func (c *capturingTelegramClient) waitForMessage(t *testing.T) (int64, string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		if len(c.sent) > 0 {
+			msg := c.sent[0]
+			c.mu.Unlock()
+			return msg.chatID, msg.text
+		}
+		c.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a Telegram DM to be sent")
+	return 0, ""
+}
+
+func (c *capturingTelegramClient) assertNothingSent(t *testing.T) {
+	t.Helper()
+	time.Sleep(20 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.sent) != 0 {
+		t.Errorf("expected no Telegram DM sent, got %v", c.sent)
+	}
+}
+
 type testServer struct {
-	mux      *http.ServeMux
-	tx       pgx.Tx
-	users    *users.Service
-	tokens   *tokens.Service
-	mailer   *capturingMailer
-	notifier *capturingNotifier
+	mux            *http.ServeMux
+	tx             pgx.Tx
+	users          *users.Service
+	tokens         *tokens.Service
+	mailer         *capturingMailer
+	notifier       *capturingNotifier
+	telegramClient *capturingTelegramClient
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -92,8 +142,9 @@ func newTestServer(t *testing.T) *testServer {
 	authenticator := auth.NewAuthenticator(tokensService)
 	mailer := &capturingMailer{}
 	notifier := &capturingNotifier{}
+	telegramClient := &capturingTelegramClient{}
 
-	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, authapi.Options{
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, telegramClient, authapi.Options{
 		TokenTTL:          time.Hour,
 		MagicLinkTTL:      15 * time.Minute,
 		MagicLinkCooldown: time.Minute,
@@ -103,7 +154,7 @@ func newTestServer(t *testing.T) *testServer {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer, notifier: notifier}
+	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer, notifier: notifier, telegramClient: telegramClient}
 }
 
 func (s *testServer) post(t *testing.T, path string, body any) *httptest.ResponseRecorder {
@@ -251,6 +302,40 @@ func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	token := s.requestAndExtractToken(t, user.Email, user.Phone)
 	if token == "" {
 		t.Fatalf("expected a non-empty token")
+	}
+}
+
+func TestRequestMagicLinkDoesNotDMWhenNoTelegramLinked(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+
+	s.requestAndExtractToken(t, user.Email, user.Phone)
+
+	s.telegramClient.assertNothingSent(t)
+}
+
+// TestRequestMagicLinkAlsoSendsViaTelegramWhenLinked covers the actual
+// feature: someone who's linked their Telegram account gets the same
+// link and code by DM too, not just email.
+func TestRequestMagicLinkAlsoSendsViaTelegramWhenLinked(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+
+	chatID, text := s.telegramClient.waitForMessage(t)
+	if chatID != 555 {
+		t.Errorf("expected the DM to go to chat_id 555, got %d", chatID)
+	}
+	if !strings.Contains(text, token) {
+		t.Errorf("expected the DM to contain the same token as the email, got %q", text)
+	}
+	m := codeInBody.FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("no code found in the Telegram message: %q", text)
 	}
 }
 

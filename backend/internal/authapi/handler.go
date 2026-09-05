@@ -35,18 +35,31 @@ type Options struct {
 	PublicBaseURL     string
 }
 
-type Handler struct {
-	users         *users.Service
-	roles         *roles.Service
-	tokens        *tokens.Service
-	authenticator *auth.Authenticator
-	mailer        mail.Sender
-	notifier      telegram.Sender
-	opts          Options
+// TelegramMessenger sends a DM to a specific Telegram chat — unlike
+// notifier (telegram.Sender), which always targets the fixed log
+// channel, this targets whichever chat_id a specific person has linked
+// (see users.Repository.TelegramChatIDForUser). *telegram.Client
+// satisfies this structurally; defined locally, the same narrow-
+// dependency pattern as MutationNotifier/UserLookup elsewhere, so this
+// package doesn't need to import internal/telegram just for this one
+// method (it already does, for Sender, but the principle is the same).
+type TelegramMessenger interface {
+	SendMessage(ctx context.Context, chatID int64, text string) error
 }
 
-func NewHandler(usersService *users.Service, rolesService *roles.Service, tokensService *tokens.Service, authenticator *auth.Authenticator, mailer mail.Sender, notifier telegram.Sender, opts Options) *Handler {
-	return &Handler{users: usersService, roles: rolesService, tokens: tokensService, authenticator: authenticator, mailer: mailer, notifier: notifier, opts: opts}
+type Handler struct {
+	users          *users.Service
+	roles          *roles.Service
+	tokens         *tokens.Service
+	authenticator  *auth.Authenticator
+	mailer         mail.Sender
+	notifier       telegram.Sender
+	telegramClient TelegramMessenger
+	opts           Options
+}
+
+func NewHandler(usersService *users.Service, rolesService *roles.Service, tokensService *tokens.Service, authenticator *auth.Authenticator, mailer mail.Sender, notifier telegram.Sender, telegramClient TelegramMessenger, opts Options) *Handler {
+	return &Handler{users: usersService, roles: rolesService, tokens: tokensService, authenticator: authenticator, mailer: mailer, notifier: notifier, telegramClient: telegramClient, opts: opts}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -143,11 +156,51 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 			"Si no has pedido este acceso, puedes ignorar este mensaje.",
 		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
 	)
+	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code)
+
 	// user.Email is never nil here — reaching this point already required
 	// FindActiveByEmailAndPhone above to match a real on-file address —
 	// and may hold more than one, space-separated (see users.User.Email);
 	// mail.Sender expects a comma-separated list.
 	return h.mailer.Send(ctx, strings.Join(strings.Fields(*user.Email), ", "), subject, body)
+}
+
+// notifyMagicLinkViaTelegram DMs the same link and login code to
+// whoever has linked their Telegram account (see
+// users.Repository.TelegramChatIDForUser) — alongside the email, not
+// instead of it: someone with no Telegram linked, or if the lookup or
+// the send itself fails, still has the email to fall back on. The chat
+// id lookup runs synchronously on the request's own context, same
+// reasoning as notifyLogin (a background goroutine touching the
+// database independently of the request isn't safe against a
+// request-scoped pgx.Tx); only the network call to Telegram itself is
+// deferred to a goroutine.
+func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string) {
+	if h.telegramClient == nil {
+		return
+	}
+	chatID, err := h.users.TelegramChatIDForUser(ctx, userID)
+	if err != nil {
+		slog.Error("look up telegram chat id for magic link", "error", err)
+		return
+	}
+	if chatID == nil {
+		return
+	}
+	text := fmt.Sprintf(
+		"Hola %s,\n\n"+
+			"Aquí tienes tu enlace de acceso a la intranet del Club de Espeleología Katiuskas, válido durante %d minutos:\n%s\n\n"+
+			"También puedes escribir este código en la página de acceso: %s\n\n"+
+			"Si no has pedido este acceso, puedes ignorar este mensaje.",
+		firstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
+	)
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.telegramClient.SendMessage(sendCtx, *chatID, text); err != nil {
+			slog.Error("send magic link via telegram", "error", err)
+		}
+	}()
 }
 
 func (h *Handler) ConsumeMagicLink(w http.ResponseWriter, r *http.Request) {

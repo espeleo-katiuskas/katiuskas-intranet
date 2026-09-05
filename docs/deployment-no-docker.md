@@ -143,10 +143,12 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 # `journalctl -u katiuskas-api`, igual que hasta ahora, sin aviso de
 # logins ni de llamadas al API, y el bot no reacciona a nadie que le
 # escriba. Rellénalas para activarlo todo: un aviso cada vez que arranca
-# el API, errores, un aviso por cada inicio de sesión, un aviso por cada
-# llamada al API que sea POST/PUT/PATCH/DELETE, y el bot pidiendo el
-# contacto a quien le escriba sin estar ya vinculado para asociar su
-# cuenta de Telegram con su teléfono.
+# el API, errores, un aviso por cada inicio de sesión, el enlace y
+# código de acceso también por Telegram (además del correo) a quien
+# tenga la cuenta vinculada, un aviso por cada llamada al API que sea
+# POST/PUT/PATCH/DELETE, y el bot pidiendo el contacto a quien le
+# escriba sin estar ya vinculado para asociar su cuenta de Telegram con
+# su teléfono.
 #TELEGRAM_BOT_TOKEN=
 #TELEGRAM_LOG_CHAT_ID=
 EOF

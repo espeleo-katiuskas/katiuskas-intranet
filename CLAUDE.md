@@ -113,6 +113,8 @@ carries a 6-digit login code — hashed alongside the link's token in the same
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`
 identifies the caller by email+phone (the code alone is too short to look someone up by)
 and a per-row attempt counter bounds brute-forcing it without affecting the link itself.
+Whoever's linked their Telegram account (see **Telegram** below) gets the same link and
+code by DM too, alongside — never instead of — the email.
 
 `httpapi.RequestLogger`'s per-request log line includes `user_id` once `auth.RequireAuth`
 resolves one. That takes a small mutable box placed in the request context before
@@ -264,12 +266,14 @@ line. `bot.go` adds the general, not-chat-specific pieces this package's own `Se
 `BotSender` don't need — `Client.SendMessage`/`SendMessageRequestingContact` (to whichever
 chat, not just the fixed log one) and `Client.GetUpdates` (long-polling, see
 `internal/telegrambot` below) — kept separate from, and never refactored to share code
-with, `BotSender`'s own already-shipped, already-tested HTTP-call logic. No OTP-via-
-Telegram login yet — that's a separate, larger piece of future work, not built here.
-Five things currently talk to Telegram, all independent of each other. Four are
-fire-and-forget (their own goroutine, a bounded timeout, a background context detached
-from the request/statement that triggered them — so a slow or unreachable Telegram API
-never adds latency anywhere); the fifth (startup) is the one exception, described below:
+with, `BotSender`'s own already-shipped, already-tested HTTP-call logic. Delivering the
+existing magic-link/login code by Telegram DM too (see `authapi.Handler.
+notifyMagicLinkViaTelegram` below) is as far as this goes — a dedicated Telegram-native
+login flow that skips email entirely is still a separate, larger piece of future work,
+not built here. Six things currently talk to Telegram, all independent of each other.
+Five are fire-and-forget (their own goroutine, a bounded timeout, a background context
+detached from the request/statement that triggered them — so a slow or unreachable
+Telegram API never adds latency anywhere); startup is the one exception, described below:
 - `LogHandler` wraps the root `slog.Handler` in `cmd/api/main.go` and forwards every
   record at `slog.LevelError` or above (panics, JSON-encode failures — see
   `httpapi.RequestLogger`/`middleware.go`) in addition to (never instead of) logging it
@@ -284,6 +288,19 @@ never adds latency anywhere); the fifth (startup) is the one exception, describe
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
+- `authapi.Handler.notifyMagicLinkViaTelegram` DMs the same link and login code
+  `sendMagicLinkIfEligible` just emailed to whoever has linked their Telegram account
+  (`users.Repository.TelegramChatIDForUser`) — alongside the email, never instead of it,
+  so someone with no Telegram linked (or a failed lookup/send) still has the email to
+  fall back on. Unlike `notifier`/`notifyLogin` above, which always target the fixed log
+  channel, this needs `authapi.TelegramMessenger` (`*telegram.Client` satisfies it
+  structurally) to DM whichever `chat_id` that specific person has — a second dependency
+  alongside `notifier`, wired from the same `botClient` `cmd/api/main.go` also gives
+  `internal/telegrambot`, and `nil` (not gated behind a separate config check) whenever
+  Telegram isn't configured at all, the same nil-disables-the-feature shape
+  `httpapi.NotifyMutatingCalls` uses. The chat id lookup runs synchronously on the
+  request's own context, same reasoning as `notifyLogin`; only the network call itself is
+  deferred to a goroutine.
 - `httpapi.NotifyMutatingCalls` (`internal/httpapi/notify.go`) sends
   "[API] `<method>` `<path>` -> `<status>`" for every `POST`/`PUT`/`PATCH`/`DELETE`
   request, once it completes, regardless of status — a failed write is still worth
