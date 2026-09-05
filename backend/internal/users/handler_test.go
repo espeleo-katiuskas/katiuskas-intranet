@@ -208,7 +208,7 @@ func TestHandlerListIncludesRolesForAPlainMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create target: %v", err)
 	}
-	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now()}); err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().UTC()}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
 
@@ -235,12 +235,12 @@ func TestHandlerListIncludesOnLeaveForAPlainMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create target: %v", err)
 	}
-	membership, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().AddDate(0, -1, 0)})
+	membership, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().UTC().AddDate(0, -1, 0)})
 	if err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	leaveStart := time.Now().AddDate(0, 0, -1)
-	leaveEnd := time.Now().AddDate(0, 0, 1)
+	leaveStart := time.Now().UTC().AddDate(0, 0, -1)
+	leaveEnd := time.Now().UTC().AddDate(0, 0, 1)
 	if _, err := membershipsService.CreateLeave(ctx, memberships.CreateLeaveInput{
 		MembershipID: membership.ID, StartDate: leaveStart, EndDate: leaveEnd,
 	}); err != nil {
@@ -268,11 +268,11 @@ func TestHandlerListIncludesLicenseTypeForAPlainMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create target: %v", err)
 	}
-	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now()}); err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().UTC()}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
 	licenseTypeID := testutil.LicenseTypeID(t, tx, "A BASICA")
-	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: target.ID, LicenseTypeID: licenseTypeID, IssuedDate: time.Now()}); err != nil {
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: target.ID, LicenseTypeID: licenseTypeID, IssuedDate: time.Now().UTC()}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 
@@ -305,7 +305,7 @@ func TestHandlerListHidesPeopleWhoHaveNeverBeenAMemberFromAPlainMember(t *testin
 	if err != nil {
 		t.Fatalf("create past member: %v", err)
 	}
-	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: pastMember.ID, StartDate: time.Now().AddDate(-1, 0, 0)}); err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: pastMember.ID, StartDate: time.Now().UTC().AddDate(-1, 0, 0)}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
 
