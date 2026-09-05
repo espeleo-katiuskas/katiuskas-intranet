@@ -250,20 +250,28 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 	return u, err
 }
 
-// FindByPhoneSuffix looks up a person by phone the way a Telegram
+// spainCountryCode is the +34 calling code every phone Telegram's
+// "share contact" hands back is expected to carry (this is a Spanish
+// club — see FindByPhoneNumber) but a phone on file here never does
+// (see users.CreateInput and every SEED_ADMIN_PHONE default).
+const spainCountryCode = "34"
+
+// FindByPhoneNumber looks up a person by phone the way a Telegram
 // "share contact" does it, not the way FindActiveByEmailAndPhone does:
 // Telegram always includes the country code (e.g. "34611222333"), while
-// a phone on file here never does (see users.CreateInput and every
-// SEED_ADMIN_PHONE default), so an exact digits match would never work.
-// Matching is a suffix check in both directions instead — good enough
-// for a 9-digit Spanish mobile number, not a general phone-number
-// library. digits must already be stripped to only digits by the
-// caller; empty always misses rather than matching every phone on file.
-// A phone shared by more than one person (each phone field is itself
-// space-separated, so this isn't even the only way to be ambiguous)
-// returns whichever one sorts first by id — rare enough not to need
-// anything smarter.
-func (r *Repository) FindByPhoneSuffix(ctx context.Context, digits string) (User, error) {
+// a phone on file here never does, so an exact digits match would never
+// work as-is. Matching requires digits to equal a candidate exactly, or
+// to equal spainCountryCode prepended to one — deliberately not a
+// same-length-agnostic suffix match: that would also match, say, a
+// French "+33666777888" against a Spanish "666777888" on file (they
+// share every digit but the country code), letting anyone claim to be
+// whoever's number happens to end the same way. digits must already be
+// stripped to only digits by the caller; empty always misses rather
+// than matching every phone on file. A phone shared by more than one
+// person (each phone field is itself space-separated, so this isn't
+// even the only way to be ambiguous) returns whichever one sorts first
+// by id — rare enough not to need anything smarter.
+func (r *Repository) FindByPhoneNumber(ctx context.Context, digits string) (User, error) {
 	var u User
 	if digits == "" {
 		return u, ErrNotFound
@@ -274,14 +282,14 @@ func (r *Repository) FindByPhoneSuffix(ctx context.Context, digits string) (User
 		WHERE EXISTS (
 			SELECT 1 FROM unnest(string_to_array(u.phone, ' ')) AS candidate
 			WHERE length(regexp_replace(candidate, '\D', '', 'g')) >= 6
-				AND (
-					$1 LIKE '%' || regexp_replace(candidate, '\D', '', 'g')
-					OR regexp_replace(candidate, '\D', '', 'g') LIKE '%' || $1
+				AND $1 IN (
+					regexp_replace(candidate, '\D', '', 'g'),
+					$2 || regexp_replace(candidate, '\D', '', 'g')
 				)
 		)
 		ORDER BY u.id
 		LIMIT 1
-	`, digits), &u)
+	`, digits, spainCountryCode), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}

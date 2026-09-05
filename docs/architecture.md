@@ -384,8 +384,10 @@ uso de un token es en sí un UPDATE, avisaba en cada petición autenticada, no s
 que de verdad cambiaban algo), y —el único
 que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
 si alguien desconocido escribe al bot, le pide que comparta su contacto, y si el teléfono
-compartido coincide con el de un socio (`users.Repository.FindByPhoneSuffix`, que hace
-coincidir el prefijo de país que Telegram siempre añade) vincula su `telegram_chat_id` y
+compartido coincide con el de un socio (`users.Repository.FindByPhoneNumber`, exigiendo
+que el prefijo de país que Telegram siempre añade sea el de España — nunca un simple
+sufijo, que dejaría a un "+33666777888" francés hacerse pasar por un "666777888" español,
+ya que comparten todos los dígitos salvo el prefijo) vincula su `telegram_chat_id` y
 se lo confirma; si no coincide, se lo dice; en ambos casos avisa al canal de quién lo ha
 intentado, con qué teléfono, y si coincidía o no (ver `CLAUDE.md` para el detalle de los
 cuatro). Los cuatro dependen de tener `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`

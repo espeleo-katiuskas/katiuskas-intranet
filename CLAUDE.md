@@ -309,17 +309,21 @@ never adds latency anywhere):
   job anyway). Any message from a chat `users.HasTelegramChatID` doesn't yet recognize
   gets a greeting plus a "share your contact" keyboard button
   (`Client.SendMessageRequestingContact`); a shared contact's phone number is matched
-  against `users.phone` via `users.Repository.FindByPhoneSuffix` — a *suffix* match, not
-  the exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests,
-  because Telegram always includes the country code (`"34611222333"`) while a phone on
-  file here never does (see `CreateInput`/every `SEED_ADMIN_PHONE` default). A match
+  against `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the
+  exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests, because
+  Telegram always includes the country code (`"34611222333"`) while a phone on file here
+  never does (see `CreateInput`/every `SEED_ADMIN_PHONE` default), so digits must equal a
+  candidate exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
+  same-length-agnostic suffix match: that also matched a French `"+33666777888"` against
+  a Spanish `"666777888"` on file (every digit but the country code is shared), letting
+  anyone claim to be whoever's number happened to end the same way. A match
   calls `users.Repository.SetTelegramChatID` and confirms; no match replies saying so.
   Either way, `Bot.notifyChannel` reports the attempt to the log channel — who sent it,
   the phone number, and whether it matched — the same "tell the club everything, matched
   or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
-  `HasTelegramChatID`/`FindByPhoneSuffix` directly, never through a generic `Get`.
+  `HasTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the

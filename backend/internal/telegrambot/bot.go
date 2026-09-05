@@ -132,7 +132,7 @@ var nonDigits = regexp.MustCompile(`\D`)
 func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 	digits := nonDigits.ReplaceAllString(msg.Contact.PhoneNumber, "")
 
-	matched, err := b.users.FindByPhoneSuffix(ctx, digits)
+	matched, err := b.users.FindByPhoneNumber(ctx, digits)
 	switch {
 	case err == nil:
 		if linkErr := b.users.SetTelegramChatID(ctx, matched.ID, msg.Chat.ID); linkErr != nil {

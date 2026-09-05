@@ -373,7 +373,7 @@ func TestFindActiveByEmailAndPhoneRejectsWhenNoPhoneOnFile(t *testing.T) {
 	}
 }
 
-func TestFindByPhoneSuffixMatchesAPhoneWithACountryCodePrefix(t *testing.T) {
+func TestFindByPhoneNumberMatchesAPhoneWithACountryCodePrefix(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
@@ -385,7 +385,7 @@ func TestFindByPhoneSuffixMatchesAPhoneWithACountryCodePrefix(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	found, err := repo.FindByPhoneSuffix(context.Background(), "34611222333")
+	found, err := repo.FindByPhoneNumber(context.Background(), "34611222333")
 	if err != nil {
 		t.Fatalf("expected a match despite the extra country code, got %v", err)
 	}
@@ -394,7 +394,7 @@ func TestFindByPhoneSuffixMatchesAPhoneWithACountryCodePrefix(t *testing.T) {
 	}
 }
 
-func TestFindByPhoneSuffixMatchesAnyOfSeveralPhones(t *testing.T) {
+func TestFindByPhoneNumberMatchesAnyOfSeveralPhones(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
@@ -405,12 +405,12 @@ func TestFindByPhoneSuffixMatchesAnyOfSeveralPhones(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := repo.FindByPhoneSuffix(context.Background(), "34622333444"); err != nil {
+	if _, err := repo.FindByPhoneNumber(context.Background(), "34622333444"); err != nil {
 		t.Errorf("expected a match against the second phone, got %v", err)
 	}
 }
 
-func TestFindByPhoneSuffixRejectsWrongPhone(t *testing.T) {
+func TestFindByPhoneNumberRejectsWrongPhone(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
@@ -421,17 +421,38 @@ func TestFindByPhoneSuffixRejectsWrongPhone(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := repo.FindByPhoneSuffix(context.Background(), "34600000000"); !errors.Is(err, users.ErrNotFound) {
+	if _, err := repo.FindByPhoneNumber(context.Background(), "34600000000"); !errors.Is(err, users.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for a mismatched phone, got %v", err)
 	}
 }
 
-func TestFindByPhoneSuffixRejectsEmptyDigits(t *testing.T) {
+func TestFindByPhoneNumberRejectsEmptyDigits(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 
-	if _, err := repo.FindByPhoneSuffix(context.Background(), ""); !errors.Is(err, users.ErrNotFound) {
+	if _, err := repo.FindByPhoneNumber(context.Background(), ""); !errors.Is(err, users.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for empty digits, got %v", err)
+	}
+}
+
+// TestFindByPhoneNumberRejectsAForeignNumberSharingTheSameDigits guards
+// against the exact impersonation a same-length-agnostic suffix match
+// used to allow: a French "+33666777888" and a Spanish "666777888" share
+// every digit except the country code, so someone sharing the French
+// number with the bot must not be matched to the Spanish person on file.
+func TestFindByPhoneNumberRejectsAForeignNumberSharingTheSameDigits(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("666777888"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := repo.FindByPhoneNumber(context.Background(), "33666777888"); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("expected ErrNotFound for a French +33 number sharing the Spanish person's digits, got %v", err)
 	}
 }
 
