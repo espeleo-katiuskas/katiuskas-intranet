@@ -163,6 +163,108 @@ func TestHandleContactLinksAMatchingUser(t *testing.T) {
 	}
 }
 
+// TestHandleContactRejectsSomeoneElsesSharedContact is the security
+// regression test: sharing a contact card that names a real socio's
+// phone number, but isn't the sender's own Telegram contact (Contact.
+// UserID doesn't match From.ID), must never link that socio's account
+// to the sender's chat — otherwise anyone who knew, or made up, a
+// socio's phone number could hijack their magic-link/login code.
+func TestHandleContactRejectsSomeoneElsesSharedContact(t *testing.T) {
+	usersService := newUsersService(t)
+	victim, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "Victima", LastName: "Real", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier}
+
+	attackerChatID := int64(666)
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{
+			Chat: telegram.Chat{ID: attackerChatID},
+			From: &telegram.From{ID: attackerChatID, FirstName: "Atacante"},
+			// UserID belongs to someone else (or nobody at all — a
+			// manually typed vCard would also carry UserID: 0), not to
+			// the attacker sending this message.
+			Contact: &telegram.Contact{PhoneNumber: "34611222333", UserID: 12345},
+		},
+	})
+
+	linked, err := usersService.HasTelegramChatID(context.Background(), attackerChatID)
+	if err != nil {
+		t.Fatalf("HasTelegramChatID: %v", err)
+	}
+	if linked {
+		t.Fatal("expected the victim's account to NOT be linked to the attacker's chat")
+	}
+	stillHasNoChat, err := usersService.FindByPhoneNumber(context.Background(), "34611222333")
+	if err != nil {
+		t.Fatalf("FindByPhoneNumber: %v", err)
+	}
+	if stillHasNoChat.Login != victim.Login {
+		t.Fatalf("sanity check failed: phone lookup found %q, not the victim %q", stillHasNoChat.Login, victim.Login)
+	}
+
+	if len(client.sent) != 1 || !strings.Contains(client.sent[0], "tu propio contacto") {
+		t.Errorf("expected a rejection reply, got %v", client.sent)
+	}
+	if len(notifier.sent) != 1 || !strings.Contains(notifier.sent[0], "no es el suyo") {
+		t.Errorf("expected a channel warning about the mismatched contact, got %v", notifier.sent)
+	}
+}
+
+func TestIsOwnContact(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  *telegram.Message
+		want bool
+	}{
+		{
+			name: "matches",
+			msg: &telegram.Message{
+				From:    &telegram.From{ID: 42},
+				Contact: &telegram.Contact{UserID: 42},
+			},
+			want: true,
+		},
+		{
+			name: "someone else's contact",
+			msg: &telegram.Message{
+				From:    &telegram.From{ID: 42},
+				Contact: &telegram.Contact{UserID: 99},
+			},
+			want: false,
+		},
+		{
+			name: "manually typed vCard has no user id at all",
+			msg: &telegram.Message{
+				From:    &telegram.From{ID: 42},
+				Contact: &telegram.Contact{UserID: 0},
+			},
+			want: false,
+		},
+		{
+			name: "no From at all",
+			msg: &telegram.Message{
+				From:    nil,
+				Contact: &telegram.Contact{UserID: 42},
+			},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isOwnContact(tc.msg); got != tc.want {
+				t.Errorf("isOwnContact() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHandleContactReportsNoMatch(t *testing.T) {
 	usersService := newUsersService(t)
 	client := &fakeClient{}

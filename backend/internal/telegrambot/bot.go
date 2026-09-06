@@ -130,6 +130,25 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 var nonDigits = regexp.MustCompile(`\D`)
 
 func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
+	// Telegram lets someone attach *any* contact card to a message, not
+	// just their own — a manually typed vCard, or a different Telegram
+	// user's saved contact. Only the "share contact" button this bot
+	// itself offers (SendMessageRequestingContact) guarantees
+	// Contact.UserID equals the sender's own From.ID; anything else
+	// means whoever's sharing this isn't necessarily who the phone
+	// number belongs to. Without this check, anyone who knew — or made
+	// up — a socio's phone number could link that socio's account to
+	// their *own* Telegram chat, and from then on receive that socio's
+	// magic-link/login code themselves.
+	if !isOwnContact(msg) {
+		reply := "Por tu seguridad, solo puedo vincular tu propio contacto — compártelo con el botón, no el de otra persona."
+		if err := b.client.SendMessage(ctx, msg.Chat.ID, reply); err != nil {
+			slog.Error("telegram bot: send reply", "error", err)
+		}
+		b.notifyChannelRejectedForeignContact(ctx, msg)
+		return
+	}
+
 	digits := nonDigits.ReplaceAllString(msg.Contact.PhoneNumber, "")
 
 	matched, err := b.users.FindByPhoneNumber(ctx, digits)
@@ -156,22 +175,47 @@ func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 	}
 }
 
+// isOwnContact reports whether the contact msg carries is the sender's
+// own — see the security note in handleContact above for why this
+// matters. Contact.UserID is 0 whenever Telegram doesn't know who the
+// shared contact actually is (a manually typed vCard), which never
+// equals a real From.ID either.
+func isOwnContact(msg *telegram.Message) bool {
+	return msg.From != nil && msg.Contact.UserID != 0 && msg.Contact.UserID == msg.From.ID
+}
+
+func senderName(msg *telegram.Message) string {
+	if msg.From != nil && msg.From.FirstName != "" {
+		return msg.From.FirstName
+	}
+	return "alguien"
+}
+
 // notifyChannel reports every contact-share attempt to the log channel,
 // matched or not — the club wants visibility into who's trying to link
 // an account, not just successful ones.
 func (b *Bot) notifyChannel(ctx context.Context, msg *telegram.Message, phone string, matched *users.User) {
-	sender := "alguien"
-	if msg.From != nil && msg.From.FirstName != "" {
-		sender = msg.From.FirstName
-	}
 	var text string
 	if matched != nil {
 		text = fmt.Sprintf("📇 %s ha compartido su contacto (%s) por Telegram: coincide con %s.",
-			sender, phone, matched.Login)
+			senderName(msg), phone, matched.Login)
 	} else {
 		text = fmt.Sprintf("📇 %s ha compartido su contacto (%s) por Telegram: no coincide con ningún socio.",
-			sender, phone)
+			senderName(msg), phone)
 	}
+	if err := b.logNotifier.Send(ctx, text); err != nil {
+		slog.Error("telegram bot: notify channel", "error", err)
+	}
+}
+
+// notifyChannelRejectedForeignContact reports a rejected attempt to
+// link an account via someone else's contact card (see the security
+// note in handleContact) — this is worth the club knowing about even
+// more than a routine no-match, since it's a possible impersonation
+// attempt rather than just someone fumbling the bot.
+func (b *Bot) notifyChannelRejectedForeignContact(ctx context.Context, msg *telegram.Message) {
+	text := fmt.Sprintf("⚠️ %s ha intentado vincular un contacto que no es el suyo (%s) por Telegram: vinculación rechazada.",
+		senderName(msg), msg.Contact.PhoneNumber)
 	if err := b.logNotifier.Send(ctx, text); err != nil {
 		slog.Error("telegram bot: notify channel", "error", err)
 	}

@@ -389,13 +389,24 @@ cada cambio en la base de datos en vez de cada llamada, y como tocar la fecha de
 uso de un token es en sí un UPDATE, avisaba en cada petición autenticada, no solo en las
 que de verdad cambiaban algo), y —el único
 que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
-si alguien desconocido escribe al bot, le pide que comparta su contacto, y si el teléfono
-compartido coincide con el de un socio (`users.Repository.FindByPhoneNumber`, exigiendo
-que el prefijo de país que Telegram siempre añade sea el de España — nunca un simple
-sufijo, que dejaría a un "+33666777888" francés hacerse pasar por un "666777888" español,
-ya que comparten todos los dígitos salvo el prefijo) vincula su `telegram_chat_id` y
-se lo confirma; si no coincide, se lo dice; en ambos casos avisa al canal de quién lo ha
-intentado, con qué teléfono, y si coincidía o no. El sexto es la excepción a
+si alguien desconocido escribe al bot, le pide que comparta su contacto; antes de mirar
+el teléfono, `isOwnContact` comprueba que el contacto compartido es el suyo propio —
+Telegram permite adjuntar el contacto de cualquiera, no solo el propio (una vCard escrita
+a mano, o el contacto guardado de otra persona), y solo el botón "compartir contacto" que
+envía el propio bot garantiza que coincidan. Esto era un fallo de seguridad real,
+encontrado y corregido después de publicarlo: compartir el teléfono de un socio de
+verdad, en nombre de otra persona, vinculaba la cuenta de *ese socio* al chat de *quien
+lo envió* — un camino de suplantación, no solo un problema de calidad de datos, del
+mismo tipo que el del prefijo de país de más abajo. Un contacto ajeno se rechaza con una
+respuesta y un aviso propio al canal (más grave que un simple "no coincide", por ser un
+posible intento de suplantación), sin llegar a mirar el teléfono siquiera. Si el
+contacto sí es el suyo y el teléfono coincide con el de un socio
+(`users.Repository.FindByPhoneNumber`, exigiendo que el prefijo de país que Telegram
+siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
+"+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
+los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; si no
+coincide, se lo dice; en ambos casos avisa al canal de quién lo ha intentado, con qué
+teléfono, y si coincidía o no. El sexto es la excepción a
 "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
 servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
 el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada

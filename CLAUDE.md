@@ -333,7 +333,18 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   candidate exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
   same-length-agnostic suffix match: that also matched a French `"+33666777888"` against
   a Spanish `"666777888"` on file (every digit but the country code is shared), letting
-  anyone claim to be whoever's number happened to end the same way. A match
+  anyone claim to be whoever's number happened to end the same way. Before any of that,
+  `isOwnContact` checks the shared contact is actually the sender's own — Telegram lets
+  a message carry *any* contact card, not just the sender's (a manually typed vCard, or
+  someone else's saved contact), and only the "share contact" button this bot itself
+  sends guarantees `Contact.UserID` equals the sender's own `From.ID`. Skipping this
+  check was a real vulnerability, found and fixed after shipping: sharing a real socio's
+  phone number in someone else's name linked *that socio's* account to the *sender's*
+  chat, handing the sender that socio's magic-link/login code from then on — an
+  impersonation path, not just a data-quality one, the same shape as the
+  `FindByPhoneNumber` country-code issue above. A mismatch gets a rejection reply and its
+  own `Bot.notifyChannelRejectedForeignContact` warning (worth flagging above a routine
+  no-match, since it's a possible impersonation attempt) and goes no further. A match
   calls `users.Repository.SetTelegramChatID` and confirms; no match replies saying so.
   Either way, `Bot.notifyChannel` reports the attempt to the log channel — who sent it,
   the phone number, and whether it matched — the same "tell the club everything, matched
