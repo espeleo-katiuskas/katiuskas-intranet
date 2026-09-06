@@ -44,13 +44,33 @@ func TestCreateDuplicateEmailRejected(t *testing.T) {
 	}
 }
 
-// TestCreateDuplicatePhoneRejected: unlike email (see
-// TestCreateDuplicateEmailRejected's sibling behavior — two people can
-// legitimately share an inbox), a phone number is expected to identify
-// one person, since internal/telegrambot resolves a shared Telegram
-// contact straight to whoever its phone number belongs to
-// (Repository.FindByPhoneNumber) — two people sharing one would make
-// that resolution ambiguous.
+// TestCreateDuplicateEmailRejectedRegardlessOfCasing guards against a
+// real gap that used to exist here: emailTakenByAnotherUser's own
+// duplicate check used to compare emails exactly, so "foo@x.com" and
+// "FOO@X.COM" could end up belonging to two different people even
+// though FindActiveByEmailAndPhone's login lookup already treats them
+// as the same address — letting a login-relevant duplicate slip past
+// the one check meant to prevent it.
+func TestCreateDuplicateEmailRejectedRegardlessOfCasing(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(email)}); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := repo.Create(context.Background(), users.CreateInput{FirstName: "C", LastName: "D", Email: strPtr(strings.ToUpper(email))})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate despite the different casing, got %v", err)
+	}
+}
+
+// TestCreateDuplicatePhoneRejected: an individual phone number is
+// expected to identify one person, since internal/telegrambot resolves
+// a shared Telegram contact straight to whoever its phone number
+// belongs to (Repository.FindByPhoneNumber) — two people sharing one
+// would make that resolution ambiguous, the same reason email's own
+// duplicate check exists.
 func TestCreateDuplicatePhoneRejected(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

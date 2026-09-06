@@ -1812,11 +1812,11 @@ components:
           description: >
             One or more email addresses, space-separated, or absent
             entirely. Signing in and a magic link going out both work
-            against any one of them; someone with none on file can never
-            receive a magic link, the same way someone with no phone
-            already couldn't. An individual address still can't belong
-            to two different people, even as one of several on the same
-            record.
+            against any one of them, matched case-insensitively; someone
+            with none on file can never receive a magic link, the same
+            way someone with no phone already couldn't. An individual
+            address still can't belong to two different people, even as
+            one of several on the same record.
         phone:
           type: string
           nullable: true
@@ -1824,9 +1824,9 @@ components:
             One or more phone numbers, space-separated — so each number
             itself can't contain a space (write "600111222", not
             "600 111 222"; other punctuation like dashes is fine).
-            Matched the same way as email for signing in. Unlike email, an
-            individual number can't belong to two different people at
-            all, even as one of several on the same record.
+            Matched the same way as email for signing in. An individual
+            number can't belong to two different people either, even as
+            one of several on the same record.
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }
         city: { type: string, nullable: true }

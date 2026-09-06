@@ -163,14 +163,15 @@ follow-up `LoginForUserID` call.
 them (`Repository.FindActiveByEmailAndPhone`). That rules out a plain column `UNIQUE`
 constraint, since Postgres can't express "no two rows share an element" that way, so
 `users.Repository` checks it in Go instead: `emailTakenByAnotherUser` (an array-overlap
-`EXISTS`) and `phoneTakenByAnotherUser` (the same shape, but comparing digits only, so
-"611-222-333" and "611222333" count as the same number), both called from `Create` and
-`Update` and both returning `ErrDuplicate` on a hit. The two aren't symmetric on purpose:
-sharing an email (a family inbox, say) is fine, so `emailTakenByAnotherUser` exists only
-to stop one address literally belonging to two accounts at once, but a phone is never
-legitimately shared — `internal/telegrambot.Bot` resolves a shared Telegram contact
-straight to whoever its phone number belongs to (`users.Repository.FindByPhoneNumber`),
-so two people sharing one would make that resolution ambiguous.
+`EXISTS`, case-insensitive — "foo@x.com" and "FOO@X.COM" count as the same address, the
+same as `FindActiveByEmailAndPhone`'s own login lookup) and `phoneTakenByAnotherUser` (the
+same shape, but comparing digits only, so "611-222-333" and "611222333" count as the same
+number), both called from `Create` and `Update` and both returning `ErrDuplicate` on a
+hit. Neither an individual email nor an individual phone may belong to two different
+people at once, even though either field can hold several — sharing either would make a
+lookup meant to resolve to exactly one person land on whichever one happens to come back
+first instead: `FindActiveByEmailAndPhone` for email, `internal/telegrambot.Bot`'s own
+phone-based account resolution (`users.Repository.FindByPhoneNumber`) for phone.
 
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,

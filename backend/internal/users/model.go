@@ -91,12 +91,17 @@ type User struct {
 	// (like EmergencyContact already allows) — someone with a personal
 	// and a work address, say. Signing in, and a magic link going out,
 	// works against any one of them (see
-	// Repository.FindActiveByEmailAndPhone); one email still can't
-	// belong to two different people (Repository enforces that in Go,
-	// since the database can no longer express it as a plain column
-	// constraint once it's not a single atomic value). Email is
-	// optional — someone with none on file simply can never receive a
-	// magic link, the same way someone with no phone already couldn't.
+	// Repository.FindActiveByEmailAndPhone, case-insensitive on the
+	// email side). Neither an individual email nor an individual phone
+	// can belong to two different people — Repository enforces both in
+	// Go (emailTakenByAnotherUser/phoneTakenByAnotherUser, also
+	// case-insensitive on the email side) since the database can no
+	// longer express it as a plain column constraint once either field
+	// isn't a single atomic value; see either check's own doc comment
+	// for why sharing either would be a real problem, not just an
+	// oddity. Email is optional — someone with none on file simply can
+	// never receive a magic link, the same way someone with no phone
+	// already couldn't.
 	Email            *string `json:"email,omitempty"`
 	Phone            *string `json:"phone,omitempty"`
 	Address          *string `json:"address,omitempty"`

@@ -103,16 +103,19 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   aparte: encajar "alguno de estos" es una comprobación de solape de arrays
   (`string_to_array(...) && string_to_array(...)`), y esta escala de club no necesita
   más. Eso sí impide seguir usando un `UNIQUE` de columna en ninguno de los dos — un
-  correo o un teléfono sigue sin poder pertenecer a dos personas, pero Postgres no puede
-  expresar "ninguna fila comparte un elemento" así, de modo que `users.Repository` lo
-  comprueba a mano en `Create`/`Update` (`emailTakenByAnotherUser`/
-  `phoneTakenByAnotherUser`, ver `db/migrations/00002_users.sql`) — el teléfono además
-  compara solo por dígitos, igual que `FindActiveByEmailAndPhone`, así que un mismo
-  número con distinto formato ("611-222-333" frente a "611222333") también cuenta como
-  el mismo. A diferencia del correo (donde compartir uno, p. ej. un buzón familiar, no es
-  ningún problema), un teléfono sí tiene que identificar a una sola persona: si dos
-  compartieran uno, el propio `FindByPhoneNumber` de `internal/telegrambot` no sabría a
-  quién vincular el chat de Telegram que comparte ese contacto. Iniciar sesión y
+  correo o un teléfono sigue sin poder pertenecer a dos personas a la vez, aunque cada
+  campo admita varios, pero Postgres no puede expresar "ninguna fila comparte un
+  elemento" así, de modo que `users.Repository` lo comprueba a mano en `Create`/`Update`
+  (`emailTakenByAnotherUser`/`phoneTakenByAnotherUser`, ver `db/migrations/00002_users.sql`)
+  — el correo compara sin distinguir mayúsculas/minúsculas ("foo@x.com" y "FOO@X.COM"
+  cuentan como la misma dirección, igual que en `FindActiveByEmailAndPhone`) y el
+  teléfono compara solo por dígitos, igual que `FindActiveByEmailAndPhone`, así que un
+  mismo número con distinto formato ("611-222-333" frente a "611222333") también cuenta
+  como el mismo. Ambos existen por la misma razón: si dos personas compartieran un correo
+  o un teléfono, una búsqueda pensada para resolver a una sola persona —
+  `FindActiveByEmailAndPhone` para el correo, el propio `FindByPhoneNumber` de
+  `internal/telegrambot` para el teléfono — acabaría resolviendo a la que sea que
+  aparezca primero, en vez de dar error. Iniciar sesión y
   el enlace de acceso funcionan contra cualquiera de los correos/teléfonos registrados
   (`Repository.FindActiveByEmailAndPhone`, sin distinguir mayúsculas/minúsculas en el
   correo — igual que la comprobación propia de `internal/telegrambot`, `emailMatchesUser`,

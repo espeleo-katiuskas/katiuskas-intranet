@@ -21,14 +21,17 @@ var (
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
 	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
-	// ErrDuplicate means an email (or one of several) — allowed to repeat
-	// across people, e.g. a shared family inbox, but not to belong to two
-	// different accounts at once — or a phone, national ID, login, or
-	// membership number being set already belongs to another person.
-	// Unlike email, a phone is never legitimately shared: two people
-	// sharing one would make internal/telegrambot's own phone-based
-	// lookup (FindByPhoneNumber) ambiguous, silently linking the wrong
-	// person's Telegram account.
+	// ErrDuplicate means an email (or one of several — see
+	// emailTakenByAnotherUser), a phone (phoneTakenByAnotherUser), a
+	// national ID, a login, or a membership number being set already
+	// belongs to another person. A person can hold more than one email
+	// or phone at once, but neither an individual email nor an
+	// individual phone may belong to two different people at the same
+	// time: sharing either would make a lookup meant to resolve to
+	// exactly one person — FindActiveByEmailAndPhone for email,
+	// internal/telegrambot's phone-based account resolution
+	// (FindByPhoneNumber) for phone — land on whichever person happens
+	// to come back first, silently signing in or DMing the wrong one.
 	ErrDuplicate = errors.New("email, phone, national ID, login, or membership number already belongs to another person")
 	// ErrInvalidLogin means an admin-supplied login doesn't match
 	// loginFormat — lowercase letters, digits, dots, and hyphens only,
@@ -71,18 +74,27 @@ func NewRepository(pool db.PGX) *Repository {
 }
 
 // emailTakenByAnotherUser reports whether any of the space-separated
-// emails in candidate already belongs to a user other than excludeID
-// (pass 0 when checking a not-yet-created person). This is the check a
-// plain UNIQUE constraint used to do before email could hold more than
-// one address — Postgres can't express "no two rows share an element"
-// as a column constraint, so it's enforced here instead.
+// emails in candidate — compared case-insensitively, the same as
+// FindActiveByEmailAndPhone's own login lookup and
+// internal/telegrambot's emailMatchesUser, so a duplicate can't slip
+// through this check purely by casing when every other email
+// comparison in this codebase already ignores it — already belongs to
+// a user other than excludeID (pass 0 when checking a not-yet-created
+// person). This is the check a plain UNIQUE constraint used to do
+// before email could hold more than one address — Postgres can't
+// express "no two rows share an element" as a column constraint, so
+// it's enforced here instead.
 func (r *Repository) emailTakenByAnotherUser(ctx context.Context, excludeID int64, candidate string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
 		SELECT EXISTS (
-			SELECT 1 FROM users
-			WHERE id <> $1
-				AND string_to_array(email, ' ') && string_to_array($2, ' ')
+			SELECT 1
+			FROM users u, unnest(string_to_array($2, ' ')) AS candidate_email
+			WHERE u.id <> $1
+				AND EXISTS (
+					SELECT 1 FROM unnest(string_to_array(u.email, ' ')) AS existing_email
+					WHERE lower(existing_email) = lower(candidate_email)
+				)
 		)
 	`, excludeID, candidate).Scan(&exists)
 	return exists, err
@@ -92,12 +104,12 @@ func (r *Repository) emailTakenByAnotherUser(ctx context.Context, excludeID int6
 // phone numbers in candidate — compared by digits only, the same
 // normalization FindActiveByEmailAndPhone/FindByPhoneNumber use, so
 // formatting differences don't create a false gap — already belongs to
-// a user other than excludeID. Unlike email (see emailTakenByAnotherUser,
-// deliberately left non-unique — nothing stops two people from sharing
-// an inbox), a phone number identifies one person: two people sharing
-// one would make internal/telegrambot's own FindByPhoneNumber lookup
-// ambiguous, silently linking the wrong person's Telegram account to
-// whichever one it happened to resolve to.
+// a user other than excludeID. Same rationale as emailTakenByAnotherUser:
+// internal/telegrambot resolves a shared Telegram contact straight to
+// whoever its phone number belongs to (FindByPhoneNumber), so two
+// people sharing one would make that resolution ambiguous, silently
+// linking the wrong person's Telegram account to whichever one it
+// happened to resolve to.
 func (r *Repository) phoneTakenByAnotherUser(ctx context.Context, excludeID int64, candidate string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
