@@ -157,7 +157,7 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   email+teléfono igual que la propia petición (el código por sí solo es demasiado corto
   para servir de clave de búsqueda) y responde siempre con el mismo 401 genérico,
   también por no distinguir casos desde fuera. Si la persona tiene su cuenta de Telegram
-  vinculada (ver más abajo), recibe el mismo enlace y código por Telegram además del
+  vinculada (ver más abajo), recibe el mismo enlace por Telegram además del
   correo — nunca en su lugar, así que quien no lo tenga vinculado, o si ese envío falla,
   sigue teniendo el correo. La lógica de emitir el enlace (comprobar el rol, el tiempo
   de espera, crear el token, enviarlo) vive en un único sitio interno
@@ -166,7 +166,15 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   vinculada y escribe al bot recibe exactamente el mismo enlace, sin pasar por email ni
   teléfono. Ese es el único caso en el que la persona puede no tener correo en absoluto
   (`FindActiveByEmailAndPhone` sí lo garantiza para la petición web), así que el envío
-  por correo simplemente se omite cuando no hay ninguno — nunca falla por eso.
+  por correo simplemente se omite cuando no hay ninguno — nunca falla por eso. El texto
+  del DM de Telegram no es siempre igual: el correo (que puede leerse desde otro
+  dispositivo y no tiene por qué responder a nada que la persona acabe de hacer) siempre
+  incluye el código de acceso y un "si no has pedido esto, ignora este mensaje"; el DM
+  copia eso tal cual cuando simplemente acompaña a una petición hecha desde la web, pero
+  cuando es el propio bot el que responde a alguien que acaba de escribirle su correo
+  (`handleRecognizedChat`, más abajo) omite ambas cosas — no hay ninguna página pidiendo
+  ese código en ese momento, y el mensaje es precisamente la respuesta a lo que esa
+  persona acaba de enviar, no algo que pueda llegar sin que lo haya pedido.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente
@@ -388,7 +396,8 @@ dependencias — solo `net/http`/`encoding/json` —, usado hoy para seis avisos
 independientes. Cinco son "fire-and-forget" y nunca añaden latencia a lo que los
 dispara: los
 logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), el mismo
-enlace y código del magic-link también por DM de Telegram a quien tenga la cuenta
+enlace del magic-link (y, según el caso, el código — ver más arriba) también por DM de
+Telegram a quien tenga la cuenta
 vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso de
 cada llamada al API que sea POST/PUT/PATCH/DELETE (`httpapi.NotifyMutatingCalls`, en el
 propio router — no un wrapper de la base de datos: la primera versión de esto avisaba de

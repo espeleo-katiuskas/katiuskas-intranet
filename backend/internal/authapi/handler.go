@@ -113,32 +113,37 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	if err != nil {
 		return err
 	}
-	return h.issueMagicLink(ctx, user)
+	return h.issueMagicLink(ctx, user, false)
 }
 
 // IssueMagicLinkForTelegramUser replies to a message from someone whose
 // Telegram chat is already linked (see internal/telegrambot) with a
-// fresh sign-in link and code, exactly as if they'd requested one from
-// the web — same eligibility checks, same delivery. Silently does
-// nothing when ineligible (no baseline role, or a recent link is still
-// live), the same anti-enumeration-flavored silence sendMagicLinkIfEligible
-// itself uses for the web endpoint — there's nothing to hide here (the
-// caller already knows exactly who this is), but there's also no reason
-// to answer a rate-limited retry any differently than the web flow
-// would.
+// fresh sign-in link, exactly as if they'd requested one from the web —
+// same eligibility checks, same delivery. Silently does nothing when
+// ineligible (no baseline role, or a recent link is still live), the
+// same anti-enumeration-flavored silence sendMagicLinkIfEligible itself
+// uses for the web endpoint — there's nothing to hide here (the caller
+// already knows exactly who this is), but there's also no reason to
+// answer a rate-limited retry any differently than the web flow would.
 func (h *Handler) IssueMagicLinkForTelegramUser(ctx context.Context, userID int64) error {
 	user, err := h.users.Get(ctx, userID)
 	if err != nil {
 		return err
 	}
-	return h.issueMagicLink(ctx, user)
+	return h.issueMagicLink(ctx, user, true)
 }
 
 // issueMagicLink is sendMagicLinkIfEligible/IssueMagicLinkForTelegramUser's
 // shared core, once the target person is already resolved: the
 // baseline-role and cooldown gates, creating the token/code, and
-// delivering it by every channel available for them.
-func (h *Handler) issueMagicLink(ctx context.Context, user users.User) error {
+// delivering it by every channel available for them. viaTelegramBot
+// distinguishes the Telegram DM's own wording — see
+// notifyMagicLinkViaTelegram — from the case where a link is also
+// delivered by Telegram merely because the requester (from the web)
+// happens to have one linked; the email itself doesn't need this
+// distinction, since it's always speculative — sent to an inbox that
+// might not even be the one currently being read.
+func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegramBot bool) error {
 	// Signing in would be pointless for someone who can't call the API
 	// anyway (see auth.BaselineRoles) — don't hand out a link, and don't
 	// even let the cooldown check below reveal that this person exists
@@ -172,7 +177,7 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User) error {
 	}
 
 	link := fmt.Sprintf("%s/login?token=%s", h.opts.PublicBaseURL, rawToken)
-	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code)
+	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code, viaTelegramBot)
 
 	// Unlike Telegram, email isn't guaranteed here: sendMagicLinkIfEligible's
 	// own FindActiveByEmailAndPhone lookup requires one, but
@@ -197,17 +202,28 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User) error {
 	return h.mailer.Send(ctx, strings.Join(strings.Fields(*user.Email), ", "), subject, body)
 }
 
-// notifyMagicLinkViaTelegram DMs the same link and login code to
-// whoever has linked their Telegram account (see
-// users.Repository.TelegramChatIDForUser) — alongside the email, not
-// instead of it: someone with no Telegram linked, or if the lookup or
-// the send itself fails, still has the email to fall back on. The chat
-// id lookup runs synchronously on the request's own context, same
-// reasoning as notifyLogin (a background goroutine touching the
-// database independently of the request isn't safe against a
-// request-scoped pgx.Tx); only the network call to Telegram itself is
-// deferred to a goroutine.
-func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string) {
+// notifyMagicLinkViaTelegram DMs a sign-in link to whoever has linked
+// their Telegram account (see users.Repository.TelegramChatIDForUser)
+// — alongside the email, not instead of it: someone with no Telegram
+// linked, or if the lookup or the send itself fails, still has the
+// email to fall back on. The chat id lookup runs synchronously on the
+// request's own context, same reasoning as notifyLogin (a background
+// goroutine touching the database independently of the request isn't
+// safe against a request-scoped pgx.Tx); only the network call to
+// Telegram itself is deferred to a goroutine.
+//
+// viaTelegramBot picks the wording: when this link was requested
+// through internal/telegrambot's own conversation (the person just
+// typed their email to the bot, see handleRecognizedChat), the message
+// leaves out both the login code — there's no code-entry page open
+// anywhere for this request, unlike the email, which might be read on
+// a different device than the one signing in — and the "if you didn't
+// request this, ignore it" line, since this message *is* the direct
+// reply to what they just sent the bot. Otherwise (a web request that
+// merely happens to also have Telegram linked) the DM matches the
+// email in full, code included, since either could be what's read
+// first.
+func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) {
 	if h.telegramClient == nil {
 		return
 	}
@@ -219,13 +235,22 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 	if chatID == nil {
 		return
 	}
-	text := fmt.Sprintf(
-		"Hola %s,\n\n"+
-			"Aquí tienes tu enlace de acceso a la intranet del Club de Espeleología Katiuskas, válido durante %d minutos:\n%s\n\n"+
-			"También puedes escribir este código en la página de acceso: %s\n\n"+
-			"Si no has pedido este acceso, puedes ignorar este mensaje.",
-		firstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
-	)
+	var text string
+	if viaTelegramBot {
+		text = fmt.Sprintf(
+			"Hola %s,\n\n"+
+				"Aquí tienes tu enlace de acceso a la intranet del Club de Espeleología Katiuskas, válido durante %d minutos:\n%s",
+			firstName, int(h.opts.MagicLinkTTL.Minutes()), link,
+		)
+	} else {
+		text = fmt.Sprintf(
+			"Hola %s,\n\n"+
+				"Aquí tienes tu enlace de acceso a la intranet del Club de Espeleología Katiuskas, válido durante %d minutos:\n%s\n\n"+
+				"También puedes escribir este código en la página de acceso: %s\n\n"+
+				"Si no has pedido este acceso, puedes ignorar este mensaje.",
+			firstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
+		)
+	}
 	go func() {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

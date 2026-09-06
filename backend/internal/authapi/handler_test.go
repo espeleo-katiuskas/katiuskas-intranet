@@ -342,9 +342,9 @@ func TestRequestMagicLinkAlsoSendsViaTelegramWhenLinked(t *testing.T) {
 
 // TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM covers the bot's
 // use case directly: someone already recognized who just messages the
-// bot again gets the exact same treatment as requesting a link from the
-// web — role/cooldown checks included, delivered by every channel
-// available for them.
+// bot again gets the same role/cooldown checks and delivery as
+// requesting a link from the web, but the DM itself reads differently
+// — see TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine.
 func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")
@@ -363,8 +363,35 @@ func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
 	if chatID != 555 {
 		t.Errorf("expected the DM to go to chat_id 555, got %d", chatID)
 	}
-	if codeInBody.FindStringSubmatch(text) == nil {
-		t.Errorf("expected a login code in the DM, got %q", text)
+	if tokenInLink.FindStringSubmatch(text) == nil {
+		t.Errorf("expected a sign-in link in the DM, got %q", text)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine covers the
+// bot-flow wording directly: unlike the email (which might be read on
+// another device, hence the code-entry fallback) or a DM sent merely
+// because a web request happens to also have Telegram linked, this DM
+// is the direct reply to a message the person just sent the bot — there
+// is no code-entry page open anywhere for it to be useful for, and
+// nothing to "not have requested".
+func TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	_, text := s.telegramClient.waitForMessage(t)
+	if codeInBody.FindStringSubmatch(text) != nil {
+		t.Errorf("expected no login code in the bot-flow DM, got %q", text)
+	}
+	if strings.Contains(text, "Si no has pedido este acceso") {
+		t.Errorf("expected no \"didn't request this\" line in the bot-flow DM, got %q", text)
 	}
 }
 
@@ -392,8 +419,8 @@ func TestIssueMagicLinkForTelegramUserSkipsEmailWhenThereIsNone(t *testing.T) {
 	if s.mailer.sent != 0 {
 		t.Errorf("expected no email attempt for someone with none on file, got %d", s.mailer.sent)
 	}
-	if _, text := s.telegramClient.waitForMessage(t); codeInBody.FindStringSubmatch(text) == nil {
-		t.Errorf("expected the DM to still carry a login code, got %q", text)
+	if _, text := s.telegramClient.waitForMessage(t); tokenInLink.FindStringSubmatch(text) == nil {
+		t.Errorf("expected the DM to still carry a sign-in link, got %q", text)
 	}
 }
 

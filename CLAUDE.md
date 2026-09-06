@@ -288,13 +288,23 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
-- `authapi.Handler.notifyMagicLinkViaTelegram` DMs the same link and login code
-  `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web endpoint,
-  and the exported `IssueMagicLinkForTelegramUser`, for `internal/telegrambot.Bot`
-  above, resolve their target person into before calling) just emailed to whoever has
+- `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has
   linked their Telegram account (`users.Repository.TelegramChatIDForUser`) — alongside
-  the email, never instead of it, so someone with no Telegram linked (or a failed
-  lookup/send) still has the email to fall back on. `IssueMagicLinkForTelegramUser` is
+  the email `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web
+  endpoint, and the exported `IssueMagicLinkForTelegramUser`, for
+  `internal/telegrambot.Bot` above, resolve their target person into before calling)
+  sends, never instead of it, so someone with no Telegram linked (or a failed
+  lookup/send) still has the email to fall back on. The DM's wording depends on which of
+  those two callers triggered it (`issueMagicLink`'s own `viaTelegramBot` bool, threaded
+  through): the email always includes the login code and a "if you didn't request this,
+  ignore it" line, since it might be read on another device than the one signing in and
+  wasn't necessarily prompted by anything the reader just did; the Telegram DM matches
+  that in full when it's merely riding along with a web request that happens to also have
+  Telegram linked, but when it's the bot's own `IssueMagicLinkForTelegramUser` replying to
+  someone who just typed their email into the chat (see `handleRecognizedChat` below),
+  it drops both — there's no code-entry page open anywhere for that code to be useful
+  for, and this message *is* the direct reply to what they just sent, not something that
+  could show up unprompted. `IssueMagicLinkForTelegramUser` is
   also the one caller where email genuinely can be absent — `FindActiveByEmailAndPhone`
   guarantees one for the web path, but resolving straight from a linked chat id doesn't
   — so `issueMagicLink` skips the email send entirely rather than dereferencing a nil
