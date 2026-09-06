@@ -448,9 +448,9 @@ func TestListByUserReturnsEmptySliceNotNilWhenPersonHasNoHistory(t *testing.T) {
 	}
 }
 
-// year 2026 is seeded by migration 00014; this only needs one more row
-// in a different year to prove filtering actually happens rather than
-// just returning everything.
+// year 2026 is seeded by migration 00009_holidays.sql; this only needs
+// one more row in a different year to prove filtering actually happens
+// rather than just returning everything.
 func TestListHolidaysFiltersByYear(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
@@ -614,7 +614,7 @@ func TestCreateHolidayRejectsDuplicateDate(t *testing.T) {
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 
-	// 2026-01-01 is already seeded (migration 00014).
+	// 2026-01-01 is already seeded (migration 00009_holidays.sql).
 	if _, err := repo.CreateHoliday(ctx, date("2026-01-01"), "Duplicado"); !errors.Is(err, activities.ErrDuplicateHoliday) {
 		t.Errorf("expected ErrDuplicateHoliday, got %v", err)
 	}

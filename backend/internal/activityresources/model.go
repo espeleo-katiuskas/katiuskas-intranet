@@ -25,7 +25,7 @@ const (
 // afterward (see Handler.canEdit). Description is set only for a text
 // resource; FileName/FileSize/ContentType only for a file one — kept in
 // sync with Type by CHECK constraints in the database (migration
-// 00018), not just application code.
+// 00010_activity_resources.sql), not just application code.
 type Resource struct {
 	ID          int64        `json:"id"`
 	ActivityID  int64        `json:"activity_id"`

@@ -734,7 +734,7 @@ func TestHandlerCreateHolidayRejectsDuplicateDate(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	// 2026-01-01 is already seeded (migration 00014).
+	// 2026-01-01 is already seeded (migration 00009_holidays.sql).
 	rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", boardToken, map[string]any{
 		"date": "2026-01-01", "name": "Duplicado",
 	})

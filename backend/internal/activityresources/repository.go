@@ -14,8 +14,9 @@ var (
 	ErrNotFound = errors.New("resource not found")
 	// ErrInvalidFields means a text/description or file-field combination
 	// that doesn't match the resource's own type was given — the
-	// database's own CHECK constraints (migration 00018) are the actual
-	// source of truth for which combinations are valid; this just
+	// database's own CHECK constraints (migration
+	// 00010_activity_resources.sql) are the actual source of truth for
+	// which combinations are valid; this just
 	// surfaces a constraint violation as a typed error instead of a raw
 	// one, the same way inventory.CreateMovement does for
 	// activityRequiredConstraint.

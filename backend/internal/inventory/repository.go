@@ -39,7 +39,7 @@ var (
 const categoryFKViolationCode = "23503"
 
 // activityRequiredConstraint is the CHECK constraint (see migration
-// 00017) requiring a loan or return to name the activity it's for.
+// 00006_inventory.sql) requiring a loan or return to name the activity it's for.
 // Rental's activity is optional — a rental doesn't always happen as
 // part of one.
 const activityRequiredConstraint = "activity_required_for_loan_and_return"
@@ -174,8 +174,8 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 }
 
 // ListMaterialCategories returns the gear category catalog (migration
-// 00013) — every entry, in name order, for the "new item" form's
-// category picker.
+// 00006_inventory.sql) — every entry, in name order, for the "new item"
+// form's category picker.
 func (r *Repository) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, name FROM material_categories ORDER BY name`)
 	if err != nil {

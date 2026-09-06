@@ -16,8 +16,10 @@ import (
 // This package's own routes are nested under /users/{login}/movements,
 // but item_movements is keyed by numeric user id — users.Service
 // satisfies this structurally (see main.go's wiring), without inventory
-// having to import that package (it can't: users already imports this
-// one).
+// having to import that package directly. licenses/memberships/roles
+// genuinely can't (users.Service imports all three); inventory keeps
+// the same small local-interface shape anyway for consistency across
+// every package that's keyed by user id.
 type UserLookup interface {
 	UserIDForLogin(ctx context.Context, login string) (int64, error)
 	LoginForUserID(ctx context.Context, id int64) (string, error)

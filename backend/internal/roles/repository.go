@@ -106,9 +106,12 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 // this person hold": everything stored in user_roles, plus "member" and
 // "former_member" computed live from their membership history, and
 // "board" computed live from their board_members history (see the
-// package doc comment). It backs both the JWT roles claim issued at
-// login and the roles shown on their profile, so the two can never
-// disagree.
+// package doc comment). There's no JWT or other token payload baking
+// roles in — tokens.Service calls this fresh on every authenticated
+// request, and users.Service.enrich calls it again for the roles shown
+// on a profile, so the two can never disagree and losing membership or
+// a board term revokes access on the very next request rather than
+// waiting for a stale token to expire.
 func (r *Repository) ListNamesForUser(ctx context.Context, userID int64) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT r.name FROM roles r

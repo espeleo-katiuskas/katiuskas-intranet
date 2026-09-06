@@ -338,8 +338,8 @@ func TestMovementsWithoutRecipientHaveNilUserLogin(t *testing.T) {
 
 // The handler already rejects a login for these types before ever
 // reaching the repository, but the recipient_only_for_loan_rental_sale
-// CHECK (migration 00019) is the actual source of truth — this exercises
-// it directly.
+// CHECK (migration 00006_inventory.sql) is the actual source of truth —
+// this exercises it directly.
 func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)

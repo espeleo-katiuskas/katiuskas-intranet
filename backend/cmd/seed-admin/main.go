@@ -1,7 +1,7 @@
 // Command seed-admin creates the first administrator.
 //
-// It exists because POST /api/v1/users already requires an admin or board
-// role to call it: without this command there would be no way into a
+// It exists because POST /api/v1/users already requires an admin role
+// to call it: without this command there would be no way into a
 // freshly migrated database at all. Safe to run more than once — if the
 // email already has a person record, it does nothing.
 //

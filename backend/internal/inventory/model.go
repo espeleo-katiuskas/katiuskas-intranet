@@ -18,7 +18,7 @@ const (
 )
 
 // ItemType distinguishes the three shapes an inventory item can take —
-// see migration 00013. Rope and bag are individually tracked physical
+// see migration 00006_inventory.sql. Rope and bag are individually tracked physical
 // objects (their own code, always total_quantity 1) with type-specific
 // attributes; gear is everything else, a fungible stock item filed
 // under an admin-managed category.

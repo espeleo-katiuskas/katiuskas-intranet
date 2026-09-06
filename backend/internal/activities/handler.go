@@ -17,8 +17,10 @@ import (
 // (or name a person by login in a request body), but activities and
 // activity_participants are keyed by numeric user id — users.Service
 // satisfies this structurally (see main.go's wiring), without
-// activities having to import that package (it can't: users already
-// imports this one, via licenses).
+// activities having to import that package directly. licenses/
+// memberships/roles genuinely can't (users.Service imports all three);
+// activities keeps the same small local-interface shape anyway for
+// consistency across every package that's keyed by user id.
 type UserLookup interface {
 	UserIDForLogin(ctx context.Context, login string) (int64, error)
 	LoginForUserID(ctx context.Context, id int64) (string, error)

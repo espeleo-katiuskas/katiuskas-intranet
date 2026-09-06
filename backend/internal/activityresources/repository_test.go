@@ -95,7 +95,8 @@ func TestCreateFileResource(t *testing.T) {
 	}
 }
 
-// The database's own CHECK constraints (migration 00018) are the real
+// The database's own CHECK constraints (migration
+// 00010_activity_resources.sql) are the real
 // source of truth for which fields belong to which type — this
 // exercises them directly, the same way inventory's tests exercise its
 // own type-specific CHECKs.
