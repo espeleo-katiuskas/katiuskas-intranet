@@ -107,7 +107,10 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   fila comparte un elemento" así, de modo que `users.Repository` lo comprueba a mano en
   `Create`/`Update` (ver `db/migrations/00002_users.sql`). Iniciar sesión y
   el enlace de acceso funcionan contra cualquiera de los correos/teléfonos registrados
-  (`Repository.FindActiveByEmailAndPhone`); como el espacio pasa a separar varios
+  (`Repository.FindActiveByEmailAndPhone`, sin distinguir mayúsculas/minúsculas en el
+  correo — igual que la comprobación propia de `internal/telegrambot`, `emailMatchesUser`,
+  así que la misma dirección funciona igual entre entrar desde la web o desde Telegram);
+  como el espacio pasa a separar varios
   teléfonos, uno solo ya no puede llevar espacios internos como formato (escribe
   "600111222", no "600 111 222" — otra puntuación como los guiones sigue dando igual).
   `birth_date` es obligatorio (`NOT NULL`, migración `00002_users.sql`)

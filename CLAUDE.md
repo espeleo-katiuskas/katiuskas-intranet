@@ -113,6 +113,11 @@ carries a 6-digit login code — hashed alongside the link's token in the same
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`
 identifies the caller by email+phone (the code alone is too short to look someone up by)
 and a per-row attempt counter bounds brute-forcing it without affecting the link itself.
+Both this and the initial `POST /auth/magic-link` request resolve email+phone through the
+same `users.Repository.FindActiveByEmailAndPhone`, whose email side matches
+case-insensitively — the same as `internal/telegrambot`'s own `emailMatchesUser` check, so
+the same address behaves the same way whether someone signs in from the web or from
+Telegram.
 Whoever's linked their Telegram account (see **Telegram** below) gets the same link and
 code by DM too, alongside — never instead of — the email.
 

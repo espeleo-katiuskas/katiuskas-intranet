@@ -225,18 +225,24 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]User, error
 }
 
 // FindActiveByEmailAndPhone is the login lookup: matches against any one
-// of the person's emails and any one of their phones (digits only, so
-// formatting differences don't matter), or ErrNotFound for either not
-// matching. The caller must not distinguish between those cases in its
-// response — see authapi's anti-enumeration design. Anyone in this table
-// with both on file can be found this way; what a resulting session can
-// actually do is entirely down to roles.
+// of the person's emails (case-insensitively — same as
+// internal/telegrambot's own emailMatchesUser check, so a login only
+// possible from one channel and not the other isn't a real difference)
+// and any one of their phones (digits only, so formatting differences
+// don't matter), or ErrNotFound for either not matching. The caller must
+// not distinguish between those cases in its response — see authapi's
+// anti-enumeration design. Anyone in this table with both on file can be
+// found this way; what a resulting session can actually do is entirely
+// down to roles.
 func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT `+userSelect+`
 		FROM users u
-		WHERE $1 = ANY(string_to_array(u.email, ' '))
+		WHERE EXISTS (
+				SELECT 1 FROM unnest(string_to_array(u.email, ' ')) AS candidate
+				WHERE lower(candidate) = lower($1)
+			)
 			AND u.phone IS NOT NULL
 			AND regexp_replace($2, '\D', '', 'g') <> ''
 			AND EXISTS (

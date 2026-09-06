@@ -3,6 +3,7 @@ package users_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -338,6 +339,31 @@ func TestFindActiveByEmailAndPhoneMatchesAnyOfSeveralEmails(t *testing.T) {
 
 	if _, err := repo.FindActiveByEmailAndPhone(context.Background(), secondary, "600111222"); err != nil {
 		t.Errorf("expected a match against the secondary email, got %v", err)
+	}
+}
+
+// TestFindActiveByEmailAndPhoneMatchesRegardlessOfEmailCasing mirrors
+// internal/telegrambot's own emailMatchesUser check: a login that only
+// works from one of those two channels and not the other, just because
+// of casing, isn't a real security boundary — email addresses aren't
+// meant to be case-sensitive.
+func TestFindActiveByEmailAndPhoneMatchesRegardlessOfEmailCasing(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	email := testutil.UniqueEmail(t)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("600111222"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	found, err := repo.FindActiveByEmailAndPhone(context.Background(), strings.ToUpper(email), "600111222")
+	if err != nil {
+		t.Fatalf("expected a match despite different email casing, got %v", err)
+	}
+	if found.Email == nil || *found.Email != email {
+		t.Errorf("unexpected match: %+v", found)
 	}
 }
 
