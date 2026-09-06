@@ -35,7 +35,7 @@ make seed-admin
 ```
 
 `seed-admin` crea la primera cuenta de administración — necesaria porque `POST /users` ya
-exige ser `admin` o `board`, así que sin ella no habría forma de entrar en una base de
+exige ser `admin`, así que sin ella no habría forma de entrar en una base de
 datos recién migrada. No hay contraseña: por defecto crea `admin@club.test` con el
 teléfono `600000000`; para otros valores, exporta `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PHONE`,
 `SEED_ADMIN_FIRST_NAME` o `SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si

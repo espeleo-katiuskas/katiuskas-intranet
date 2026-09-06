@@ -158,6 +158,20 @@ instead of a lookup per row; a single-row write via `INSERT`/`UPDATE ... RETURNI
 can't `JOIN`) resolves it from a login the handler already has in scope, or with a
 follow-up `LoginForUserID` call.
 
+**Email and phone can each hold more than one value**, space-separated (`users.email`/
+`users.phone`, no separate table) — signing in and a magic link work against any one of
+them (`Repository.FindActiveByEmailAndPhone`). That rules out a plain column `UNIQUE`
+constraint, since Postgres can't express "no two rows share an element" that way, so
+`users.Repository` checks it in Go instead: `emailTakenByAnotherUser` (an array-overlap
+`EXISTS`) and `phoneTakenByAnotherUser` (the same shape, but comparing digits only, so
+"611-222-333" and "611222333" count as the same number), both called from `Create` and
+`Update` and both returning `ErrDuplicate` on a hit. The two aren't symmetric on purpose:
+sharing an email (a family inbox, say) is fine, so `emailTakenByAnotherUser` exists only
+to stop one address literally belonging to two accounts at once, but a phone is never
+legitimately shared — `internal/telegrambot.Bot` resolves a shared Telegram contact
+straight to whoever its phone number belongs to (`users.Repository.FindByPhoneNumber`),
+so two people sharing one would make that resolution ambiguous.
+
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,
 licenses, roles) but can only write activities and material — every person-data,
