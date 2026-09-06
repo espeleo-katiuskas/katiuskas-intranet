@@ -254,7 +254,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
         "403": { description: Only admin can create a person. }
         "409":
-          description: The email or national ID already belongs to another person.
+          description: The email, phone, or national ID already belongs to another person.
 
   /users/directory:
     get:
@@ -320,7 +320,7 @@ paths:
             restricted_fields — a non-admin tried to change a field
             beyond the contact ones.
         "409":
-          description: The email, national ID, or login being set already belongs to another person.
+          description: The email, phone, national ID, or login being set already belongs to another person.
     delete:
       summary: Delete a person (and their login, membership history and activity sign-ups)
       description: Admin-only — board can no longer modify a person's data at all.
@@ -1824,7 +1824,9 @@ components:
             One or more phone numbers, space-separated — so each number
             itself can't contain a space (write "600111222", not
             "600 111 222"; other punctuation like dashes is fine).
-            Matched the same way as email for signing in.
+            Matched the same way as email for signing in. Unlike email, an
+            individual number can't belong to two different people at
+            all, even as one of several on the same record.
         address: { type: string, nullable: true }
         postal_code: { type: string, nullable: true }
         city: { type: string, nullable: true }

@@ -44,6 +44,73 @@ func TestCreateDuplicateEmailRejected(t *testing.T) {
 	}
 }
 
+// TestCreateDuplicatePhoneRejected: unlike email (see
+// TestCreateDuplicateEmailRejected's sibling behavior — two people can
+// legitimately share an inbox), a phone number is expected to identify
+// one person, since internal/telegrambot resolves a shared Telegram
+// contact straight to whoever its phone number belongs to
+// (Repository.FindByPhoneNumber) — two people sharing one would make
+// that resolution ambiguous.
+func TestCreateDuplicatePhoneRejected(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	phone := "611222333"
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: &phone,
+	}); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t)), Phone: &phone,
+	})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
+	}
+}
+
+// TestCreateDuplicatePhoneRejectedRegardlessOfFormatting matches
+// Repository.FindActiveByEmailAndPhone's own digits-only comparison —
+// two phone numbers that are the same once punctuation is stripped are
+// the same phone number, not two different ones that merely look alike.
+func TestCreateDuplicatePhoneRejectedRegardlessOfFormatting(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611-222-333"),
+	}); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate despite the different formatting, got %v", err)
+	}
+}
+
+// TestCreateDuplicatePhoneRejectedAgainstAnyOfSeveral covers the
+// multi-phone convention (phone can hold more than one, space-separated
+// — see users.User.Phone): a new person's phone colliding with just one
+// of an existing person's several is still a collision.
+func TestCreateDuplicatePhoneRejectedAgainstAnyOfSeveral(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+
+	if _, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("600111222 622333444"),
+	}); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("622333444"),
+	})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate against the second of the existing person's phones, got %v", err)
+	}
+}
+
 func TestCreateDuplicateNationalIDRejected(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
@@ -722,6 +789,30 @@ func TestUpdateEmailToADuplicateIsRejected(t *testing.T) {
 	}
 
 	_, err = repo.Update(ctx, second.ID, users.UpdateInput{Email: users.Nullable[string]{Set: true, Value: &taken}})
+	if !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
+	}
+}
+
+func TestUpdatePhoneToADuplicateIsRejected(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	taken := "611222333"
+	if _, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: &taken,
+	}); err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+	second, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(testutil.UniqueEmail(t)),
+	})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+
+	_, err = repo.Update(ctx, second.ID, users.UpdateInput{Phone: users.Nullable[string]{Set: true, Value: &taken}})
 	if !errors.Is(err, users.ErrDuplicate) {
 		t.Errorf("expected ErrDuplicate, got %v", err)
 	}

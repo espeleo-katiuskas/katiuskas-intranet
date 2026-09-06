@@ -21,10 +21,15 @@ var (
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
 	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
-	// ErrDuplicate means an email (or one of several), the national ID,
-	// or the membership number being set already belongs to another
-	// person.
-	ErrDuplicate = errors.New("email, national ID, login, or membership number already belongs to another person")
+	// ErrDuplicate means an email (or one of several) — allowed to repeat
+	// across people, e.g. a shared family inbox, but not to belong to two
+	// different accounts at once — or a phone, national ID, login, or
+	// membership number being set already belongs to another person.
+	// Unlike email, a phone is never legitimately shared: two people
+	// sharing one would make internal/telegrambot's own phone-based
+	// lookup (FindByPhoneNumber) ambiguous, silently linking the wrong
+	// person's Telegram account.
+	ErrDuplicate = errors.New("email, phone, national ID, login, or membership number already belongs to another person")
 	// ErrInvalidLogin means an admin-supplied login doesn't match
 	// loginFormat — lowercase letters, digits, dots, and hyphens only,
 	// never at the edges or doubled.
@@ -83,9 +88,42 @@ func (r *Repository) emailTakenByAnotherUser(ctx context.Context, excludeID int6
 	return exists, err
 }
 
+// phoneTakenByAnotherUser reports whether any of the space-separated
+// phone numbers in candidate — compared by digits only, the same
+// normalization FindActiveByEmailAndPhone/FindByPhoneNumber use, so
+// formatting differences don't create a false gap — already belongs to
+// a user other than excludeID. Unlike email (see emailTakenByAnotherUser,
+// deliberately left non-unique — nothing stops two people from sharing
+// an inbox), a phone number identifies one person: two people sharing
+// one would make internal/telegrambot's own FindByPhoneNumber lookup
+// ambiguous, silently linking the wrong person's Telegram account to
+// whichever one it happened to resolve to.
+func (r *Repository) phoneTakenByAnotherUser(ctx context.Context, excludeID int64, candidate string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM users u, unnest(string_to_array($2, ' ')) AS candidate_phone
+			WHERE u.id <> $1
+				AND EXISTS (
+					SELECT 1 FROM unnest(string_to_array(u.phone, ' ')) AS existing_phone
+					WHERE regexp_replace(existing_phone, '\D', '', 'g') = regexp_replace(candidate_phone, '\D', '', 'g')
+				)
+		)
+	`, excludeID, candidate).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) Create(ctx context.Context, in CreateInput) (User, error) {
 	if in.Email != nil {
 		if taken, err := r.emailTakenByAnotherUser(ctx, 0, *in.Email); err != nil {
+			return User{}, err
+		} else if taken {
+			return User{}, ErrDuplicate
+		}
+	}
+	if in.Phone != nil {
+		if taken, err := r.phoneTakenByAnotherUser(ctx, 0, *in.Phone); err != nil {
 			return User{}, err
 		} else if taken {
 			return User{}, ErrDuplicate
@@ -273,10 +311,13 @@ const spainCountryCode = "34"
 // share every digit but the country code), letting anyone claim to be
 // whoever's number happens to end the same way. digits must already be
 // stripped to only digits by the caller; empty always misses rather
-// than matching every phone on file. A phone shared by more than one
-// person (each phone field is itself space-separated, so this isn't
-// even the only way to be ambiguous) returns whichever one sorts first
-// by id — rare enough not to need anything smarter.
+// than matching every phone on file. phoneTakenByAnotherUser keeps a
+// phone from belonging to two different people going forward, but that
+// check can't retroactively fix data that predates it — if two rows
+// still end up sharing one (or, since a phone field can itself hold
+// more than one, space-separated, one row's own second number
+// collides with another row's first), this returns whichever sorts
+// first by id rather than erroring.
 func (r *Repository) FindByPhoneNumber(ctx context.Context, digits string) (User, error) {
 	var u User
 	if digits == "" {
@@ -394,6 +435,13 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	phoneChanged := in.Phone.Set && !stringPtrsEqual(u.Phone, in.Phone.Value)
 	if in.Phone.Set {
 		u.Phone = in.Phone.Value
+		if in.Phone.Value != nil {
+			if taken, err := r.phoneTakenByAnotherUser(ctx, id, *in.Phone.Value); err != nil {
+				return u, err
+			} else if taken {
+				return u, ErrDuplicate
+			}
+		}
 	}
 	if in.Address.Set {
 		u.Address = in.Address.Value
