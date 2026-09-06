@@ -413,7 +413,12 @@ siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
 "+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
 los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; si no
 coincide, se lo dice; en ambos casos avisa al canal de quién lo ha intentado, con qué
-teléfono, y si coincidía o no. Un mensaje normal (no un contacto) de un chat que
+teléfono, y si coincidía o no. Ese vínculo solo vale lo que valga el número de
+teléfono con el que se hizo, así que `users.Repository.Update` lo borra
+(`telegram_chat_id = NULL`) en cuanto un `PATCH` cambia de verdad el teléfono de la
+persona (o lo deja vacío) — si no, un chat vinculado a un número antiguo seguiría
+resolviendo a quien ya no lo tiene. Reenviar el mismo teléfono, o un `PATCH` que ni
+siquiera lo toca, deja el vínculo tal cual. Un mensaje normal (no un contacto) de un chat que
 `users.Repository.UserIDForTelegramChatID` ya reconoce ya no repite el menú de
 "comparta su contacto", pero tampoco dispara un enlace de acceso al instante con
 cualquier mensaje — eso se probó y se revirtió por ser un retroceso de seguridad: bastaba

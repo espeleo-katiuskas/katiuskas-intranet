@@ -573,6 +573,114 @@ func TestUpdateLeavesAnOptionalFieldAloneWhenItsKeyIsAbsent(t *testing.T) {
 	}
 }
 
+// TestUpdateChangingPhoneClearsLinkedTelegramChatID: a linked
+// telegram_chat_id was only ever established by internal/telegrambot
+// matching a shared contact's phone number against this exact one
+// (users.Repository.FindByPhoneNumber) — once the phone on file changes,
+// that link no longer proves anything and must not survive, or someone
+// who kept the old phone number could still pass the bot's phone check
+// for an account it no longer belongs to.
+func TestUpdateChangingPhoneClearsLinkedTelegramChatID(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.SetTelegramChatID(ctx, created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	newPhone := "699888777"
+	if _, err := repo.Update(ctx, created.ID, users.UpdateInput{
+		Phone: users.Nullable[string]{Set: true, Value: &newPhone},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	chatID, err := repo.TelegramChatIDForUser(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("TelegramChatIDForUser: %v", err)
+	}
+	if chatID != nil {
+		t.Errorf("expected telegram_chat_id to be cleared after changing phone, got %v", *chatID)
+	}
+}
+
+// TestUpdateClearingPhoneClearsLinkedTelegramChatID covers the same
+// rationale as TestUpdateChangingPhoneClearsLinkedTelegramChatID for the
+// explicit-null case (phone removed entirely, not just replaced).
+func TestUpdateClearingPhoneClearsLinkedTelegramChatID(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.SetTelegramChatID(ctx, created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if _, err := repo.Update(ctx, created.ID, users.UpdateInput{
+		Phone: users.Nullable[string]{Set: true, Value: nil},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	chatID, err := repo.TelegramChatIDForUser(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("TelegramChatIDForUser: %v", err)
+	}
+	if chatID != nil {
+		t.Errorf("expected telegram_chat_id to be cleared after clearing phone, got %v", *chatID)
+	}
+}
+
+// TestUpdateLeavesLinkedTelegramChatIDAloneWhenPhoneIsUnchanged makes
+// sure the clearing above is specifically tied to the phone actually
+// changing — an update that doesn't touch it (or resends the same
+// value) must not silently unlink an already-verified Telegram chat.
+func TestUpdateLeavesLinkedTelegramChatIDAloneWhenPhoneIsUnchanged(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.SetTelegramChatID(ctx, created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	newCity := "Alcalá de Henares"
+	samePhone := "611222333"
+	if _, err := repo.Update(ctx, created.ID, users.UpdateInput{
+		City:  users.Nullable[string]{Set: true, Value: &newCity},
+		Phone: users.Nullable[string]{Set: true, Value: &samePhone},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	chatID, err := repo.TelegramChatIDForUser(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("TelegramChatIDForUser: %v", err)
+	}
+	if chatID == nil || *chatID != 555 {
+		t.Errorf("expected telegram_chat_id to survive an update that doesn't change phone, got %v", chatID)
+	}
+}
+
 func TestUpdateEmailToADuplicateIsRejected(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)

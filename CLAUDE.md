@@ -380,6 +380,13 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
   `UserIDForTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
+  A link made this way is only as trustworthy as the phone number it was matched
+  against, so `users.Repository.Update` clears `telegram_chat_id` back to `NULL`
+  whenever a `PATCH` actually changes `phone` (including clearing it to nothing) —
+  otherwise a chat linked to an old number would keep resolving to the person who
+  used to have it. Sending the same phone back, or a `PATCH` that doesn't touch
+  `phone` at all, leaves an existing link alone (`stringPtrsEqual`, treating two
+  `nil`s as equal); only an actual change to the value clears it.
 - `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it

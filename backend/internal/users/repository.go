@@ -331,6 +331,18 @@ func (r *Repository) UserIDForTelegramChatID(ctx context.Context, chatID int64) 
 	return userID, err
 }
 
+// stringPtrsEqual reports whether a and b hold the same value, treating
+// two nils as equal — used by Update to tell whether phone actually
+// changed, since a linked telegram_chat_id was only ever established by
+// matching that number (see SetTelegramChatID/FindByPhoneNumber) and
+// must not survive it changing to something else.
+func stringPtrsEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {
 	u, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -373,6 +385,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	if in.Gender.Set {
 		u.Gender = in.Gender.Value
 	}
+	phoneChanged := in.Phone.Set && !stringPtrsEqual(u.Phone, in.Phone.Value)
 	if in.Phone.Set {
 		u.Phone = in.Phone.Value
 	}
@@ -395,10 +408,11 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User
 	_, err = r.pool.Exec(ctx, `
 		UPDATE users SET first_name=$1, last_name=$2, email=$3, national_id=$4, birth_date=$5,
 			gender=$6, phone=$7, address=$8, postal_code=$9, city=$10, province=$11, emergency_contact=$12,
-			login=$13, updated_at=now()
-		WHERE id=$14
+			login=$13, updated_at=now(),
+			telegram_chat_id = CASE WHEN $14 THEN NULL ELSE telegram_chat_id END
+		WHERE id=$15
 	`, u.FirstName, u.LastName, u.Email, u.NationalID, u.BirthDate, u.Gender, u.Phone, u.Address,
-		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.Login, id)
+		u.PostalCode, u.City, u.Province, u.EmergencyContact, u.Login, phoneChanged, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
 		return u, ErrDuplicate
