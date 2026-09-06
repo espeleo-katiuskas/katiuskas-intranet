@@ -125,13 +125,15 @@ func main() {
 		telegramClient = botClient
 	}
 
+	authHandler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
+		TokenTTL:          cfg.TokenTTL,
+		MagicLinkTTL:      cfg.MagicLinkTTL,
+		MagicLinkCooldown: cfg.MagicLinkCooldown,
+		PublicBaseURL:     cfg.PublicBaseURL,
+	})
+
 	router := httpapi.NewRouter(httpapi.Routes{
-		Auth: authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
-			TokenTTL:          cfg.TokenTTL,
-			MagicLinkTTL:      cfg.MagicLinkTTL,
-			MagicLinkCooldown: cfg.MagicLinkCooldown,
-			PublicBaseURL:     cfg.PublicBaseURL,
-		}),
+		Auth:              authHandler,
 		Users:             users.NewHandler(usersService, authenticator),
 		Roles:             roles.NewHandler(rolesService, authenticator, usersService),
 		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
@@ -150,7 +152,7 @@ func main() {
 	// reach the log channel (see telegrambot.Bot.notifyChannel), so both
 	// need to be configured.
 	if telegramConfigured {
-		bot := telegrambot.New(botClient, usersService, telegramSender)
+		bot := telegrambot.New(botClient, usersService, telegramSender, authHandler)
 		go bot.Run(ctx)
 	}
 

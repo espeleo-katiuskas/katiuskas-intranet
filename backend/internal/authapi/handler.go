@@ -113,11 +113,36 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	if err != nil {
 		return err
 	}
+	return h.issueMagicLink(ctx, user)
+}
 
+// IssueMagicLinkForTelegramUser replies to a message from someone whose
+// Telegram chat is already linked (see internal/telegrambot) with a
+// fresh sign-in link and code, exactly as if they'd requested one from
+// the web — same eligibility checks, same delivery. Silently does
+// nothing when ineligible (no baseline role, or a recent link is still
+// live), the same anti-enumeration-flavored silence sendMagicLinkIfEligible
+// itself uses for the web endpoint — there's nothing to hide here (the
+// caller already knows exactly who this is), but there's also no reason
+// to answer a rate-limited retry any differently than the web flow
+// would.
+func (h *Handler) IssueMagicLinkForTelegramUser(ctx context.Context, userID int64) error {
+	user, err := h.users.Get(ctx, userID)
+	if err != nil {
+		return err
+	}
+	return h.issueMagicLink(ctx, user)
+}
+
+// issueMagicLink is sendMagicLinkIfEligible/IssueMagicLinkForTelegramUser's
+// shared core, once the target person is already resolved: the
+// baseline-role and cooldown gates, creating the token/code, and
+// delivering it by every channel available for them.
+func (h *Handler) issueMagicLink(ctx context.Context, user users.User) error {
 	// Signing in would be pointless for someone who can't call the API
 	// anyway (see auth.BaselineRoles) — don't hand out a link, and don't
-	// even let the cooldown check below reveal that this email/phone
-	// combination exists but has no baseline role.
+	// even let the cooldown check below reveal that this person exists
+	// but has no baseline role.
 	roleNames, err := h.roles.ListNamesForUser(ctx, user.ID)
 	if err != nil {
 		return err
@@ -147,6 +172,17 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	}
 
 	link := fmt.Sprintf("%s/login?token=%s", h.opts.PublicBaseURL, rawToken)
+	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code)
+
+	// Unlike Telegram, email isn't guaranteed here: sendMagicLinkIfEligible's
+	// own FindActiveByEmailAndPhone lookup requires one, but
+	// IssueMagicLinkForTelegramUser resolves someone straight from their
+	// linked chat id — and email is optional on file (see
+	// users.User.Email), so someone reachable only by Telegram might
+	// have none at all.
+	if user.Email == nil {
+		return nil
+	}
 	subject := "Accede a la intranet del Club de Espeleología Katiuskas"
 	body := fmt.Sprintf(
 		"Hola %s,\n\n"+
@@ -156,12 +192,8 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 			"Si no has pedido este acceso, puedes ignorar este mensaje.",
 		user.FirstName, int(h.opts.MagicLinkTTL.Minutes()), link, code,
 	)
-	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code)
-
-	// user.Email is never nil here — reaching this point already required
-	// FindActiveByEmailAndPhone above to match a real on-file address —
-	// and may hold more than one, space-separated (see users.User.Email);
-	// mail.Sender expects a comma-separated list.
+	// user.Email may hold more than one, space-separated (see
+	// users.User.Email); mail.Sender expects a comma-separated list.
 	return h.mailer.Send(ctx, strings.Join(strings.Fields(*user.Email), ", "), subject, body)
 }
 

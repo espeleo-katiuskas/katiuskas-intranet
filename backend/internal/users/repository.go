@@ -317,13 +317,18 @@ func (r *Repository) TelegramChatIDForUser(ctx context.Context, userID int64) (*
 	return chatID, err
 }
 
-// HasTelegramChatID reports whether some person has already linked this
-// Telegram chat — internal/telegrambot only greets a chat it doesn't
-// recognize yet.
-func (r *Repository) HasTelegramChatID(ctx context.Context, chatID int64) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE telegram_chat_id = $1)`, chatID).Scan(&exists)
-	return exists, err
+// UserIDForTelegramChatID is TelegramChatIDForUser's inverse: which
+// person a linked Telegram chat belongs to, or ErrNotFound if nobody's
+// linked it — internal/telegrambot uses this to tell a chat it already
+// recognizes (reply with a fresh sign-in link) from one it doesn't yet
+// (greet and ask for their contact instead).
+func (r *Repository) UserIDForTelegramChatID(ctx context.Context, chatID int64) (int64, error) {
+	var userID int64
+	err := r.pool.QueryRow(ctx, `SELECT id FROM users WHERE telegram_chat_id = $1`, chatID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return userID, err
 }
 
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {

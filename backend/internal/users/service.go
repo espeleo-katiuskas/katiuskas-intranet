@@ -189,8 +189,8 @@ func (s *Service) TelegramChatIDForUser(ctx context.Context, userID int64) (*int
 	return s.repo.TelegramChatIDForUser(ctx, userID)
 }
 
-func (s *Service) HasTelegramChatID(ctx context.Context, chatID int64) (bool, error) {
-	return s.repo.HasTelegramChatID(ctx, chatID)
+func (s *Service) UserIDForTelegramChatID(ctx context.Context, chatID int64) (int64, error) {
+	return s.repo.UserIDForTelegramChatID(ctx, chatID)
 }
 
 func (s *Service) TouchLastLogin(ctx context.Context, userID int64, ip string) error {

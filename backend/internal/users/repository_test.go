@@ -456,7 +456,7 @@ func TestFindByPhoneNumberRejectsAForeignNumberSharingTheSameDigits(t *testing.T
 	}
 }
 
-func TestSetAndHasTelegramChatID(t *testing.T) {
+func TestSetTelegramChatIDAndUserIDForTelegramChatID(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	email := testutil.UniqueEmail(t)
@@ -468,17 +468,20 @@ func TestSetAndHasTelegramChatID(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if has, err := repo.HasTelegramChatID(context.Background(), 999); err != nil || has {
-		t.Fatalf("expected no chat linked yet, got has=%v err=%v", has, err)
+	if _, err := repo.UserIDForTelegramChatID(context.Background(), 999); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for an unlinked chat, got %v", err)
 	}
 
 	if err := repo.SetTelegramChatID(context.Background(), created.ID, 999); err != nil {
 		t.Fatalf("SetTelegramChatID: %v", err)
 	}
 
-	has, err := repo.HasTelegramChatID(context.Background(), 999)
-	if err != nil || !has {
-		t.Fatalf("expected the chat to be linked, got has=%v err=%v", has, err)
+	userID, err := repo.UserIDForTelegramChatID(context.Background(), 999)
+	if err != nil {
+		t.Fatalf("UserIDForTelegramChatID: %v", err)
+	}
+	if userID != created.ID {
+		t.Errorf("expected user id %d, got %d", created.ID, userID)
 	}
 }
 

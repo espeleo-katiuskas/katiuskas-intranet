@@ -289,13 +289,20 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
 - `authapi.Handler.notifyMagicLinkViaTelegram` DMs the same link and login code
-  `sendMagicLinkIfEligible` just emailed to whoever has linked their Telegram account
-  (`users.Repository.TelegramChatIDForUser`) — alongside the email, never instead of it,
-  so someone with no Telegram linked (or a failed lookup/send) still has the email to
-  fall back on. Unlike `notifier`/`notifyLogin` above, which always target the fixed log
-  channel, this needs `authapi.TelegramMessenger` (`*telegram.Client` satisfies it
-  structurally) to DM whichever `chat_id` that specific person has — a second dependency
-  alongside `notifier`, wired from the same `botClient` `cmd/api/main.go` also gives
+  `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web endpoint,
+  and the exported `IssueMagicLinkForTelegramUser`, for `internal/telegrambot.Bot`
+  above, resolve their target person into before calling) just emailed to whoever has
+  linked their Telegram account (`users.Repository.TelegramChatIDForUser`) — alongside
+  the email, never instead of it, so someone with no Telegram linked (or a failed
+  lookup/send) still has the email to fall back on. `IssueMagicLinkForTelegramUser` is
+  also the one caller where email genuinely can be absent — `FindActiveByEmailAndPhone`
+  guarantees one for the web path, but resolving straight from a linked chat id doesn't
+  — so `issueMagicLink` skips the email send entirely rather than dereferencing a nil
+  `*string` when `user.Email` is nil, sending only the Telegram DM in that case. Unlike
+  `notifier`/`notifyLogin` above, which always target the fixed log channel, this needs
+  `authapi.TelegramMessenger` (`*telegram.Client` satisfies it structurally) to DM
+  whichever `chat_id` that specific person has — a second dependency alongside
+  `notifier`, wired from the same `botClient` `cmd/api/main.go` also gives
   `internal/telegrambot`, and `nil` (not gated behind a separate config check) whenever
   Telegram isn't configured at all, the same nil-disables-the-feature shape
   `httpapi.NotifyMutatingCalls` uses. The chat id lookup runs synchronously on the
@@ -323,9 +330,18 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   behind NAT or with no domain at all) in a loop started with `go bot.Run(ctx)` from
   `cmd/api/main.go`, gated on the same two env vars as `httpapi.NotifyMutatingCalls` (every linking
   attempt has to reach the log channel, so a bot with no channel configured can't do its
-  job anyway). Any message from a chat `users.HasTelegramChatID` doesn't yet recognize
-  gets a greeting plus a "share your contact" keyboard button
-  (`Client.SendMessageRequestingContact`); a shared contact's phone number is matched
+  job anyway). `users.Repository.UserIDForTelegramChatID` tells apart a chat this
+  doesn't recognize yet — every other message from one gets a greeting plus a "share your
+  contact" keyboard button (`Client.SendMessageRequestingContact`) — from one it does:
+  any message from an already-linked chat instead gets `magicLinkIssuer.
+  IssueMagicLinkForTelegramUser` called for them, replying with a fresh sign-in link
+  exactly as if they'd requested one from the web (see `authapi.Handler` below) — no
+  more re-offering the contact-share menu to someone already recognized.
+  `magicLinkIssuer` is a local interface (`*authapi.Handler` satisfies it structurally,
+  the same pattern as `botClient`) wired in from `cmd/api/main.go`, which is also where
+  `authHandler` is hoisted into its own variable instead of being built inline in
+  `httpapi.Routes`, purely so both the router and the bot can share the one instance. A
+  shared contact's phone number is matched
   against `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the
   exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests, because
   Telegram always includes the country code (`"34611222333"`) while a phone on file here
@@ -351,7 +367,7 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
-  `HasTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
+  `UserIDForTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
 - `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it

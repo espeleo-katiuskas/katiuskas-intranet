@@ -124,6 +124,7 @@ func (c *capturingTelegramClient) assertNothingSent(t *testing.T) {
 
 type testServer struct {
 	mux            *http.ServeMux
+	handler        *authapi.Handler
 	tx             pgx.Tx
 	users          *users.Service
 	tokens         *tokens.Service
@@ -154,7 +155,7 @@ func newTestServer(t *testing.T) *testServer {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	return &testServer{mux: mux, tx: tx, users: usersService, tokens: tokensService, mailer: mailer, notifier: notifier, telegramClient: telegramClient}
+	return &testServer{mux: mux, handler: handler, tx: tx, users: usersService, tokens: tokensService, mailer: mailer, notifier: notifier, telegramClient: telegramClient}
 }
 
 func (s *testServer) post(t *testing.T, path string, body any) *httptest.ResponseRecorder {
@@ -336,6 +337,114 @@ func TestRequestMagicLinkAlsoSendsViaTelegramWhenLinked(t *testing.T) {
 	m := codeInBody.FindStringSubmatch(text)
 	if m == nil {
 		t.Fatalf("no code found in the Telegram message: %q", text)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM covers the bot's
+// use case directly: someone already recognized who just messages the
+// bot again gets the exact same treatment as requesting a link from the
+// web — role/cooldown checks included, delivered by every channel
+// available for them.
+func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	if s.mailer.sent == 0 {
+		t.Errorf("expected an email to have been sent too, not just the DM")
+	}
+	chatID, text := s.telegramClient.waitForMessage(t)
+	if chatID != 555 {
+		t.Errorf("expected the DM to go to chat_id 555, got %d", chatID)
+	}
+	if codeInBody.FindStringSubmatch(text) == nil {
+		t.Errorf("expected a login code in the DM, got %q", text)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserSkipsEmailWhenThereIsNone covers the
+// edge case only this Telegram-triggered path can hit: resolving
+// straight from a linked chat id, unlike the web flow, doesn't require
+// an email on file at all.
+func TestIssueMagicLinkForTelegramUserSkipsEmailWhenThereIsNone(t *testing.T) {
+	s := newTestServer(t)
+	phone := "611222333"
+	user, err := s.users.Create(context.Background(), users.CreateInput{
+		FirstName: "Sin", LastName: "Correo", Phone: &phone, RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	if s.mailer.sent != 0 {
+		t.Errorf("expected no email attempt for someone with none on file, got %d", s.mailer.sent)
+	}
+	if _, text := s.telegramClient.waitForMessage(t); codeInBody.FindStringSubmatch(text) == nil {
+		t.Errorf("expected the DM to still carry a login code, got %q", text)
+	}
+}
+
+func TestIssueMagicLinkForTelegramUserSkipsSomeoneWithNoBaselineRole(t *testing.T) {
+	s := newTestServer(t)
+	phone := "611222333"
+	user, err := s.users.Create(context.Background(), users.CreateInput{
+		FirstName: "Sin", LastName: "Rol", Email: strPtr(testutil.UniqueEmail(t)), Phone: &phone,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	if s.mailer.sent != 0 {
+		t.Errorf("expected no email for someone with no baseline role, got %d", s.mailer.sent)
+	}
+	s.telegramClient.assertNothingSent(t)
+}
+
+func TestIssueMagicLinkForTelegramUserRespectsCooldown(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	s.telegramClient.waitForMessage(t)
+	firstSent := s.mailer.sent
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if s.mailer.sent != firstSent {
+		t.Errorf("expected the cooldown to suppress a second email, but sent went from %d to %d", firstSent, s.mailer.sent)
+	}
+	time.Sleep(20 * time.Millisecond)
+	s.telegramClient.mu.Lock()
+	dmCount := len(s.telegramClient.sent)
+	s.telegramClient.mu.Unlock()
+	if dmCount != 1 {
+		t.Errorf("expected the cooldown to suppress a second DM too, got %d DMs sent", dmCount)
 	}
 }
 

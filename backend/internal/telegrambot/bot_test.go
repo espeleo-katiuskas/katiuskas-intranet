@@ -2,6 +2,7 @@ package telegrambot
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -77,6 +78,22 @@ func (n *fakeNotifier) Send(_ context.Context, text string) error {
 	return nil
 }
 
+// fakeMagicLinkIssuer stands in for magicLinkIssuer (*authapi.Handler in
+// production) so tests can check which user id the bot asked for a
+// fresh sign-in link, without pulling in all of authapi's own
+// dependencies (mailer, roles, tokens...).
+type fakeMagicLinkIssuer struct {
+	mu        sync.Mutex
+	calledFor []int64
+}
+
+func (f *fakeMagicLinkIssuer) IssueMagicLinkForTelegramUser(_ context.Context, userID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calledFor = append(f.calledFor, userID)
+	return nil
+}
+
 func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
 	usersService := newUsersService(t)
 	client := &fakeClient{}
@@ -98,7 +115,11 @@ func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
 	}
 }
 
-func TestHandleDoesNotGreetAnAlreadyLinkedChat(t *testing.T) {
+// TestHandleRepliesWithMagicLinkForAnAlreadyLinkedChat covers the
+// requested behavior directly: someone already recognized doesn't get
+// asked to link again — any message from them instead gets a fresh
+// sign-in link, exactly as if they'd requested one from the web.
+func TestHandleRepliesWithMagicLinkForAnAlreadyLinkedChat(t *testing.T) {
 	usersService := newUsersService(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
@@ -112,14 +133,21 @@ func TestHandleDoesNotGreetAnAlreadyLinkedChat(t *testing.T) {
 
 	client := &fakeClient{}
 	notifier := &fakeNotifier{}
-	bot := &Bot{client: client, users: usersService, logNotifier: notifier}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
 
 	bot.handle(context.Background(), telegram.Update{
 		Message: &telegram.Message{Chat: telegram.Chat{ID: 555}, Text: "hola de nuevo"},
 	})
 
 	if len(client.sentContacts) != 0 || len(client.sent) != 0 {
-		t.Errorf("expected no message sent to an already-linked chat, got contacts=%v sent=%v", client.sentContacts, client.sent)
+		t.Errorf("expected no reply directly from the bot itself (the magic link is delivered through "+
+			"authapi's own Telegram send), got contacts=%v sent=%v", client.sentContacts, client.sent)
+	}
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 1 || issuer.calledFor[0] != created.ID {
+		t.Errorf("expected IssueMagicLinkForTelegramUser to be called once for user %d, got %v", created.ID, issuer.calledFor)
 	}
 }
 
@@ -145,11 +173,11 @@ func TestHandleContactLinksAMatchingUser(t *testing.T) {
 	})
 
 	// TelegramChatID is deliberately left out of the general User-fetching
-	// query (userSelect/scanUser), so HasTelegramChatID — not Get — is the
-	// way to check the link took.
-	linked, err := usersService.HasTelegramChatID(context.Background(), 555)
-	if err != nil || !linked {
-		t.Fatalf("expected the chat to be linked, got linked=%v err=%v", linked, err)
+	// query (userSelect/scanUser), so UserIDForTelegramChatID — not Get —
+	// is the way to check the link took.
+	linkedUserID, err := usersService.UserIDForTelegramChatID(context.Background(), 555)
+	if err != nil || linkedUserID != created.ID {
+		t.Fatalf("expected the chat to be linked to %d, got id=%d err=%v", created.ID, linkedUserID, err)
 	}
 
 	if len(client.sent) != 1 {
@@ -194,12 +222,8 @@ func TestHandleContactRejectsSomeoneElsesSharedContact(t *testing.T) {
 		},
 	})
 
-	linked, err := usersService.HasTelegramChatID(context.Background(), attackerChatID)
-	if err != nil {
-		t.Fatalf("HasTelegramChatID: %v", err)
-	}
-	if linked {
-		t.Fatal("expected the victim's account to NOT be linked to the attacker's chat")
+	if _, err := usersService.UserIDForTelegramChatID(context.Background(), attackerChatID); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("expected the attacker's chat to remain unlinked, got err=%v", err)
 	}
 	stillHasNoChat, err := usersService.FindByPhoneNumber(context.Background(), "34611222333")
 	if err != nil {

@@ -159,7 +159,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   también por no distinguir casos desde fuera. Si la persona tiene su cuenta de Telegram
   vinculada (ver más abajo), recibe el mismo enlace y código por Telegram además del
   correo — nunca en su lugar, así que quien no lo tenga vinculado, o si ese envío falla,
-  sigue teniendo el correo.
+  sigue teniendo el correo. La lógica de emitir el enlace (comprobar el rol, el tiempo
+  de espera, crear el token, enviarlo) vive en un único sitio interno
+  (`authapi.Handler.issueMagicLink`) que tanto esta petición web como el propio bot de
+  Telegram usan — ver `internal/telegrambot.Bot` más abajo: quien ya tiene la cuenta
+  vinculada y escribe al bot recibe exactamente el mismo enlace, sin pasar por email ni
+  teléfono. Ese es el único caso en el que la persona puede no tener correo en absoluto
+  (`FindActiveByEmailAndPhone` sí lo garantiza para la petición web), así que el envío
+  por correo simplemente se omite cuando no hay ninguno — nunca falla por eso.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente
@@ -406,7 +413,11 @@ siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
 "+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
 los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; si no
 coincide, se lo dice; en ambos casos avisa al canal de quién lo ha intentado, con qué
-teléfono, y si coincidía o no. El sexto es la excepción a
+teléfono, y si coincidía o no. Un mensaje normal (no un contacto) de un chat que
+`users.Repository.UserIDForTelegramChatID` ya reconoce ya no repite el menú de
+"comparta su contacto" — en su lugar contesta con un enlace de acceso nuevo, exactamente
+igual que si lo hubiera pedido desde la web (`authapi.Handler.IssueMagicLinkForTelegramUser`,
+ver más arriba). El sexto es la excepción a
 "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
 servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
 el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada

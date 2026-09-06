@@ -4,12 +4,14 @@
 // CLAUDE.md for how this fits alongside the other three notifications
 // (error logs, logins, database mutations).
 //
-// Today it does exactly one thing: turn "someone we don't yet recognize
+// It does two things. First, turn "someone we don't yet recognize
 // messages the bot" into a linked Telegram account, by asking them to
 // share their contact and matching its phone number against
 // users.phone. Every attempt to link an account — matched or not — is
 // also reported to the Telegram log channel, same as every other
-// notification in this app.
+// notification in this app. Second, once a chat is recognized, any
+// further message from it gets a fresh magic-link sign-in reply instead
+// of being asked to link again — see handle.
 package telegrambot
 
 import (
@@ -44,15 +46,24 @@ type botClient interface {
 	GetUpdates(ctx context.Context, offset int64, timeoutSeconds int) ([]telegram.Update, error)
 }
 
+// magicLinkIssuer lets an already-linked chat get a fresh sign-in link
+// just by messaging the bot, exactly as if they'd requested one from
+// the web — *authapi.Handler satisfies this structurally, the same
+// narrow-dependency pattern as botClient above.
+type magicLinkIssuer interface {
+	IssueMagicLinkForTelegramUser(ctx context.Context, userID int64) error
+}
+
 // Bot polls Telegram for messages and reacts to them — see Run.
 type Bot struct {
 	client      botClient
 	users       *users.Service
 	logNotifier telegram.Sender
+	magicLinks  magicLinkIssuer
 }
 
-func New(client *telegram.Client, usersService *users.Service, logNotifier telegram.Sender) *Bot {
-	return &Bot{client: client, users: usersService, logNotifier: logNotifier}
+func New(client *telegram.Client, usersService *users.Service, logNotifier telegram.Sender, magicLinks magicLinkIssuer) *Bot {
+	return &Bot{client: client, users: usersService, logNotifier: logNotifier, magicLinks: magicLinks}
 }
 
 // Run polls Telegram for new messages until ctx is cancelled. Meant to
@@ -111,19 +122,24 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 		return
 	}
 
-	// Any other message from a chat we don't recognize yet: greet and
-	// ask for their contact. A chat that's already linked is left
-	// alone — this package has nothing else to say to them.
-	linked, err := b.users.HasTelegramChatID(ctx, msg.Chat.ID)
+	userID, err := b.users.UserIDForTelegramChatID(ctx, msg.Chat.ID)
+	if errors.Is(err, users.ErrNotFound) {
+		// Not recognized yet: greet and ask for their contact.
+		if err := b.client.SendMessageRequestingContact(ctx, msg.Chat.ID, greeting, contactButtonText); err != nil {
+			slog.Error("telegram bot: send greeting", "error", err)
+		}
+		return
+	}
 	if err != nil {
-		slog.Error("telegram bot: check linked chat", "error", err)
+		slog.Error("telegram bot: look up linked chat", "error", err)
 		return
 	}
-	if linked {
-		return
-	}
-	if err := b.client.SendMessageRequestingContact(ctx, msg.Chat.ID, greeting, contactButtonText); err != nil {
-		slog.Error("telegram bot: send greeting", "error", err)
+
+	// Already recognized: no need to ask them to link again — any
+	// message from them gets a fresh sign-in link instead, the same as
+	// if they'd requested one from the web themselves.
+	if err := b.magicLinks.IssueMagicLinkForTelegramUser(ctx, userID); err != nil {
+		slog.Error("telegram bot: issue magic link", "error", err)
 	}
 }
 
