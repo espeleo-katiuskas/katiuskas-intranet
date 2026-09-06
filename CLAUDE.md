@@ -333,10 +333,22 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   job anyway). `users.Repository.UserIDForTelegramChatID` tells apart a chat this
   doesn't recognize yet — every other message from one gets a greeting plus a "share your
   contact" keyboard button (`Client.SendMessageRequestingContact`) — from one it does:
-  any message from an already-linked chat instead gets `magicLinkIssuer.
-  IssueMagicLinkForTelegramUser` called for them, replying with a fresh sign-in link
-  exactly as if they'd requested one from the web (see `authapi.Handler` below) — no
-  more re-offering the contact-share menu to someone already recognized.
+  an already-linked chat no longer gets the contact-share menu again, but a message from
+  one doesn't *instantly* trigger a sign-in link either — that was tried and reverted as
+  a security regression: it reduced logging in via Telegram to merely having the phone/
+  session (whoever's holding an already-open Telegram app), dropping the "must know
+  *both* phone and email" requirement the web flow enforces. Instead
+  `Bot.handleRecognizedChat` asks a first factor be proven a second time: it replies with
+  `emailPrompt` ("si quieres entrar en la intranet, envíame tu dirección de correo
+  electrónico") to any message that isn't the account's own registered email
+  (`emailMatchesUser`, checked case-insensitively against the same space-separated
+  multi-email convention `FindActiveByEmailAndPhone` uses); only once that matches does it
+  call `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
+  private chat — to scrub that email out of the chat history for whoever might get hold of
+  the phone/session afterward (best-effort: a failed delete, e.g. an old message past
+  Telegram's 48h window, still lets `magicLinkIssuer.IssueMagicLinkForTelegramUser` go
+  through), then finally issues the fresh sign-in link exactly as if they'd requested one
+  from the web (see `authapi.Handler` below).
   `magicLinkIssuer` is a local interface (`*authapi.Handler` satisfies it structurally,
   the same pattern as `botClient`) wired in from `cmd/api/main.go`, which is also where
   `authHandler` is hoisted into its own variable instead of being built inline in

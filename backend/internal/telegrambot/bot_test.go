@@ -37,6 +37,8 @@ type fakeClient struct {
 	mu           sync.Mutex
 	sent         []string // plain SendMessage texts
 	sentContacts []string // SendMessageRequestingContact texts
+	deleted      []struct{ chatID, messageID int64 }
+	deleteErr    error // returned by DeleteMessage when set, to test the best-effort path
 	batches      [][]telegram.Update
 }
 
@@ -52,6 +54,13 @@ func (f *fakeClient) SendMessageRequestingContact(_ context.Context, _ int64, te
 	defer f.mu.Unlock()
 	f.sentContacts = append(f.sentContacts, text)
 	return nil
+}
+
+func (f *fakeClient) DeleteMessage(_ context.Context, chatID, messageID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleted = append(f.deleted, struct{ chatID, messageID int64 }{chatID, messageID})
+	return f.deleteErr
 }
 
 func (f *fakeClient) GetUpdates(_ context.Context, _ int64, _ int) ([]telegram.Update, error) {
@@ -115,11 +124,14 @@ func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
 	}
 }
 
-// TestHandleRepliesWithMagicLinkForAnAlreadyLinkedChat covers the
-// requested behavior directly: someone already recognized doesn't get
-// asked to link again — any message from them instead gets a fresh
-// sign-in link, exactly as if they'd requested one from the web.
-func TestHandleRepliesWithMagicLinkForAnAlreadyLinkedChat(t *testing.T) {
+// TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst is the security
+// regression test for the second factor: an already-recognized chat
+// doesn't get a sign-in link just for sending *any* message — merely
+// having the phone/session open used to be enough, which is a real step
+// down from the web flow (needs phone *and* email). A message that
+// isn't the account's own registered email gets the prompt instead, and
+// nothing is issued or deleted.
+func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
 	usersService := newUsersService(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
@@ -137,17 +149,137 @@ func TestHandleRepliesWithMagicLinkForAnAlreadyLinkedChat(t *testing.T) {
 	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
 
 	bot.handle(context.Background(), telegram.Update{
-		Message: &telegram.Message{Chat: telegram.Chat{ID: 555}, Text: "hola de nuevo"},
+		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: "hola de nuevo"},
 	})
 
-	if len(client.sentContacts) != 0 || len(client.sent) != 0 {
-		t.Errorf("expected no reply directly from the bot itself (the magic link is delivered through "+
-			"authapi's own Telegram send), got contacts=%v sent=%v", client.sentContacts, client.sent)
+	if len(client.sent) != 1 || client.sent[0] != emailPrompt {
+		t.Errorf("expected the email prompt, got %v", client.sent)
+	}
+	if len(client.sentContacts) != 0 {
+		t.Errorf("expected no contact-share menu for an already-linked chat, got %v", client.sentContacts)
+	}
+	if len(client.deleted) != 0 {
+		t.Errorf("expected nothing deleted before the email is verified, got %v", client.deleted)
+	}
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 0 {
+		t.Errorf("expected no magic link issued yet, got %v", issuer.calledFor)
+	}
+}
+
+// TestHandleIssuesMagicLinkAndDeletesTheMessageWhenEmailMatches is the
+// success path: sending the account's own registered email deletes that
+// message (so it doesn't linger in the chat history) and asks
+// authapi for a fresh sign-in link for the right person.
+func TestHandleIssuesMagicLinkAndDeletesTheMessageWhenEmailMatches(t *testing.T) {
+	usersService := newUsersService(t)
+	email := testutil.UniqueEmail(t)
+	created, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := usersService.SetTelegramChatID(context.Background(), created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	// Different casing and surrounding whitespace — verified leniently,
+	// unlike a phone number's digits.
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 42, Chat: telegram.Chat{ID: 555}, Text: "  " + strings.ToUpper(email) + "  "},
+	})
+
+	if len(client.sent) != 0 || len(client.sentContacts) != 0 {
+		t.Errorf("expected no reply directly from the bot itself (the link is delivered through "+
+			"authapi's own Telegram send), got sent=%v contacts=%v", client.sent, client.sentContacts)
+	}
+	if len(client.deleted) != 1 || client.deleted[0].chatID != 555 || client.deleted[0].messageID != 42 {
+		t.Errorf("expected the email message to be deleted, got %v", client.deleted)
 	}
 	issuer.mu.Lock()
 	defer issuer.mu.Unlock()
 	if len(issuer.calledFor) != 1 || issuer.calledFor[0] != created.ID {
 		t.Errorf("expected IssueMagicLinkForTelegramUser to be called once for user %d, got %v", created.ID, issuer.calledFor)
+	}
+}
+
+// TestHandleRejectsSomeoneElsesEmail makes sure the check is against
+// *this* chat's own linked account, not merely "is this any registered
+// email" — sending a different real socio's email must not work.
+func TestHandleRejectsSomeoneElsesEmail(t *testing.T) {
+	usersService := newUsersService(t)
+	linkedPerson, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create linked person: %v", err)
+	}
+	if err := usersService.SetTelegramChatID(context.Background(), linkedPerson.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	someoneElseEmail := testutil.UniqueEmail(t)
+	if _, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(someoneElseEmail), Phone: strPtr("622333444"),
+	}); err != nil {
+		t.Fatalf("create someone else: %v", err)
+	}
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: someoneElseEmail},
+	})
+
+	if len(client.sent) != 1 || client.sent[0] != emailPrompt {
+		t.Errorf("expected the email prompt (someone else's email must not match), got %v", client.sent)
+	}
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 0 {
+		t.Errorf("expected no magic link issued, got %v", issuer.calledFor)
+	}
+}
+
+// TestHandleIssuesMagicLinkEvenWhenDeletingTheMessageFails covers the
+// best-effort nature of the delete: it's a privacy nicety, not a
+// security gate, so a failure to delete must never withhold the actual
+// sign-in link.
+func TestHandleIssuesMagicLinkEvenWhenDeletingTheMessageFails(t *testing.T) {
+	usersService := newUsersService(t)
+	email := testutil.UniqueEmail(t)
+	created, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := usersService.SetTelegramChatID(context.Background(), created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	client := &fakeClient{deleteErr: errors.New("message too old to delete")}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: email},
+	})
+
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 1 || issuer.calledFor[0] != created.ID {
+		t.Errorf("expected the magic link to still be issued despite the failed delete, got %v", issuer.calledFor)
 	}
 }
 

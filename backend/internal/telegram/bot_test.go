@@ -36,6 +36,31 @@ func TestClientSendMessage(t *testing.T) {
 	}
 }
 
+func TestClientDeleteMessage(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer server.Close()
+
+	client := &Client{Token: "123:abc", HTTPClient: server.Client(), apiBase: server.URL}
+	if err := client.DeleteMessage(context.Background(), 42, 99); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	if gotPath != "/bot123:abc/deleteMessage" {
+		t.Errorf("unexpected path: %s", gotPath)
+	}
+	if gotBody["chat_id"] != float64(42) || gotBody["message_id"] != float64(99) {
+		t.Errorf("unexpected request body: %v", gotBody)
+	}
+}
+
 func TestClientSendMessageRequestingContactIncludesAKeyboard(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +116,10 @@ func TestClientGetUpdatesParsesMessagesAndContacts(t *testing.T) {
 				{
 					"update_id": 100,
 					"message": map[string]any{
-						"chat": map[string]any{"id": 42},
-						"from": map[string]any{"id": 42, "first_name": "Ana"},
-						"text": "hola",
+						"chat":       map[string]any{"id": 42},
+						"from":       map[string]any{"id": 42, "first_name": "Ana"},
+						"text":       "hola",
+						"message_id": 7,
 					},
 				},
 				{
@@ -119,7 +145,7 @@ func TestClientGetUpdatesParsesMessagesAndContacts(t *testing.T) {
 	if len(updates) != 2 {
 		t.Fatalf("expected 2 updates, got %d", len(updates))
 	}
-	if updates[0].Message.Text != "hola" || updates[0].Message.From.FirstName != "Ana" {
+	if updates[0].Message.Text != "hola" || updates[0].Message.From.FirstName != "Ana" || updates[0].Message.MessageID != 7 {
 		t.Errorf("unexpected first update: %+v", updates[0])
 	}
 	if updates[1].Message.Contact == nil || updates[1].Message.Contact.PhoneNumber != "34611222333" {

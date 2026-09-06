@@ -415,9 +415,22 @@ los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; s
 coincide, se lo dice; en ambos casos avisa al canal de quién lo ha intentado, con qué
 teléfono, y si coincidía o no. Un mensaje normal (no un contacto) de un chat que
 `users.Repository.UserIDForTelegramChatID` ya reconoce ya no repite el menú de
-"comparta su contacto" — en su lugar contesta con un enlace de acceso nuevo, exactamente
-igual que si lo hubiera pedido desde la web (`authapi.Handler.IssueMagicLinkForTelegramUser`,
-ver más arriba). El sexto es la excepción a
+"comparta su contacto", pero tampoco dispara un enlace de acceso al instante con
+cualquier mensaje — eso se probó y se revirtió por ser un retroceso de seguridad: bastaba
+con tener el móvil (o la sesión de Telegram ya abierta) de un socio para entrar, sin la
+exigencia de conocer *a la vez* teléfono y correo que sí tiene el flujo web. En su lugar,
+`Bot.handleRecognizedChat` pide un segundo factor: contesta con `emailPrompt` ("si quieres
+entrar en la intranet, envíame tu dirección de correo electrónico") a cualquier mensaje
+que no sea el correo registrado de esa cuenta (`emailMatchesUser`, comparado sin
+distinguir mayúsculas/minúsculas contra el mismo formato de varios correos separados por
+espacios que usa `FindActiveByEmailAndPhone`); solo cuando coincide, borra ese mensaje del
+chat con `Client.DeleteMessage` —la API de bots de Telegram permite borrar un mensaje que
+el propio bot ha recibido en un chat privado— para que no quede el correo a la vista de
+quien pueda acceder después al móvil o la sesión (best-effort: si el borrado falla, por
+ejemplo por ser un mensaje demasiado antiguo, pasadas las 48h que permite Telegram, el
+enlace se envía igualmente), y entonces sí contesta con un enlace de acceso nuevo,
+exactamente igual que si lo hubiera pedido desde la web
+(`authapi.Handler.IssueMagicLinkForTelegramUser`, ver más arriba). El sexto es la excepción a
 "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
 servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
 el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada

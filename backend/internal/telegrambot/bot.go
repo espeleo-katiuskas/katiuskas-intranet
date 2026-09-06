@@ -9,9 +9,11 @@
 // share their contact and matching its phone number against
 // users.phone. Every attempt to link an account — matched or not — is
 // also reported to the Telegram log channel, same as every other
-// notification in this app. Second, once a chat is recognized, any
-// further message from it gets a fresh magic-link sign-in reply instead
-// of being asked to link again — see handle.
+// notification in this app. Second, once a chat is recognized, it can
+// ask for a sign-in link — but only after proving it's still actually
+// that person by typing their own registered email, not just by being
+// whoever's holding the phone with Telegram already open on it; see
+// handleRecognizedChat.
 package telegrambot
 
 import (
@@ -20,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
@@ -30,6 +33,10 @@ const greeting = "¡Hola! Soy el bot del Club de Espeleología Katiuskas. " +
 	"Si eres socio o socia del club, compárteme tu contacto para identificarte."
 
 const contactButtonText = "Compartir mi contacto"
+
+// emailPrompt is what an already-recognized chat gets in reply to any
+// message that isn't its own registered email — see handleRecognizedChat.
+const emailPrompt = "Si quieres entrar en la intranet, envíame tu dirección de correo electrónico."
 
 // pollTimeoutSeconds is how long each GetUpdates call blocks server-side
 // waiting for a new message before returning empty — long enough to
@@ -43,6 +50,7 @@ const pollTimeoutSeconds = 30
 type botClient interface {
 	SendMessage(ctx context.Context, chatID int64, text string) error
 	SendMessageRequestingContact(ctx context.Context, chatID int64, text, buttonText string) error
+	DeleteMessage(ctx context.Context, chatID, messageID int64) error
 	GetUpdates(ctx context.Context, offset int64, timeoutSeconds int) ([]telegram.Update, error)
 }
 
@@ -134,13 +142,64 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 		slog.Error("telegram bot: look up linked chat", "error", err)
 		return
 	}
+	b.handleRecognizedChat(ctx, msg, userID)
+}
 
-	// Already recognized: no need to ask them to link again — any
-	// message from them gets a fresh sign-in link instead, the same as
-	// if they'd requested one from the web themselves.
+// handleRecognizedChat is the second factor an already-linked chat has
+// to clear before getting a sign-in link: merely being whoever's
+// holding a socio's phone with Telegram already open — a borrowed
+// phone, an unlocked session left unattended — used to be enough, since
+// any message at all triggered one. That's a real step down from
+// requesting one on the web, which needs both phone *and* email. Now
+// the bot instead asks for the account's own registered email, and only
+// issues the link once it gets it — restoring "you also have to know
+// something, not just have the device" the same way the web flow
+// already does.
+func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, userID int64) {
+	user, err := b.users.Get(ctx, userID)
+	if err != nil {
+		slog.Error("telegram bot: look up linked user", "error", err)
+		return
+	}
+	if !emailMatchesUser(user, msg.Text) {
+		if err := b.client.SendMessage(ctx, msg.Chat.ID, emailPrompt); err != nil {
+			slog.Error("telegram bot: send email prompt", "error", err)
+		}
+		return
+	}
+
+	// The message just proved it — delete it so the email doesn't sit
+	// around in the chat history for whoever might get hold of this
+	// phone/session afterward. Best-effort: deleting can fail (an old
+	// message, revoked rights, ...) without that being any reason to
+	// withhold the sign-in link itself.
+	if err := b.client.DeleteMessage(ctx, msg.Chat.ID, msg.MessageID); err != nil {
+		slog.Error("telegram bot: delete email message", "error", err)
+	}
 	if err := b.magicLinks.IssueMagicLinkForTelegramUser(ctx, userID); err != nil {
 		slog.Error("telegram bot: issue magic link", "error", err)
 	}
+}
+
+// emailMatchesUser reports whether candidate is one of user's own
+// registered emails — compared case-insensitively and trimmed (a typo
+// in casing shouldn't matter here the way it might for, say, a phone
+// digit), against the same space-separated multi-email convention
+// users.Repository.FindActiveByEmailAndPhone already uses.
+func emailMatchesUser(user users.User, candidate string) bool {
+	if user.Email == nil {
+		return false
+	}
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return false
+	}
+	for _, email := range strings.Fields(*user.Email) {
+		if strings.EqualFold(email, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 var nonDigits = regexp.MustCompile(`\D`)

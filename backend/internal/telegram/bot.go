@@ -67,6 +67,20 @@ func (c *Client) SendMessageRequestingContact(ctx context.Context, chatID int64,
 	})
 }
 
+// DeleteMessage removes a message the bot itself received in a private
+// chat — Telegram's Bot API allows this specifically so a bot can clean
+// up sensitive text (an OTP, a password typed by mistake, ...) a person
+// sent it, which is exactly what internal/telegrambot uses this for: a
+// message that turned out to carry someone's own email, once it's
+// served its purpose confirming who they are, shouldn't linger in the
+// chat history for whoever might get hold of the phone/session later.
+func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) error {
+	return c.post(ctx, "deleteMessage", map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+	})
+}
+
 func (c *Client) post(ctx context.Context, method string, params map[string]any) error {
 	body, err := json.Marshal(params)
 	if err != nil {
@@ -123,10 +137,11 @@ type Contact struct {
 }
 
 type Message struct {
-	Chat    Chat     `json:"chat"`
-	From    *From    `json:"from"`
-	Text    string   `json:"text"`
-	Contact *Contact `json:"contact"`
+	MessageID int64    `json:"message_id"`
+	Chat      Chat     `json:"chat"`
+	From      *From    `json:"from"`
+	Text      string   `json:"text"`
+	Contact   *Contact `json:"contact"`
 }
 
 type Update struct {
