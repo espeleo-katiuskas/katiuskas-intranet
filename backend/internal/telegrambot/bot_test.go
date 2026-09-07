@@ -143,6 +143,7 @@ func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
 	usersService := newUsersService(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -185,6 +186,7 @@ func TestHandleIssuesMagicLinkAndDeletesTheMessageWhenEmailMatches(t *testing.T)
 	email := testutil.UniqueEmail(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -225,6 +227,7 @@ func TestHandleRejectsSomeoneElsesEmail(t *testing.T) {
 	usersService := newUsersService(t)
 	linkedPerson, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create linked person: %v", err)
@@ -267,6 +270,7 @@ func TestHandleIssuesMagicLinkEvenWhenDeletingTheMessageFails(t *testing.T) {
 	email := testutil.UniqueEmail(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -291,10 +295,15 @@ func TestHandleIssuesMagicLinkEvenWhenDeletingTheMessageFails(t *testing.T) {
 	}
 }
 
+// TestHandleContactLinksAMatchingUser covers the eligible case: someone
+// who could actually sign in gets the link confirmation followed
+// immediately by emailPrompt, instead of having to send something else
+// first to find out whether the bot is even usable for them.
 func TestHandleContactLinksAMatchingUser(t *testing.T) {
 	usersService := newUsersService(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
 		FirstName: "Ana", LastName: "García", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -327,11 +336,44 @@ func TestHandleContactLinksAMatchingUser(t *testing.T) {
 	if len(client.sentRemovingKeyboard) != 1 {
 		t.Fatalf("expected exactly one confirmation reply removing the keyboard, got sent=%v removingKeyboard=%v", client.sent, client.sentRemovingKeyboard)
 	}
+	if len(client.sent) != 1 || client.sent[0] != emailPrompt {
+		t.Errorf("expected an emailPrompt follow-up, got %v", client.sent)
+	}
 	if len(notifier.sent) != 1 {
 		t.Fatalf("expected exactly one channel notification, got %v", notifier.sent)
 	}
 	if got := notifier.sent[0]; !strings.Contains(got, created.Login) || !strings.Contains(got, "34611222333") {
 		t.Errorf("expected the channel notification to mention the login and phone, got %q", got)
+	}
+}
+
+// TestHandleContactLinksAnIneligibleUser covers the other half: someone
+// linked successfully (their contact really did match a real socio) but
+// who isn't actually eligible to sign in — no baseline role here — gets
+// unauthorizedMessage as the follow-up instead of ever being asked for
+// their email, which would be a dead end for them.
+func TestHandleContactLinksAnIneligibleUser(t *testing.T) {
+	usersService := newUsersService(t)
+	if _, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "Ana", LastName: "García", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{
+			Chat:    telegram.Chat{ID: 555},
+			From:    &telegram.From{ID: 555, FirstName: "Ana"},
+			Contact: &telegram.Contact{PhoneNumber: "34611222333", UserID: 555},
+		},
+	})
+
+	if len(client.sent) != 1 || client.sent[0] != unauthorizedMessage {
+		t.Errorf("expected the unauthorized message as the follow-up, got %v", client.sent)
 	}
 }
 
@@ -453,6 +495,9 @@ func TestHandleContactReportsNoMatch(t *testing.T) {
 	// down here too.
 	if len(client.sentRemovingKeyboard) != 1 {
 		t.Fatalf("expected exactly one reply removing the keyboard, got sent=%v removingKeyboard=%v", client.sent, client.sentRemovingKeyboard)
+	}
+	if !strings.Contains(client.sentRemovingKeyboard[0], contactClubHint) {
+		t.Errorf("expected the no-match reply to suggest contacting the club, got %q", client.sentRemovingKeyboard[0])
 	}
 	if len(notifier.sent) != 1 {
 		t.Fatalf("expected exactly one channel notification, got %v", notifier.sent)

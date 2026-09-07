@@ -14,7 +14,12 @@
 // ask for a sign-in link — but only after proving it's still actually
 // that person by typing their own registered email, not just by being
 // whoever's holding the phone with Telegram already open on it; see
-// handleRecognizedChat.
+// handleRecognizedChat. Being linked at all doesn't automatically mean
+// being allowed to sign in, though — canUseTelegramLogin gates both of
+// the above on the same baseline-role check every route in this API
+// enforces, plus having an email and a phone on file; someone who
+// fails it never gets asked for their email at all, just told the bot
+// isn't for them.
 package telegrambot
 
 import (
@@ -26,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
@@ -47,6 +53,46 @@ const contactButtonText = "Compartir mi contacto"
 // emailPrompt is what an already-recognized chat gets in reply to any
 // message that isn't its own registered email — see handleRecognizedChat.
 const emailPrompt = "Si quieres entrar en la intranet, envíame tu dirección de correo electrónico."
+
+// contactClubHint is appended to any reply telling someone the bot
+// can't help them right now — an unrecognized phone number, or being
+// linked but not actually eligible to sign in — so being told no
+// always comes with a next step instead of a dead end.
+const contactClubHint = "Si crees que deberías tener acceso, ponte en contacto con el club para comprobar tu situación."
+
+// unauthorizedMessage replaces emailPrompt for a chat linked to someone
+// who isn't actually eligible to sign in at all — see
+// canUseTelegramLogin. Sent instead of ever asking for their email,
+// since asking would just be a dead end for them.
+const unauthorizedMessage = "Este bot está disponible únicamente para usuarios autorizados. " + contactClubHint
+
+// canUseTelegramLogin reports whether user could sign in at all: the
+// same baseline-role gate every route in this API enforces
+// (auth.HasBaselineRole — in practice, an active socio via the
+// automatic "member" role, or admin/board), plus having both an email
+// and a phone on file. The web magic-link request already requires
+// both as input to even resolve a match (FindActiveByEmailAndPhone),
+// but a Telegram-linked account is resolved straight from its chat id
+// instead, so nothing there guarantees either is actually on file —
+// issueMagicLink already tolerates a missing email for that reason
+// (see authapi.Handler), but a magic link genuinely needs both to be
+// useful for the person receiving it.
+func canUseTelegramLogin(user users.User) bool {
+	return auth.HasBaselineRole(user.Roles) && user.Email != nil && user.Phone != nil
+}
+
+// eligibilityMessage picks what to tell userID's linked chat about
+// whether they can actually sign in — emailPrompt to invite the next
+// step if canUseTelegramLogin says yes, unauthorizedMessage otherwise.
+// Sent both right after a chat is first linked (handleContact) and on
+// every later message from one (handleRecognizedChat), so the answer
+// never depends on how many times they've asked.
+func eligibilityMessage(user users.User) string {
+	if canUseTelegramLogin(user) {
+		return emailPrompt
+	}
+	return unauthorizedMessage
+}
 
 // pollTimeoutSeconds is how long each GetUpdates call blocks server-side
 // waiting for a new message before returning empty — long enough to
@@ -172,6 +218,12 @@ func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, u
 		slog.Error("telegram bot: look up linked user", "error", err)
 		return
 	}
+	if !canUseTelegramLogin(user) {
+		if err := b.client.SendMessage(ctx, msg.Chat.ID, unauthorizedMessage); err != nil {
+			slog.Error("telegram bot: send unauthorized message", "error", err)
+		}
+		return
+	}
 	if !emailMatchesUser(user, msg.Text) {
 		if err := b.client.SendMessage(ctx, msg.Chat.ID, emailPrompt); err != nil {
 			slog.Error("telegram bot: send email prompt", "error", err)
@@ -252,9 +304,22 @@ func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 		if sendErr := b.client.SendMessageRemovingKeyboard(ctx, msg.Chat.ID, reply); sendErr != nil {
 			slog.Error("telegram bot: send reply", "error", sendErr)
 		}
+		// Follow up immediately with the same eligibility message any
+		// later message from this chat would get anyway (see
+		// handleRecognizedChat) — no reason to make them send something
+		// first just to find out whether they can actually use this bot
+		// to sign in. matched itself only carries the plain columns
+		// (FindByPhoneNumber doesn't enrich), so this needs its own Get
+		// for Roles to be populated.
+		enriched, enrichErr := b.users.Get(ctx, matched.ID)
+		if enrichErr != nil {
+			slog.Error("telegram bot: look up linked user", "error", enrichErr)
+		} else if sendErr := b.client.SendMessage(ctx, msg.Chat.ID, eligibilityMessage(enriched)); sendErr != nil {
+			slog.Error("telegram bot: send eligibility message", "error", sendErr)
+		}
 		b.notifyChannel(ctx, msg, msg.Contact.PhoneNumber, &matched)
 	case errors.Is(err, users.ErrNotFound):
-		reply := "No hemos encontrado a nadie con ese número de teléfono en la base de datos del club."
+		reply := "No hemos encontrado a nadie con ese número de teléfono en la base de datos del club. " + contactClubHint
 		// Same reasoning as the match case above: this is still their
 		// own contact, just not on file, so tapping the button again
 		// would only resend the same number and get the same answer.

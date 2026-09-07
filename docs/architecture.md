@@ -439,8 +439,15 @@ contacto sí es el suyo y el teléfono coincide con el de un socio
 (`users.Repository.FindByPhoneNumber`, exigiendo que el prefijo de país que Telegram
 siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
 "+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
-los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; si no
-coincide, se lo dice; en ambos casos usa `Client.SendMessageRemovingKeyboard` en vez de
+los dígitos salvo el prefijo) vincula su `telegram_chat_id`, se lo confirma, y a
+continuación le manda ya el mismo `emailPrompt`/`unauthorizedMessage` que recibiría con
+cualquier mensaje posterior (`eligibilityMessage`, ver más abajo) — sin hacerle escribir
+nada antes solo para averiguar si el bot le sirve de algo; si no coincide, se lo dice y
+añade `contactClubHint` ("si crees que deberías tener acceso, ponte en contacto con el
+club para comprobar tu situación" — el mismo consejo con el que termina
+`unauthorizedMessage`), ya que un teléfono que de verdad no está en la base de datos es
+justo el caso que merece que alguien del club lo compruebe a mano. En ambos casos usa
+`Client.SendMessageRemovingKeyboard` en vez de
 un `SendMessage` normal, porque de todas formas era su propio contacto y volver a pulsar
 el botón solo podría reenviar ese mismo teléfono para la misma respuesta — a diferencia
 del caso de contacto ajeno de arriba, donde dejar el teclado es precisamente lo que
@@ -455,7 +462,16 @@ siquiera lo toca, deja el vínculo tal cual. Un mensaje normal (no un contacto) 
 "comparta su contacto", pero tampoco dispara un enlace de acceso al instante con
 cualquier mensaje — eso se probó y se revirtió por ser un retroceso de seguridad: bastaba
 con tener el móvil (o la sesión de Telegram ya abierta) de un socio para entrar, sin la
-exigencia de conocer *a la vez* teléfono y correo que sí tiene el flujo web. En su lugar,
+exigencia de conocer *a la vez* teléfono y correo que sí tiene el flujo web. Estar
+vinculado tampoco implica poder entrar: `canUseTelegramLogin` exige el mismo rol base que
+cualquier ruta del API (`auth.HasBaselineRole` — en la práctica, un socio activo vía el
+rol automático "member", o admin/board) y además que la persona tenga correo y teléfono
+registrados — la petición de magic-link desde la web ya exige ambos como entrada
+(`FindActiveByEmailAndPhone`), pero un chat vinculado se resuelve directamente por su
+`telegram_chat_id`, así que nada garantiza que los tenga. A quien no cumple esto nunca se
+le llega a pedir el correo: cualquier mensaje suyo recibe `unauthorizedMessage` ("este bot
+está disponible únicamente para usuarios autorizados. Si crees que deberías tener acceso,
+ponte en contacto con el club para comprobar tu situación"). Si lo cumple,
 `Bot.handleRecognizedChat` pide un segundo factor: contesta con `emailPrompt` ("si quieres
 entrar en la intranet, envíame tu dirección de correo electrónico") a cualquier mensaje
 que no sea el correo registrado de esa cuenta (`emailMatchesUser`, comparado sin

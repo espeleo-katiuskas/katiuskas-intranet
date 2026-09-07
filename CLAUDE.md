@@ -372,10 +372,22 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   one doesn't *instantly* trigger a sign-in link either — that was tried and reverted as
   a security regression: it reduced logging in via Telegram to merely having the phone/
   session (whoever's holding an already-open Telegram app), dropping the "must know
-  *both* phone and email" requirement the web flow enforces. Instead
-  `Bot.handleRecognizedChat` asks a first factor be proven a second time: it replies with
-  `emailPrompt` ("si quieres entrar en la intranet, envíame tu dirección de correo
-  electrónico") to any message that isn't the account's own registered email
+  *both* phone and email" requirement the web flow enforces. Being linked doesn't imply
+  being eligible to sign in at all, either — `canUseTelegramLogin` gates both this and the
+  link confirmation below on the same baseline-role check every route in this API
+  enforces (`auth.HasBaselineRole`, in practice an active socio via the automatic
+  "member" role, or admin/board) plus having both an email and a phone on file: the web
+  magic-link request already requires both as input just to find a match
+  (`FindActiveByEmailAndPhone`), but a Telegram-linked account is resolved straight from
+  its chat id, so nothing there guarantees either is actually on file the way
+  `issueMagicLink`'s own tolerance for a missing email (see below) might suggest. Someone
+  who fails this check never gets asked for their email — every message from them instead
+  gets `unauthorizedMessage` ("este bot está disponible únicamente para usuarios
+  autorizados. Si crees que deberías tener acceso, ponte en contacto con el club para
+  comprobar tu situación"). Otherwise, `Bot.handleRecognizedChat` asks a first factor be
+  proven a second time: it replies with `emailPrompt` ("si quieres entrar en la intranet,
+  envíame tu dirección de correo electrónico") to any message that isn't the account's
+  own registered email
   (`emailMatchesUser`, checked case-insensitively against the same space-separated
   multi-email convention `FindActiveByEmailAndPhone` uses); only once that matches does it
   call `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
@@ -409,11 +421,18 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   own `Bot.notifyChannelRejectedForeignContact` warning (worth flagging above a routine
   no-match, since it's a possible impersonation attempt) and goes no further — the "share
   contact" keyboard stays up so they can retry with their real one. A match calls
-  `users.Repository.SetTelegramChatID` and confirms; no match replies saying so; both use
-  `Client.SendMessageRemovingKeyboard` instead of a plain `SendMessage`, since it really
-  was their own contact either way and tapping the button again could only ever resend
-  that same phone number for the same answer — unlike the rejection case above, where
-  the button staying up is the point. Either way, `Bot.notifyChannel` reports the
+  `users.Repository.SetTelegramChatID` and confirms, then immediately follows up with
+  whichever of `emailPrompt`/`unauthorizedMessage` a later message from them would get
+  anyway (`eligibilityMessage`, the same check `canUseTelegramLogin` does above — no
+  reason to make them send something first just to find out whether the bot is even
+  usable for them); no match replies saying so, plus `contactClubHint` ("si crees que
+  deberías tener acceso, ponte en contacto con el club para comprobar tu situación" — the
+  same suggestion `unauthorizedMessage` ends with) since a phone genuinely not on file is
+  exactly the kind of thing worth a human checking. Both the match and no-match replies
+  use `Client.SendMessageRemovingKeyboard` instead of a plain `SendMessage`, since it
+  really was their own contact either way and tapping the button again could only ever
+  resend that same phone number for the same answer — unlike the rejection case above,
+  where the button staying up is the point. Either way, `Bot.notifyChannel` reports the
   attempt to the log channel — who sent it,
   the phone number, and whether it matched — the same "tell the club everything, matched
   or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
