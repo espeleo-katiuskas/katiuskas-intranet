@@ -53,6 +53,10 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string) err
 // a single button that, when tapped, shares the person's own Telegram
 // contact (their phone number) back to the bot — see
 // internal/telegrambot, which matches that phone against users.phone.
+// is_persistent (Bot API 6.6+) asks the client to show this keyboard by
+// default instead of collapsing it behind the small keyboard-icon
+// toggle next to the message box — without it, a first-time user has no
+// obvious cue that tapping that icon is what reveals the button at all.
 func (c *Client) SendMessageRequestingContact(ctx context.Context, chatID int64, text, buttonText string) error {
 	return c.post(ctx, "sendMessage", map[string]any{
 		"chat_id": chatID,
@@ -63,6 +67,7 @@ func (c *Client) SendMessageRequestingContact(ctx context.Context, chatID int64,
 			},
 			"resize_keyboard":   true,
 			"one_time_keyboard": true,
+			"is_persistent":     true,
 		},
 	})
 }

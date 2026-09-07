@@ -30,8 +30,17 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
+// greeting asks for a contact share and, since the button that does it
+// lives in Telegram's own custom-keyboard panel rather than inline in
+// the chat, spells out how to get to it — SendMessageRequestingContact
+// already asks the client to show that panel open by default
+// (is_persistent), but a client that doesn't honor it would otherwise
+// leave the button hidden behind an icon next to the message box with
+// no clue that tapping it is what reveals anything at all.
 const greeting = "¡Hola! Soy el bot del Club de Espeleología Katiuskas. " +
-	"Si eres socio o socia del club, compárteme tu contacto para identificarte."
+	"Si eres socio o socia del club, compárteme tu contacto para identificarte: " +
+	"toca el botón «" + contactButtonText + "» que aparece junto al campo donde escribes el mensaje " +
+	"(si no lo ves, pulsa primero el icono de teclado ⌨️ que hay junto a ese campo)."
 
 const contactButtonText = "Compartir mi contacto"
 

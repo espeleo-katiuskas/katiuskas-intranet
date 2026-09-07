@@ -90,6 +90,9 @@ func TestClientSendMessageRequestingContactIncludesAKeyboard(t *testing.T) {
 	if button["text"] != "Compartir contacto" || button["request_contact"] != true {
 		t.Errorf("unexpected button: %v", button)
 	}
+	if markup["is_persistent"] != true {
+		t.Errorf("expected is_persistent so the keyboard isn't hidden behind the keyboard-icon toggle, got %v", markup["is_persistent"])
+	}
 }
 
 func TestClientSendMessageReturnsErrorOnTelegramAPIError(t *testing.T) {

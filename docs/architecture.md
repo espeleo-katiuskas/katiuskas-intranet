@@ -418,7 +418,12 @@ cada cambio en la base de datos en vez de cada llamada, y como tocar la fecha de
 uso de un token es en sí un UPDATE, avisaba en cada petición autenticada, no solo en las
 que de verdad cambiaban algo), y —el único
 que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
-si alguien desconocido escribe al bot, le pide que comparta su contacto; antes de mirar
+si alguien desconocido escribe al bot, le pide que comparta su contacto (con
+`is_persistent: true` en el teclado personalizado que ofrece el botón, para que el
+cliente lo muestre ya abierto en vez de escondido tras su propio icono de teclado, y con
+el propio texto del saludo explicando dónde está ese botón y cómo revelarlo si el cliente
+no respeta ese flag — nada en un teclado personalizado de Telegram es evidente por sí
+solo para quien no ha visto uno antes); antes de mirar
 el teléfono, `isOwnContact` comprueba que el contacto compartido es el suyo propio —
 Telegram permite adjuntar el contacto de cualquiera, no solo el propio (una vCard escrita
 a mano, o el contacto guardado de otra persona), y solo el botón "compartir contacto" que

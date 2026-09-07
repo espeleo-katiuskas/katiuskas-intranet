@@ -362,7 +362,12 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   attempt has to reach the log channel, so a bot with no channel configured can't do its
   job anyway). `users.Repository.UserIDForTelegramChatID` tells apart a chat this
   doesn't recognize yet — every other message from one gets a greeting plus a "share your
-  contact" keyboard button (`Client.SendMessageRequestingContact`) — from one it does:
+  contact" keyboard button (`Client.SendMessageRequestingContact`, sent with
+  `is_persistent: true` so the client shows that keyboard open by default instead of
+  collapsed behind its own keyboard-icon toggle; the greeting text also spells out where
+  that button is and how to reveal it if a client doesn't honor the flag, since nothing
+  about a Telegram custom keyboard is otherwise self-explanatory to someone who's never
+  seen one) — from one it does:
   an already-linked chat no longer gets the contact-share menu again, but a message from
   one doesn't *instantly* trigger a sign-in link either — that was tried and reverted as
   a security regression: it reduced logging in via Telegram to merely having the phone/
