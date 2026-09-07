@@ -29,6 +29,14 @@ const positionLabels = {
   member_at_large: 'Vocal',
 };
 
+// A person's phone can hold more than one number, space-separated (see
+// users.User.Phone) — board-members exposes whatever's on file as one
+// string, so only the first is shown here rather than the raw
+// space-separated list.
+function firstPhone(phone) {
+  return (phone ?? '').split(' ')[0];
+}
+
 async function loadBoardMembers() {
   const grid = document.getElementById('alt-board-grid');
   try {
@@ -44,7 +52,7 @@ async function loadBoardMembers() {
                   <div class="alt-board-lastname">${escapeHtml(b.last_name)}</div>
                   <div class="alt-board-meta">
                     <span>${escapeHtml(positionLabels[b.position] ?? b.position)}</span>
-                    <span class="alt-board-phone">${escapeHtml(b.phone ?? '')}</span>
+                    <span class="alt-board-phone">${escapeHtml(firstPhone(b.phone))}</span>
                   </div>
                 </div>
               </div>
@@ -59,9 +67,25 @@ async function loadBoardMembers() {
 
 loadBoardMembers();
 
-// The "Datos de interés"/"Logos"/"Actas asambleas" sections are static
-// placeholders for now (see home-alt.html) — nothing behind them yet,
-// so their links shouldn't actually navigate anywhere.
+// "Copiar NIF"/"Copiar IBAN" — the only two buttons here backed by
+// real data (see home-alt.html); everything else in "Actas asambleas"
+// is still a static placeholder with no endpoint behind it, so those
+// links are just kept from navigating anywhere.
+document.querySelectorAll('[data-copy]').forEach((button) => {
+  const originalLabel = button.textContent;
+  button.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(button.dataset.copy);
+      button.textContent = '¡Copiado!';
+    } catch {
+      button.textContent = 'No se pudo copiar';
+    }
+    setTimeout(() => {
+      button.textContent = originalLabel;
+    }, 1500);
+  });
+});
+
 document.querySelectorAll('.alt-static a[href="#"]').forEach((link) => {
   link.addEventListener('click', (event) => event.preventDefault());
 });

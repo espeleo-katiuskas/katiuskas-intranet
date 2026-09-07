@@ -73,62 +73,42 @@
               </div>
             </div>
           </div>
-
-          <h2>Accesos</h2>
-          <div class="card-grid">
-            <a class="card" href="/members" data-roles="admin,board,member">
-              <h3>Socios</h3>
-              <p>Altas, bajas e historial de socios.</p>
-            </a>
-            <a class="card" href="/activities">
-              <h3>Actividades</h3>
-              <p>Próximas salidas y apuntes.</p>
-            </a>
-            <a class="card" href="/inventory">
-              <h3>Material</h3>
-              <p>Catálogo, préstamos, alquileres y ventas.</p>
-            </a>
-            <a class="card" href="/library">
-              <h3>Documentos</h3>
-              <p>Estatutos, actas y demás documentación del club.</p>
-            </a>
-          </div>
         </div>
 
-        <!-- Datos de interés y actas: también estáticos de momento —
-             valores pendientes de configurar, no datos reales del
-             club, y los botones/enlaces no hacen nada todavía. -->
-        <aside class="alt-col-side alt-static">
+        <!-- Datos de interés: datos reales del club. Actas: contenido
+             estático de momento — sin endpoint que lo sirva, así que
+             esos enlaces siguen sin hacer nada todavía. -->
+        <aside class="alt-col-side">
           <h2>Datos de interés</h2>
           <div class="alt-info-card">
             <dl class="alt-info-list">
               <div class="alt-info-row">
                 <dt>Nombre</dt>
-                <dd>Club de Espeleología Katiuskas</dd>
+                <dd>Club Deportivo Elemental de Espeleología Katiuskas</dd>
               </div>
               <div class="alt-info-row">
                 <dt>NIF</dt>
                 <dd>
-                  Pendiente de configurar
-                  <a href="#" class="alt-link-pill alt-link-pill-small">Copiar NIF</a>
+                  G-81622987
+                  <button type="button" class="alt-link-pill alt-link-pill-small" data-copy="G-81622987">Copiar NIF</button>
                 </dd>
               </div>
               <div class="alt-info-row">
                 <dt>Dirección</dt>
-                <dd>Pendiente de configurar</dd>
+                <dd>Polideportivo Los Rosales sala 2. C/ Lilas, s/n</dd>
               </div>
               <div class="alt-info-row">
                 <dt>Cuenta bancaria</dt>
                 <dd>
-                  Pendiente de configurar
-                  <a href="#" class="alt-link-pill alt-link-pill-small">Copiar IBAN</a>
+                  IBAN: ES75-0073-0100-5305-0580-2942 (Openbank)
+                  <button type="button" class="alt-link-pill alt-link-pill-small" data-copy="ES75-0073-0100-5305-0580-2942">Copiar IBAN</button>
                 </dd>
               </div>
             </dl>
           </div>
 
           <h2>Actas asambleas</h2>
-          <div class="alt-info-card">
+          <div class="alt-info-card alt-static">
             <label for="alt-actas-year">Año</label>
             <select id="alt-actas-year">
               <option>2026</option>
