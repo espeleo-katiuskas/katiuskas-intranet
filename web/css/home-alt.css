@@ -1,0 +1,152 @@
+/* Styles for home-alt.html only — a sidebar-based alternative to the
+   regular homepage's topbar layout (see index.html/style.css), scoped
+   under .alt-* classes so nothing here affects any other page. Reuses
+   the shared --accent/--surface/--line/--ink-muted variables and the
+   existing .card/.card-grid classes from style.css rather than
+   inventing a parallel design language. */
+
+.alt-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.alt-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  padding: 20px 0;
+}
+
+.alt-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 20px;
+  font-weight: 700;
+}
+
+.alt-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.95rem;
+}
+
+.alt-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.alt-nav a {
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.alt-nav a:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.alt-nav a.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-weight: 600;
+}
+
+.alt-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.alt-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.alt-topbar h1 {
+  font-size: 1.15rem;
+  margin: 0;
+  color: var(--accent);
+}
+
+.alt-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.9rem;
+}
+
+.alt-content {
+  padding: 28px;
+  max-width: 960px;
+}
+
+.alt-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.alt-board-card {
+  display: flex;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.alt-board-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.alt-board-name {
+  font-weight: 600;
+}
+
+.alt-board-lastname {
+  margin-bottom: 6px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.alt-board-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .alt-shell {
+    flex-direction: column;
+  }
+
+  .alt-sidebar {
+    width: 100%;
+  }
+
+  .alt-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
