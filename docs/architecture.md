@@ -439,10 +439,14 @@ contacto sí es el suyo y el teléfono coincide con el de un socio
 (`users.Repository.FindByPhoneNumber`, exigiendo que el prefijo de país que Telegram
 siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
 "+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
-los dígitos salvo el prefijo) vincula su `telegram_chat_id`, se lo confirma, y a
-continuación le manda ya el mismo `emailPrompt`/`unauthorizedMessage` que recibiría con
-cualquier mensaje posterior (`eligibilityMessage`, ver más abajo) — sin hacerle escribir
-nada antes solo para averiguar si el bot le sirve de algo; si no coincide, se lo dice y
+los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma vía
+`Bot.replyToLinkedContact`, que ya comprueba ahí mismo el mismo `canUseTelegramLogin` en
+vez de esperar a un mensaje posterior para descubrirlo: a quien sí puede entrar le llega
+`emailPrompt` como segundo mensaje aparte; a quien no, en cambio, le llega una única
+respuesta combinada (`unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te hemos identificado
+como Nombre Apellidos. Sin embargo, este bot está disponible únicamente para usuarios
+autorizados. ...") en vez de partir la noticia en dos mensajes — "ya estás vinculado" y
+luego "pero no puedes usar esto" — sin nada útil en medio; si no coincide, se lo dice y
 añade `contactClubHint` ("si crees que deberías tener acceso, ponte en contacto con el
 club para comprobar tu situación" — el mismo consejo con el que termina
 `unauthorizedMessage`), ya que un teléfono que de verdad no está en la base de datos es

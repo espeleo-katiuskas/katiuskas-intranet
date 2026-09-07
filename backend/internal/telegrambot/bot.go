@@ -130,18 +130,14 @@ func canUseTelegramLogin(user users.User) bool {
 	return auth.HasBaselineRole(user.Roles) && user.Email != nil && user.Phone != nil
 }
 
-// eligibilityMessage picks what to tell userID's linked chat about
-// whether they can actually sign in — emailPrompt to invite the next
-// step if canUseTelegramLogin says yes, unauthorizedMessage otherwise.
-// Sent both right after a chat is first linked (handleContact) and on
-// every later message from one (handleRecognizedChat), so the answer
-// never depends on how many times they've asked.
-func eligibilityMessage(user users.User) string {
-	if canUseTelegramLogin(user) {
-		return emailPrompt
-	}
-	return unauthorizedMessage
-}
+// unauthorizedAfterLinkReplyFormat is handleContact's own version of
+// unauthorizedMessage: a single combined reply for someone whose
+// contact just matched a real socio but who isn't actually eligible to
+// sign in, instead of "you're linked" followed by "but you can't use
+// this" as two separate messages with nothing useful in between. %s %s
+// is their first and last name.
+const unauthorizedAfterLinkReplyFormat = "¡Gracias! Te hemos identificado como %s %s. Sin embargo, " +
+	"este bot está disponible únicamente para usuarios autorizados. " + contactClubHint
 
 // pollTimeoutSeconds is how long each GetUpdates call blocks server-side
 // waiting for a new message before returning empty — long enough to
@@ -346,27 +342,7 @@ func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 			slog.Error("telegram bot: link telegram chat id", "error", linkErr)
 			return
 		}
-		reply := fmt.Sprintf("¡Gracias! Te hemos identificado como %s %s y hemos vinculado tu cuenta de Telegram.",
-			matched.FirstName, matched.LastName)
-		// The "share your contact" button has done its job — leaving it
-		// up would only invite a pointless second tap that resends the
-		// same phone number, so this is the one reply that removes it.
-		if sendErr := b.client.SendMessageRemovingKeyboard(ctx, msg.Chat.ID, reply); sendErr != nil {
-			slog.Error("telegram bot: send reply", "error", sendErr)
-		}
-		// Follow up immediately with the same eligibility message any
-		// later message from this chat would get anyway (see
-		// handleRecognizedChat) — no reason to make them send something
-		// first just to find out whether they can actually use this bot
-		// to sign in. matched itself only carries the plain columns
-		// (FindByPhoneNumber doesn't enrich), so this needs its own Get
-		// for Roles to be populated.
-		enriched, enrichErr := b.users.Get(ctx, matched.ID)
-		if enrichErr != nil {
-			slog.Error("telegram bot: look up linked user", "error", enrichErr)
-		} else if sendErr := b.client.SendMessage(ctx, msg.Chat.ID, eligibilityMessage(enriched)); sendErr != nil {
-			slog.Error("telegram bot: send eligibility message", "error", sendErr)
-		}
+		b.replyToLinkedContact(ctx, msg, matched)
 		b.notifyChannel(ctx, msg, msg.Contact.PhoneNumber, &matched)
 	case errors.Is(err, users.ErrNotFound):
 		reply := "No hemos encontrado a nadie con ese número de teléfono en la base de datos del club. " + contactClubHint
@@ -379,6 +355,45 @@ func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 		b.notifyChannel(ctx, msg, msg.Contact.PhoneNumber, nil)
 	default:
 		slog.Error("telegram bot: look up phone", "error", err)
+	}
+}
+
+// replyToLinkedContact tells a chat what happened right after its
+// shared contact matched a real socio (handleContact's own success
+// case): the plain link confirmation followed by emailPrompt for
+// someone actually eligible to sign in, or — when they're not — a
+// single combined reply (unauthorizedAfterLinkReplyFormat) instead of
+// splitting "you're linked" and "but you can't use this bot" into two
+// separate messages with nothing useful in between. matched itself
+// only carries the plain columns (FindByPhoneNumber doesn't enrich),
+// so this needs its own Get for Roles to be populated before
+// canUseTelegramLogin can say anything useful; a Get failure fails
+// open to the plain confirmation alone, same as before eligibility
+// gating existed here.
+func (b *Bot) replyToLinkedContact(ctx context.Context, msg *telegram.Message, matched users.User) {
+	enriched, err := b.users.Get(ctx, matched.ID)
+	if err != nil {
+		slog.Error("telegram bot: look up linked user", "error", err)
+	}
+	eligible := err == nil && canUseTelegramLogin(enriched)
+
+	var reply string
+	if err != nil || eligible {
+		reply = fmt.Sprintf("¡Gracias! Te hemos identificado como %s %s y hemos vinculado tu cuenta de Telegram.",
+			matched.FirstName, matched.LastName)
+	} else {
+		reply = fmt.Sprintf(unauthorizedAfterLinkReplyFormat, matched.FirstName, matched.LastName)
+	}
+	// The "share your contact" button has done its job — leaving it up
+	// would only invite a pointless second tap that resends the same
+	// phone number, so this reply always removes it.
+	if sendErr := b.client.SendMessageRemovingKeyboard(ctx, msg.Chat.ID, reply); sendErr != nil {
+		slog.Error("telegram bot: send reply", "error", sendErr)
+	}
+	if eligible {
+		if sendErr := b.client.SendMessage(ctx, msg.Chat.ID, emailPrompt); sendErr != nil {
+			slog.Error("telegram bot: send email prompt", "error", sendErr)
+		}
 	}
 }
 

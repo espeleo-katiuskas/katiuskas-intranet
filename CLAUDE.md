@@ -429,11 +429,15 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   own `Bot.notifyChannelRejectedForeignContact` warning (worth flagging above a routine
   no-match, since it's a possible impersonation attempt) and goes no further — the "share
   contact" keyboard stays up so they can retry with their real one. A match calls
-  `users.Repository.SetTelegramChatID` and confirms, then immediately follows up with
-  whichever of `emailPrompt`/`unauthorizedMessage` a later message from them would get
-  anyway (`eligibilityMessage`, the same check `canUseTelegramLogin` does above — no
-  reason to make them send something first just to find out whether the bot is even
-  usable for them); no match replies saying so, plus `contactClubHint` ("si crees que
+  `users.Repository.SetTelegramChatID` and confirms via `Bot.replyToLinkedContact`, which
+  checks the same `canUseTelegramLogin` eligibility gate right away rather than waiting
+  for a later message to find out (`emailPrompt` follows the confirmation as a second
+  message for someone actually eligible; someone who isn't gets a single combined reply
+  instead — `unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te hemos identificado como
+  Nombre Apellidos. Sin embargo, este bot está disponible únicamente para usuarios
+  autorizados. ..." — rather than "you're linked" followed by "but you can't use this" as
+  two separate messages with nothing useful in between); no match replies saying so, plus
+  `contactClubHint` ("si crees que
   deberías tener acceso, ponte en contacto con el club para comprobar tu situación" — the
   same suggestion `unauthorizedMessage` ends with) since a phone genuinely not on file is
   exactly the kind of thing worth a human checking. Both the match and no-match replies

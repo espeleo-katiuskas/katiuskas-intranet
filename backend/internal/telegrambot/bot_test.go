@@ -417,8 +417,9 @@ func TestHandleContactLinksAMatchingUser(t *testing.T) {
 // TestHandleContactLinksAnIneligibleUser covers the other half: someone
 // linked successfully (their contact really did match a real socio) but
 // who isn't actually eligible to sign in — no baseline role here — gets
-// unauthorizedMessage as the follow-up instead of ever being asked for
-// their email, which would be a dead end for them.
+// a single combined reply (name, linked, but not authorized) instead of
+// the plain confirmation followed by ever being asked for their email,
+// which would be a dead end for them.
 func TestHandleContactLinksAnIneligibleUser(t *testing.T) {
 	usersService := newUsersService(t)
 	if _, err := usersService.Create(context.Background(), users.CreateInput{
@@ -439,8 +440,12 @@ func TestHandleContactLinksAnIneligibleUser(t *testing.T) {
 		},
 	})
 
-	if len(client.sent) != 1 || client.sent[0] != unauthorizedMessage {
-		t.Errorf("expected the unauthorized message as the follow-up, got %v", client.sent)
+	want := fmt.Sprintf(unauthorizedAfterLinkReplyFormat, "Ana", "García")
+	if len(client.sentRemovingKeyboard) != 1 || client.sentRemovingKeyboard[0] != want {
+		t.Errorf("expected the combined linked-but-unauthorized reply, got %v", client.sentRemovingKeyboard)
+	}
+	if len(client.sent) != 0 {
+		t.Errorf("expected no separate follow-up message, got %v", client.sent)
 	}
 }
 
