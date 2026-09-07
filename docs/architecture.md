@@ -187,7 +187,15 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   cuando es el propio bot el que responde a alguien que acaba de escribirle su correo
   (`handleRecognizedChat`, más abajo) omite ambas cosas — no hay ninguna página pidiendo
   ese código en ese momento, y el mensaje es precisamente la respuesta a lo que esa
-  persona acaba de enviar, no algo que pueda llegar sin que lo haya pedido.
+  persona acaba de enviar, no algo que pueda llegar sin que lo haya pedido. Ese mismo DM
+  se borra solo pasado el `MagicLinkTTL` (los mismos 15 minutos que el propio enlace deja
+  de funcionar): se envía con `Client.SendMessageForID` en vez del `SendMessage` normal
+  —precisamente para quedarse con el id del mensaje que acaba de mandar—, y la misma
+  goroutine que hace el envío espera ese tiempo y llama después a `Client.DeleteMessage`
+  con ese id. Es solo una mejora de higiene, no algo de lo que dependa la seguridad del
+  enlace en sí — si el borrado falla, o el proceso se reinicia mientras tanto, el enlace
+  deja de funcionar igual — pero uno ya caducado que se queda ahí es confuso, y es una
+  cosa más expuesta si alguien llega a acceder más tarde al teléfono o a la sesión.
 - **`roles`** / **`user_roles`** — catálogo de roles (gestionable: crear, borrar) y
   quién tiene cuáles (muchos a muchos). `admin`, `board`, `member` y `former_member`
   son roles de *sistema* (`is_system`): son los únicos a los que el código realmente

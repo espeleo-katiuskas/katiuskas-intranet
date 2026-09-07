@@ -49,6 +49,22 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string) err
 	})
 }
 
+// SendMessageForID is SendMessage, but also returns the id Telegram
+// assigned the sent message — needed only where a caller might want to
+// delete this exact message later (see authapi.Handler's own
+// magic-link cleanup, which schedules a DeleteMessage once the link
+// itself expires).
+func (c *Client) SendMessageForID(ctx context.Context, chatID int64, text string) (int64, error) {
+	parsed, err := c.postResult(ctx, "sendMessage", map[string]any{
+		"chat_id": chatID,
+		"text":    text,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return parsed.Result.MessageID, nil
+}
+
 // SendMessageRequestingContact sends text along with a keyboard offering
 // a single button that, when tapped, shares the person's own Telegram
 // contact (their phone number) back to the bot — see
@@ -105,32 +121,42 @@ func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) err
 }
 
 func (c *Client) post(ctx context.Context, method string, params map[string]any) error {
+	_, err := c.postResult(ctx, method, params)
+	return err
+}
+
+// postResult is post, but also hands back the decoded response — the
+// only reason to reach for it over plain post is needing something out
+// of Result (see SendMessageForID); every other caller here only cares
+// whether the call succeeded.
+func (c *Client) postResult(ctx context.Context, method string, params map[string]any) (sendMessageResponse, error) {
+	var parsed sendMessageResponse
+
 	body, err := json.Marshal(params)
 	if err != nil {
-		return fmt.Errorf("encode request: %w", err)
+		return parsed, fmt.Errorf("encode request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/bot%s/%s", c.base(), c.Token, method)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return parsed, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("call %s: %w", method, err)
+		return parsed, fmt.Errorf("call %s: %w", method, err)
 	}
 	defer resp.Body.Close()
 
-	var parsed sendMessageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return fmt.Errorf("decode response: %w", err)
+		return parsed, fmt.Errorf("decode response: %w", err)
 	}
 	if !parsed.OK {
-		return fmt.Errorf("telegram API error: %s", parsed.Description)
+		return parsed, fmt.Errorf("telegram API error: %s", parsed.Description)
 	}
-	return nil
+	return parsed, nil
 }
 
 // Chat is the chat a message arrived in — ID doubles as the person's own

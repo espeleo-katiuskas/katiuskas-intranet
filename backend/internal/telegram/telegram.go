@@ -54,6 +54,12 @@ type BotSender struct {
 type sendMessageResponse struct {
 	OK          bool   `json:"ok"`
 	Description string `json:"description"`
+	// Result is the message the API just sent — BotSender's own Send
+	// never needs it (it never targets anything but the fixed log
+	// channel, and nothing here ever needs to act on that message
+	// again), but Client.postResult reuses this same struct and does
+	// (see Client.SendMessageForID).
+	Result Message `json:"result"`
 }
 
 func (b BotSender) Send(ctx context.Context, text string) error {

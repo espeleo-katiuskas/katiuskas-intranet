@@ -77,21 +77,42 @@ func (n *capturingNotifier) waitForMessage(t *testing.T) string {
 // tests can inspect what DM would have been sent, and to which chat —
 // unlike capturingNotifier (the fixed log channel), this one records
 // per-chat_id, the way Handler.notifyMagicLinkViaTelegram actually sends.
+// nextMessageID hands out increasing, distinguishable ids so a test can
+// tell which DeleteMessage call matches which earlier send.
 type capturingTelegramClient struct {
 	mu   sync.Mutex
 	sent []struct {
-		chatID int64
-		text   string
+		chatID    int64
+		text      string
+		messageID int64
 	}
+	deleted []struct {
+		chatID    int64
+		messageID int64
+	}
+	nextMessageID int64
 }
 
-func (c *capturingTelegramClient) SendMessage(_ context.Context, chatID int64, text string) error {
+func (c *capturingTelegramClient) SendMessageForID(_ context.Context, chatID int64, text string) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.nextMessageID++
+	messageID := c.nextMessageID
 	c.sent = append(c.sent, struct {
-		chatID int64
-		text   string
-	}{chatID, text})
+		chatID    int64
+		text      string
+		messageID int64
+	}{chatID, text, messageID})
+	return messageID, nil
+}
+
+func (c *capturingTelegramClient) DeleteMessage(_ context.Context, chatID, messageID int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deleted = append(c.deleted, struct {
+		chatID    int64
+		messageID int64
+	}{chatID, messageID})
 	return nil
 }
 
@@ -110,6 +131,28 @@ func (c *capturingTelegramClient) waitForMessage(t *testing.T) (int64, string) {
 	}
 	t.Fatal("timed out waiting for a Telegram DM to be sent")
 	return 0, ""
+}
+
+// waitForDelete polls for DeleteMessage to have been called — used by
+// tests exercising notifyMagicLinkViaTelegram's own expiry cleanup,
+// which sleeps for the handler's configured MagicLinkTTL before
+// deleting, so those tests build their testServer with a short TTL
+// rather than actually waiting on a real one.
+func (c *capturingTelegramClient) waitForDelete(t *testing.T) (int64, int64) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		if len(c.deleted) > 0 {
+			d := c.deleted[0]
+			c.mu.Unlock()
+			return d.chatID, d.messageID
+		}
+		c.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for the magic link message to be deleted")
+	return 0, 0
 }
 
 func (c *capturingTelegramClient) assertNothingSent(t *testing.T) {
@@ -134,6 +177,15 @@ type testServer struct {
 }
 
 func newTestServer(t *testing.T) *testServer {
+	return newTestServerWithMagicLinkTTL(t, 15*time.Minute)
+}
+
+// newTestServerWithMagicLinkTTL is newTestServer, but lets a test pick
+// its own MagicLinkTTL — needed for exercising
+// notifyMagicLinkViaTelegram's own expiry cleanup, which sleeps for
+// exactly that long before deleting the DM it sent; a real 15 minutes
+// would make that test take 15 minutes.
+func newTestServerWithMagicLinkTTL(t *testing.T, magicLinkTTL time.Duration) *testServer {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
@@ -147,7 +199,7 @@ func newTestServer(t *testing.T) *testServer {
 
 	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, telegramClient, authapi.Options{
 		TokenTTL:          time.Hour,
-		MagicLinkTTL:      15 * time.Minute,
+		MagicLinkTTL:      magicLinkTTL,
 		MagicLinkCooldown: time.Minute,
 		PublicBaseURL:     "http://localhost:64710",
 	})
@@ -365,6 +417,35 @@ func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
 	}
 	if tokenInLink.FindStringSubmatch(text) == nil {
 		t.Errorf("expected a sign-in link in the DM, got %q", text)
+	}
+}
+
+// TestNotifyMagicLinkViaTelegramDeletesTheDMOnceItExpires: the link
+// stops working after MagicLinkTTL regardless, but leaving a dead link
+// sitting in the chat is misleading, and one more thing exposed if the
+// phone/session is compromised later — see notifyMagicLinkViaTelegram's
+// own doc comment on why this is a hygiene nicety, not a security gate.
+func TestNotifyMagicLinkViaTelegramDeletesTheDMOnceItExpires(t *testing.T) {
+	s := newTestServerWithMagicLinkTTL(t, 30*time.Millisecond)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	sentChatID, _ := s.telegramClient.waitForMessage(t)
+	deletedChatID, deletedMessageID := s.telegramClient.waitForDelete(t)
+	if deletedChatID != sentChatID {
+		t.Errorf("expected the delete to target the same chat the DM was sent to, got sent=%d deleted=%d", sentChatID, deletedChatID)
+	}
+	s.telegramClient.mu.Lock()
+	wantMessageID := s.telegramClient.sent[0].messageID
+	s.telegramClient.mu.Unlock()
+	if deletedMessageID != wantMessageID {
+		t.Errorf("expected the delete to target the sent message's own id %d, got %d", wantMessageID, deletedMessageID)
 	}
 }
 

@@ -337,7 +337,14 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   Telegram isn't configured at all, disabling this DM outright rather than falling
   through to some no-op default. The chat id lookup runs synchronously on the
   request's own context, same reasoning as `notifyLogin`; only the network call itself is
-  deferred to a goroutine.
+  deferred to a goroutine — the same goroutine also schedules the DM's own cleanup: it
+  sends via `Client.SendMessageForID` (unlike plain `SendMessage`, this hands back the
+  sent message's own id), sleeps for `MagicLinkTTL`, then calls `Client.DeleteMessage` on
+  it. Purely a hygiene nicety, not a security gate — the link inside stops working after
+  `MagicLinkTTL` regardless of whether this delete succeeds, or even runs at all (a
+  process restart in between just loses it, the same as any other best-effort cleanup in
+  this app) — but a dead link lingering in the chat is misleading, and one more thing
+  exposed for no reason if the phone/session is compromised later.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
   every resource package's own mutation notifications are built from. `NotifyAsync` is
   the fire-and-forget goroutine/timeout dance every Telegram send in this app already

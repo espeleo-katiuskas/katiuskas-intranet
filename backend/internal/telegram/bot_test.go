@@ -36,6 +36,26 @@ func TestClientSendMessage(t *testing.T) {
 	}
 }
 
+func TestClientSendMessageForIDReturnsTheSentMessagesID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"result": map[string]any{"message_id": 99, "chat": map[string]any{"id": 42}},
+		})
+	}))
+	defer server.Close()
+
+	client := &Client{Token: "123:abc", HTTPClient: server.Client(), apiBase: server.URL}
+	messageID, err := client.SendMessageForID(context.Background(), 42, "hola")
+	if err != nil {
+		t.Fatalf("SendMessageForID: %v", err)
+	}
+	if messageID != 99 {
+		t.Errorf("expected message id 99, got %d", messageID)
+	}
+}
+
 func TestClientDeleteMessage(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]any

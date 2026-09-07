@@ -48,8 +48,12 @@ type Options struct {
 // dependency pattern as MutationNotifier/UserLookup elsewhere, so this
 // package doesn't need to import internal/telegram just for this one
 // method (it already does, for Sender, but the principle is the same).
+// SendMessageForID/DeleteMessage (rather than plain SendMessage) exist
+// so notifyMagicLinkViaTelegram can clean up its own DM once the link
+// in it expires — see there.
 type TelegramMessenger interface {
-	SendMessage(ctx context.Context, chatID int64, text string) error
+	SendMessageForID(ctx context.Context, chatID int64, text string) (messageID int64, err error)
+	DeleteMessage(ctx context.Context, chatID, messageID int64) error
 }
 
 type Handler struct {
@@ -273,8 +277,25 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 	go func() {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := h.telegramClient.SendMessage(sendCtx, *chatID, text); err != nil {
+		messageID, err := h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
+		if err != nil {
 			slog.Error("send magic link via telegram", "error", err)
+			return
+		}
+
+		// The link itself already stops working after MagicLinkTTL
+		// regardless of whether this delete succeeds or even runs at
+		// all (a process restart in between loses it, same as any other
+		// best-effort cleanup in this app) — this is purely a hygiene
+		// nicety, not something the link's own security depends on: a
+		// dead link lingering in the chat is misleading, and one more
+		// thing exposed for no reason if the phone/session is
+		// compromised later.
+		time.Sleep(h.opts.MagicLinkTTL)
+		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.telegramClient.DeleteMessage(deleteCtx, *chatID, messageID); err != nil {
+			slog.Error("delete expired magic link message", "error", err)
 		}
 	}()
 }
