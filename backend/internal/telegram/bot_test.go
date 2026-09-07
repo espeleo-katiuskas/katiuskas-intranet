@@ -56,6 +56,13 @@ func TestClientSendMessageForIDReturnsTheSentMessagesID(t *testing.T) {
 	}
 }
 
+// TestClientDeleteMessage's fake server deliberately responds with the
+// real Telegram API's own shape for a successful deleteMessage — result
+// is a bare `true`, not a Message object the way sendMessage's own
+// result is — since a fake that just returned {"ok": true} (no result
+// at all) previously let a real bug slip through untested: decoding
+// result as a Message unconditionally broke on the bool Telegram
+// actually sends back.
 func TestClientDeleteMessage(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]any
@@ -65,7 +72,7 @@ func TestClientDeleteMessage(t *testing.T) {
 			t.Fatalf("decode request body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": true})
 	}))
 	defer server.Close()
 

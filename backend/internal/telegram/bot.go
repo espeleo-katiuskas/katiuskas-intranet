@@ -62,7 +62,11 @@ func (c *Client) SendMessageForID(ctx context.Context, chatID int64, text string
 	if err != nil {
 		return 0, err
 	}
-	return parsed.Result.MessageID, nil
+	var sent Message
+	if err := json.Unmarshal(parsed.Result, &sent); err != nil {
+		return 0, fmt.Errorf("decode sent message: %w", err)
+	}
+	return sent.MessageID, nil
 }
 
 // SendMessageRequestingContact sends text along with a keyboard offering

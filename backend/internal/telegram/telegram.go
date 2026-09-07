@@ -54,12 +54,19 @@ type BotSender struct {
 type sendMessageResponse struct {
 	OK          bool   `json:"ok"`
 	Description string `json:"description"`
-	// Result is the message the API just sent — BotSender's own Send
-	// never needs it (it never targets anything but the fixed log
-	// channel, and nothing here ever needs to act on that message
-	// again), but Client.postResult reuses this same struct and does
-	// (see Client.SendMessageForID).
-	Result Message `json:"result"`
+	// Result's shape depends entirely on which Telegram method was
+	// called — a Message object for sendMessage, but a bare `true` for
+	// deleteMessage — and Client.postResult is shared by every method
+	// Client has, so this has to stay undecoded here rather than typed
+	// as Message: a fixed struct type failed to unmarshal deleteMessage's
+	// own boolean result, breaking every DeleteMessage call outright
+	// (found in production — the email-verification and expired-
+	// magic-link cleanups both use it). Only SendMessageForID actually
+	// needs to look inside Result, and does its own second unmarshal
+	// into Message there — every other caller of post/postResult never
+	// touches this field at all, so nothing about their own response
+	// shape can break decoding for them either.
+	Result json.RawMessage `json:"result"`
 }
 
 func (b BotSender) Send(ctx context.Context, text string) error {
