@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,6 +22,46 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then). It pops the oldest undelivered message
+// rather than just peeking at it, so a test that triggers more than one
+// notification (e.g. a create followed by an update) can call this
+// once per notification, in order, instead of always seeing the first.
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.sent = f.sent[1:]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
 	return newTestServerWithTx(t)
@@ -38,8 +81,28 @@ func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, p
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	activities.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
+	activities.NewHandler(service, authenticator, usersService, nil).RegisterRoutes(mux)
 	return mux, resolver, tx
+}
+
+// newTestServerWithNotifier is newTestServerWithTx, but also wires a
+// fakeNotifier so tests can assert on mutation-notification content —
+// separate from newTestServerWithTx itself so the many tests that don't
+// care about notifications aren't slowed down polling for one that'll
+// never arrive.
+func newTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *fakeNotifier) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	activities.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
+	return mux, resolver, tx, notifier
 }
 
 func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -820,5 +883,197 @@ func TestHandlerListOrderDefaultsToDescendingAndCanBeAscending(t *testing.T) {
 	}
 	if ascending[0].ID != olderActivity.ID || ascending[1].ID != newerActivity.ID {
 		t.Errorf("expected oldest first with order=asc, got [%d, %d]", ascending[0].ID, ascending[1].ID)
+	}
+}
+
+func TestHandlerCreateNotifiesTelegramWithActorAndTitle(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "Sima del Viento", "type": "caving", "start_date": "2026-03-01", "end_date": "2026-03-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, leader.Login) || !strings.Contains(msg, "Sima del Viento") {
+		t.Errorf("expected the notification to name the actor and title, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateNotifiesTelegramWithFieldDiff is the core of the
+// feature this whole notifier exists for: seeing exactly what changed,
+// not just that something did.
+func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification first
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"title": "B"}); rec.Code != http.StatusOK {
+		t.Fatalf("update: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, leader.Login) {
+		t.Errorf("expected the notification to name the actor, got %q", msg)
+	}
+	if !strings.Contains(msg, "Title: A → B") {
+		t.Errorf("expected the notification to show the title change, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateWithNoActualChangeSendsNoNotification makes sure a
+// PATCH that doesn't actually change anything doesn't produce a
+// misleading "edited" message with an empty diff.
+func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification first
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"title": "A"}); rec.Code != http.StatusOK {
+		t.Fatalf("update: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 0 {
+		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
+	}
+}
+
+func TestHandlerCancelNotifiesTelegramWithActorAndTitle(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	leader := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "Cancelada", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification first
+
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	if rec := doRequest(mux, http.MethodDelete, path, leaderToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("cancel: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, leader.Login) || !strings.Contains(msg, "Cancelada") {
+		t.Errorf("expected the notification to name the actor and title, got %q", msg)
+	}
+}
+
+func TestHandlerJoinNotifiesTelegramDifferentlyForSelfVersusOther(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	admin := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification first
+	participantsPath := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("self join: %d: %s", rec.Code, rec.Body.String())
+	}
+	selfMsg := notifier.waitForMessage(t)
+	if !strings.Contains(selfMsg, member.Login) || !strings.Contains(selfMsg, "se ha apuntado") {
+		t.Errorf("expected a self-signup message naming %q, got %q", member.Login, selfMsg)
+	}
+
+	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
+		t.Fatalf("admin adds other: %d: %s", rec.Code, rec.Body.String())
+	}
+	otherMsg := notifier.waitForMessage(t)
+	if !strings.Contains(otherMsg, admin.Login) || !strings.Contains(otherMsg, other.Login) || !strings.Contains(otherMsg, "ha apuntado") {
+		t.Errorf("expected a message naming both actor %q and target %q, got %q", admin.Login, other.Login, otherMsg)
+	}
+}
+
+func TestHandlerCreateHolidayNotifiesTelegram(t *testing.T) {
+	mux, authn, _, notifier := newTestServerWithNotifier(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	body := map[string]any{"date": "2026-04-06", "name": "Lunes de Pascua"}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", boardToken, body); rec.Code != http.StatusCreated {
+		t.Fatalf("create holiday: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, "Lunes de Pascua") || !strings.Contains(msg, "2026-04-06") {
+		t.Errorf("expected the notification to name the holiday and date, got %q", msg)
+	}
+}
+
+func TestHandlerDeleteHolidayNotifiesTelegram(t *testing.T) {
+	mux, authn, _, notifier := newTestServerWithNotifier(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/holidays", boardToken, map[string]any{
+		"date": "2026-04-06", "name": "Lunes de Pascua",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create holiday: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Holiday
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification first
+
+	rec = doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/holidays/%d", created.ID), boardToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete holiday: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, "Lunes de Pascua") {
+		t.Errorf("expected the notification to name the deleted holiday, got %q", msg)
 	}
 }

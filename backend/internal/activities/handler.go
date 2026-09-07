@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -30,10 +32,36 @@ type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — every write endpoint in
+// this handler needs it, so it's pulled out rather than repeated at
+// each call site. Falls back to a placeholder rather than failing the
+// whole request if the lookup itself errors, since a notification is
+// never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
+}
+
+// auditableFields are the Activity fields update's own mutation
+// notification diffs (see httpapi.DiffFields) — matching UpdateInput's
+// field set exactly (LeaderLogin standing in for the underlying
+// LeaderID, which is a raw numeric id and not human-readable), so
+// nothing this endpoint can't actually touch shows up as a spurious
+// "change".
+var auditableFields = []string{
+	"Title", "Type", "StartDate", "EndDate", "Description", "Status", "Visibility", "LeaderLogin",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -169,6 +197,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if leaderLogin, err := h.users.LoginForUserID(r.Context(), leaderID); err == nil {
 		a.LeaderLogin = leaderLogin
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la actividad «%s» (%s).",
+		h.actorLogin(r.Context()), a.Title, a.StartDate.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, a)
 }
 
@@ -265,6 +295,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		}
 		in.EndDate = &d
 	}
+
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below (see auditableFields)
+	// — a failure here isn't reason enough to fail the actual edit, so
+	// it's only ever consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), id)
+
 	a, err := h.service.Update(r.Context(), id, in)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
@@ -273,6 +310,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update activity")
 		return
+	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, a, auditableFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la actividad «%s»:\n%s",
+				h.actorLogin(r.Context()), before.Title, strings.Join(diff, "\n")))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
 }
@@ -287,6 +330,10 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can cancel this activity")
 		return
 	}
+	// Fetched before cancelling purely so the notification below can
+	// still name the activity afterward.
+	target, targetErr := h.service.Get(r.Context(), id)
+
 	err = h.service.Cancel(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
@@ -295,6 +342,10 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not cancel activity")
 		return
+	}
+	if targetErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha cancelado la actividad «%s».",
+			h.actorLogin(r.Context()), target.Title))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
@@ -402,6 +453,16 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not join activity")
 		return
 	}
+	// Distinguishes "signed themselves up" from "an organizer/admin/board
+	// added someone else" — the second is worth naming both people, the
+	// first would just be saying the same login twice.
+	if userID == current.ID {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s se ha apuntado a la actividad «%s».",
+			h.actorLogin(r.Context()), activity.Title))
+	} else {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha apuntado a %s a la actividad «%s».",
+			h.actorLogin(r.Context()), *body.Login, activity.Title))
+	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -420,9 +481,24 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only remove themselves")
 		return
 	}
+	// Fetched before removing the participant purely so the notification
+	// below can still name the activity — a failure here isn't reason
+	// enough to fail the actual removal.
+	activity, activityErr := h.service.Get(r.Context(), id)
+
 	if err := h.service.Leave(r.Context(), id, userID); err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not leave activity")
 		return
+	}
+	if activityErr == nil {
+		targetLogin := r.PathValue("login")
+		if current.ID == userID {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s se ha dado de baja de la actividad «%s».",
+				targetLogin, activity.Title))
+		} else {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha dado de baja a %s de la actividad «%s».",
+				h.actorLogin(r.Context()), targetLogin, activity.Title))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
@@ -468,6 +544,8 @@ func (h *Handler) createHoliday(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create holiday")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el festivo «%s» (%s).",
+		h.actorLogin(r.Context()), holiday.Name, holiday.Date.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, holiday)
 }
 
@@ -477,7 +555,11 @@ func (h *Handler) deleteHoliday(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
-	if err := h.service.DeleteHoliday(r.Context(), id); err != nil {
+	// DeleteHoliday itself returns the row it removed (DELETE ...
+	// RETURNING), so the notification below can name it without a
+	// separate fetch-before-delete.
+	deleted, err := h.service.DeleteHoliday(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, ErrHolidayNotFound) {
 			httpapi.WriteError(w, http.StatusNotFound, "not_found", "holiday not found")
 			return
@@ -485,5 +567,7 @@ func (h *Handler) deleteHoliday(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete holiday")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el festivo «%s» (%s).",
+		h.actorLogin(r.Context()), deleted.Name, deleted.Date.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

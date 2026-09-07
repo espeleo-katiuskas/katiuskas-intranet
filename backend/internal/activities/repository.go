@@ -347,13 +347,15 @@ func (r *Repository) CreateHoliday(ctx context.Context, date time.Time, name str
 	return h, err
 }
 
-func (r *Repository) DeleteHoliday(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM holidays WHERE id = $1`, id)
-	if err != nil {
-		return err
+// DeleteHoliday returns the row it removed (via DELETE ... RETURNING,
+// atomically — no separate fetch-then-delete race) so the caller can
+// still name what was deleted in a mutation notification afterward,
+// once there's nothing left to look up.
+func (r *Repository) DeleteHoliday(ctx context.Context, id int64) (Holiday, error) {
+	var h Holiday
+	err := r.pool.QueryRow(ctx, `DELETE FROM holidays WHERE id = $1 RETURNING id, date, name`, id).Scan(&h.ID, &h.Date, &h.Name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return h, ErrHolidayNotFound
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrHolidayNotFound
-	}
-	return nil
+	return h, err
 }

@@ -595,8 +595,12 @@ func TestCreateAndDeleteHoliday(t *testing.T) {
 		t.Errorf("expected the created holiday to be listed, got %+v", list)
 	}
 
-	if err := repo.DeleteHoliday(ctx, created.ID); err != nil {
+	deleted, err := repo.DeleteHoliday(ctx, created.ID)
+	if err != nil {
 		t.Fatalf("delete holiday: %v", err)
+	}
+	if deleted.Name != "Lunes de Pascua" {
+		t.Errorf("expected DeleteHoliday to return the deleted row, got %+v", deleted)
 	}
 	list, err = repo.ListHolidays(ctx, 2026)
 	if err != nil {
@@ -623,7 +627,7 @@ func TestCreateHolidayRejectsDuplicateDate(t *testing.T) {
 func TestDeleteHolidayNotFound(t *testing.T) {
 	repo := activities.NewRepository(testutil.NewTx(t))
 
-	if err := repo.DeleteHoliday(context.Background(), 999999); !errors.Is(err, activities.ErrHolidayNotFound) {
+	if _, err := repo.DeleteHoliday(context.Background(), 999999); !errors.Is(err, activities.ErrHolidayNotFound) {
 		t.Errorf("expected ErrHolidayNotFound, got %v", err)
 	}
 }

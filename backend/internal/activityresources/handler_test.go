@@ -9,12 +9,54 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then). It pops the oldest undelivered message
+// rather than just peeking at it, so a test that triggers more than
+// one notification can call this once per notification, in order.
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.sent = f.sent[1:]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
 
 // stubActivities is the minimal activityresources.ActivityLookup a
 // handler test needs — a single fixed activity (id, leader) and a fixed
@@ -86,8 +128,45 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, int64, 
 	}}
 
 	mux := http.NewServeMux()
-	activityresources.NewHandler(service, authenticator, stubAct, stubU).RegisterRoutes(mux)
+	activityresources.NewHandler(service, authenticator, stubAct, stubU, nil).RegisterRoutes(mux)
 	return mux, resolver, activityID, people
+}
+
+// newTestServerWithNotifier is newTestServer, but also wires a
+// fakeNotifier so tests can assert on mutation-notification content,
+// and gives the stub activity a real Title (newTestServer leaves it
+// blank, since nothing but the notifications actually reads it).
+func newTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, int64, testPeople, *fakeNotifier) {
+	t.Helper()
+	tx := testutil.NewTx(t)
+	repo := activityresources.NewRepository(tx)
+	storage, err := activityresources.NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	people := testPeople{
+		leader:      testutil.InsertUser(t, tx, ""),
+		participant: testutil.InsertUser(t, tx, ""),
+		stranger:    testutil.InsertUser(t, tx, ""),
+		admin:       testutil.InsertUser(t, tx, ""),
+	}
+	activityID := testutil.InsertActivity(t, tx)
+	service := activityresources.NewService(repo, storage)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+
+	stubAct := stubActivities{
+		activity:     activities.Activity{ID: activityID, Title: "Sima del Viento", LeaderID: people.leader.ID},
+		participants: map[int64]bool{people.participant.ID: true},
+	}
+	stubU := stubUsers{loginsByID: map[int64]string{
+		people.leader.ID: people.leader.Login, people.participant.ID: people.participant.Login,
+		people.stranger.ID: people.stranger.Login, people.admin.ID: people.admin.Login,
+	}}
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	activityresources.NewHandler(service, authenticator, stubAct, stubU, notifier).RegisterRoutes(mux)
+	return mux, resolver, activityID, people, notifier
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body []byte, contentType string) *httptest.ResponseRecorder {
@@ -430,5 +509,106 @@ func TestHandlerReorderRejectsNonParticipant(t *testing.T) {
 		map[string]any{"resource_ids": []int64{first.ID}})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateNotifiesTelegramWithActorActivityAndTitle(t *testing.T) {
+	mux, authn, activityID, people, notifier := newTestServerWithNotifier(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+
+	createTextResource(t, mux, activityID, token, "Fotos de la sima", "d")
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, people.participant.Login) {
+		t.Errorf("expected the notification to name the actor, got %q", msg)
+	}
+	if !strings.Contains(msg, "Sima del Viento") || !strings.Contains(msg, "Fotos de la sima") {
+		t.Errorf("expected the notification to name the activity and the resource, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateNotifiesTelegramWithFieldDiff is the core of the
+// feature this whole notifier exists for: seeing exactly what changed,
+// not just that something did.
+func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, authn, activityID, people, notifier := newTestServerWithNotifier(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+	res := createTextResource(t, mux, activityID, token, "Original", "d")
+	notifier.waitForMessage(t) // drain the create notification first
+
+	rec := doJSON(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d/resources/%d", activityID, res.ID), token,
+		map[string]any{"title": "Actualizado"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, people.participant.Login) {
+		t.Errorf("expected the notification to name the actor, got %q", msg)
+	}
+	if !strings.Contains(msg, "Title: Original → Actualizado") {
+		t.Errorf("expected the notification to show the title change, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateWithNoActualChangeSendsNoNotification makes sure a
+// PATCH that doesn't actually change anything doesn't produce a
+// misleading "edited" message with an empty diff.
+func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
+	mux, authn, activityID, people, notifier := newTestServerWithNotifier(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+	res := createTextResource(t, mux, activityID, token, "Original", "d")
+	notifier.waitForMessage(t) // drain the create notification first
+
+	rec := doJSON(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d/resources/%d", activityID, res.ID), token,
+		map[string]any{"title": "Original"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 0 {
+		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
+	}
+}
+
+func TestHandlerDeleteNotifiesTelegramWithActorActivityAndTitle(t *testing.T) {
+	mux, authn, activityID, people, notifier := newTestServerWithNotifier(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+	res := createTextResource(t, mux, activityID, token, "Para borrar", "d")
+	notifier.waitForMessage(t) // drain the create notification first
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/activities/%d/resources/%d", activityID, res.ID), token, nil, "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, people.participant.Login) {
+		t.Errorf("expected the notification to name the actor, got %q", msg)
+	}
+	if !strings.Contains(msg, "Sima del Viento") || !strings.Contains(msg, "Para borrar") {
+		t.Errorf("expected the notification to name the activity and the resource, got %q", msg)
+	}
+}
+
+func TestHandlerReorderNotifiesTelegram(t *testing.T) {
+	mux, authn, activityID, people, notifier := newTestServerWithNotifier(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+	first := createTextResource(t, mux, activityID, token, "First", "d")
+	notifier.waitForMessage(t) // drain the first create notification
+	second := createTextResource(t, mux, activityID, token, "Second", "d")
+	notifier.waitForMessage(t) // drain the second create notification
+
+	rec := doJSON(mux, http.MethodPut, fmt.Sprintf("/api/v1/activities/%d/resources/order", activityID), token,
+		map[string]any{"resource_ids": []int64{second.ID, first.ID}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reorder: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, people.participant.Login) || !strings.Contains(msg, "Sima del Viento") {
+		t.Errorf("expected the notification to name the actor and activity, got %q", msg)
 	}
 }

@@ -110,6 +110,6 @@ func (s *Service) CreateHoliday(ctx context.Context, date time.Time, name string
 	return s.repo.CreateHoliday(ctx, date, name)
 }
 
-func (s *Service) DeleteHoliday(ctx context.Context, id int64) error {
+func (s *Service) DeleteHoliday(ctx context.Context, id int64) (Holiday, error) {
 	return s.repo.DeleteHoliday(ctx, id)
 }

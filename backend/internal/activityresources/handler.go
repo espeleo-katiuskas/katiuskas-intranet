@@ -50,11 +50,46 @@ type Handler struct {
 	authenticator *auth.Authenticator
 	activities    ActivityLookup
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, activitiesService ActivityLookup, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, activities: activitiesService, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, activitiesService ActivityLookup, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, activities: activitiesService, users: users, notifier: notifier}
 }
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — every write endpoint in
+// this handler needs it, so it's pulled out rather than repeated at
+// each call site. Falls back to a placeholder rather than failing the
+// whole request if the lookup itself errors, since a notification is
+// never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
+}
+
+// activityTitle resolves activityID's title for a mutation
+// notification — best-effort: a lookup failure falls back to naming
+// the id inline rather than failing the whole write over a
+// notification detail.
+func (h *Handler) activityTitle(ctx context.Context, activityID int64) string {
+	a, err := h.activities.Get(ctx, activityID)
+	if err != nil {
+		return fmt.Sprintf("actividad #%d", activityID)
+	}
+	return a.Title
+}
+
+// auditableFields are the Resource fields update's own mutation
+// notification diffs (see httpapi.DiffFields) — matching UpdateInput's
+// field set exactly, so a field this endpoint can't touch at all
+// (Position, the file metadata, ...) never shows up as a spurious
+// "change".
+var auditableFields = []string{"Title", "Description"}
 
 // Every route requires only baseline auth — read access is open to any
 // baseline role (admin/board/member), same as the rest of an activity's
@@ -231,6 +266,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if login, lerr := h.users.LoginForUserID(r.Context(), current.ID); lerr == nil {
 		res.AuthorLogin = login
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido un recurso a la memoria de la actividad «%s»: «%s».",
+		h.actorLogin(r.Context()), h.activityTitle(r.Context(), activityID), res.Title))
 	httpapi.WriteJSON(w, http.StatusCreated, res)
 }
 
@@ -269,6 +306,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update resource")
 		return
 	}
+	// res (fetched by resolveResource above, before any of this ran) is
+	// already the "before" snapshot the diff needs — no separate fetch
+	// required, unlike a package whose resolve step doesn't already load
+	// the full record.
+	if diff := httpapi.DiffFields(res, updated, auditableFields...); len(diff) > 0 {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el recurso «%s» de la memoria de «%s»:\n%s",
+			h.actorLogin(r.Context()), res.Title, h.activityTitle(r.Context(), activityID), strings.Join(diff, "\n")))
+	}
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 
@@ -290,6 +335,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete resource")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el recurso «%s» de la memoria de «%s».",
+		h.actorLogin(r.Context()), res.Title, h.activityTitle(r.Context(), activityID)))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -371,6 +418,8 @@ func (h *Handler) reorder(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list resources")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha reordenado la memoria de la actividad «%s».",
+		h.actorLogin(r.Context()), h.activityTitle(r.Context(), activityID)))
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
