@@ -19,6 +19,38 @@ func TestNewOpaqueTokenIsUniqueAndNonEmpty(t *testing.T) {
 	}
 }
 
+func TestNewMagicLinkTokenIsUniqueAndShorterThanNewOpaqueToken(t *testing.T) {
+	a, err := NewMagicLinkToken()
+	if err != nil {
+		t.Fatalf("new magic link token: %v", err)
+	}
+	b, err := NewMagicLinkToken()
+	if err != nil {
+		t.Fatalf("new magic link token: %v", err)
+	}
+	if a == "" || b == "" {
+		t.Fatalf("expected non-empty tokens")
+	}
+	if a == b {
+		t.Fatalf("expected two calls to produce different tokens, got the same one twice")
+	}
+
+	// 16 bytes (128 bits) versus NewOpaqueToken's 32 (256 bits) — half
+	// the entropy, but still the widely-used baseline for this kind of
+	// secret (see NewMagicLinkToken's own doc comment for why that's
+	// still comfortably enough for a 15-minute-lived, URL-embedded
+	// token). Checked via the encoded string's own length rather than a
+	// hardcoded character count, so this doesn't silently stop meaning
+	// anything if the encoding ever changes.
+	full, err := NewOpaqueToken()
+	if err != nil {
+		t.Fatalf("new opaque token: %v", err)
+	}
+	if len(a) >= len(full) {
+		t.Errorf("expected a magic link token to be shorter than a full opaque token, got %d vs %d chars", len(a), len(full))
+	}
+}
+
 func TestNewLoginCodeIsSixDigitsAndVaries(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 20; i++ {

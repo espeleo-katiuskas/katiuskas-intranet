@@ -187,7 +187,7 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 		return nil
 	}
 
-	rawToken, err := auth.NewOpaqueToken()
+	rawToken, err := auth.NewMagicLinkToken()
 	if err != nil {
 		return err
 	}

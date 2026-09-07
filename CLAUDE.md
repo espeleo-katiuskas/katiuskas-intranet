@@ -107,7 +107,17 @@ person in every way except `AuthenticatedUser.ImpersonatedBy`, which names the a
 `POST /auth/impersonate/exit` to end one and get a fresh normal token back.
 `internal/authapi` glues magic-link request/consume/logout and `GET /auth/me`
 (identity+roles resolved from context, no extra DB round trip — the frontend calls this
-once per page load since an opaque token has nothing to decode). A magic-link email also
+once per page load since an opaque token has nothing to decode). The magic-link token
+itself (`auth.NewMagicLinkToken`, 128 bits/16 bytes) is deliberately smaller than a
+session or impersonation token (`auth.NewOpaqueToken`, 256 bits/32 bytes) — it's the one
+opaque token in this app that ends up in a URL rather than only ever sent as a header, so
+its length actually matters, and it only needs to resist guessing within `MagicLinkTTL`'s
+own short window rather than staying a valid bearer credential for weeks; 128 bits is
+still the OWASP-recommended *minimum* for a session identifier, astronomically out of
+reach for brute-forcing in that window given `POST /auth/magic-link/consume` has no
+rate limit of its own (unlike the login code below, capped by a per-row attempt
+counter) — token entropy alone is what carries this endpoint's security. A magic-link
+email also
 carries a 6-digit login code — hashed alongside the link's token in the same
 `magic_link_tokens` row, so consuming either one consumes both — for signing in on a
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`

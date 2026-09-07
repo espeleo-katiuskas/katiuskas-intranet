@@ -152,7 +152,17 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   marca de consumido), junto con el hash de un código numérico de 6 dígitos que va en el
   mismo correo — pensado para cuando el correo se lee desde un
   dispositivo distinto al que se quiere usar para entrar: escribir el código en
-  `/login` es más práctico ahí que copiar una URL larga. Enlace y código representan el
+  `/login` es más práctico ahí que copiar una URL larga. El propio token del enlace
+  (`auth.NewMagicLinkToken`, 128 bits/16 bytes) es a propósito más corto que un token de
+  sesión o de suplantación (`auth.NewOpaqueToken`, 256 bits/32 bytes): es el único token
+  opaco de esta aplicación que acaba en una URL en vez de ir siempre en una cabecera, así
+  que su longitud sí importa, y solo necesita resistir intentos de adivinarlo mientras
+  dure `MagicLinkTTL`, no seguir siendo una credencial válida durante semanas. 128 bits
+  sigue siendo el mínimo que recomienda OWASP para un identificador de sesión —
+  astronómicamente inalcanzable por fuerza bruta en esa ventana, y ahí es donde de verdad
+  importa: `POST /auth/magic-link/consume` no tiene ningún límite de intentos propio (a
+  diferencia del código, acotado por `code_attempts`), así que la entropía del token es
+  la única defensa de ese endpoint. Enlace y código representan el
   mismo intento de acceso en la misma fila; consumir uno consume también el otro
   (`users.Repository.ConsumeMagicLinkToken` / `ConsumeMagicLinkCode`). Como un código de
   6 dígitos es mucho más fácil de adivinar por fuerza bruta que el token del enlace,
