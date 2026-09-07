@@ -403,6 +403,17 @@ form.form-panel button {
   cursor: pointer;
 }
 
+/* Sits below the main submit button as a secondary, alternate way in —
+   its own top margin/border keep it visually separate from the
+   email/phone form above it, instead of reading like part of the same
+   flow (p.subtitle's own margin-top: 0 would otherwise leave it
+   flush against the button). */
+.telegram-info {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
 .error-message {
   background: #f6e9e8;
   color: var(--danger);
