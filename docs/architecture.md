@@ -564,6 +564,14 @@ editables, su historial de actividades y material (`GET /users/{login}/activitie
 previsualización, aparece también en `/profile` para que cada socio vea los suyos).
 `/library` es la biblioteca de documentos del club, abierta a cualquier rol baseline.
 
+`login.html` ofrece Telegram como segunda vía de acceso, junto al formulario de correo y
+teléfono (nunca en su lugar): al cargar, `auth.js` llama a `GET /auth/telegram-bot` (sin
+autenticación, sin datos secretos — el nombre público del bot es tan público como el
+enlace `t.me/<username>` que se construye con él) y, solo si viene un nombre de usuario,
+muestra un aviso con enlace directo al chat del bot. Ese nombre se configura con
+`TELEGRAM_BOT_USERNAME`, independiente de `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` —
+ver más arriba.
+
 ## Cómo ejecutar en local
 
 ```sh

@@ -884,3 +884,66 @@ func TestLogoutRevokesTheToken(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestTelegramBotInfoEmptyWhenNotConfigured covers the default case
+// (no TELEGRAM_BOT_USERNAME set): the login page must be able to tell
+// "Telegram sign-in isn't offered at all" apart from "here's who to
+// message", not just get an empty string it can't distinguish from a
+// slow network.
+func TestTelegramBotInfoEmptyWhenNotConfigured(t *testing.T) {
+	s := newTestServer(t)
+
+	rec := s.getWithToken(t, "/api/v1/auth/telegram-bot", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Username != "" {
+		t.Errorf("expected an empty username, got %q", body.Username)
+	}
+}
+
+// TestTelegramBotInfoReturnsConfiguredUsername covers the configured
+// case — this is a plain, unauthenticated GET (no token at all), since
+// the whole point is helping someone who isn't signed in yet.
+func TestTelegramBotInfoReturnsConfiguredUsername(t *testing.T) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
+
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, &capturingMailer{}, &capturingNotifier{}, &capturingTelegramClient{}, authapi.Options{
+		TokenTTL:            time.Hour,
+		MagicLinkTTL:        15 * time.Minute,
+		MagicLinkCooldown:   time.Minute,
+		PublicBaseURL:       "http://localhost:64710",
+		TelegramBotUsername: "KatiuskasBot",
+	})
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/telegram-bot", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Username != "KatiuskasBot" {
+		t.Errorf("expected the configured username, got %q", body.Username)
+	}
+}

@@ -36,6 +36,14 @@ type Config struct {
 	// channel/group's username.
 	TelegramBotToken  string
 	TelegramLogChatID string
+	// TelegramBotUsername is the bot's public "@name" (without the "@"),
+	// e.g. "KatiuskasBot" — unlike TelegramBotToken, this isn't secret;
+	// it's only used to build a t.me/<username> link on the login page
+	// offering Telegram as a way to sign in (see
+	// authapi.Handler.TelegramBotInfo). Left empty, that option simply
+	// doesn't show up, the same as every other Telegram feature being
+	// unset.
+	TelegramBotUsername string
 	// LibraryRoot is the directory the internal/library package serves
 	// club documents (estatutos, actas...) from — mounted read-only into
 	// the container, populated by whoever deploys the club's documents,
@@ -72,6 +80,7 @@ func Load() (Config, error) {
 		SMTPFrom:              os.Getenv("SMTP_FROM"),
 		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramLogChatID:     os.Getenv("TELEGRAM_LOG_CHAT_ID"),
+		TelegramBotUsername:   os.Getenv("TELEGRAM_BOT_USERNAME"),
 		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
 		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
 		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),

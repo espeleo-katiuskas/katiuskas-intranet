@@ -10,6 +10,8 @@ const errorBox = document.getElementById('request-error');
 const codeForm = document.getElementById('code-form');
 const codeInput = document.getElementById('code');
 const codeErrorBox = document.getElementById('code-error');
+const telegramInfo = document.getElementById('telegram-info');
+const telegramBotLink = document.getElementById('telegram-bot-link');
 
 // Remembered across the request → code step so the code can be checked
 // without asking for email/phone again — the code alone is too short to
@@ -34,6 +36,26 @@ if (token) {
   consumeMagicLink(token);
 } else {
   wireUpForms();
+}
+
+loadTelegramBotInfo();
+
+// Shows the "sign in via Telegram" note only once we know there's a bot
+// to actually message — username comes back empty when
+// TELEGRAM_BOT_USERNAME isn't configured, and this call itself can fail
+// (network hiccup); either way the page still works fine with just the
+// email/phone flow, so this never blocks or shows an error of its own.
+async function loadTelegramBotInfo() {
+  try {
+    const response = await fetch(`${API_BASE}/auth/telegram-bot`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.username) return;
+    telegramBotLink.href = `https://t.me/${data.username}`;
+    telegramInfo.hidden = false;
+  } catch {
+    // Nothing to show — see comment above.
+  }
 }
 
 async function consumeMagicLink(rawToken) {

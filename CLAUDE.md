@@ -523,6 +523,15 @@ Detail pages read a login from the query string (`/member?login=<login>`,
 magic-link token from an emailed URL. Its login code has no URL of its own to arrive
 in — `login.html`'s second panel gets it typed in by hand — so the email/phone from the
 first step are instead remembered in a plain JS variable across that two-step flow.
+`login.html` also offers Telegram as a second way in, alongside (never instead of) the
+email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the unauthenticated
+`GET /auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
+`config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since
+it's only the public "@name" a `t.me/<username>` link needs) and, only if a username
+comes back non-empty, un-hides a note linking straight to the bot's chat — left hidden
+by default so there's no dead link (or flash of one) when Telegram isn't configured at
+all, or the request itself fails.
 
 Downloading or previewing a `/library` document has no session cookie to ride along on a
 plain `<a href>` (the API only ever authenticates via a bearer header), so it fetches the

@@ -28,11 +28,16 @@ import (
 // lives, how soon another one can be requested for the same person, how
 // long a freshly issued session token lasts before an admin needs to
 // extend it, and where the frontend is served (to build the link's URL).
+// TelegramBotUsername is separate from all of that — it's not secret
+// (unlike TELEGRAM_BOT_TOKEN, which internal/telegram alone ever sees),
+// just the public "@name" a t.me/<username> link needs, so the login
+// page can offer signing in via Telegram at all; see TelegramBotInfo.
 type Options struct {
-	TokenTTL          time.Duration
-	MagicLinkTTL      time.Duration
-	MagicLinkCooldown time.Duration
-	PublicBaseURL     string
+	TokenTTL            time.Duration
+	MagicLinkTTL        time.Duration
+	MagicLinkCooldown   time.Duration
+	PublicBaseURL       string
+	TelegramBotUsername string
 }
 
 // TelegramMessenger sends a DM to a specific Telegram chat — unlike
@@ -67,6 +72,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume-code", h.ConsumeMagicLinkCode)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)
+	mux.HandleFunc("GET /api/v1/auth/telegram-bot", h.TelegramBotInfo)
 	mux.Handle("GET /api/v1/auth/me", h.authenticator.Protect(h.Me))
 	// RequireAuth only, not Protect: exiting impersonation must work even
 	// if the impersonated person has since lost their baseline role (a
@@ -102,6 +108,19 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{
 		"message": "If those details match someone in our records, an email with a sign-in link is on its way.",
+	})
+}
+
+// TelegramBotInfo tells the login page whether signing in via Telegram
+// is even worth offering, and if so, who to message — a plain GET with
+// no auth (the whole point is helping someone who isn't signed in yet),
+// no request body, and nothing secret in the response: a bot's
+// username is exactly as public as the t.me/<username> link built from
+// it. An empty username (Telegram not configured at all) means the
+// login page simply doesn't show that option.
+func (h *Handler) TelegramBotInfo(w http.ResponseWriter, r *http.Request) {
+	httpapi.WriteJSON(w, http.StatusOK, map[string]string{
+		"username": h.opts.TelegramBotUsername,
 	})
 }
 

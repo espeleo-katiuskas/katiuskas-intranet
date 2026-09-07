@@ -141,16 +141,22 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 # Deja las dos TELEGRAM_* comentadas para no usar Telegram en absoluto:
 # los errores inesperados del API solo se registran en
 # `journalctl -u katiuskas-api`, igual que hasta ahora, sin aviso de
-# logins ni de llamadas al API, y el bot no reacciona a nadie que le
-# escriba. Rellénalas para activarlo todo: un aviso cada vez que arranca
-# el API, errores, un aviso por cada inicio de sesión, el enlace y
-# código de acceso también por Telegram (además del correo) a quien
-# tenga la cuenta vinculada, un aviso por cada llamada al API que sea
-# POST/PUT/PATCH/DELETE, y el bot pidiendo el contacto a quien le
-# escriba sin estar ya vinculado para asociar su cuenta de Telegram con
-# su teléfono.
+# logins ni de cada alta/edición/baja, y el bot no reacciona a nadie que
+# le escriba. Rellénalas para activarlo todo: un aviso cada vez que
+# arranca el API, errores, un aviso por cada inicio de sesión, el enlace
+# y código de acceso también por Telegram (además del correo) a quien
+# tenga la cuenta vinculada, un mensaje propio por cada persona/socio/
+# rol/actividad/material/... que se crea, edita o borra (quién lo hizo
+# y, en una edición, qué cambió), y el bot pidiendo el contacto a quien
+# le escriba sin estar ya vinculado para asociar su cuenta de Telegram
+# con su teléfono.
 #TELEGRAM_BOT_TOKEN=
 #TELEGRAM_LOG_CHAT_ID=
+# TELEGRAM_BOT_USERNAME es independiente de las dos anteriores: el
+# nombre público del bot (sin la "@"), solo para que la página de acceso
+# ofrezca "entrar por Telegram" con un enlace directo. Solo tiene
+# sentido si también rellenas TELEGRAM_BOT_TOKEN arriba.
+#TELEGRAM_BOT_USERNAME=
 EOF
 sudo chown katiuskas:katiuskas /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env

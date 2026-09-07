@@ -144,6 +144,27 @@ paths:
       responses:
         "204": { description: Session revoked }
 
+  /auth/telegram-bot:
+    get:
+      summary: Public info for offering Telegram as a sign-in option
+      description: >
+        No auth required — the whole point is helping someone who isn't
+        signed in yet. username is the bot's public "@name" (without
+        the "@"), used to build a t.me/<username> link on the login
+        page; empty when TELEGRAM_BOT_USERNAME isn't configured, which
+        means the Telegram sign-in option shouldn't be shown at all.
+        Nothing here is secret — a bot's username is exactly as public
+        as the t.me link built from it.
+      responses:
+        "200":
+          description: Whether Telegram sign-in is offered, and who to message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string, description: "Empty when not configured." }
+
   /auth/me:
     get:
       summary: Identity and roles of the caller

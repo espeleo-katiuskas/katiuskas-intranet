@@ -50,12 +50,14 @@ services:
       SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
       SMTP_FROM: "${SMTP_FROM:-}"
       # Leave both unset in .env to skip Telegram entirely — error-level
-      # logs, logins, and POST/PUT/PATCH/DELETE API calls all just log
-      # normally instead of also being forwarded to a Telegram
+      # logs, logins, and every create/edit/delete's own notification all
+      # just log normally instead of also being forwarded to a Telegram
       # group/channel, and the bot (internal/telegrambot) never starts
-      # polling at all.
+      # polling at all. TELEGRAM_BOT_USERNAME is independent of those two
+      # — set it to have the login page offer Telegram as a way to sign in.
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_LOG_CHAT_ID: "${TELEGRAM_LOG_CHAT_ID:-}"
+      TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME:-}"
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"

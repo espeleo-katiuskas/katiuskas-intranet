@@ -120,10 +120,11 @@ func main() {
 	}
 
 	authHandler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
-		TokenTTL:          cfg.TokenTTL,
-		MagicLinkTTL:      cfg.MagicLinkTTL,
-		MagicLinkCooldown: cfg.MagicLinkCooldown,
-		PublicBaseURL:     cfg.PublicBaseURL,
+		TokenTTL:            cfg.TokenTTL,
+		MagicLinkTTL:        cfg.MagicLinkTTL,
+		MagicLinkCooldown:   cfg.MagicLinkCooldown,
+		PublicBaseURL:       cfg.PublicBaseURL,
+		TelegramBotUsername: cfg.TelegramBotUsername,
 	})
 
 	router := httpapi.NewRouter(httpapi.Routes{
