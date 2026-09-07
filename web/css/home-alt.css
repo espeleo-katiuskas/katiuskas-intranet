@@ -297,6 +297,24 @@
   text-decoration: underline;
 }
 
+/* Memorias de actividades: a year per entry, but there are 16 of them
+   (2010-2025), so — unlike Documentos/Actas asambleas above — they run
+   inline and wrap instead of one per line. */
+.alt-year-list {
+  margin: 12px 0 0;
+  line-height: 1.9;
+}
+
+.alt-year-list a {
+  color: var(--alt-link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.alt-year-list a:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 720px) {
   .alt-shell {
     flex-direction: column;
