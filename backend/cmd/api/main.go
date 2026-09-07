@@ -105,12 +105,7 @@ func main() {
 
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
-	// Only set when Telegram is actually configured — otherwise every
-	// single POST/PUT/PATCH/DELETE would fall through to NoopSender's own
-	// "not sent" info log, which is fine once per login or error but far
-	// too noisy per API call. nil disables NotifyMutatingCalls entirely.
 	telegramConfigured := cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != ""
-	var mutationNotifier httpapi.MutationNotifier
 	// telegramClient is shared between authapi (DMing a magic link to
 	// whoever has linked their account) and the bot below — a linked
 	// telegram_chat_id can only exist at all because the bot processed a
@@ -120,7 +115,6 @@ func main() {
 	var telegramClient authapi.TelegramMessenger
 	var botClient *telegram.Client
 	if telegramConfigured {
-		mutationNotifier = telegramSender
 		botClient = telegram.NewClient(cfg.TelegramBotToken)
 		telegramClient = botClient
 	}
@@ -135,22 +129,21 @@ func main() {
 	router := httpapi.NewRouter(httpapi.Routes{
 		Auth:              authHandler,
 		Users:             users.NewHandler(usersService, authenticator, telegramSender),
-		Roles:             roles.NewHandler(rolesService, authenticator, usersService),
-		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
-		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService),
-		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService),
-		Activities:        activities.NewHandler(activitiesService, authenticator, usersService),
-		Inventory:         inventory.NewHandler(inventoryService, authenticator, usersService),
-		Board:             board.NewHandler(boardService, authenticator, usersService),
+		Roles:             roles.NewHandler(rolesService, authenticator, usersService, telegramSender),
+		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL, telegramSender),
+		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService, telegramSender),
+		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService, telegramSender),
+		Activities:        activities.NewHandler(activitiesService, authenticator, usersService, telegramSender),
+		Inventory:         inventory.NewHandler(inventoryService, authenticator, usersService, telegramSender),
+		Board:             board.NewHandler(boardService, authenticator, usersService, telegramSender),
 		Library:           library.NewHandler(libraryService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
-		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService),
-	}, mutationNotifier)
+		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
+	})
 
-	// Same gate as mutationNotifier above: reacting to Telegram messages
-	// is pointless without a bot token, and every linking attempt has to
-	// reach the log channel (see telegrambot.Bot.notifyChannel), so both
-	// need to be configured.
+	// Reacting to Telegram messages is pointless without a bot token,
+	// and every linking attempt has to reach the log channel (see
+	// telegrambot.Bot.notifyChannel), so both need to be configured.
 	if telegramConfigured {
 		bot := telegrambot.New(botClient, usersService, telegramSender, authHandler)
 		go bot.Run(ctx)

@@ -8,6 +8,19 @@ import (
 	"time"
 )
 
+// MutationNotifier is how a package sends a Telegram notification about
+// something it just did — every resource package's Handler takes one
+// (nil disables it entirely, the same as every other Telegram sender in
+// this app when Telegram isn't configured) and calls NotifyAsync with
+// it after a successful create/update/delete. Defined locally, the same
+// way other packages narrow a dependency to just what they need (a
+// "UserLookup" interface, say) rather than importing internal/telegram
+// directly; telegram.Sender satisfies this structurally without either
+// package knowing about the other.
+type MutationNotifier interface {
+	Send(ctx context.Context, text string) error
+}
+
 // NotifyAsync sends text to notifier on its own goroutine, with a
 // bounded timeout and a context detached from the request (which may
 // already be gone by the time the send completes) — the same

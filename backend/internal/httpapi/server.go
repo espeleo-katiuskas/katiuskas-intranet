@@ -23,9 +23,7 @@ type Routes struct {
 	ActivityResources ResourceHandler
 }
 
-// mutationNotifier is nil-able — see NotifyMutatingCalls — so passing
-// nil here (no Telegram configured) disables that middleware entirely.
-func NewRouter(routes Routes, mutationNotifier MutationNotifier) http.Handler {
+func NewRouter(routes Routes) http.Handler {
 	mux := http.NewServeMux()
 
 	routes.Auth.RegisterRoutes(mux)
@@ -41,5 +39,5 @@ func NewRouter(routes Routes, mutationNotifier MutationNotifier) http.Handler {
 	routes.UserFiles.RegisterRoutes(mux)
 	routes.ActivityResources.RegisterRoutes(mux)
 
-	return Recoverer(RequestLogger(NotifyMutatingCalls(mutationNotifier)(mux)))
+	return Recoverer(RequestLogger(mux))
 }

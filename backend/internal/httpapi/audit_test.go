@@ -1,11 +1,49 @@
 package httpapi
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 )
 
 func strPtr(s string) *string { return &s }
+
+// fakeMutationNotifier stands in for MutationNotifier in tests across
+// this package, so they can check what was actually sent without a
+// real Telegram call.
+type fakeMutationNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeMutationNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately (the send is
+// fire-and-forget, so it can still be in flight right after the call
+// that triggered it returns).
+func (f *fakeMutationNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a message to be sent")
+	return ""
+}
 
 func TestNotifyAsyncNilNotifierIsANoop(t *testing.T) {
 	// Must not panic or block — nil is what every handler gets when
