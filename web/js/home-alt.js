@@ -1,4 +1,4 @@
-import { initSession, logout, applyRoleVisibility, apiFetch, escapeHtml, currentUser } from './api.js';
+import { initSession, logout, applyRoleVisibility, apiFetch, apiFetchBlob, escapeHtml, currentUser } from './api.js';
 
 await initSession();
 applyRoleVisibility();
@@ -111,23 +111,54 @@ function stripExtension(name) {
   return i === -1 ? name : name.slice(0, i);
 }
 
-// Same page library.js itself uses for a directory row (linkHrefFor) —
-// a plain navigation link, not a fetch, so no clipboard/blob handling
-// is needed here: /library's own file view already does the actual
-// preview/download (apiFetchBlob under the hood), keeping the
-// downloaded file's name exactly as it is on disk.
-function libraryViewHref(dirPath, name) {
-  return `/library?view=${encodeURIComponent(`${dirPath}/${name}`)}`;
+// Every Documentos/Actas/Memorias entry is rendered as a plain
+// <a href="#" data-open-path="...">, handled by one delegated listener
+// below rather than a per-render one, since these lists get re-rendered
+// (loadActas' own year filter included) well after page load.
+function fileLink(dirPath, name, label) {
+  return `<a href="#" data-open-path="${escapeHtml(`${dirPath}/${name}`)}">${escapeHtml(label)}</a>`;
 }
+
+// Opens a /library PDF directly in a new tab. There's no session
+// cookie a plain <a href> could ride on (the API only authenticates via
+// a bearer header, see api.js), so the bytes have to be fetched by hand
+// and handed to the browser as an object URL — window.open on that URL
+// puts the PDF straight in its own tab (Content-Type: application/pdf,
+// set from the file's own extension) rather than /library's own
+// preview-plus-download page. The object URL is only revoked well after
+// window.open returns, since the new tab still needs it valid long
+// enough to actually load the PDF into its native viewer.
+async function openLibraryFile(path) {
+  try {
+    const blob = await apiFetchBlob(`/library/file?path=${encodeURIComponent(path)}`);
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    alert(err.message || 'No se pudo abrir el documento.');
+  }
+}
+
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('[data-open-path]');
+  if (!link) return;
+  event.preventDefault();
+  openLibraryFile(link.dataset.openPath);
+});
 
 // Actas are named YYYY-MM-DD.pdf so alphabetical order doubles as
 // chronological order; only the display label gets reformatted to
-// DD-MM-YYYY. A name that doesn't match that convention is shown as-is
-// rather than dropped.
-function formatActaLabel(name) {
-  const base = stripExtension(name);
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(base);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : base;
+// DD-MM-YYYY. actaYear pulls the year out for the year <select> below;
+// both return null for a name that doesn't match the convention, so
+// such a file is simply left out of the year-filtered view.
+function formatActaDate(name) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(stripExtension(name));
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : stripExtension(name);
+}
+
+function actaYear(name) {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(stripExtension(name));
+  return match ? match[1] : null;
 }
 
 async function loadDocumentos() {
@@ -135,25 +166,46 @@ async function loadDocumentos() {
   try {
     const files = await loadOrderedFiles('documentos');
     list.innerHTML = files.length
-      ? files
-          .map((f) => `<li><a href="${libraryViewHref('documentos', f.name)}">${escapeHtml(stripExtension(f.name))}</a></li>`)
-          .join('')
+      ? files.map((f) => `<li>${fileLink('documentos', f.name, stripExtension(f.name))}</li>`).join('')
       : '<li>No hay documentos disponibles.</li>';
   } catch {
     list.innerHTML = '<li>No se pudieron cargar los documentos.</li>';
   }
 }
 
+// There are normally 2-4 actas a year, going back to 2006, so unlike
+// Documentos/Memorias they're filtered down to one year at a time
+// rather than all listed together. The year <select> is built from
+// whatever years actually have a file (ascending, most recent selected
+// by default) instead of a fixed range, so a year with no assembly
+// never shows up as an empty option, and .order.json (see
+// loadOrderedFiles) still decides the order actas appear in *within* a
+// year, in case that's ever needed.
 async function loadActas() {
+  const yearSelect = document.getElementById('alt-actas-year');
   const list = document.getElementById('alt-actas-list');
   try {
-    const files = await loadOrderedFiles('actas');
-    list.innerHTML = files.length
-      ? files
-          .map((f) => `<li><a href="${libraryViewHref('actas', f.name)}">${escapeHtml(formatActaLabel(f.name))}</a></li>`)
-          .join('')
-      : '<li>No hay actas disponibles.</li>';
+    const files = (await loadOrderedFiles('actas')).filter((f) => actaYear(f.name) !== null);
+    const years = [...new Set(files.map((f) => actaYear(f.name)))].sort();
+    if (!years.length) {
+      yearSelect.innerHTML = '';
+      list.innerHTML = '<li>No hay actas disponibles.</li>';
+      return;
+    }
+
+    yearSelect.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
+    yearSelect.value = years[years.length - 1];
+
+    const renderSelectedYear = () => {
+      const yearFiles = files.filter((f) => actaYear(f.name) === yearSelect.value);
+      list.innerHTML = yearFiles
+        .map((f) => `<li>${fileLink('actas', f.name, formatActaDate(f.name))}</li>`)
+        .join('');
+    };
+    yearSelect.addEventListener('change', renderSelectedYear);
+    renderSelectedYear();
   } catch {
+    yearSelect.innerHTML = '';
     list.innerHTML = '<li>No se pudieron cargar las actas.</li>';
   }
 }
@@ -163,9 +215,7 @@ async function loadMemorias() {
   try {
     const files = await loadOrderedFiles('memorias');
     container.innerHTML = files.length
-      ? files
-          .map((f) => `<a href="${libraryViewHref('memorias', f.name)}">${escapeHtml(stripExtension(f.name))}</a>`)
-          .join(' · ')
+      ? files.map((f) => fileLink('memorias', f.name, stripExtension(f.name))).join(' · ')
       : 'No hay memorias disponibles.';
   } catch {
     container.innerHTML = 'No se pudieron cargar las memorias.';
