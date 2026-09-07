@@ -32,27 +32,114 @@
       </div>
     </header>
     <main class="alt-content">
-      <h2>Junta directiva</h2>
-      <div class="alt-board-grid" id="alt-board-grid"></div>
+      <div class="alt-columns">
+        <div class="alt-col-main">
+          <h2>Junta directiva</h2>
+          <div class="alt-board-grid" id="alt-board-grid"></div>
 
-      <h2>Accesos</h2>
-      <div class="card-grid">
-        <a class="card" href="/members" data-roles="admin,board,member">
-          <h3>Socios</h3>
-          <p>Altas, bajas e historial de socios.</p>
-        </a>
-        <a class="card" href="/activities">
-          <h3>Actividades</h3>
-          <p>Próximas salidas y apuntes.</p>
-        </a>
-        <a class="card" href="/inventory">
-          <h3>Material</h3>
-          <p>Catálogo, préstamos, alquileres y ventas.</p>
-        </a>
-        <a class="card" href="/library">
-          <h3>Documentos</h3>
-          <p>Estatutos, actas y demás documentación del club.</p>
-        </a>
+          <!-- Logos y descargas de ejemplo: contenido estático de
+               momento, no hay ficheros reales detrás ni un endpoint que
+               los sirva — los enlaces no llevan a ningún sitio. -->
+          <h2>Logos</h2>
+          <div class="alt-logos-grid alt-static">
+            <div class="alt-logo-card">
+              <div class="alt-logo-preview alt-logo-preview-circular">K</div>
+              <p class="alt-logo-name">Circular</p>
+              <div class="alt-logo-actions">
+                <a href="#" class="alt-link-pill">Descargar imprimir</a>
+                <a href="#" class="alt-link-pill">Descargar web</a>
+                <a href="#" class="alt-link-pill">Descargar negro</a>
+                <a href="#" class="alt-link-pill">Descargar blanco</a>
+              </div>
+            </div>
+            <div class="alt-logo-card">
+              <div class="alt-logo-preview alt-logo-preview-triangular">K</div>
+              <p class="alt-logo-name">Triangular</p>
+              <div class="alt-logo-actions">
+                <a href="#" class="alt-link-pill">Descargar imprimir</a>
+                <a href="#" class="alt-link-pill">Descargar web</a>
+                <a href="#" class="alt-link-pill">Descargar negro</a>
+                <a href="#" class="alt-link-pill">Descargar blanco</a>
+              </div>
+            </div>
+            <div class="alt-logo-card">
+              <div class="alt-logo-preview alt-logo-preview-apaisado">K</div>
+              <p class="alt-logo-name">Apaisado</p>
+              <div class="alt-logo-actions">
+                <a href="#" class="alt-link-pill">Descargar imprimir</a>
+                <a href="#" class="alt-link-pill">Descargar web</a>
+                <a href="#" class="alt-link-pill">Descargar negro</a>
+                <a href="#" class="alt-link-pill">Descargar blanco</a>
+              </div>
+            </div>
+          </div>
+
+          <h2>Accesos</h2>
+          <div class="card-grid">
+            <a class="card" href="/members" data-roles="admin,board,member">
+              <h3>Socios</h3>
+              <p>Altas, bajas e historial de socios.</p>
+            </a>
+            <a class="card" href="/activities">
+              <h3>Actividades</h3>
+              <p>Próximas salidas y apuntes.</p>
+            </a>
+            <a class="card" href="/inventory">
+              <h3>Material</h3>
+              <p>Catálogo, préstamos, alquileres y ventas.</p>
+            </a>
+            <a class="card" href="/library">
+              <h3>Documentos</h3>
+              <p>Estatutos, actas y demás documentación del club.</p>
+            </a>
+          </div>
+        </div>
+
+        <!-- Datos de interés y actas: también estáticos de momento —
+             valores pendientes de configurar, no datos reales del
+             club, y los botones/enlaces no hacen nada todavía. -->
+        <aside class="alt-col-side alt-static">
+          <h2>Datos de interés</h2>
+          <div class="alt-info-card">
+            <dl class="alt-info-list">
+              <div class="alt-info-row">
+                <dt>Nombre</dt>
+                <dd>Club de Espeleología Katiuskas</dd>
+              </div>
+              <div class="alt-info-row">
+                <dt>NIF</dt>
+                <dd>
+                  Pendiente de configurar
+                  <a href="#" class="alt-link-pill alt-link-pill-small">Copiar NIF</a>
+                </dd>
+              </div>
+              <div class="alt-info-row">
+                <dt>Dirección</dt>
+                <dd>Pendiente de configurar</dd>
+              </div>
+              <div class="alt-info-row">
+                <dt>Cuenta bancaria</dt>
+                <dd>
+                  Pendiente de configurar
+                  <a href="#" class="alt-link-pill alt-link-pill-small">Copiar IBAN</a>
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <h2>Actas asambleas</h2>
+          <div class="alt-info-card">
+            <label for="alt-actas-year">Año</label>
+            <select id="alt-actas-year">
+              <option>2026</option>
+            </select>
+            <ul class="alt-actas-list">
+              <li><a href="#">01-02-2026</a></li>
+              <li><a href="#">01-06-2026</a></li>
+              <li><a href="#">01-12-2026</a></li>
+            </ul>
+          </div>
+        </aside>
       </div>
     </main>
   </div>

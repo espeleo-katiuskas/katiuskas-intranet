@@ -44,7 +44,7 @@ async function loadBoardMembers() {
                   <div class="alt-board-lastname">${escapeHtml(b.last_name)}</div>
                   <div class="alt-board-meta">
                     <span>${escapeHtml(positionLabels[b.position] ?? b.position)}</span>
-                    <span>${escapeHtml(b.phone ?? '')}</span>
+                    <span class="alt-board-phone">${escapeHtml(b.phone ?? '')}</span>
                   </div>
                 </div>
               </div>
@@ -58,3 +58,10 @@ async function loadBoardMembers() {
 }
 
 loadBoardMembers();
+
+// The "Datos de interés"/"Logos"/"Actas asambleas" sections are static
+// placeholders for now (see home-alt.html) — nothing behind them yet,
+// so their links shouldn't actually navigate anywhere.
+document.querySelectorAll('.alt-static a[href="#"]').forEach((link) => {
+  link.addEventListener('click', (event) => event.preventDefault());
+});

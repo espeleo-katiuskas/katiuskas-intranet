@@ -3,7 +3,14 @@
    under .alt-* classes so nothing here affects any other page. Reuses
    the shared --accent/--surface/--line/--ink-muted variables and the
    existing .card/.card-grid classes from style.css rather than
-   inventing a parallel design language. */
+   inventing a parallel design language. --alt-link is the one new
+   color this page needs — the reference design's phone numbers and
+   download/copy links are blue, distinct from the site's own orange
+   --accent, which stays reserved for the sidebar/brand. */
+
+:root {
+  --alt-link: #2f6fed;
+}
 
 .alt-shell {
   display: flex;
@@ -90,7 +97,20 @@
 
 .alt-content {
   padding: 28px;
-  max-width: 960px;
+  max-width: 1120px;
+}
+
+.alt-columns {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .alt-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .alt-board-grid {
@@ -134,6 +154,142 @@
   gap: 8px;
   color: var(--ink-muted);
   font-size: 0.85rem;
+}
+
+.alt-board-phone {
+  color: var(--alt-link);
+  font-weight: 600;
+}
+
+/* A small blue "pill" link — the reference design's own style for
+   "Copiar NIF/IBAN" and every "Descargar ..." action. Used here for
+   static placeholders (see the "Logos"/"Datos de interés"/"Actas
+   asambleas" sections in home-alt.html) that don't do anything yet. */
+.alt-link-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--alt-link);
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.06);
+  color: var(--alt-link);
+  font-size: 0.78rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.alt-link-pill:hover {
+  background: rgba(47, 111, 237, 0.14);
+}
+
+.alt-link-pill-small {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+}
+
+.alt-logos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.alt-logo-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.alt-logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.alt-logo-preview-circular {
+  border-radius: 50%;
+}
+
+.alt-logo-preview-triangular {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.alt-logo-preview-apaisado {
+  width: 100px;
+  border-radius: 6px;
+}
+
+.alt-logo-name {
+  margin: 0 0 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.alt-logo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.alt-info-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 0.88rem;
+}
+
+.alt-info-list {
+  margin: 0;
+}
+
+.alt-info-row {
+  margin-bottom: 12px;
+}
+
+.alt-info-row:last-child {
+  margin-bottom: 0;
+}
+
+.alt-info-row dt {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.alt-info-row dd {
+  margin: 2px 0 0;
+}
+
+.alt-actas-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.alt-actas-list li {
+  margin-bottom: 8px;
+}
+
+.alt-actas-list a {
+  color: var(--alt-link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.alt-actas-list a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 720px) {
