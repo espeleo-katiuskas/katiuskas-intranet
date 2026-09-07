@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -19,16 +20,32 @@ import (
 // without roles having to import that package.
 type UserLookup interface {
 	UserIDForLogin(ctx context.Context, login string) (int64, error)
+	LoginForUserID(ctx context.Context, id int64) (string, error)
 }
 
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — see users.Handler's own
+// actorLogin, the same pattern. Falls back to a placeholder rather than
+// failing the whole request if the lookup itself errors, since a
+// notification is never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 // Assigning or revoking a role is data about a person, same as their
@@ -91,6 +108,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create role")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado el rol «%s».", h.actorLogin(r.Context()), role.Name))
 	httpapi.WriteJSON(w, http.StatusCreated, role)
 }
 
@@ -100,6 +118,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
+	// Fetched before deleting, purely so the mutation notification below
+	// can still name the role afterward — there's nothing left to look
+	// up once Delete succeeds.
+	target, targetErr := h.service.Get(r.Context(), id)
+
 	err = h.service.Delete(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "role not found")
@@ -112,6 +135,9 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete role")
 		return
+	}
+	if targetErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el rol «%s».", h.actorLogin(r.Context()), target.Name))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
@@ -152,6 +178,8 @@ func (h *Handler) assign(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not assign role")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha asignado el rol «%s» a %s.",
+		h.actorLogin(r.Context()), role.Name, r.PathValue("login")))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -198,5 +226,7 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not remove role")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado el rol «%s» a %s.",
+		h.actorLogin(r.Context()), role.Name, r.PathValue("login")))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

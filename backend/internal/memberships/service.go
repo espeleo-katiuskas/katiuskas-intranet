@@ -53,6 +53,14 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Members
 	return s.repo.Update(ctx, id, in)
 }
 
+// Get is the single-record counterpart to ListByUser/ListActive — used
+// by Handler.update to snapshot a membership before applying a PATCH,
+// so it can describe exactly what changed in the mutation notification
+// afterward.
+func (s *Service) Get(ctx context.Context, id int64) (Membership, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {
 	return s.repo.ListByUser(ctx, userID)
 }
@@ -75,6 +83,12 @@ func (s *Service) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, 
 
 func (s *Service) UpdateLeave(ctx context.Context, id int64, in UpdateLeaveInput) (Leave, error) {
 	return s.repo.UpdateLeave(ctx, id, in)
+}
+
+// GetLeave is Get's counterpart for a single leave — used by
+// Handler.updateLeave/deleteLeave for the same before-snapshot reason.
+func (s *Service) GetLeave(ctx context.Context, id int64) (Leave, error) {
+	return s.repo.GetLeaveByID(ctx, id)
 }
 
 func (s *Service) DeleteLeave(ctx context.Context, id int64) error {

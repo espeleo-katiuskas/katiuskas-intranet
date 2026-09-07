@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -32,8 +35,60 @@ func newRolesTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *r
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	roles.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
+	roles.NewHandler(service, authenticator, usersService, nil).RegisterRoutes(mux)
 	return mux, resolver, service, tx
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then).
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
+
+// newRolesTestServerWithNotifier is newRolesTestServer, but also wires
+// a fakeNotifier so tests can assert on mutation-notification content.
+func newRolesTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *roles.Service, pgx.Tx, *fakeNotifier) {
+	tx := testutil.NewTx(t)
+	service := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), service, membershipsService, licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	roles.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
+	return mux, resolver, service, tx, notifier
 }
 
 func rolesToken(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -218,5 +273,83 @@ func TestHandlerDeleteRefusesSystemRole(t *testing.T) {
 	}
 	if code := rolesErrorCode(t, rec); code != "system_role" {
 		t.Errorf("expected error code system_role, got %q", code)
+	}
+}
+
+func TestHandlerCreateNotifiesTelegram(t *testing.T) {
+	mux, authn, _, tx, notifier := newRolesTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	adminToken := rolesToken(t, authn, actor.ID, "admin")
+
+	rec := rolesDoRequest(mux, http.MethodPost, "/api/v1/roles", adminToken,
+		map[string]string{"name": "vocal"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, "vocal") {
+		t.Errorf("expected the notification to name the actor and the new role, got %q", msg)
+	}
+}
+
+func TestHandlerDeleteNotifiesTelegramWithRoleName(t *testing.T) {
+	mux, authn, service, tx, notifier := newRolesTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	adminToken := rolesToken(t, authn, actor.ID, "admin")
+
+	created, err := service.Create(context.Background(), roles.CreateInput{Name: "logistica"})
+	if err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+
+	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/roles/%d", created.ID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, "logistica") {
+		t.Errorf("expected the notification to name the actor and the deleted role, got %q", msg)
+	}
+}
+
+func TestHandlerAssignNotifiesTelegramWithRoleAndTarget(t *testing.T) {
+	mux, authn, _, tx, notifier := newRolesTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	materialRoleID := testutil.RoleID(t, tx, "material")
+	adminToken := rolesToken(t, authn, actor.ID, "admin")
+
+	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), adminToken,
+		map[string]int64{"role_id": materialRoleID})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, "material") || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor, role, and target, got %q", msg)
+	}
+}
+
+func TestHandlerRemoveNotifiesTelegramWithRoleAndTarget(t *testing.T) {
+	mux, authn, service, tx, notifier := newRolesTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	materialRoleID := testutil.RoleID(t, tx, "material")
+	if err := service.Assign(context.Background(), target.ID, materialRoleID); err != nil {
+		t.Fatalf("assign: %v", err)
+	}
+	adminToken := rolesToken(t, authn, actor.ID, "admin")
+
+	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", target.Login, materialRoleID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, "material") || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor, role, and target, got %q", msg)
 	}
 }

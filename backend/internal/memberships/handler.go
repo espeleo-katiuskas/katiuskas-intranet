@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -26,10 +28,25 @@ type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — see users.Handler's own
+// actorLogin, the same pattern. Falls back to a placeholder rather than
+// failing the whole request if the lookup itself errors, since a
+// notification is never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 // Only admin can write here now — board can see every membership period
@@ -121,6 +138,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.UserLogin = login
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha dado de alta como socio/a a %s (desde %s).",
+		h.actorLogin(r.Context()), login, m.StartDate.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
@@ -159,6 +178,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		endDate = &d
 	}
 
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below — a failure here isn't
+	// reason enough to fail the actual edit, so it's only ever
+	// consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), id)
+
 	m, err := h.service.Update(r.Context(), id, UpdateInput{
 		StartDate: startDate, EndDate: endDate, EndReason: body.EndReason,
 	})
@@ -180,6 +205,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.UserLogin = login
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, m, "StartDate", "EndDate", "EndReason"); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la membresía de %s:\n%s",
+				h.actorLogin(r.Context()), login, strings.Join(diff, "\n")))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, m)
 }
 
@@ -195,6 +226,25 @@ func (h *Handler) listLeaves(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// membershipOwnerLogin resolves the login of whoever membershipID
+// belongs to, for the leave-related mutation notifications below — a
+// Leave only carries a numeric MembershipID, not a login, so naming the
+// person in a notification means going through the membership first.
+// Returns "" (silently skipped by the caller) on any failure, the same
+// best-effort spirit as actorLogin: a notification detail is never
+// worth failing an otherwise-successful write over.
+func (h *Handler) membershipOwnerLogin(ctx context.Context, membershipID int64) string {
+	m, err := h.service.Get(ctx, membershipID)
+	if err != nil {
+		return ""
+	}
+	login, err := h.users.LoginForUserID(ctx, m.UserID)
+	if err != nil {
+		return ""
+	}
+	return login
 }
 
 func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +292,10 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create temporary leave")
 		return
 	}
+	if login := h.membershipOwnerLogin(r.Context(), membershipID); login != "" {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado una excedencia de %s (%s a %s).",
+			h.actorLogin(r.Context()), login, l.StartDate.Format("2006-01-02"), l.EndDate.Format("2006-01-02")))
+	}
 	httpapi.WriteJSON(w, http.StatusCreated, l)
 }
 
@@ -271,6 +325,12 @@ func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below — a failure here isn't
+	// reason enough to fail the actual edit, so it's only ever
+	// consulted if it succeeded.
+	before, beforeErr := h.service.GetLeave(r.Context(), id)
+
 	l, err := h.service.UpdateLeave(r.Context(), id, UpdateLeaveInput{
 		StartDate: startDate, EndDate: endDate, Reason: body.Reason,
 	})
@@ -290,6 +350,16 @@ func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update temporary leave")
 		return
 	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, l, "StartDate", "EndDate", "Reason"); len(diff) > 0 {
+			login := h.membershipOwnerLogin(r.Context(), l.MembershipID)
+			if login == "" {
+				login = fmt.Sprintf("membership#%d", l.MembershipID)
+			}
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado una excedencia de %s:\n%s",
+				h.actorLogin(r.Context()), login, strings.Join(diff, "\n")))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, l)
 }
 
@@ -299,6 +369,11 @@ func (h *Handler) deleteLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
+	// Fetched before deleting, purely so the mutation notification below
+	// can still describe the leave afterward — there's nothing left to
+	// look up once DeleteLeave succeeds.
+	target, targetErr := h.service.GetLeave(r.Context(), id)
+
 	err = h.service.DeleteLeave(r.Context(), id)
 	if errors.Is(err, ErrLeaveNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "temporary leave not found")
@@ -307,6 +382,14 @@ func (h *Handler) deleteLeave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete temporary leave")
 		return
+	}
+	if targetErr == nil {
+		login := h.membershipOwnerLogin(r.Context(), target.MembershipID)
+		if login == "" {
+			login = fmt.Sprintf("membership#%d", target.MembershipID)
+		}
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado una excedencia de %s (%s a %s).",
+			h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02"), target.EndDate.Format("2006-01-02")))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

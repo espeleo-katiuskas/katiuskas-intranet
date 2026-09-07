@@ -2,11 +2,15 @@ package memberships_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,8 +30,66 @@ func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, 
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	memberships.NewHandler(membershipsService, authenticator, usersService).RegisterRoutes(mux)
+	memberships.NewHandler(membershipsService, authenticator, usersService, nil).RegisterRoutes(mux)
 	return mux, resolver, tx
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then). Pops the message it returns off the
+// front of the queue — a test whose own setup (e.g. createMembership,
+// which goes through the real HTTP handler) triggers a notification of
+// its own calls this once to consume and discard it before checking
+// the one the actual action under test produces.
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.sent = f.sent[1:]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
+
+// newHandlerTestServerWithNotifier is newHandlerTestServer, but also
+// wires a fakeNotifier so tests can assert on mutation-notification
+// content.
+func newHandlerTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *fakeNotifier) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	memberships.NewHandler(membershipsService, authenticator, usersService, notifier).RegisterRoutes(mux)
+	return mux, resolver, tx, notifier
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {
@@ -421,5 +483,158 @@ func TestHandlerDeleteLeaveNotFound(t *testing.T) {
 	rec := doRequest(mux, http.MethodDelete, "/api/v1/leaves/999999", adminToken, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateNotifiesTelegram(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/memberships", target.Login), adminToken,
+		map[string]string{"start_date": "2020-01-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) || !strings.Contains(msg, "2020-01-01") {
+		t.Errorf("expected the notification to name actor, target, and start date, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateNotifiesTelegramWithFieldDiff is the core of the
+// feature this whole notifier exists for: seeing exactly what changed,
+// not just that something did.
+func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
+		map[string]string{"start_date": "2020-01-01", "end_date": "2020-12-31", "end_reason": "voluntaria"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "EndDate: (vacío) → 2020-12-31") {
+		t.Errorf("expected the notification to show the end_date change, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateWithNoActualChangeSendsNoNotification makes sure a
+// PATCH that doesn't actually change anything (every field resent with
+// its own current value) doesn't produce a misleading "edited" message
+// with an empty diff.
+func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
+		map[string]string{"start_date": "2020-01-01"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 0 {
+		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
+	}
+}
+
+func TestHandlerCreateLeaveNotifiesTelegram(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor and target, got %q", msg)
+	}
+}
+
+func TestHandlerUpdateLeaveNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())
+	}
+	notifier.waitForMessage(t) // discard the leave-creation notification
+	var leave memberships.Leave
+	if err := json.Unmarshal(created.Body.Bytes(), &leave); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/leaves/%d", leave.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-07-15"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "EndDate: 2020-06-30 → 2020-07-15") {
+		t.Errorf("expected the notification to show the end_date change, got %q", msg)
+	}
+}
+
+func TestHandlerDeleteLeaveNotifiesTelegram(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())
+	}
+	notifier.waitForMessage(t) // discard the leave-creation notification
+	var leave memberships.Leave
+	if err := json.Unmarshal(created.Body.Bytes(), &leave); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/leaves/%d", leave.ID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor and target, got %q", msg)
 	}
 }
