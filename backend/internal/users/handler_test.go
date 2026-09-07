@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,7 +40,7 @@ func newTestServerWithMemberships(t *testing.T) (*http.ServeMux, testutil.FakeRe
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
+	users.NewHandler(usersService, authenticator, nil).RegisterRoutes(mux)
 	return mux, resolver, usersService, membershipsService
 }
 
@@ -56,8 +58,63 @@ func newTestServerWithLicenses(t *testing.T) (*http.ServeMux, testutil.FakeResol
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	users.NewHandler(usersService, authenticator).RegisterRoutes(mux)
+	users.NewHandler(usersService, authenticator, nil).RegisterRoutes(mux)
 	return mux, resolver, usersService, membershipsService, licensesService, tx
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then).
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
+
+// newTestServerWithNotifier is newTestServer, but also wires a
+// fakeNotifier so tests can assert on mutation-notification content —
+// separate from newTestServer itself so the many tests that don't care
+// about notifications aren't slowed down polling for one that'll never
+// arrive.
+func newTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *users.Service, *fakeNotifier) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	users.NewHandler(usersService, authenticator, notifier).RegisterRoutes(mux)
+	return mux, resolver, usersService, notifier
 }
 
 func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -615,5 +672,133 @@ func TestHandlerUpdateRestrictsFieldsForNonAdminSelfEdit(t *testing.T) {
 	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s", member.Login), adminToken, map[string]any{"first_name": "Renamed"})
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected admin to still edit any field on anyone, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateNotifiesTelegramWithActorAndNewPerson(t *testing.T) {
+	mux, authn, svc, notifier := newTestServerWithNotifier(t)
+	ctx := context.Background()
+
+	admin, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Admin", LastName: "Uno", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	body := map[string]any{
+		"first_name": "Nueva", "last_name": "Persona", "email": testutil.UniqueEmail(t), "birth_date": "2000-01-01",
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/users", adminToken, body); rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) {
+		t.Errorf("expected the notification to name the actor %q, got %q", admin.Login, msg)
+	}
+	if !strings.Contains(msg, "Nueva") || !strings.Contains(msg, "Persona") {
+		t.Errorf("expected the notification to name the new person, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateNotifiesTelegramWithFieldDiff is the core of the
+// feature this whole notifier exists for: seeing exactly what changed,
+// not just that something did.
+func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, authn, svc, notifier := newTestServerWithNotifier(t)
+	ctx := context.Background()
+
+	admin, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Admin", LastName: "Dos", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	target, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Juan", LastName: "Perez", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	body := map[string]any{"phone": "666777888"}
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/users/"+target.Login, adminToken, body); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "Phone: 611222333 → 666777888") {
+		t.Errorf("expected the notification to show the phone change, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateWithNoActualChangeSendsNoNotification makes sure a
+// PATCH that doesn't actually change anything (every field resent with
+// its own current value) doesn't produce a misleading "edited" message
+// with an empty diff.
+func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
+	mux, authn, svc, notifier := newTestServerWithNotifier(t)
+	ctx := context.Background()
+
+	admin, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Admin", LastName: "Tres", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	target, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Sin", LastName: "Cambios", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+	})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	body := map[string]any{"phone": "611222333"}
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/users/"+target.Login, adminToken, body); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 0 {
+		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
+	}
+}
+
+func TestHandlerDeleteNotifiesTelegramWithActorAndDeletedPerson(t *testing.T) {
+	mux, authn, svc, notifier := newTestServerWithNotifier(t)
+	ctx := context.Background()
+
+	admin, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Admin", LastName: "Cuatro", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	target, err := svc.Create(ctx, users.CreateInput{
+		FirstName: "Se", LastName: "Borra", Email: strPtr(testutil.UniqueEmail(t)),
+	})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/users/"+target.Login, adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) {
+		t.Errorf("expected the notification to name the actor %q, got %q", admin.Login, msg)
+	}
+	if !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name the deleted person %q, got %q", target.Login, msg)
 	}
 }

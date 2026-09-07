@@ -1,10 +1,13 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -15,10 +18,26 @@ import (
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
-	return &Handler{service: service, authenticator: authenticator}
+func NewHandler(service *Service, authenticator *auth.Authenticator, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — every write endpoint in
+// this handler needs it, so it's pulled out rather than repeated at
+// each call site. Falls back to a placeholder rather than failing the
+// whole request if the lookup itself errors, since a notification is
+// never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.service.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -129,6 +148,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create user")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la persona %s (%s %s).",
+		h.actorLogin(r.Context()), user.Login, user.FirstName, user.LastName))
 	httpapi.WriteJSON(w, http.StatusCreated, user)
 }
 
@@ -225,6 +246,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below (see auditableFields)
+	// — a failure here isn't reason enough to fail the actual edit, so
+	// it's only ever consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), id)
+
 	user, err := h.service.Update(r.Context(), id, UpdateInput{
 		Login:            body.Login,
 		FirstName:        body.FirstName,
@@ -256,7 +283,24 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update user")
 		return
 	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, user, auditableFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado a %s:\n%s",
+				h.actorLogin(r.Context()), before.Login, strings.Join(diff, "\n")))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, user)
+}
+
+// auditableFields are the User fields update's own mutation
+// notification diffs (see httpapi.DiffFields) — matching UpdateInput's
+// field set exactly, so a computed/derived field this endpoint can't
+// touch at all (Roles, a membership or license date, last login...)
+// never shows up as a spurious "change" just because it happened to be
+// recomputed between the before and after fetch.
+var auditableFields = []string{
+	"Login", "FirstName", "LastName", "BirthDate", "Email", "NationalID",
+	"Gender", "Phone", "Address", "PostalCode", "City", "Province", "EmergencyContact",
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -269,6 +313,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "cannot_delete_self", "you cannot delete your own account")
 		return
 	}
+	// Fetched before deleting, purely so the mutation notification below
+	// can name who was deleted — there's nothing left to look up once
+	// Delete succeeds.
+	target, targetErr := h.service.Get(r.Context(), id)
+
 	err := h.service.Delete(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
@@ -285,6 +334,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete user")
 		return
+	}
+	if targetErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado a %s (%s %s).",
+			h.actorLogin(r.Context()), target.Login, target.FirstName, target.LastName))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

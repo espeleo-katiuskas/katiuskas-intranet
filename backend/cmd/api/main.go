@@ -134,7 +134,7 @@ func main() {
 
 	router := httpapi.NewRouter(httpapi.Routes{
 		Auth:              authHandler,
-		Users:             users.NewHandler(usersService, authenticator),
+		Users:             users.NewHandler(usersService, authenticator, telegramSender),
 		Roles:             roles.NewHandler(rolesService, authenticator, usersService),
 		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL),
 		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService),
