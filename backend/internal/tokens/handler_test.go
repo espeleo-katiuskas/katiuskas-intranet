@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -43,7 +44,7 @@ func newHandlerTestServerWithNotifier(t *testing.T, notifier httpapi.MutationNot
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	tokens.NewHandler(service, authenticator, usersService, time.Hour, notifier).RegisterRoutes(mux)
+	tokens.NewHandler(service, authenticator, usersService, time.Hour, notifier, "https://intranet.example.test").RegisterRoutes(mux)
 	return mux, resolver, service, tx, usersService
 }
 
@@ -165,6 +166,39 @@ func TestHandlerImpersonateSucceedsAndTheTokenWorksAsTheTarget(t *testing.T) {
 	}
 	if resolved.ImpersonatedBy == nil || *resolved.ImpersonatedBy != admin.ID {
 		t.Errorf("expected impersonated_by %d, got %v", admin.ID, resolved.ImpersonatedBy)
+	}
+}
+
+// TestHandlerImpersonateSetsSessionCookie checks the impersonation
+// token is also carried as auth.SessionCookieName, matching the
+// response body — so a library/userfiles file opened straight from a
+// new tab while impersonating resolves as the impersonated person too,
+// the same as every other request the frontend makes with this token.
+func TestHandlerImpersonateSetsSessionCookie(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	if err := rolesService.AssignByName(ctx, target.ID, []string{"admin"}); err != nil {
+		t.Fatalf("assign admin to target: %v", err)
+	}
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", target.Login), adminToken, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != auth.SessionCookieName || cookies[0].Value != body.Token {
+		t.Errorf("expected the session cookie to carry the impersonation token, got %v", cookies)
 	}
 }
 

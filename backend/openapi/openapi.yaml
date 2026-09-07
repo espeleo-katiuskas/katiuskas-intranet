@@ -1457,7 +1457,7 @@ paths:
         same as GET /library/file — supports HTTP Range requests, and
         the same path resolution, root confinement, and
         self-or-admin/board access check as GET /users/{login}/files.
-      security: [{ bearerAuth: [] }]
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
         - name: path
@@ -1715,7 +1715,7 @@ paths:
         itself (Markdown) or hand it to the browser (PDF, image, HTML).
         Supports HTTP Range requests. Same path resolution and root
         confinement as GET /library.
-      security: [{ bearerAuth: [] }]
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - name: path
           in: query
@@ -1742,6 +1742,20 @@ components:
         An opaque session token issued by POST /auth/magic-link/consume,
         not a JWT — it carries no information of its own, so the API
         looks it up (and its holder's current roles) on every request.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: katiuskas_session
+      description: >
+        The same opaque session token as bearerAuth, carried as an
+        HttpOnly cookie instead — set by every endpoint that issues or
+        replaces a session (magic-link consume, impersonate,
+        impersonate/exit), cleared by POST /auth/logout. Accepted only
+        by GET /library/file and GET /users/{login}/files/file, which
+        need to work as a plain, browser-navigable URL (opened directly
+        in a new tab, or saved by the browser's own "Save As" under the
+        file's real name) that a custom Authorization header can't ride
+        along on. Every other endpoint still requires bearerAuth.
 
   responses:
     Unauthorized:

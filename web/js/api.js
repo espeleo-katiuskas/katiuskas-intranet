@@ -214,6 +214,7 @@ function resolvePickerId(entries, typedValue) {
 }
 
 export {
+  API_BASE,
   apiFetch,
   apiFetchBlob,
   apiFetchForm,

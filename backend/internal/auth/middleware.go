@@ -36,12 +36,48 @@ func (u AuthenticatedUser) HasAnyRole(names ...string) bool {
 	return false
 }
 
+func bearerToken(r *http.Request) string {
+	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return token
+}
+
 func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header := r.Header.Get("Authorization")
-		token, ok := strings.CutPrefix(header, "Bearer ")
-		if !ok || token == "" {
+		token := bearerToken(r)
+		if token == "" {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+			return
+		}
+		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r))
+		if err != nil {
+			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid, expired, or revoked token")
+			return
+		}
+		httpapi.SetRequestUserID(r.Context(), user.ID)
+		ctx := context.WithValue(r.Context(), userContextKey, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// RequireAuthFromHeaderOrCookie is RequireAuth, but falls back to
+// SessionCookieName when there's no Authorization header. Reserved for
+// the specific read-only file-serving routes (library, userfiles) that
+// need to work as a plain, browser-navigable URL — opened directly in a
+// new tab, or saved by the browser's own "Save As" with its real
+// filename — neither of which can carry a custom header the way a
+// fetch() call can. Every other route keeps using RequireAuth/Protect,
+// bearer-header only, so this never widens the CSRF surface beyond
+// those specific idempotent GETs.
+func (a *Authenticator) RequireAuthFromHeaderOrCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := bearerToken(r)
+		if token == "" {
+			if cookie, err := r.Cookie(SessionCookieName); err == nil {
+				token = cookie.Value
+			}
+		}
+		if token == "" {
+			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token or session cookie")
 			return
 		}
 		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r))
@@ -106,4 +142,17 @@ func (a *Authenticator) Protect(next http.HandlerFunc, roles ...string) http.Han
 	}
 	handler = RequireRole(BaselineRoles...)(handler)
 	return a.RequireAuth(handler)
+}
+
+// ProtectAllowingCookie is Protect, but also accepts SessionCookieName
+// as an alternative to the bearer header — see
+// RequireAuthFromHeaderOrCookie. Reserved for the library/userfiles
+// file-serving routes; every other route keeps using Protect.
+func (a *Authenticator) ProtectAllowingCookie(next http.HandlerFunc, roles ...string) http.Handler {
+	var handler http.Handler = next
+	if len(roles) > 0 {
+		handler = RequireRole(roles...)(handler)
+	}
+	handler = RequireRole(BaselineRoles...)(handler)
+	return a.RequireAuthFromHeaderOrCookie(handler)
 }

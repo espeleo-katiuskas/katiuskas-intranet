@@ -372,6 +372,7 @@ func (h *Handler) issueSessionAndRespond(w http.ResponseWriter, r *http.Request,
 	ip := httpapi.ClientIP(r)
 	_ = h.users.TouchLastLogin(r.Context(), userID, ip)
 	h.notifyLogin(r.Context(), userID, ip)
+	auth.SetSessionCookie(w, sessionToken, h.opts.PublicBaseURL, h.opts.TokenTTL)
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": sessionToken})
 }
 
@@ -407,6 +408,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.tokens.RevokeByHash(r.Context(), body.Token)
+	auth.ClearSessionCookie(w, h.opts.PublicBaseURL)
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -462,5 +464,6 @@ func (h *Handler) ExitImpersonation(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not exit impersonation")
 		return
 	}
+	auth.SetSessionCookie(w, newToken, h.opts.PublicBaseURL, h.opts.TokenTTL)
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": newToken})
 }

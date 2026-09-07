@@ -32,10 +32,13 @@ type Handler struct {
 	users                 UserLookup
 	impersonationTokenTTL time.Duration
 	notifier              httpapi.MutationNotifier
+	// publicBaseURL is only used to decide the impersonation session
+	// cookie's Secure attribute — see auth.SetSessionCookie.
+	publicBaseURL string
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, impersonationTokenTTL time.Duration, notifier httpapi.MutationNotifier) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, impersonationTokenTTL: impersonationTokenTTL, notifier: notifier}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, impersonationTokenTTL time.Duration, notifier httpapi.MutationNotifier, publicBaseURL string) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, impersonationTokenTTL: impersonationTokenTTL, notifier: notifier, publicBaseURL: publicBaseURL}
 }
 
 // actorLogin resolves the calling session's own login, for the "who
@@ -98,6 +101,11 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha iniciado una suplantación de %s.",
 		h.actorLogin(r.Context()), r.PathValue("login")))
+	// Also carried as a cookie (see auth.SetSessionCookie) so a file
+	// opened straight in a new tab from library/userfiles while
+	// impersonating resolves as the impersonated person too, exactly
+	// like every other request the frontend makes with this same token.
+	auth.SetSessionCookie(w, raw, h.publicBaseURL, h.impersonationTokenTTL)
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]string{"token": raw})
 }
 

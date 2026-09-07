@@ -64,10 +64,13 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // handler, the same self-or-privileged pattern
 // memberships.Handler.listByUser and inventory.Handler.listMovementsByUser
 // use, since who may see a specific person's files isn't a fixed role
-// list the way, say, GET /library is.
+// list the way, say, GET /library is. /file also accepts the session
+// cookie (ProtectAllowingCookie, see auth.RequireAuthFromHeaderOrCookie),
+// not just the bearer header, so it works as a plain URL a browser can
+// navigate to directly and still get the file's real name.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/files", h.authenticator.Protect(h.list))
-	mux.Handle("GET /api/v1/users/{login}/files/file", h.authenticator.Protect(h.file))
+	mux.Handle("GET /api/v1/users/{login}/files/file", h.authenticator.ProtectAllowingCookie(h.file))
 }
 
 // resolveAccess looks up the numeric id behind a {login} path segment

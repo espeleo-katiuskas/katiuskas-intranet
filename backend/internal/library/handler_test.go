@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
@@ -36,6 +37,16 @@ func doRequest(mux *http.ServeMux, path, token string) *httptest.ResponseRecorde
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func doRequestWithCookie(mux *http.ServeMux, path, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if token != "" {
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -160,6 +171,35 @@ func TestHandlerFileRequiresAuthentication(t *testing.T) {
 	mux, _ := newTestServer(t)
 	if rec := doRequest(mux, "/api/v1/library/file?path=Estatutos.pdf", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rec.Code)
+	}
+}
+
+// TestHandlerFileAcceptsSessionCookie is what makes it possible to open
+// a document straight in a new tab (or let the browser's own "Save As"
+// use the real filename) — a plain GET can't carry a custom
+// Authorization header, so /file also accepts the same token as a
+// cookie (see auth.ProtectAllowingCookie).
+func TestHandlerFileAcceptsSessionCookie(t *testing.T) {
+	mux, authn := newTestServer(t)
+	token := testutil.TokenFor(authn, 1, "member")
+
+	rec := doRequestWithCookie(mux, "/api/v1/library/file?path=Estatutos.pdf", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with a cookie-only request, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerListRejectsSessionCookie is the boundary check: only
+// /file opts into the cookie fallback. /library's own listing must
+// keep requiring the bearer header, so cookie support never quietly
+// widens beyond the specific routes that actually need it.
+func TestHandlerListRejectsSessionCookie(t *testing.T) {
+	mux, authn := newTestServer(t)
+	token := testutil.TokenFor(authn, 1, "member")
+
+	rec := doRequestWithCookie(mux, "/api/v1/library", token)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 (GET /library must not accept the session cookie), got %d", rec.Code)
 	}
 }
 

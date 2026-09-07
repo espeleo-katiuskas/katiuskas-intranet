@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 )
@@ -52,6 +53,16 @@ func doRequest(mux *http.ServeMux, path, token string) *httptest.ResponseRecorde
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func doRequestWithCookie(mux *http.ServeMux, path, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if token != "" {
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -230,5 +241,45 @@ func TestHandlerFileRequiresAuthentication(t *testing.T) {
 	mux, _ := newTestServer(t)
 	if rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rec.Code)
+	}
+}
+
+// TestHandlerFileAcceptsSessionCookie mirrors library's own test: /file
+// also accepts the session cookie so a person's own document can be
+// opened as a plain, browser-navigable URL — and resolveAccess's
+// self-or-admin/board check still applies, since the cookie populates
+// the same AuthenticatedUser in context as the bearer header does.
+func TestHandlerFileAcceptsSessionCookie(t *testing.T) {
+	mux, authn := newTestServer(t)
+	token := testutil.TokenFor(authn, 1, "member")
+
+	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with a cookie-only request, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerFileCookieStillEnforcesSelfOrPrivileged checks the cookie
+// fallback doesn't bypass resolveAccess's own access check — someone
+// else's cookie-only request for juan.perez's file must still be 403.
+func TestHandlerFileCookieStillEnforcesSelfOrPrivileged(t *testing.T) {
+	mux, authn := newTestServer(t)
+	token := testutil.TokenFor(authn, 2, "member")
+
+	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", token)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rec.Code)
+	}
+}
+
+// TestHandlerListRejectsSessionCookie is the boundary check: only
+// /file opts into the cookie fallback, not /files itself.
+func TestHandlerListRejectsSessionCookie(t *testing.T) {
+	mux, authn := newTestServer(t)
+	token := testutil.TokenFor(authn, 1, "member")
+
+	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files", token)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 (GET .../files must not accept the session cookie), got %d", rec.Code)
 	}
 }

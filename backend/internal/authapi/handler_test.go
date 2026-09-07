@@ -707,6 +707,34 @@ func TestConsumeMagicLinkNotifiesTelegramOfTheLogin(t *testing.T) {
 	}
 }
 
+// TestConsumeMagicLinkSetsSessionCookie checks the same session token
+// returned in the JSON body is also set as auth.SessionCookieName —
+// the transport GET /library/file and GET /users/{login}/files/file
+// accept in addition to the bearer header, so a document can be opened
+// as a plain, browser-navigable URL. See auth.SetSessionCookie.
+func TestConsumeMagicLinkSetsSessionCookie(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	sessionToken := decodeSessionToken(t, rec)
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != auth.SessionCookieName {
+		t.Fatalf("expected a single %s cookie, got %v", auth.SessionCookieName, cookies)
+	}
+	if cookies[0].Value != sessionToken {
+		t.Errorf("expected the cookie to carry the same token as the response body, got %q vs %q", cookies[0].Value, sessionToken)
+	}
+	if !cookies[0].HttpOnly {
+		t.Errorf("expected the session cookie to be HttpOnly")
+	}
+}
+
 func TestConsumeMagicLinkRejectsInvalidToken(t *testing.T) {
 	s := newTestServer(t)
 	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": "never-issued"})
@@ -920,6 +948,11 @@ func TestExitImpersonationEndsTheSessionAndRestoresTheAdmin(t *testing.T) {
 	if login != admin.Login {
 		t.Errorf("expected the new token to resolve to the admin %q, got %q", admin.Login, login)
 	}
+
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != auth.SessionCookieName || cookies[0].Value != body.Token {
+		t.Errorf("expected the session cookie to be refreshed to the new token, got %v", cookies)
+	}
 }
 
 func TestExitImpersonationRejectsANormalSession(t *testing.T) {
@@ -961,6 +994,30 @@ func TestLogoutRevokesTheToken(t *testing.T) {
 
 	if _, _, status := s.me(t, sessionToken); status != http.StatusUnauthorized {
 		t.Errorf("expected the revoked token to be rejected, got %d", status)
+	}
+}
+
+// TestLogoutClearsSessionCookie checks logout also expires
+// auth.SessionCookieName (MaxAge < 0), not just revoking the token in
+// the body — otherwise a signed-out browser could still open a
+// library/userfiles file link straight from history or a bookmark.
+func TestLogoutClearsSessionCookie(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	linkToken := s.requestAndExtractToken(t, user.Email, user.Phone)
+	sessionToken := decodeSessionToken(t, s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": linkToken}))
+
+	rec := s.post(t, "/api/v1/auth/logout", map[string]string{"token": sessionToken})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != auth.SessionCookieName {
+		t.Fatalf("expected a %s cookie in the response, got %v", auth.SessionCookieName, cookies)
+	}
+	if cookies[0].MaxAge >= 0 {
+		t.Errorf("expected a negative MaxAge to clear the cookie, got %d", cookies[0].MaxAge)
 	}
 }
 

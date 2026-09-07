@@ -24,10 +24,14 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 
 // Both routes are baseline-only (admin/board/member, see
 // auth.BaselineRoles) — no extra role required, since this library is
-// meant for every socio, and there's nothing here to write.
+// meant for every socio, and there's nothing here to write. /file also
+// accepts the session cookie (ProtectAllowingCookie), not just the
+// bearer header — see auth.RequireAuthFromHeaderOrCookie — so it works
+// as a plain URL a browser can navigate to directly (a new tab, "Save
+// As") and still get the file's real name, not just via fetch().
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/library", h.authenticator.Protect(h.list))
-	mux.Handle("GET /api/v1/library/file", h.authenticator.Protect(h.file))
+	mux.Handle("GET /api/v1/library/file", h.authenticator.ProtectAllowingCookie(h.file))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

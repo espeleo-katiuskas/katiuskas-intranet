@@ -132,6 +132,82 @@ func TestRequireAuthRecordsTheUserForRequestLogging(t *testing.T) {
 	}
 }
 
+func TestRequireAuthFromHeaderOrCookieAcceptsEitherTransport(t *testing.T) {
+	resolver := stubResolver{"valid-token": AuthenticatedUser{ID: 7, Roles: []string{"admin"}}}
+	a := NewAuthenticator(resolver)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := a.RequireAuthFromHeaderOrCookie(next)
+
+	t.Run("bearer header alone", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer valid-token")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("cookie alone", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "valid-token"})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("header takes precedence over a mismatched cookie", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer valid-token")
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "garbage"})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected 200 (header wins), got %d", rec.Code)
+		}
+	})
+
+	t.Run("neither present yields 401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("invalid cookie value yields 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "garbage"})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rec.Code)
+		}
+	})
+}
+
+// TestRequireAuthIgnoresTheSessionCookie is the important negative case:
+// every *other* route in the API keeps using plain RequireAuth/Protect,
+// so a cookie alone (no bearer header) must never authenticate them —
+// only the specific file-serving routes that opt into
+// RequireAuthFromHeaderOrCookie get that fallback.
+func TestRequireAuthIgnoresTheSessionCookie(t *testing.T) {
+	resolver := stubResolver{"valid-token": AuthenticatedUser{ID: 7, Roles: []string{"admin"}}}
+	a := NewAuthenticator(resolver)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "valid-token"})
+	rec := httptest.NewRecorder()
+	a.RequireAuth(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 (RequireAuth must not fall back to the cookie), got %d", rec.Code)
+	}
+}
+
 func TestRequireRole(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	handler := RequireRole("admin", "board")(next)

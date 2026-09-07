@@ -131,7 +131,7 @@ func main() {
 		Auth:              authHandler,
 		Users:             users.NewHandler(usersService, authenticator, telegramSender),
 		Roles:             roles.NewHandler(rolesService, authenticator, usersService, telegramSender),
-		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL, telegramSender),
+		Tokens:            tokens.NewHandler(tokensService, authenticator, usersService, cfg.ImpersonationTokenTTL, telegramSender, cfg.PublicBaseURL),
 		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService, telegramSender),
 		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService, telegramSender),
 		Activities:        activities.NewHandler(activitiesService, authenticator, usersService, telegramSender),

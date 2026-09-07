@@ -1,4 +1,4 @@
-import { initSession, logout, applyRoleVisibility, apiFetch, apiFetchBlob, escapeHtml, currentUser } from './api.js';
+import { API_BASE, initSession, logout, applyRoleVisibility, apiFetch, escapeHtml, currentUser } from './api.js';
 
 await initSession();
 applyRoleVisibility();
@@ -111,40 +111,18 @@ function stripExtension(name) {
   return i === -1 ? name : name.slice(0, i);
 }
 
-// Every Documentos/Actas/Memorias entry is rendered as a plain
-// <a href="#" data-open-path="...">, handled by one delegated listener
-// below rather than a per-render one, since these lists get re-rendered
-// (loadActas' own year filter included) well after page load.
+// Every Documentos/Actas/Memorias entry is a plain link straight to
+// /library/file, opened in a new tab — no fetch/blob juggling needed:
+// initSession() (see api.js) also gets the API to set the session as an
+// HttpOnly cookie (auth.SetSessionCookie), which GET /library/file
+// accepts as well as the bearer header specifically so a plain,
+// browser-navigated URL like this one works and the browser's own
+// "Save As" picks up the file's real name — a blob: URL created from a
+// fetch() response can't carry that name at all.
 function fileLink(dirPath, name, label) {
-  return `<a href="#" data-open-path="${escapeHtml(`${dirPath}/${name}`)}">${escapeHtml(label)}</a>`;
+  const href = `${API_BASE}/library/file?path=${encodeURIComponent(`${dirPath}/${name}`)}`;
+  return `<a href="${href}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
 }
-
-// Opens a /library PDF directly in a new tab. There's no session
-// cookie a plain <a href> could ride on (the API only authenticates via
-// a bearer header, see api.js), so the bytes have to be fetched by hand
-// and handed to the browser as an object URL — window.open on that URL
-// puts the PDF straight in its own tab (Content-Type: application/pdf,
-// set from the file's own extension) rather than /library's own
-// preview-plus-download page. The object URL is only revoked well after
-// window.open returns, since the new tab still needs it valid long
-// enough to actually load the PDF into its native viewer.
-async function openLibraryFile(path) {
-  try {
-    const blob = await apiFetchBlob(`/library/file?path=${encodeURIComponent(path)}`);
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (err) {
-    alert(err.message || 'No se pudo abrir el documento.');
-  }
-}
-
-document.addEventListener('click', (event) => {
-  const link = event.target.closest('[data-open-path]');
-  if (!link) return;
-  event.preventDefault();
-  openLibraryFile(link.dataset.openPath);
-});
 
 // Actas are named YYYY-MM-DD.pdf so alphabetical order doubles as
 // chronological order; only the display label gets reformatted to
