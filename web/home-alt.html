@@ -76,9 +76,11 @@
         </div>
 
         <!-- Datos de interés: datos reales del club. Documentos, Actas y
-             Memorias: contenido estático de momento — todavía no se ha
-             decidido dónde vive cada fichero dentro de /library, así que
-             esos enlaces siguen sin hacer nada todavía. -->
+             Memorias se cargan dinámicamente desde /library (ver
+             js/home-alt.js) — cada uno es una carpeta con los PDF
+             directamente dentro (library/documentos, library/actas,
+             library/memorias) y un .order.json opcional para fijar el
+             orden de aparición. -->
         <aside class="alt-col-side">
           <h2>Datos de interés</h2>
           <div class="alt-info-card">
@@ -109,40 +111,18 @@
           </div>
 
           <h2>Documentos</h2>
-          <div class="alt-info-card alt-static">
-            <ul class="alt-link-list">
-              <li><a href="#">Estatutos</a></li>
-              <li><a href="#">Reglamento de Funcionamiento Interno</a></li>
-              <li><a href="#">Normativa del espeleódromo</a></li>
-            </ul>
+          <div class="alt-info-card">
+            <ul class="alt-link-list" id="alt-documentos-list"></ul>
           </div>
 
           <h2>Actas asambleas</h2>
-          <div class="alt-info-card alt-static">
-            <label for="alt-actas-year">Año</label>
-            <select id="alt-actas-year">
-              <option>2026</option>
-            </select>
-            <ul class="alt-link-list">
-              <li><a href="#">01-02-2026</a></li>
-              <li><a href="#">01-06-2026</a></li>
-              <li><a href="#">01-12-2026</a></li>
-            </ul>
+          <div class="alt-info-card">
+            <ul class="alt-link-list" id="alt-actas-list"></ul>
           </div>
 
-          <!-- Una memoria por año, 2010-2025; cualquier socio podrá
-               descargar cualquiera de ellas una vez esto tenga un
-               endpoint real detrás. -->
           <h2>Memorias de actividades</h2>
-          <div class="alt-info-card alt-static">
-            <p class="alt-year-list">
-              <a href="#">2010</a> · <a href="#">2011</a> · <a href="#">2012</a> ·
-              <a href="#">2013</a> · <a href="#">2014</a> · <a href="#">2015</a> ·
-              <a href="#">2016</a> · <a href="#">2017</a> · <a href="#">2018</a> ·
-              <a href="#">2019</a> · <a href="#">2020</a> · <a href="#">2021</a> ·
-              <a href="#">2022</a> · <a href="#">2023</a> · <a href="#">2024</a> ·
-              <a href="#">2025</a>
-            </p>
+          <div class="alt-info-card">
+            <p class="alt-year-list" id="alt-memorias-list"></p>
           </div>
         </aside>
       </div>
