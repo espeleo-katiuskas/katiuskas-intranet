@@ -433,13 +433,18 @@ verdad, en nombre de otra persona, vinculaba la cuenta de *ese socio* al chat de
 lo envió* — un camino de suplantación, no solo un problema de calidad de datos, del
 mismo tipo que el del prefijo de país de más abajo. Un contacto ajeno se rechaza con una
 respuesta y un aviso propio al canal (más grave que un simple "no coincide", por ser un
-posible intento de suplantación), sin llegar a mirar el teléfono siquiera. Si el
+posible intento de suplantación), sin llegar a mirar el teléfono siquiera — el teclado de
+"compartir contacto" se queda ahí para que pueda reintentarlo con el suyo propio. Si el
 contacto sí es el suyo y el teléfono coincide con el de un socio
 (`users.Repository.FindByPhoneNumber`, exigiendo que el prefijo de país que Telegram
 siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
 "+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
 los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma; si no
-coincide, se lo dice; en ambos casos avisa al canal de quién lo ha intentado, con qué
+coincide, se lo dice; en ambos casos usa `Client.SendMessageRemovingKeyboard` en vez de
+un `SendMessage` normal, porque de todas formas era su propio contacto y volver a pulsar
+el botón solo podría reenviar ese mismo teléfono para la misma respuesta — a diferencia
+del caso de contacto ajeno de arriba, donde dejar el teclado es precisamente lo que
+interesa. En ambos casos avisa también al canal de quién lo ha intentado, con qué
 teléfono, y si coincidía o no. Ese vínculo solo vale lo que valga el número de
 teléfono con el que se hizo, así que `users.Repository.Update` lo borra
 (`telegram_chat_id = NULL`) en cuanto un `PATCH` cambia de verdad el teléfono de la

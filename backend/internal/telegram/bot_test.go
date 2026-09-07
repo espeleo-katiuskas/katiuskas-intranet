@@ -95,6 +95,31 @@ func TestClientSendMessageRequestingContactIncludesAKeyboard(t *testing.T) {
 	}
 }
 
+func TestClientSendMessageRemovingKeyboardIncludesRemoveKeyboard(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer server.Close()
+
+	client := &Client{Token: "123:abc", HTTPClient: server.Client(), apiBase: server.URL}
+	if err := client.SendMessageRemovingKeyboard(context.Background(), 42, "gracias"); err != nil {
+		t.Fatalf("SendMessageRemovingKeyboard: %v", err)
+	}
+	if gotBody["text"] != "gracias" {
+		t.Errorf("unexpected text: %v", gotBody["text"])
+	}
+	markup, ok := gotBody["reply_markup"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a reply_markup object, got %v", gotBody["reply_markup"])
+	}
+	if markup["remove_keyboard"] != true {
+		t.Errorf("expected remove_keyboard: true, got %v", markup)
+	}
+}
+
 func TestClientSendMessageReturnsErrorOnTelegramAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

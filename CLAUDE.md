@@ -407,9 +407,14 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   impersonation path, not just a data-quality one, the same shape as the
   `FindByPhoneNumber` country-code issue above. A mismatch gets a rejection reply and its
   own `Bot.notifyChannelRejectedForeignContact` warning (worth flagging above a routine
-  no-match, since it's a possible impersonation attempt) and goes no further. A match
-  calls `users.Repository.SetTelegramChatID` and confirms; no match replies saying so.
-  Either way, `Bot.notifyChannel` reports the attempt to the log channel — who sent it,
+  no-match, since it's a possible impersonation attempt) and goes no further — the "share
+  contact" keyboard stays up so they can retry with their real one. A match calls
+  `users.Repository.SetTelegramChatID` and confirms; no match replies saying so; both use
+  `Client.SendMessageRemovingKeyboard` instead of a plain `SendMessage`, since it really
+  was their own contact either way and tapping the button again could only ever resend
+  that same phone number for the same answer — unlike the rejection case above, where
+  the button staying up is the point. Either way, `Bot.notifyChannel` reports the
+  attempt to the log channel — who sent it,
   the phone number, and whether it matched — the same "tell the club everything, matched
   or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since

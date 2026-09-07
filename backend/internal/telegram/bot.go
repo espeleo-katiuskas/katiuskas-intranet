@@ -72,6 +72,24 @@ func (c *Client) SendMessageRequestingContact(ctx context.Context, chatID int64,
 	})
 }
 
+// SendMessageRemovingKeyboard sends a plain text message and, unlike
+// SendMessage, also asks the client to remove any custom keyboard
+// currently showing for this chat — internal/telegrambot uses this once
+// a "share your contact" button (SendMessageRequestingContact, sent
+// is_persistent so it keeps reappearing) has served its purpose, since
+// leaving it up afterward invites tapping it again for no effect: it
+// always shares the same contact, so a second tap can only ever resend
+// the same phone number that was just handled.
+func (c *Client) SendMessageRemovingKeyboard(ctx context.Context, chatID int64, text string) error {
+	return c.post(ctx, "sendMessage", map[string]any{
+		"chat_id": chatID,
+		"text":    text,
+		"reply_markup": map[string]any{
+			"remove_keyboard": true,
+		},
+	})
+}
+
 // DeleteMessage removes a message the bot itself received in a private
 // chat — Telegram's Bot API allows this specifically so a bot can clean
 // up sensitive text (an OTP, a password typed by mistake, ...) a person

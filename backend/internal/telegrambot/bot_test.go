@@ -34,12 +34,13 @@ func newUsersService(t *testing.T) *users.Service {
 // acting on it, so tests exercising Run need an empty leading batch to
 // represent "no backlog" before the batch they actually want processed.
 type fakeClient struct {
-	mu           sync.Mutex
-	sent         []string // plain SendMessage texts
-	sentContacts []string // SendMessageRequestingContact texts
-	deleted      []struct{ chatID, messageID int64 }
-	deleteErr    error // returned by DeleteMessage when set, to test the best-effort path
-	batches      [][]telegram.Update
+	mu                   sync.Mutex
+	sent                 []string // plain SendMessage texts
+	sentContacts         []string // SendMessageRequestingContact texts
+	sentRemovingKeyboard []string // SendMessageRemovingKeyboard texts
+	deleted              []struct{ chatID, messageID int64 }
+	deleteErr            error // returned by DeleteMessage when set, to test the best-effort path
+	batches              [][]telegram.Update
 }
 
 func (f *fakeClient) SendMessage(_ context.Context, _ int64, text string) error {
@@ -53,6 +54,13 @@ func (f *fakeClient) SendMessageRequestingContact(_ context.Context, _ int64, te
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sentContacts = append(f.sentContacts, text)
+	return nil
+}
+
+func (f *fakeClient) SendMessageRemovingKeyboard(_ context.Context, _ int64, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sentRemovingKeyboard = append(f.sentRemovingKeyboard, text)
 	return nil
 }
 
@@ -312,8 +320,12 @@ func TestHandleContactLinksAMatchingUser(t *testing.T) {
 		t.Fatalf("expected the chat to be linked to %d, got id=%d err=%v", created.ID, linkedUserID, err)
 	}
 
-	if len(client.sent) != 1 {
-		t.Fatalf("expected exactly one confirmation reply, got %v", client.sent)
+	// The confirmation removes the keyboard rather than using a plain
+	// SendMessage — the "share your contact" button has served its
+	// purpose now that the chat is linked, and leaving it up would only
+	// invite a pointless second tap.
+	if len(client.sentRemovingKeyboard) != 1 {
+		t.Fatalf("expected exactly one confirmation reply removing the keyboard, got sent=%v removingKeyboard=%v", client.sent, client.sentRemovingKeyboard)
 	}
 	if len(notifier.sent) != 1 {
 		t.Fatalf("expected exactly one channel notification, got %v", notifier.sent)
@@ -435,8 +447,12 @@ func TestHandleContactReportsNoMatch(t *testing.T) {
 		},
 	})
 
-	if len(client.sent) != 1 {
-		t.Fatalf("expected exactly one reply, got %v", client.sent)
+	// Same reasoning as the matched case: it's still their own contact,
+	// so tapping the button again would only resend the same phone
+	// number and get the same "no match" answer — the keyboard comes
+	// down here too.
+	if len(client.sentRemovingKeyboard) != 1 {
+		t.Fatalf("expected exactly one reply removing the keyboard, got sent=%v removingKeyboard=%v", client.sent, client.sentRemovingKeyboard)
 	}
 	if len(notifier.sent) != 1 {
 		t.Fatalf("expected exactly one channel notification, got %v", notifier.sent)

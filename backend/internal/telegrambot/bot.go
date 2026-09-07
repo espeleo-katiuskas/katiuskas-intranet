@@ -39,8 +39,8 @@ import (
 // no clue that tapping it is what reveals anything at all.
 const greeting = "¡Hola! Soy el bot del Club de Espeleología Katiuskas. " +
 	"Si eres socio o socia del club, compárteme tu contacto para identificarte: " +
-	"toca el botón «" + contactButtonText + "» que aparece junto al campo donde escribes el mensaje " +
-	"(si no lo ves, pulsa primero el icono de teclado ⌨️ que hay junto a ese campo)."
+	"toca el botón «" + contactButtonText + "» que aparece debajo " +
+	"(si no lo ves, pulsa primero el icono de teclado que hay a la derecha)."
 
 const contactButtonText = "Compartir mi contacto"
 
@@ -60,6 +60,7 @@ const pollTimeoutSeconds = 30
 type botClient interface {
 	SendMessage(ctx context.Context, chatID int64, text string) error
 	SendMessageRequestingContact(ctx context.Context, chatID int64, text, buttonText string) error
+	SendMessageRemovingKeyboard(ctx context.Context, chatID int64, text string) error
 	DeleteMessage(ctx context.Context, chatID, messageID int64) error
 	GetUpdates(ctx context.Context, offset int64, timeoutSeconds int) ([]telegram.Update, error)
 }
@@ -245,13 +246,19 @@ func (b *Bot) handleContact(ctx context.Context, msg *telegram.Message) {
 		}
 		reply := fmt.Sprintf("¡Gracias! Te hemos identificado como %s %s y hemos vinculado tu cuenta de Telegram.",
 			matched.FirstName, matched.LastName)
-		if sendErr := b.client.SendMessage(ctx, msg.Chat.ID, reply); sendErr != nil {
+		// The "share your contact" button has done its job — leaving it
+		// up would only invite a pointless second tap that resends the
+		// same phone number, so this is the one reply that removes it.
+		if sendErr := b.client.SendMessageRemovingKeyboard(ctx, msg.Chat.ID, reply); sendErr != nil {
 			slog.Error("telegram bot: send reply", "error", sendErr)
 		}
 		b.notifyChannel(ctx, msg, msg.Contact.PhoneNumber, &matched)
 	case errors.Is(err, users.ErrNotFound):
 		reply := "No hemos encontrado a nadie con ese número de teléfono en la base de datos del club."
-		if sendErr := b.client.SendMessage(ctx, msg.Chat.ID, reply); sendErr != nil {
+		// Same reasoning as the match case above: this is still their
+		// own contact, just not on file, so tapping the button again
+		// would only resend the same number and get the same answer.
+		if sendErr := b.client.SendMessageRemovingKeyboard(ctx, msg.Chat.ID, reply); sendErr != nil {
 			slog.Error("telegram bot: send reply", "error", sendErr)
 		}
 		b.notifyChannel(ctx, msg, msg.Contact.PhoneNumber, nil)
