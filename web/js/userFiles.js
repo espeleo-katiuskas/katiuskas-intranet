@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchBlob, escapeHtml, formatDate } from './api.js';
+import { apiFetch, apiFetchBlob, escapeHtml, encodeFilePath, formatDate } from './api.js';
 import { renderMarkdown } from './markdown.js';
 
 // A per-person document browser, embedded (not a page of its own) in
@@ -178,7 +178,7 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
     document.getElementById('uf-file-back').onclick = () => loadDirectory(dir);
     document.getElementById('uf-file-download').onclick = async () => {
       try {
-        const blob = await apiFetchBlob(`/users/${login}/files/file?path=${encodeURIComponent(path)}&download=1`);
+        const blob = await apiFetchBlob(`/users/${login}/files/file/${encodeFilePath(path)}?download=1`);
         downloadBlob(blob, name);
       } catch (err) {
         showError(err.message);
@@ -187,7 +187,7 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
 
     const kind = fileKind(name);
     try {
-      const blob = await apiFetchBlob(`/users/${login}/files/file?path=${encodeURIComponent(path)}`);
+      const blob = await apiFetchBlob(`/users/${login}/files/file/${encodeFilePath(path)}`);
       document.getElementById('uf-file-meta').textContent = formatSize(blob.size);
 
       if (kind === 'markdown' || kind === 'text') {

@@ -28,10 +28,15 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 // accepts the session cookie (ProtectAllowingCookie), not just the
 // bearer header — see auth.RequireAuthFromHeaderOrCookie — so it works
 // as a plain URL a browser can navigate to directly (a new tab, "Save
-// As") and still get the file's real name, not just via fetch().
+// As") and still get the file's real name, not just via fetch(). Its
+// own path is a URL path segment, not a ?path= query parameter — the
+// {path...} wildcard (Go 1.22+ ServeMux) matches every remaining
+// segment, slashes included, so a nested file's URL reads as a real
+// path (/library/file/actas/2026-02-01.pdf) rather than
+// /library/file?path=actas%2F2026-02-01.pdf.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/library", h.authenticator.Protect(h.list))
-	mux.Handle("GET /api/v1/library/file", h.authenticator.ProtectAllowingCookie(h.file))
+	mux.Handle("GET /api/v1/library/file/{path...}", h.authenticator.ProtectAllowingCookie(h.file))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +61,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 // frontend to fetch and either render itself (Markdown) or hand to the
 // browser to display (PDF, image, HTML).
 func (h *Handler) file(w http.ResponseWriter, r *http.Request) {
-	relPath := r.URL.Query().Get("path")
+	relPath := r.PathValue("path")
 	f, err := h.service.OpenFile(relPath)
 	switch {
 	case errors.Is(err, ErrNotFound):

@@ -5,6 +5,7 @@ import {
   apiFetch,
   apiFetchBlob,
   escapeHtml,
+  encodeFilePath,
   formatDate,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
@@ -157,7 +158,7 @@ async function loadFile(path) {
   };
   document.getElementById('file-download').onclick = async () => {
     try {
-      const blob = await apiFetchBlob(`/library/file?path=${encodeURIComponent(path)}&download=1`);
+      const blob = await apiFetchBlob(`/library/file/${encodeFilePath(path)}?download=1`);
       downloadBlob(blob, name);
     } catch (err) {
       showError(err.message);
@@ -166,7 +167,7 @@ async function loadFile(path) {
 
   const kind = fileKind(name);
   try {
-    const blob = await apiFetchBlob(`/library/file?path=${encodeURIComponent(path)}`);
+    const blob = await apiFetchBlob(`/library/file/${encodeFilePath(path)}`);
     document.getElementById('file-meta').textContent = formatSize(blob.size);
 
     if (kind === 'markdown' || kind === 'text') {

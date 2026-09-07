@@ -1295,8 +1295,8 @@ paths:
         Streams a type=file resource's raw bytes — not_a_file for a
         type=text resource, which never has one. Same
         inline-by-default/?download=1/Content-Type behavior as
-        GET /library/file and GET /users/{login}/files/file, open to any
-        baseline role (same as GET .../resources above).
+        GET /library/file/{path} and GET /users/{login}/files/file/{path},
+        open to any baseline role (same as GET .../resources above).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1449,22 +1449,27 @@ paths:
         "403": { description: Neither the person themselves nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /users/{login}/files/file:
+  /users/{login}/files/file/{path}:
     get:
       summary: Read or download one of a person's own files
       description: >
         Streams a document's raw bytes with a best-effort Content-Type,
-        same as GET /library/file — supports HTTP Range requests, and
-        the same path resolution, root confinement, and
+        same as GET /library/file/{path} — supports HTTP Range requests,
+        and the same path resolution, root confinement, and
         self-or-admin/board access check as GET /users/{login}/files.
       security: [{ bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
         - name: path
-          in: query
+          in: path
           required: true
           schema: { type: string }
-          description: Slash-separated file path, relative to this person's own root.
+          description: >
+            Slash-separated file path, relative to this person's own
+            root — a wildcard capturing every remaining URL segment
+            (e.g. Licencias/2024-federativa.md), not a single path
+            parameter; each segment must be percent-encoded on its own,
+            the slashes between them left literal.
         - name: download
           in: query
           schema: { type: string, enum: ["1"] }
@@ -1704,7 +1709,7 @@ paths:
           description: invalid_path (escapes root) or not_a_directory (path names a file).
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /library/file:
+  /library/file/{path}:
     get:
       summary: Read or download a document
       description: >
@@ -1718,10 +1723,15 @@ paths:
       security: [{ bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - name: path
-          in: query
+          in: path
           required: true
           schema: { type: string }
-          description: Slash-separated, root-relative file path.
+          description: >
+            Slash-separated, root-relative file path — a wildcard
+            capturing every remaining URL segment (e.g.
+            actas/2026-02-01.pdf), not a single path parameter; each
+            segment must be percent-encoded on its own, the slashes
+            between them left literal.
         - name: download
           in: query
           schema: { type: string, enum: ["1"] }
@@ -1751,7 +1761,7 @@ components:
         HttpOnly cookie instead — set by every endpoint that issues or
         replaces a session (magic-link consume, impersonate,
         impersonate/exit), cleared by POST /auth/logout. Accepted only
-        by GET /library/file and GET /users/{login}/files/file, which
+        by GET /library/file/{path} and GET /users/{login}/files/file/{path}, which
         need to work as a plain, browser-navigable URL (opened directly
         in a new tab, or saved by the browser's own "Save As" under the
         file's real name) that a custom Authorization header can't ride

@@ -124,6 +124,16 @@ async function apiFetchBlob(path) {
   return response.blob();
 }
 
+// Encodes a slash-separated file path for use as URL path segments —
+// GET /library/file/<path> and GET /users/{login}/files/file/<path>
+// take the file's path as part of the URL itself (a {path...} wildcard
+// server-side), not a ?path= query parameter, so each segment needs
+// its own escaping (spaces, accents, "?"...) while the slashes between
+// them stay literal.
+function encodeFilePath(relPath) {
+  return relPath.split('/').map(encodeURIComponent).join('/');
+}
+
 function logout() {
   const current = token;
   localStorage.removeItem('token');
@@ -225,6 +235,7 @@ export {
   applyRoleVisibility,
   setToken,
   escapeHtml,
+  encodeFilePath,
   formatDate,
   pickerLabel,
   renderPickerOptions,

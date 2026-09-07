@@ -179,7 +179,7 @@ func TestHandlerFileServesContentInlineByDefault(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=Licencias%2F2024-federativa.md", token)
+	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/Licencias/2024-federativa.md", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -198,7 +198,7 @@ func TestHandlerFileDownloadSetsAttachmentDisposition(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf&download=1", token)
+	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/DNI.pdf?download=1", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -211,7 +211,7 @@ func TestHandlerFileRejectsAnotherPlainMember(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 2, "member")
 
-	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", token)
+	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/DNI.pdf", token)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
 	}
@@ -221,7 +221,7 @@ func TestHandlerFileNotFound(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=nope.pdf", token)
+	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/nope.pdf", token)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}
@@ -231,7 +231,7 @@ func TestHandlerFileRejectsADirectoryPath(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=Licencias", token)
+	rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/Licencias", token)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
 	}
@@ -239,7 +239,7 @@ func TestHandlerFileRejectsADirectoryPath(t *testing.T) {
 
 func TestHandlerFileRequiresAuthentication(t *testing.T) {
 	mux, _ := newTestServer(t)
-	if rec := doRequest(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", ""); rec.Code != http.StatusUnauthorized {
+	if rec := doRequest(mux, "/api/v1/users/juan.perez/files/file/DNI.pdf", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rec.Code)
 	}
 }
@@ -253,7 +253,7 @@ func TestHandlerFileAcceptsSessionCookie(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", token)
+	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file/DNI.pdf", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 with a cookie-only request, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -266,7 +266,7 @@ func TestHandlerFileCookieStillEnforcesSelfOrPrivileged(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 2, "member")
 
-	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file?path=DNI.pdf", token)
+	rec := doRequestWithCookie(mux, "/api/v1/users/juan.perez/files/file/DNI.pdf", token)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
 	}

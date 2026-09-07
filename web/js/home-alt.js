@@ -1,4 +1,4 @@
-import { API_BASE, initSession, logout, applyRoleVisibility, apiFetch, escapeHtml, currentUser } from './api.js';
+import { API_BASE, initSession, logout, applyRoleVisibility, apiFetch, escapeHtml, encodeFilePath, currentUser } from './api.js';
 
 await initSession();
 applyRoleVisibility();
@@ -85,7 +85,7 @@ async function loadOrderedFiles(dirPath) {
 
   let order = [];
   try {
-    const manifest = await apiFetch(`/library/file?path=${encodeURIComponent(`${dirPath}/.order.json`)}`);
+    const manifest = await apiFetch(`/library/file/${encodeFilePath(`${dirPath}/.order.json`)}`);
     if (Array.isArray(manifest)) order = manifest;
   } catch {
     // No .order.json (or it failed to load) — alphabetical order below covers everything.
@@ -120,7 +120,7 @@ function stripExtension(name) {
 // "Save As" picks up the file's real name — a blob: URL created from a
 // fetch() response can't carry that name at all.
 function fileLink(dirPath, name, label) {
-  const href = `${API_BASE}/library/file?path=${encodeURIComponent(`${dirPath}/${name}`)}`;
+  const href = `${API_BASE}/library/file/${encodeFilePath(`${dirPath}/${name}`)}`;
   return `<a href="${href}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
 }
 

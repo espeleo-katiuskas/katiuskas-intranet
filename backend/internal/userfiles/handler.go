@@ -67,10 +67,12 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // list the way, say, GET /library is. /file also accepts the session
 // cookie (ProtectAllowingCookie, see auth.RequireAuthFromHeaderOrCookie),
 // not just the bearer header, so it works as a plain URL a browser can
-// navigate to directly and still get the file's real name.
+// navigate to directly and still get the file's real name. Its own path
+// is a URL path segment, not a ?path= query parameter — same
+// {path...} wildcard shape as internal/library's own /file route.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/files", h.authenticator.Protect(h.list))
-	mux.Handle("GET /api/v1/users/{login}/files/file", h.authenticator.ProtectAllowingCookie(h.file))
+	mux.Handle("GET /api/v1/users/{login}/files/file/{path...}", h.authenticator.ProtectAllowingCookie(h.file))
 }
 
 // resolveAccess looks up the numeric id behind a {login} path segment
@@ -126,7 +128,7 @@ func (h *Handler) file(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	relPath := r.URL.Query().Get("path")
+	relPath := r.PathValue("path")
 	f, err := h.service.OpenFile(login, relPath)
 	switch {
 	case errors.Is(err, ErrNotFound):

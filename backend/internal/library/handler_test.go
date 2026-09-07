@@ -119,7 +119,7 @@ func TestHandlerFileServesContentInlineByDefault(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/library/file?path=Actas%2F2024-acta.md", token)
+	rec := doRequest(mux, "/api/v1/library/file/Actas/2024-acta.md", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -138,7 +138,7 @@ func TestHandlerFileDownloadSetsAttachmentDisposition(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/library/file?path=Estatutos.pdf&download=1", token)
+	rec := doRequest(mux, "/api/v1/library/file/Estatutos.pdf?download=1", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -151,7 +151,7 @@ func TestHandlerFileNotFound(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/library/file?path=nope.pdf", token)
+	rec := doRequest(mux, "/api/v1/library/file/nope.pdf", token)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}
@@ -161,7 +161,7 @@ func TestHandlerFileRejectsADirectoryPath(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequest(mux, "/api/v1/library/file?path=Actas", token)
+	rec := doRequest(mux, "/api/v1/library/file/Actas", token)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
 	}
@@ -169,7 +169,7 @@ func TestHandlerFileRejectsADirectoryPath(t *testing.T) {
 
 func TestHandlerFileRequiresAuthentication(t *testing.T) {
 	mux, _ := newTestServer(t)
-	if rec := doRequest(mux, "/api/v1/library/file?path=Estatutos.pdf", ""); rec.Code != http.StatusUnauthorized {
+	if rec := doRequest(mux, "/api/v1/library/file/Estatutos.pdf", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rec.Code)
 	}
 }
@@ -183,7 +183,7 @@ func TestHandlerFileAcceptsSessionCookie(t *testing.T) {
 	mux, authn := newTestServer(t)
 	token := testutil.TokenFor(authn, 1, "member")
 
-	rec := doRequestWithCookie(mux, "/api/v1/library/file?path=Estatutos.pdf", token)
+	rec := doRequestWithCookie(mux, "/api/v1/library/file/Estatutos.pdf", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 with a cookie-only request, got %d: %s", rec.Code, rec.Body.String())
 	}
