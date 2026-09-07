@@ -54,6 +54,55 @@ const contactButtonText = "Compartir mi contacto"
 // message that isn't its own registered email — see handleRecognizedChat.
 const emailPrompt = "Si quieres entrar en la intranet, envíame tu dirección de correo electrónico."
 
+// nonTextEmailReply is emailAttemptReply's answer to a message that
+// isn't text at all — a photo, sticker, voice note... Telegram never
+// sends a real text message with an empty body, so an empty Text always
+// means something that isn't text.
+const nonTextEmailReply = "No admito ese tipo de mensajes — tienes que enviarme solo texto, con tu dirección de correo electrónico."
+
+// onlyEmailReply is emailAttemptReply's answer to a message that
+// carries more than one word — the address on its own is what's
+// expected, not a sentence that happens to contain one.
+const onlyEmailReply = "Envíame solo tu dirección de correo electrónico, y nada más."
+
+// notAnEmailReplyFormat is emailAttemptReply's answer to a single word
+// that doesn't even look like an email address (no "@"). %s is that
+// word, repeated back so there's no doubt about what was rejected.
+const notAnEmailReplyFormat = "«%s» no es una dirección de correo electrónico. Envíame una dirección válida, como usuario@gmail.com."
+
+// unknownEmailReplyFormat is emailAttemptReply's answer to a single
+// word that does look like an email address but isn't one of this
+// account's own registered ones. %s is that address, repeated back so
+// the person can spot a typo themselves.
+const unknownEmailReplyFormat = "No tenemos apuntada la dirección «%s». Si crees que es un error, ponte en contacto con el club."
+
+// emailAttemptReply figures out what handleRecognizedChat should tell
+// an already-linked chat about their latest message, on the way to
+// matching one of user's own registered emails. Returns ("", true)
+// only for a genuine match; every other case — an attachment instead
+// of text, more than one word, something not shaped like an email at
+// all, or an email that just isn't this account's — gets its own
+// specific, actionable reply instead of the same generic emailPrompt
+// regardless of what actually went wrong.
+func emailAttemptReply(user users.User, text string) (reply string, matched bool) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return nonTextEmailReply, false
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) > 1 {
+		return onlyEmailReply, false
+	}
+	candidate := fields[0]
+	if !strings.Contains(candidate, "@") {
+		return fmt.Sprintf(notAnEmailReplyFormat, candidate), false
+	}
+	if emailMatchesUser(user, candidate) {
+		return "", true
+	}
+	return fmt.Sprintf(unknownEmailReplyFormat, candidate), false
+}
+
 // contactClubHint is appended to any reply telling someone the bot
 // can't help them right now — an unrecognized phone number, or being
 // linked but not actually eligible to sign in — so being told no
@@ -224,8 +273,9 @@ func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, u
 		}
 		return
 	}
-	if !emailMatchesUser(user, msg.Text) {
-		if err := b.client.SendMessage(ctx, msg.Chat.ID, emailPrompt); err != nil {
+	reply, matched := emailAttemptReply(user, msg.Text)
+	if !matched {
+		if err := b.client.SendMessage(ctx, msg.Chat.ID, reply); err != nil {
 			slog.Error("telegram bot: send email prompt", "error", err)
 		}
 		return

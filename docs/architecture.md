@@ -476,7 +476,16 @@ ponte en contacto con el club para comprobar tu situación"). Si lo cumple,
 entrar en la intranet, envíame tu dirección de correo electrónico") a cualquier mensaje
 que no sea el correo registrado de esa cuenta (`emailMatchesUser`, comparado sin
 distinguir mayúsculas/minúsculas contra el mismo formato de varios correos separados por
-espacios que usa `FindActiveByEmailAndPhone`); solo cuando coincide, borra ese mensaje del
+espacios que usa `FindActiveByEmailAndPhone`) — pero `emailAttemptReply` da una respuesta
+concreta según *por qué* no coincidió, en vez de repetir siempre ese mismo aviso genérico:
+`nonTextEmailReply` si lo que llega no es texto (un `Text` vacío siempre significa eso,
+ya que Telegram nunca manda un mensaje de texto de verdad con el cuerpo vacío),
+`onlyEmailReply` si trae más de una palabra, `notAnEmailReplyFormat` si es una sola
+palabra sin "@" (repitiéndola en la respuesta), y `unknownEmailReplyFormat` si tiene
+forma de correo pero no es ninguno de los registrados en esa cuenta (repitiendo también
+la dirección, y sugiriendo contactar con el club si cree que es un error) — solo una
+coincidencia exacta de una sola palabra se salta todo esto. Solo cuando coincide, borra
+ese mensaje del
 chat con `Client.DeleteMessage` —la API de bots de Telegram permite borrar un mensaje que
 el propio bot ha recibido en un chat privado— para que no quede el correo a la vista de
 quien pueda acceder después al móvil o la sesión (best-effort: si el borrado falla, por

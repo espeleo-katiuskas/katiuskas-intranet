@@ -387,10 +387,18 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   comprobar tu situación"). Otherwise, `Bot.handleRecognizedChat` asks a first factor be
   proven a second time: it replies with `emailPrompt` ("si quieres entrar en la intranet,
   envíame tu dirección de correo electrónico") to any message that isn't the account's
-  own registered email
-  (`emailMatchesUser`, checked case-insensitively against the same space-separated
-  multi-email convention `FindActiveByEmailAndPhone` uses); only once that matches does it
-  call `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
+  own registered email (`emailMatchesUser`, checked case-insensitively against the same
+  space-separated multi-email convention `FindActiveByEmailAndPhone` uses) — but
+  `emailAttemptReply` gives a specific, actionable reply for *why* a given message didn't
+  match instead of that same generic prompt every time: `nonTextEmailReply` for an
+  attachment instead of text (an empty `Text` always means something that isn't text —
+  Telegram never sends a real text message with an empty body), `onlyEmailReply` for more
+  than one word, `notAnEmailReplyFormat` for a single word with no "@" at all (repeating
+  the word back), and `unknownEmailReplyFormat` for something shaped like an email that
+  just isn't one of this account's own (repeating the address back, plus a "contact the
+  club if you think this is wrong" suggestion) — only a genuine single-word match skips
+  all of these and proceeds. Once it matches, it
+  calls `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
   private chat — to scrub that email out of the chat history for whoever might get hold of
   the phone/session afterward (best-effort: a failed delete, e.g. an old message past
   Telegram's 48h window, still lets `magicLinkIssuer.IssueMagicLinkForTelegramUser` go

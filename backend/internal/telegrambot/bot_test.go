@@ -3,6 +3,7 @@ package telegrambot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -132,25 +133,38 @@ func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
 	}
 }
 
-// TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst is the security
-// regression test for the second factor: an already-recognized chat
-// doesn't get a sign-in link just for sending *any* message — merely
-// having the phone/session open used to be enough, which is a real step
-// down from the web flow (needs phone *and* email). A message that
-// isn't the account's own registered email gets the prompt instead, and
-// nothing is issued or deleted.
-func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
+// newLinkedEligibleUser is the common setup for the emailAttemptReply
+// test cases below: an already-linked chat belonging to someone
+// actually eligible to sign in (see canUseTelegramLogin), so every
+// difference in the bot's reply comes purely from what they sent, not
+// from the eligibility gate.
+func newLinkedEligibleUser(t *testing.T, chatID int64) (*users.Service, users.User) {
+	t.Helper()
 	usersService := newUsersService(t)
+	email := testutil.UniqueEmail(t)
 	created, err := usersService.Create(context.Background(), users.CreateInput{
-		FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t)), Phone: strPtr("611222333"),
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
 		RoleNames: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := usersService.SetTelegramChatID(context.Background(), created.ID, 555); err != nil {
+	if err := usersService.SetTelegramChatID(context.Background(), created.ID, chatID); err != nil {
 		t.Fatalf("SetTelegramChatID: %v", err)
 	}
+	return usersService, created
+}
+
+// TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst is the security
+// regression test for the second factor: an already-recognized chat
+// doesn't get a sign-in link just for sending *any* message — merely
+// having the phone/session open used to be enough, which is a real step
+// down from the web flow (needs phone *and* email). A message that
+// isn't the account's own registered email gets a reply instead, and
+// nothing is issued or deleted — this covers the "more than one word"
+// case specifically (see the sibling tests below for the others).
+func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
+	usersService, _ := newLinkedEligibleUser(t, 555)
 
 	client := &fakeClient{}
 	notifier := &fakeNotifier{}
@@ -161,8 +175,8 @@ func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: "hola de nuevo"},
 	})
 
-	if len(client.sent) != 1 || client.sent[0] != emailPrompt {
-		t.Errorf("expected the email prompt, got %v", client.sent)
+	if len(client.sent) != 1 || client.sent[0] != onlyEmailReply {
+		t.Errorf("expected onlyEmailReply for a multi-word message, got %v", client.sent)
 	}
 	if len(client.sentContacts) != 0 {
 		t.Errorf("expected no contact-share menu for an already-linked chat, got %v", client.sentContacts)
@@ -174,6 +188,58 @@ func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
 	defer issuer.mu.Unlock()
 	if len(issuer.calledFor) != 0 {
 		t.Errorf("expected no magic link issued yet, got %v", issuer.calledFor)
+	}
+}
+
+// TestHandleRecognizedChatRejectsNonTextMessages covers an attachment
+// (photo, sticker, voice note...) sent while the bot is waiting on an
+// email — Telegram never sends a real text message with an empty body,
+// so an empty Text always means something that isn't text.
+func TestHandleRecognizedChatRejectsNonTextMessages(t *testing.T) {
+	usersService, _ := newLinkedEligibleUser(t, 555)
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: ""},
+	})
+
+	if len(client.sent) != 1 || client.sent[0] != nonTextEmailReply {
+		t.Errorf("expected nonTextEmailReply, got %v", client.sent)
+	}
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 0 {
+		t.Errorf("expected no magic link issued, got %v", issuer.calledFor)
+	}
+}
+
+// TestHandleRecognizedChatRejectsANonEmailWord covers a single word
+// that doesn't even look like an email address (no "@") — the reply
+// repeats it back so there's no doubt about what was rejected.
+func TestHandleRecognizedChatRejectsANonEmailWord(t *testing.T) {
+	usersService, _ := newLinkedEligibleUser(t, 555)
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: "hola"},
+	})
+
+	want := fmt.Sprintf(notAnEmailReplyFormat, "hola")
+	if len(client.sent) != 1 || client.sent[0] != want {
+		t.Errorf("expected %q, got %v", want, client.sent)
+	}
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 0 {
+		t.Errorf("expected no magic link issued, got %v", issuer.calledFor)
 	}
 }
 
@@ -251,8 +317,9 @@ func TestHandleRejectsSomeoneElsesEmail(t *testing.T) {
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: someoneElseEmail},
 	})
 
-	if len(client.sent) != 1 || client.sent[0] != emailPrompt {
-		t.Errorf("expected the email prompt (someone else's email must not match), got %v", client.sent)
+	want := fmt.Sprintf(unknownEmailReplyFormat, someoneElseEmail)
+	if len(client.sent) != 1 || client.sent[0] != want {
+		t.Errorf("expected the unknown-email reply (someone else's email must not match), got %v", client.sent)
 	}
 	issuer.mu.Lock()
 	defer issuer.mu.Unlock()
