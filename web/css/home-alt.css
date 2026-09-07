@@ -274,23 +274,26 @@
   margin: 2px 0 0;
 }
 
-.alt-actas-list {
+/* Shared by every plain "list of download links" side-column card
+   (Documentos, Actas asambleas, Memorias de actividades) — same look,
+   nothing card-specific about it. */
+.alt-link-list {
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
 }
 
-.alt-actas-list li {
+.alt-link-list li {
   margin-bottom: 8px;
 }
 
-.alt-actas-list a {
+.alt-link-list a {
   color: var(--alt-link);
   font-size: 0.85rem;
   text-decoration: none;
 }
 
-.alt-actas-list a:hover {
+.alt-link-list a:hover {
   text-decoration: underline;
 }
 
