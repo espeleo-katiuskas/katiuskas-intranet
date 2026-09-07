@@ -152,6 +152,21 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	return it, tx.Commit(ctx)
 }
 
+// GetItem looks up a single item by id — used to name it in a mutation
+// notification (see Handler.createMovement/returnMovement), since a
+// Movement only carries an ItemID, not the item's own brand/model/code.
+func (r *Repository) GetItem(ctx context.Context, id int64) (Item, error) {
+	var it Item
+	err := scanItem(r.pool.QueryRow(ctx, `
+		SELECT `+itemSelect+`
+		WHERE i.id = $1
+	`, id), &it)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return it, ErrNotFound
+	}
+	return it, err
+}
+
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+itemSelect+`

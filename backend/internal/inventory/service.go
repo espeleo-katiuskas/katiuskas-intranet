@@ -17,6 +17,10 @@ func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, err
 	return s.repo.CreateItem(ctx, in)
 }
 
+func (s *Service) GetItem(ctx context.Context, id int64) (Item, error) {
+	return s.repo.GetItem(ctx, id)
+}
+
 func (s *Service) ListItems(ctx context.Context) ([]Item, error) {
 	return s.repo.ListItems(ctx)
 }

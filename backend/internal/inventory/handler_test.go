@@ -2,11 +2,15 @@ package inventory_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -20,6 +24,16 @@ import (
 )
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx) {
+	mux, resolver, tx, _, _ := newTestServerWithServices(t, nil)
+	return mux, resolver, tx
+}
+
+// newTestServerWithServices is newTestServer, but also returns the
+// inventory.Service and users.Service backing it (for tests that need
+// to create an item/movement directly, or resolve a login), and wires
+// notifier — pass nil (like newTestServer does) when a test doesn't
+// care about mutation notifications.
+func newTestServerWithServices(t *testing.T, notifier httpapi.MutationNotifier) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *inventory.Service, *users.Service) {
 	tx := testutil.NewTx(t)
 	service := inventory.NewService(inventory.NewRepository(tx))
 	rolesService := roles.NewService(roles.NewRepository(tx))
@@ -29,8 +43,66 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	inventory.NewHandler(service, authenticator, usersService).RegisterRoutes(mux)
-	return mux, resolver, tx
+	inventory.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
+	return mux, resolver, tx, service, usersService
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then).
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
+
+// waitForNthMessage polls until at least n+1 messages have arrived and
+// returns the nth (0-indexed) — for a test flow that triggers more than
+// one notification (creating an item, then a movement against it), so
+// each assertion can target the specific message it cares about instead
+// of guessing at delivery order between two independent goroutines.
+func (f *fakeNotifier) waitForNthMessage(t *testing.T, n int) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > n {
+			msg := f.sent[n]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for mutation notification #%d", n)
+	return ""
 }
 
 func tokenFor(t *testing.T, resolver testutil.FakeResolver, id int64, roleNames ...string) string {
@@ -663,5 +735,111 @@ func TestHandlerListMovementsByActivity(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Quantity != 3 {
 		t.Fatalf("expected only this activity's own loan, got %+v", list)
+	}
+}
+
+func TestHandlerCreateItemNotifiesTelegram(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, boardUser.Login) {
+		t.Errorf("expected the notification to name the actor %q, got %q", boardUser.Login, msg)
+	}
+	if !strings.Contains(msg, "Casco") {
+		t.Errorf("expected the notification to name the item, got %q", msg)
+	}
+}
+
+// TestHandlerCreateMovementNotifiesTelegramWithBorrower covers a rental
+// (which always has a recipient), since it exercises both the item
+// label and the borrower login in the same message.
+func TestHandlerCreateMovementNotifiesTelegramWithBorrower(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	borrower := testutil.InsertUser(t, tx, "")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	notifier.waitForMessage(t) // the createItem notification, checked in its own test
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForNthMessage(t, 1)
+	if !strings.Contains(msg, boardUser.Login) {
+		t.Errorf("expected the notification to name the actor %q, got %q", boardUser.Login, msg)
+	}
+	if !strings.Contains(msg, borrower.Login) {
+		t.Errorf("expected the notification to name the borrower %q, got %q", borrower.Login, msg)
+	}
+	if !strings.Contains(msg, "alquiler") || !strings.Contains(msg, "Casco") {
+		t.Errorf("expected the notification to name the movement kind and item, got %q", msg)
+	}
+}
+
+func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
+	boardUser := testutil.InsertUser(t, tx, "")
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	borrower := testutil.InsertUser(t, tx, "")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
+	}
+	var rental inventory.Movement
+	if err := json.Unmarshal(rec.Body.Bytes(), &rental); err != nil {
+		t.Fatalf("decode rental: %v", err)
+	}
+	// #0 and #1 are the createItem/createMovement notifications, each
+	// covered by their own test.
+	notifier.waitForNthMessage(t, 1)
+
+	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", rental.ID)
+	if rec := doRequest(mux, http.MethodPatch, returnPath, boardToken, nil); rec.Code != http.StatusOK {
+		t.Fatalf("return rental: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForNthMessage(t, 2)
+	if !strings.Contains(msg, boardUser.Login) {
+		t.Errorf("expected the notification to name the actor %q, got %q", boardUser.Login, msg)
+	}
+	if !strings.Contains(msg, borrower.Login) {
+		t.Errorf("expected the notification to name the borrower %q, got %q", borrower.Login, msg)
+	}
+	if !strings.Contains(msg, "devolución") || !strings.Contains(msg, "Casco") {
+		t.Errorf("expected the notification to name the action and item, got %q", msg)
 	}
 }

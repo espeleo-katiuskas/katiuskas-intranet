@@ -138,6 +138,14 @@ func (s *Service) get(ctx context.Context, userID, tokenID int64) (Token, error)
 	return t, nil
 }
 
+// Get looks up a single token, confirming it belongs to userID — the
+// exported counterpart to get, for callers outside this package that
+// need to know a token's current state before changing it (see
+// Handler.updateExpiry/revoke's own mutation notifications).
+func (s *Service) Get(ctx context.Context, userID, tokenID int64) (Token, error) {
+	return s.get(ctx, userID, tokenID)
+}
+
 func (s *Service) UpdateExpiry(ctx context.Context, userID, tokenID int64, expiresAt time.Time) error {
 	if _, err := s.get(ctx, userID, tokenID); err != nil {
 		return err

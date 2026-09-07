@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
@@ -21,6 +24,16 @@ import (
 )
 
 func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *tokens.Service, pgx.Tx) {
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, nil)
+	return mux, resolver, service, tx
+}
+
+// newHandlerTestServerWithNotifier is newHandlerTestServer, but also
+// wires notifier and returns the users.Service backing it (so a test
+// can create an actor with a real, resolvable login) — pass nil (like
+// newHandlerTestServer does) when a test doesn't care about mutation
+// notifications.
+func newHandlerTestServerWithNotifier(t *testing.T, notifier httpapi.MutationNotifier) (*http.ServeMux, testutil.FakeResolver, *tokens.Service, pgx.Tx, *users.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
@@ -30,8 +43,44 @@ func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, 
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	tokens.NewHandler(service, authenticator, usersService, time.Hour).RegisterRoutes(mux)
-	return mux, resolver, service, tx
+	tokens.NewHandler(service, authenticator, usersService, time.Hour, notifier).RegisterRoutes(mux)
+	return mux, resolver, service, tx, usersService
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then).
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {
@@ -249,5 +298,79 @@ func TestHandlerRejectsTokenIDBelongingToAnotherUser(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", someoneElse.Login, tokenID)
 	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for a token id under the wrong user, got %d", rec.Code)
+	}
+}
+
+func TestHandlerImpersonateNotifiesTelegram(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, resolver, _, tx, _ := newHandlerTestServerWithNotifier(t, notifier)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	if err := rolesService.AssignByName(ctx, target.ID, []string{"admin"}); err != nil {
+		t.Fatalf("assign admin to target: %v", err)
+	}
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/impersonate", target.Login), adminToken, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor %q and target %q, got %q", admin.Login, target.Login, msg)
+	}
+}
+
+func TestHandlerUpdateExpiryNotifiesTelegramWithOldAndNewExpiry(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, notifier)
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(context.Background(), target.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	list, _ := service.ListForUser(context.Background(), target.ID)
+	tokenID := list[0].ID
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	newExpiry := time.Now().Add(90 * 24 * time.Hour).UTC().Truncate(time.Second)
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken,
+		map[string]string{"expires_at": newExpiry.Format(time.RFC3339)})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor %q and target %q, got %q", admin.Login, target.Login, msg)
+	}
+	if !strings.Contains(msg, newExpiry.Format("2006-01-02")) {
+		t.Errorf("expected the notification to show the new expiry, got %q", msg)
+	}
+}
+
+func TestHandlerRevokeNotifiesTelegram(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, notifier)
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(context.Background(), target.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	list, _ := service.ListForUser(context.Background(), target.ID)
+	tokenID := list[0].ID
+
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor %q and target %q, got %q", admin.Login, target.Login, msg)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,14 +13,17 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
-// UserLookup resolves a login into the numeric id it names. This
+// UserLookup resolves between a login and the numeric id it names. This
 // package's own routes are nested under /users/{login}/..., but its
 // tables are keyed by that person's numeric id, so every handler needs
 // this translation before it can call into Service — users.Service
 // satisfies this structurally (see main.go's wiring), without tokens
-// having to import that package.
+// having to import that package. LoginForUserID is only needed to name
+// the *actor* in a mutation notification (see actorLogin) — the
+// target's own login is always already in scope from the URL itself.
 type UserLookup interface {
 	UserIDForLogin(ctx context.Context, login string) (int64, error)
+	LoginForUserID(ctx context.Context, id int64) (string, error)
 }
 
 type Handler struct {
@@ -27,10 +31,26 @@ type Handler struct {
 	authenticator         *auth.Authenticator
 	users                 UserLookup
 	impersonationTokenTTL time.Duration
+	notifier              httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, impersonationTokenTTL time.Duration) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, impersonationTokenTTL: impersonationTokenTTL}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, impersonationTokenTTL time.Duration, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, impersonationTokenTTL: impersonationTokenTTL, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — every write endpoint in
+// this handler needs it, so it's pulled out rather than repeated at
+// each call site. Falls back to a placeholder rather than failing the
+// whole request if the lookup itself errors, since a notification is
+// never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -76,6 +96,8 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not start impersonation")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha iniciado una suplantación de %s.",
+		h.actorLogin(r.Context()), r.PathValue("login")))
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]string{"token": raw})
 }
 
@@ -109,6 +131,12 @@ func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetched before applying anything, purely to describe the old
+	// expiry in the mutation notification below — a failure here isn't
+	// reason enough to fail the actual edit, so it's only ever
+	// consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), userID, tokenID)
+
 	err := h.service.UpdateExpiry(r.Context(), userID, tokenID, body.ExpiresAt)
 	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
@@ -118,6 +146,11 @@ func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update token")
 		return
 	}
+	if beforeErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado la caducidad de un token de %s: %s → %s.",
+			h.actorLogin(r.Context()), before.UserLogin,
+			before.ExpiresAt.Format("2006-01-02 15:04"), body.ExpiresAt.Format("2006-01-02 15:04")))
+	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -126,6 +159,10 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Fetched before revoking, purely so the mutation notification below
+	// can still name whose token it was.
+	target, targetErr := h.service.Get(r.Context(), userID, tokenID)
+
 	err := h.service.Revoke(r.Context(), userID, tokenID)
 	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
@@ -134,6 +171,10 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not revoke token")
 		return
+	}
+	if targetErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha revocado un token de %s.",
+			h.actorLogin(r.Context()), target.UserLogin))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

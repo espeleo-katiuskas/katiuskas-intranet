@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -59,10 +60,70 @@ type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — every write endpoint in
+// this handler needs it, so it's pulled out rather than repeated at
+// each call site. Falls back to a placeholder rather than failing the
+// whole request if the lookup itself errors, since a notification is
+// never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
+}
+
+// itemLabel picks whatever actually identifies item for a mutation
+// notification — rope/bag are always brand+model (both required for
+// those types), gear falls back to its description when brand/model
+// are absent (both optional there), and code is the last resort so a
+// notification is never just empty.
+func itemLabel(item Item) string {
+	if item.Brand != nil && item.Model != nil {
+		return *item.Brand + " " + *item.Model
+	}
+	if item.Description != nil && *item.Description != "" {
+		return *item.Description
+	}
+	if item.Code != nil {
+		return *item.Code
+	}
+	return fmt.Sprintf("item#%d", item.ID)
+}
+
+// movementVerb names what a movement type does, in Spanish, for the
+// mutation notification below — see MovementType's own doc comment for
+// what each one actually means to an item's computed quantities.
+func movementVerb(t MovementType) string {
+	switch t {
+	case MovementLoan:
+		return "préstamo"
+	case MovementRental:
+		return "alquiler"
+	case MovementSale:
+		return "venta"
+	case MovementAcquisition:
+		return "adquisición"
+	case MovementLoss:
+		return "pérdida"
+	case MovementAbandonment:
+		return "abandono"
+	case MovementRetirement:
+		return "retirada"
+	case MovementReturn:
+		return "devolución"
+	default:
+		return string(t)
+	}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -164,6 +225,8 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create item")
 		return
 	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el material «%s» (%s, x%d).",
+		h.actorLogin(r.Context()), itemLabel(item), item.Type, item.TotalQuantity))
 	httpapi.WriteJSON(w, http.StatusCreated, item)
 }
 
@@ -326,6 +389,14 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 	if recordedByLogin, err := h.users.LoginForUserID(r.Context(), recordedBy); err == nil {
 		m.RecordedByLogin = &recordedByLogin
 	}
+	if item, itemErr := h.service.GetItem(r.Context(), m.ItemID); itemErr == nil {
+		text := fmt.Sprintf("🆕 %s ha registrado un %s de «%s» (x%d)",
+			h.actorLogin(r.Context()), movementVerb(m.Type), itemLabel(item), m.Quantity)
+		if m.UserLogin != nil {
+			text += fmt.Sprintf(" a %s", *m.UserLogin)
+		}
+		httpapi.NotifyAsync(h.notifier, text+".")
+	}
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
@@ -356,6 +427,14 @@ func (h *Handler) returnMovement(w http.ResponseWriter, r *http.Request) {
 		if login, err := h.users.LoginForUserID(r.Context(), *m.RecordedBy); err == nil {
 			m.RecordedByLogin = &login
 		}
+	}
+	if item, itemErr := h.service.GetItem(r.Context(), m.ItemID); itemErr == nil {
+		text := fmt.Sprintf("✏️ %s ha registrado la devolución del alquiler de «%s»",
+			h.actorLogin(r.Context()), itemLabel(item))
+		if m.UserLogin != nil {
+			text += fmt.Sprintf(" (alquilado a %s)", *m.UserLogin)
+		}
+		httpapi.NotifyAsync(h.notifier, text+".")
 	}
 	httpapi.WriteJSON(w, http.StatusOK, m)
 }
