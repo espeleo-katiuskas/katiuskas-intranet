@@ -411,12 +411,23 @@ dispara: los
 logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), el mismo
 enlace del magic-link (y, según el caso, el código — ver más arriba) también por DM de
 Telegram a quien tenga la cuenta
-vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso de
-cada llamada al API que sea POST/PUT/PATCH/DELETE (`httpapi.NotifyMutatingCalls`, en el
-propio router — no un wrapper de la base de datos: la primera versión de esto avisaba de
-cada cambio en la base de datos en vez de cada llamada, y como tocar la fecha del último
-uso de un token es en sí un UPDATE, avisaba en cada petición autenticada, no solo en las
-que de verdad cambiaban algo), y —el único
+vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso
+específico por cada acción que crea, edita o borra algo (una persona, un rol, una
+membresía, una licencia, una actividad, material, un cargo de la junta, un recurso de la
+memoria de una actividad, un token) — no un aviso genérico de "hubo una llamada
+POST/PUT/PATCH/DELETE" como en la primera versión de esto, sino un mensaje propio por
+paquete que dice quién lo hizo y, en una edición, exactamente qué cambió campo a campo
+(`httpapi.NotifyAsync`/`DiffFields`, en `internal/httpapi/audit.go`: `DiffFields` compara
+solo los campos que ese endpoint puede tocar de verdad —nunca todos los del struct, para
+que un campo calculado aparte, como la lista de roles, no aparezca como un cambio que en
+realidad nunca ocurrió— y devuelve una línea "campo: antes → después" por cada uno que de
+verdad difiera). Cada paquete con rutas de escritura recibe su propio
+`httpapi.MutationNotifier` desde `cmd/api/main.go`, sin la comprobación de "no molestar
+en cada petición" que sí necesitaba la versión anterior de esto (avisaba de *cada*
+petición POST/PUT/PATCH/DELETE, incluido un simple toque de `last_used_at` en un token,
+que es en sí un UPDATE — de ahí que la primera versión de todo esto, un wrapper a nivel
+de base de datos en vez del router, avisara de cada petición autenticada aunque no
+cambiara nada de verdad). Y —el único
 que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
 si alguien desconocido escribe al bot, le pide que comparta su contacto (con
 `is_persistent: true` en el teclado personalizado que ofrece el botón, para que el

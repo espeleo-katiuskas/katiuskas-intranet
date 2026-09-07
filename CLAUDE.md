@@ -334,33 +334,50 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   whichever `chat_id` that specific person has — a second dependency alongside
   `notifier`, wired from the same `botClient` `cmd/api/main.go` also gives
   `internal/telegrambot`, and `nil` (not gated behind a separate config check) whenever
-  Telegram isn't configured at all, the same nil-disables-the-feature shape
-  `httpapi.NotifyMutatingCalls` uses. The chat id lookup runs synchronously on the
+  Telegram isn't configured at all, disabling this DM outright rather than falling
+  through to some no-op default. The chat id lookup runs synchronously on the
   request's own context, same reasoning as `notifyLogin`; only the network call itself is
   deferred to a goroutine.
-- `httpapi.NotifyMutatingCalls` (`internal/httpapi/notify.go`) sends
-  "[API] `<method>` `<path>` -> `<status>`" for every `POST`/`PUT`/`PATCH`/`DELETE`
-  request, once it completes, regardless of status — a failed write is still worth
-  knowing about. Sits between `RequestLogger` and the mux (`httpapi.NewRouter`'s second
-  parameter, `MutationNotifier` — a local one-method interface `telegram.Sender`
-  satisfies structurally, so `httpapi` never imports `internal/telegram`). This replaced
-  an earlier attempt at a database-level `db.NotifyingPGX` wrapper: it fired on every
-  request regardless of method, since `tokens.Repository` touches `last_used_at` on every
-  authenticated call — an `UPDATE tokens` the club never actually cared to see, and by far
-  the most frequent mutation in the app. Reacting to the HTTP method instead means only
-  calls that *intend* to change something get reported, and doing it in `httpapi` rather
-  than by wrapping `db.PGX` means nothing about how a handler talks to Postgres matters
-  here at all. `cmd/api/main.go` passes `nil` for `MutationNotifier` unless
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` are both set — a `nil` notifier disables the
-  middleware outright rather than falling through to `NoopSender`'s own info log on every
-  write, which would still be too noisy per call.
+- `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
+  every resource package's own mutation notifications are built from. `NotifyAsync` is
+  the fire-and-forget goroutine/timeout dance every Telegram send in this app already
+  used, pulled out once so nobody duplicates it. `DiffFields(before, after, fields...)`
+  reflects over a *named* subset of a struct's fields — never every field on it, since a
+  derived/computed one (a computed role list, a membership date recalculated elsewhere)
+  must never show up as a spurious "change" just because it was recomputed at a slightly
+  different moment than "before" — comparing the pair and returning one "field: old →
+  new" line per field that actually differs (a nil pointer formats as `(vacío)`, a date
+  as a plain `YYYY-MM-DD`). Every resource package with a mutating route (`users`,
+  `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
+  `activityresources`) takes an `httpapi.MutationNotifier` in its own `NewHandler` —
+  wired to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't
+  spam every single request" check the way the predecessor of this whole thing needed,
+  since one message per meaningful action isn't noisy the way one per every mutating
+  request (a routine token touch included) was — and sends its own specific message once
+  a create/update/delete actually succeeds: who did it (`actorLogin`, resolved from the
+  session's own id through that package's existing `UserLookup`, falling back to
+  `user#<id>` rather than failing the whole request if the lookup itself errors) and what
+  changed. An `update` handler fetches the record via `Service.Get` *before* applying the
+  patch and diffs it against the result using `auditableFields` — a package-level var
+  whose names exactly match that endpoint's own `UpdateInput` — so nothing that endpoint
+  can't actually touch can appear as a spurious change; an edit whose diff comes back
+  empty (every field resent unchanged) sends nothing, rather than an "edited" message
+  with nothing in it. A `delete` handler fetches the target the same way, purely so it
+  can still be named once it's gone. This whole mechanism replaced an earlier
+  `httpapi.NotifyMutatingCalls` middleware that sent a blanket "[API] `<method>` `<path>`
+  -> `<status>`" for literally every write regardless of what it actually changed — every
+  route it covered now has a strictly more informative replacement, except `authapi`'s
+  own session-lifecycle routes (magic-link request/consume, logout, impersonate/exit),
+  which were never business-data mutations and already have their own dedicated
+  notifications elsewhere in this list.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather
   than only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook —
   no public HTTPS endpoint to expose or coordinate with a reverse proxy, works the same
   behind NAT or with no domain at all) in a loop started with `go bot.Run(ctx)` from
-  `cmd/api/main.go`, gated on the same two env vars as `httpapi.NotifyMutatingCalls` (every linking
+  `cmd/api/main.go`, gated on the same `telegramConfigured` flag (both
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` set) as `telegramClient` above — every linking
   attempt has to reach the log channel, so a bot with no channel configured can't do its
-  job anyway). `users.Repository.UserIDForTelegramChatID` tells apart a chat this
+  job anyway. `users.Repository.UserIDForTelegramChatID` tells apart a chat this
   doesn't recognize yet — every other message from one gets a greeting plus a "share your
   contact" keyboard button (`Client.SendMessageRequestingContact`, sent with
   `is_persistent: true` so the client shows that keyboard open by default instead of
@@ -446,8 +463,8 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   resend that same phone number for the same answer — unlike the rejection case above,
   where the button staying up is the point. Either way, `Bot.notifyChannel` reports the
   attempt to the log channel — who sent it,
-  the phone number, and whether it matched — the same "tell the club everything, matched
-  or not" spirit as `httpapi.NotifyMutatingCalls`. `users.User.TelegramChatID` is deliberately left
+  the phone number, and whether it matched — telling the club about every attempt, not
+  just successful ones. `users.User.TelegramChatID` is deliberately left
   out of `userSelect`/`scanUser` (the query every other `users` method uses) since
   nothing else needs it yet — checking or reading it always goes through
   `UserIDForTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
@@ -462,10 +479,10 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it
   (bounded to 10s, same timeout every other notification uses for its own goroutine)
-  costs nothing a user could ever notice. Still unconditional rather than gated like
-  `httpapi.NotifyMutatingCalls`/the bot — a restart is rare enough that falling through
-  to `NoopSender`'s own info log when Telegram isn't configured is no noisier than
-  logging it directly would've been anyway.
+  costs nothing a user could ever notice. Still unconditional rather than gated like the
+  bot above (which genuinely can't do anything useful without a channel to report to) —
+  a restart is rare enough that falling through to `NoopSender`'s own info log when
+  Telegram isn't configured is no noisier than logging it directly would've been anyway.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
