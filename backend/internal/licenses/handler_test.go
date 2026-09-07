@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -27,8 +30,71 @@ func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, 
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	licenses.NewHandler(licensesService, authenticator, usersService).RegisterRoutes(mux)
+	licenses.NewHandler(licensesService, authenticator, usersService, nil).RegisterRoutes(mux)
 	return mux, resolver, membershipsService, tx
+}
+
+// fakeNotifier stands in for httpapi.MutationNotifier so tests can
+// check what a mutation notification actually said, without a real
+// Telegram call.
+type fakeNotifier struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (f *fakeNotifier) Send(_ context.Context, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, text)
+	return nil
+}
+
+// reset discards whatever's already been recorded — used between a
+// test's setup calls (which fire their own notifications) and the
+// actual action under test, so waitForMessage picks up that action's
+// own message rather than an earlier setup one.
+func (f *fakeNotifier) reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = nil
+}
+
+// waitForMessage polls briefly for NotifyAsync's own goroutine to have
+// delivered something, rather than asserting immediately after the
+// request returns (the notification is fire-and-forget, so it can
+// still be in flight by then).
+func (f *fakeNotifier) waitForMessage(t *testing.T) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		if len(f.sent) > 0 {
+			msg := f.sent[0]
+			f.mu.Unlock()
+			return msg
+		}
+		f.mu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("timed out waiting for a mutation notification")
+	return ""
+}
+
+// newHandlerTestServerWithNotifier is newHandlerTestServer, but also
+// wires a fakeNotifier so tests can assert on mutation-notification
+// content.
+func newHandlerTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *memberships.Service, pgx.Tx, *fakeNotifier) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	notifier := &fakeNotifier{}
+
+	mux := http.NewServeMux()
+	licenses.NewHandler(licensesService, authenticator, usersService, notifier).RegisterRoutes(mux)
+	return mux, resolver, membershipsService, tx, notifier
 }
 
 func doRequest(mux *http.ServeMux, method, path, token string, body any) *httptest.ResponseRecorder {
@@ -326,5 +392,132 @@ func TestHandlerListByUserSelfVersusOthers(t *testing.T) {
 	boardToken := testutil.TokenFor(resolver, 2, "board")
 	if rec := doRequest(mux, http.MethodGet, path, boardToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected board to view anyone's licenses, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateNotifiesTelegramWithActorAndTypeAndTarget(t *testing.T) {
+	mux, resolver, membershipsService, tx, notifier := newHandlerTestServerWithNotifier(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "A BASICA") {
+		t.Errorf("expected the notification to name the license type, got %q", msg)
+	}
+}
+
+// TestHandlerUpdateNotifiesTelegramWithFieldDiff covers the core of the
+// feature: seeing exactly what changed (here, the issued_date), not
+// just that something did.
+func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
+	mux, resolver, membershipsService, tx, notifier := newHandlerTestServerWithNotifier(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+	var created licenses.License
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // the create notification from setup above
+	notifier.reset()
+
+	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
+	rec := doRequest(mux, http.MethodPatch, path, adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-06-01"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "IssuedDate: 2026-01-01 → 2026-06-01") {
+		t.Errorf("expected the notification to show the issued_date change, got %q", msg)
+	}
+}
+
+func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
+	mux, resolver, membershipsService, tx, notifier := newHandlerTestServerWithNotifier(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+	var created licenses.License
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // the create notification from setup above
+	notifier.reset()
+
+	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
+	rec := doRequest(mux, http.MethodPatch, path, adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 0 {
+		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
+	}
+}
+
+func TestHandlerDeleteNotifiesTelegramWithActorAndTarget(t *testing.T) {
+	mux, resolver, membershipsService, tx, notifier := newHandlerTestServerWithNotifier(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+	var created licenses.License
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // the create notification from setup above
+	notifier.reset()
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/licenses/%d", created.ID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
 	}
 }

@@ -111,6 +111,29 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Lice
 	return l, nil
 }
 
+// GetByID returns a single license by id, joined with its type name the
+// same way ListByUser is — used by Handler's own mutation-notification
+// before/after diff on Update and to name what's being removed on
+// Delete, not by any route of its own.
+func (r *Repository) GetByID(ctx context.Context, id int64) (License, error) {
+	var l License
+	var name string
+	err := r.pool.QueryRow(ctx, `
+		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.created_at
+		FROM licenses l JOIN license_types lt ON lt.id = l.license_type_id
+		WHERE l.id = $1
+	`, id).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return l, ErrNotFound
+	}
+	if err != nil {
+		return l, err
+	}
+	l.Type = displayType(name, l.OtherDetail)
+	l.ValidUntil = validUntil(l.IssuedDate)
+	return l, nil
+}
+
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM licenses WHERE id = $1`, id)
 	if err != nil {

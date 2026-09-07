@@ -23,8 +23,8 @@ type LicenseType struct {
 }
 
 type License struct {
-	ID     int64  `json:"id"`
-	UserID int64  `json:"-"`
+	ID     int64 `json:"id"`
+	UserID int64 `json:"-"`
 	// UserLogin is filled in by the handler, not this package's queries:
 	// every route here is either scoped under a known /users/{login}, or
 	// resolves the owner separately after the fact (see

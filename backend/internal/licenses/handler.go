@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -27,10 +29,25 @@ type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — see users.Handler's own
+// copy of this same helper. Falls back to a placeholder rather than
+// failing the whole request if the lookup itself errors, since a
+// notification is never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 // POST/PATCH/DELETE are admin-only: board can see everyone's licenses
@@ -135,6 +152,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.UserLogin = login
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha asignado la licencia «%s» a %s (emitida el %s).",
+		h.actorLogin(r.Context()), l.Type, login, l.IssuedDate.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, l)
 }
 
@@ -163,6 +182,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below (see auditableFields)
+	// — a failure here isn't reason enough to fail the actual edit, so
+	// it's only ever consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), id)
+
 	l, err := h.service.Update(r.Context(), id, UpdateInput{
 		LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail, IssuedDate: issuedDate,
 	})
@@ -188,8 +213,25 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.UserLogin = login
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, l, auditableFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la licencia de %s:\n%s",
+				h.actorLogin(r.Context()), login, strings.Join(diff, "\n")))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, l)
 }
+
+// auditableFields are the License fields update's own mutation
+// notification diffs (see httpapi.DiffFields). Type stands in for
+// UpdateInput's own LicenseTypeID/OtherDetail pair: Type is already the
+// human-readable label computed from both ("<catalog name>" normally,
+// "<catalog name>: <other_detail>" for the "Otra" escape hatch), so
+// diffing it instead of the raw numeric LicenseTypeID keeps the
+// notification readable, and still shows an OtherDetail-only change
+// (a corrected "Otra" detail with the same LicenseTypeID) since that
+// changes Type's own text too.
+var auditableFields = []string{"Type", "IssuedDate"}
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -197,6 +239,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
+	// Fetched before deleting, purely so the mutation notification below
+	// can still name the license and its owner afterward — there's
+	// nothing left to look up once Delete succeeds.
+	target, targetErr := h.service.Get(r.Context(), id)
+
 	err = h.service.Delete(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "license not found")
@@ -205,6 +252,12 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete license")
 		return
+	}
+	if targetErr == nil {
+		if login, loginErr := h.users.LoginForUserID(r.Context(), target.UserID); loginErr == nil {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la licencia «%s» de %s.",
+				h.actorLogin(r.Context()), target.Type, login))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

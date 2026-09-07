@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -29,10 +31,25 @@ type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — see users.Handler's own
+// copy of this same helper. Falls back to a placeholder rather than
+// failing the whole request if the lookup itself errors, since a
+// notification is never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
 }
 
 // listActive is open to plain members too — anyone can see who's
@@ -122,6 +139,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.UserLogin = login
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido a %s a la junta directiva como %s (desde %s).",
+		h.actorLogin(r.Context()), login, m.Position, m.StartDate.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
@@ -159,6 +178,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		endDate = &d
 	}
 
+	// Fetched before applying anything, purely to describe exactly what
+	// changed in the mutation notification below (see auditableFields)
+	// — a failure here isn't reason enough to fail the actual edit, so
+	// it's only ever consulted if it succeeded.
+	before, beforeErr := h.service.Get(r.Context(), id)
+
 	m, err := h.service.Update(r.Context(), id, UpdateInput{
 		Position: body.Position, StartDate: startDate, EndDate: endDate,
 	})
@@ -180,5 +205,16 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.UserLogin = login
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, m, auditableFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el cargo de %s en la junta directiva:\n%s",
+				h.actorLogin(r.Context()), login, strings.Join(diff, "\n")))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, m)
 }
+
+// auditableFields are the Member fields update's own mutation
+// notification diffs (see httpapi.DiffFields) — matching UpdateInput's
+// field set exactly.
+var auditableFields = []string{"Position", "StartDate", "EndDate"}

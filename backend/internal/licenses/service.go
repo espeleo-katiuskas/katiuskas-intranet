@@ -94,6 +94,13 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (License
 	return s.repo.Update(ctx, id, in)
 }
 
+// Get returns a single license by id — used by Handler's own mutation
+// notifications (a before/after diff on Update, naming what's about to
+// be removed on Delete), not by any route of its own.
+func (s *Service) Get(ctx context.Context, id int64) (License, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
