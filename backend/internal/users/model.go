@@ -50,26 +50,42 @@ const (
 
 type AgeCategory string
 
+// These six mirror the club's own normativa exactly — the English
+// identifiers are this codebase's own convention (see CLAUDE.md,
+// "Language"), not a translation the normativa itself uses, so each one
+// carries its real Spanish name in a comment.
 const (
-	AgeCategoryChild AgeCategory = "child"
-	AgeCategoryTeen  AgeCategory = "teen"
-	AgeCategoryAdult AgeCategory = "adult"
+	AgeCategoryYouth    AgeCategory = "youth"     // alevín
+	AgeCategoryChild    AgeCategory = "child"     // infantil
+	AgeCategoryJunior   AgeCategory = "junior"    // juvenil
+	AgeCategorySenior   AgeCategory = "senior"    // mayor
+	AgeCategoryVeteranA AgeCategory = "veteran_a" // veterano A
+	AgeCategoryVeteranB AgeCategory = "veteran_b" // veterano B
 )
 
-// ageCategoryFor buckets a birth date into a caving-club-style age
-// category, based on the age the person turns *this calendar year* (not
-// their exact age today) — child up to 13, teen 14-17, adult 18 and up.
-// Exists so MemberListing can show a coarse age bracket without exposing
-// the exact birth date it's computed from — see ForMemberListing.
+// ageCategoryFor buckets a birth date into the club's own age category
+// (per its normativa), based on the age the person turns *this
+// calendar year* (not their exact age today) — everyone holds the same
+// category from January 1st through December 31st, whatever age they
+// turn that year: alevín up to 9, infantil 10-13, juvenil 14-17, mayor
+// 18-44, veterano A 45-54, veterano B 55 and up. Exists so
+// MemberListing can show a coarse age bracket without exposing the
+// exact birth date it's computed from — see ForMemberListing.
 func ageCategoryFor(birthDate time.Time) AgeCategory {
 	ageThisYear := time.Now().Year() - birthDate.Year()
 	switch {
+	case ageThisYear <= 9:
+		return AgeCategoryYouth
 	case ageThisYear <= 13:
 		return AgeCategoryChild
 	case ageThisYear <= 17:
-		return AgeCategoryTeen
+		return AgeCategoryJunior
+	case ageThisYear <= 44:
+		return AgeCategorySenior
+	case ageThisYear <= 54:
+		return AgeCategoryVeteranA
 	default:
-		return AgeCategoryAdult
+		return AgeCategoryVeteranB
 	}
 }
 

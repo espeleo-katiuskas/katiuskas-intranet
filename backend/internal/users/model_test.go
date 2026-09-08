@@ -18,10 +18,16 @@ func TestForMemberListingComputesAgeCategoryFromBirthDate(t *testing.T) {
 		birthDate time.Time
 		want      users.AgeCategory
 	}{
-		{"turns 13 this year", birthDate(13), users.AgeCategoryChild},
-		{"turns 14 this year", birthDate(14), users.AgeCategoryTeen},
-		{"turns 17 this year", birthDate(17), users.AgeCategoryTeen},
-		{"turns 18 this year", birthDate(18), users.AgeCategoryAdult},
+		{"turns 9 this year (alevín)", birthDate(9), users.AgeCategoryYouth},
+		{"turns 10 this year (infantil)", birthDate(10), users.AgeCategoryChild},
+		{"turns 13 this year (infantil)", birthDate(13), users.AgeCategoryChild},
+		{"turns 14 this year (juvenil)", birthDate(14), users.AgeCategoryJunior},
+		{"turns 17 this year (juvenil)", birthDate(17), users.AgeCategoryJunior},
+		{"turns 18 this year (mayor)", birthDate(18), users.AgeCategorySenior},
+		{"turns 44 this year (mayor)", birthDate(44), users.AgeCategorySenior},
+		{"turns 45 this year (veterano A)", birthDate(45), users.AgeCategoryVeteranA},
+		{"turns 54 this year (veterano A)", birthDate(54), users.AgeCategoryVeteranA},
+		{"turns 55 this year (veterano B)", birthDate(55), users.AgeCategoryVeteranB},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1973,12 +1973,16 @@ components:
         gender: { $ref: "#/components/schemas/Gender" }
         age_category:
           type: string
-          enum: [child, teen, adult]
+          enum: [youth, child, junior, senior, veteran_a, veteran_b]
           description: >
-            A coarse age bracket computed from birth_date (child up to 13,
-            teen 14-17, adult 18+, based on the age turned this calendar
-            year) — stands in for the exact birth_date, which isn't
-            exposed here.
+            A coarse age bracket computed from birth_date, per the
+            club's own normativa (Spanish name in parens): youth up to
+            9 (alevín), child 10-13 (infantil), junior 14-17 (juvenil),
+            senior 18-44 (mayor), veteran_a 45-54 (veterano A),
+            veteran_b 55+ (veterano B) — based on the age turned this
+            calendar year, so everyone holds the same category from
+            January 1st through December 31st. Stands in for the exact
+            birth_date, which isn't exposed here.
         membership_number: { type: integer, minimum: 0, nullable: true }
         membership_start_date: { type: string, format: date, nullable: true }
         membership_end_date: { type: string, format: date, nullable: true }

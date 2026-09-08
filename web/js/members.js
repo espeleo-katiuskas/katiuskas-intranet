@@ -239,26 +239,42 @@ function dateColumn(key, label, getValue) {
 // something from data it already has instead of asking the API for it.
 const genderLabels = { male: 'Masculino', female: 'Femenino' };
 
-// A caving-club-style age category, based on the age a person turns
-// *this calendar year* (not today's exact age) — infantil up to 13,
-// juvenil 14–17, mayores 18 and up. birth_date is mandatory
-// (users.CreateInput/db NOT NULL) — nobody in the system can lack one,
-// so there's no "unknown category" case to handle here.
-const CATEGORY_ORDER = ['Infantil', 'Juvenil', 'Mayores'];
+// The club's own age category (per its normativa), based on the age a
+// person turns *this calendar year* (not today's exact age) — everyone
+// holds the same category from January 1st through December 31st,
+// whatever age they turn that year: alevín up to 9, infantil 10-13,
+// juvenil 14-17, mayor 18-44, veterano A 45-54, veterano B 55 and up.
+// birth_date is mandatory (users.CreateInput/db NOT NULL) — nobody in
+// the system can lack one, so there's no "unknown category" case to
+// handle here.
+const CATEGORY_ORDER = ['Alevín', 'Infantil', 'Juvenil', 'Mayor', 'Veterano A', 'Veterano B'];
 function categoryFor(person) {
   const ageThisYear = new Date().getFullYear() - new Date(person.birth_date).getFullYear();
+  if (ageThisYear <= 9) return 'Alevín';
   if (ageThisYear <= 13) return 'Infantil';
   if (ageThisYear <= 17) return 'Juvenil';
-  return 'Mayores';
+  if (ageThisYear <= 44) return 'Mayor';
+  if (ageThisYear <= 54) return 'Veterano A';
+  return 'Veterano B';
 }
 
 // A plain member's listing doesn't include birth_date (see
 // users.MemberListing) — just the already-bucketed age_category the API
-// computes from it (child/teen/adult, always present, same guarantee as
-// categoryFor's own birth_date above), so this maps that instead of
-// deriving it locally like categoryFor does for the full listing.
-const AGE_CATEGORY_LABELS = { child: 'Infantil', teen: 'Juvenil', adult: 'Mayores' };
-const AGE_CATEGORY_ORDER = ['child', 'teen', 'adult'];
+// computes from it (youth/child/junior/senior/veteran_a/veteran_b,
+// always present, same guarantee as categoryFor's own birth_date
+// above — the English identifiers are this codebase's own convention,
+// not what the normativa itself calls them, see users.AgeCategory), so
+// this maps that instead of deriving it locally like categoryFor does
+// for the full listing.
+const AGE_CATEGORY_LABELS = {
+  youth: 'Alevín',
+  child: 'Infantil',
+  junior: 'Juvenil',
+  senior: 'Mayor',
+  veteran_a: 'Veterano A',
+  veteran_b: 'Veterano B',
+};
+const AGE_CATEGORY_ORDER = ['youth', 'child', 'junior', 'senior', 'veteran_a', 'veteran_b'];
 function memberCategoryFor(person) {
   return AGE_CATEGORY_LABELS[person.age_category];
 }

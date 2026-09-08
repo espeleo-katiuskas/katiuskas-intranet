@@ -41,10 +41,12 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   validez, que siguen reservadas a admin/board) — y solo de quien es o ha sido socio
   (`membership_start_date` no nulo); a quien nunca ha tenido un alta
   (una cuenta solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este
-  listado para member, aunque admin/board lo sigan viendo. `age_category` (child/teen/
-  adult, calculado con `ageCategoryFor` a partir de `birth_date`) sustituye a la fecha
-  de nacimiento exacta, que no se expone aquí — el tramo basta para lo que hace falta
-  ver de un vistazo sin revelar la fecha de nacimiento de nadie. `users.Handler.list`
+  listado para member, aunque admin/board lo sigan viendo. `age_category` (youth/child/
+  junior/senior/veteran_a/veteran_b — alevín/infantil/juvenil/mayor/veterano A/veterano B
+  en la normativa del club, calculado con `ageCategoryFor` a partir de `birth_date`)
+  sustituye a la fecha de nacimiento exacta, que no se expone aquí — el tramo basta para
+  lo que hace falta ver de un vistazo sin revelar la fecha de nacimiento de nadie.
+  `users.Handler.list`
   decide qué forma devolver según el rol de quien pregunta — no hay una ruta aparte.
   También puede ver `GET /board-members` (la Junta Directiva actual, con cargo,
   teléfono y correo) y ahora también `GET /roles` (el catálogo — de solo lectura para
@@ -95,9 +97,10 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   construir ambos servicios), que le pone el siguiente número tras el más alto que haya
   en ese momento, y no hace nada si la persona ya tiene uno. `gender` (tipo enum de
   PostgreSQL, `male`/`female`) es opcional y nulo por defecto — nadie lo rellena al
-  crear una persona salvo que se indique explícitamente. La "categoría" (infantil,
-  juvenil, mayores) no se guarda: `web/js/members.js` la calcula al vuelo a partir de
-  `birth_date` y el año actual, igual que cualquier otra columna derivada de la lista.
+  crear una persona salvo que se indique explícitamente. La "categoría" (alevín,
+  infantil, juvenil, mayor, veterano A, veterano B) no se guarda: `web/js/members.js`
+  la calcula al vuelo a partir de `birth_date` y el año actual, igual que cualquier
+  otra columna derivada de la lista.
   `email` y `phone` pueden llevar más de un valor separados por espacio — igual que
   `emergency_contact` ya admitía varios contactos en texto libre — en vez de una tabla
   aparte: encajar "alguno de estos" es una comprobación de solape de arrays
