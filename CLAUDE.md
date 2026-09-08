@@ -353,14 +353,23 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   Telegram isn't configured at all, disabling this DM outright rather than falling
   through to some no-op default. The chat id lookup runs synchronously on the
   request's own context, same reasoning as `notifyLogin`; only the network call itself is
-  deferred to a goroutine — the same goroutine also schedules the DM's own cleanup: it
-  sends via `Client.SendMessageForID` (unlike plain `SendMessage`, this hands back the
-  sent message's own id), sleeps for `MagicLinkTTL`, then calls `Client.DeleteMessage` on
-  it. Purely a hygiene nicety, not a security gate — the link inside stops working after
-  `MagicLinkTTL` regardless of whether this delete succeeds, or even runs at all (a
-  process restart in between just loses it, the same as any other best-effort cleanup in
-  this app) — but a dead link lingering in the chat is misleading, and one more thing
-  exposed for no reason if the phone/session is compromised later.
+  deferred to a goroutine — the same goroutine also schedules the DM's own cleanup, but
+  only for a bot-flow DM (`viaTelegramBot`): sends via `Client.SendMessageForID` (unlike
+  plain `SendMessage`, this hands back the sent message's own id), sleeps for
+  `Options.TelegramBotDMLinkTTL` (5 minutes by default, `config.Config`'s own
+  hardcoded default — deliberately much shorter than `MagicLinkTTL`, the link's real,
+  unaffected expiry: typing an email straight into the bot happens live in the chat, so a
+  tight window reads as more trustworthy than the same span an email — read who knows
+  when — gets, and this message's own wording states that same shorter number, not
+  `MagicLinkTTL`), then calls `Client.DeleteMessage` on it. Purely a hygiene nicety, not a
+  security gate — the link inside keeps working for the rest of the real `MagicLinkTTL`
+  regardless of whether this delete succeeds, or even runs at all (a process restart in
+  between just loses it, the same as any other best-effort cleanup in this app) — but a
+  dead link lingering in the chat is misleading, and one more thing exposed for no reason
+  if the phone/session is compromised later. A web-triggered DM (`!viaTelegramBot`) skips
+  this scheduling entirely and is never auto-deleted: unlike the bot-flow DM, it has no
+  equivalent moment where it's definitely done being useful — the code in it, especially,
+  might still be typed into the login page from a different device well after it arrives.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
   every resource package's own mutation notifications are built from. `NotifyAsync` is
   the fire-and-forget goroutine/timeout dance every Telegram send in this app already

@@ -28,16 +28,20 @@ import (
 // lives, how soon another one can be requested for the same person, how
 // long a freshly issued session token lasts before an admin needs to
 // extend it, and where the frontend is served (to build the link's URL).
+// TelegramBotDMLinkTTL is the shorter, cosmetic validity/deletion-delay
+// used only for a bot-flow DM (see notifyMagicLinkViaTelegram) — every
+// other message still states, and is bound by, the real MagicLinkTTL.
 // TelegramBotUsername is separate from all of that — it's not secret
 // (unlike TELEGRAM_BOT_TOKEN, which internal/telegram alone ever sees),
 // just the public "@name" a t.me/<username> link needs, so the login
 // page can offer signing in via Telegram at all; see TelegramBotInfo.
 type Options struct {
-	TokenTTL            time.Duration
-	MagicLinkTTL        time.Duration
-	MagicLinkCooldown   time.Duration
-	PublicBaseURL       string
-	TelegramBotUsername string
+	TokenTTL             time.Duration
+	MagicLinkTTL         time.Duration
+	MagicLinkCooldown    time.Duration
+	TelegramBotDMLinkTTL time.Duration
+	PublicBaseURL        string
+	TelegramBotUsername  string
 }
 
 // TelegramMessenger sends a DM to a specific Telegram chat — unlike
@@ -256,10 +260,14 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 // anywhere for this request, unlike an email, which might be read on a
 // different device than the one signing in — and the "if you didn't
 // request this, ignore it" line, since this message *is* the direct
-// reply to what they just sent the bot. Otherwise (a web request that
-// merely happens to also have Telegram linked) the DM matches the
-// email in full, code included, since either could be what's read
-// first.
+// reply to what they just sent the bot; its own stated validity is
+// h.opts.TelegramBotDMLinkTTL (see Options), not the real
+// h.opts.MagicLinkTTL every other message states. Otherwise (a web request that merely
+// happens to also have Telegram linked) the DM matches the email in
+// full, code and real TTL included, since either could be what's read
+// first — and, unlike the bot-flow DM, is never auto-deleted at all:
+// only a bot-flow DM's own delivery is tied to something this handler
+// itself schedules a cleanup for.
 func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) {
 	if h.telegramClient == nil {
 		return
@@ -277,7 +285,7 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 		text = fmt.Sprintf(
 			"Hola %s,\n\n"+
 				"Aquí tienes tu enlace de acceso a la intranet del Club de Espeleología Katiuskas, válido durante %d minutos:\n%s",
-			firstName, int(h.opts.MagicLinkTTL.Minutes()), link,
+			firstName, int(h.opts.TelegramBotDMLinkTTL.Minutes()), link,
 		)
 	} else {
 		text = fmt.Sprintf(
@@ -297,15 +305,29 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 			return
 		}
 
-		// The link itself already stops working after MagicLinkTTL
-		// regardless of whether this delete succeeds or even runs at
-		// all (a process restart in between loses it, same as any other
-		// best-effort cleanup in this app) — this is purely a hygiene
-		// nicety, not something the link's own security depends on: a
-		// dead link lingering in the chat is misleading, and one more
-		// thing exposed for no reason if the phone/session is
-		// compromised later.
-		time.Sleep(h.opts.MagicLinkTTL)
+		// Auto-deleting only ever applies to a bot-flow DM — this
+		// message's own reason for existing was answering what was just
+		// typed into this same chat, so once that's served its purpose
+		// there's nothing left worth keeping around; a DM merely riding
+		// along a web request has no equivalent moment where it's
+		// definitely done being useful (the code in it, especially, might
+		// still be typed into the login page from a different device
+		// well after this), so it's left alone indefinitely.
+		if !viaTelegramBot {
+			return
+		}
+
+		// The link itself keeps working for the rest of the real
+		// h.opts.MagicLinkTTL regardless of whether this delete succeeds
+		// or even runs at all (a process restart in between loses it,
+		// same as any other best-effort cleanup in this app) — this is
+		// purely a hygiene nicety, not something the link's own security
+		// depends on: a dead link lingering in the chat is misleading,
+		// and one more thing exposed for no reason if the phone/session
+		// is compromised later. The delay before deleting matches
+		// h.opts.TelegramBotDMLinkTTL, this message's own (shorter,
+		// cosmetic) stated validity — not the real, longer h.opts.MagicLinkTTL.
+		time.Sleep(h.opts.TelegramBotDMLinkTTL)
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := h.telegramClient.DeleteMessage(deleteCtx, *chatID, messageID); err != nil {

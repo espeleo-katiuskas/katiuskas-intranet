@@ -13,6 +13,18 @@ type Config struct {
 	TokenTTL          time.Duration
 	MagicLinkTTL      time.Duration
 	MagicLinkCooldown time.Duration
+	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
+	// states in, and the delay before it deletes, a magic-link DM sent in
+	// direct reply to someone typing their email into the bot's own
+	// chat — deliberately much shorter than MagicLinkTTL (the link's
+	// real, unaffected expiry): that person is live in the chat right
+	// now, so a tight window reads as more trustworthy than the same
+	// span an email — read who knows when — gets, and shrinks how long
+	// a still-valid-looking link sits exposed in the chat history. Only
+	// that one specific DM uses this; every other magic-link message
+	// (the email, and a DM merely riding along a web request) still
+	// states, and is bound by, the real MagicLinkTTL.
+	TelegramBotDMLinkTTL time.Duration
 	// ImpersonationTokenTTL is deliberately much shorter than TokenTTL —
 	// a session acting as someone else is a bigger blast radius than a
 	// normal one, so it expires on its own well before a normal session
@@ -71,6 +83,7 @@ func Load() (Config, error) {
 		TokenTTL:              30 * 24 * time.Hour,
 		MagicLinkTTL:          15 * time.Minute,
 		MagicLinkCooldown:     60 * time.Second,
+		TelegramBotDMLinkTTL:  5 * time.Minute,
 		ImpersonationTokenTTL: time.Hour,
 		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),
 		SMTPHost:              os.Getenv("SMTP_HOST"),

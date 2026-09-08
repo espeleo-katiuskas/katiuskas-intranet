@@ -181,10 +181,10 @@ func newTestServer(t *testing.T) *testServer {
 }
 
 // newTestServerWithMagicLinkTTL is newTestServer, but lets a test pick
-// its own MagicLinkTTL — needed for exercising
-// notifyMagicLinkViaTelegram's own expiry cleanup, which sleeps for
-// exactly that long before deleting the DM it sent; a real 15 minutes
-// would make that test take 15 minutes.
+// its own MagicLinkTTL and TelegramBotDMLinkTTL (set to the same
+// value) — needed for exercising notifyMagicLinkViaTelegram's own
+// expiry cleanup, which sleeps for TelegramBotDMLinkTTL before deleting
+// the DM it sent; a real 5 minutes would make that test take 5 minutes.
 func newTestServerWithMagicLinkTTL(t *testing.T, magicLinkTTL time.Duration) *testServer {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
@@ -198,10 +198,11 @@ func newTestServerWithMagicLinkTTL(t *testing.T, magicLinkTTL time.Duration) *te
 	telegramClient := &capturingTelegramClient{}
 
 	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, telegramClient, authapi.Options{
-		TokenTTL:          time.Hour,
-		MagicLinkTTL:      magicLinkTTL,
-		MagicLinkCooldown: time.Minute,
-		PublicBaseURL:     "http://localhost:64710",
+		TokenTTL:             time.Hour,
+		MagicLinkTTL:         magicLinkTTL,
+		MagicLinkCooldown:    time.Minute,
+		TelegramBotDMLinkTTL: magicLinkTTL,
+		PublicBaseURL:        "http://localhost:64710",
 	})
 
 	mux := http.NewServeMux()
@@ -455,6 +456,79 @@ func TestNotifyMagicLinkViaTelegramDeletesTheDMOnceItExpires(t *testing.T) {
 	s.telegramClient.mu.Unlock()
 	if deletedMessageID != wantMessageID {
 		t.Errorf("expected the delete to target the sent message's own id %d, got %d", wantMessageID, deletedMessageID)
+	}
+}
+
+// TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM: only a
+// bot-flow DM (viaTelegramBot true, see the test above) is ever
+// auto-deleted — one merely riding along a web request has no
+// equivalent "already answered its purpose" moment (the code in it
+// might still be typed into the login page from a different device
+// well after this), so it's left alone indefinitely.
+func TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM(t *testing.T) {
+	s := newTestServerWithMagicLinkTTL(t, 30*time.Millisecond)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	s.requestAndExtractToken(t, user.Email, user.Phone)
+	s.telegramClient.waitForMessage(t)
+
+	// Comfortably past the short TTL newTestServerWithMagicLinkTTL used
+	// above, which would have already triggered a delete by now if this
+	// DM were treated as a bot-flow one.
+	time.Sleep(100 * time.Millisecond)
+	s.telegramClient.mu.Lock()
+	deleted := len(s.telegramClient.deleted)
+	s.telegramClient.mu.Unlock()
+	if deleted != 0 {
+		t.Errorf("expected no delete for a web-triggered DM, got %d deletes", deleted)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserDMStatesShorterValidity checks the
+// bot-flow DM's own wording uses TelegramBotDMLinkTTL, not the real,
+// longer MagicLinkTTL every other message states — built with the two
+// deliberately different (unlike newTestServerWithMagicLinkTTL, which
+// sets them equal for the delete-timing tests above) so a test that
+// accidentally read the wrong one would fail.
+func TestIssueMagicLinkForTelegramUserDMStatesShorterValidity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
+	telegramClient := &capturingTelegramClient{}
+
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, &capturingMailer{}, &capturingNotifier{}, telegramClient, authapi.Options{
+		TokenTTL:             time.Hour,
+		MagicLinkTTL:         15 * time.Minute,
+		MagicLinkCooldown:    time.Minute,
+		TelegramBotDMLinkTTL: 5 * time.Minute,
+		PublicBaseURL:        "http://localhost:64710",
+	})
+
+	user := testutil.InsertUser(t, tx, "611222333")
+	if err := rolesService.AssignByName(context.Background(), user.ID, []string{"admin"}); err != nil {
+		t.Fatalf("assign role: %v", err)
+	}
+	if err := usersService.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+
+	_, text := telegramClient.waitForMessage(t)
+	if !strings.Contains(text, "válido durante 5 minutos") {
+		t.Errorf("expected the bot-flow DM to state TelegramBotDMLinkTTL (5 minutes), got %q", text)
+	}
+	if strings.Contains(text, "15 minutos") {
+		t.Errorf("expected the bot-flow DM not to state the real, longer MagicLinkTTL, got %q", text)
 	}
 }
 
