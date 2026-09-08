@@ -128,26 +128,20 @@ body {
    media query below. Lives in .topbar-brand, right alongside the logo
    and title, rather than in the sidebar itself — a whole extra
    full-width bar up there just to hold one icon wasted a lot of
-   vertical space for nothing else. Its own z-index keeps it painted
-   above (and clickable, to close the menu) even once .sidebar.open
-   covers the whole screen, topbar included — see the media query — and
-   its own always-on white chip background (rather than just a bare
-   icon) is what actually keeps it visible once that happens: a bare
-   var(--accent) icon would all but disappear against .sidebar.open's
-   own identically-colored background. */
+   vertical space for nothing else. api.js's own initSidebarToggle
+   hides it (the [hidden] attribute, not a class — see the reset up
+   top) for as long as the menu is open, so it never has to coexist
+   on-screen with .sidebar.open at all: closing happens by tapping
+   anywhere outside the menu instead of tapping this again, so there's
+   no need for it to keep rendering (as a close icon or otherwise) once
+   the menu covers its own corner of the screen. */
 .sidebar-toggle {
   display: none;
-  position: relative;
-  z-index: 101;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  padding: 4px 6px;
   border: none;
-  border-radius: 6px;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: none;
   color: var(--accent);
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -178,11 +172,13 @@ body {
 /* Below this width, .sidebar is collapsed entirely — not just its own
    nav — behind .sidebar-toggle (now up in .topbar-brand), shown only
    once opened via its own .open class (see api.js's
-   initSidebarToggle). Opening it overlays the current screen
-   (position: fixed, covering everything below the topbar) rather than
-   pushing .main-column's own content down the page: a full-width
-   .sidebar sitting in normal flow, nav included, is a lot of screen
-   real estate to give up just to show 6 links. */
+   initSidebarToggle, which also closes it again on a click/tap
+   anywhere outside it — the menu itself has no close control of its
+   own once open, see .sidebar-toggle's own comment). Opening it
+   overlays the current screen (position: fixed) at the same width as
+   the desktop sidebar itself, rather than pushing .main-column's own
+   content down the page or covering the full screen width for just 6
+   links. */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
@@ -197,17 +193,10 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
     bottom: 0;
-    width: 100%;
+    width: 180px;
     z-index: 100;
     overflow-y: auto;
-    /* Clears .sidebar-toggle's own row, which still renders in normal
-       flow up in .topbar (unaffected by .sidebar itself switching to
-       fixed positioning) and stays visible on top of this overlay — a
-       plain padding: 20px 0 here would put the first nav link right
-       behind/under that toggle chip instead of below it. */
-    padding-top: 68px;
   }
 
   .sidebar-toggle {

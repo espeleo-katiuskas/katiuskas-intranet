@@ -173,19 +173,33 @@ function applyRoleVisibility() {
 }
 
 // Wires #sidebar-toggle (the hamburger button in .topbar-brand, CSS
-// only shows under style.css's narrow-screen media query) to open/close
+// only shows under style.css's narrow-screen media query) to open
 // #sidebar as a whole — below that width the sidebar starts collapsed
 // entirely (not just its own nav), and opening it overlays the current
-// screen instead of pushing the page's own content down. A no-op on
+// screen instead of pushing the page's own content down. There's no
+// close button inside the open menu itself (an "✕" swapped in for the
+// toggle's own "☰" used to sit right on top of "Inicio", the first nav
+// link, since the menu is only as wide as the toggle's own corner of
+// the topbar) — tapping anywhere outside the menu closes it instead,
+// and the toggle itself is hidden for as long as it's open, so it
+// never has to visually coexist with the menu at all. A no-op on
 // /login, the one page with no sidebar shell to toggle at all.
 function initSidebarToggle() {
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
   if (!toggle || !sidebar) return;
-  toggle.addEventListener('click', () => {
-    const isOpen = sidebar.classList.toggle('open');
+
+  function setOpen(isOpen) {
+    sidebar.classList.toggle('open', isOpen);
     toggle.setAttribute('aria-expanded', String(isOpen));
-    toggle.textContent = isOpen ? '✕' : '☰';
+    toggle.hidden = isOpen;
+  }
+
+  toggle.addEventListener('click', () => setOpen(true));
+  document.addEventListener('click', (event) => {
+    if (sidebar.classList.contains('open') && !sidebar.contains(event.target) && !toggle.contains(event.target)) {
+      setOpen(false);
+    }
   });
 }
 
