@@ -319,26 +319,32 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
 - `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has
-  linked their Telegram account (`users.Repository.TelegramChatIDForUser`) — alongside
-  the email `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web
+  linked their Telegram account (`users.Repository.TelegramChatIDForUser`). Whether the
+  email `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web
   endpoint, and the exported `IssueMagicLinkForTelegramUser`, for
   `internal/telegrambot.Bot` above, resolve their target person into before calling)
-  sends, never instead of it, so someone with no Telegram linked (or a failed
-  lookup/send) still has the email to fall back on. The DM's wording depends on which of
-  those two callers triggered it (`issueMagicLink`'s own `viaTelegramBot` bool, threaded
-  through): the email always includes the login code and a "if you didn't request this,
-  ignore it" line, since it might be read on another device than the one signing in and
-  wasn't necessarily prompted by anything the reader just did; the Telegram DM matches
-  that in full when it's merely riding along with a web request that happens to also have
-  Telegram linked, but when it's the bot's own `IssueMagicLinkForTelegramUser` replying to
-  someone who just typed their email into the chat (see `handleRecognizedChat` below),
-  it drops both — there's no code-entry page open anywhere for that code to be useful
-  for, and this message *is* the direct reply to what they just sent, not something that
-  could show up unprompted. `IssueMagicLinkForTelegramUser` is
-  also the one caller where email genuinely can be absent — `FindActiveByEmailAndPhone`
-  guarantees one for the web path, but resolving straight from a linked chat id doesn't
-  — so `issueMagicLink` skips the email send entirely rather than dereferencing a nil
-  `*string` when `user.Email` is nil, sending only the Telegram DM in that case. Unlike
+  also sends depends on which of those two callers triggered it (`issueMagicLink`'s own
+  `viaTelegramBot` bool, threaded through): riding along a web request that merely
+  happens to also have Telegram linked, the DM is sent alongside the email, not instead
+  of it, so someone with no Telegram linked (or a failed lookup/send) still has the email
+  to fall back on — but when it's the bot's own `IssueMagicLinkForTelegramUser` replying
+  to someone who just typed their email into the chat (see `handleRecognizedChat`
+  below), `issueMagicLink` returns right after the DM and skips the email outright: that
+  DM already *is* the answer to what they just typed, so a follow-up email would only be
+  redundant, not a fallback worth having. Wording matches this split: the email, and a
+  web-triggered DM, both include the login code, a "recibes este mensaje porque..." line
+  naming the login page as this request's origin (the `requestOrigin` constant, since
+  neither of those two is ever built for a bot-triggered request), and a "if you didn't
+  request this, ignore it" line — since either might be read on a device other than the
+  one signing in, or simply wasn't expected — while the bot-flow DM drops all three: no
+  code-entry page is open anywhere for that code to be useful for, and asking "was this
+  you?" makes no sense for a message that *is* the direct reply to what they themselves
+  just typed, not something that could show up unprompted. `IssueMagicLinkForTelegramUser`
+  is also the one caller where email genuinely can be absent on file at all —
+  `FindActiveByEmailAndPhone` guarantees one for the web path, but resolving straight
+  from a linked chat id doesn't — though that's beside the point for the skip above,
+  which applies to every bot-triggered request the same way regardless of whether one's
+  on file. Unlike
   `notifier`/`notifyLogin` above, which always target the fixed log channel, this needs
   `authapi.TelegramMessenger` (`*telegram.Client` satisfies it structurally) to DM
   whichever `chat_id` that specific person has — a second dependency alongside

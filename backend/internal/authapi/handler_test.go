@@ -356,6 +356,9 @@ func TestRequestMagicLinkSendsEmailOnMatch(t *testing.T) {
 	if token == "" {
 		t.Fatalf("expected a non-empty token")
 	}
+	if !strings.Contains(s.mailer.lastBody, "página de acceso de la intranet") {
+		t.Errorf("expected the email to name the login page as this request's origin, got %q", s.mailer.lastBody)
+	}
 }
 
 func TestRequestMagicLinkDoesNotDMWhenNoTelegramLinked(t *testing.T) {
@@ -390,14 +393,20 @@ func TestRequestMagicLinkAlsoSendsViaTelegramWhenLinked(t *testing.T) {
 	if m == nil {
 		t.Fatalf("no code found in the Telegram message: %q", text)
 	}
+	if !strings.Contains(text, "página de acceso de la intranet") {
+		t.Errorf("expected the DM to name the login page as this request's origin, got %q", text)
+	}
 }
 
-// TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM covers the bot's
-// use case directly: someone already recognized who just messages the
-// bot again gets the same role/cooldown checks and delivery as
-// requesting a link from the web, but the DM itself reads differently
-// — see TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine.
-func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
+// TestIssueMagicLinkForTelegramUserSendsOnlyTheDMNotEmail covers the
+// bot's use case directly: someone already recognized who just
+// messages the bot again gets the same role/cooldown checks as
+// requesting a link from the web, and the link by DM — but, unlike the
+// web flow, no email at all: that DM already is the direct reply to
+// what they just typed into the bot (see
+// TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine for its own
+// wording), so a follow-up email would only be redundant.
+func TestIssueMagicLinkForTelegramUserSendsOnlyTheDMNotEmail(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")
 	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
@@ -408,8 +417,8 @@ func TestIssueMagicLinkForTelegramUserSendsBothEmailAndDM(t *testing.T) {
 		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
 	}
 
-	if s.mailer.sent == 0 {
-		t.Errorf("expected an email to have been sent too, not just the DM")
+	if s.mailer.sent != 0 {
+		t.Errorf("expected no email to be sent for a Telegram-bot-triggered request, got %d sent", s.mailer.sent)
 	}
 	chatID, text := s.telegramClient.waitForMessage(t)
 	if chatID != 555 {
@@ -476,11 +485,18 @@ func TestIssueMagicLinkForTelegramUserDMHasNoCodeOrIgnoreLine(t *testing.T) {
 	}
 }
 
-// TestIssueMagicLinkForTelegramUserSkipsEmailWhenThereIsNone covers the
-// edge case only this Telegram-triggered path can hit: resolving
-// straight from a linked chat id, unlike the web flow, doesn't require
-// an email on file at all.
-func TestIssueMagicLinkForTelegramUserSkipsEmailWhenThereIsNone(t *testing.T) {
+// TestIssueMagicLinkForTelegramUserWorksForSomeoneWithNoEmailOnFile
+// covers the one case only this Telegram-triggered path can hit:
+// resolving straight from a linked chat id, unlike the web flow,
+// doesn't require an email on file at all — so this must still work
+// (not, say, panic dereferencing a nil user.Email) for someone who has
+// none. Since issueMagicLink now skips the email entirely for any
+// Telegram-bot-triggered request regardless of whether one is on file,
+// this doesn't hit a different code path than
+// TestIssueMagicLinkForTelegramUserSendsOnlyTheDMNotEmail, only a
+// different fixture — worth keeping anyway as the one test that would
+// catch a nil-email dereference if that early return were ever removed.
+func TestIssueMagicLinkForTelegramUserWorksForSomeoneWithNoEmailOnFile(t *testing.T) {
 	s := newTestServer(t)
 	phone := "611222333"
 	user, err := s.users.Create(context.Background(), users.CreateInput{
