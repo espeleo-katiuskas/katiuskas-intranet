@@ -72,7 +72,7 @@ body {
 }
 
 .sidebar {
-  width: 220px;
+  width: 180px;
   flex-shrink: 0;
   background: var(--accent);
   color: #fff;
@@ -101,27 +101,6 @@ body {
   font-weight: 600;
 }
 
-/* The hamburger toggle for .sidebar-nav — hidden here (desktop, where
-   the nav is always visible) and only shown under the narrow-screen
-   media query below, where it takes the nav's place until tapped.
-   Right-aligned via text-align on its own full-width block rather than
-   a flex margin-left: auto, since it now sits directly in .sidebar
-   (a plain block) rather than inside a flex row alongside a brand
-   mark/wordmark — dropped, see .topbar-brand below, since it just
-   duplicated the topbar's own "Club de Espeleología Katiuskas". */
-.sidebar-toggle {
-  display: none;
-  width: 100%;
-  padding: 8px 20px;
-  border: none;
-  background: none;
-  color: #fff;
-  font-size: 1.3rem;
-  line-height: 1;
-  text-align: right;
-  cursor: pointer;
-}
-
 .main-column {
   flex: 1;
   min-width: 0;
@@ -142,6 +121,35 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* The hamburger toggle for .sidebar — hidden here (desktop, where the
+   sidebar is always visible) and only shown under the narrow-screen
+   media query below. Lives in .topbar-brand, right alongside the logo
+   and title, rather than in the sidebar itself — a whole extra
+   full-width bar up there just to hold one icon wasted a lot of
+   vertical space for nothing else. Its own z-index keeps it painted
+   above (and clickable, to close the menu) even once .sidebar.open
+   covers the whole screen, topbar included — see the media query — and
+   its own always-on white chip background (rather than just a bare
+   icon) is what actually keeps it visible once that happens: a bare
+   var(--accent) icon would all but disappear against .sidebar.open's
+   own identically-colored background. */
+.sidebar-toggle {
+  display: none;
+  position: relative;
+  z-index: 101;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  color: var(--accent);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .topbar-logo {
@@ -167,31 +175,43 @@ body {
   max-width: 1120px;
 }
 
-/* Below this width, the nav no longer fits comfortably as a row (it
-   used to just wrap, eating a lot of vertical space above the actual
-   page content) — instead it's collapsed behind .sidebar-toggle, shown
-   only once opened via its own .open class (see api.js's
-   initSidebarToggle). */
+/* Below this width, .sidebar is collapsed entirely — not just its own
+   nav — behind .sidebar-toggle (now up in .topbar-brand), shown only
+   once opened via its own .open class (see api.js's
+   initSidebarToggle). Opening it overlays the current screen
+   (position: fixed, covering everything below the topbar) rather than
+   pushing .main-column's own content down the page: a full-width
+   .sidebar sitting in normal flow, nav included, is a lot of screen
+   real estate to give up just to show 6 links. */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
   }
 
   .sidebar {
+    display: none;
+  }
+
+  .sidebar.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
+    z-index: 100;
+    overflow-y: auto;
+    /* Clears .sidebar-toggle's own row, which still renders in normal
+       flow up in .topbar (unaffected by .sidebar itself switching to
+       fixed positioning) and stays visible on top of this overlay — a
+       plain padding: 20px 0 here would put the first nav link right
+       behind/under that toggle chip instead of below it. */
+    padding-top: 68px;
   }
 
   .sidebar-toggle {
     display: block;
-  }
-
-  .sidebar-nav {
-    display: none;
-    flex-direction: column;
-  }
-
-  .sidebar-nav.open {
-    display: flex;
   }
 }
 

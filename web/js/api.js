@@ -172,18 +172,18 @@ function applyRoleVisibility() {
   });
 }
 
-// Wires #sidebar-toggle (the hamburger button CSS only shows under
-// style.css's narrow-screen media query) to open/close #sidebar-nav —
-// below that width the nav starts collapsed, since a wide horizontal
-// row of links used to eat a lot of vertical space above the actual
-// page content on a small screen. A no-op on /login, the one page with
-// no sidebar shell to toggle at all.
+// Wires #sidebar-toggle (the hamburger button in .topbar-brand, CSS
+// only shows under style.css's narrow-screen media query) to open/close
+// #sidebar as a whole — below that width the sidebar starts collapsed
+// entirely (not just its own nav), and opening it overlays the current
+// screen instead of pushing the page's own content down. A no-op on
+// /login, the one page with no sidebar shell to toggle at all.
 function initSidebarToggle() {
   const toggle = document.getElementById('sidebar-toggle');
-  const nav = document.getElementById('sidebar-nav');
-  if (!toggle || !nav) return;
+  const sidebar = document.getElementById('sidebar');
+  if (!toggle || !sidebar) return;
   toggle.addEventListener('click', () => {
-    const isOpen = nav.classList.toggle('open');
+    const isOpen = sidebar.classList.toggle('open');
     toggle.setAttribute('aria-expanded', String(isOpen));
     toggle.textContent = isOpen ? '✕' : '☰';
   });
