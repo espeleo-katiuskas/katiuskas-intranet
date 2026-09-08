@@ -458,6 +458,30 @@ form.form-panel button {
   cursor: pointer;
 }
 
+/* /login's own brand mark — same circular "K" motif as the sidebar's
+   .sidebar-brand-mark every other page shows, but inverted (solid
+   accent circle, white "K") since this page has no orange sidebar
+   behind it to sit on top of, just the page's own light background. */
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.3rem;
+}
+
+.login-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.95rem;
+}
+
 /* Sits below the main submit button as a secondary, alternate way in —
    its own top margin/border keep it visually separate from the
    email/phone form above it, instead of reading like part of the same
