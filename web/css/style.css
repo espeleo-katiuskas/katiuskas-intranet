@@ -8,6 +8,10 @@
   --line: #dcded7;
   --danger: #a1453d;
   --success: #4c7a52;
+  /* Interactive links/actions inside content (phone numbers, "Copiar
+     NIF", document links) — distinct from --accent, which stays
+     reserved for the sidebar/brand. */
+  --link: #2f6fed;
 }
 
 * {
@@ -54,46 +58,113 @@ body {
   color: var(--ink);
 }
 
-header.topbar {
+/* Shared page shell: an orange sidebar (brand + nav) down the left,
+   everything else — a topbar with a greeting/logout, then the page's
+   own content — filling the rest. Every page except /login uses this
+   (login has no session yet, so a nav full of protected-area links and
+   a "Hola, ..." greeting would make no sense there — see login.html's
+   own centered form.panel instead). */
+.shell {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  min-height: 100vh;
 }
 
-header.topbar .brand {
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  padding: 20px 0;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 20px;
   font-weight: 700;
-  color: var(--ink);
-  text-decoration: none;
 }
 
-header.topbar .brand:hover {
-  color: var(--accent);
-}
-
-nav.main-nav {
-  display: flex;
+.sidebar-brand-mark {
+  display: inline-flex;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.95rem;
 }
 
-nav.main-nav a {
-  color: var(--ink-muted);
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-nav a {
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   font-size: 0.92rem;
 }
 
-nav.main-nav a:hover,
-nav.main-nav a.active {
+.sidebar-nav a:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sidebar-nav a.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-weight: 600;
+}
+
+.main-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  font-size: 1.15rem;
+  margin: 0;
   color: var(--accent);
 }
 
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 32px 24px;
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.9rem;
+}
+
+.content {
+  padding: 28px;
+  max-width: 1120px;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
 h1 {

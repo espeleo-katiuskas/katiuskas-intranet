@@ -1,0 +1,233 @@
+/* Styles for index.html only — the Junta Directiva/Logos/Datos de
+   interés content that's unique to the homepage. The shared sidebar
+   shell (.shell/.sidebar/.topbar/.content...) every page now uses lives
+   in style.css instead, since it's no longer specific to this page. */
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.board-card {
+  display: flex;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.board-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.board-name {
+  font-weight: 600;
+}
+
+.board-lastname {
+  margin-bottom: 6px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.board-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.board-phone {
+  color: var(--link);
+  font-weight: 600;
+}
+
+/* A small blue "pill" link/button — used for "Copiar NIF/IBAN" and
+   every "Descargar ..." action. Some of the "Logos" ones are still
+   static placeholders (see .static-placeholder in index.html) with no
+   endpoint behind them yet. */
+.link-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--link);
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.06);
+  color: var(--link);
+  font: inherit;
+  font-size: 0.78rem;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.link-pill:hover {
+  background: rgba(47, 111, 237, 0.14);
+}
+
+.link-pill-small {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+}
+
+.logos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.logo-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.logo-preview-circular {
+  border-radius: 50%;
+}
+
+.logo-preview-triangular {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.logo-preview-apaisado {
+  width: 100px;
+  border-radius: 6px;
+}
+
+.logo-name {
+  margin: 0 0 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.logo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 0.88rem;
+}
+
+.info-list {
+  margin: 0;
+}
+
+.info-row {
+  margin-bottom: 12px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-row dt {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.info-row dd {
+  margin: 2px 0 0;
+}
+
+/* Actas asambleas' own year filter — the label sits inline with the
+   <select>, and both are separated from the (re-rendered on change)
+   list below by the same top margin .link-list already uses. */
+.info-card label {
+  margin-right: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.year-select {
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* Shared by every plain "list of download links" side-column card
+   (Documentos, Actas asambleas, Memorias de actividades) — same look,
+   nothing card-specific about it. */
+.link-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.link-list li {
+  margin-bottom: 8px;
+}
+
+.link-list a {
+  color: var(--link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.link-list a:hover {
+  text-decoration: underline;
+}
+
+/* Memorias de actividades: a year per entry, but there can be many, so
+   — unlike Documentos/Actas asambleas above — they run inline and wrap
+   instead of one per line. */
+.year-list {
+  margin: 12px 0 0;
+  line-height: 1.9;
+}
+
+.year-list a {
+  color: var(--link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.year-list a:hover {
+  text-decoration: underline;
+}

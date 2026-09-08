@@ -172,6 +172,24 @@ function applyRoleVisibility() {
   });
 }
 
+// Fills the shared shell's "Hola, <nombre>" greeting (#topbar-user-name
+// — every logged-in page's .topbar has one, see style.css) with the
+// signed-in person's first name. A no-op on a page with no such element
+// (there is none, but this keeps a stray/renamed id from throwing
+// instead of just skipping the greeting). Falls back to the login if
+// the profile fetch fails — still identifies who's signed in, just less
+// friendly than a first name.
+async function loadTopbarGreeting() {
+  const el = document.getElementById('topbar-user-name');
+  if (!el) return;
+  try {
+    const profile = await apiFetch(`/users/${currentUser().login}`);
+    el.textContent = profile.first_name;
+  } catch {
+    el.textContent = currentUser().login;
+  }
+}
+
 // Called right after consuming a magic link, when the frontend receives
 // its first (and only) session token for this sign-in.
 function setToken(raw) {
@@ -233,6 +251,7 @@ export {
   currentUser,
   hasAnyRole,
   applyRoleVisibility,
+  loadTopbarGreeting,
   setToken,
   escapeHtml,
   encodeFilePath,

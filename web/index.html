@@ -5,52 +5,132 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Inicio — Club de Espeleología Katiuskas</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
-<header class="topbar">
-  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
-  <nav class="main-nav">
-    <a href="/" class="active">Inicio</a>
-    <a href="/members" data-roles="admin,board,member">Socios</a>
-    <a href="/activities">Actividades</a>
-    <a href="/inventory">Material</a>
-    <a href="/library">Documentos</a>
-    <a href="/profile">Mi perfil</a>
-    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
-  </nav>
-</header>
-<main>
-  <h1 id="welcome-heading">Bienvenido/a</h1>
-  <p class="subtitle">Gestión de socios, actividades y material del club.</p>
-  <div class="card-grid">
-    <a class="card" href="/members" data-roles="admin,board,member">
-      <h3>Socios</h3>
-      <p>Altas, bajas e historial de socios.</p>
-    </a>
-    <a class="card" href="/activities">
-      <h3>Actividades</h3>
-      <p>Próximas salidas y apuntes.</p>
-    </a>
-    <a class="card" href="/inventory">
-      <h3>Material</h3>
-      <p>Catálogo, préstamos, alquileres y ventas.</p>
-    </a>
-    <a class="card" href="/profile">
-      <h3>Mi perfil</h3>
-      <p>Tus datos y tu historial como socio.</p>
-    </a>
-  </div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-brand-mark">K</span>
+      <span>Katiuskas</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="active">🏠 Inicio</a>
+      <a href="/members" data-roles="admin,board,member">👥 Socios</a>
+      <a href="/activities">🧗 Actividades</a>
+      <a href="/inventory">🎒 Material</a>
+      <a href="/library">📚 Documentos</a>
+      <a href="/profile">🙋 Mi perfil</a>
+    </nav>
+  </aside>
+  <div class="main-column">
+    <header class="topbar">
+      <h1>Club de Espeleología Katiuskas — Intranet</h1>
+      <div class="topbar-user">
+        <span>Hola, <strong id="topbar-user-name">…</strong></span>
+        <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="columns">
+        <div class="col-main">
+          <h2>Junta directiva</h2>
+          <div class="board-grid" id="board-grid"></div>
 
-  <h2>Junta Directiva</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Nombre</th><th>Apellidos</th><th>Cargo</th><th>Teléfono</th><th>Email</th></tr>
-      </thead>
-      <tbody id="board-table-body"></tbody>
-    </table>
+          <!-- Logos y descargas de ejemplo: contenido estático de
+               momento, no hay ficheros reales detrás ni un endpoint que
+               los sirva — los enlaces no llevan a ningún sitio. -->
+          <h2>Logos</h2>
+          <div class="logos-grid static-placeholder">
+            <div class="logo-card">
+              <div class="logo-preview logo-preview-circular">K</div>
+              <p class="logo-name">Circular</p>
+              <div class="logo-actions">
+                <a href="#" class="link-pill">Descargar imprimir</a>
+                <a href="#" class="link-pill">Descargar web</a>
+                <a href="#" class="link-pill">Descargar negro</a>
+                <a href="#" class="link-pill">Descargar blanco</a>
+              </div>
+            </div>
+            <div class="logo-card">
+              <div class="logo-preview logo-preview-triangular">K</div>
+              <p class="logo-name">Triangular</p>
+              <div class="logo-actions">
+                <a href="#" class="link-pill">Descargar imprimir</a>
+                <a href="#" class="link-pill">Descargar web</a>
+                <a href="#" class="link-pill">Descargar negro</a>
+                <a href="#" class="link-pill">Descargar blanco</a>
+              </div>
+            </div>
+            <div class="logo-card">
+              <div class="logo-preview logo-preview-apaisado">K</div>
+              <p class="logo-name">Apaisado</p>
+              <div class="logo-actions">
+                <a href="#" class="link-pill">Descargar imprimir</a>
+                <a href="#" class="link-pill">Descargar web</a>
+                <a href="#" class="link-pill">Descargar negro</a>
+                <a href="#" class="link-pill">Descargar blanco</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Datos de interés: datos reales del club. Documentos, Actas y
+             Memorias se cargan dinámicamente desde /library (ver
+             js/dashboard.js) — cada uno es una carpeta con los PDF
+             directamente dentro (library/documentos, library/actas,
+             library/memorias) y un .order.json opcional para fijar el
+             orden de aparición. -->
+        <aside class="col-side">
+          <h2>Datos de interés</h2>
+          <div class="info-card">
+            <dl class="info-list">
+              <div class="info-row">
+                <dt>Nombre</dt>
+                <dd>Club Deportivo Elemental de Espeleología Katiuskas</dd>
+              </div>
+              <div class="info-row">
+                <dt>NIF</dt>
+                <dd>
+                  G-81622987
+                  <button type="button" class="link-pill link-pill-small" data-copy="G-81622987">Copiar NIF</button>
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>Dirección</dt>
+                <dd>Polideportivo Los Rosales sala 2. C/ Lilas, s/n</dd>
+              </div>
+              <div class="info-row">
+                <dt>Cuenta bancaria</dt>
+                <dd>
+                  IBAN: ES75-0073-0100-5305-0580-2942 (Openbank)
+                  <button type="button" class="link-pill link-pill-small" data-copy="ES75-0073-0100-5305-0580-2942">Copiar IBAN</button>
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <h2>Documentos</h2>
+          <div class="info-card">
+            <ul class="link-list" id="documentos-list"></ul>
+          </div>
+
+          <h2>Actas asambleas</h2>
+          <div class="info-card">
+            <label for="actas-year">Año</label>
+            <select id="actas-year" class="year-select"></select>
+            <ul class="link-list" id="actas-list"></ul>
+          </div>
+
+          <h2>Memorias de actividades</h2>
+          <div class="info-card">
+            <p class="year-list" id="memorias-list"></p>
+          </div>
+        </aside>
+      </div>
+    </main>
   </div>
-</main>
+</div>
 <script type="module" src="js/dashboard.js"></script>
 </body>
 </html>
