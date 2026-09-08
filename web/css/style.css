@@ -422,6 +422,7 @@ th.sortable:hover {
 
 .role-add-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
   align-items: center;
@@ -580,10 +581,31 @@ button.link-button {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Grid/flex items default to min-width: auto — their own content's
+     min size, not 0 — so without this a field could refuse to shrink
+     past its input's intrinsic width and force the row to overflow
+     instead of actually wrapping onto its own line on a narrow screen. */
+  min-width: 0;
 }
 
 .field.span-2 {
   grid-column: span 2;
+}
+
+/* Below this width there's no room for two 200px-minimum columns side
+   by side (nombre/apellidos, say) without overflowing — every field
+   grid stacks into one column instead, span-2 included, so every field
+   just gets its own full-width row. Chosen to comfortably cover down
+   to a 320px-wide screen once .content/.panel's own padding is
+   subtracted. */
+@media (max-width: 480px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field.span-2 {
+    grid-column: span 1;
+  }
 }
 
 .field label {
@@ -615,6 +637,7 @@ button.link-button {
 
 .panel-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin-top: 18px;
