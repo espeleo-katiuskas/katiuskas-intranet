@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  loadTopbarGreeting,
   currentUser,
   hasAnyRole,
   apiFetch,
@@ -18,6 +19,7 @@ import { renderMarkdown } from './markdown.js';
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+loadTopbarGreeting();
 
 const viewer = currentUser();
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);

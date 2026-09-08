@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  loadTopbarGreeting,
   apiFetch,
   apiFetchBlob,
   escapeHtml,
@@ -13,6 +14,7 @@ import { renderMarkdown } from './markdown.js';
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+loadTopbarGreeting();
 
 const feedbackBox = document.getElementById('feedback');
 const errorBox = document.getElementById('error');

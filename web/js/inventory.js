@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  loadTopbarGreeting,
   currentUser,
   hasAnyRole,
   apiFetch,
@@ -15,6 +16,7 @@ import {
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+loadTopbarGreeting();
 
 const user = currentUser();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);

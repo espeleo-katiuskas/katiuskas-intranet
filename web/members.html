@@ -7,19 +7,30 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header class="topbar">
-  <a class="brand" href="https://katiuskas.es/" target="_blank" rel="noopener">Club de Espeleología Katiuskas</a>
-  <nav class="main-nav">
-    <a href="/">Inicio</a>
-    <a href="/members" class="active" data-roles="admin,board,member">Socios</a>
-    <a href="/activities">Actividades</a>
-    <a href="/inventory">Material</a>
-    <a href="/library">Documentos</a>
-    <a href="/profile">Mi perfil</a>
-    <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
-  </nav>
-</header>
-<main>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-brand-mark">K</span>
+      <span>Katiuskas</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/">🏠 Inicio</a>
+      <a href="/members" class="active" data-roles="admin,board,member">👥 Socios</a>
+      <a href="/activities">🧗 Actividades</a>
+      <a href="/inventory">🎒 Material</a>
+      <a href="/library">📚 Documentos</a>
+      <a href="/profile">🙋 Mi perfil</a>
+    </nav>
+  </aside>
+  <div class="main-column">
+    <header class="topbar">
+      <h1>Club de Espeleología Katiuskas — Intranet</h1>
+      <div class="topbar-user">
+        <span>Hola, <strong id="topbar-user-name">…</strong></span>
+        <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
+      </div>
+    </header>
+    <main class="content">
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
@@ -157,7 +168,9 @@
       <tbody id="users-table-body" class="clickable-rows"></tbody>
     </table>
   </div>
-</main>
+    </main>
+  </div>
+</div>
 <script type="module" src="js/members.js"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  loadTopbarGreeting,
   currentUser,
   hasAnyRole,
   apiFetch,
@@ -12,6 +13,7 @@ import {
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+loadTopbarGreeting();
 
 const user = currentUser();
 // isAdmin means "full read access" (admin or board) — a plain member
