@@ -9,11 +9,7 @@
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="sidebar-brand">
-      <span class="sidebar-brand-mark">K</span>
-      <span>Katiuskas</span>
-      <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar-nav">☰</button>
-    </div>
+    <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar-nav">☰</button>
     <nav class="sidebar-nav" id="sidebar-nav">
       <a href="/">🏠 Inicio</a>
       <a href="/members" data-roles="admin,board,member">👥 Socios</a>
@@ -25,7 +21,10 @@
   </aside>
   <div class="main-column">
     <header class="topbar">
-      <h1>Club de Espeleología Katiuskas — Intranet</h1>
+      <div class="topbar-brand">
+        <img src="images/logo-katiuskas.png" alt="" class="topbar-logo">
+        <h1>Club de Espeleología Katiuskas — Intranet</h1>
+      </div>
       <div class="topbar-user">
         <span>Hola, <strong id="topbar-user-name">…</strong></span>
         <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>

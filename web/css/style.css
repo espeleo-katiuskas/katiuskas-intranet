@@ -58,12 +58,14 @@ body {
   color: var(--ink);
 }
 
-/* Shared page shell: an orange sidebar (brand + nav) down the left,
-   everything else — a topbar with a greeting/logout, then the page's
-   own content — filling the rest. Every page except /login uses this
-   (login has no session yet, so a nav full of protected-area links and
-   a "Hola, ..." greeting would make no sense there — see login.html's
-   own centered form.panel instead). */
+/* Shared page shell: an orange sidebar (just nav — the club logo lives
+   in the topbar instead, see .topbar-brand, so it isn't repeated here
+   too) down the left, everything else — a topbar with the logo/title
+   and a greeting/logout, then the page's own content — filling the
+   rest. Every page except /login uses this (login has no session yet,
+   so a nav full of protected-area links and a "Hola, ..." greeting
+   would make no sense there — see login.html's own centered
+   form.panel instead). */
 .shell {
   display: flex;
   min-height: 100vh;
@@ -75,25 +77,6 @@ body {
   background: var(--accent);
   color: #fff;
   padding: 20px 0;
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 20px 20px;
-  font-weight: 700;
-}
-
-.sidebar-brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 0.95rem;
 }
 
 .sidebar-nav {
@@ -120,16 +103,22 @@ body {
 
 /* The hamburger toggle for .sidebar-nav — hidden here (desktop, where
    the nav is always visible) and only shown under the narrow-screen
-   media query below, where it takes the nav's place until tapped. */
+   media query below, where it takes the nav's place until tapped.
+   Right-aligned via text-align on its own full-width block rather than
+   a flex margin-left: auto, since it now sits directly in .sidebar
+   (a plain block) rather than inside a flex row alongside a brand
+   mark/wordmark — dropped, see .topbar-brand below, since it just
+   duplicated the topbar's own "Club de Espeleología Katiuskas". */
 .sidebar-toggle {
   display: none;
-  margin-left: auto;
-  padding: 4px 10px;
+  width: 100%;
+  padding: 8px 20px;
   border: none;
   background: none;
   color: #fff;
   font-size: 1.3rem;
   line-height: 1;
+  text-align: right;
   cursor: pointer;
 }
 
@@ -147,6 +136,17 @@ body {
   padding: 16px 28px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-logo {
+  height: 36px;
+  width: auto;
 }
 
 .topbar h1 {
@@ -182,8 +182,7 @@ body {
   }
 
   .sidebar-toggle {
-    display: inline-flex;
-    align-items: center;
+    display: block;
   }
 
   .sidebar-nav {
@@ -488,10 +487,8 @@ form.form-panel button {
   cursor: pointer;
 }
 
-/* /login's own brand mark — same circular "K" motif as the sidebar's
-   .sidebar-brand-mark every other page shows, but inverted (solid
-   accent circle, white "K") since this page has no orange sidebar
-   behind it to sit on top of, just the page's own light background. */
+/* /login's own brand row — the same club logo (images/logo-katiuskas.png)
+   every other page's .topbar-logo shows now. */
 .login-brand {
   display: flex;
   align-items: center;
@@ -500,16 +497,9 @@ form.form-panel button {
 }
 
 .login-brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
   height: 32px;
+  width: auto;
   flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.95rem;
 }
 
 /* Sits below the main submit button as a secondary, alternate way in —
