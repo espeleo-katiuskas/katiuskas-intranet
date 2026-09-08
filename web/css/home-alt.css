@@ -12,23 +12,9 @@
   --alt-link: #2f6fed;
 }
 
-/* .alt-page is the sticky-footer wrapper: exactly viewport-tall at
-   minimum, with .alt-shell (flex: 1) filling whatever's left above the
-   footer. Putting min-height: 100vh on .alt-shell itself (the previous
-   approach) forced the page to be at least 100vh *plus* the footer's
-   own height, so the footer was only reachable by scrolling even on a
-   screen tall enough to fit everything — .alt-page's min-height is the
-   only 100vh in this layout, so a short page's footer sits right at
-   the bottom of the viewport instead. */
-.alt-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
 .alt-shell {
   display: flex;
-  flex: 1;
+  min-height: 100vh;
 }
 
 .alt-sidebar {

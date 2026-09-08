@@ -73,22 +73,6 @@ header.topbar .brand:hover {
   color: var(--accent);
 }
 
-footer.site-footer {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 8px 24px 32px;
-  color: var(--ink-muted);
-  font-size: 0.85rem;
-}
-
-footer.site-footer a {
-  color: var(--ink-muted);
-}
-
-footer.site-footer a:hover {
-  color: var(--accent);
-}
-
 nav.main-nav {
   display: flex;
   align-items: center;
