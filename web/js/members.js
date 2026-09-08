@@ -424,14 +424,7 @@ const FULL_COLUMNS = [
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },
   { ...textColumn('province', 'Provincia', (p) => p.province ?? ''), default: false },
   { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
-  {
-    ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date),
-    default: true,
-    render: (person) => {
-      if (person.membership_end_date) return formatDate(person.membership_end_date);
-      return person.membership_start_date ? '<span class="badge">Activa</span>' : '—';
-    },
-  },
+  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: true },
   {
     key: 'category',
     label: 'Categoría',
