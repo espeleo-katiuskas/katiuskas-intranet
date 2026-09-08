@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  initSidebarToggle,
   loadTopbarGreeting,
   currentUser,
   hasAnyRole,
@@ -15,6 +16,7 @@ import { initUserFilesBrowser } from './userFiles.js';
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+initSidebarToggle();
 loadTopbarGreeting();
 
 const viewer = currentUser();

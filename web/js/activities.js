@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  initSidebarToggle,
   loadTopbarGreeting,
   apiFetch,
   escapeHtml,
@@ -14,6 +15,7 @@ import {
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+initSidebarToggle();
 loadTopbarGreeting();
 
 const feedbackBox = document.getElementById('feedback');

@@ -2,6 +2,7 @@ import {
   initSession,
   logout,
   applyRoleVisibility,
+  initSidebarToggle,
   loadTopbarGreeting,
   currentUser,
   hasAnyRole,
@@ -19,6 +20,7 @@ import { renderMarkdown } from './markdown.js';
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+initSidebarToggle();
 loadTopbarGreeting();
 
 const viewer = currentUser();

@@ -118,6 +118,21 @@ body {
   font-weight: 600;
 }
 
+/* The hamburger toggle for .sidebar-nav — hidden here (desktop, where
+   the nav is always visible) and only shown under the narrow-screen
+   media query below, where it takes the nav's place until tapped. */
+.sidebar-toggle {
+  display: none;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .main-column {
   flex: 1;
   min-width: 0;
@@ -152,6 +167,11 @@ body {
   max-width: 1120px;
 }
 
+/* Below this width, the nav no longer fits comfortably as a row (it
+   used to just wrap, eating a lot of vertical space above the actual
+   page content) — instead it's collapsed behind .sidebar-toggle, shown
+   only once opened via its own .open class (see api.js's
+   initSidebarToggle). */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
@@ -161,9 +181,18 @@ body {
     width: 100%;
   }
 
+  .sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
   .sidebar-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: none;
+    flex-direction: column;
+  }
+
+  .sidebar-nav.open {
+    display: flex;
   }
 }
 

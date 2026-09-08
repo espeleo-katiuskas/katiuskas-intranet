@@ -1,8 +1,9 @@
-import { API_BASE, initSession, logout, applyRoleVisibility, loadTopbarGreeting, apiFetch, escapeHtml, encodeFilePath } from './api.js';
+import { API_BASE, initSession, logout, applyRoleVisibility, initSidebarToggle, loadTopbarGreeting, apiFetch, escapeHtml, encodeFilePath } from './api.js';
 
 await initSession();
 applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
+initSidebarToggle();
 loadTopbarGreeting();
 
 // Same labels/endpoint the Junta Directiva table used before this page
