@@ -36,11 +36,11 @@
       <h1>Material</h1>
       <p class="subtitle">Catálogo de material del club, su disponibilidad y sus movimientos.</p>
     </div>
-    <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">+ Nuevo material</button>
+    <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" aria-expanded="false" aria-controls="new-item-panel">+ Nuevo material</button>
   </div>
 
-  <p id="feedback" class="success-message" hidden></p>
-  <p id="error" class="error-message" hidden></p>
+  <p id="feedback" class="success-message" role="status" hidden></p>
+  <p id="error" class="error-message" role="alert" hidden></p>
 
   <div id="new-item-panel" class="panel" hidden data-roles="admin,board">
     <h3>Nuevo material</h3>

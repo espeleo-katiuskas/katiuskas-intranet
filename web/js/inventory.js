@@ -12,6 +12,7 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  setPanelHidden,
   showFeedback,
   showError,
 } from './api.js';
@@ -474,6 +475,7 @@ document.getElementById('loaned-material-table-body')?.addEventListener('click',
 
 if (isAdmin) {
   const newItemPanel = document.getElementById('new-item-panel');
+  const toggleNewItemButton = document.getElementById('toggle-new-item');
   const newItemForm = document.getElementById('new-item-form');
   const itemTypeSelect = document.getElementById('ni-item-type');
   const descriptionField = document.getElementById('ni-description');
@@ -507,13 +509,13 @@ if (isAdmin) {
     })
     .catch(() => showError('No se pudo cargar la lista de categorías.'));
 
-  document.getElementById('toggle-new-item').addEventListener('click', () => {
-    newItemPanel.hidden = !newItemPanel.hidden;
+  toggleNewItemButton.addEventListener('click', () => {
+    setPanelHidden(newItemPanel, toggleNewItemButton, !newItemPanel.hidden);
   });
 
   document.getElementById('cancel-new-item').addEventListener('click', () => {
     newItemForm.reset();
-    newItemPanel.hidden = true;
+    setPanelHidden(newItemPanel, toggleNewItemButton, true);
     updateItemTypeFieldsVisibility();
   });
 
@@ -556,7 +558,7 @@ if (isAdmin) {
       await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
       showFeedback('Material creado.');
       newItemForm.reset();
-      newItemPanel.hidden = true;
+      setPanelHidden(newItemPanel, toggleNewItemButton, true);
       updateItemTypeFieldsVisibility();
       await loadItems();
     } catch (err) {

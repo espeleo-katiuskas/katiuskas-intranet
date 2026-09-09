@@ -36,11 +36,11 @@
       <h1>Actividades</h1>
       <p class="subtitle">Próximas salidas y actividades del club.</p>
     </div>
-    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small">+ Nueva actividad</button>
+    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small" aria-expanded="false" aria-controls="new-activity-panel">+ Nueva actividad</button>
   </div>
 
-  <p id="feedback" class="success-message" hidden></p>
-  <p id="error" class="error-message" hidden></p>
+  <p id="feedback" class="success-message" role="status" hidden></p>
+  <p id="error" class="error-message" role="alert" hidden></p>
 
   <div id="new-activity-panel" class="panel" hidden>
     <h3>Nueva actividad</h3>

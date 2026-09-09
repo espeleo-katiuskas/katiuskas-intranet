@@ -203,6 +203,19 @@ function initSidebarToggle() {
   });
 }
 
+// Shows/hides a disclosure panel (a "+ Nueva actividad"-style form that
+// expands below its own toggle button) and keeps that button's
+// aria-expanded in sync — the same pairing initSidebarToggle's own
+// setOpen already does for the sidebar, pulled out here since several
+// pages repeat this exact shape for their own panels. Callers still own
+// the button's aria-controls (pointing at the panel's id) in the
+// markup itself; this only ever flips the one state that changes at
+// runtime.
+function setPanelHidden(panel, button, hidden) {
+  panel.hidden = hidden;
+  button.setAttribute('aria-expanded', String(!hidden));
+}
+
 // Fills the shared shell's "Hola, <nombre>" greeting (#topbar-user-name
 // — every logged-in page's .topbar has one, see style.css) with the
 // signed-in person's first name. A no-op on a page with no such element
@@ -341,6 +354,7 @@ export {
   setToken,
   escapeHtml,
   encodeFilePath,
+  setPanelHidden,
   knownRoleLabels,
   roleLabel,
   positionLabels,
