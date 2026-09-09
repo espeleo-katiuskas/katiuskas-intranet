@@ -42,6 +42,13 @@ type Options struct {
 	TelegramBotDMLinkTTL time.Duration
 	PublicBaseURL        string
 	TelegramBotUsername  string
+	// MagicLinkIPRateLimit/MagicLinkIPRateWindow configure the
+	// per-address throttle on RequestMagicLink (see
+	// httpapi.NewIPRateLimiter) — left unset, MagicLinkIPRateLimit's
+	// zero value disables it outright, which is what every existing
+	// test's newTestServer helper gets today.
+	MagicLinkIPRateLimit  int
+	MagicLinkIPRateWindow time.Duration
 }
 
 // TelegramMessenger sends a DM to a specific Telegram chat — unlike
@@ -69,14 +76,25 @@ type Handler struct {
 	notifier       telegram.Sender
 	telegramClient TelegramMessenger
 	opts           Options
+	ipLimiter      *httpapi.IPRateLimiter
 }
 
 func NewHandler(usersService *users.Service, rolesService *roles.Service, tokensService *tokens.Service, authenticator *auth.Authenticator, mailer mail.Sender, notifier telegram.Sender, telegramClient TelegramMessenger, opts Options) *Handler {
-	return &Handler{users: usersService, roles: rolesService, tokens: tokensService, authenticator: authenticator, mailer: mailer, notifier: notifier, telegramClient: telegramClient, opts: opts}
+	return &Handler{
+		users:          usersService,
+		roles:          rolesService,
+		tokens:         tokensService,
+		authenticator:  authenticator,
+		mailer:         mailer,
+		notifier:       notifier,
+		telegramClient: telegramClient,
+		opts:           opts,
+		ipLimiter:      httpapi.NewIPRateLimiter(opts.MagicLinkIPRateLimit, opts.MagicLinkIPRateWindow),
+	}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/auth/magic-link", h.RequestMagicLink)
+	mux.Handle("POST /api/v1/auth/magic-link", h.ipLimiter.Limit(h.RequestMagicLink))
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume-code", h.ConsumeMagicLinkCode)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)

@@ -13,6 +13,15 @@ type Config struct {
 	TokenTTL          time.Duration
 	MagicLinkTTL      time.Duration
 	MagicLinkCooldown time.Duration
+	// MagicLinkIPRateLimit/MagicLinkIPRateWindow throttle POST
+	// /auth/magic-link per calling address (see httpapi.IPRateLimiter) —
+	// a coarser backstop above MagicLinkCooldown, which is keyed by the
+	// matched person instead: cooldown alone does nothing to slow down
+	// one address cycling through many different fake email/phone
+	// guesses, since each one is a different "person" as far as the
+	// cooldown is concerned.
+	MagicLinkIPRateLimit  int
+	MagicLinkIPRateWindow time.Duration
 	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
 	// states in, and the delay before it deletes, a magic-link DM sent in
 	// direct reply to someone typing their email into the bot's own
@@ -83,6 +92,8 @@ func Load() (Config, error) {
 		TokenTTL:              30 * 24 * time.Hour,
 		MagicLinkTTL:          15 * time.Minute,
 		MagicLinkCooldown:     60 * time.Second,
+		MagicLinkIPRateLimit:  20,
+		MagicLinkIPRateWindow: 15 * time.Minute,
 		TelegramBotDMLinkTTL:  5 * time.Minute,
 		ImpersonationTokenTTL: time.Hour,
 		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),

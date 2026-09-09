@@ -733,6 +733,62 @@ func TestRequestMagicLinkRespectsCooldown(t *testing.T) {
 	}
 }
 
+// TestRequestMagicLinkIsRateLimitedPerIPAddress covers the per-address
+// throttle (httpapi.IPRateLimiter) wrapping this route in RegisterRoutes
+// — a coarser backstop above the per-user cooldown tested above, which
+// does nothing to slow down one address cycling through many different
+// fake email/phone guesses. newTestServer itself leaves
+// MagicLinkIPRateLimit unset (disabled, see Options' own doc comment),
+// so this builds its own handler with a small explicit limit instead.
+func TestRequestMagicLinkIsRateLimitedPerIPAddress(t *testing.T) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
+
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, &capturingMailer{}, &capturingNotifier{}, &capturingTelegramClient{}, authapi.Options{
+		TokenTTL:              time.Hour,
+		MagicLinkTTL:          15 * time.Minute,
+		MagicLinkCooldown:     time.Minute,
+		PublicBaseURL:         "http://localhost:64710",
+		MagicLinkIPRateLimit:  1,
+		MagicLinkIPRateWindow: time.Minute,
+	})
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	postFrom := func(remoteAddr string) *httptest.ResponseRecorder {
+		body, err := json.Marshal(map[string]string{"email": "nobody@example.com", "phone": "600000000"})
+		if err != nil {
+			t.Fatalf("marshal request body: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/magic-link", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := postFrom("203.0.113.9:1111"); rec.Code != http.StatusOK {
+		t.Fatalf("expected 1st request to pass through with 200, got %d", rec.Code)
+	}
+	rec := postFrom("203.0.113.9:1111")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 2nd request from the same address to get 429, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "rate_limited" {
+		t.Errorf("expected error code rate_limited, got %q", code)
+	}
+
+	if rec := postFrom("203.0.113.10:2222"); rec.Code != http.StatusOK {
+		t.Fatalf("expected a different address's own 1st request to still pass through, got %d", rec.Code)
+	}
+}
+
 func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")

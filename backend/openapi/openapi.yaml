@@ -78,6 +78,12 @@ paths:
         already be on its way) — telling those cases apart would let
         this endpoint enumerate who's in the system, or spam someone's
         inbox.
+
+        Also throttled per calling address (a coarser backstop above
+        the per-person cooldown above, which alone does nothing to slow
+        down one address cycling through many different fake email/phone
+        guesses): a limit generous enough for a shared address (a
+        household, an office) to never notice it in normal use.
       requestBody:
         required: true
         content:
@@ -91,6 +97,8 @@ paths:
       responses:
         "200":
           description: Always returned, regardless of whether a link was actually sent.
+        "429":
+          description: rate_limited — too many requests from this address recently; try again later.
 
   /auth/magic-link/consume:
     post:
