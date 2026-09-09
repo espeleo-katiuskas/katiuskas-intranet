@@ -10,6 +10,8 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  showFeedback,
+  showError,
 } from './api.js';
 
 await initSession();
@@ -17,9 +19,6 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 initSidebarToggle();
 loadTopbarGreeting();
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
 
 // Loaded once, shared only by the "new activity" participant picker now —
 // per-activity participant management lives on /activity?id=… instead.
@@ -38,18 +37,6 @@ async function loadDirectory() {
     directoryByLogin = {};
     personEntries = [];
   }
-}
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
 }
 
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };

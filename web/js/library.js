@@ -9,6 +9,7 @@ import {
   escapeHtml,
   encodeFilePath,
   formatDate,
+  showError,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -17,15 +18,6 @@ applyRoleVisibility();
 document.getElementById('logout-button').addEventListener('click', logout);
 initSidebarToggle();
 loadTopbarGreeting();
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
-}
 
 const directoryView = document.getElementById('directory-view');
 const fileView = document.getElementById('file-view');

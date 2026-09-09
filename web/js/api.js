@@ -236,6 +236,34 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => chars[char]);
 }
 
+// Shared "success/error banner" pair every page provides via its own
+// #feedback/#error <p> elements (see e.g. members.html) — previously
+// copy-pasted verbatim into every page script instead of living here.
+// Looked up by id on every call rather than cached at module load, so
+// these keep working regardless of when a page's own script runs
+// relative to the elements existing in the DOM; a page missing one of
+// the two ids (there are none today) just silently skips that half
+// instead of throwing.
+function showFeedback(message) {
+  const feedbackBox = document.getElementById('feedback');
+  const errorBox = document.getElementById('error');
+  if (errorBox) errorBox.hidden = true;
+  if (feedbackBox) {
+    feedbackBox.textContent = message;
+    feedbackBox.hidden = false;
+  }
+}
+
+function showError(message) {
+  const feedbackBox = document.getElementById('feedback');
+  const errorBox = document.getElementById('error');
+  if (feedbackBox) feedbackBox.hidden = true;
+  if (errorBox) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+}
+
 function formatDate(isoDate) {
   const date = new Date(isoDate);
   const day = String(date.getDate()).padStart(2, '0');
@@ -287,6 +315,8 @@ export {
   setToken,
   escapeHtml,
   encodeFilePath,
+  showFeedback,
+  showError,
   formatDate,
   pickerLabel,
   renderPickerOptions,

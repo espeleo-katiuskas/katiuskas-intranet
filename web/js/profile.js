@@ -8,6 +8,8 @@ import {
   hasAnyRole,
   apiFetch,
   formatDate,
+  showFeedback,
+  showError,
 } from './api.js';
 import { initUserFilesBrowser } from './userFiles.js';
 
@@ -19,21 +21,6 @@ loadTopbarGreeting();
 
 const user = currentUser();
 const isAdmin = hasAnyRole(user, ['admin']);
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
-}
 
 const editForm = document.getElementById('edit-profile-form');
 

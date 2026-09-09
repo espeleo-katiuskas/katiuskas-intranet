@@ -12,6 +12,8 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  showFeedback,
+  showError,
 } from './api.js';
 
 await initSession();
@@ -28,20 +30,6 @@ const isAdmin = hasAnyRole(user, ['admin', 'board']);
 // so this is deliberately a separate check from isAdmin.
 const canManageMovements = hasAnyRole(user, ['admin', 'board', 'material']);
 
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
-}
 
 const itemStatusLabels = {
   available: 'Disponible',

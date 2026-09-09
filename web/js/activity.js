@@ -14,6 +14,8 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  showFeedback,
+  showError,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -57,21 +59,6 @@ const canManageMovements = hasAnyRole(viewer, ['admin', 'board', 'material']);
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!activityId) {
   window.location.href = '/activities';
-}
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
 }
 
 const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };

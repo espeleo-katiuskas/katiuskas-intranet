@@ -10,6 +10,8 @@ import {
   escapeHtml,
   formatDate,
   setToken,
+  showFeedback,
+  showError,
 } from './api.js';
 import { initUserFilesBrowser } from './userFiles.js';
 
@@ -29,21 +31,6 @@ if (!isAdmin) {
 const memberLogin = new URLSearchParams(window.location.search).get('login');
 if (!memberLogin) {
   window.location.href = '/members';
-}
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
 }
 
 // Same friendly labels as members.js — kept in sync there since neither

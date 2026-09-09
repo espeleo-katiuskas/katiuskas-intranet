@@ -9,6 +9,8 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  showFeedback,
+  showError,
 } from './api.js';
 
 await initSession();
@@ -24,21 +26,6 @@ const user = currentUser();
 // applyRoleVisibility() already strips via each element's data-roles.
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
-
-const feedbackBox = document.getElementById('feedback');
-const errorBox = document.getElementById('error');
-
-function showFeedback(message) {
-  errorBox.hidden = true;
-  feedbackBox.textContent = message;
-  feedbackBox.hidden = false;
-}
-
-function showError(message) {
-  feedbackBox.hidden = true;
-  errorBox.textContent = message;
-  errorBox.hidden = false;
-}
 
 // The system roles (see docs/architecture.md) get a friendlier Spanish
 // label; anything an admin created shows as typed. Only used here for the
