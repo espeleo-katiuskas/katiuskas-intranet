@@ -10,7 +10,6 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
-  setPanelHidden,
   typeLabels,
   statusLabels,
   showFeedback,
@@ -111,7 +110,6 @@ activitiesList.addEventListener('click', (event) => {
 
 // Creating an activity is open to any signed-in member, not just admin/board.
 const newActivityPanel = document.getElementById('new-activity-panel');
-const toggleNewActivityButton = document.getElementById('toggle-new-activity');
 const newActivityForm = document.getElementById('new-activity-form');
 const participantSearchInput = document.getElementById('na-participant-search');
 const participantOptions = document.getElementById('na-participant-options');
@@ -158,15 +156,15 @@ participantOptions.innerHTML = renderPickerOptions(personEntries);
 const leaderOptions = document.getElementById('na-leader-options');
 if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
 
-toggleNewActivityButton.addEventListener('click', () => {
-  setPanelHidden(newActivityPanel, toggleNewActivityButton, !newActivityPanel.hidden);
+document.getElementById('toggle-new-activity').addEventListener('click', () => {
+  newActivityPanel.hidden = !newActivityPanel.hidden;
 });
 
 document.getElementById('cancel-new-activity').addEventListener('click', () => {
   newActivityForm.reset();
   chosenParticipants.clear();
   renderParticipantChips();
-  setPanelHidden(newActivityPanel, toggleNewActivityButton, true);
+  newActivityPanel.hidden = true;
 });
 
 newActivityForm.addEventListener('submit', async (event) => {
@@ -204,7 +202,7 @@ newActivityForm.addEventListener('submit', async (event) => {
     newActivityForm.reset();
     chosenParticipants.clear();
     renderParticipantChips();
-    setPanelHidden(newActivityPanel, toggleNewActivityButton, true);
+    newActivityPanel.hidden = true;
     offset = 0;
     await loadActivities();
   } catch (err) {

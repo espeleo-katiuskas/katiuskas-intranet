@@ -12,7 +12,6 @@ import {
   knownRoleLabels,
   roleLabel,
   positionLabels,
-  setPanelHidden,
   showFeedback,
   showError,
 } from './api.js';
@@ -130,16 +129,15 @@ if (isAdmin) {
 
 if (isRealAdmin) {
   const newRolePanel = document.getElementById('new-role-panel');
-  const toggleNewRoleButton = document.getElementById('toggle-new-role');
   const newRoleForm = document.getElementById('new-role-form');
 
-  toggleNewRoleButton.addEventListener('click', () => {
-    setPanelHidden(newRolePanel, toggleNewRoleButton, !newRolePanel.hidden);
+  document.getElementById('toggle-new-role').addEventListener('click', () => {
+    newRolePanel.hidden = !newRolePanel.hidden;
   });
 
   document.getElementById('cancel-new-role').addEventListener('click', () => {
     newRoleForm.reset();
-    setPanelHidden(newRolePanel, toggleNewRoleButton, true);
+    newRolePanel.hidden = true;
   });
 
   newRoleForm.addEventListener('submit', async (event) => {
@@ -156,7 +154,7 @@ if (isRealAdmin) {
       await apiFetch('/roles', { method: 'POST', body: JSON.stringify(body) });
       showFeedback('Rol creado.');
       newRoleForm.reset();
-      setPanelHidden(newRolePanel, toggleNewRoleButton, true);
+      newRolePanel.hidden = true;
       await loadRoles();
     } catch (err) {
       showError(err.message);
@@ -620,16 +618,15 @@ async function loadUsers() {
 // (applyRoleVisibility already removed the button, panel, and form).
 if (isRealAdmin) {
   const newPersonPanel = document.getElementById('new-person-panel');
-  const toggleNewPersonButton = document.getElementById('toggle-new-person');
   const newPersonForm = document.getElementById('new-person-form');
 
-  toggleNewPersonButton.addEventListener('click', () => {
-    setPanelHidden(newPersonPanel, toggleNewPersonButton, !newPersonPanel.hidden);
+  document.getElementById('toggle-new-person').addEventListener('click', () => {
+    newPersonPanel.hidden = !newPersonPanel.hidden;
   });
 
   document.getElementById('cancel-new-person').addEventListener('click', () => {
     newPersonForm.reset();
-    setPanelHidden(newPersonPanel, toggleNewPersonButton, true);
+    newPersonPanel.hidden = true;
   });
 
   newPersonForm.addEventListener('submit', async (event) => {
@@ -673,7 +670,7 @@ if (isRealAdmin) {
       }
       showFeedback(feedback);
       newPersonForm.reset();
-      setPanelHidden(newPersonPanel, toggleNewPersonButton, true);
+      newPersonPanel.hidden = true;
       await loadUsers();
     } catch (err) {
       showError(err.message);
