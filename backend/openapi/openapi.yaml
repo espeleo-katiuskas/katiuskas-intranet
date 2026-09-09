@@ -1780,6 +1780,221 @@ paths:
           description: invalid_path (escapes root) or not_a_file (path names a directory).
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /accounts:
+    get:
+      summary: List the chart of accounts
+      description: >
+        Open to admin, board, and plain members alike — the club's own
+        money is something every socio can see, not just admin/board.
+        Ordered by code; the frontend builds any tree view it wants
+        client-side from each account's own parent_id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Every account, ordered by code
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Account" }
+    post:
+      summary: Create an account
+      description: >
+        Requires admin or the optional "money" role (seeded by migration
+        00012_accounting.sql, not a system role — a club that doesn't
+        want this distinction can delete it and keep using admin
+        instead), the same "admin plus one optional custom role" shape
+        the material role already has for inventory movements. Like
+        every route, also requires a baseline role (admin/board/member)
+        regardless — holding only "money" with none of those is
+        rejected everywhere, this included.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name: { type: string }
+                code: { type: string, description: "Unique across every account." }
+                parent_id: { type: integer, nullable: true }
+      responses:
+        "201":
+          description: Created account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400":
+          description: missing_fields, or unknown_parent_account (parent_id names no existing account)
+        "403": { description: Requires admin or the money role. }
+        "409": { description: duplicate_code — another account already has this code. }
+
+  /accounts/{id}:
+    get:
+      summary: Get a single account
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Correct an account's name, code, or parent
+      description: Requires admin or the money role (see POST /accounts). name/code/parent_id always replace the current values.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name: { type: string }
+                code: { type: string }
+                parent_id: { type: integer, nullable: true }
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { description: missing_fields, or unknown_parent_account. }
+        "403": { description: Requires admin or the money role. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_code. }
+    delete:
+      summary: Delete an account
+      description: >
+        Requires admin or the money role. Rejected outright
+        (account_in_use) if this account is still referenced by a child
+        account (its own parent_id) or a posted transaction entry —
+        deleting it would either orphan that subtree or silently erase
+        financial history.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Requires admin or the money role. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: account_in_use — still referenced by a child account or a transaction entry. }
+
+  /transactions:
+    get:
+      summary: List transactions, most recently occurred first
+      description: Open to admin, board, and plain members alike, same as GET /accounts. Each transaction carries its own entries inline.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Transactions, most recent occurred_at first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+    post:
+      summary: Record a transaction
+      description: >
+        Requires admin or the money role (see POST /accounts). entries
+        needs two or more, and they must sum to exactly zero — standard
+        double-entry bookkeeping: a transaction always says both where
+        money came from and where it went. This is enforced by a
+        deferred database constraint regardless of what calls this
+        endpoint, not just checked here.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, occurred_at, entries]
+              properties:
+                description: { type: string }
+                occurred_at: { type: string, format: date-time }
+                entries:
+                  type: array
+                  minItems: 2
+                  items: { $ref: "#/components/schemas/EntryInput" }
+      responses:
+        "201":
+          description: Created transaction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "400": { description: missing_fields, too_few_entries, invalid_amount (a zero-amount entry), or unknown_account. }
+        "403": { description: Requires admin or the money role. }
+        "409": { description: unbalanced — entries don't sum to zero. }
+
+  /transactions/{id}:
+    get:
+      summary: Get a single transaction, with its entries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The transaction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Correct a transaction's description, timestamp, or entries
+      description: >
+        Requires admin or the money role. description, occurred_at and
+        entries always replace the current values in full — there's no
+        single-entry edit, only replacing the whole set at once, same
+        as POST's own balance requirement.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, occurred_at, entries]
+              properties:
+                description: { type: string }
+                occurred_at: { type: string, format: date-time }
+                entries:
+                  type: array
+                  minItems: 2
+                  items: { $ref: "#/components/schemas/EntryInput" }
+      responses:
+        "200":
+          description: Updated transaction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "400": { description: missing_fields, too_few_entries, invalid_amount, or unknown_account. }
+        "403": { description: Requires admin or the money role. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: unbalanced. }
+    delete:
+      summary: Delete a transaction (and its entries)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Requires admin or the money role. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2498,3 +2713,46 @@ components:
           type: array
           items: { $ref: "#/components/schemas/UserFileEntry" }
           description: Subdirectories first, then files, both alphabetical. Dotfiles never appear.
+
+    Account:
+      type: object
+      description: >
+        One node in the chart of accounts. code is unique across every
+        account; parent_id nests it under a broader one (null for a
+        top-level account) — the frontend builds any tree view it wants
+        client-side from this.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        code: { type: string }
+        parent_id: { type: integer, nullable: true }
+
+    Entry:
+      type: object
+      description: One line of a Transaction — amount moved into (positive) or out of (negative) account_id.
+      properties:
+        id: { type: integer }
+        account_id: { type: integer }
+        amount: { type: number, format: double }
+
+    EntryInput:
+      type: object
+      required: [account_id, amount]
+      properties:
+        account_id: { type: integer }
+        amount: { type: number, format: double, description: "Never zero — a no-op leg is rejected." }
+
+    Transaction:
+      type: object
+      description: >
+        A single, dated, balanced movement of money. entries always
+        number two or more and always sum to exactly zero, enforced by
+        a deferred database constraint regardless of what wrote them.
+      properties:
+        id: { type: integer }
+        description: { type: string }
+        occurred_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/Entry" }

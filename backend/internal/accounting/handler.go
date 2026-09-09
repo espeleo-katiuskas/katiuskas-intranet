@@ -1,0 +1,416 @@
+package accounting
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+)
+
+// UserLookup resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — the same narrow,
+// locally-defined interface every other mutating package uses (see
+// board.UserLookup), even though accounting itself keys nothing by
+// user id or login the way board/licenses/memberships do.
+type UserLookup interface {
+	LoginForUserID(ctx context.Context, id int64) (string, error)
+}
+
+type Handler struct {
+	service       *Service
+	authenticator *auth.Authenticator
+	users         UserLookup
+	notifier      httpapi.MutationNotifier
+}
+
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+}
+
+// actorLogin resolves the calling session's own login, for the "who
+// did this" half of a mutation notification — see board.Handler's own
+// copy of this same helper. Falls back to a placeholder rather than
+// failing the whole request if the lookup itself errors, since a
+// notification is never worth failing the actual write over.
+func (h *Handler) actorLogin(ctx context.Context) string {
+	current, _ := auth.UserFromContext(ctx)
+	login, err := h.users.LoginForUserID(ctx, current.ID)
+	if err != nil {
+		return fmt.Sprintf("user#%d", current.ID)
+	}
+	return login
+}
+
+// Reading is open to every baseline role (admin/board/member, see
+// auth.BaselineRoles) — the club's own money is something every socio
+// can see, not just admin/board. Writing (creating or correcting an
+// account or a transaction) is admin-only plus the optional "money"
+// role (seeded by migration 00012_accounting.sql, not a system role —
+// a club that doesn't want this distinction can delete it and keep
+// using admin instead), the same "admin plus one optional custom role"
+// shape inventory.Handler already uses via "material" for its own
+// movements.
+func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/accounts", h.authenticator.Protect(h.listAccounts))
+	mux.Handle("POST /api/v1/accounts", h.authenticator.Protect(h.createAccount, "admin", "money"))
+	mux.Handle("GET /api/v1/accounts/{id}", h.authenticator.Protect(h.getAccount))
+	mux.Handle("PATCH /api/v1/accounts/{id}", h.authenticator.Protect(h.updateAccount, "admin", "money"))
+	mux.Handle("DELETE /api/v1/accounts/{id}", h.authenticator.Protect(h.deleteAccount, "admin", "money"))
+
+	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions))
+	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "money"))
+	mux.Handle("GET /api/v1/transactions/{id}", h.authenticator.Protect(h.getTransaction))
+	mux.Handle("PATCH /api/v1/transactions/{id}", h.authenticator.Protect(h.updateTransaction, "admin", "money"))
+	mux.Handle("DELETE /api/v1/transactions/{id}", h.authenticator.Protect(h.deleteTransaction, "admin", "money"))
+}
+
+func pathID(r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	return id, err == nil
+}
+
+// ---- Accounts ----
+
+func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListAccounts(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list accounts")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	a, err := h.service.GetAccount(r.Context(), id)
+	if errors.Is(err, ErrAccountNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get account")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, a)
+}
+
+func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
+	var body struct {
+		Name     string `json:"name"`
+		Code     string `json:"code"`
+		ParentID *int64 `json:"parent_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return CreateAccountInput{}, err
+	}
+	return CreateAccountInput{Name: body.Name, Code: body.Code, ParentID: body.ParentID}, nil
+}
+
+func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
+	in, err := decodeAccountBody(r)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Code) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name and code are both required")
+		return
+	}
+	a, err := h.service.CreateAccount(r.Context(), in)
+	if writeAccountError(w, err) {
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la cuenta «%s» (%s).",
+		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.WriteJSON(w, http.StatusCreated, a)
+}
+
+func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	in, err := decodeAccountBody(r)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Code) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name and code are both required")
+		return
+	}
+
+	// Fetched before applying anything, purely to describe exactly
+	// what changed in the mutation notification below (see
+	// accountAuditableFields) — a failure here isn't reason enough to
+	// fail the actual edit, so it's only ever consulted if it
+	// succeeded. Same pattern board.Handler.update uses.
+	before, beforeErr := h.service.GetAccount(r.Context(), id)
+
+	a, err := h.service.UpdateAccount(r.Context(), id, UpdateAccountInput{Name: in.Name, Code: in.Code, ParentID: in.ParentID})
+	if writeAccountError(w, err) {
+		return
+	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, a, accountAuditableFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la cuenta «%s»:\n%s",
+				h.actorLogin(r.Context()), a.Code, strings.Join(diff, "\n")))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, a)
+}
+
+func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	a, err := h.service.GetAccount(r.Context(), id)
+	if errors.Is(err, ErrAccountNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get account")
+		return
+	}
+	if err := h.service.DeleteAccount(r.Context(), id); writeAccountError(w, err) {
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la cuenta «%s» (%s).",
+		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// writeAccountError maps an accounting account error to its HTTP
+// response and reports whether it wrote one at all (false for a nil
+// err, meaning the caller should carry on).
+func writeAccountError(w http.ResponseWriter, err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, ErrAccountNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
+	case errors.Is(err, ErrUnknownAccount):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_parent_account", err.Error())
+	case errors.Is(err, ErrDuplicateCode):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_code", err.Error())
+	case errors.Is(err, ErrAccountInUse):
+		httpapi.WriteError(w, http.StatusConflict, "account_in_use", err.Error())
+	default:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not save account")
+	}
+	return true
+}
+
+// accountAuditableFields are the Account fields updateAccount's own
+// mutation notification diffs (see httpapi.DiffFields) — matching
+// UpdateAccountInput's field set exactly.
+var accountAuditableFields = []string{"Name", "Code", "ParentID"}
+
+// ---- Transactions ----
+
+func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	list, err := h.service.ListTransactions(r.Context(), limit, offset)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list transactions")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) getTransaction(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	t, err := h.service.GetTransaction(r.Context(), id)
+	if errors.Is(err, ErrTransactionNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get transaction")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, t)
+}
+
+type entryBody struct {
+	AccountID int64   `json:"account_id"`
+	Amount    float64 `json:"amount"`
+}
+
+// transactionBody is shared by createTransaction/updateTransaction —
+// occurred_at decodes straight into time.Time (encoding/json parses
+// RFC 3339 natively), unlike the plain YYYY-MM-DD "date" fields
+// elsewhere in this API (activities.start_date, licenses.issued_date,
+// ...), which need a manual time.Parse since RFC 3339 isn't what those
+// represent. occurred_at is a real timestamp, not just a date, so the
+// default format is exactly what's wanted here.
+type transactionBody struct {
+	Description string      `json:"description"`
+	OccurredAt  time.Time   `json:"occurred_at"`
+	Entries     []entryBody `json:"entries"`
+}
+
+func decodeTransactionBody(r *http.Request) (transactionBody, error) {
+	var body transactionBody
+	err := json.NewDecoder(r.Body).Decode(&body)
+	return body, err
+}
+
+func toEntryInputs(entries []entryBody) []EntryInput {
+	out := make([]EntryInput, len(entries))
+	for i, e := range entries {
+		out[i] = EntryInput{AccountID: e.AccountID, Amount: e.Amount}
+	}
+	return out
+}
+
+func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
+	in, err := decodeTransactionBody(r)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body, or occurred_at isn't RFC 3339")
+		return
+	}
+	if strings.TrimSpace(in.Description) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "description is required")
+		return
+	}
+	t, err := h.service.CreateTransaction(r.Context(), CreateTransactionInput{
+		Description: in.Description, OccurredAt: in.OccurredAt, Entries: toEntryInputs(in.Entries),
+	})
+	if writeTransactionError(w, err) {
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado la transacción «%s» (%d apuntes).",
+		h.actorLogin(r.Context()), t.Description, len(t.Entries)))
+	httpapi.WriteJSON(w, http.StatusCreated, t)
+}
+
+func (h *Handler) updateTransaction(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	in, err := decodeTransactionBody(r)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body, or occurred_at isn't RFC 3339")
+		return
+	}
+	if strings.TrimSpace(in.Description) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "description is required")
+		return
+	}
+
+	before, beforeErr := h.service.GetTransaction(r.Context(), id)
+
+	t, err := h.service.UpdateTransaction(r.Context(), id, UpdateTransactionInput{
+		Description: in.Description, OccurredAt: in.OccurredAt, Entries: toEntryInputs(in.Entries),
+	})
+	if writeTransactionError(w, err) {
+		return
+	}
+	if beforeErr == nil {
+		diff := httpapi.DiffFields(before, t, transactionAuditableFields...)
+		if entriesDiffer(before.Entries, t.Entries) {
+			diff = append(diff, fmt.Sprintf("Entries: %d apunte(s)", len(t.Entries)))
+		}
+		if len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la transacción «%s»:\n%s",
+				h.actorLogin(r.Context()), t.Description, strings.Join(diff, "\n")))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) deleteTransaction(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	t, err := h.service.GetTransaction(r.Context(), id)
+	if errors.Is(err, ErrTransactionNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get transaction")
+		return
+	}
+	if err := h.service.DeleteTransaction(r.Context(), id); writeTransactionError(w, err) {
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la transacción «%s».",
+		h.actorLogin(r.Context()), t.Description))
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// writeTransactionError maps an accounting transaction error to its
+// HTTP response and reports whether it wrote one at all (false for a
+// nil err, meaning the caller should carry on).
+func writeTransactionError(w http.ResponseWriter, err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, ErrTransactionNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
+	case errors.Is(err, ErrTooFewEntries):
+		httpapi.WriteError(w, http.StatusBadRequest, "too_few_entries", err.Error())
+	case errors.Is(err, ErrInvalidAmount):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_amount", err.Error())
+	case errors.Is(err, ErrUnknownAccount):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_account", err.Error())
+	case errors.Is(err, ErrUnbalanced):
+		httpapi.WriteError(w, http.StatusConflict, "unbalanced", err.Error())
+	default:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not save transaction")
+	}
+	return true
+}
+
+// transactionAuditableFields are the Transaction fields
+// updateTransaction's own mutation notification diffs via
+// httpapi.DiffFields — Entries isn't in this list (a slice diffs badly
+// as one "before → after" line); entriesDiffer covers that separately.
+var transactionAuditableFields = []string{"Description", "OccurredAt"}
+
+// entriesDiffer reports whether two transactions' entries differ in
+// count, account, or amount — order-sensitive, since both come back
+// from the database ordered by id (see
+// Repository.entriesForTransaction/insertEntries), so a genuine
+// reorder-with-no-other-change would still (correctly) count as a
+// difference.
+func entriesDiffer(before, after []Entry) bool {
+	if len(before) != len(after) {
+		return true
+	}
+	for i := range before {
+		if before[i].AccountID != after[i].AccountID || before[i].Amount != after[i].Amount {
+			return true
+		}
+	}
+	return false
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounting"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -174,6 +175,9 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	activityResourcesRepo := activityresources.NewRepository(repoPool)
 	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
 
+	accountingRepo := accounting.NewRepository(repoPool)
+	accountingService := accounting.NewService(accountingRepo)
+
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	authHandler = authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
@@ -201,6 +205,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Library:           library.NewHandler(libraryService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
+		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, telegramSender),
 	})
 
 	return router, authHandler, usersService, nil

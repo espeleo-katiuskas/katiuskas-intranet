@@ -78,7 +78,8 @@ per login.
 
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
 panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
-`roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`, `tokens`), each
+`roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`, `tokens`,
+`accounting`), each
 split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain
 layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
 owns and registers its own routes via `RegisterRoutes(mux)`, wired together in
@@ -381,7 +382,7 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   new" line per field that actually differs (a nil pointer formats as `(vacío)`, a date
   as a plain `YYYY-MM-DD`). Every resource package with a mutating route (`users`,
   `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
-  `activityresources`) takes an `httpapi.MutationNotifier` in its own `NewHandler` —
+  `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its own `NewHandler` —
   wired to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't
   spam every single request" check the way the predecessor of this whole thing needed,
   since one message per meaningful action isn't noisy the way one per every mutating
@@ -515,6 +516,56 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   bot above (which genuinely can't do anything useful without a channel to report to) —
   a restart is rare enough that falling through to `NoopSender`'s own info log when
   Telegram isn't configured is no noisier than logging it directly would've been anyway.
+
+**Accounting** (`internal/accounting`): the club's own money — a chart of accounts
+(`accounts`: name, a unique `code`, and an optional `parent_id` nesting it under a
+broader one — the frontend builds any tree view it wants client-side from that) and,
+against that chart, `transactions`: every real movement of money the club records, each
+made of two or more `entries` (an `account_id` and an `amount`, positive into that
+account or negative out of it) whose amounts always sum to exactly zero — standard
+double-entry bookkeeping, so a transaction always says both where money came from and
+where it went, never just one side of it. "At least two entries" and "sums to zero" both
+depend on every sibling row, not just one, so neither can be a plain `CHECK` — both are
+enforced instead by `transaction_entries_balance`, a `DEFERRABLE INITIALLY DEFERRED`
+constraint trigger (migration `00012_accounting.sql`) that only actually runs at commit,
+after every entry a write touched is in place, rather than rejecting a transaction's
+entries one at a time as `accounting.Repository.CreateTransaction`/`UpdateTransaction`
+insert them individually inside their own DB transaction (the same `pool.Begin` pattern
+`activities.Repository.Create` already uses for an activity's initial participants).
+The trigger explicitly skips its own check once the `transactions` row itself is also
+gone (checked first, before counting/summing entries) — deleting a whole transaction
+cascades to every one of its entries, each of which fires this same trigger, and without
+that guard the last entry to go would look like "a transaction with zero (too few)
+entries" instead of a transaction that's correctly, completely gone.
+`Repository.CreateTransaction`/`UpdateTransaction` don't just rely on the deferred
+default, though: right after inserting entries they run `SET CONSTRAINTS
+transaction_entries_balance IMMEDIATE` on their own DB transaction to force the check
+right then (mapping a violation to `ErrUnbalanced` from that call instead of a later
+`Commit`), then set it back to `DEFERRED` before returning — necessary because
+`pool.Begin` on top of an already-open `pgx.Tx` (exactly what every test does, via
+`testutil.NewTx`) opens a *savepoint*, not a real nested transaction, and Postgres only
+ever fires a deferred trigger at a real `COMMIT`, never at a savepoint's own `RELEASE` —
+so without forcing it immediate, the check would silently never run at all under test,
+and resetting back to `DEFERRED` afterward matters too, since `SET CONSTRAINTS`'s effect
+otherwise outlives the savepoint that set it (unlike a `ROLLBACK`, a successful `RELEASE
+SAVEPOINT` doesn't undo it), which would make the *next* multi-row entry insert
+anywhere else in the same enclosing transaction fail spuriously, checked one row too
+early. `UpdateTransaction` corrects a transaction by replacing its description,
+`occurred_at`, and its *entire* set of entries at once (delete every existing one, insert
+the given set) rather than editing a single entry in place — there's no single-entry
+edit endpoint. `occurred_at` is a real timestamp, not just a date the way
+`activities.start_date`/`licenses.issued_date` are, so it decodes straight into a Go
+`time.Time` (RFC 3339, `encoding/json`'s own default) rather than needing the manual
+`time.Parse` every plain-date field elsewhere needs.
+Reading (`GET /accounts`, `GET /transactions`, and their `/{id}` forms) is open to any
+baseline role — the club's own finances are something every socio can see, not just
+admin/board. Writing needs admin or the optional, non-system "money" role (seeded by
+migration `00012_accounting.sql`, deletable by a club that doesn't want the distinction),
+the same "admin plus one optional custom role" shape `material` already has for
+inventory movements — board itself gets no special write access here, same as it has
+none for licenses or a person's own data. Every write still goes through the same
+baseline-role floor as every other route: holding only `money` with none of
+admin/board/member is rejected everywhere, this included.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
