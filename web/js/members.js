@@ -9,6 +9,9 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  knownRoleLabels,
+  roleLabel,
+  positionLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -26,26 +29,6 @@ const user = currentUser();
 // applyRoleVisibility() already strips via each element's data-roles.
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
-
-// The system roles (see docs/architecture.md) get a friendlier Spanish
-// label; anything an admin created shows as typed. Only used here for the
-// role catalog table and the "Nueva persona" checkboxes — managing an
-// existing person's roles happens on their own page (/member?login=…) now.
-const knownRoleLabels = { admin: 'Administrador', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
-function roleLabel(name) {
-  return knownRoleLabels[name] ?? name;
-}
-
-// Same friendly labels as member.js/dashboard.js — kept in sync there
-// since neither file is big enough yet to justify sharing them through
-// api.js.
-const positionLabels = {
-  president: 'Presidente',
-  vice_president: 'Vicepresidente',
-  secretary: 'Secretario',
-  treasurer: 'Tesorero',
-  member_at_large: 'Vocal',
-};
 
 let allRoles = [];
 // Role names is_automatic=true (member/former_member/board — see

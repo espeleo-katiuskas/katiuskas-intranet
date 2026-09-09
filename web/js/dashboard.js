@@ -1,4 +1,4 @@
-import { API_BASE, initSession, logout, applyRoleVisibility, initSidebarToggle, loadTopbarGreeting, apiFetch, escapeHtml, encodeFilePath } from './api.js';
+import { API_BASE, initSession, logout, applyRoleVisibility, initSidebarToggle, loadTopbarGreeting, apiFetch, escapeHtml, encodeFilePath, positionLabels } from './api.js';
 
 await initSession();
 applyRoleVisibility();
@@ -6,16 +6,9 @@ document.getElementById('logout-button').addEventListener('click', logout);
 initSidebarToggle();
 loadTopbarGreeting();
 
-// Same labels/endpoint the Junta Directiva table used before this page
-// existed — GET /board-members is open to anyone with a baseline role,
-// rendered here as cards instead of a table row.
-const positionLabels = {
-  president: 'Presidente',
-  vice_president: 'Vicepresidente',
-  secretary: 'Secretario',
-  treasurer: 'Tesorero',
-  member_at_large: 'Vocal',
-};
+// Same endpoint the Junta Directiva table used before this page existed —
+// GET /board-members is open to anyone with a baseline role, rendered
+// here as cards instead of a table row.
 
 // A person's phone can hold more than one number, space-separated (see
 // users.User.Phone) — board-members exposes whatever's on file as one

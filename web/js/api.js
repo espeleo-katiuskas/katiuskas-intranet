@@ -236,6 +236,26 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => chars[char]);
 }
 
+// Friendly Spanish label for a system role (see docs/architecture.md) —
+// anything an admin created shows as typed instead. Shared by members.js
+// (role catalog table, "Nueva persona" checkboxes) and member.js (a
+// person's own roles panel) — previously defined identically in both.
+const knownRoleLabels = { admin: 'Administrador', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
+function roleLabel(name) {
+  return knownRoleLabels[name] ?? name;
+}
+
+// Friendly Spanish label for a Junta Directiva position. Shared by
+// dashboard.js, members.js (cargoFor) and member.js — previously
+// defined identically in all three.
+const positionLabels = {
+  president: 'Presidente',
+  vice_president: 'Vicepresidente',
+  secretary: 'Secretario',
+  treasurer: 'Tesorero',
+  member_at_large: 'Vocal',
+};
+
 // Friendly Spanish labels for an activity's type/status, shared by every
 // page that lists or shows one (activities.js, activity.js) — previously
 // defined identically in both.
@@ -321,6 +341,9 @@ export {
   setToken,
   escapeHtml,
   encodeFilePath,
+  knownRoleLabels,
+  roleLabel,
+  positionLabels,
   typeLabels,
   statusLabels,
   showFeedback,

@@ -10,6 +10,9 @@ import {
   escapeHtml,
   formatDate,
   setToken,
+  knownRoleLabels,
+  roleLabel,
+  positionLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -31,13 +34,6 @@ if (!isAdmin) {
 const memberLogin = new URLSearchParams(window.location.search).get('login');
 if (!memberLogin) {
   window.location.href = '/members';
-}
-
-// Same friendly labels as members.js — kept in sync there since neither
-// file is big enough yet to justify sharing them through api.js.
-const knownRoleLabels = { admin: 'Administrador', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
-function roleLabel(name) {
-  return knownRoleLabels[name] ?? name;
 }
 
 // "member"/"former_member"/"board" are computed from membership/board
@@ -278,14 +274,6 @@ function renderLeaveAddPanel(membershipId) {
     </div>
   `;
 }
-
-const positionLabels = {
-  president: 'Presidente',
-  vice_president: 'Vicepresidente',
-  secretary: 'Secretario',
-  treasurer: 'Tesorero',
-  member_at_large: 'Vocal',
-};
 
 function renderBoardEditPanel(b) {
   const options = Object.entries(positionLabels)
