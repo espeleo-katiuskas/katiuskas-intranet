@@ -27,6 +27,35 @@ servers:
   - url: /api/v1
 
 paths:
+  /health:
+    get:
+      summary: Process liveness and database connectivity
+      description: >
+        No auth required — a reverse proxy or systemd unit polling this
+        has no session token to send, and there's nothing here worth
+        protecting. Returns 200 once the process is up and it can reach
+        Postgres (a 2-second ping); 503, same shape, when the database
+        isn't reachable within that window.
+      responses:
+        "200":
+          description: The process is up and Postgres is reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+                  database: { type: string, enum: [ok] }
+        "503":
+          description: The process is up but Postgres isn't reachable right now.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [error] }
+                  database: { type: string, enum: [unreachable] }
+
   /auth/magic-link:
     post:
       summary: Request a sign-in link (and code) by email

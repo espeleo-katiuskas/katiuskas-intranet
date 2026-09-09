@@ -129,6 +129,7 @@ func main() {
 	})
 
 	router := httpapi.NewRouter(httpapi.Routes{
+		Health:            httpapi.NewHealthHandler(pool),
 		Auth:              authHandler,
 		Users:             users.NewHandler(usersService, authenticator, telegramSender),
 		Roles:             roles.NewHandler(rolesService, authenticator, usersService, telegramSender),

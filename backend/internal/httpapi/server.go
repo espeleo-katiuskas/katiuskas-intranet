@@ -9,6 +9,7 @@ type ResourceHandler interface {
 }
 
 type Routes struct {
+	Health            ResourceHandler
 	Auth              ResourceHandler
 	Users             ResourceHandler
 	Roles             ResourceHandler
@@ -26,6 +27,7 @@ type Routes struct {
 func NewRouter(routes Routes) http.Handler {
 	mux := http.NewServeMux()
 
+	routes.Health.RegisterRoutes(mux)
 	routes.Auth.RegisterRoutes(mux)
 	routes.Users.RegisterRoutes(mux)
 	routes.Roles.RegisterRoutes(mux)
