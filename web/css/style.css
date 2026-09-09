@@ -169,6 +169,29 @@ body {
   max-width: 1120px;
 }
 
+/* #feedback/#error (the shared top-of-page status banner every
+   authenticated page has, right after <main class="content"> opens —
+   login.html's own request-feedback/request-error/code-error sit
+   inline below the button they answer instead, on a page short enough
+   to never need this) used to just sit in the normal document flow, so
+   an action taken further down a long, scrolled page — editing a role,
+   filtering a long socios table — could leave it scrolled entirely out
+   of view, with nothing on screen to show anything had even happened.
+   position: sticky keeps it in its normal place (right below the
+   topbar) while the page is scrolled to the top, same as before, but
+   pins it to the very top of the viewport once scrolled past — which
+   by then is also true of the topbar itself, so nothing already
+   visible gets newly covered. Below .sidebar.open's own z-index (100,
+   see the narrow-screen media query below) so the mobile menu still
+   overlays it rather than the other way around. */
+#feedback,
+#error {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 /* Below this width, .sidebar is collapsed entirely — not just its own
    nav — behind .sidebar-toggle (now up in .topbar-brand), shown only
    once opened via its own .open class (see api.js's
