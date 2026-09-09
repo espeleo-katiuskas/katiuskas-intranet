@@ -265,6 +265,57 @@ func TestDeleteAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	}
 }
 
+// TestMoveAccountRequiresAdminOrMoneyNotBoard also covers the response
+// shape: the whole, freshly reordered GET /accounts list, not just the
+// moved account.
+func TestMoveAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	createAccount(t, mux, adminToken, "Primera", "1")
+	b := createAccount(t, mux, adminToken, "Segunda", "2")
+	path := "/api/v1/accounts/" + itoa(b.ID) + "/move"
+
+	boardToken := testutil.TokenFor(resolver, 2, "board")
+	if rec := doRequest(mux, http.MethodPost, path, boardToken, map[string]string{"direction": "up"}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from moving an account, got %d", rec.Code)
+	}
+
+	rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]string{"direction": "up"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 2 || list[0].Code != "2" || list[1].Code != "1" {
+		t.Errorf("expected [2, 1] after moving Segunda up, got %+v", list)
+	}
+}
+
+func TestHandlerMoveAccountRejectsInvalidDirection(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	a := createAccount(t, mux, adminToken, "Caja", "570")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts/"+itoa(a.ID)+"/move", adminToken, map[string]string{"direction": "sideways"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_direction, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_direction" {
+		t.Errorf("expected invalid_direction, got %q", code)
+	}
+}
+
+func TestHandlerMoveAccountNotFound(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts/999999/move", adminToken, map[string]string{"direction": "up"})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
 func TestCreateAccountNotifiesTelegram(t *testing.T) {
 	mux, resolver, notifier := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")

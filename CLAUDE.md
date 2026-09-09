@@ -574,6 +574,36 @@ inventory movements — board itself gets no special write access here, same as 
 none for licenses or a person's own data. Every write still goes through the same
 baseline-role floor as every other route: holding only `money` with none of
 admin/board/member is rejected everywhere, this included.
+Every account also has a `position` (migration `00012_accounting.sql`) — its
+manual display order among its own siblings (same `parent_id`, `NULL` counted together
+as one top-level group), not unique or gap-free on purpose, since it's only ever used to
+`ORDER BY`, never to identify a row. `CreateAccount` appends a new account after its own
+sibling group's current highest position, the same "`MAX(position) + 1` in the same
+`INSERT`'s own subquery" pattern `activityresources.Repository.Create` uses for a
+resource's position within its activity. The only way to actually change one afterward
+is `POST /accounts/{id}/move`, admin/money-gated same as every other accounting write:
+`{"direction": "up"}` swaps it with the sibling immediately before it, `"down"` the one
+immediately after — a harmless no-op, not an error, if there's no such sibling (already
+first/last within its own group) — and answers with the whole, freshly reordered `GET
+/accounts` list (same "return the full list after reordering" shape the memoria's own
+reorder endpoint uses) rather than just the moved account, so a caller can re-render
+straight from the response. `GET /accounts` itself walks the tree in pre-order,
+depth-first: every top-level account in its own `position` order, each immediately
+followed by all of its own descendants (recursively, each in their own `position` order,
+however deep) before the next top-level sibling — `Repository.ListAccounts`'s own
+`tree` CTE computes this via the standard "materialized path" trick (an array of every
+`position` from a real root down to each account; Postgres compares arrays
+element-by-element, so ordering by it reads out exactly that walk) rather than assembling
+the tree in Go. Anchored only at genuine roots (`parent_id IS NULL`), that walk can never
+loop forever even against a cycle somehow already among non-root accounts — nothing in
+such a cycle has `parent_id IS NULL`, so nothing in it could ever seed the walk to begin
+with; it would instead just silently vanish from the listing, which is exactly why
+`UpdateAccount` rejects (`ErrCircularParent`, 409 `circular_parent`) setting a
+`parent_id` that is, or descends from, the account being edited — checked by walking
+*up* from the proposed parent (a query genuinely capable of looping forever against
+pre-existing bad data, unlike the listing's own downward walk), so that one's own
+recursion is capped at a depth no real chart of accounts would ever approach, purely so
+it can't hang even then.
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the

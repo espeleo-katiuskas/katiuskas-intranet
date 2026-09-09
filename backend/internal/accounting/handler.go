@@ -63,6 +63,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/accounts/{id}", h.authenticator.Protect(h.getAccount))
 	mux.Handle("PATCH /api/v1/accounts/{id}", h.authenticator.Protect(h.updateAccount, "admin", "money"))
 	mux.Handle("DELETE /api/v1/accounts/{id}", h.authenticator.Protect(h.deleteAccount, "admin", "money"))
+	mux.Handle("POST /api/v1/accounts/{id}/move", h.authenticator.Protect(h.moveAccount, "admin", "money"))
 
 	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions))
 	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "money"))
@@ -195,6 +196,40 @@ func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
+// moveAccount swaps this account's display position with its
+// immediately preceding ("up") or following ("down") sibling — see
+// Repository.MoveAccount — then answers with the whole, freshly
+// reordered GET /accounts tree, the same "return the full list after
+// reordering it" shape activityresources.Handler's own memoria
+// reorder endpoint uses, so a caller can just re-render from this
+// response instead of following up with its own GET.
+func (h *Handler) moveAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	var body struct {
+		Direction MoveDirection `json:"direction"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	a, err := h.service.MoveAccount(r.Context(), id, body.Direction)
+	if writeAccountError(w, err) {
+		return
+	}
+	list, err := h.service.ListAccounts(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list accounts")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha reordenado la cuenta «%s» (%s).",
+		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
 // writeAccountError maps an accounting account error to its HTTP
 // response and reports whether it wrote one at all (false for a nil
 // err, meaning the caller should carry on).
@@ -210,6 +245,10 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_code", err.Error())
 	case errors.Is(err, ErrAccountInUse):
 		httpapi.WriteError(w, http.StatusConflict, "account_in_use", err.Error())
+	case errors.Is(err, ErrCircularParent):
+		httpapi.WriteError(w, http.StatusConflict, "circular_parent", err.Error())
+	case errors.Is(err, ErrInvalidDirection):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_direction", err.Error())
 	default:
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not save account")
 	}

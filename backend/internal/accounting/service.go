@@ -30,6 +30,10 @@ func (s *Service) DeleteAccount(ctx context.Context, id int64) error {
 	return s.repo.DeleteAccount(ctx, id)
 }
 
+func (s *Service) MoveAccount(ctx context.Context, id int64, direction MoveDirection) (Account, error) {
+	return s.repo.MoveAccount(ctx, id, direction)
+}
+
 func (s *Service) CreateTransaction(ctx context.Context, in CreateTransactionInput) (Transaction, error) {
 	return s.repo.CreateTransaction(ctx, in)
 }

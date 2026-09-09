@@ -10,9 +10,16 @@ CREATE TABLE accounts (
     name       text NOT NULL,
     code       text UNIQUE NOT NULL,
     parent_id  bigint REFERENCES accounts(id),
-    created_at timestamptz NOT NULL DEFAULT now()
+    created_at timestamptz NOT NULL DEFAULT now(),
+    -- Manual display order among sibling accounts (same parent_id,
+    -- including NULL together as one top-level group) — see
+    -- accounting.Repository.MoveAccount. Not unique on purpose: a gap
+    -- or a rare duplicate (nothing else in this schema enforces one)
+    -- is harmless, since it's only ever used to ORDER BY, never to
+    -- identify a row.
+    position   integer NOT NULL
 );
-CREATE INDEX idx_accounts_parent_id ON accounts(parent_id);
+CREATE INDEX idx_accounts_parent_id_position ON accounts(parent_id, position);
 
 -- One real movement of money, described once and dated (occurred_at is
 -- a full timestamp, not just a calendar date — unlike, say,

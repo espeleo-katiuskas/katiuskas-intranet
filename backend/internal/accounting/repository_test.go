@@ -3,6 +3,7 @@ package accounting_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -75,7 +76,12 @@ func TestGetAccountNotFound(t *testing.T) {
 	}
 }
 
-func TestListAccountsOrderedByCode(t *testing.T) {
+// TestListAccountsOrderedByCreationPosition covers the simple,
+// no-nesting case: siblings (here, both top-level) list in the order
+// they were created — CreateAccount appends each one after its
+// sibling group's current highest Position, so creation order and
+// display order start out the same until MoveAccount changes it.
+func TestListAccountsOrderedByCreationPosition(t *testing.T) {
 	repo := newRepo(t)
 	mustCreateAccount(t, repo, "Cuotas", "700")
 	mustCreateAccount(t, repo, "Caja", "570")
@@ -84,8 +90,8 @@ func TestListAccountsOrderedByCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	if len(list) != 2 || list[0].Code != "570" || list[1].Code != "700" {
-		t.Errorf("expected [570, 700] in order, got %+v", list)
+	if len(list) != 2 || list[0].Code != "700" || list[1].Code != "570" {
+		t.Errorf("expected [700, 570] (creation order), got %+v", list)
 	}
 	// Neither has any entries yet: still a real, computed (non-nil)
 	// zero balance, not the same as never having computed one at all
@@ -173,6 +179,165 @@ func TestGetCreateUpdateAccountLeaveBalanceNil(t *testing.T) {
 	}
 	if updated.Balance != nil || updated.LastTransactionAt != nil {
 		t.Errorf("expected UpdateAccount to leave both nil, got %+v", updated)
+	}
+}
+
+func mustCreateChildAccount(t *testing.T, repo *accounting.Repository, name, code string, parentID int64) accounting.Account {
+	t.Helper()
+	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: name, Code: code, ParentID: &parentID})
+	if err != nil {
+		t.Fatalf("create child account %s: %v", code, err)
+	}
+	return a
+}
+
+func codesOf(list []accounting.Account) []string {
+	codes := make([]string, len(list))
+	for i, a := range list {
+		codes[i] = a.Code
+	}
+	return codes
+}
+
+// TestListAccountsChildrenBeforeNextSibling covers the tree-shaped walk
+// itself: a top-level account's own children (and their own children,
+// arbitrarily deep) list immediately below it, before the next
+// top-level sibling — rather than a flat listing by Position alone
+// regardless of nesting.
+func TestListAccountsChildrenBeforeNextSibling(t *testing.T) {
+	repo := newRepo(t)
+	tesoreria := mustCreateAccount(t, repo, "Tesorería", "57")
+	ingresos := mustCreateAccount(t, repo, "Ingresos", "70") // another top-level sibling, created after Tesorería
+	caja := mustCreateChildAccount(t, repo, "Caja", "570", tesoreria.ID)
+	banco := mustCreateChildAccount(t, repo, "Banco", "572", tesoreria.ID)
+	cajaFuerte := mustCreateChildAccount(t, repo, "Caja fuerte", "5700", caja.ID) // a grandchild
+
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	want := []string{tesoreria.Code, caja.Code, cajaFuerte.Code, banco.Code, ingresos.Code}
+	if got := codesOf(list); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v, got %v", want, got)
+	}
+}
+
+func TestMoveAccountUpSwapsWithPrecedingSibling(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Primera", "1")
+	b := mustCreateAccount(t, repo, "Segunda", "2")
+	c := mustCreateAccount(t, repo, "Tercera", "3")
+
+	if _, err := repo.MoveAccount(context.Background(), c.ID, accounting.MoveUp); err != nil {
+		t.Fatalf("MoveAccount up: %v", err)
+	}
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	want := []string{a.Code, c.Code, b.Code}
+	if got := codesOf(list); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v after moving Tercera up, got %v", want, got)
+	}
+}
+
+func TestMoveAccountDownSwapsWithFollowingSibling(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Primera", "1")
+	b := mustCreateAccount(t, repo, "Segunda", "2")
+	c := mustCreateAccount(t, repo, "Tercera", "3")
+
+	if _, err := repo.MoveAccount(context.Background(), a.ID, accounting.MoveDown); err != nil {
+		t.Fatalf("MoveAccount down: %v", err)
+	}
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	want := []string{b.Code, a.Code, c.Code}
+	if got := codesOf(list); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v after moving Primera down, got %v", want, got)
+	}
+}
+
+func TestMoveAccountUpAtStartIsANoOp(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Primera", "1")
+	b := mustCreateAccount(t, repo, "Segunda", "2")
+
+	if _, err := repo.MoveAccount(context.Background(), a.ID, accounting.MoveUp); err != nil {
+		t.Fatalf("MoveAccount up: %v", err)
+	}
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	want := []string{a.Code, b.Code}
+	if got := codesOf(list); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected no change moving the first account up, got %v", got)
+	}
+}
+
+// TestMoveAccountOnlySwapsWithinSameParent confirms a move never
+// reaches across to an account with a different parent_id, even one
+// that would otherwise be the "next" one in the flat listing.
+func TestMoveAccountOnlySwapsWithinSameParent(t *testing.T) {
+	repo := newRepo(t)
+	tesoreria := mustCreateAccount(t, repo, "Tesorería", "57")
+	ingresos := mustCreateAccount(t, repo, "Ingresos", "70")
+	caja := mustCreateChildAccount(t, repo, "Caja", "570", tesoreria.ID) // Tesorería's only child
+
+	if _, err := repo.MoveAccount(context.Background(), caja.ID, accounting.MoveDown); err != nil {
+		t.Fatalf("MoveAccount down: %v", err)
+	}
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	want := []string{tesoreria.Code, caja.Code, ingresos.Code}
+	if got := codesOf(list); !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v (unchanged), got %v", want, got)
+	}
+}
+
+func TestMoveAccountNotFound(t *testing.T) {
+	repo := newRepo(t)
+	if _, err := repo.MoveAccount(context.Background(), 999999, accounting.MoveUp); !errors.Is(err, accounting.ErrAccountNotFound) {
+		t.Errorf("expected ErrAccountNotFound, got %v", err)
+	}
+}
+
+func TestMoveAccountRejectsInvalidDirection(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Caja", "570")
+	if _, err := repo.MoveAccount(context.Background(), a.ID, accounting.MoveDirection("sideways")); !errors.Is(err, accounting.ErrInvalidDirection) {
+		t.Errorf("expected ErrInvalidDirection, got %v", err)
+	}
+}
+
+func TestUpdateAccountRejectsSelfAsParent(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Caja", "570")
+	_, err := repo.UpdateAccount(context.Background(), a.ID, accounting.UpdateAccountInput{Name: a.Name, Code: a.Code, ParentID: &a.ID})
+	if !errors.Is(err, accounting.ErrCircularParent) {
+		t.Errorf("expected ErrCircularParent, got %v", err)
+	}
+}
+
+// TestUpdateAccountRejectsIndirectCycle covers the deeper case: not
+// just "an account can't be its own parent" but "an account can't be
+// nested under one of its own descendants either", however many levels
+// removed.
+func TestUpdateAccountRejectsIndirectCycle(t *testing.T) {
+	repo := newRepo(t)
+	parent := mustCreateAccount(t, repo, "Tesorería", "57")
+	child := mustCreateChildAccount(t, repo, "Caja", "570", parent.ID)
+
+	_, err := repo.UpdateAccount(context.Background(), parent.ID, accounting.UpdateAccountInput{
+		Name: parent.Name, Code: parent.Code, ParentID: &child.ID,
+	})
+	if !errors.Is(err, accounting.ErrCircularParent) {
+		t.Errorf("expected ErrCircularParent, got %v", err)
 	}
 }
 

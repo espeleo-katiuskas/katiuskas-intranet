@@ -45,12 +45,23 @@ type CreateAccountInput struct {
 // UpdateAccountInput replaces every field at once — the same
 // all-fields-required convention board.UpdateInput/memberships.UpdateInput
 // already use, since the edit form always resends the current values
-// rather than leaving anything ambiguous.
+// rather than leaving anything ambiguous. There's no Position field
+// here — reordering only ever happens through MoveAccount/MoveDirection
+// below, never as a side effect of an otherwise ordinary edit.
 type UpdateAccountInput struct {
 	Name     string
 	Code     string
 	ParentID *int64
 }
+
+// MoveDirection is which adjacent sibling (same parent_id) to swap an
+// account's display position with — see Repository.MoveAccount.
+type MoveDirection string
+
+const (
+	MoveUp   MoveDirection = "up"
+	MoveDown MoveDirection = "down"
+)
 
 // Entry is one line of a Transaction: Amount moved into (positive) or
 // out of (negative) AccountID. Never created, read, or deleted on its

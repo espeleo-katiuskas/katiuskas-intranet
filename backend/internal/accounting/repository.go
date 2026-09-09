@@ -26,6 +26,17 @@ var (
 	// transaction entry, and deleting it would either orphan that
 	// subtree or silently erase financial history.
 	ErrAccountInUse = errors.New("account is still referenced by a child account or a transaction entry")
+	// ErrCircularParent means the given parent_id is this account
+	// itself, or one of its own descendants — setting it would make
+	// this account a descendant of one of its own descendants, a cycle
+	// GET /accounts's own tree traversal (Repository.ListAccounts, a
+	// top-down walk starting only from real parent_id IS NULL roots)
+	// can't ever reach, so an account caught in one would just quietly
+	// vanish from the listing instead of erroring anywhere obvious.
+	ErrCircularParent = errors.New("parent_id would make this account a descendant of itself")
+	// ErrInvalidDirection means MoveAccount's direction wasn't "up" or
+	// "down".
+	ErrInvalidDirection = errors.New(`direction must be "up" or "down"`)
 
 	ErrTransactionNotFound = errors.New("transaction not found")
 	// ErrTooFewEntries means fewer than two entries were given — a
@@ -65,11 +76,19 @@ func NewRepository(pool db.PGX) *Repository {
 
 // ---- Accounts ----
 
+// CreateAccount appends the new account after whatever its own sibling
+// group's (same parent_id, NULL included) current highest position is
+// — the MAX(position) subquery and the INSERT run as one statement, so
+// there's no separate round trip a concurrent create against the same
+// group could race against. Same pattern
+// activityresources.Repository.Create uses for a resource's own
+// position within its activity.
 func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO accounts (name, code, parent_id)
-		VALUES ($1,$2,$3)
+		INSERT INTO accounts (name, code, parent_id, position)
+		SELECT $1, $2, $3, COALESCE(MAX(position), 0) + 1
+		FROM accounts WHERE parent_id IS NOT DISTINCT FROM $3
 		RETURNING id, name, code, parent_id
 	`, in.Name, in.Code, in.ParentID).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID)
 	switch pgErrCode(err) {
@@ -92,26 +111,51 @@ func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) 
 	return a, err
 }
 
-// ListAccounts returns every account, ordered by code — the natural
-// chart-of-accounts order, and stable regardless of parent/child
-// nesting (the frontend builds any tree view it wants from ParentID
-// itself, same as members.js's own client-side grouping elsewhere) —
+// ListAccounts returns every account in display order: a pre-order
+// depth-first walk of the chart of accounts — every top-level account
+// in turn (by its own Position, see MoveAccount), each immediately
+// followed by all of its own descendants (recursively, each in their
+// own Position order) before moving on to the next top-level sibling —
 // each with its own direct Balance and LastTransactionAt (never rolled
-// up from child accounts). The LEFT JOINs mean an account with no
-// entries at all still gets one row back (COALESCE'd to a zero
-// balance; MAX over zero rows is already NULL on its own for
-// last_transaction_at), rather than being silently missing from the
-// result the way an inner join would leave it.
+// up from child accounts).
+//
+// tree's own path column is the standard "materialized path" trick for
+// exactly this: the sequence of Position values from a real root (only
+// ever accounts.parent_id IS NULL seeds this) down to each account, so
+// ordering by it (Postgres compares arrays element-by-element) reads
+// out precisely that walk — a node's own descendants always sort
+// immediately after it and before its next sibling, however deep they
+// go, without this query needing to know the tree's depth up front.
+// Anchored only at genuine roots, this can never loop forever even if
+// bad data somewhere formed a cycle among non-root accounts (nothing
+// in such a cycle has parent_id IS NULL, so nothing in it could ever
+// seed tree in the first place) — see ErrCircularParent, which exists
+// to stop that from happening to begin with, since an account caught
+// in one would otherwise just silently vanish from this listing.
+//
+// The LEFT JOINs mean an account with no entries at all still gets one
+// row back (COALESCE'd to a zero balance; MAX over zero rows is
+// already NULL on its own for last_transaction_at), rather than being
+// silently missing from the result the way an inner join would leave
+// it.
 func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	rows, err := r.pool.Query(ctx, `
+		WITH RECURSIVE tree AS (
+			SELECT id, ARRAY[position] AS path
+			FROM accounts WHERE parent_id IS NULL
+			UNION ALL
+			SELECT a.id, tree.path || a.position
+			FROM accounts a JOIN tree ON a.parent_id = tree.id
+		)
 		SELECT a.id, a.name, a.code, a.parent_id,
 			COALESCE(SUM(te.amount), 0) AS balance,
 			MAX(t.occurred_at) AS last_transaction_at
 		FROM accounts a
+		JOIN tree ON tree.id = a.id
 		LEFT JOIN transaction_entries te ON te.account_id = a.id
 		LEFT JOIN transactions t ON t.id = te.transaction_id
-		GROUP BY a.id
-		ORDER BY a.code
+		GROUP BY a.id, tree.path
+		ORDER BY tree.path
 	`)
 	if err != nil {
 		return nil, err
@@ -132,6 +176,16 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 }
 
 func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) (Account, error) {
+	if in.ParentID != nil {
+		cyclic, err := r.wouldCreateCycle(ctx, id, *in.ParentID)
+		if err != nil {
+			return Account{}, err
+		}
+		if cyclic {
+			return Account{}, ErrCircularParent
+		}
+	}
+
 	var a Account
 	err := r.pool.QueryRow(ctx, `
 		UPDATE accounts SET name = $1, code = $2, parent_id = $3
@@ -150,6 +204,31 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 	return a, err
 }
 
+// wouldCreateCycle reports whether setting accountID's parent to
+// proposedParentID would make accountID a descendant of one of its own
+// descendants (proposedParentID == accountID itself included, the
+// simplest case: an account can't be its own parent). Walks upward
+// from proposedParentID via parent_id, capped at a depth no real chart
+// of accounts would ever approach, purely so this can never loop
+// forever even against data a cycle somehow already reached — a bound
+// this specific check needs that ListAccounts's own recursive walk
+// (anchored only at real roots) never does.
+func (r *Repository) wouldCreateCycle(ctx context.Context, accountID, proposedParentID int64) (bool, error) {
+	const maxDepth = 100
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		WITH RECURSIVE ancestors AS (
+			SELECT id, parent_id, 0 AS depth FROM accounts WHERE id = $1
+			UNION ALL
+			SELECT a.id, a.parent_id, ancestors.depth + 1
+			FROM accounts a JOIN ancestors ON a.id = ancestors.parent_id
+			WHERE ancestors.depth < $3
+		)
+		SELECT EXISTS (SELECT 1 FROM ancestors WHERE id = $2)
+	`, proposedParentID, accountID, maxDepth).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repository) DeleteAccount(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM accounts WHERE id = $1`, id)
 	if err != nil {
@@ -162,6 +241,67 @@ func (r *Repository) DeleteAccount(ctx context.Context, id int64) error {
 		return ErrAccountNotFound
 	}
 	return nil
+}
+
+// MoveAccount swaps this account's Position with its adjacent sibling
+// (same parent_id, NULL included) — the one immediately before it for
+// MoveUp, immediately after for MoveDown — so it displays right before
+// or right after that sibling in ListAccounts instead. A harmless
+// no-op (not an error) if there's no such sibling: this account is
+// already first or last within its own parent_id group in that
+// direction. Both rows are locked (FOR UPDATE) for the swap's duration
+// so a concurrent move against either one can't interleave with it.
+func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDirection) (Account, error) {
+	if direction != MoveUp && direction != MoveDown {
+		return Account{}, ErrInvalidDirection
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var a Account
+	var position int
+	err = tx.QueryRow(ctx, `
+		SELECT id, name, code, parent_id, position FROM accounts WHERE id = $1 FOR UPDATE
+	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &position)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Account{}, ErrAccountNotFound
+	}
+	if err != nil {
+		return Account{}, err
+	}
+
+	siblingQuery := `
+		SELECT id, position FROM accounts
+		WHERE parent_id IS NOT DISTINCT FROM $1 AND position > $2
+		ORDER BY position ASC LIMIT 1 FOR UPDATE`
+	if direction == MoveUp {
+		siblingQuery = `
+			SELECT id, position FROM accounts
+			WHERE parent_id IS NOT DISTINCT FROM $1 AND position < $2
+			ORDER BY position DESC LIMIT 1 FOR UPDATE`
+	}
+
+	var siblingID int64
+	var siblingPosition int
+	err = tx.QueryRow(ctx, siblingQuery, a.ParentID, position).Scan(&siblingID, &siblingPosition)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return a, tx.Commit(ctx)
+	}
+	if err != nil {
+		return Account{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, siblingPosition, id); err != nil {
+		return Account{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, position, siblingID); err != nil {
+		return Account{}, err
+	}
+	return a, tx.Commit(ctx)
 }
 
 // ---- Transactions ----

@@ -1786,10 +1786,13 @@ paths:
       description: >
         Open to admin, board, and plain members alike — the club's own
         money is something every socio can see, not just admin/board.
-        Ordered by code; the frontend builds any tree view it wants
-        client-side from each account's own parent_id. Each account also
-        carries its own direct balance and last_transaction_at (see the
-        Account schema) — not present on any other accounts endpoint.
+        Ordered as a pre-order depth-first walk of the tree — each
+        top-level account in its own display order (see POST
+        /accounts/{id}/move), immediately followed by all of its own
+        descendants (recursively, each in their own order) before the
+        next top-level account. Each account also carries its own direct
+        balance and last_transaction_at (see the Account schema) — not
+        present on any other accounts endpoint.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -1872,7 +1875,7 @@ paths:
         "400": { description: missing_fields, or unknown_parent_account. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: duplicate_code. }
+        "409": { description: duplicate_code, or circular_parent (parent_id is this account itself, or one of its own descendants). }
     delete:
       summary: Delete an account
       description: >
@@ -1889,6 +1892,43 @@ paths:
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: account_in_use — still referenced by a child account or a transaction entry. }
+
+  /accounts/{id}/move:
+    post:
+      summary: Swap an account's display order with an adjacent sibling
+      description: >
+        Requires admin or the money role. direction "up" swaps this
+        account with the sibling (same parent_id, NULL included)
+        immediately before it in GET /accounts's own order; "down" the
+        one immediately after. A harmless no-op if there's no such
+        sibling — this account is already first or last within its own
+        parent_id group in that direction. Never reaches across to an
+        account with a different parent_id. Answers with the whole,
+        freshly reordered GET /accounts list, not just this account, so
+        a caller can re-render from this response directly.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction: { type: string, enum: [up, down] }
+      responses:
+        "200":
+          description: Every account, in its new order (see GET /accounts)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Account" }
+        "400": { description: invalid_id, or invalid_direction (direction wasn't "up" or "down"). }
+        "403": { description: Requires admin or the money role. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /transactions:
     get:
