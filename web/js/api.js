@@ -236,6 +236,12 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => chars[char]);
 }
 
+// Friendly Spanish labels for an activity's type/status, shared by every
+// page that lists or shows one (activities.js, activity.js) — previously
+// defined identically in both.
+const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
+const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
+
 // Shared "success/error banner" pair every page provides via its own
 // #feedback/#error <p> elements (see e.g. members.html) — previously
 // copy-pasted verbatim into every page script instead of living here.
@@ -315,6 +321,8 @@ export {
   setToken,
   escapeHtml,
   encodeFilePath,
+  typeLabels,
+  statusLabels,
   showFeedback,
   showError,
   formatDate,

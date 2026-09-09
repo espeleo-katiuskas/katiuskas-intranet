@@ -10,6 +10,8 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  typeLabels,
+  statusLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -38,9 +40,6 @@ async function loadDirectory() {
     personEntries = [];
   }
 }
-
-const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
-const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
 
 function leaderLabel(activity) {
   const leader = directoryByLogin[activity.leader_login];

@@ -14,6 +14,8 @@ import {
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
+  typeLabels,
+  statusLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -61,8 +63,6 @@ if (!activityId) {
   window.location.href = '/activities';
 }
 
-const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
-const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 const visibilityLabels = { public: 'Pública', private: 'Privada' };
 
 const editForm = document.getElementById('edit-activity-form');
