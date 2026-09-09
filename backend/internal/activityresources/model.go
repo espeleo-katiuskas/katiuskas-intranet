@@ -22,7 +22,8 @@ const (
 // Resource is one memoria entry. AuthorID/AuthorLogin is whoever
 // contributed it — not necessarily the activity's own organizer — and
 // is the only person (besides admin/board) allowed to edit or delete it
-// afterward (see Handler.canEdit). Description is set only for a text
+// afterward (the same author-or-admin/board check inlined in both
+// Handler.update and Handler.delete). Description is set only for a text
 // resource; FileName/FileSize/ContentType only for a file one — kept in
 // sync with Type by CHECK constraints in the database (migration
 // 00010_activity_resources.sql), not just application code.

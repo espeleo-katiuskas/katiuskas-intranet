@@ -28,9 +28,9 @@ type UserLookup interface {
 
 // recipientRequiredTypes are the movement types that always exchange
 // the item with a specific person and so must name one — see
-// MovementType. Loan and sale's recipients are optional (neither
-// required nor forbidden — see recipientForbiddenTypes below for the
-// types that forbid one outright).
+// MovementType. Loan, sale and return's recipients are optional
+// (neither required nor forbidden — see recipientForbiddenTypes below
+// for the types that forbid one outright).
 var recipientRequiredTypes = map[MovementType]bool{
 	MovementRental: true,
 }

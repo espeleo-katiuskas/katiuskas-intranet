@@ -270,9 +270,9 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 }
 
 // InsertActivity inserts a bare-bones activity, for tests that need a real
-// activities.id to satisfy a foreign key — namely a loan or rental
-// transaction, which the loan_and_rental_require_activity CHECK constraint
-// (migration 00006) requires.
+// activities.id to satisfy a foreign key — namely a loan or return
+// movement, which the activity_required_for_loan_and_return CHECK
+// constraint (migration 00006_inventory.sql) requires.
 func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
 	t.Helper()
 	leader := InsertUser(t, tx, "")
@@ -313,8 +313,8 @@ func LicenseTypeID(t *testing.T, tx pgx.Tx, name string) int64 {
 }
 
 // MaterialCategoryID looks up a catalog material category's id by name
-// (seeded by migration 00013: "Mosquetones", "Spits", "Placas",
-// "Maillones", "Iluminación").
+// (seeded by migration 00006_inventory.sql: "Mosquetones", "Spits",
+// "Placas", "Maillones", "Iluminación").
 func MaterialCategoryID(t *testing.T, tx pgx.Tx, name string) int64 {
 	t.Helper()
 	var id int64

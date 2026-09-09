@@ -63,13 +63,15 @@ type MaterialCategory struct {
 }
 
 // MovementType is either an exchange with a specific person — rental
-// always requires a UserID, loan and sale's are optional — or a
-// stock-level change that never has one at all: acquisition and return
-// both bring units back into available_quantity (new stock in, or
-// loaned stock coming back), loss/abandonment/retirement permanently
-// take units out (lost in the field, left behind on a trip, or
-// decommissioned). See Repository.CreateMovement for how each type
-// affects an item's computed quantities and status.
+// always requires a UserID, loan/sale/return's are optional (return is
+// the other side of an earlier loan, so it may optionally name who's
+// returning it too) — or a stock-level change that forbids one
+// outright: acquisition brings new stock in, loss/abandonment/
+// retirement permanently take units out (lost in the field, left
+// behind on a trip, or decommissioned) — see recipientRequiredTypes/
+// recipientForbiddenTypes in handler.go for the actual, enforced split.
+// See Repository.CreateMovement for how each type affects an item's
+// computed quantities and status.
 type MovementType string
 
 const (
@@ -148,8 +150,8 @@ type Item struct {
 	BagType        *BagType `json:"bag_type,omitempty"`
 	CapacityLiters *float64 `json:"capacity_liters,omitempty"`
 	// Gear-only. CategoryID is the catalog id; CategoryName is resolved
-	// alongside it (see Repository.queryItems/CreateItem), the same
-	// LicenseTypeID/Type split licenses.License uses.
+	// alongside it (see Repository.GetItem/ListItems/CreateItem), the
+	// same LicenseTypeID/Type split licenses.License uses.
 	CategoryID   *int64  `json:"category_id,omitempty"`
 	CategoryName *string `json:"category_name,omitempty"`
 }
