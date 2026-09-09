@@ -524,7 +524,15 @@ against that chart, `transactions`: every real movement of money the club record
 made of two or more `entries` (an `account_id` and an `amount`, positive into that
 account or negative out of it) whose amounts always sum to exactly zero — standard
 double-entry bookkeeping, so a transaction always says both where money came from and
-where it went, never just one side of it. "At least two entries" and "sums to zero" both
+where it went, never just one side of it. `GET /accounts` also joins in each account's
+own direct `balance` (summed from every entry ever posted straight to it) and
+`last_transaction_at` (the most recent one's `occurred_at`) — never rolled up from a
+child account, and never present on any other `accounts` route (`GET`/`POST`/`PATCH
+/accounts/{id}` are all just the row itself, no extra join); a `LEFT JOIN` against
+`transaction_entries`/`transactions` means an account with no entries at all still gets
+one row back rather than being silently missing, `COALESCE`d to a zero `balance` (a
+real, computed zero — never absent the way it is everywhere else `Account` shows up)
+while `last_transaction_at` is simply `NULL`. "At least two entries" and "sums to zero" both
 depend on every sibling row, not just one, so neither can be a plain `CHECK` — both are
 enforced instead by `transaction_entries_balance`, a `DEFERRABLE INITIALLY DEFERRED`
 constraint trigger (migration `00012_accounting.sql`) that only actually runs at commit,

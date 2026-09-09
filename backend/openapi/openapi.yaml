@@ -1787,7 +1787,9 @@ paths:
         Open to admin, board, and plain members alike — the club's own
         money is something every socio can see, not just admin/board.
         Ordered by code; the frontend builds any tree view it wants
-        client-side from each account's own parent_id.
+        client-side from each account's own parent_id. Each account also
+        carries its own direct balance and last_transaction_at (see the
+        Account schema) — not present on any other accounts endpoint.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -2720,12 +2722,25 @@ components:
         One node in the chart of accounts. code is unique across every
         account; parent_id nests it under a broader one (null for a
         top-level account) — the frontend builds any tree view it wants
-        client-side from this.
+        client-side from this. balance/last_transaction_at are only
+        ever present from GET /accounts (never on GET/POST/PATCH
+        /accounts/{id}) — this account's own direct activity, summing
+        every entry ever posted straight to it, never rolled up from
+        any child account.
       properties:
         id: { type: integer }
         name: { type: string }
         code: { type: string }
         parent_id: { type: integer, nullable: true }
+        balance:
+          type: number
+          format: double
+          description: Only present from GET /accounts — 0 (not absent) for an account with no entries at all.
+        last_transaction_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Only present from GET /accounts — null for an account with no entries at all.
 
     Entry:
       type: object

@@ -95,10 +95,23 @@ func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) 
 // ListAccounts returns every account, ordered by code — the natural
 // chart-of-accounts order, and stable regardless of parent/child
 // nesting (the frontend builds any tree view it wants from ParentID
-// itself, same as members.js's own client-side grouping elsewhere).
+// itself, same as members.js's own client-side grouping elsewhere) —
+// each with its own direct Balance and LastTransactionAt (never rolled
+// up from child accounts). The LEFT JOINs mean an account with no
+// entries at all still gets one row back (COALESCE'd to a zero
+// balance; MAX over zero rows is already NULL on its own for
+// last_transaction_at), rather than being silently missing from the
+// result the way an inner join would leave it.
 func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, code, parent_id FROM accounts ORDER BY code
+		SELECT a.id, a.name, a.code, a.parent_id,
+			COALESCE(SUM(te.amount), 0) AS balance,
+			MAX(t.occurred_at) AS last_transaction_at
+		FROM accounts a
+		LEFT JOIN transaction_entries te ON te.account_id = a.id
+		LEFT JOIN transactions t ON t.id = te.transaction_id
+		GROUP BY a.id
+		ORDER BY a.code
 	`)
 	if err != nil {
 		return nil, err
@@ -108,9 +121,11 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	list := []Account{}
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID); err != nil {
+		var balance float64
+		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &balance, &a.LastTransactionAt); err != nil {
 			return nil, err
 		}
+		a.Balance = &balance
 		list = append(list, a)
 	}
 	return list, rows.Err()

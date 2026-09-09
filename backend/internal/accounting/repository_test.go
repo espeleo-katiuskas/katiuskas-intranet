@@ -87,6 +87,93 @@ func TestListAccountsOrderedByCode(t *testing.T) {
 	if len(list) != 2 || list[0].Code != "570" || list[1].Code != "700" {
 		t.Errorf("expected [570, 700] in order, got %+v", list)
 	}
+	// Neither has any entries yet: still a real, computed (non-nil)
+	// zero balance, not the same as never having computed one at all
+	// (see GetAccount/CreateAccount/UpdateAccount, which leave it nil).
+	for _, a := range list {
+		if a.Balance == nil || *a.Balance != 0 {
+			t.Errorf("expected a zero (but non-nil) balance for %s, got %+v", a.Code, a.Balance)
+		}
+		if a.LastTransactionAt != nil {
+			t.Errorf("expected no last_transaction_at for %s, got %v", a.Code, a.LastTransactionAt)
+		}
+	}
+}
+
+// TestListAccountsComputesBalanceAndLastTransactionAt is the core of
+// the feature: Balance sums every entry ever posted directly to that
+// account (across as many transactions as touched it), and
+// LastTransactionAt is the most recent occurred_at among them —
+// neither rolled up from any child account.
+func TestListAccountsComputesBalanceAndLastTransactionAt(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	cuotas := mustCreateAccount(t, repo, "Cuotas", "700")
+
+	older := time.Now().Add(-48 * time.Hour)
+	newer := time.Now()
+	if _, err := repo.CreateTransaction(context.Background(), accounting.CreateTransactionInput{
+		Description: "Primera", OccurredAt: older,
+		Entries: []accounting.EntryInput{{AccountID: caja.ID, Amount: 10}, {AccountID: cuotas.ID, Amount: -10}},
+	}); err != nil {
+		t.Fatalf("create 1st transaction: %v", err)
+	}
+	if _, err := repo.CreateTransaction(context.Background(), accounting.CreateTransactionInput{
+		Description: "Segunda", OccurredAt: newer,
+		Entries: []accounting.EntryInput{{AccountID: caja.ID, Amount: 5}, {AccountID: cuotas.ID, Amount: -5}},
+	}); err != nil {
+		t.Fatalf("create 2nd transaction: %v", err)
+	}
+
+	list, err := repo.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	byCode := map[string]accounting.Account{list[0].Code: list[0], list[1].Code: list[1]}
+
+	cajaListed := byCode["570"]
+	if cajaListed.Balance == nil || *cajaListed.Balance != 15 {
+		t.Errorf("expected Caja balance 15, got %+v", cajaListed.Balance)
+	}
+	cuotasListed := byCode["700"]
+	if cuotasListed.Balance == nil || *cuotasListed.Balance != -15 {
+		t.Errorf("expected Cuotas balance -15, got %+v", cuotasListed.Balance)
+	}
+	// A small tolerance rather than an exact round-trip match — Postgres
+	// timestamptz has microsecond precision, Go's time.Time more.
+	for code, a := range byCode {
+		if a.LastTransactionAt == nil || a.LastTransactionAt.Sub(newer).Abs() > time.Millisecond {
+			t.Errorf("expected %s's last_transaction_at close to the 2nd transaction's occurred_at, got %v", code, a.LastTransactionAt)
+		}
+	}
+}
+
+// TestGetCreateUpdateAccountLeaveBalanceNil covers the other half:
+// unlike ListAccounts, none of these ever populate Balance/
+// LastTransactionAt — they're each just the accounts row itself, no
+// extra join.
+func TestGetCreateUpdateAccountLeaveBalanceNil(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	if caja.Balance != nil || caja.LastTransactionAt != nil {
+		t.Errorf("expected CreateAccount to leave both nil, got %+v", caja)
+	}
+
+	fetched, err := repo.GetAccount(context.Background(), caja.ID)
+	if err != nil {
+		t.Fatalf("GetAccount: %v", err)
+	}
+	if fetched.Balance != nil || fetched.LastTransactionAt != nil {
+		t.Errorf("expected GetAccount to leave both nil, got %+v", fetched)
+	}
+
+	updated, err := repo.UpdateAccount(context.Background(), caja.ID, accounting.UpdateAccountInput{Name: "Caja chica", Code: "571"})
+	if err != nil {
+		t.Fatalf("UpdateAccount: %v", err)
+	}
+	if updated.Balance != nil || updated.LastTransactionAt != nil {
+		t.Errorf("expected UpdateAccount to leave both nil, got %+v", updated)
+	}
 }
 
 func TestUpdateAccount(t *testing.T) {

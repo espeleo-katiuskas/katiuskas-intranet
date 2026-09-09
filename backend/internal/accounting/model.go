@@ -21,6 +21,19 @@ type Account struct {
 	Name     string `json:"name"`
 	Code     string `json:"code"`
 	ParentID *int64 `json:"parent_id,omitempty"`
+	// Balance and LastTransactionAt are this account's own direct
+	// activity — the sum of every entry ever posted straight to it
+	// (never rolled up from child accounts) and when the most recent
+	// one occurred (nil if never). Both are only ever populated by
+	// ListAccounts (see GET /accounts, Repository.ListAccounts) — left
+	// nil everywhere else (GetAccount, CreateAccount, UpdateAccount),
+	// since computing them costs an extra join those single-account
+	// paths don't need. Balance is still a non-nil pointer to exactly 0
+	// for an account with no entries at all, so it reads as "computed,
+	// and it's zero" rather than being indistinguishable, via
+	// omitempty, from an endpoint that never computed it at all.
+	Balance           *float64   `json:"balance,omitempty"`
+	LastTransactionAt *time.Time `json:"last_transaction_at,omitempty"`
 }
 
 type CreateAccountInput struct {
