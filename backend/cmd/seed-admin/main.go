@@ -49,10 +49,6 @@ func main() {
 	service := users.NewService(repo, rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(service)
 
-	email := getEnv("SEED_ADMIN_EMAIL", "admin@club.test")
-	phone := getEnv("SEED_ADMIN_PHONE", "600000000")
-	firstName := getEnv("SEED_ADMIN_FIRST_NAME", "Admin")
-	lastName := getEnv("SEED_ADMIN_LAST_NAME", "Club")
 	birthDateRaw := getEnv("SEED_ADMIN_BIRTH_DATE", "1970-01-01")
 	birthDate, err := time.Parse("2006-01-02", birthDateRaw)
 	if err != nil {
@@ -60,30 +56,60 @@ func main() {
 		os.Exit(1)
 	}
 
-	if _, err := repo.GetByEmail(ctx, email); err == nil {
-		slog.Info("admin account already exists, nothing to do", "email", email)
-		return
-	} else if !errors.Is(err, users.ErrNotFound) {
-		fmt.Fprintf(os.Stderr, "check for an existing account: %v\n", err)
+	err = seedAdmin(ctx, repo, service, seedParams{
+		Email:     getEnv("SEED_ADMIN_EMAIL", "admin@club.test"),
+		Phone:     getEnv("SEED_ADMIN_PHONE", "600000000"),
+		FirstName: getEnv("SEED_ADMIN_FIRST_NAME", "Admin"),
+		LastName:  getEnv("SEED_ADMIN_LAST_NAME", "Club"),
+		BirthDate: birthDate,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
 
-	_, err = service.Create(ctx, users.CreateInput{
-		FirstName: firstName,
-		LastName:  lastName,
-		BirthDate: birthDate,
-		Email:     &email,
-		Phone:     &phone,
+// seedParams is the first administrator's own data, gathered from
+// SEED_ADMIN_* env vars (or their defaults) by main() before calling
+// seedAdmin.
+type seedParams struct {
+	Email     string
+	Phone     string
+	FirstName string
+	LastName  string
+	BirthDate time.Time
+}
+
+// seedAdmin creates the first administrator if nobody with this email
+// exists yet — idempotent, so running this command again (e.g. as part
+// of every deploy) is always safe. Pulled out of main() so a test can
+// exercise the actual create-vs-already-exists logic against a real
+// (migrated) database directly, without main()'s own env var parsing
+// or os.Exit calls getting in the way.
+func seedAdmin(ctx context.Context, repo *users.Repository, service *users.Service, p seedParams) error {
+	if _, err := repo.GetByEmail(ctx, p.Email); err == nil {
+		slog.Info("admin account already exists, nothing to do", "email", p.Email)
+		return nil
+	} else if !errors.Is(err, users.ErrNotFound) {
+		return fmt.Errorf("check for an existing account: %w", err)
+	}
+
+	_, err := service.Create(ctx, users.CreateInput{
+		FirstName: p.FirstName,
+		LastName:  p.LastName,
+		BirthDate: p.BirthDate,
+		Email:     &p.Email,
+		Phone:     &p.Phone,
 		RoleNames: []string{"admin"},
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "create admin account: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("create admin account: %w", err)
 	}
 
-	slog.Info("admin account created", "email", email, "phone", phone)
+	slog.Info("admin account created", "email", p.Email, "phone", p.Phone)
 	slog.Info("to sign in: request a magic link from the login page with this email and phone, " +
 		"then check the API's logs (or your SMTP inbox, if configured) for the link")
+	return nil
 }
 
 func getEnv(key, fallback string) string {
