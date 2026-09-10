@@ -139,10 +139,21 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+/* min-width: 0 overrides a flex item's default auto min-width (its
+   content's own min-content size — here, since h1 can wrap, roughly
+   the width of its single longest word) with the ordinary "can shrink
+   all the way down" floor every non-flex box already has. Without it,
+   .topbar's wrap point (see .topbar-user's own comment) landed at an
+   inconsistent width depending on exactly where the title's text
+   happened to wrap internally, sometimes leaving .topbar-user sharing
+   .topbar-brand's own line — off in a half-wrapped state where
+   margin-left: auto had much less room to push it into, and it ended
+   up rendered near the left instead of the right. */
 .topbar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 /* The hamburger toggle for .sidebar — hidden here (desktop, where the
@@ -150,17 +161,18 @@ body {
    media query below. Lives in .topbar-brand, right alongside the logo
    and title, rather than in the sidebar itself — a whole extra
    full-width bar up there just to hold one icon wasted a lot of
-   vertical space for nothing else. It stays on screen for as long as
-   the menu is open too (api.js's own initSidebarToggle no longer hides
-   it) — .sidebar.open opens right below the topbar instead of
-   covering it (see the narrow-screen media query below), so there's
-   no overlap to hide it from in the first place; hiding it used to be
-   the only way to avoid it looking stranded once the menu opened
-   right past it, which also meant .topbar-brand lost its width and
-   the title visibly jumped left. Left visible, the same button also
-   doubles as the menu's own close control (initSidebarToggle toggles
-   instead of only opening) — tapping anywhere outside the menu still
-   closes it too. */
+   vertical space for nothing else. It's never hidden via [hidden] for
+   as long as the menu is open (an earlier version did exactly that),
+   but it stays covered by it visually — .sidebar.open sits at a higher
+   z-index (see the narrow-screen media query below) and this element
+   gets no z-index of its own to poke back above it, so the two never
+   fight over the same pixels the way they would if this were an
+   ordinary same-stacking-level overlap. The point of leaving it in
+   place rather than hiding it is purely to keep it occupying its
+   usual slot in .topbar-brand's flex layout: [hidden] used to drop it
+   out of that layout entirely, visibly shifting the title left into
+   the gap it left behind — being covered instead of removed avoids
+   that shift without needing the toggle to actually stay visible. */
 .sidebar-toggle {
   display: none;
   padding: 4px 6px;
@@ -183,10 +195,24 @@ body {
   color: var(--accent);
 }
 
+/* margin-left: auto (not just .topbar's own justify-content:
+   space-between) pushes this flush to the right even once .topbar's
+   flex-wrap wraps it onto its own second line below .topbar-brand on
+   a narrow screen — space-between only has an effect when there are
+   two items sharing one line to put space between; alone on a
+   wrapped line of its own, it would otherwise sit at that line's
+   start (left) instead. flex-shrink: 0 keeps this from being
+   compressed below its own natural width first (its default
+   flex-shrink: 1 would let it shrink alongside .topbar-brand instead
+   of wrapping cleanly) — between this and .topbar-brand's own
+   min-width: 0, the wrap either happens or it doesn't, with nothing
+   in between where the two sit awkwardly sharing a line. */
 .topbar-user {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-shrink: 0;
+  margin-left: auto;
   font-size: 0.9rem;
 }
 
@@ -221,22 +247,18 @@ body {
 /* Below this width, .sidebar is collapsed entirely — not just its own
    nav — behind .sidebar-toggle (now up in .topbar-brand), shown only
    once opened via its own .open class (see api.js's
-   initSidebarToggle, which also closes it again on a second tap of the
-   toggle itself, or a tap/click anywhere else outside it — see
-   .sidebar-toggle's own comment). Opening it overlays the current
-   screen (position: fixed) at the same width as the desktop sidebar
-   itself, rather than pushing .main-column's own content down the
-   page or covering the full screen width for just 6 links — but
-   starting at top: var(--topbar-height), not top: 0, so it opens
-   right below the topbar instead of covering it (which would either
-   hide the toggle/logo/title underneath it, or, stacked the other way
-   around, cover the sidebar's own first couple of links behind the
-   topbar instead). --topbar-height is a custom property
-   initSidebarToggle keeps in sync with the topbar's real, current
-   height (itself not a fixed constant — the greeting in .topbar-user
-   can wrap to a second line on a narrow enough phone) rather than a
-   guessed pixel value baked in here; the 64px fallback only matters
-   for the first paint, before that JS has run at all. */
+   initSidebarToggle, which also closes it again on a tap/click
+   anywhere outside it — the toggle itself sits right underneath the
+   open menu, covered by it, see its own comment, so in practice that
+   outside tap is what closes it day to day). Opening it overlays the
+   current screen from the very top-left corner (position: fixed,
+   top/left: 0) at the same width as the desktop sidebar itself, rather
+   than pushing .main-column's own content down the page or covering
+   the full screen width for just 6 links — covering the topbar
+   (toggle, logo, title, greeting) underneath it too, not just the
+   page's own content below it, is simply what a fixed top-left overlay
+   at a higher z-index does; nothing here carves out an exception for
+   the topbar. */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
@@ -249,7 +271,7 @@ body {
   .sidebar.open {
     display: block;
     position: fixed;
-    top: var(--topbar-height, 64px);
+    top: 0;
     left: 0;
     bottom: 0;
     width: 180px;

@@ -176,39 +176,24 @@ function applyRoleVisibility() {
 // only shows under style.css's narrow-screen media query) to open
 // #sidebar as a whole — below that width the sidebar starts collapsed
 // entirely (not just its own nav), and opening it overlays the current
-// screen instead of pushing the page's own content down. There's no
-// separate close button inside the open menu itself (an "✕" swapped in
-// for the toggle's own "☰" used to sit right on top of "Inicio", the
-// first nav link, since the menu is only as wide as the toggle's own
-// corner of the topbar) — the toggle itself doubles as the close
-// control instead (a second tap closes it again), and tapping anywhere
-// else outside the menu closes it too. Unlike an earlier version, the
-// toggle is never hidden while the menu is open: style.css opens
-// .sidebar.open right below the topbar (via the --topbar-height custom
-// property this function keeps in sync, see below) rather than over
-// it, so the toggle just stays visible and clickable in its usual spot
-// instead of needing to disappear — hiding it used to also drop it out
-// of .topbar-brand's flex layout, visibly shifting the title over into
-// the gap it left behind. A no-op on /login, the one page with no
-// sidebar shell to toggle at all.
+// screen (including the topbar underneath it) instead of pushing the
+// page's own content down. Tapping anywhere outside the menu closes it
+// again; the toggle also still toggles (a second activation closes it
+// too), which mostly matters for a keyboard/AT user tabbing to it,
+// since visually it now sits covered behind the open menu (style.css
+// gives .sidebar.open a higher z-index, and this element none of its
+// own to rise back above it) rather than disappearing the way an
+// earlier version had it. It's never actually hidden via [hidden]
+// while the menu is open, unlike that earlier version — that used to
+// drop it out of .topbar-brand's flex layout, visibly shifting the
+// title over into the gap it left behind; staying covered instead of
+// removed keeps its slot in that layout without needing it to stay
+// visible. A no-op on /login, the one page with no sidebar shell to
+// toggle at all.
 function initSidebarToggle() {
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
-  const topbar = document.querySelector('.topbar');
   if (!toggle || !sidebar) return;
-
-  // --topbar-height isn't a fixed constant — .topbar-user's greeting
-  // can wrap to a second line on a narrow enough phone — so it's
-  // measured from the real, current element rather than guessed, and
-  // re-measured on resize/orientation change (a rotation can change
-  // whether that greeting wraps at all).
-  function updateTopbarHeight() {
-    if (topbar) {
-      document.documentElement.style.setProperty('--topbar-height', `${topbar.offsetHeight}px`);
-    }
-  }
-  updateTopbarHeight();
-  window.addEventListener('resize', updateTopbarHeight);
 
   function setOpen(isOpen) {
     sidebar.classList.toggle('open', isOpen);
