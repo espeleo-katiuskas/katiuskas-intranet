@@ -123,6 +123,16 @@ body {
   stroke-linejoin: round;
 }
 
+/* Material's own icon (a figure-8 descender) is a filled shape with
+   two punched holes, not an outline like the other five — a thin
+   stroke read too much like the bare digit "8"; the solid rings read
+   as an actual piece of rigging hardware instead. Deliberately
+   heavier than its siblings for that reason, not an oversight. */
+.nav-icon-filled {
+  fill: currentColor;
+  stroke: none;
+}
+
 .main-column {
   flex: 1;
   min-width: 0;
