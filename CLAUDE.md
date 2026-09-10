@@ -410,7 +410,14 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   `cmd/api/main.go`, gated on the same `telegramConfigured` flag (both
   `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` set) as `telegramClient` above — every linking
   attempt has to reach the log channel, so a bot with no channel configured can't do its
-  job anyway. `users.Repository.UserIDForTelegramChatID` tells apart a chat this
+  job anyway. A failed `GetUpdates` call (Telegram's own long-poll connection dropping or
+  timing out for a moment — near-daily in practice, almost always resolved by the very
+  next attempt) is logged at `WARN`, below `telegram.LogHandler`'s own forwarding
+  threshold (`slog.LevelError`, see below) — only once failures actually repeat
+  (`getUpdatesFailureLogThreshold` consecutive ones) does `Run` escalate to `ERROR`, and
+  only for that one call, not for every one of however many more follow — a longer real
+  outage doesn't re-notify the log channel on every 5-second retry for as long as it
+  lasts. `users.Repository.UserIDForTelegramChatID` tells apart a chat this
   doesn't recognize yet — every other message from one gets a greeting plus a "share your
   contact" keyboard button (`Client.SendMessageRequestingContact`, sent with
   `is_persistent: true` so the client shows that keyboard open by default instead of

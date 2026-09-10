@@ -603,6 +603,29 @@ func TestLatestUpdateOffsetSkipsExistingBacklogWithoutProcessingIt(t *testing.T)
 	}
 }
 
+// TestShouldEscalateGetUpdatesFailure covers the actual behavior
+// change: an isolated GetUpdates failure (a Telegram long-poll blip)
+// doesn't escalate to ERROR — only the one at exactly
+// getUpdatesFailureLogThreshold does, and none of the ones after that,
+// so a longer outage doesn't keep re-notifying the log channel for as
+// long as it lasts.
+func TestShouldEscalateGetUpdatesFailure(t *testing.T) {
+	cases := []struct {
+		consecutiveFailures int
+		want                bool
+	}{
+		{1, false},
+		{2, true},
+		{3, false},
+		{4, false},
+	}
+	for _, c := range cases {
+		if got := shouldEscalateGetUpdatesFailure(c.consecutiveFailures); got != c.want {
+			t.Errorf("shouldEscalateGetUpdatesFailure(%d) = %v, want %v", c.consecutiveFailures, got, c.want)
+		}
+	}
+}
+
 func TestRunProcessesQueuedUpdatesAndStopsOnCancel(t *testing.T) {
 	usersService := newUsersService(t)
 	client := &fakeClient{batches: [][]telegram.Update{
