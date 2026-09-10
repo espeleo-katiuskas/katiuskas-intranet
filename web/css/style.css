@@ -85,6 +85,9 @@ body {
 }
 
 .sidebar-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 12px 20px;
   color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
@@ -99,6 +102,25 @@ body {
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
   font-weight: 600;
+}
+
+/* Thin-line outline icons, one per nav entry — plain inline SVG rather
+   than an emoji (no dependency on the browser/OS having a color emoji
+   font installed at all, unlike 🏠/👥/🧗/🎒/📚/🙋, which is a real gap on
+   a bare-bones Linux desktop) or an icon font/library (nothing to load,
+   consistent with how little this app already depends on). stroke:
+   currentColor means each one already matches its own link's text
+   color — rgba(255,255,255,.85) normally, solid white and bold once
+   .active — with no color rule of its own needed here. */
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .main-column {
