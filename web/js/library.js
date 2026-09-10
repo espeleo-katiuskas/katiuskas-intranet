@@ -89,7 +89,7 @@ function linkHrefFor(path, isDir) {
 
 function renderBreadcrumbs(dirPath) {
   const segments = dirPath ? dirPath.split('/') : [];
-  const links = ['<a href="/library">Documentos</a>'];
+  const links = ['<a href="/library">Archivo</a>'];
   let acc = '';
   for (const segment of segments) {
     acc = joinPath(acc, segment);
