@@ -177,25 +177,45 @@ function applyRoleVisibility() {
 // #sidebar as a whole — below that width the sidebar starts collapsed
 // entirely (not just its own nav), and opening it overlays the current
 // screen instead of pushing the page's own content down. There's no
-// close button inside the open menu itself (an "✕" swapped in for the
-// toggle's own "☰" used to sit right on top of "Inicio", the first nav
-// link, since the menu is only as wide as the toggle's own corner of
-// the topbar) — tapping anywhere outside the menu closes it instead,
-// and the toggle itself is hidden for as long as it's open, so it
-// never has to visually coexist with the menu at all. A no-op on
-// /login, the one page with no sidebar shell to toggle at all.
+// separate close button inside the open menu itself (an "✕" swapped in
+// for the toggle's own "☰" used to sit right on top of "Inicio", the
+// first nav link, since the menu is only as wide as the toggle's own
+// corner of the topbar) — the toggle itself doubles as the close
+// control instead (a second tap closes it again), and tapping anywhere
+// else outside the menu closes it too. Unlike an earlier version, the
+// toggle is never hidden while the menu is open: style.css opens
+// .sidebar.open right below the topbar (via the --topbar-height custom
+// property this function keeps in sync, see below) rather than over
+// it, so the toggle just stays visible and clickable in its usual spot
+// instead of needing to disappear — hiding it used to also drop it out
+// of .topbar-brand's flex layout, visibly shifting the title over into
+// the gap it left behind. A no-op on /login, the one page with no
+// sidebar shell to toggle at all.
 function initSidebarToggle() {
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
+  const topbar = document.querySelector('.topbar');
   if (!toggle || !sidebar) return;
+
+  // --topbar-height isn't a fixed constant — .topbar-user's greeting
+  // can wrap to a second line on a narrow enough phone — so it's
+  // measured from the real, current element rather than guessed, and
+  // re-measured on resize/orientation change (a rotation can change
+  // whether that greeting wraps at all).
+  function updateTopbarHeight() {
+    if (topbar) {
+      document.documentElement.style.setProperty('--topbar-height', `${topbar.offsetHeight}px`);
+    }
+  }
+  updateTopbarHeight();
+  window.addEventListener('resize', updateTopbarHeight);
 
   function setOpen(isOpen) {
     sidebar.classList.toggle('open', isOpen);
     toggle.setAttribute('aria-expanded', String(isOpen));
-    toggle.hidden = isOpen;
   }
 
-  toggle.addEventListener('click', () => setOpen(true));
+  toggle.addEventListener('click', () => setOpen(!sidebar.classList.contains('open')));
   document.addEventListener('click', (event) => {
     if (sidebar.classList.contains('open') && !sidebar.contains(event.target) && !toggle.contains(event.target)) {
       setOpen(false);

@@ -150,13 +150,17 @@ body {
    media query below. Lives in .topbar-brand, right alongside the logo
    and title, rather than in the sidebar itself — a whole extra
    full-width bar up there just to hold one icon wasted a lot of
-   vertical space for nothing else. api.js's own initSidebarToggle
-   hides it (the [hidden] attribute, not a class — see the reset up
-   top) for as long as the menu is open, so it never has to coexist
-   on-screen with .sidebar.open at all: closing happens by tapping
-   anywhere outside the menu instead of tapping this again, so there's
-   no need for it to keep rendering (as a close icon or otherwise) once
-   the menu covers its own corner of the screen. */
+   vertical space for nothing else. It stays on screen for as long as
+   the menu is open too (api.js's own initSidebarToggle no longer hides
+   it) — .sidebar.open opens right below the topbar instead of
+   covering it (see the narrow-screen media query below), so there's
+   no overlap to hide it from in the first place; hiding it used to be
+   the only way to avoid it looking stranded once the menu opened
+   right past it, which also meant .topbar-brand lost its width and
+   the title visibly jumped left. Left visible, the same button also
+   doubles as the menu's own close control (initSidebarToggle toggles
+   instead of only opening) — tapping anywhere outside the menu still
+   closes it too. */
 .sidebar-toggle {
   display: none;
   padding: 4px 6px;
@@ -217,13 +221,22 @@ body {
 /* Below this width, .sidebar is collapsed entirely — not just its own
    nav — behind .sidebar-toggle (now up in .topbar-brand), shown only
    once opened via its own .open class (see api.js's
-   initSidebarToggle, which also closes it again on a click/tap
-   anywhere outside it — the menu itself has no close control of its
-   own once open, see .sidebar-toggle's own comment). Opening it
-   overlays the current screen (position: fixed) at the same width as
-   the desktop sidebar itself, rather than pushing .main-column's own
-   content down the page or covering the full screen width for just 6
-   links. */
+   initSidebarToggle, which also closes it again on a second tap of the
+   toggle itself, or a tap/click anywhere else outside it — see
+   .sidebar-toggle's own comment). Opening it overlays the current
+   screen (position: fixed) at the same width as the desktop sidebar
+   itself, rather than pushing .main-column's own content down the
+   page or covering the full screen width for just 6 links — but
+   starting at top: var(--topbar-height), not top: 0, so it opens
+   right below the topbar instead of covering it (which would either
+   hide the toggle/logo/title underneath it, or, stacked the other way
+   around, cover the sidebar's own first couple of links behind the
+   topbar instead). --topbar-height is a custom property
+   initSidebarToggle keeps in sync with the topbar's real, current
+   height (itself not a fixed constant — the greeting in .topbar-user
+   can wrap to a second line on a narrow enough phone) rather than a
+   guessed pixel value baked in here; the 64px fallback only matters
+   for the first paint, before that JS has run at all. */
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;
@@ -236,7 +249,7 @@ body {
   .sidebar.open {
     display: block;
     position: fixed;
-    top: 0;
+    top: var(--topbar-height, 64px);
     left: 0;
     bottom: 0;
     width: 180px;
