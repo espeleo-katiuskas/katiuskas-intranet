@@ -992,6 +992,19 @@ func TestHandlerDeleteHolidayNotFound(t *testing.T) {
 
 // The list defaults to newest-first (unchanged); ?order=asc switches
 // to oldest-first, for the activities list page.
+// TestHandlerListClampsNegativeOffset covers the fix for a previously
+// unhandled 500: a negative offset used to reach Postgres's own OFFSET
+// clause untouched, which rejects it outright. Now defaulted to the
+// start instead, same as an out-of-range limit already was.
+func TestHandlerListClampsNegativeOffset(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	member := testutil.InsertUser(t, tx, "")
+	token := tokenFor(t, authn, member.ID, "member")
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/activities?offset=-1", token, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected a negative offset to be clamped rather than error, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerListOrderDefaultsToDescendingAndCanBeAscending(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	leader := testutil.InsertUser(t, tx, "")

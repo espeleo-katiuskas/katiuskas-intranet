@@ -70,6 +70,14 @@ func (s *Service) List(ctx context.Context, limit, offset int, onlySocios bool) 
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	// A negative offset (a malformed or hand-edited query string) would
+	// otherwise reach Postgres's own OFFSET clause untouched, which
+	// rejects it outright — defaulted to the start, same as limit above
+	// for an out-of-range value, rather than surfacing as a raw,
+	// unhandled 500.
+	if offset < 0 {
+		offset = 0
+	}
 	list, err := s.repo.List(ctx, limit, offset, onlySocios)
 	if err != nil {
 		return nil, err

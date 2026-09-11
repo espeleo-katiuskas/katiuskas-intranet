@@ -342,6 +342,19 @@ func TestListTransactionsOpenToAnyBaselineRole(t *testing.T) {
 	}
 }
 
+// TestListTransactionsClampsNegativeOffset covers the fix for a
+// previously unhandled 500: a negative offset used to reach Postgres's
+// own OFFSET clause untouched, which rejects it outright. Now
+// defaulted to the start instead, same as an out-of-range limit
+// already was.
+func TestListTransactionsClampsNegativeOffset(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/transactions?offset=-1", token, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected a negative offset to be clamped rather than error, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // ---- Transactions: writing needs admin or the "money" role, not board ----
 
 func transactionBody(occurredAt time.Time, description string, entries ...map[string]any) map[string]any {

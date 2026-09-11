@@ -49,18 +49,30 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	return s.repo.Create(ctx, in)
 }
 
+// clampOffset defaults a negative offset (a malformed or hand-edited
+// query string) to the start instead of passing it through to
+// Postgres's own OFFSET clause, which rejects a negative value outright
+// — a raw, unhandled 500 otherwise, the same reasoning limit above
+// already gets for an out-of-range value.
+func clampOffset(offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	return offset
+}
+
 func (s *Service) List(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	return s.repo.List(ctx, limit, offset, ascending)
+	return s.repo.List(ctx, limit, clampOffset(offset), ascending)
 }
 
 func (s *Service) ListActive(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	return s.repo.ListActive(ctx, limit, offset, ascending)
+	return s.repo.ListActive(ctx, limit, clampOffset(offset), ascending)
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (Activity, error) {

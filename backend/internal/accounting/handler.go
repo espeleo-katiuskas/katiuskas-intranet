@@ -268,6 +268,14 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	// A negative offset (a malformed or hand-edited query string) used to
+	// reach Postgres's own OFFSET clause untouched, which rejects it
+	// outright — a raw, unhandled 500 instead of just starting from the
+	// beginning, the same way limit above is defaulted rather than
+	// rejected for an out-of-range value.
+	if offset < 0 {
+		offset = 0
+	}
 	list, err := h.service.ListTransactions(r.Context(), limit, offset)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list transactions")

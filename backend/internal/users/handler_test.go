@@ -177,6 +177,18 @@ func TestHandlerGetSelfVersusOthers(t *testing.T) {
 	}
 }
 
+// TestHandlerListClampsNegativeOffset covers the fix for a previously
+// unhandled 500: a negative offset used to reach Postgres's own
+// OFFSET clause untouched, which rejects it outright. Now defaulted to
+// the start instead, same as an out-of-range limit already was.
+func TestHandlerListClampsNegativeOffset(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	adminToken := tokenFor(t, authn, 1, "admin")
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users?offset=-1", adminToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected a negative offset to be clamped rather than error, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerListRequiresABaselineRole(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
