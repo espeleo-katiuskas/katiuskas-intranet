@@ -66,6 +66,13 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Membership, error) 
 	return m, err
 }
 
+// Update also re-validates every one of this membership's own existing
+// membership_leaves against its new, possibly narrower start/end date
+// — shrinking a membership's own period could just as easily strand an
+// already-existing leave outside it as a bad leave edit could (see
+// UpdateLeave, which checks the same invariant from the other
+// direction); this package still has to check it itself either way,
+// since no CHECK constraint spans both tables.
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Membership, error) {
 	m, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -77,6 +84,10 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Memb
 	m.StartDate = in.StartDate
 	m.EndDate = in.EndDate
 
+	if err := r.leavesStillFitWithin(ctx, id, m); err != nil {
+		return Membership{}, err
+	}
+
 	_, err = r.pool.Exec(ctx, `
 		UPDATE memberships SET start_date = $1, end_date = $2, end_reason = $3
 		WHERE id = $4
@@ -86,6 +97,25 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Memb
 		return m, ErrOverlap
 	}
 	return m, err
+}
+
+// leavesStillFitWithin reports (as ErrLeaveOutsideMembership, nil
+// otherwise) whether every existing membership_leaves row under
+// membershipID still falls entirely within candidate's start/end date
+// — used by Update before it actually narrows a membership's own
+// period, so an edit can't silently strand a leave outside the period
+// it belongs to.
+func (r *Repository) leavesStillFitWithin(ctx context.Context, membershipID int64, candidate Membership) error {
+	leaves, err := r.ListLeavesByMembership(ctx, membershipID)
+	if err != nil {
+		return err
+	}
+	for _, l := range leaves {
+		if !withinMembershipPeriod(candidate, l.StartDate, l.EndDate) {
+			return ErrLeaveOutsideMembership
+		}
+	}
+	return nil
 }
 
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {

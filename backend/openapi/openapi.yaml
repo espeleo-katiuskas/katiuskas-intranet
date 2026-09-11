@@ -806,7 +806,11 @@ paths:
         "403": { description: Only admin can correct a membership period. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: The corrected dates overlap another period for this person.
+          description: >
+            overlapping_period (the corrected dates overlap another
+            period for this person), or outside_membership_period (the
+            new dates would strand an existing temporary leave of this
+            membership's own outside its period).
 
   /users/{login}/board-members:
     get:

@@ -131,6 +131,72 @@ func TestUpdateRejectsOverlap(t *testing.T) {
 	}
 }
 
+// TestUpdateRejectsShrinkingPeriodPastAnExistingLeave and
+// TestUpdateAllowsShrinkingPeriodThatStillContainsExistingLeave cover
+// the fix for a previously unchecked invariant: Update let a
+// membership's own period narrow past an existing membership_leaves
+// row's dates, stranding it outside the very period it's supposed to
+// fall entirely within — CreateLeave/UpdateLeave already check this
+// from the leave's own side, but nothing checked it from the
+// membership's side until now.
+func TestUpdateRejectsShrinkingPeriodPastAnExistingLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	// Ending the membership on 2020-06-15 would strand the leave's own
+	// 2020-06-01..06-30 window half outside it.
+	tooEarly := date("2020-06-15")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &tooEarly}); !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+
+	// Pushing the start date forward into the leave's own window is
+	// rejected the same way, from the other end.
+	tooLate := date("2020-06-15")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: tooLate}); !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+}
+
+func TestUpdateAllowsShrinkingPeriodThatStillContainsExistingLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	// Ending well after the leave's own window still contains it.
+	stillFits := date("2020-12-31")
+	updated, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &stillFits})
+	if err != nil {
+		t.Fatalf("expected the update to succeed, got %v", err)
+	}
+	if updated.EndDate == nil || !updated.EndDate.Equal(stillFits) {
+		t.Errorf("expected end date %v, got %v", stillFits, updated.EndDate)
+	}
+}
+
 func TestUpdateNotFound(t *testing.T) {
 	repo := memberships.NewRepository(testutil.NewTx(t))
 	endDate := date("2024-01-01")

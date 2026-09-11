@@ -195,6 +195,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "overlapping_period", err.Error())
 		return
 	}
+	if errors.Is(err, ErrLeaveOutsideMembership) {
+		httpapi.WriteError(w, http.StatusConflict, "outside_membership_period",
+			"this change would leave an existing temporary leave outside the membership period")
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update membership")
 		return

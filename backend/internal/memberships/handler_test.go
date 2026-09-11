@@ -259,6 +259,31 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	}
 }
 
+// TestHandlerUpdateRejectsShrinkingPeriodPastAnExistingLeave covers the
+// fix for a previously unchecked invariant: shrinking a membership's own
+// period past an existing temporary leave's dates used to succeed,
+// stranding that leave outside the period it's supposed to fall
+// entirely within.
+func TestHandlerUpdateRejectsShrinkingPeriodPastAnExistingLeave(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	leavesPath := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	if rec := doRequest(mux, http.MethodPost, leavesPath, adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create leave: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	updatePath := fmt.Sprintf("/api/v1/memberships/%d", m.ID)
+	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+		map[string]string{"start_date": "2020-01-01", "end_date": "2020-06-15"})
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 outside_membership_period, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestHandlerListByUserIsSelfOrPrivileged covers listByUser's own access
 // check directly: a plain member may see their own membership history,
 // admin/board may see anyone's, but a different plain member may see
