@@ -56,29 +56,16 @@ func (s *Service) Get(ctx context.Context, id int64) (User, error) {
 	return s.enrich(ctx, user)
 }
 
-// List returns a page of users ordered by name — onlySocios restricts
-// it, at the database level, to people who are or have been a socio
-// (see Handler.list, the only caller that ever sets it: a plain
-// member's own restricted view). Filtering there rather than in Go
-// after the fact matters because it happens *before* limit/offset are
-// applied, not after — excluding non-socio rows from an
-// already-fetched page would silently shrink it below limit (or leave
-// it empty) whenever enough of that particular page happened to be
-// admin-only accounts, even with plenty of real socios further along
-// in the same ordering.
-func (s *Service) List(ctx context.Context, limit, offset int, onlySocios bool) ([]User, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 50
-	}
-	// A negative offset (a malformed or hand-edited query string) would
-	// otherwise reach Postgres's own OFFSET clause untouched, which
-	// rejects it outright — defaulted to the start, same as limit above
-	// for an out-of-range value, rather than surfacing as a raw,
-	// unhandled 500.
-	if offset < 0 {
-		offset = 0
-	}
-	list, err := s.repo.List(ctx, limit, offset, onlySocios)
+// List returns every user on file, ordered by name — deliberately not
+// paginated: membership grows by roughly 15 people a year, nowhere near
+// the scale where returning everyone in one response is a real cost.
+// onlySocios restricts it, at the database level, to people who are or
+// have been a socio (see Handler.list, the only caller that ever sets
+// it: a plain member's own restricted view) — filtering there rather
+// than in Go after the fact so a non-socio row is never fetched from
+// Postgres at all, not just hidden from the response.
+func (s *Service) List(ctx context.Context, onlySocios bool) ([]User, error) {
+	list, err := s.repo.List(ctx, onlySocios)
 	if err != nil {
 		return nil, err
 	}

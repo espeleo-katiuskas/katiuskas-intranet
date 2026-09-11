@@ -218,12 +218,11 @@ anything else in that body gets 403 `restricted_fields` instead of being silentl
 `membership_start_date`) in a plain member's own listing — someone with no membership
 period at all (an admin-only account, say) is left out of it entirely, even though
 admin/board still see them (`Handler.list`). That restriction is applied by
-`users.Repository.List` itself (an `EXISTS` against `memberships`), *before* `limit`/
-`offset`, not filtered back out of an already-paginated page afterward — doing it the
-other way round used to make a plain member's own page come back short of `limit`, or
-even empty, whenever enough of that particular page's alphabetical slice happened to be
-admin-only accounts, regardless of how many real socios existed further along the same
-ordering. The role catalog itself (`GET /roles`) is
+`users.Repository.List` itself (an `EXISTS` against `memberships`), not filtered back out
+in Go after the fact, so a non-socio row is never even fetched from Postgres. `GET /users`
+is deliberately unpaginated — the club's membership grows by roughly 15 people a year,
+nowhere near the scale where returning everyone on file in one response is a real cost.
+The role catalog itself (`GET /roles`) is
 open to any baseline role, read-only regardless of who's asking — assigning/revoking one
 is still admin-only — since it's just organizational labels, and a plain member's own
 "Cargo" column on `/members` needs `is_automatic` from it to tell an automatic role

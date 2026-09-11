@@ -284,18 +284,14 @@ paths:
         membership_start_date); someone who's never had a membership
         period at all (an admin-only account, say) is left out of a
         plain member's own listing entirely, even though admin/board
-        still see them. limit/offset apply to that same restricted set
-        for a plain member — not to everyone on file first — so a page
-        is always as full as there are qualifying people left to fill
-        it, regardless of how many non-socio accounts sort ahead of
-        them.
+        still see them. Deliberately unpaginated — the club's
+        membership grows by roughly 15 people a year, nowhere near the
+        scale where returning everyone on file in one response is a
+        real cost.
       security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: limit, in: query, schema: { type: integer } }
-        - { name: offset, in: query, schema: { type: integer } }
       responses:
         "200":
-          description: A page of users (User for admin/board, MemberListing otherwise)
+          description: Every user on file (User for admin/board, MemberListing otherwise)
           content:
             application/json:
               schema:

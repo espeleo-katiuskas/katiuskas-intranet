@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -54,19 +53,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // MemberListing's narrower view — and only of people who are or have
 // been a socio (a non-nil MembershipStartDate), not everyone on file —
 // see MemberListing's own doc comment for exactly what that includes.
-// That socio-only restriction is applied by List itself, before
-// limit/offset ever get to it — not filtered back out of an
-// already-paginated page here, which used to make a plain member's own
-// page come back short of limit (or even empty) whenever some of the
-// admin-only accounts in that slice of the alphabet had no membership
-// history at all, even though more real socios existed further down
-// the same query.
+// Unpaginated, deliberately: membership grows by roughly 15 people a
+// year, nowhere near the scale where returning everyone on file in one
+// response would be a real cost.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	current, _ := auth.UserFromContext(r.Context())
 	onlySocios := !current.HasAnyRole("admin", "board")
-	list, err := h.service.List(r.Context(), limit, offset, onlySocios)
+	list, err := h.service.List(r.Context(), onlySocios)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list users")
 		return

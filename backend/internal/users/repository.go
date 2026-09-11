@@ -252,20 +252,21 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (User, error)
 	return u, err
 }
 
-// List orders every person by name — onlySocios, when true, restricts
-// this to people with at least one memberships row of their own (an
-// EXISTS, not a JOIN: a person can have several membership periods,
-// and this only ever needs to know whether at least one exists, never
-// which or how many). Applied here, ahead of LIMIT/OFFSET, rather than
-// filtered out of the page after fetching it — see Service.List's own
-// doc comment for why that distinction matters.
-func (r *Repository) List(ctx context.Context, limit, offset int, onlySocios bool) ([]User, error) {
+// List orders every person by name, unpaginated — see Service.List's
+// own doc comment for why. onlySocios, when true, restricts this to
+// people with at least one memberships row of their own (an EXISTS,
+// not a JOIN: a person can have several membership periods, and this
+// only ever needs to know whether at least one exists, never which or
+// how many) — applied here, in the query itself, rather than filtered
+// out of the result in Go after fetching it, so a non-socio row is
+// never fetched at all, not just hidden from the response.
+func (r *Repository) List(ctx context.Context, onlySocios bool) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+userSelect+`
 		FROM users u
-		WHERE $3 = false OR EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id)
-		ORDER BY u.last_name, u.first_name LIMIT $1 OFFSET $2
-	`, limit, offset, onlySocios)
+		WHERE $1 = false OR EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id)
+		ORDER BY u.last_name, u.first_name
+	`, onlySocios)
 	if err != nil {
 		return nil, err
 	}

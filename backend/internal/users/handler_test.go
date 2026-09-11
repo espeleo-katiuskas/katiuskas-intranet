@@ -177,18 +177,6 @@ func TestHandlerGetSelfVersusOthers(t *testing.T) {
 	}
 }
 
-// TestHandlerListClampsNegativeOffset covers the fix for a previously
-// unhandled 500: a negative offset used to reach Postgres's own
-// OFFSET clause untouched, which rejects it outright. Now defaulted to
-// the start instead, same as an out-of-range limit already was.
-func TestHandlerListClampsNegativeOffset(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
-	adminToken := tokenFor(t, authn, 1, "admin")
-	if rec := doRequest(mux, http.MethodGet, "/api/v1/users?offset=-1", adminToken, nil); rec.Code != http.StatusOK {
-		t.Errorf("expected a negative offset to be clamped rather than error, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
 func TestHandlerListRequiresABaselineRole(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
@@ -418,28 +406,34 @@ func TestHandlerListHidesPeopleWhoHaveNeverBeenAMemberFromAPlainMember(t *testin
 // real socios existing further along the same ordering. The filter now
 // runs in the database, before limit/offset, so a plain member's own
 // page is always as full as there are socios left to fill it.
-func TestHandlerListPaginatesAfterFilteringNonSociosNotBefore(t *testing.T) {
+// TestHandlerListReturnsEverySocioUnpaginated covers GET /users being
+// deliberately unpaginated (see Service.List's own doc comment —
+// membership grows by roughly 15 people a year, nowhere near the scale
+// where returning everyone in one response is a real cost): a plain
+// member's own listing includes every socio on file, not some subset
+// of them, regardless of how many non-socio accounts exist alongside.
+func TestHandlerListReturnsEverySocioUnpaginated(t *testing.T) {
 	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
 	ctx := context.Background()
 
-	// Sorts ahead of every socio below (ORDER BY last_name, first_name).
 	for _, lastName := range []string{"AA", "AB", "AC"} {
 		if _, err := svc.Create(ctx, users.CreateInput{FirstName: "Never", LastName: lastName, Email: strPtr(testutil.UniqueEmail(t))}); err != nil {
 			t.Fatalf("create never-member %s: %v", lastName, err)
 		}
 	}
-	for _, lastName := range []string{"ZA", "ZB", "ZC"} {
-		socio, err := svc.Create(ctx, users.CreateInput{FirstName: "Socio", LastName: lastName, Email: strPtr(testutil.UniqueEmail(t))})
+	const socioCount = 6
+	for i := 0; i < socioCount; i++ {
+		socio, err := svc.Create(ctx, users.CreateInput{FirstName: "Socio", LastName: testutil.UniqueEmail(t), Email: strPtr(testutil.UniqueEmail(t))})
 		if err != nil {
-			t.Fatalf("create socio %s: %v", lastName, err)
+			t.Fatalf("create socio %d: %v", i, err)
 		}
 		if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: socio.ID, StartDate: time.Now().UTC().AddDate(-1, 0, 0)}); err != nil {
-			t.Fatalf("create membership for %s: %v", lastName, err)
+			t.Fatalf("create membership %d: %v", i, err)
 		}
 	}
 
 	memberToken := tokenFor(t, authn, 1, "member")
-	rec := doRequest(mux, http.MethodGet, "/api/v1/users?limit=2", memberToken, nil)
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users", memberToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -447,12 +441,12 @@ func TestHandlerListPaginatesAfterFilteringNonSociosNotBefore(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list) != 2 {
-		t.Fatalf("expected a full page of 2 socios despite 3 never-members sorting ahead of them, got %d: %+v", len(list), list)
+	if len(list) != socioCount {
+		t.Fatalf("expected all %d socios, got %d: %+v", socioCount, len(list), list)
 	}
 	for _, p := range list {
 		if !strings.HasPrefix(p["login"].(string), "socio.") {
-			t.Errorf("expected only socios on this page, got %+v", p)
+			t.Errorf("expected only socios in the response, got %+v", p)
 		}
 	}
 }
