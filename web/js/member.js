@@ -13,6 +13,8 @@ import {
   knownRoleLabels,
   roleLabel,
   positionLabels,
+  typeLabels,
+  statusLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -713,9 +715,6 @@ if (impersonateButton) {
   }
 }
 
-const activityTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
-const activityStatusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
-
 function renderActivityRow(activity) {
   const role = activity.leader_login === memberLogin ? 'Organizador' : 'Participante';
   return `
@@ -723,8 +722,8 @@ function renderActivityRow(activity) {
       <td>${formatDate(activity.start_date)}</td>
       <td>${formatDate(activity.end_date)}</td>
       <td><a href="/activity?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
-      <td>${activityTypeLabels[activity.type] ?? activity.type}</td>
-      <td><span class="badge status-${activity.status}">${activityStatusLabels[activity.status] ?? activity.status}</span></td>
+      <td>${typeLabels[activity.type] ?? activity.type}</td>
+      <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
       <td>${role}</td>
     </tr>
   `;
