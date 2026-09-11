@@ -32,9 +32,16 @@ var nonLoginChars = regexp.MustCompile(`[^a-z0-9]+`)
 // slugify folds s down to the lowercase-ASCII, hyphen-separated shape a
 // login segment needs: accents stripped, anything else that isn't a
 // letter or digit collapsed to a single hyphen, and no leading or
-// trailing hyphen left over.
+// trailing hyphen left over. Lowercases *before* stripping accents, not
+// after — diacritics only maps the lowercase accented forms ("á", not
+// "Á"), so a capitalized one (the common case: names arrive
+// title-cased, "Ángeles", "Óscar") would otherwise reach it unmapped,
+// get case-folded by ToLower into a lowercase-but-still-accented
+// letter ("á"), and then have nonLoginChars below silently drop it as
+// if it were punctuation — quietly eating a letter out of the login
+// instead of folding it to its unaccented equivalent.
 func slugify(s string) string {
-	s = strings.ToLower(diacritics.Replace(s))
+	s = diacritics.Replace(strings.ToLower(s))
 	s = nonLoginChars.ReplaceAllString(s, "-")
 	return strings.Trim(s, "-")
 }

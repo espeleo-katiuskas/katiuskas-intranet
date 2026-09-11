@@ -30,6 +30,46 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+// TestCreateAppendsNumericSuffixOnLoginCollision covers generateLogin's
+// own collision path: two people whose names slugify to the exact same
+// base login ("juan.perez") don't fail — the second gets that same
+// base with a numeric suffix appended (loginWithSuffix), the first
+// still-free candidate in that sequence.
+func TestCreateAppendsNumericSuffixOnLoginCollision(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+
+	first, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "Juan", LastName: "Pérez", Email: strPtr(testutil.UniqueEmail(t)),
+	})
+	if err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+	if first.Login != "juan.perez" {
+		t.Fatalf("expected the first person to get the plain base login, got %q", first.Login)
+	}
+
+	second, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "Juan", LastName: "Pérez", Email: strPtr(testutil.UniqueEmail(t)),
+	})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+	if second.Login != "juan.perez2" {
+		t.Errorf("expected the second person's login to get a numeric suffix, got %q", second.Login)
+	}
+
+	third, err := repo.Create(context.Background(), users.CreateInput{
+		FirstName: "Juan", LastName: "Pérez", Email: strPtr(testutil.UniqueEmail(t)),
+	})
+	if err != nil {
+		t.Fatalf("create third: %v", err)
+	}
+	if third.Login != "juan.perez3" {
+		t.Errorf("expected the third person's login to move on to the next free suffix, got %q", third.Login)
+	}
+}
+
 func TestCreateDuplicateEmailRejected(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
@@ -618,6 +658,79 @@ func TestUpdate(t *testing.T) {
 	}
 	if updated.FirstName != "A" {
 		t.Errorf("expected untouched fields to survive an update, got first_name %q", updated.FirstName)
+	}
+}
+
+// TestUpdateRenamesLogin covers the admin-only login correction path
+// (UpdateInput.Login) — auto-generated at creation, but editable
+// afterward, unlike every other identity field it's dot-joined from.
+func TestUpdateRenamesLogin(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "Juan", LastName: "Pérez", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.Login != "juan.perez" {
+		t.Fatalf("expected the auto-generated login, got %q", created.Login)
+	}
+
+	newLogin := "juanpe"
+	updated, err := repo.Update(ctx, created.ID, users.UpdateInput{Login: &newLogin})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Login != newLogin {
+		t.Errorf("expected login %q, got %q", newLogin, updated.Login)
+	}
+}
+
+// TestUpdateRejectsInvalidLoginFormat covers loginFormat's own
+// validation on a hand-edited login — spaces, underscores, and a
+// leading/doubled separator are all rejected (uppercase isn't one of
+// these cases: Update lowercases before validating, the same
+// case-insensitive normalization login lookups elsewhere already use,
+// so "Juan.Perez" is accepted as "juan.perez" rather than rejected).
+func TestUpdateRejectsInvalidLoginFormat(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	for _, bad := range []string{"juan perez", "juan_perez", ".juanperez", "juan--perez"} {
+		bad := bad
+		t.Run(bad, func(t *testing.T) {
+			if _, err := repo.Update(ctx, created.ID, users.UpdateInput{Login: &bad}); !errors.Is(err, users.ErrInvalidLogin) {
+				t.Errorf("expected ErrInvalidLogin for %q, got %v", bad, err)
+			}
+		})
+	}
+}
+
+// TestUpdateRejectsDuplicateLogin covers renaming into a login another
+// person already has.
+func TestUpdateRejectsDuplicateLogin(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	existing, err := repo.Create(ctx, users.CreateInput{FirstName: "Ana", LastName: "Gomez", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create existing: %v", err)
+	}
+	target, err := repo.Create(ctx, users.CreateInput{FirstName: "Luis", LastName: "Ruiz", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+
+	if _, err := repo.Update(ctx, target.ID, users.UpdateInput{Login: &existing.Login}); !errors.Is(err, users.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
 	}
 }
 
