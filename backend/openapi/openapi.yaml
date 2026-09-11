@@ -1163,14 +1163,23 @@ paths:
     delete:
       summary: Leave an activity
       description: >
-        A member can only remove themselves; admin/board can remove anyone.
+        A member can only remove themselves; admin/board can remove
+        anyone. On a private activity, the organizer can also remove
+        anyone — the mirror image of POST .../participants' own
+        organizer-only gate for adding one there — but gets no such
+        extra say on a public activity, same as for adding one.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "204": { description: Removed }
-        "403": { description: A plain member tried to remove someone other than themselves. }
+        "403":
+          description: >
+            A plain member tried to remove someone other than
+            themselves, or — on a public activity — the organizer tried
+            to remove someone other than themselves.
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /activities/{id}/resources:
     get:

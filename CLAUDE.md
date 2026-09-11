@@ -225,6 +225,10 @@ else 409 `not_federated`. Its `visibility` (`public`, the default, or `private`)
 may add a participant at all, not just who may join: public works as it always has (anyone
 can sign themselves up, admin/board can add anyone else); private restricts adding
 *anyone* — self included — to the organizer, board, or admin (`Handler.join`).
+Removing one (`Handler.leave`, `DELETE .../participants/{login}`) mirrors this: a plain
+member can only remove themselves regardless of visibility, but a private activity's own
+organizer can remove anyone, the same as they can add anyone — on a public one they get no
+such extra say, same as for adding.
 
 **Activity resources / memoria** (`internal/activityresources`): after a trip, whoever
 took part in it writes up its memoria as an ordered list of resources — either a text

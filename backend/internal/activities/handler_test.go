@@ -653,6 +653,156 @@ func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *te
 	}
 }
 
+func TestHandlerLeaveSelfOrAdminBoardOnly(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	board := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	boardToken := tokenFor(t, authn, board.ID, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "visibility": "public", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"participant_logins": []string{member.Login, other.Login},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	pathFor := func(login string) string {
+		return fmt.Sprintf("/api/v1/activities/%d/participants/%s", created.ID, login)
+	}
+
+	// A plain member can't remove someone else...
+	if rec := doRequest(mux, http.MethodDelete, pathFor(other.Login), memberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a plain member to be forbidden from removing someone else, got %d", rec.Code)
+	}
+	if code := errorCode(t, doRequest(mux, http.MethodDelete, pathFor(other.Login), memberToken, nil)); code != "forbidden" {
+		t.Errorf("expected error code forbidden, got %q", code)
+	}
+	// ...but can remove themselves.
+	if rec := doRequest(mux, http.MethodDelete, pathFor(member.Login), memberToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected a member to remove themselves, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Board can remove anyone.
+	if rec := doRequest(mux, http.MethodDelete, pathFor(other.Login), boardToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected board to remove someone else, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerLeavePrivateActivityOrganizerCanRemoveAnyone(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "visibility": "private", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	participantsPath := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+	if rec := doRequest(mux, http.MethodPost, participantsPath, leaderToken, map[string]any{"login": member.Login}); rec.Code != http.StatusNoContent {
+		t.Fatalf("organizer adds member: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The mirror image of adding: the organizer of a *private* activity
+	// can remove anyone from it too, not just admin/board or the person
+	// themselves.
+	leavePath := fmt.Sprintf("/api/v1/activities/%d/participants/%s", created.ID, member.Login)
+	if rec := doRequest(mux, http.MethodDelete, leavePath, leaderToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected the organizer to remove a participant from their own private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerLeavePublicActivityOrganizerCannotRemoveSomeoneElse(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "A", "type": "social", "visibility": "public", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	participantsPath := fmt.Sprintf("/api/v1/activities/%d/participants", created.ID)
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("self join: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Unlike a private activity, the organizer of a *public* one gets no
+	// extra say over who's in it — same as they get none over who may
+	// join it in the first place.
+	leavePath := fmt.Sprintf("/api/v1/activities/%d/participants/%s", created.ID, member.Login)
+	if rec := doRequest(mux, http.MethodDelete, leavePath, leaderToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected the organizer of a public activity to be forbidden from removing someone else, got %d", rec.Code)
+	}
+}
+
+func TestHandlerLeaveActivityNotFound(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	member := testutil.InsertUser(t, tx, "")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/activities/%d/participants/%s", 999999, member.Login), memberToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for a nonexistent activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerLeaveNotifiesTelegramDifferentlyForSelfVersusOther(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	admin := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertUser(t, tx, "")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"participant_logins": []string{member.Login},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.waitForMessage(t) // drain the create notification
+
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/activities/%d/participants/%s", created.ID, admin.Login), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("admin removes self (never actually a participant here, still allowed): %d: %s", rec.Code, rec.Body.String())
+	}
+	selfMsg := notifier.waitForMessage(t)
+	if !strings.Contains(selfMsg, admin.Login) || !strings.Contains(selfMsg, "se ha dado de baja") {
+		t.Errorf("expected a self-removal message naming %q, got %q", admin.Login, selfMsg)
+	}
+
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/activities/%d/participants/%s", created.ID, member.Login), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("admin removes other: %d: %s", rec.Code, rec.Body.String())
+	}
+	otherMsg := notifier.waitForMessage(t)
+	if !strings.Contains(otherMsg, admin.Login) || !strings.Contains(otherMsg, member.Login) || !strings.Contains(otherMsg, "ha dado de baja a") {
+		t.Errorf("expected a message naming both actor %q and target %q, got %q", admin.Login, member.Login, otherMsg)
+	}
+}
+
 func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	leader := testutil.InsertUser(t, tx, "")

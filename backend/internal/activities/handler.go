@@ -477,28 +477,46 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if !current.HasAnyRole("admin", "board") && current.ID != userID {
+
+	// Fetched before the permission check below (not just for the
+	// notification, as before) — a private activity's own organizer can
+	// now remove a participant too, the mirror image of join's own
+	// "organizer, board, or admin" gate for adding one to a private
+	// activity, so answering that needs Activity.Visibility/LeaderID in
+	// hand first. A nonexistent activity 404s here rather than falling
+	// through to a self-or-admin-only check that can't tell whether the
+	// caller organizes it.
+	activity, err := h.service.Get(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not fetch activity")
+		return
+	}
+
+	// Symmetric with join: a private activity's organizer may remove
+	// anyone, the same as they may add anyone — but, also like join, get
+	// no such extra say over a public activity, which works exactly as
+	// it always has (self, or admin/board removing anyone).
+	isOrganizerOfPrivate := activity.Visibility == VisibilityPrivate && current.ID == activity.LeaderID
+	if !current.HasAnyRole("admin", "board") && !isOrganizerOfPrivate && current.ID != userID {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only remove themselves")
 		return
 	}
-	// Fetched before removing the participant purely so the notification
-	// below can still name the activity — a failure here isn't reason
-	// enough to fail the actual removal.
-	activity, activityErr := h.service.Get(r.Context(), id)
 
 	if err := h.service.Leave(r.Context(), id, userID); err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not leave activity")
 		return
 	}
-	if activityErr == nil {
-		targetLogin := r.PathValue("login")
-		if current.ID == userID {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s se ha dado de baja de la actividad «%s».",
-				targetLogin, activity.Title))
-		} else {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha dado de baja a %s de la actividad «%s».",
-				h.actorLogin(r.Context()), targetLogin, activity.Title))
-		}
+	targetLogin := r.PathValue("login")
+	if current.ID == userID {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s se ha dado de baja de la actividad «%s».",
+			targetLogin, activity.Title))
+	} else {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha dado de baja a %s de la actividad «%s».",
+			h.actorLogin(r.Context()), targetLogin, activity.Title))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
