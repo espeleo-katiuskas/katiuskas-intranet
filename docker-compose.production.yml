@@ -68,6 +68,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # GET /api/v1/health (see internal/httpapi/health.go) checks the
+    # process is up and can currently reach Postgres — wget rather than
+    # curl since it's what alpine:3.19 (this image's own final stage,
+    # see backend/Dockerfile) already has via busybox, nothing extra to
+    # install just for this.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:64711/api/v1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   web:
@@ -81,7 +91,12 @@ services:
     ports:
       - "127.0.0.1:64710:64710"
     depends_on:
-      - api
+      api:
+        # Without this, depends_on only waits for the api container to
+        # start, not for the process inside it to actually be ready —
+        # Caddy would come up and start proxying /api/* before the API
+        # could answer anything.
+        condition: service_healthy
     restart: unless-stopped
 
   # One-off tasks, not part of the running stack (profiles: [tools] keeps

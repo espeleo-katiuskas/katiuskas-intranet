@@ -77,3 +77,19 @@ jobs:
 
       - name: Parse openapi.yaml
         run: python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"
+
+  docker:
+    name: Build the API image
+    runs-on: ubuntu-latest
+    # Catches a broken Dockerfile (a bad COPY path, a build step that
+    # only fails inside the image's own Go/Alpine version) here instead
+    # of first surfacing during an actual deploy — the backend job above
+    # builds/tests the Go code directly on the runner, which doesn't
+    # exercise the Dockerfile at all. Build-only, no push: nothing here
+    # needs to leave the runner, this is purely a "does it still build"
+    # check.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker build
+        run: docker build ./backend

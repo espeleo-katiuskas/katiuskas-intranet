@@ -60,6 +60,16 @@ services:
     # beyond local use.
     ports:
       - "127.0.0.1:64711:64711"
+    # GET /api/v1/health (see internal/httpapi/health.go) checks the
+    # process is up and can currently reach Postgres — wget rather than
+    # curl since it's what alpine:3.19 (this image's own final stage,
+    # see backend/Dockerfile) already has via busybox, nothing extra to
+    # install just for this.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:64711/api/v1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   web:
@@ -68,7 +78,12 @@ services:
       - ./web:/srv
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile
     depends_on:
-      - api
+      api:
+        # Without this, depends_on only waits for the api container to
+        # start, not for the process inside it to actually be ready —
+        # Caddy would come up and start proxying /api/* before the API
+        # could answer anything.
+        condition: service_healthy
     # Bound to localhost only — same reasoning as the other two services.
     ports:
       - "127.0.0.1:64710:64710"
