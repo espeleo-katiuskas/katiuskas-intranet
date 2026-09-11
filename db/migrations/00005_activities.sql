@@ -12,9 +12,11 @@ CREATE TABLE activities (
     end_date          date NOT NULL,
     description       text,
     status            activity_status NOT NULL DEFAULT 'planned',
-    -- The organizer: always set, to whoever created the activity (see
-    -- activities.Service.Create — never something the caller chooses),
-    -- and the only person besides admin/board who can edit or cancel it.
+    -- The organizer: always set, defaulting to whoever created the
+    -- activity — admin/board can instead name someone else at creation
+    -- time, or reassign it afterward (see activities.Handler.create/
+    -- Handler.update; a plain member can't do either). The organizer is
+    -- the only person besides admin/board who can edit or cancel it.
     leader_id         bigint NOT NULL REFERENCES users(id),
     -- public (the default): anyone can join themselves, and admin/board
     -- can add anyone else. private: only the organizer, board, or admin

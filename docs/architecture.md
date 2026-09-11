@@ -417,9 +417,35 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   normal, hasta que alguien le deja algún fichero — ve un listado vacío en su propia raíz
   en vez de un 404.
 
+- **`accounts`** / **`transactions`** / **`transaction_entries`** — el dinero del club.
+  `accounts` es un plan contable en árbol (`name`, `code` único, `parent_id` opcional
+  hacia otra cuenta) con una `position` propia entre hermanos (mismo `parent_id`, `NULL`
+  contado como un grupo más) que solo sirve para ordenar, nunca para identificar una fila
+  — `POST /accounts/{id}/move` (`{"direction": "up"|"down"}`) intercambia la posición con
+  el hermano inmediatamente antes o después, sin error si ya es el primero/último de su
+  grupo. `GET /accounts` recorre el árbol en profundidad (cada cuenta seguida de todos
+  sus descendientes antes del siguiente hermano) y añade a cada una su `balance` propio
+  (suma de sus movimientos directos, nunca de los de sus hijas) y `last_transaction_at` —
+  ninguna otra ruta de `accounts` calcula estos dos campos. Cada `transaction` se compone
+  de dos o más `entries` (una cuenta y un importe, positivo o negativo) que deben sumar
+  exactamente cero — contabilidad de partida doble estándar — comprobado no con un
+  `CHECK` (no puede ver más que su propia fila) sino con un trigger de restricción
+  `DEFERRABLE INITIALLY DEFERRED` que se ejecuta al hacer commit, una vez insertadas
+  todas las entradas de esa transacción. Corregir una transacción (`PATCH`) sustituye su
+  descripción, fecha y el conjunto entero de entradas a la vez; no hay edición de una
+  entrada suelta. Lectura abierta a cualquier rol baseline — las cuentas del club son
+  algo que cualquier socio puede ver, no solo admin/board —; escritura reservada a admin
+  o al rol opcional `money` (sembrado por la migración, no de sistema, la misma forma que
+  `material` en `inventory`) — board no tiene aquí ningún acceso de escritura especial,
+  igual que no lo tiene sobre licencias ni sobre los datos de una persona.
+
 ## Backend (`backend/`)
 
-Capas separadas por paquete: `internal/httpapi` (router y helpers HTTP), `internal/auth`
+Capas separadas por paquete: `internal/httpapi` (router y helpers HTTP — incluido
+`GET /health`, sin autenticar y con un timeout propio de 2s, que responde si el proceso
+está vivo y, por separado, si puede alcanzar PostgreSQL en ese momento, pensado para un
+reverse proxy o systemd que necesite comprobarlo sin tener ningún token de sesión que
+mandar), `internal/auth`
 (middleware de autenticación/autorización — ya no hay contraseñas que gestionar; no sabe
 nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal/tokens`
 (el `SessionResolver` real: valida un token opaco contra la base de datos, calcula los
@@ -540,7 +566,8 @@ simplemente no se intenta (nadie puede tener `telegram_chat_id` sin el bot corri
 pero ni el aviso de mutaciones ni el bot se activan siquiera sin esas variables, para no
 generar una línea de log por cada escritura ni un bot que no podría avisar al canal de
 nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
-dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`), cada uno con
+dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`,
+`accounting`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e
 `internal/userfiles` son la excepción a ese patrón de capas: como no hay nada en

@@ -106,6 +106,19 @@ re-expire, or revoke any token, plus `POST /users/{login}/impersonate` (admin-on
 issues a short-lived token — `config.ImpersonationTokenTTL` — that resolves as the target
 person in every way except `AuthenticatedUser.ImpersonatedBy`, which names the admin) and
 `POST /auth/impersonate/exit` to end one and get a fresh normal token back.
+The same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
+(`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is
+issued or refreshed (sign-in, impersonation start/exit) — every ordinary route still only
+ever looks at the bearer header (`auth.Protect`/`RequireAuth`), so this cookie existing
+changes nothing about them. It exists purely for
+`auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/library` and
+`internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere
+else) so a document/file can be a plain, browser-navigable `<a href>` link — opened
+directly in a new tab, or saved by the browser's own "Save As" with the real filename —
+instead of needing `apiFetchBlob`'s fetch-then-`Blob` dance the way `library.js` otherwise
+uses for everything else; `web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean
+on exactly this to stay plain links. `ClearSessionCookie` removes it on logout, so a
+signed-out browser can't open a file link straight from history or a bookmark anymore.
 `internal/authapi` glues magic-link request/consume/logout and `GET /auth/me`
 (identity+roles resolved from context, no extra DB round trip — the frontend calls this
 once per page load since an opaque token has nothing to decode). The magic-link token
@@ -692,10 +705,13 @@ comes back non-empty, un-hides a note linking straight to the bot's chat — lef
 by default so there's no dead link (or flash of one) when Telegram isn't configured at
 all, or the request itself fails.
 
-Downloading or previewing a `/library` document has no session cookie to ride along on a
-plain `<a href>` (the API only ever authenticates via a bearer header), so it fetches the
-file with `apiFetchBlob` (`api.js`) and works with the resulting `Blob` client-side — an
-object URL for inline preview, a synthetic `<a download>` click to save. Markdown
+`library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
+own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
+document from the `/library` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
+and works with the resulting `Blob` client-side — an object URL for inline preview, a
+synthetic `<a download>` click to save — since a `Blob` is what lets it render Markdown
+inline and drive the download from a click handler rather than a bare link, not because
+the route itself needs the bearer header specifically. Markdown
 documents render through a small dependency-free converter (`js/markdown.js`) that
 resolves each document-relative link against the document's own directory and rewrites it
 into an in-app `/library` navigation link; HTML documents render in a fully sandboxed

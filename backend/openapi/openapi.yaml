@@ -404,9 +404,11 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
-            Cannot delete: this account is the caller's own, or the person is
-            still referenced by an activity they led or an inventory
-            movement they're party to.
+            cannot_delete_self (this account is the caller's own),
+            has_references (the person is still referenced by an
+            activity they led or an inventory movement they're party
+            to), or last_admin (they're the only remaining admin —
+            someone has to be left who can manage users and roles).
 
   /roles:
     get:
@@ -645,6 +647,10 @@ paths:
   /users/{login}/licenses:
     get:
       summary: List a person's federative licenses
+      description: >
+        Open to that person themselves, or to admin/board — nobody else,
+        even though POST/PATCH/DELETE on a license are admin-only
+        regardless of whose it is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -656,6 +662,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/License" }
+        "403": { description: Someone other than that person, admin, or board tried to view it. }
     post:
       summary: Assign a federative license ("licencia federativa")
       description: >
@@ -2444,6 +2451,7 @@ components:
           type: string
           format: date
           description: Computed as December 31 of issued_date's year — never set directly.
+        created_at: { type: string, format: date-time }
 
     BoardPosition:
       type: string
