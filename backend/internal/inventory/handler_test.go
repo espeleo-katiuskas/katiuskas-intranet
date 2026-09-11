@@ -332,6 +332,26 @@ func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateItemRejectsMismatchedFieldsForType covers the fix
+// for a previously unmapped 500: a rope with no rope-only fields set
+// used to hit the database's own CHECK constraint directly, instead of
+// a clear 400.
+func TestHandlerCreateItemRejectsMismatchedFieldsForType(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-101", "total_quantity": 1,
+		// Deliberately missing rope_type/diameter_mm/manufacture_year/length_m.
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a rope missing its own required fields, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "invalid_item_fields" {
+		t.Errorf("expected error code invalid_item_fields, got %q", code)
+	}
+}
+
 func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")

@@ -1566,9 +1566,15 @@ paths:
         "400":
           description: >
             invalid_item_type, invalid_date, unknown_category
-            (category_id isn't in the catalog), or single_unit_item
+            (category_id isn't in the catalog), single_unit_item
             (total_quantity above 1 for a rope or bag — they're always
-            exactly one individually-tracked object).
+            exactly one individually-tracked object), or
+            invalid_item_fields (the given fields don't fit item_type's
+            own required shape — a rope needs rope_type/diameter_mm/
+            manufacture_year/length_m in addition to brand/model/code,
+            a bag needs bag_type/capacity_liters, a gear item needs
+            category_id/description, and none of a rope or bag's own
+            fields may be set on the other two types).
 
   /material-categories:
     get:

@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -41,11 +42,29 @@ var (
 	// more than this item still has outstanding *for that activity* —
 	// see Repository.CreateMovement.
 	ErrReturnExceedsLoaned = errors.New("cannot return more than is currently on loan for this activity")
+	// ErrInvalidItemFields means CreateItem's given fields don't fit
+	// item_type's own required shape — a rope or bag with no
+	// code/brand/model, a rope without its own rope-only fields (or a
+	// non-rope with them), a bag without bag_type/capacity_liters (or a
+	// non-bag with them), or a gear item with no category_id/
+	// description (see migration 00006_inventory.sql's own CHECK
+	// constraints). There are too many distinct constraints here to
+	// give each its own sentinel error the way ErrCategoryNotFound does
+	// for the one foreign key on this same INSERT — every case instead
+	// wraps this one sentinel with %w, so errors.Is still matches
+	// regardless of which specific constraint fired, while the
+	// message itself (built from Postgres's own ConstraintName) still
+	// says which one.
+	ErrInvalidItemFields = errors.New("item fields do not match item_type's required shape")
 )
 
 // categoryFKViolationCode is the foreign-key violation Postgres raises
 // when CreateItem is given a category_id absent from material_categories.
 const categoryFKViolationCode = "23503"
+
+// checkViolationCode is any CHECK constraint violation — see
+// ErrInvalidItemFields, the only place this is checked for.
+const checkViolationCode = "23514"
 
 // activityRequiredConstraint is the CHECK constraint (see migration
 // 00006_inventory.sql) requiring a loan or return to name the activity it's for.
@@ -132,8 +151,14 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 		&it.RentalPricePerWeek, &it.SalePrice, &it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM,
 		&it.BagType, &it.CapacityLiters, &it.CategoryID)
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == categoryFKViolationCode {
-		return Item{}, ErrCategoryNotFound
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case categoryFKViolationCode:
+			return Item{}, ErrCategoryNotFound
+		case checkViolationCode:
+			return Item{}, fmt.Errorf("fields do not fit item_type %q (violates %s): %w",
+				in.Type, pgErr.ConstraintName, ErrInvalidItemFields)
+		}
 	}
 	if err != nil {
 		return Item{}, err

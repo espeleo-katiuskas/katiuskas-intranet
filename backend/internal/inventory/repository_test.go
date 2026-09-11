@@ -1161,6 +1161,46 @@ func TestCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 	}
 }
 
+// TestCreateItemRejectsRopeMissingRopeFields and
+// TestCreateItemRejectsGearMissingCategory cover the fix for
+// CreateItem's own previously-unmapped CHECK-constraint violations:
+// rope/bag/gear each require their own type-specific fields (see
+// migration 00006_inventory.sql), none of which were validated in Go
+// before this — a mismatched combination used to hit the database's
+// raw CHECK constraint and surface as an unhandled 500 instead of a
+// clear 400.
+func TestCreateItemRejectsRopeMissingRopeFields(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, model, code := "Beal", "Antipodes", "C-101"
+	_, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		InitialQuantity: 1, Loanable: true,
+		// Deliberately missing RopeType/DiameterMM/ManufactureYear/LengthM.
+	})
+	if !errors.Is(err, inventory.ErrInvalidItemFields) {
+		t.Errorf("expected ErrInvalidItemFields, got %v", err)
+	}
+}
+
+func TestCreateItemRejectsGearMissingCategory(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	description := "Casco"
+	_, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description,
+		InitialQuantity: 1, Loanable: true,
+		// Deliberately missing CategoryID.
+	})
+	if !errors.Is(err, inventory.ErrInvalidItemFields) {
+		t.Errorf("expected ErrInvalidItemFields, got %v", err)
+	}
+}
+
 func TestListMaterialCategories(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)

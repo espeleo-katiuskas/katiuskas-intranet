@@ -221,6 +221,10 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "single_unit_item", err.Error())
 		return
 	}
+	if errors.Is(err, ErrInvalidItemFields) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create item")
 		return
