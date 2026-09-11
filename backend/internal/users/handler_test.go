@@ -397,6 +397,54 @@ func TestHandlerListHidesPeopleWhoHaveNeverBeenAMemberFromAPlainMember(t *testin
 	}
 }
 
+// TestHandlerListPaginatesAfterFilteringNonSociosNotBefore covers the
+// fix for a previously wrong pagination order: a plain member's
+// socio-only restriction used to be applied *after* limit/offset had
+// already picked a page, so a page consisting mostly (or entirely) of
+// never-a-member accounts — alphabetically ahead of every real socio,
+// here — came back short of limit, or even empty, despite plenty of
+// real socios existing further along the same ordering. The filter now
+// runs in the database, before limit/offset, so a plain member's own
+// page is always as full as there are socios left to fill it.
+func TestHandlerListPaginatesAfterFilteringNonSociosNotBefore(t *testing.T) {
+	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
+	ctx := context.Background()
+
+	// Sorts ahead of every socio below (ORDER BY last_name, first_name).
+	for _, lastName := range []string{"AA", "AB", "AC"} {
+		if _, err := svc.Create(ctx, users.CreateInput{FirstName: "Never", LastName: lastName, Email: strPtr(testutil.UniqueEmail(t))}); err != nil {
+			t.Fatalf("create never-member %s: %v", lastName, err)
+		}
+	}
+	for _, lastName := range []string{"ZA", "ZB", "ZC"} {
+		socio, err := svc.Create(ctx, users.CreateInput{FirstName: "Socio", LastName: lastName, Email: strPtr(testutil.UniqueEmail(t))})
+		if err != nil {
+			t.Fatalf("create socio %s: %v", lastName, err)
+		}
+		if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: socio.ID, StartDate: time.Now().UTC().AddDate(-1, 0, 0)}); err != nil {
+			t.Fatalf("create membership for %s: %v", lastName, err)
+		}
+	}
+
+	memberToken := tokenFor(t, authn, 1, "member")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users?limit=2", memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected a full page of 2 socios despite 3 never-members sorting ahead of them, got %d: %+v", len(list), list)
+	}
+	for _, p := range list {
+		if !strings.HasPrefix(p["login"].(string), "socio.") {
+			t.Errorf("expected only socios on this page, got %+v", p)
+		}
+	}
+}
+
 // Creating and deleting a person are admin-only now — board lost every
 // way to modify a person's data, this included.
 func TestHandlerCreateAndDeleteRequireAdminNotBoard(t *testing.T) {

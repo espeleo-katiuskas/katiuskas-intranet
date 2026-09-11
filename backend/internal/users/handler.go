@@ -54,22 +54,27 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // MemberListing's narrower view — and only of people who are or have
 // been a socio (a non-nil MembershipStartDate), not everyone on file —
 // see MemberListing's own doc comment for exactly what that includes.
+// That socio-only restriction is applied by List itself, before
+// limit/offset ever get to it — not filtered back out of an
+// already-paginated page here, which used to make a plain member's own
+// page come back short of limit (or even empty) whenever some of the
+// admin-only accounts in that slice of the alphabet had no membership
+// history at all, even though more real socios existed further down
+// the same query.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	list, err := h.service.List(r.Context(), limit, offset)
+	current, _ := auth.UserFromContext(r.Context())
+	onlySocios := !current.HasAnyRole("admin", "board")
+	list, err := h.service.List(r.Context(), limit, offset, onlySocios)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list users")
 		return
 	}
 
-	current, _ := auth.UserFromContext(r.Context())
-	if !current.HasAnyRole("admin", "board") {
+	if onlySocios {
 		restricted := make([]MemberListing, 0, len(list))
 		for _, u := range list {
-			if u.MembershipStartDate == nil {
-				continue
-			}
 			restricted = append(restricted, u.ForMemberListing())
 		}
 		httpapi.WriteJSON(w, http.StatusOK, restricted)

@@ -360,7 +360,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	list, err := repo.List(ctx, 50, 0)
+	list, err := repo.List(ctx, 50, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -1101,7 +1101,7 @@ func TestConsumeMagicLinkCodeLocksOutAfterTooManyWrongGuesses(t *testing.T) {
 // the page crashes trying to render it.
 func TestListReturnsEmptySliceNotNilWhenThereAreNoUsers(t *testing.T) {
 	repo := users.NewRepository(testutil.NewTx(t))
-	list, err := repo.List(context.Background(), 50, 0)
+	list, err := repo.List(context.Background(), 50, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

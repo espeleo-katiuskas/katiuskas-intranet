@@ -394,7 +394,7 @@ func TestServiceDeleteAllowsRemovingAnAdminWhenAnotherRemains(t *testing.T) {
 // failed partway through.
 func mustID(t *testing.T, svc *users.Service, email string) int64 {
 	t.Helper()
-	list, err := svc.List(context.Background(), 100, 0)
+	list, err := svc.List(context.Background(), 100, 0, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

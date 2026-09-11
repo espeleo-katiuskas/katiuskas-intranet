@@ -56,11 +56,21 @@ func (s *Service) Get(ctx context.Context, id int64) (User, error) {
 	return s.enrich(ctx, user)
 }
 
-func (s *Service) List(ctx context.Context, limit, offset int) ([]User, error) {
+// List returns a page of users ordered by name — onlySocios restricts
+// it, at the database level, to people who are or have been a socio
+// (see Handler.list, the only caller that ever sets it: a plain
+// member's own restricted view). Filtering there rather than in Go
+// after the fact matters because it happens *before* limit/offset are
+// applied, not after — excluding non-socio rows from an
+// already-fetched page would silently shrink it below limit (or leave
+// it empty) whenever enough of that particular page happened to be
+// admin-only accounts, even with plenty of real socios further along
+// in the same ordering.
+func (s *Service) List(ctx context.Context, limit, offset int, onlySocios bool) ([]User, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	list, err := s.repo.List(ctx, limit, offset)
+	list, err := s.repo.List(ctx, limit, offset, onlySocios)
 	if err != nil {
 		return nil, err
 	}
