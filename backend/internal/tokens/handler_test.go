@@ -294,6 +294,66 @@ func TestHandlerUpdateExpiry(t *testing.T) {
 	}
 }
 
+// TestHandlerUpdateExpiryRejectsMalformedBody covers Decode's own error
+// path — doRequest always marshals a valid Go value into valid JSON, so
+// this builds the request directly with a body that isn't JSON at all.
+func TestHandlerUpdateExpiryRejectsMalformedBody(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(context.Background(), target.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	list, _ := service.ListForUser(context.Background(), target.ID)
+	tokenID := list[0].ID
+
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID)
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewReader([]byte("{not json")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 invalid_body, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerUpdateExpiryRequiresExpiresAt covers the other half of the
+// same validation: well-formed JSON, but missing (or zero) expires_at.
+func TestHandlerUpdateExpiryRequiresExpiresAt(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(context.Background(), target.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	list, _ := service.ListForUser(context.Background(), target.ID)
+	tokenID := list[0].ID
+
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID)
+	rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]string{})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 missing_fields, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerPathIDsRejectsNonNumericTokenID covers pathIDs's own
+// tokenID parse failure — shared by both updateExpiry and revoke, so
+// exercising it through either route is enough for both.
+func TestHandlerPathIDsRejectsNonNumericTokenID(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/not-a-number", target.Login)
+
+	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]string{"expires_at": time.Now().Add(time.Hour).Format(time.RFC3339)}); rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_id for a non-numeric token id, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_id for a non-numeric token id, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandlerRevoke(t *testing.T) {
 	mux, resolver, service, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
