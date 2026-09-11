@@ -115,6 +115,17 @@ const contactClubHint = "Si crees que deberías tener acceso, ponte en contacto 
 // since asking would just be a dead end for them.
 const unauthorizedMessage = "Este bot está disponible únicamente para usuarios autorizados. " + contactClubHint
 
+// magicLinkDeliveryFailedMessage answers a matched email when
+// magicLinkIssuer.IssueMagicLinkForTelegramUser itself fails (a
+// transient error sending the DM, most likely, rather than anything
+// about the person asking) — this reply *is* the only channel this
+// request has (see authapi.Handler.issueMagicLink's own
+// viaTelegramBot branch, which skips the email entirely here), so
+// silence on failure would leave whoever just proved their email with
+// no link and no idea anything went wrong at all.
+const magicLinkDeliveryFailedMessage = "No se ha podido generar tu enlace de acceso en este momento. " +
+	"Inténtalo de nuevo en unos minutos; si el problema persiste, ponte en contacto con el club."
+
 // canUseTelegramLogin reports whether user could sign in at all: the
 // same baseline-role gate every route in this API enforces
 // (auth.HasBaselineRole — in practice, an active socio via the
@@ -333,6 +344,14 @@ func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, u
 	}
 	if err := b.magicLinks.IssueMagicLinkForTelegramUser(ctx, userID); err != nil {
 		slog.Error("telegram bot: issue magic link", "error", err)
+		// This DM is the only channel this request ever gets (see
+		// authapi.Handler.issueMagicLink's own viaTelegramBot branch) —
+		// without this reply, whoever just proved their email would be
+		// left with neither the link nor any sign that anything had
+		// gone wrong at all.
+		if err := b.client.SendMessage(ctx, msg.Chat.ID, magicLinkDeliveryFailedMessage); err != nil {
+			slog.Error("telegram bot: send magic link failure notice", "error", err)
+		}
 	}
 }
 

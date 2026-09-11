@@ -99,17 +99,21 @@ func (n *fakeNotifier) Send(_ context.Context, text string) error {
 // fakeMagicLinkIssuer stands in for magicLinkIssuer (*authapi.Handler in
 // production) so tests can check which user id the bot asked for a
 // fresh sign-in link, without pulling in all of authapi's own
-// dependencies (mailer, roles, tokens...).
+// dependencies (mailer, roles, tokens...). err, when set, is returned
+// on every call instead — used to exercise handleRecognizedChat's own
+// reply when the DM delivery itself fails (see
+// TestHandleRepliesWithFailureNoticeWhenIssuingTheMagicLinkFails).
 type fakeMagicLinkIssuer struct {
 	mu        sync.Mutex
 	calledFor []int64
+	err       error
 }
 
 func (f *fakeMagicLinkIssuer) IssueMagicLinkForTelegramUser(_ context.Context, userID int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calledFor = append(f.calledFor, userID)
-	return nil
+	return f.err
 }
 
 func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
@@ -283,6 +287,47 @@ func TestHandleIssuesMagicLinkAndDeletesTheMessageWhenEmailMatches(t *testing.T)
 	defer issuer.mu.Unlock()
 	if len(issuer.calledFor) != 1 || issuer.calledFor[0] != created.ID {
 		t.Errorf("expected IssueMagicLinkForTelegramUser to be called once for user %d, got %v", created.ID, issuer.calledFor)
+	}
+}
+
+// TestHandleRepliesWithFailureNoticeWhenIssuingTheMagicLinkFails covers
+// the other side of the success path above: previously, a failure from
+// magicLinks.IssueMagicLinkForTelegramUser (a delivery failure inside
+// authapi, or a chat-id lookup gone wrong) was only ever logged, never
+// told to the person who just proved their email — leaving them with
+// neither a link nor any sign that anything had gone wrong at all,
+// since this DM is the only channel this request ever gets.
+func TestHandleRepliesWithFailureNoticeWhenIssuingTheMagicLinkFails(t *testing.T) {
+	usersService := newUsersService(t)
+	email := testutil.UniqueEmail(t)
+	created, err := usersService.Create(context.Background(), users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+		RoleNames: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := usersService.SetTelegramChatID(context.Background(), created.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{err: errors.New("telegram send failed")}
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 42, Chat: telegram.Chat{ID: 555}, Text: email},
+	})
+
+	issuer.mu.Lock()
+	called := len(issuer.calledFor) == 1 && issuer.calledFor[0] == created.ID
+	issuer.mu.Unlock()
+	if !called {
+		t.Fatalf("expected IssueMagicLinkForTelegramUser to be called once for user %d, got %v", created.ID, issuer.calledFor)
+	}
+	if len(client.sent) != 1 || client.sent[0] != magicLinkDeliveryFailedMessage {
+		t.Errorf("expected exactly one failure-notice reply, got %v", client.sent)
 	}
 }
 

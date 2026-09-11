@@ -242,7 +242,18 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 	}
 
 	link := fmt.Sprintf("%s/login?token=%s", h.opts.PublicBaseURL, rawToken)
-	h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code, viaTelegramBot)
+	// notifyMagicLinkViaTelegram only ever returns a non-nil error for a
+	// bot-triggered request (see its own doc comment) — a web request's
+	// own DM attempt is best-effort and always reports success here
+	// regardless of what actually happened, since the email below is
+	// its real fallback either way. For a bot-triggered one, that DM
+	// *is* the only channel this request gets, so a failure here has to
+	// reach the caller instead of vanishing: without this, whoever just
+	// proved their email to the bot got neither the link nor any word
+	// that something went wrong.
+	if err := h.notifyMagicLinkViaTelegram(ctx, user.ID, user.FirstName, link, code, viaTelegramBot); err != nil {
+		return err
+	}
 
 	// A Telegram-bot-triggered request already got its one answer as
 	// that DM above — see this function's own doc comment.
@@ -267,20 +278,37 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 	return h.mailer.Send(ctx, strings.Join(strings.Fields(*user.Email), ", "), subject, body)
 }
 
+// errMagicLinkTelegramDMFailed is notifyMagicLinkViaTelegram's own
+// sentinel for "this bot-triggered request's one and only channel
+// didn't go through" — never returned for a web-triggered request (see
+// that function's own doc comment), where a DM is only ever a bonus
+// alongside the real, unaffected email fallback.
+var errMagicLinkTelegramDMFailed = errors.New("could not deliver the magic link via telegram")
+
 // notifyMagicLinkViaTelegram DMs a sign-in link to whoever has linked
 // their Telegram account (see users.Repository.TelegramChatIDForUser).
 // When viaTelegramBot is false, this is alongside the email, not
 // instead of it: someone with no Telegram linked, or if the lookup or
-// the send itself fails, still has the email to fall back on. When
-// viaTelegramBot is true, this DM is the *only* thing sent at all —
-// issueMagicLink skips the email entirely in that case, since this
-// message already is the direct reply to what they just typed into the
-// bot, and a follow-up email would only be redundant. The chat id
-// lookup runs synchronously on the request's own context, same
-// reasoning as notifyLogin (a background goroutine touching the
+// the send itself fails, still has the email to fall back on, so this
+// always reports success (nil) regardless of what actually happened —
+// the chat id lookup runs synchronously on the request's own context,
+// same reasoning as notifyLogin (a background goroutine touching the
 // database independently of the request isn't safe against a
-// request-scoped pgx.Tx); only the network call to Telegram itself is
-// deferred to a goroutine.
+// request-scoped pgx.Tx), but the network call to Telegram itself, and
+// any failure in it, stays fire-and-forget in its own goroutine exactly
+// as before. When viaTelegramBot is true, this DM is the *only* thing
+// sent at all — issueMagicLink skips the email entirely in that case,
+// since this message already is the direct reply to what they just
+// typed into the bot — so there's no fallback left to lean on if it
+// doesn't go through, and every step (the chat id lookup, and now the
+// send itself too) runs synchronously and reports
+// errMagicLinkTelegramDMFailed on any failure, all the way back to
+// Bot.handleRecognizedChat, which needs to know to actually tell the
+// person something went wrong instead of leaving them with silence.
+// Bot.Run already processes one update at a time with no goroutine of
+// its own, calling the Telegram API directly and synchronously the
+// same way elsewhere (SendMessage, SendMessageRequestingContact,
+// DeleteMessage) — this is no different, just one more such call.
 //
 // viaTelegramBot also picks the wording: when this link was requested
 // through internal/telegrambot's own conversation (the person just
@@ -297,17 +325,39 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 // first — and, unlike the bot-flow DM, is never auto-deleted at all:
 // only a bot-flow DM's own delivery is tied to something this handler
 // itself schedules a cleanup for.
-func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) {
+func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) error {
+	fail := func(logMsg string, err error) error {
+		slog.Error(logMsg, "error", err)
+		if viaTelegramBot {
+			return errMagicLinkTelegramDMFailed
+		}
+		return nil
+	}
+
 	if h.telegramClient == nil {
-		return
+		// Shouldn't happen for a bot-triggered request in practice —
+		// internal/telegrambot.Bot only ever runs at all when Telegram
+		// is configured (see cmd/api/main.go's telegramConfigured gate)
+		// — but still worth failing loudly rather than silently for a
+		// path with no email fallback to fall back on.
+		if viaTelegramBot {
+			return fail("telegram not configured for a bot-triggered magic link", errors.New("telegramClient is nil"))
+		}
+		return nil
 	}
 	chatID, err := h.users.TelegramChatIDForUser(ctx, userID)
 	if err != nil {
-		slog.Error("look up telegram chat id for magic link", "error", err)
-		return
+		return fail("look up telegram chat id for magic link", err)
 	}
 	if chatID == nil {
-		return
+		// Shouldn't happen for a bot-triggered request either — that
+		// flow only ever reaches here once this same chat has already
+		// been resolved to this userID (see Bot.handle) — but the same
+		// reasoning as the nil-client case above applies.
+		if viaTelegramBot {
+			return fail("no linked telegram chat for a bot-triggered magic link", errors.New("TelegramChatIDForUser returned nil"))
+		}
+		return nil
 	}
 	var text string
 	if viaTelegramBot {
@@ -325,44 +375,57 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 			firstName, int(h.opts.MagicLinkTTL.Minutes()), link, code, requestOrigin,
 		)
 	}
-	go func() {
+
+	send := func() (int64, error) {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		messageID, err := h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
+		return h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
+	}
+	// The link itself keeps working for the rest of the real
+	// h.opts.MagicLinkTTL regardless of whether this delete succeeds or
+	// even runs at all (a process restart in between loses it, same as
+	// any other best-effort cleanup in this app) — this is purely a
+	// hygiene nicety, not something the link's own security depends on:
+	// a dead link lingering in the chat is misleading, and one more
+	// thing exposed for no reason if the phone/session is compromised
+	// later. The delay before deleting matches h.opts.TelegramBotDMLinkTTL,
+	// this message's own (shorter, cosmetic) stated validity — not the
+	// real, longer h.opts.MagicLinkTTL. Auto-deleting only ever applies
+	// to a bot-flow DM — this message's own reason for existing was
+	// answering what was just typed into this same chat, so once
+	// that's served its purpose there's nothing left worth keeping
+	// around; a DM merely riding along a web request has no equivalent
+	// moment where it's definitely done being useful (the code in it,
+	// especially, might still be typed into the login page from a
+	// different device well after this), so it's left alone
+	// indefinitely — scheduleCleanup is therefore only ever called from
+	// the viaTelegramBot branch below.
+	scheduleCleanup := func(messageID int64) {
+		go func() {
+			time.Sleep(h.opts.TelegramBotDMLinkTTL)
+			deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := h.telegramClient.DeleteMessage(deleteCtx, *chatID, messageID); err != nil {
+				slog.Error("delete expired magic link message", "error", err)
+			}
+		}()
+	}
+
+	if viaTelegramBot {
+		messageID, err := send()
 		if err != nil {
+			return fail("send magic link via telegram", err)
+		}
+		scheduleCleanup(messageID)
+		return nil
+	}
+
+	go func() {
+		if _, err := send(); err != nil {
 			slog.Error("send magic link via telegram", "error", err)
-			return
-		}
-
-		// Auto-deleting only ever applies to a bot-flow DM — this
-		// message's own reason for existing was answering what was just
-		// typed into this same chat, so once that's served its purpose
-		// there's nothing left worth keeping around; a DM merely riding
-		// along a web request has no equivalent moment where it's
-		// definitely done being useful (the code in it, especially, might
-		// still be typed into the login page from a different device
-		// well after this), so it's left alone indefinitely.
-		if !viaTelegramBot {
-			return
-		}
-
-		// The link itself keeps working for the rest of the real
-		// h.opts.MagicLinkTTL regardless of whether this delete succeeds
-		// or even runs at all (a process restart in between loses it,
-		// same as any other best-effort cleanup in this app) — this is
-		// purely a hygiene nicety, not something the link's own security
-		// depends on: a dead link lingering in the chat is misleading,
-		// and one more thing exposed for no reason if the phone/session
-		// is compromised later. The delay before deleting matches
-		// h.opts.TelegramBotDMLinkTTL, this message's own (shorter,
-		// cosmetic) stated validity — not the real, longer h.opts.MagicLinkTTL.
-		time.Sleep(h.opts.TelegramBotDMLinkTTL)
-		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := h.telegramClient.DeleteMessage(deleteCtx, *chatID, messageID); err != nil {
-			slog.Error("delete expired magic link message", "error", err)
 		}
 	}()
+	return nil
 }
 
 func (h *Handler) ConsumeMagicLink(w http.ResponseWriter, r *http.Request) {

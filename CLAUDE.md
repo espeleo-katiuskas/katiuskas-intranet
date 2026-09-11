@@ -363,10 +363,25 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   `internal/telegrambot`, and `nil` (not gated behind a separate config check) whenever
   Telegram isn't configured at all, disabling this DM outright rather than falling
   through to some no-op default. The chat id lookup runs synchronously on the
-  request's own context, same reasoning as `notifyLogin`; only the network call itself is
-  deferred to a goroutine — the same goroutine also schedules the DM's own cleanup, but
-  only for a bot-flow DM (`viaTelegramBot`): sends via `Client.SendMessageForID` (unlike
-  plain `SendMessage`, this hands back the sent message's own id), sleeps for
+  request's own context, same reasoning as `notifyLogin`. For a web-triggered DM, only
+  the network call itself is deferred to a goroutine, fire-and-forget — any failure (the
+  lookup, or the send) is logged and otherwise swallowed, since the email is this path's
+  own real fallback regardless of whether the DM goes through. A bot-flow DM
+  (`viaTelegramBot`) has no such fallback — `issueMagicLink` skips the email entirely for
+  it — so every step, send included, runs synchronously instead and reports a failure
+  anywhere along the way as `errMagicLinkTelegramDMFailed`, all the way back through
+  `IssueMagicLinkForTelegramUser` to `Bot.handleRecognizedChat`, which replies with
+  `magicLinkDeliveryFailedMessage` instead of leaving the person with silence (previously
+  this was only ever logged, a genuinely silent dead end for whoever just proved their
+  email to the bot). Running synchronously here is no different from every other call
+  `Bot.handle`'s own call chain already makes straight to the Telegram API
+  (`SendMessage`/`SendMessageRequestingContact`/`DeleteMessage`, all synchronous) — `Run`
+  processes one update at a time with no per-update goroutine of its own, so blocking
+  briefly on this one call is already this bot's normal way of working, not a departure
+  from it. The delete itself is still deferred to its own goroutine, and only ever
+  scheduled at all for a bot-flow DM once its (now synchronous) send has actually
+  succeeded: sends via `Client.SendMessageForID` (unlike plain `SendMessage`, this hands
+  back the sent message's own id), sleeps for
   `Options.TelegramBotDMLinkTTL` (5 minutes by default, `config.Config`'s own
   hardcoded default — deliberately much shorter than `MagicLinkTTL`, the link's real,
   unaffected expiry: typing an email straight into the bot happens live in the chat, so a

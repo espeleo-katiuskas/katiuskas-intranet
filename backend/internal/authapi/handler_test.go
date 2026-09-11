@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -91,11 +92,21 @@ type capturingTelegramClient struct {
 		messageID int64
 	}
 	nextMessageID int64
+	// sendErr, when set, is returned by SendMessageForID instead of
+	// actually recording a send — used to exercise
+	// notifyMagicLinkViaTelegram's own failure path for a bot-triggered
+	// request (see TestIssueMagicLinkForTelegramUserFailsWhenTheDMFails),
+	// which has no email fallback to quietly fall back on the way a
+	// web-triggered request's own failed DM does.
+	sendErr error
 }
 
 func (c *capturingTelegramClient) SendMessageForID(_ context.Context, chatID int64, text string) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.sendErr != nil {
+		return 0, c.sendErr
+	}
 	c.nextMessageID++
 	messageID := c.nextMessageID
 	c.sent = append(c.sent, struct {
@@ -643,6 +654,69 @@ func TestIssueMagicLinkForTelegramUserRespectsCooldown(t *testing.T) {
 	s.telegramClient.mu.Unlock()
 	if dmCount != 1 {
 		t.Errorf("expected the cooldown to suppress a second DM too, got %d DMs sent", dmCount)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserFailsWhenTheDMFails covers the fix
+// for a previously silent dead end: a bot-triggered request has no
+// email fallback (see issueMagicLink's own viaTelegramBot branch), so
+// a failure actually sending the DM has to reach the caller —
+// internal/telegrambot.Bot, which needs to know to tell the person
+// something went wrong — instead of vanishing into a single log line
+// the way it used to.
+func TestIssueMagicLinkForTelegramUserFailsWhenTheDMFails(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	s.telegramClient.sendErr = errors.New("telegram API unreachable")
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err == nil {
+		t.Fatal("expected an error when the DM itself fails to send")
+	}
+	if s.mailer.sent != 0 {
+		t.Errorf("expected no email fallback for a bot-triggered request, got %d sent", s.mailer.sent)
+	}
+}
+
+// TestIssueMagicLinkForTelegramUserFailsWhenNotLinked covers the other,
+// defensive branch of the same fix: this shouldn't happen in practice
+// (internal/telegrambot.Bot only ever calls this once the chat is
+// already resolved to this same user id), but a nil chatID must still
+// be reported as a failure for a bot-triggered request rather than
+// silently doing nothing.
+func TestIssueMagicLinkForTelegramUserFailsWhenNotLinked(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	// Deliberately never calls SetTelegramChatID.
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err == nil {
+		t.Fatal("expected an error when there's no linked telegram chat to DM at all")
+	}
+	s.telegramClient.assertNothingSent(t)
+}
+
+// TestRequestMagicLinkStillSendsEmailWhenTheTelegramDMFails covers the
+// other side of the same fix: a *web*-triggered request's own Telegram
+// DM is only ever a bonus alongside the real email fallback, so a
+// failure sending it must stay invisible to the caller — the request
+// itself still succeeds, and the email still goes out, exactly as if
+// Telegram weren't linked at all.
+func TestRequestMagicLinkStillSendsEmailWhenTheTelegramDMFails(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	s.telegramClient.sendErr = errors.New("telegram API unreachable")
+
+	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 regardless of the Telegram DM failing, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if s.mailer.sent != 1 {
+		t.Errorf("expected the email to still go out, got %d sent", s.mailer.sent)
 	}
 }
 
