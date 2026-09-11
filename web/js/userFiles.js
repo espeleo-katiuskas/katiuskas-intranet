@@ -1,10 +1,12 @@
 import { apiFetch, apiFetchBlob, escapeHtml, encodeFilePath, formatDate } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { joinPath, dirOf, nameOf, formatSize, fileKind, resolveRelativePath, downloadBlob } from './fileBrowser.js';
 
 // A per-person document browser, embedded (not a page of its own) in
 // both profile.html (a socio's own files) and member.html (admin/board
 // viewing someone else's) — see GET /users/{login}/files[/file]. Mostly
-// mirrors js/library.js's own browsing/preview logic, but navigates by
+// mirrors js/library.js's own browsing/preview logic (see
+// js/fileBrowser.js for the pieces shared with it), but navigates by
 // updating this same page's DOM in place instead of real page loads:
 // there's no dedicated URL for "this folder" or "this file" the way
 // /library?path=/?view= has, since this widget only ever lives inside a
@@ -12,64 +14,6 @@ import { renderMarkdown } from './markdown.js';
 // signed-in viewer). Internal links use a synthetic #uf:dir:.../
 // #uf:file:... href instead, intercepted the same way breadcrumbs and
 // entries are.
-
-function joinPath(dir, name) {
-  return dir ? `${dir}/${name}` : name;
-}
-
-function dirOf(path) {
-  const i = path.lastIndexOf('/');
-  return i === -1 ? '' : path.slice(0, i);
-}
-
-function nameOf(path) {
-  const i = path.lastIndexOf('/');
-  return i === -1 ? path : path.slice(i + 1);
-}
-
-function formatSize(bytes) {
-  if (bytes == null) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function fileKind(name) {
-  const ext = name.toLowerCase().split('.').pop();
-  if (['md', 'markdown'].includes(ext)) return 'markdown';
-  if (['html', 'htm'].includes(ext)) return 'html';
-  if (ext === 'txt') return 'text';
-  if (ext === 'pdf') return 'pdf';
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
-  return 'other';
-}
-
-// Same document-relative link resolution as js/library.js — "./Actas/",
-// "../foo.pdf" and the like, resolved against the directory the
-// document viewing it lives in. Anything that isn't a document-relative
-// link (an absolute URL, mailto:, a same-page # anchor) is left
-// untouched.
-function resolveRelativePath(baseDir, href) {
-  if (/^([a-z][a-z0-9+.-]*:)?\/\//i.test(href) || href.startsWith('mailto:') || href.startsWith('#')) {
-    return null;
-  }
-  const isDir = href.endsWith('/');
-  const parts = [];
-  for (const seg of (baseDir ? baseDir.split('/') : []).concat(href.split('/'))) {
-    if (seg === '' || seg === '.') continue;
-    if (seg === '..') {
-      parts.pop();
-      continue;
-    }
-    parts.push(seg);
-  }
-  return { path: parts.join('/'), isDir };
-}
 
 // A synthetic, non-navigating href this widget's own click handlers
 // intercept — see the module doc comment above for why this can't just
@@ -81,17 +25,6 @@ function ufHref(path, isDir) {
 function parseUfHref(href) {
   const match = href.match(/^#uf:(dir|file):(.*)$/);
   return match ? { isDir: match[1] === 'dir', path: decodeURIComponent(match[2]) } : null;
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // initUserFilesBrowser wires up a fixed set of element ids (uf-*, see

@@ -20,6 +20,7 @@ import {
   showError,
 } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { formatSize, downloadBlob } from './fileBrowser.js';
 
 await initSession();
 applyRoleVisibility();
@@ -481,34 +482,11 @@ function canEditMemoriaResource(res) {
   return isAdmin || res.author_login === viewer?.login;
 }
 
-function formatFileSize(bytes) {
-  if (bytes == null) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 function renderMemoriaBody(res) {
   if (res.type === 'text') {
     return `<div class="document-text">${renderMarkdown(res.description ?? '')}</div>`;
   }
-  return `<p><a href="#" data-memoria-file="${res.id}">${escapeHtml(res.file_name ?? res.title)}</a> <span class="hint">(${formatFileSize(res.file_size)})</span></p>`;
+  return `<p><a href="#" data-memoria-file="${res.id}">${escapeHtml(res.file_name ?? res.title)}</a> <span class="hint">(${formatSize(res.file_size)})</span></p>`;
 }
 
 function renderMemoriaRow(res, index) {

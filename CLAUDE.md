@@ -715,7 +715,13 @@ the route itself needs the bearer header specifically. Markdown
 documents render through a small dependency-free converter (`js/markdown.js`) that
 resolves each document-relative link against the document's own directory and rewrites it
 into an in-app `/library` navigation link; HTML documents render in a fully sandboxed
-`<iframe>` instead, with no such link rewriting.
+`<iframe>` instead, with no such link rewriting. `library.js` and `userFiles.js` (the
+embedded per-person file browser on `/profile`/`/member`) share this same
+listing/preview/download logic almost verbatim — `js/fileBrowser.js` pulls out the
+common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
+document-relative link resolver, `downloadBlob`) both import, rather than each carrying
+its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
+`formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role
