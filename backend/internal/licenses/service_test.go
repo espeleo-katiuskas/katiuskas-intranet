@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -333,5 +334,74 @@ func TestServiceLatestByUserReturnsTheMostRecentlyIssued(t *testing.T) {
 	}
 	if !latest.ValidUntil.Equal(date("2026-12-31")) {
 		t.Errorf("expected valid_until 2026-12-31, got %v", latest.ValidUntil)
+	}
+}
+
+// TestIsCurrentlyFederatedFalseWhenNeverLicensed, TestIsCurrentlyFederatedTrueForALicenseIssuedThisYear,
+// and TestIsCurrentlyFederatedFalseForAnExpiredLicense cover
+// IsCurrentlyFederated directly — until now it was only ever exercised
+// indirectly through activities.Service's own federation check.
+
+func TestIsCurrentlyFederatedFalseWhenNeverLicensed(t *testing.T) {
+	tx := testutil.NewTx(t)
+	svc := licenses.NewService(licenses.NewRepository(tx), memberships.NewService(memberships.NewRepository(tx)))
+	person := testutil.InsertUser(t, tx, "")
+
+	federated, err := svc.IsCurrentlyFederated(context.Background(), person.ID)
+	if err != nil {
+		t.Fatalf("is currently federated: %v", err)
+	}
+	if federated {
+		t.Error("expected someone with no license at all to not be federated")
+	}
+}
+
+func TestIsCurrentlyFederatedTrueForALicenseIssuedThisYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	thisYear := time.Date(time.Now().Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: thisYear}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+
+	federated, err := svc.IsCurrentlyFederated(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("is currently federated: %v", err)
+	}
+	if !federated {
+		t.Error("expected a license issued this year to still be currently federated")
+	}
+}
+
+func TestIsCurrentlyFederatedFalseForAnExpiredLicense(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2000-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	lastYear := time.Date(time.Now().Year()-1, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: lastYear}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+
+	federated, err := svc.IsCurrentlyFederated(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("is currently federated: %v", err)
+	}
+	if federated {
+		t.Error("expected a license issued last year (valid_until December 31st of last year) to no longer be federated")
 	}
 }
