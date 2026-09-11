@@ -108,3 +108,34 @@ func TestRecovererLeavesNormalResponsesAlone(t *testing.T) {
 		t.Errorf("expected 201 to pass through untouched, got %d", rec.Code)
 	}
 }
+
+// TestRequestLoggerStillLogsAPanickingRequest covers NewRouter's own
+// middleware order (RequestLogger(Recoverer(mux)), see server.go):
+// Recoverer has to sit *inside* RequestLogger for a panic to still
+// produce RequestLogger's full method/path/status/duration/request_id
+// line — the other way around, the panic would unwind straight past
+// the code that logs it, leaving only Recoverer's own bare "panic
+// recovered" line with none of that request context at all.
+func TestRequestLoggerStillLogsAPanickingRequest(t *testing.T) {
+	panicking := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("something went wrong")
+	})
+
+	rec := httptest.NewRecorder()
+	logOutput := captureLog(t, func() {
+		RequestLogger(Recoverer(panicking)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/boom", nil))
+	})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected the panic to still turn into a 500 response, got %d", rec.Code)
+	}
+	if !strings.Contains(logOutput, `msg="panic recovered"`) {
+		t.Errorf("expected Recoverer's own panic log line, got %q", logOutput)
+	}
+	if !strings.Contains(logOutput, `msg=request`) {
+		t.Errorf("expected RequestLogger's own request line to still be logged despite the panic, got %q", logOutput)
+	}
+	if !strings.Contains(logOutput, "path=/boom") || !strings.Contains(logOutput, "status=500") {
+		t.Errorf("expected the request line to carry the real path and the 500 status, got %q", logOutput)
+	}
+}
