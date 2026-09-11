@@ -9,6 +9,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -358,6 +360,39 @@ func TestHandlerCreateFileResourceAndDownloadIt(t *testing.T) {
 	downloadRec := doRequest(mux, http.MethodGet, filePath+"?download=1", token, nil, "")
 	if got := downloadRec.Header().Get("Content-Disposition"); got != `attachment; filename="foto.jpg"` {
 		t.Errorf("expected attachment disposition, got %q", got)
+	}
+}
+
+// TestHandlerCreateFileResourceCleansUpMultipartTempFile covers the fix
+// for a previously leaked temp file: net/http's own ParseMultipartForm
+// spills anything past its 4 MiB in-memory threshold to a temp file
+// (mime/multipart's own "multipart-" prefix, in os.TempDir()) that
+// nothing removed before create started deferring
+// r.MultipartForm.RemoveAll().
+func TestHandlerCreateFileResourceCleansUpMultipartTempFile(t *testing.T) {
+	mux, authn, activityID, people := newTestServer(t)
+	token := testutil.TokenFor(authn, people.participant.ID, "member")
+
+	before, err := filepath.Glob(filepath.Join(os.TempDir(), "multipart-*"))
+	if err != nil {
+		t.Fatalf("glob before: %v", err)
+	}
+
+	// Past ParseMultipartForm's own 4 MiB in-memory threshold, well
+	// under this route's 25 MiB cap (maxUploadSize).
+	content := bytes.Repeat([]byte("x"), 5<<20)
+	body, contentType := multipartBody(t, map[string]string{"type": "file", "title": "Vídeo"}, "file", "video.mp4", content)
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/resources", activityID), token, body.Bytes(), contentType)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create file resource: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	after, err := filepath.Glob(filepath.Join(os.TempDir(), "multipart-*"))
+	if err != nil {
+		t.Fatalf("glob after: %v", err)
+	}
+	if len(after) > len(before) {
+		t.Errorf("expected no leftover multipart temp file, had %d before the upload and %d after", len(before), len(after))
 	}
 }
 

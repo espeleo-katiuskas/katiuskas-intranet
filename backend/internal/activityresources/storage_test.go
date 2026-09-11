@@ -95,6 +95,48 @@ func TestStorageDelete(t *testing.T) {
 	}
 }
 
+// failingReader returns n bytes successfully, then a fixed error on
+// every read after that — enough to make io.Copy fail partway through,
+// simulating an upload that fails mid-transfer (the client
+// disconnecting, a read error off the request body).
+type failingReader struct {
+	remaining int
+	err       error
+}
+
+func (r *failingReader) Read(p []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, r.err
+	}
+	n := len(p)
+	if n > r.remaining {
+		n = r.remaining
+	}
+	r.remaining -= n
+	return n, nil
+}
+
+// TestStorageSaveRemovesPartialFileOnCopyFailure covers the fix for a
+// previously leaked partial file: Save's own io.Copy failing partway
+// used to leave whatever had already been written behind — Service.
+// CreateFile's cleanup on a Save failure only ever deletes the metadata
+// row it just created, never reaches into storage, so nothing else was
+// going to catch this either.
+func TestStorageSaveRemovesPartialFileOnCopyFailure(t *testing.T) {
+	storage, err := activityresources.NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("new storage: %v", err)
+	}
+	readErr := errors.New("connection reset")
+	err = storage.Save(1, 1, &failingReader{remaining: 4, err: readErr})
+	if !errors.Is(err, readErr) {
+		t.Fatalf("expected the read error to surface, got %v", err)
+	}
+	if _, err := storage.Open(1, 1); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected no partial file left behind, got err=%v", err)
+	}
+}
+
 func TestNewStorageCreatesTheRootIfMissing(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "nested", "activity-resources")
 	if _, err := os.Stat(root); !os.IsNotExist(err) {

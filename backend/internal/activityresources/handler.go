@@ -218,6 +218,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed multipart form")
 		return
 	}
+	// ParseMultipartForm spills anything past its own 4 MiB in-memory
+	// threshold to a temp file on disk (net/http's own doc comment on
+	// Request.MultipartForm: "callers should... call RemoveAll" once
+	// done) — without this, every upload past that threshold (this
+	// route's own real cap is maxUploadSize, well above 4 MiB) leaked
+	// its temp file for good, never cleaned up by anything else here.
+	defer r.MultipartForm.RemoveAll()
 
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {

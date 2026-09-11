@@ -51,13 +51,23 @@ func (s *Storage) Save(activityID, resourceID int64, content io.Reader) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(s.pathFor(activityID, resourceID))
+	path := s.pathFor(activityID, resourceID)
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(f, content)
-	return err
+	if _, err := io.Copy(f, content); err != nil {
+		f.Close()
+		// Best-effort: an upload that fails partway (the client
+		// disconnecting, a read error off the request body) used to
+		// leave a partial file behind here — Service.CreateFile's own
+		// cleanup on a Save failure only ever deletes the metadata row
+		// it just created, never reaches into storage at all, so
+		// nothing else was going to catch this.
+		_ = os.Remove(path)
+		return err
+	}
+	return f.Close()
 }
 
 // Open opens a resource's file for reading. The caller is responsible
