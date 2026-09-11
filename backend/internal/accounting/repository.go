@@ -249,8 +249,24 @@ func (r *Repository) DeleteAccount(ctx context.Context, id int64) error {
 // or right after that sibling in ListAccounts instead. A harmless
 // no-op (not an error) if there's no such sibling: this account is
 // already first or last within its own parent_id group in that
-// direction. Both rows are locked (FOR UPDATE) for the swap's duration
-// so a concurrent move against either one can't interleave with it.
+// direction.
+//
+// Every account in the whole sibling group is locked (FOR UPDATE) up
+// front, in a fixed id order (ORDER BY id), rather than locking just
+// this account first and then whichever one turns out to be its
+// adjacent sibling — the previous approach, which could deadlock: two
+// concurrent opposite-direction moves on the same adjacent pair (A
+// moving down past B, B moving up past A, say) would each lock their
+// own "self" row first and then reach for the other's, the exact
+// lock-ordering inversion that produces one (Postgres would abort one
+// of the two with error 40P01, deadlock_detected, surfacing as a raw,
+// unhandled 500 — not in pgErrCode's own recognized codes). Locking
+// the whole group in the same id order up front instead means any two
+// concurrent moves within it always queue up behind whichever
+// transaction locked first, never each waiting on the other. A chart
+// of accounts' own sibling groups are small enough in practice that
+// locking the whole group instead of just the two rows that end up
+// mattering costs nothing worth optimizing away.
 func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDirection) (Account, error) {
 	if direction != MoveUp && direction != MoveDown {
 		return Account{}, ErrInvalidDirection
@@ -262,11 +278,12 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	}
 	defer tx.Rollback(ctx)
 
-	var a Account
-	var position int
-	err = tx.QueryRow(ctx, `
-		SELECT id, name, code, parent_id, position FROM accounts WHERE id = $1 FOR UPDATE
-	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &position)
+	// Read this account's own parent_id first, unlocked — just enough
+	// to know which sibling group to lock next; not itself a source of
+	// the same race, since every MoveAccount call locks that whole
+	// group before making any decision based on it.
+	var parentID *int64
+	err = tx.QueryRow(ctx, `SELECT parent_id FROM accounts WHERE id = $1`, id).Scan(&parentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -274,34 +291,69 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 		return Account{}, err
 	}
 
-	siblingQuery := `
-		SELECT id, position FROM accounts
-		WHERE parent_id IS NOT DISTINCT FROM $1 AND position > $2
-		ORDER BY position ASC LIMIT 1 FOR UPDATE`
-	if direction == MoveUp {
-		siblingQuery = `
-			SELECT id, position FROM accounts
-			WHERE parent_id IS NOT DISTINCT FROM $1 AND position < $2
-			ORDER BY position DESC LIMIT 1 FOR UPDATE`
-	}
-
-	var siblingID int64
-	var siblingPosition int
-	err = tx.QueryRow(ctx, siblingQuery, a.ParentID, position).Scan(&siblingID, &siblingPosition)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return a, tx.Commit(ctx)
-	}
+	rows, err := tx.Query(ctx, `
+		SELECT id, name, code, parent_id, position FROM accounts
+		WHERE parent_id IS NOT DISTINCT FROM $1
+		ORDER BY id
+		FOR UPDATE
+	`, parentID)
 	if err != nil {
 		return Account{}, err
 	}
+	defer rows.Close()
 
-	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, siblingPosition, id); err != nil {
+	type sibling struct {
+		Account
+		position int
+	}
+	var target sibling
+	found := false
+	siblings := []sibling{}
+	for rows.Next() {
+		var s sibling
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.position); err != nil {
+			return Account{}, err
+		}
+		if s.ID == id {
+			target = s
+			found = true
+		}
+		siblings = append(siblings, s)
+	}
+	if err := rows.Err(); err != nil {
 		return Account{}, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, position, siblingID); err != nil {
+	if !found {
+		return Account{}, ErrAccountNotFound
+	}
+
+	// The adjacent sibling in the requested direction: the closest
+	// position below target's own for MoveUp, above it for MoveDown —
+	// among rows already locked above, not a further query.
+	var adjacent *sibling
+	for i := range siblings {
+		s := &siblings[i]
+		if s.ID == id {
+			continue
+		}
+		if direction == MoveUp && s.position < target.position && (adjacent == nil || s.position > adjacent.position) {
+			adjacent = s
+		}
+		if direction == MoveDown && s.position > target.position && (adjacent == nil || s.position < adjacent.position) {
+			adjacent = s
+		}
+	}
+	if adjacent == nil {
+		return target.Account, tx.Commit(ctx)
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, adjacent.position, id); err != nil {
 		return Account{}, err
 	}
-	return a, tx.Commit(ctx)
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET position = $1 WHERE id = $2`, target.position, adjacent.ID); err != nil {
+		return Account{}, err
+	}
+	return target.Account, tx.Commit(ctx)
 }
 
 // ---- Transactions ----
