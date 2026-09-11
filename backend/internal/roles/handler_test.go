@@ -154,22 +154,6 @@ func TestHandlerListAllowsMember(t *testing.T) {
 	}
 }
 
-func TestHandlerOnlyAdminCanGrantTheAdminRole(t *testing.T) {
-	mux, authn, _, tx := newRolesTestServer(t)
-	target := testutil.InsertUser(t, tx, "")
-	adminRoleID := testutil.RoleID(t, tx, "admin")
-
-	boardToken := rolesToken(t, authn, 1, "board")
-	rec := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), boardToken,
-		map[string]int64{"role_id": adminRoleID})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected board granting admin to be forbidden, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if code := rolesErrorCode(t, rec); code != "forbidden" {
-		t.Errorf("expected error code forbidden, got %q", code)
-	}
-}
-
 // Board lost the ability to modify a person's data entirely, role
 // assignment included — granting or revoking any role, not just admin,
 // is admin-only now.
@@ -238,27 +222,6 @@ func TestHandlerAdminCanGrantTheAdminRole(t *testing.T) {
 		map[string]int64{"role_id": adminRoleID})
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to be able to grant admin, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandlerOnlyAdminCanRevokeTheAdminRole(t *testing.T) {
-	mux, authn, service, tx := newRolesTestServer(t)
-	ctx := context.Background()
-	adminRoleID := testutil.RoleID(t, tx, "admin")
-
-	holder := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
-	if err := service.Assign(ctx, holder.ID, adminRoleID); err != nil {
-		t.Fatalf("assign admin to holder: %v", err)
-	}
-	if err := service.Assign(ctx, other.ID, adminRoleID); err != nil {
-		t.Fatalf("assign admin to other (avoids tripping the last-admin guard): %v", err)
-	}
-
-	boardToken := rolesToken(t, authn, 1, "board")
-	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", holder.Login, adminRoleID), boardToken, nil)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected board revoking admin to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

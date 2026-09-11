@@ -164,12 +164,6 @@ func (h *Handler) assign(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not look up role")
 		return
 	}
-	current, _ := auth.UserFromContext(r.Context())
-	if role.Name == "admin" && !current.HasAnyRole("admin") {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only an admin can grant the admin role")
-		return
-	}
-
 	if err := h.service.Assign(r.Context(), userID, role.ID); err != nil {
 		if errors.Is(err, ErrAutomaticRole) {
 			httpapi.WriteError(w, http.StatusConflict, "automatic_role", err.Error())
@@ -203,12 +197,6 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not look up role")
 		return
 	}
-	current, _ := auth.UserFromContext(r.Context())
-	if role.Name == "admin" && !current.HasAnyRole("admin") {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only an admin can revoke the admin role")
-		return
-	}
-
 	err = h.service.Remove(r.Context(), userID, roleID)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "that person doesn't have this role")
