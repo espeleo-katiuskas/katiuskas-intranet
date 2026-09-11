@@ -1079,6 +1079,88 @@ func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 	}
 }
 
+// TestRentalRejectedWhenItemNotRentable and
+// TestSaleRejectedWhenItemNotSellable mirror
+// TestLoanRejectedWhenItemNotLoanable above for the two movement types
+// that instead derive their own "can this even happen" flag from a
+// price (Item.Rentable/Item.Sellable, see CreateItem) rather than a
+// stored boolean — without this check, CreateMovement would have
+// inserted the movement anyway with a nil price, hitting the database's
+// own price_required_for_rental_and_sale CHECK constraint instead of
+// answering with a clear, mapped error.
+func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	description := "Casco"
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		InitialQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create item with no rental price: %v", err)
+	}
+	if item.Rentable {
+		t.Fatalf("expected the item not to be rentable with no rental price set, got %+v", item)
+	}
+	user := testutil.InsertUser(t, tx, "")
+
+	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	})
+	if !errors.Is(err, inventory.ErrNotRentable) {
+		t.Errorf("expected ErrNotRentable, got %v", err)
+	}
+}
+
+func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	description := "Casco"
+	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
+		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+		InitialQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("create item with no sale price: %v", err)
+	}
+	if item.Sellable {
+		t.Fatalf("expected the item not to be sellable with no sale price set, got %+v", item)
+	}
+	user := testutil.InsertUser(t, tx, "")
+
+	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	})
+	if !errors.Is(err, inventory.ErrNotSellable) {
+		t.Errorf("expected ErrNotSellable, got %v", err)
+	}
+}
+
+// TestCreateMovementNotFoundForNonexistentItem covers the fix for a
+// previously wrong error: a movement against an item id that doesn't
+// exist at all used to come back as ErrInsufficientStock ("not enough
+// available quantity"), a confusing answer for an item that isn't
+// there to have any quantity at all — a plain not-found, same as every
+// other id-addressed lookup in this package.
+func TestCreateMovementNotFoundForNonexistentItem(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := inventory.NewRepository(tx)
+	ctx := context.Background()
+
+	_, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
+		ItemID: 999999, Type: inventory.MovementAcquisition, Quantity: 1,
+	})
+	if !errors.Is(err, inventory.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestListMaterialCategories(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := inventory.NewRepository(tx)

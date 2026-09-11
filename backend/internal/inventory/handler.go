@@ -359,6 +359,10 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		ItemID: body.ItemID, UserID: userID, Type: body.Type, Quantity: body.Quantity,
 		TransactedAt: transactedAt, RecordedBy: &recordedBy, ActivityID: body.ActivityID, Notes: body.Notes,
 	})
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "item not found")
+		return
+	}
 	if errors.Is(err, ErrInsufficientStock) {
 		httpapi.WriteError(w, http.StatusConflict, "insufficient_stock", err.Error())
 		return
@@ -369,6 +373,14 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrNotLoanable) {
 		httpapi.WriteError(w, http.StatusConflict, "not_loanable", err.Error())
+		return
+	}
+	if errors.Is(err, ErrNotRentable) {
+		httpapi.WriteError(w, http.StatusConflict, "not_rentable", err.Error())
+		return
+	}
+	if errors.Is(err, ErrNotSellable) {
+		httpapi.WriteError(w, http.StatusConflict, "not_sellable", err.Error())
 		return
 	}
 	if errors.Is(err, ErrSingleUnitItem) {

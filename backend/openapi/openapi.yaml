@@ -1699,12 +1699,14 @@ paths:
             acquisition/loss/abandonment/retirement), or
             activity_required (loan or return without activity_id).
         "404":
-          description: The given login doesn't belong to anyone.
+          description: not_found (item_id doesn't exist), or the given login doesn't belong to anyone.
         "409":
           description: >
             insufficient_stock (not enough available quantity),
             not_loanable (the item's loanable flag is false) for a
-            loan, single_unit_item (an acquisition against a rope or
+            loan, not_rentable/not_sellable (the item has no
+            rental_price_per_week/sale_price on file) for a rental or
+            sale, single_unit_item (an acquisition against a rope or
             bag item), or return_exceeds_loaned (a return larger than
             what this item still has outstanding for this activity).
 

@@ -366,6 +366,92 @@ func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateMovementRejectsRentalOfNonRentableItem and
+// TestHandlerCreateMovementRejectsSaleOfNonSellableItem mirror
+// TestHandlerCreateMovementRejectsLoanOfNonLoanableItem above, for the
+// two movement types whose own "can this happen" flag is instead
+// derived from a price being on file (see Item.Rentable/Item.Sellable).
+func TestHandlerCreateMovementRejectsRentalOfNonRentableItem(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "gear", "description": "Casco",
+		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"total_quantity": 1, "loanable": true,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	if item.Rentable {
+		t.Fatalf("expected the created item not to be rentable with no rental price given, got %+v", item)
+	}
+	user := testutil.InsertUser(t, tx, "")
+
+	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1}
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for a rental of a non-rentable item, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "not_rentable" {
+		t.Errorf("expected error code not_rentable, got %q", code)
+	}
+}
+
+func TestHandlerCreateMovementRejectsSaleOfNonSellableItem(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
+		"item_type": "gear", "description": "Casco",
+		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"total_quantity": 1, "loanable": true,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode item: %v", err)
+	}
+	if item.Sellable {
+		t.Fatalf("expected the created item not to be sellable with no sale price given, got %+v", item)
+	}
+	user := testutil.InsertUser(t, tx, "")
+
+	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "sale", "quantity": 1}
+	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for a sale of a non-sellable item, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "not_sellable" {
+		t.Errorf("expected error code not_sellable, got %q", code)
+	}
+}
+
+// TestHandlerCreateMovementNotFoundForNonexistentItem covers the fix
+// for a previously wrong status: a movement against an item id that
+// doesn't exist at all used to come back 409 insufficient_stock — a
+// confusing answer for an item that isn't there to have any quantity
+// at all — instead of a plain 404.
+func TestHandlerCreateMovementNotFoundForNonexistentItem(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+
+	body := map[string]any{"item_id": 999999, "type": "acquisition", "quantity": 1}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for a movement against a nonexistent item, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "not_found" {
+		t.Errorf("expected error code not_found, got %q", code)
+	}
+}
+
 func TestHandlerListMaterialCategoriesRequiresAdminOrBoard(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")

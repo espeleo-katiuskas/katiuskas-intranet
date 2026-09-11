@@ -18,6 +18,15 @@ var (
 	// ErrNotLoanable means the item's loanable flag is false — see
 	// Item.Loanable.
 	ErrNotLoanable = errors.New("this item cannot be loaned")
+	// ErrNotRentable/ErrNotSellable mean the item has no
+	// rental_price_per_week/sale_price on file — see Item.Rentable/
+	// Item.Sellable, which are fully derived from that. Without this
+	// check, CreateMovement would insert a 'rental'/'sale' movement with
+	// a nil price anyway, hitting migration 00006_inventory's own
+	// price_required_for_rental_and_sale CHECK constraint instead —
+	// unmapped, so it would have surfaced as a raw 500.
+	ErrNotRentable = errors.New("this item cannot be rented (no rental price set)")
+	ErrNotSellable = errors.New("this item cannot be sold (no sale price set)")
 	// ErrCategoryNotFound means the given category_id isn't in the
 	// material_categories catalog.
 	ErrCategoryNotFound = errors.New("material category not found")
@@ -286,7 +295,7 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		FROM inventory_items WHERE id = $1 FOR UPDATE
 	`, in.ItemID).Scan(&itemType, &loanable, &rentalPrice, &salePrice)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Movement{}, ErrInsufficientStock
+		return Movement{}, ErrNotFound
 	}
 	if err != nil {
 		return Movement{}, err
@@ -312,8 +321,14 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 			return Movement{}, ErrNotLoanable
 		}
 	case MovementRental:
+		if rentalPrice == nil {
+			return Movement{}, ErrNotRentable
+		}
 		price = rentalPrice
 	case MovementSale:
+		if salePrice == nil {
+			return Movement{}, ErrNotSellable
+		}
 		price = salePrice
 	}
 
