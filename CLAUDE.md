@@ -124,6 +124,12 @@ carries a 6-digit login code — hashed alongside the link's token in the same
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`
 identifies the caller by email+phone (the code alone is too short to look someone up by)
 and a per-row attempt counter bounds brute-forcing it without affecting the link itself.
+That lookup runs before the attempt counter is ever reached, though, so — unlike
+`/auth/magic-link/consume` above, which needs none — this route shares the same
+per-calling-address `httpapi.IPRateLimiter` as the initial `POST /auth/magic-link` request
+(`authapi.Handler`'s own `ipLimiter`, one limiter/budget covering both routes): without it,
+an address could scan through many different email/phone guesses here with nothing to slow
+it down, the same gap the initial request's own throttle exists to close.
 Both this and the initial `POST /auth/magic-link` request resolve email+phone through the
 same `users.Repository.FindActiveByEmailAndPhone`, whose email side matches
 case-insensitively — the same as `internal/telegrambot`'s own `emailMatchesUser` check, so

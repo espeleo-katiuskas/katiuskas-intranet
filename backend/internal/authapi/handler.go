@@ -43,10 +43,12 @@ type Options struct {
 	PublicBaseURL        string
 	TelegramBotUsername  string
 	// MagicLinkIPRateLimit/MagicLinkIPRateWindow configure the
-	// per-address throttle on RequestMagicLink (see
-	// httpapi.NewIPRateLimiter) — left unset, MagicLinkIPRateLimit's
-	// zero value disables it outright, which is what every existing
-	// test's newTestServer helper gets today.
+	// per-address throttle shared by RequestMagicLink and
+	// ConsumeMagicLinkCode (see httpapi.NewIPRateLimiter — the same
+	// limiter/budget covers both, rather than each getting its own) —
+	// left unset, MagicLinkIPRateLimit's zero value disables it
+	// outright, which is what every existing test's newTestServer
+	// helper gets today.
 	MagicLinkIPRateLimit  int
 	MagicLinkIPRateWindow time.Duration
 }
@@ -96,7 +98,16 @@ func NewHandler(usersService *users.Service, rolesService *roles.Service, tokens
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/auth/magic-link", h.ipLimiter.Limit(h.RequestMagicLink))
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
-	mux.HandleFunc("POST /api/v1/auth/magic-link/consume-code", h.ConsumeMagicLinkCode)
+	// Also rate-limited, unlike the link itself: the link's token is 128
+	// bits, long enough that entropy alone carries its security (see
+	// CLAUDE.md) with no per-row attempt counter at all — but this
+	// endpoint identifies its caller by email+phone first (see
+	// ConsumeMagicLinkCode below), before its own per-row attempt
+	// counter on the short 6-digit code is even in play. Without this,
+	// an attacker could scan many email/phone combinations for a match
+	// with no throttle whatsoever, unlike guessing one known person's
+	// code, which the attempt counter already bounds.
+	mux.Handle("POST /api/v1/auth/magic-link/consume-code", h.ipLimiter.Limit(h.ConsumeMagicLinkCode))
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)
 	mux.HandleFunc("GET /api/v1/auth/telegram-bot", h.TelegramBotInfo)
 	mux.Handle("GET /api/v1/auth/me", h.authenticator.Protect(h.Me))

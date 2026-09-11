@@ -789,6 +789,118 @@ func TestRequestMagicLinkIsRateLimitedPerIPAddress(t *testing.T) {
 	}
 }
 
+// TestConsumeMagicLinkCodeIsRateLimitedPerIPAddress covers the same
+// httpapi.IPRateLimiter wrapping this route too (see RegisterRoutes) —
+// without it, an attacker could scan many email/phone combinations
+// looking for a match with no throttle at all, since
+// FindActiveByEmailAndPhone runs before the per-row attempt counter on
+// the code itself is even reached.
+func TestConsumeMagicLinkCodeIsRateLimitedPerIPAddress(t *testing.T) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
+
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, &capturingMailer{}, &capturingNotifier{}, &capturingTelegramClient{}, authapi.Options{
+		TokenTTL:              time.Hour,
+		MagicLinkTTL:          15 * time.Minute,
+		MagicLinkCooldown:     time.Minute,
+		PublicBaseURL:         "http://localhost:64710",
+		MagicLinkIPRateLimit:  1,
+		MagicLinkIPRateWindow: time.Minute,
+	})
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	postFrom := func(remoteAddr string) *httptest.ResponseRecorder {
+		body, err := json.Marshal(map[string]string{"email": "nobody@example.com", "phone": "600000000", "code": "000000"})
+		if err != nil {
+			t.Fatalf("marshal request body: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/magic-link/consume-code", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := postFrom("203.0.113.9:1111"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 1st request to pass through to the handler (invalid_code, no such user), got %d", rec.Code)
+	}
+	rec := postFrom("203.0.113.9:1111")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 2nd request from the same address to get 429, got %d", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "rate_limited" {
+		t.Errorf("expected error code rate_limited, got %q", code)
+	}
+
+	if rec := postFrom("203.0.113.10:2222"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected a different address's own 1st request to still pass through, got %d", rec.Code)
+	}
+}
+
+// TestMagicLinkRequestAndConsumeCodeShareOneIPRateLimitBudget covers
+// that both routes are wrapped by the very same *httpapi.IPRateLimiter
+// (see RegisterRoutes and Options' own doc comment) rather than each
+// getting its own independent one — exhausting the budget via one
+// endpoint blocks the other too, for the same address.
+func TestMagicLinkRequestAndConsumeCodeShareOneIPRateLimitBudget(t *testing.T) {
+	tx := testutil.NewTx(t)
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+	authenticator := auth.NewAuthenticator(tokensService)
+
+	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, &capturingMailer{}, &capturingNotifier{}, &capturingTelegramClient{}, authapi.Options{
+		TokenTTL:              time.Hour,
+		MagicLinkTTL:          15 * time.Minute,
+		MagicLinkCooldown:     time.Minute,
+		PublicBaseURL:         "http://localhost:64710",
+		MagicLinkIPRateLimit:  1,
+		MagicLinkIPRateWindow: time.Minute,
+	})
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	const remoteAddr = "203.0.113.9:1111"
+
+	linkBody, err := json.Marshal(map[string]string{"email": "nobody@example.com", "phone": "600000000"})
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	linkReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/magic-link", bytes.NewReader(linkBody))
+	linkReq.Header.Set("Content-Type", "application/json")
+	linkReq.RemoteAddr = remoteAddr
+	linkRec := httptest.NewRecorder()
+	mux.ServeHTTP(linkRec, linkReq)
+	if linkRec.Code != http.StatusOK {
+		t.Fatalf("expected the 1st request (to /magic-link) to pass through with 200, got %d", linkRec.Code)
+	}
+
+	codeBody, err := json.Marshal(map[string]string{"email": "nobody@example.com", "phone": "600000000", "code": "000000"})
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	codeReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/magic-link/consume-code", bytes.NewReader(codeBody))
+	codeReq.Header.Set("Content-Type", "application/json")
+	codeReq.RemoteAddr = remoteAddr
+	codeRec := httptest.NewRecorder()
+	mux.ServeHTTP(codeRec, codeReq)
+	if codeRec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the same address's 2nd request (to /magic-link/consume-code) to get 429, got %d", codeRec.Code)
+	}
+	if code := errorCode(t, codeRec); code != "rate_limited" {
+		t.Errorf("expected error code rate_limited, got %q", code)
+	}
+}
+
 func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")

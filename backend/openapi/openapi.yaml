@@ -143,6 +143,13 @@ paths:
         is wrong, expired, already used (by itself or via the matching
         link), guessed wrong too many times, or the email/phone didn't
         match anyone at all — nothing here tells those cases apart.
+
+        Also throttled per calling address, sharing the same limiter and
+        budget as POST /auth/magic-link (see that endpoint's own
+        description) — this call identifies its target by email/phone
+        before its per-code attempt counter is ever reached, so without
+        this an address could otherwise scan through many different
+        email/phone guesses here with nothing to slow it down.
       requestBody:
         required: true
         content:
@@ -165,6 +172,8 @@ paths:
                   token: { type: string }
         "401":
           description: invalid_code — wrong, expired, already-used, or too-many-attempts code, or no match at all.
+        "429":
+          description: rate_limited — too many requests from this address recently; try again later.
 
   /auth/logout:
     post:

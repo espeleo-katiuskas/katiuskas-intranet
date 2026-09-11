@@ -14,12 +14,13 @@ type Config struct {
 	MagicLinkTTL      time.Duration
 	MagicLinkCooldown time.Duration
 	// MagicLinkIPRateLimit/MagicLinkIPRateWindow throttle POST
-	// /auth/magic-link per calling address (see httpapi.IPRateLimiter) —
-	// a coarser backstop above MagicLinkCooldown, which is keyed by the
-	// matched person instead: cooldown alone does nothing to slow down
-	// one address cycling through many different fake email/phone
-	// guesses, since each one is a different "person" as far as the
-	// cooldown is concerned.
+	// /auth/magic-link and POST /auth/magic-link/consume-code per
+	// calling address, sharing one limiter/budget across both (see
+	// httpapi.IPRateLimiter) — a coarser backstop above
+	// MagicLinkCooldown, which is keyed by the matched person instead:
+	// cooldown alone does nothing to slow down one address cycling
+	// through many different fake email/phone guesses, since each one
+	// is a different "person" as far as the cooldown is concerned.
 	MagicLinkIPRateLimit  int
 	MagicLinkIPRateWindow time.Duration
 	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
