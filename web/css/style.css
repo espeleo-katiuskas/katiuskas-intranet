@@ -697,6 +697,15 @@ button.link-button {
   font-weight: 400;
 }
 
+/* A read-only .field value (member.js's #member-data-view, populated with
+   textContent from a plain <p>) still needs to show line breaks a textarea
+   field like "Contacto de emergencia" was saved with — plain text in a <p>
+   otherwise collapses them onto one line the way it does any other run of
+   whitespace. */
+.field p {
+  white-space: pre-line;
+}
+
 .field input,
 .field select,
 .field textarea {

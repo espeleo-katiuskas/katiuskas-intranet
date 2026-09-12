@@ -226,8 +226,10 @@ editForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch(`/users/${memberLogin}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Datos actualizados.');
-    document.getElementById('member-name').textContent = `${body.first_name} ${body.last_name}`;
-    document.getElementById('member-email').textContent = body.email;
+    // Re-fetch rather than patching #member-data-view from `body` directly —
+    // the same pattern every other mutation on this page already follows —
+    // so the view reflects exactly what the server actually saved.
+    await loadMember();
     editMemberDialog.close();
   } catch (err) {
     showError(err.message);
