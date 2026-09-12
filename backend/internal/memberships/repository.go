@@ -17,11 +17,12 @@ var (
 	// ErrLeaveNotFound and ErrLeaveOverlap mirror ErrNotFound/ErrOverlap,
 	// just for membership_leaves instead of memberships.
 	ErrLeaveNotFound = errors.New("temporary leave not found")
-	ErrLeaveOverlap  = errors.New("temporary leave period overlaps an existing one within this membership")
-	// ErrLeaveOutsideMembership means the leave's date range isn't fully
-	// contained within its membership period — the one invariant this
-	// package has to check itself, since it spans two tables.
-	ErrLeaveOutsideMembership = errors.New("temporary leave must fall entirely within the membership period it belongs to")
+	ErrLeaveOverlap  = errors.New("temporary leave period overlaps an existing one for this person")
+	// ErrLeaveOutsideMembership means the leave's date range doesn't fall
+	// entirely within any single one of this person's own membership
+	// periods — the one invariant this package has to check itself,
+	// since it spans two tables.
+	ErrLeaveOutsideMembership = errors.New("temporary leave must fall entirely within a membership period this person actually had")
 	// ErrDueAlreadyRecorded means this user already has a due on file for
 	// that year (membership_dues' own UNIQUE (user_id, year)) — one
 	// payment per person per year, never two.
@@ -82,51 +83,57 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Membership, error) 
 	return m, err
 }
 
-// Update also re-validates every one of this membership's own existing
-// membership_leaves against its new, possibly narrower start/end date
-// — shrinking a membership's own period could just as easily strand an
+// Update also re-validates this user's own existing temporary leaves
+// against the period's new, possibly narrower start/end date —
+// shrinking a membership's own period could just as easily strand an
 // already-existing leave outside it as a bad leave edit could (see
 // UpdateLeave, which checks the same invariant from the other
 // direction); this package still has to check it itself either way,
 // since no CHECK constraint spans both tables.
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Membership, error) {
-	m, err := r.GetByID(ctx, id)
+	before, err := r.GetByID(ctx, id)
 	if err != nil {
-		return m, err
+		return before, err
 	}
+	candidate := before
 	if in.EndReason != nil {
-		m.EndReason = in.EndReason
+		candidate.EndReason = in.EndReason
 	}
-	m.StartDate = in.StartDate
-	m.EndDate = in.EndDate
+	candidate.StartDate = in.StartDate
+	candidate.EndDate = in.EndDate
 
-	if err := r.leavesStillFitWithin(ctx, id, m); err != nil {
+	if err := r.leavesStillFitWithin(ctx, before, candidate); err != nil {
 		return Membership{}, err
 	}
 
 	_, err = r.pool.Exec(ctx, `
 		UPDATE memberships SET start_date = $1, end_date = $2, end_reason = $3
 		WHERE id = $4
-	`, m.StartDate, m.EndDate, m.EndReason, id)
+	`, candidate.StartDate, candidate.EndDate, candidate.EndReason, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
-		return m, ErrOverlap
+		return candidate, ErrOverlap
 	}
-	return m, err
+	return candidate, err
 }
 
 // leavesStillFitWithin reports (as ErrLeaveOutsideMembership, nil
-// otherwise) whether every existing membership_leaves row under
-// membershipID still falls entirely within candidate's start/end date
-// — used by Update before it actually narrows a membership's own
-// period, so an edit can't silently strand a leave outside the period
-// it belongs to.
-func (r *Repository) leavesStillFitWithin(ctx context.Context, membershipID int64, candidate Membership) error {
-	leaves, err := r.ListLeavesByMembership(ctx, membershipID)
+// otherwise) whether every one of this user's own temporary leaves that
+// currently falls within before's own start/end still falls entirely
+// within candidate's new start/end — used by Update before it actually
+// narrows a membership period, so an edit can't silently strand a leave
+// outside the period it belongs to. A leave that already belongs to a
+// different one of this user's own periods (before doesn't contain it
+// either) is left alone — narrowing this period can't possibly affect it.
+func (r *Repository) leavesStillFitWithin(ctx context.Context, before, candidate Membership) error {
+	leaves, err := r.ListLeavesByUser(ctx, candidate.UserID)
 	if err != nil {
 		return err
 	}
 	for _, l := range leaves {
+		if !withinMembershipPeriod(before, l.StartDate, l.EndDate) {
+			continue
+		}
 		if !withinMembershipPeriod(candidate, l.StartDate, l.EndDate) {
 			return ErrLeaveOutsideMembership
 		}
@@ -174,15 +181,13 @@ func (r *Repository) WasMemberOn(ctx context.Context, userID int64, date time.Ti
 // temporary leave windows — used by users.Service to tell "activo" apart
 // from "baja temporal" on the people list, a distinction that isn't
 // visible in the "member" role itself (a leave doesn't end the
-// membership period it belongs to).
+// membership period it belongs to). A single user_id lookup now that
+// membership_leaves carries it directly — no join through memberships
+// needed (migration 00016_membership_leaves_by_user.sql).
 func (r *Repository) IsOnLeave(ctx context.Context, userID int64) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM membership_leaves ml
-			JOIN memberships m ON m.id = ml.membership_id
-			WHERE m.user_id = $1 AND ml.period @> CURRENT_DATE
-		)
+		SELECT EXISTS(SELECT 1 FROM membership_leaves WHERE user_id = $1 AND period @> CURRENT_DATE)
 	`, userID).Scan(&exists)
 	return exists, err
 }
@@ -232,22 +237,36 @@ func withinMembershipPeriod(m Membership, start time.Time, end *time.Time) bool 
 	return end != nil && !end.After(*m.EndDate)
 }
 
-func (r *Repository) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, error) {
-	m, err := r.GetByID(ctx, in.MembershipID)
+// findContainingMembership returns the single membership period (if
+// any) among userID's own history that fully contains [start, end] —
+// there's at most one, since none of a single user's own periods ever
+// overlap (see memberships' own EXCLUDE constraint). Returns
+// ErrLeaveOutsideMembership if none does.
+func (r *Repository) findContainingMembership(ctx context.Context, userID int64, start time.Time, end *time.Time) (Membership, error) {
+	periods, err := r.ListByUser(ctx, userID)
 	if err != nil {
-		return Leave{}, err
+		return Membership{}, err
 	}
-	if !withinMembershipPeriod(m, in.StartDate, in.EndDate) {
-		return Leave{}, ErrLeaveOutsideMembership
+	for _, m := range periods {
+		if withinMembershipPeriod(m, start, end) {
+			return m, nil
+		}
+	}
+	return Membership{}, ErrLeaveOutsideMembership
+}
+
+func (r *Repository) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, error) {
+	if _, err := r.findContainingMembership(ctx, in.UserID, in.StartDate, in.EndDate); err != nil {
+		return Leave{}, err
 	}
 
 	var l Leave
-	err = r.pool.QueryRow(ctx, `
-		INSERT INTO membership_leaves (membership_id, start_date, end_date, reason)
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO membership_leaves (user_id, start_date, end_date, reason)
 		VALUES ($1,$2,$3,$4)
-		RETURNING id, membership_id, start_date, end_date, reason
-	`, in.MembershipID, in.StartDate, in.EndDate, in.Reason,
-	).Scan(&l.ID, &l.MembershipID, &l.StartDate, &l.EndDate, &l.Reason)
+		RETURNING id, user_id, start_date, end_date, reason
+	`, in.UserID, in.StartDate, in.EndDate, in.Reason,
+	).Scan(&l.ID, &l.UserID, &l.StartDate, &l.EndDate, &l.Reason)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == exclusionViolationCode {
 		return l, ErrLeaveOverlap
@@ -258,29 +277,26 @@ func (r *Repository) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leav
 func (r *Repository) GetLeaveByID(ctx context.Context, id int64) (Leave, error) {
 	var l Leave
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, membership_id, start_date, end_date, reason
+		SELECT id, user_id, start_date, end_date, reason
 		FROM membership_leaves WHERE id = $1
-	`, id).Scan(&l.ID, &l.MembershipID, &l.StartDate, &l.EndDate, &l.Reason)
+	`, id).Scan(&l.ID, &l.UserID, &l.StartDate, &l.EndDate, &l.Reason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return l, ErrLeaveNotFound
 	}
 	return l, err
 }
 
-// UpdateLeave re-validates containment against the parent membership on
-// every correction, not just at creation — an edit could just as easily
-// push the leave's dates outside the period as a bad initial input could.
+// UpdateLeave re-validates containment on every correction, not just at
+// creation — an edit could just as easily push the leave's dates
+// outside every one of this person's own periods as a bad initial
+// input could.
 func (r *Repository) UpdateLeave(ctx context.Context, id int64, in UpdateLeaveInput) (Leave, error) {
 	l, err := r.GetLeaveByID(ctx, id)
 	if err != nil {
 		return l, err
 	}
-	m, err := r.GetByID(ctx, l.MembershipID)
-	if err != nil {
+	if _, err := r.findContainingMembership(ctx, l.UserID, in.StartDate, in.EndDate); err != nil {
 		return l, err
-	}
-	if !withinMembershipPeriod(m, in.StartDate, in.EndDate) {
-		return l, ErrLeaveOutsideMembership
 	}
 	if in.Reason != nil {
 		l.Reason = in.Reason
@@ -310,11 +326,11 @@ func (r *Repository) DeleteLeave(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *Repository) ListLeavesByMembership(ctx context.Context, membershipID int64) ([]Leave, error) {
+func (r *Repository) ListLeavesByUser(ctx context.Context, userID int64) ([]Leave, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, membership_id, start_date, end_date, reason
-		FROM membership_leaves WHERE membership_id = $1 ORDER BY start_date DESC
-	`, membershipID)
+		SELECT id, user_id, start_date, end_date, reason
+		FROM membership_leaves WHERE user_id = $1 ORDER BY start_date DESC
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +339,7 @@ func (r *Repository) ListLeavesByMembership(ctx context.Context, membershipID in
 	list := []Leave{}
 	for rows.Next() {
 		var l Leave
-		if err := rows.Scan(&l.ID, &l.MembershipID, &l.StartDate, &l.EndDate, &l.Reason); err != nil {
+		if err := rows.Scan(&l.ID, &l.UserID, &l.StartDate, &l.EndDate, &l.Reason); err != nil {
 			return nil, err
 		}
 		list = append(list, l)

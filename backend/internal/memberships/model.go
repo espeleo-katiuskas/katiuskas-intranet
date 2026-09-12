@@ -1,10 +1,12 @@
 // Package memberships tracks membership periods (start/end date) for a
-// user, and temporary leaves ("bajas temporales") within them. A user can
-// have more than one period as long as they don't overlap; that
-// invariant is enforced by the database, not by this package. A leave
-// must fall entirely within the period it belongs to — that invariant
-// isn't something a database constraint can express across two tables,
-// so this package enforces it instead.
+// user, and temporary leaves ("bajas temporales") the person takes
+// during them. A user can have more than one period as long as they
+// don't overlap; that invariant is enforced by the database, not by
+// this package. A leave belongs to the person directly, not to one
+// specific period, but must still fall entirely within one of their own
+// periods — that invariant isn't something a database constraint can
+// express across two tables, so this package enforces it itself; see
+// Leave's own doc comment.
 package memberships
 
 import "time"
@@ -43,26 +45,41 @@ type UpdateInput struct {
 	EndReason *string
 }
 
-// Leave is a "baja temporal": a bounded window, always entirely within
-// one membership period, where the person steps away for a while
-// without actually leaving the club. EndDate can be nil — the same
+// Leave is a "baja temporal": a bounded window where the person steps
+// away for a while without actually leaving the club. It belongs to
+// the person directly (UserID), not to one specific membership period
+// — that keeps every one of a person's own leaves, across however many
+// separate alta/baja spans they've had, a single user_id lookup (no
+// join through memberships needed just to answer "is this person
+// currently on leave" or "how many leaves has this person had" — see
+// Repository.IsOnLeave). It still must fall entirely within one of that
+// person's own membership periods, though: that invariant isn't
+// something a database constraint can express across two tables, so
+// CreateLeave/UpdateLeave check it themselves, by finding which single
+// period (if any) covers the given dates — see
+// Repository.findContainingMembership (migration
+// 00016_membership_leaves_by_user.sql). EndDate can be nil — the same
 // "still open" shape a membership period's own EndDate already has —
 // for a leave that's still ongoing and doesn't have a known end yet;
-// see withinMembershipPeriod for what that means for containment
-// (migration 00015_membership_leaves_open_end_date.sql).
+// see withinMembershipPeriod for what that means for containment.
 type Leave struct {
-	ID           int64      `json:"id"`
-	MembershipID int64      `json:"membership_id"`
-	StartDate    time.Time  `json:"start_date"`
-	EndDate      *time.Time `json:"end_date,omitempty"`
-	Reason       *string    `json:"reason,omitempty"`
+	ID     int64 `json:"id"`
+	UserID int64 `json:"-"`
+	// UserLogin is filled in by the handler — see License.UserLogin's own
+	// doc comment for the same split (a query already scoped under a
+	// known /users/{login} vs. one addressed by the leave's own id,
+	// which resolves it via a follow-up LoginForUserID call instead).
+	UserLogin string     `json:"user_login"`
+	StartDate time.Time  `json:"start_date"`
+	EndDate   *time.Time `json:"end_date,omitempty"`
+	Reason    *string    `json:"reason,omitempty"`
 }
 
 type CreateLeaveInput struct {
-	MembershipID int64
-	StartDate    time.Time
-	EndDate      *time.Time
-	Reason       *string
+	UserID    int64
+	StartDate time.Time
+	EndDate   *time.Time
+	Reason    *string
 }
 
 type UpdateLeaveInput struct {

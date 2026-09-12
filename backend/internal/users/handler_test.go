@@ -295,14 +295,13 @@ func TestHandlerListIncludesOnLeaveForAPlainMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create target: %v", err)
 	}
-	membership, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().UTC().AddDate(0, -1, 0)})
-	if err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: time.Now().UTC().AddDate(0, -1, 0)}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
 	leaveStart := time.Now().UTC().AddDate(0, 0, -1)
 	leaveEnd := time.Now().UTC().AddDate(0, 0, 1)
 	if _, err := membershipsService.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: membership.ID, StartDate: leaveStart, EndDate: &leaveEnd,
+		UserID: target.ID, StartDate: leaveStart, EndDate: &leaveEnd,
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}

@@ -58,8 +58,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/memberships", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/memberships", h.authenticator.Protect(h.create, "admin"))
 
-	mux.Handle("GET /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.listLeaves, "admin", "board"))
-	mux.Handle("POST /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
+	mux.Handle("GET /api/v1/users/{login}/leaves", h.authenticator.Protect(h.listLeavesByUser, "admin", "board"))
+	mux.Handle("POST /api/v1/users/{login}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
 	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
 	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
 
@@ -225,33 +225,32 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, m)
 }
 
-func (h *Handler) listLeaves(w http.ResponseWriter, r *http.Request) {
-	membershipID, err := strconv.ParseInt(r.PathValue("membershipID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "membership id must be numeric")
+func (h *Handler) listLeavesByUser(w http.ResponseWriter, r *http.Request) {
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
-	list, err := h.service.ListLeavesByMembership(r.Context(), membershipID)
+	list, err := h.service.ListLeavesByUser(r.Context(), userID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list temporary leaves")
 		return
 	}
+	for i := range list {
+		list[i].UserLogin = login
+	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
-// membershipOwnerLogin resolves the login of whoever membershipID
-// belongs to, for the leave-related mutation notifications below — a
-// Leave only carries a numeric MembershipID, not a login, so naming the
-// person in a notification means going through the membership first.
-// Returns "" (silently skipped by the caller) on any failure, the same
-// best-effort spirit as actorLogin: a notification detail is never
-// worth failing an otherwise-successful write over.
-func (h *Handler) membershipOwnerLogin(ctx context.Context, membershipID int64) string {
-	m, err := h.service.Get(ctx, membershipID)
-	if err != nil {
-		return ""
-	}
-	login, err := h.users.LoginForUserID(ctx, m.UserID)
+// leaveOwnerLogin resolves the login of whoever userID is, for the
+// leave-related mutation notifications below (PATCH/DELETE /leaves/{id}
+// aren't scoped under a known /users/{login} the way listLeavesByUser/
+// createLeave are, so the login has to be looked up). Returns ""
+// (silently skipped by the caller) on any failure, the same best-effort
+// spirit as actorLogin: a notification detail is never worth failing an
+// otherwise-successful write over.
+func (h *Handler) leaveOwnerLogin(ctx context.Context, userID int64) string {
+	login, err := h.users.LoginForUserID(ctx, userID)
 	if err != nil {
 		return ""
 	}
@@ -259,9 +258,9 @@ func (h *Handler) membershipOwnerLogin(ctx context.Context, membershipID int64) 
 }
 
 func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
-	membershipID, err := strconv.ParseInt(r.PathValue("membershipID"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "membership id must be numeric")
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -285,12 +284,8 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l, err := h.service.CreateLeave(r.Context(), CreateLeaveInput{
-		MembershipID: membershipID, StartDate: startDate, EndDate: endDate, Reason: body.Reason,
+		UserID: userID, StartDate: startDate, EndDate: endDate, Reason: body.Reason,
 	})
-	if errors.Is(err, ErrNotFound) {
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", "membership not found")
-		return
-	}
 	if errors.Is(err, ErrLeaveOutsideMembership) {
 		httpapi.WriteError(w, http.StatusConflict, "outside_membership_period", err.Error())
 		return
@@ -303,10 +298,9 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create temporary leave")
 		return
 	}
-	if login := h.membershipOwnerLogin(r.Context(), membershipID); login != "" {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado una excedencia de %s (%s).",
-			h.actorLogin(r.Context()), login, leavePeriodText(l.StartDate, l.EndDate)))
-	}
+	l.UserLogin = login
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado una excedencia de %s (%s).",
+		h.actorLogin(r.Context()), login, leavePeriodText(l.StartDate, l.EndDate)))
 	httpapi.WriteJSON(w, http.StatusCreated, l)
 }
 
@@ -388,9 +382,9 @@ func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	if beforeErr == nil {
 		if diff := httpapi.DiffFields(before, l, "StartDate", "EndDate", "Reason"); len(diff) > 0 {
-			login := h.membershipOwnerLogin(r.Context(), l.MembershipID)
+			login := h.leaveOwnerLogin(r.Context(), l.UserID)
 			if login == "" {
-				login = fmt.Sprintf("membership#%d", l.MembershipID)
+				login = fmt.Sprintf("user#%d", l.UserID)
 			}
 			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado una excedencia de %s:\n%s",
 				h.actorLogin(r.Context()), login, strings.Join(diff, "\n")))
@@ -420,12 +414,16 @@ func (h *Handler) deleteLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if targetErr == nil {
-		login := h.membershipOwnerLogin(r.Context(), target.MembershipID)
+		login := h.leaveOwnerLogin(r.Context(), target.UserID)
 		if login == "" {
-			login = fmt.Sprintf("membership#%d", target.MembershipID)
+			login = fmt.Sprintf("user#%d", target.UserID)
+		}
+		endText := "todavía en curso"
+		if target.EndDate != nil {
+			endText = target.EndDate.Format("2006-01-02")
 		}
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado una excedencia de %s (%s a %s).",
-			h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02"), target.EndDate.Format("2006-01-02")))
+			h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02"), endText))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

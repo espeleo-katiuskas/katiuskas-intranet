@@ -249,16 +249,18 @@ function openEditMembershipDialog(m) {
 
 // #leave-dialog is shared by "+ Baja temporal" (adding one, POST) and
 // "Editar" on an existing one (PATCH) — same three fields either way,
-// just a different title/submit target. leaveMode/leaveTargetId track
-// which of the two a save is actually for.
+// just a different title/submit target. A leave belongs to the person
+// directly (POST /users/{login}/leaves), not to one specific alta, so
+// adding one only needs leaveMode — memberLogin (already known, this
+// whole page is scoped to one person) is enough on its own; editing
+// still needs leaveTargetId, the leave's own id.
 const leaveDialog = document.getElementById('leave-dialog');
 initModal(leaveDialog);
 let leaveMode = null; // 'add' | 'edit'
-let leaveTargetId = null; // a membership id (add) or a leave id (edit)
+let leaveTargetId = null; // the leave's own id — only meaningful in 'edit' mode
 
-function openAddLeaveDialog(membershipId) {
+function openAddLeaveDialog() {
   leaveMode = 'add';
-  leaveTargetId = membershipId;
   document.getElementById('leave-dialog-title').textContent = 'Nueva baja temporal';
   document.getElementById('leave-start-date').value = '';
   document.getElementById('leave-end-date').value = '';
@@ -331,27 +333,29 @@ let licensesById = {};
 let boardTermsById = {};
 
 // Builds one flat, chronological list of events out of every membership
-// period, every temporary leave within it (a "baja temporal" always
-// belongs to exactly one period — see docs/architecture.md), every
-// federative license this person has ever been issued, and every board
-// term they've served (those are scoped to the person directly, not to
-// any one membership period, the same way licenses are).
+// period, every temporary leave this person has ever taken (belongs to
+// them directly, not to one specific period — a single GET
+// /users/{login}/leaves covers every alta/baja span they've had, not
+// just whichever one happens to be current), every federative license
+// this person has ever been issued, and every board term they've
+// served (those are scoped to the person directly, not to any one
+// membership period, the same way licenses are).
 async function buildTimelineEvents(memberships) {
   const events = [];
   membershipsById = Object.fromEntries(memberships.map((m) => [m.id, m]));
-  leavesById = {};
   for (const m of memberships) {
     events.push({ date: m.start_date, type: 'alta', membership: m });
     if (m.end_date) {
       events.push({ date: m.end_date, type: 'baja', membership: m, reason: m.end_reason });
     }
-    const leaves = await apiFetch(`/memberships/${m.id}/leaves`).catch(() => []);
-    for (const l of leaves) {
-      leavesById[l.id] = l;
-      events.push({ date: l.start_date, type: 'leave_start', membership: m, leave: l, reason: l.reason });
-      if (l.end_date) {
-        events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
-      }
+  }
+
+  const leaves = await apiFetch(`/users/${memberLogin}/leaves`).catch(() => []);
+  leavesById = Object.fromEntries(leaves.map((l) => [l.id, l]));
+  for (const l of leaves) {
+    events.push({ date: l.start_date, type: 'leave_start', leave: l, reason: l.reason });
+    if (l.end_date) {
+      events.push({ date: l.end_date, type: 'leave_end', leave: l, reason: l.reason });
     }
   }
 
@@ -385,7 +389,7 @@ function renderTimelineEvent(event) {
   if (isRealAdmin && event.type === 'alta') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-edit-membership="${event.membership.id}">Editar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${event.membership.id}">+ Baja temporal</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-leave>+ Baja temporal</button>
     `;
   } else if (isRealAdmin && event.type === 'leave_start') {
     actions = `
@@ -509,7 +513,7 @@ document.getElementById('save-leave').addEventListener('click', async () => {
   button.disabled = true;
   try {
     if (leaveMode === 'add') {
-      await apiFetch(`/memberships/${leaveTargetId}/leaves`, {
+      await apiFetch(`/users/${memberLogin}/leaves`, {
         method: 'POST',
         body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
       });
@@ -588,7 +592,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
 
   const addLeaveButton = event.target.closest('button[data-add-leave]');
   if (addLeaveButton) {
-    openAddLeaveDialog(Number(addLeaveButton.dataset.addLeave));
+    openAddLeaveDialog();
     return;
   }
 

@@ -270,7 +270,7 @@ func TestHandlerUpdateRejectsShrinkingPeriodPastAnExistingLeave(t *testing.T) {
 	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	leavesPath := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	leavesPath := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	if rec := doRequest(mux, http.MethodPost, leavesPath, adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"}); rec.Code != http.StatusCreated {
 		t.Fatalf("create leave: %d: %s", rec.Code, rec.Body.String())
@@ -330,10 +330,10 @@ func TestHandlerListByUserUnknownLoginIsNotFound(t *testing.T) {
 func TestHandlerListLeavesRequiresAdminOrBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 
 	memberToken := testutil.TokenFor(resolver, 1, "member")
-	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	if rec := doRequest(mux, http.MethodGet, path, memberToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from listing leaves, got %d", rec.Code)
 	}
@@ -344,13 +344,13 @@ func TestHandlerListLeavesRequiresAdminOrBoard(t *testing.T) {
 	}
 }
 
-func TestHandlerListLeavesRejectsNonNumericMembershipID(t *testing.T) {
+func TestHandlerListLeavesByUserUnknownLoginIsNotFound(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodGet, "/api/v1/memberships/not-a-number/leaves", adminToken, nil)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users/no-such-login/leaves", adminToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 not_found for an unknown login, got %d", rec.Code)
 	}
 }
 
@@ -360,8 +360,8 @@ func TestHandlerListLeavesRejectsNonNumericMembershipID(t *testing.T) {
 func TestHandlerCreateLeaveRequiresAdminNotBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
-	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	path := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	body := map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"}
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
@@ -378,19 +378,19 @@ func TestHandlerCreateLeaveRequiresAdminNotBoard(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if created.MembershipID != m.ID {
-		t.Errorf("expected membership_id %d, got %d", m.ID, created.MembershipID)
+	if created.UserLogin != target.Login {
+		t.Errorf("expected user_login %q, got %q", target.Login, created.UserLogin)
 	}
 }
 
-func TestHandlerCreateLeaveRejectsNonNumericMembershipID(t *testing.T) {
+func TestHandlerCreateLeaveUnknownLoginIsNotFound(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/memberships/not-a-number/leaves", adminToken,
+	rec := doRequest(mux, http.MethodPost, "/api/v1/users/no-such-login/leaves", adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 not_found for an unknown login, got %d", rec.Code)
 	}
 }
 
@@ -401,10 +401,10 @@ func TestHandlerCreateLeaveRejectsNonNumericMembershipID(t *testing.T) {
 func TestHandlerCreateLeaveRejectsOutsideMembershipPeriod(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	rec := doRequest(mux, http.MethodPost, path, adminToken,
 		map[string]string{"start_date": "2019-12-01", "end_date": "2020-01-15"})
 	if rec.Code != http.StatusConflict {
@@ -415,9 +415,9 @@ func TestHandlerCreateLeaveRejectsOutsideMembershipPeriod(t *testing.T) {
 func TestHandlerCreateLeaveRejectsOverlap(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 
 	first := doRequest(mux, http.MethodPost, path, adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
@@ -438,10 +438,10 @@ func TestHandlerCreateLeaveRejectsOverlap(t *testing.T) {
 func TestHandlerCreateLeaveAllowsOmittedEndDate(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]string{"start_date": "2020-06-01"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -471,7 +471,7 @@ func TestHandlerCreateLeaveRejectsOpenEndedWhenMembershipClosed(t *testing.T) {
 		t.Fatalf("close membership: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	leavesPath := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	leavesPath := fmt.Sprintf("/api/v1/users/%s/leaves", target.Login)
 	rec := doRequest(mux, http.MethodPost, leavesPath, adminToken, map[string]string{"start_date": "2020-06-01"})
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409 outside_membership_period, got %d: %s", rec.Code, rec.Body.String())
@@ -483,10 +483,10 @@ func TestHandlerCreateLeaveRejectsOpenEndedWhenMembershipClosed(t *testing.T) {
 func TestHandlerUpdateLeaveCanClearEndDate(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create leave: %d: %s", createRec.Code, createRec.Body.String())
@@ -513,10 +513,10 @@ func TestHandlerUpdateLeaveCanClearEndDate(t *testing.T) {
 func TestHandlerUpdateLeaveRequiresAdminNotBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if created.Code != http.StatusCreated {
 		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())
@@ -554,10 +554,10 @@ func TestHandlerUpdateLeaveNotFound(t *testing.T) {
 func TestHandlerDeleteLeaveRequiresAdminNotBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if created.Code != http.StatusCreated {
 		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())
@@ -662,11 +662,11 @@ func TestHandlerCreateLeaveNotifiesTelegram(t *testing.T) {
 	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
 	actor := testutil.InsertUser(t, tx, "")
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
 	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
 
-	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -682,11 +682,11 @@ func TestHandlerUpdateLeaveNotifiesTelegramWithFieldDiff(t *testing.T) {
 	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
 	actor := testutil.InsertUser(t, tx, "")
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
 	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
 
-	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if created.Code != http.StatusCreated {
 		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())
@@ -716,11 +716,11 @@ func TestHandlerDeleteLeaveNotifiesTelegram(t *testing.T) {
 	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
 	actor := testutil.InsertUser(t, tx, "")
 	target := testutil.InsertUser(t, tx, "")
-	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	createMembership(t, mux, resolver, target.Login, "2020-01-01")
 	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
 	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
 
-	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+	created := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/leaves", target.Login), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if created.Code != http.StatusCreated {
 		t.Fatalf("setup create leave: %d %s", created.Code, created.Body.String())

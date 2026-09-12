@@ -331,6 +331,26 @@ bookkeeping metadata with no meaning apart from its transaction — while
 real, independently meaningful record (proof of federation) even apart from its payment,
 so the transaction that paid for one can't be deleted out from under it at all.
 
+**Temporary leaves** (`membership_leaves`): a "baja temporal" belongs to the person
+directly (`user_id`), not to one specific `memberships` period — the same `user_id`-keyed
+shape `licenses`/`membership_dues` already have (migration
+`00016_membership_leaves_by_user.sql`, replacing an earlier `membership_id` foreign key).
+That means `GET /users/{login}/leaves` and `memberships.Repository.IsOnLeave` are both a
+single lookup, covering every leave this person has ever taken across however many
+separate alta/baja spans they've had, with no join through `memberships` needed. A leave
+still has to fall entirely within one of that person's own membership periods, though —
+that invariant can't be a foreign key anymore, so `memberships.Repository.
+findContainingMembership` checks it in Go on every `CreateLeave`/`UpdateLeave`, by finding
+which single period (if any) covers the given dates; there's at most one, since a
+person's own periods never overlap. Shrinking a membership period
+(`PATCH /memberships/{id}`) re-validates every one of that person's leaves that
+currently falls within the period *as it stood before* the edit — not every leave they've
+ever had — so narrowing one period can't be blocked by a leave that actually belongs to a
+different one of their own periods. `POST /users/{login}/leaves`/`GET .../leaves` are
+admin-only-to-write, admin/board-to-read (not open to the person themselves, unlike most
+`/users/{login}/...` history routes) — `PATCH`/`DELETE /leaves/{id}` stay addressed by the
+leave's own id.
+
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host
 — see Commands above — not the database. `GET /library?path=...` lists a directory

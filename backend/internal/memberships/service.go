@@ -95,8 +95,8 @@ func (s *Service) DeleteLeave(ctx context.Context, id int64) error {
 	return s.repo.DeleteLeave(ctx, id)
 }
 
-func (s *Service) ListLeavesByMembership(ctx context.Context, membershipID int64) ([]Leave, error) {
-	return s.repo.ListLeavesByMembership(ctx, membershipID)
+func (s *Service) ListLeavesByUser(ctx context.Context, userID int64) ([]Leave, error) {
+	return s.repo.ListLeavesByUser(ctx, userID)
 }
 
 // RecordDue records userID's cuota for year, tied to transactionID — the

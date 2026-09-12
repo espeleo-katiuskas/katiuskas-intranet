@@ -989,31 +989,40 @@ paths:
         "409":
           description: The corrected dates overlap another board term for this person.
 
-  /memberships/{membershipID}/leaves:
+  /users/{login}/leaves:
     get:
-      summary: List a membership period's temporary leaves
+      summary: List every temporary leave this person has ever taken
+      description: >
+        admin/board only (unlike most /users/{login}/... history routes,
+        this one isn't also open to the person themselves). A leave
+        belongs to the person directly, not to one specific membership
+        period, so this covers every alta/baja span they've ever had in
+        one call.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: membershipID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "200":
-          description: Temporary leaves for this period
+          description: Temporary leaves, newest first
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Leave" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Record a temporary leave ("baja temporal")
       description: >
         Admin-only. end_date can be left out (or sent empty/null) for a
         leave that's still ongoing — the same "open" shape a membership
-        period's own end_date already has. It must fall entirely within
-        its membership period's dates; an open-ended leave only fits
+        period's own end_date already has. The given dates must fall
+        entirely within one single membership period this person has
+        had (whichever one, if any, actually covers them — not
+        necessarily their current one); an open-ended leave only fits
         within a membership period that's itself still open too.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: membershipID, in: path, required: true, schema: { type: integer } }
+        - { name: login, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
@@ -1035,10 +1044,10 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
-            Either outside_membership_period (the dates aren't fully
-            contained within the membership period) or overlapping_period
-            (they overlap another leave in the same period) — see the
-            error code.
+            Either outside_membership_period (the dates don't fall
+            entirely within any single one of this person's own
+            membership periods) or overlapping_period (they overlap
+            another leave of this same person) — see the error code.
 
   /leaves/{id}:
     patch:
@@ -1048,9 +1057,9 @@ paths:
         replaces whatever was there — omitted or empty/null means the
         leave is (again) still ongoing, which also lets an admin undo an
         accidental end date the same way clearing a membership's own
-        end_date does. The containment check against the membership
-        period runs again on every correction. reason is a true partial
-        update: omit it to leave it as is.
+        end_date does. The containment check (against this person's own
+        membership periods) runs again on every correction. reason is a
+        true partial update: omit it to leave it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2381,8 +2390,7 @@ components:
             (null membership_end_date) — a leave doesn't end the period it
             belongs to, so this is the only way to tell "activo" apart from
             "baja temporal". Read-only here — set through
-            POST /memberships/{membershipID}/leaves and
-            PATCH/DELETE /leaves/{id}.
+            POST /users/{login}/leaves and PATCH/DELETE /leaves/{id}.
         license_type: { type: string, nullable: true }
         license_issued_date: { type: string, format: date, nullable: true }
         license_valid_until:
@@ -2512,12 +2520,15 @@ components:
     Leave:
       type: object
       description: >
-        A "baja temporal": a window within a membership period where the
-        person steps away for a while without actually leaving the club.
-        end_date is null while it's still ongoing.
+        A "baja temporal": a window where the person steps away for a
+        while without actually leaving the club. Belongs to the person
+        directly (user_login), not to one specific membership period —
+        it still has to fall entirely within one of their own periods,
+        just not stored as a link to any particular one. end_date is
+        null while it's still ongoing.
       properties:
         id: { type: integer }
-        membership_id: { type: integer }
+        user_login: { type: string }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }
         reason: { type: string, nullable: true }

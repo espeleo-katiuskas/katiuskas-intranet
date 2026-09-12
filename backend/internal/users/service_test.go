@@ -188,8 +188,7 @@ func TestServiceReportsOnLeave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse start date: %v", err)
 	}
-	m, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate})
-	if err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate}); err != nil {
 		t.Fatalf("start membership: %v", err)
 	}
 
@@ -210,7 +209,7 @@ func TestServiceReportsOnLeave(t *testing.T) {
 		t.Fatalf("parse tomorrow: %v", err)
 	}
 	if _, err := membershipsService.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: yesterday, EndDate: &tomorrow,
+		UserID: u.ID, StartDate: yesterday, EndDate: &tomorrow,
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}

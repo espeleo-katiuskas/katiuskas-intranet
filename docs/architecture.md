@@ -265,19 +265,24 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   que alguien que ha estado varias veces en el club siga mostrando su alta original en
   vez de la fecha de su último reingreso. Así la lista de personas puede mostrar y
   ordenar por fecha de alta/baja sin una petición aparte por persona.
-- **`membership_leaves`** — "bajas temporales": una ventana con fecha de inicio y fin
-  (ambas obligatorias desde el principio, a diferencia de un periodo de socio) dentro
-  de un periodo de `memberships` concreto — la persona se ausenta un tiempo sin dejar
-  de ser socia. Que la ventana quede *contenida* en el periodo de socio no es algo que
-  una restricción `CHECK` pueda comprobar entre dos tablas, y este proyecto no usa
-  triggers, así que `memberships.Repository` lo valida en Go antes de cada
-  `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`); que dos bajas del mismo periodo no
-  se solapen sí lo garantiza `EXCLUDE USING gist`, igual que con los propios periodos.
-  Rutas bajo `/memberships/{membershipID}/leaves` y `/leaves/{id}`, admin/board. Una
-  baja temporal no toca el periodo de socio al que pertenece — sigue abierto durante
-  ella —, así que `users.User.OnLeave` (`on_leave` en el JSON) es el único sitio que
-  distingue "activo" de "baja temporal" en la lista de personas; se calcula solo para
-  quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
+- **`membership_leaves`** — "bajas temporales": una ventana con fecha de inicio (fecha
+  de fin opcional, para una baja que sigue en curso — igual que el propio `end_date` de
+  un periodo de socio) que cuelga de la persona (`user_id`) directamente, no de un
+  periodo de `memberships` concreto — así, un único `GET /users/{login}/leaves` cubre
+  todas las bajas que ha tenido, aunque hayan sido durante altas distintas, sin tener
+  que consultar periodo por periodo. Eso sí, la ventana tiene que quedar *contenida* en
+  alguno de los periodos de esa persona: `memberships.Repository` no lo puede expresar
+  con una restricción `CHECK` entre dos tablas (y este proyecto no usa triggers), así
+  que lo valida en Go, buscando qué periodo (si hay alguno) contiene por completo esas
+  fechas antes de cada `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`,
+  `Repository.findContainingMembership`); que dos bajas de la misma persona no se
+  solapen sí lo garantiza `EXCLUDE USING gist` sobre `(user_id, period)`, igual que con
+  los propios periodos. Rutas bajo `/users/{login}/leaves` (listar/crear) y
+  `/leaves/{id}` (corregir/borrar), admin/board para leer, admin para escribir. Una baja
+  temporal no toca el periodo de socio al que pertenece — sigue abierto durante ella —,
+  así que `users.User.OnLeave` (`on_leave` en el JSON) es el único sitio que distingue
+  "activo" de "baja temporal" en la lista de personas; se calcula solo para quien ya
+  tiene un alta activa, con `memberships.Service.IsOnLeave`.
 - **`licenses`** / **`license_types`** — licencias federativas. El tipo ya no es texto
   libre: se elige de un catálogo (`license_types`, migración 00007) guardado en la base
   de datos en vez de un enum de Go, precisamente porque el club espera que la lista
