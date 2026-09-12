@@ -1,10 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
   hasAnyRole,
   apiFetch,
   escapeHtml,
@@ -18,20 +12,12 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
-
-const viewer = currentUser();
+const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(viewer, ['admin']);
-if (!isAdmin) {
-  window.location.href = '/';
-}
 
 const memberLogin = new URLSearchParams(window.location.search).get('login');
 if (!memberLogin) {

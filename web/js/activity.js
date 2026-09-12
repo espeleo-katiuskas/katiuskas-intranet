@@ -1,10 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
   hasAnyRole,
   apiFetch,
   apiFetchBlob,
@@ -19,16 +13,11 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 import { renderMarkdown } from './markdown.js';
 import { formatSize, downloadBlob } from './fileBrowser.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
-
-const viewer = currentUser();
+const viewer = await initPage();
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 // Set once loadActivity() resolves and the activity's leader_login is
 // known — admin/board can manage any activity, and the organizer who

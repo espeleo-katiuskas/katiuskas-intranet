@@ -678,9 +678,27 @@ file(s) and verify schema-equivalence by applying the old and new sets to throwa
 databases and diffing `pg_dump --schema-only` output, rather than leaving the ALTER trail
 in place.
 
-**Frontend** (`web/`): classic multi-page site (no SPA, no build step), one `<page>.html`
-+ `js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/members`
-resolve to `members.html`. `js/api.js` is the shared client: keeps the session token in
+**Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate
+choice, not just an unexamined default: every page already revalidates its own session
+and re-fetches its own data on load, so there's no cross-page state an SPA would actually
+save, and this stays free of a bundler or any client-side router), one `<page>.html` +
+`js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/members` resolve
+to `members.html`. The sidebar and topbar, identical on every authenticated page, are
+rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted into each
+`<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
+`<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own
+session bootstrap (in place of what used to be five near-identical lines re-typed at the
+top of every `<page>.js`): it validates the session, applies role-based visibility, and
+wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
+same as `currentUser()` would. Its own `requireAnyRole` option additionally redirects home
+if the signed-in user holds none of the listed roles — `member.js`/`accounting.js`'s own
+whole-page gates, tighter than the ordinary baseline check every API route already
+enforces. Which sidebar link reads as "active" is computed from `location.pathname`
+(`ACTIVE_ALIASES` mapping a detail page like `/activity` or `/member` to the listing it
+was reached from, `/activities`/`/members`) rather than a per-page `class="active"`
+written by hand — one less thing a new page could forget. `login.html` is the one page
+with no shell and no session yet, and never calls `initPage()`. `js/api.js` is the
+underlying shared client `layout.js` itself is built on: it keeps the session token in
 `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate
 the token and populate `currentUser()`. `applyRoleVisibility()` removes any
 `data-roles="admin,board"` element the current user's roles don't satisfy — client-side

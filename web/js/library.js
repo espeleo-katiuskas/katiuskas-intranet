@@ -1,9 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
   apiFetch,
   apiFetchBlob,
   escapeHtml,
@@ -11,14 +6,11 @@ import {
   formatDate,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 import { renderMarkdown } from './markdown.js';
 import { joinPath, dirOf, nameOf, formatSize, fileKind, resolveRelativePath, downloadBlob } from './fileBrowser.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
+await initPage();
 
 const directoryView = document.getElementById('directory-view');
 const fileView = document.getElementById('file-view');

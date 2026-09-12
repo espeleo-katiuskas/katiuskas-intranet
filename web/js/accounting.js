@@ -1,11 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
-  hasAnyRole,
   apiFetch,
   escapeHtml,
   formatDate,
@@ -13,12 +6,7 @@ import {
   showFeedback,
   showError,
 } from './api.js';
-
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
+import { initPage } from './layout.js';
 
 // This whole page is restricted to admin/money, tighter than the API
 // itself (GET /accounts is open to every baseline role — see
@@ -28,10 +16,7 @@ loadTopbarGreeting();
 // Both roles can also write here (POST/PATCH/move all accept "admin"
 // or "money"), so nothing on this page needs a narrower check than
 // this one gate.
-const user = currentUser();
-if (!hasAnyRole(user, ['admin', 'money'])) {
-  window.location.href = '/';
-}
+await initPage({ requireAnyRole: ['admin', 'money'] });
 
 // Everything below is keyed off the flat, pre-order list GET /accounts
 // returns (see accounting.Repository.ListAccounts) — grouping it back

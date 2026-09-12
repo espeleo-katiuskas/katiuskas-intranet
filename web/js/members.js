@@ -1,10 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
   hasAnyRole,
   apiFetch,
   escapeHtml,
@@ -15,14 +9,9 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
-
-const user = currentUser();
+const user = await initPage();
 // isAdmin means "full read access" (admin or board) — a plain member
 // still gets this page, but with far fewer fields (see MEMBER_COLUMNS/
 // MEMBER_FILTERS) and none of the admin/board management UI, which

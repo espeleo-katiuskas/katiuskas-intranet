@@ -1,10 +1,7 @@
-import { API_BASE, initSession, logout, applyRoleVisibility, initSidebarToggle, loadTopbarGreeting, apiFetch, escapeHtml, encodeFilePath, positionLabels } from './api.js';
+import { API_BASE, apiFetch, escapeHtml, encodeFilePath, positionLabels } from './api.js';
+import { initPage } from './layout.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
+await initPage();
 
 // Same endpoint the Junta Directiva table used before this page existed —
 // GET /board-members is open to anyone with a baseline role, rendered

@@ -1,9 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
   apiFetch,
   escapeHtml,
   formatDate,
@@ -15,12 +10,9 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
+await initPage();
 
 // Loaded once, shared only by the "new activity" participant picker now —
 // per-activity participant management lives on /activity?id=… instead.

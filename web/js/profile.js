@@ -1,25 +1,14 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
   hasAnyRole,
   apiFetch,
   formatDate,
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
-
-const user = currentUser();
+const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin']);
 
 const editForm = document.getElementById('edit-profile-form');

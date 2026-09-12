@@ -1,10 +1,4 @@
 import {
-  initSession,
-  logout,
-  applyRoleVisibility,
-  initSidebarToggle,
-  loadTopbarGreeting,
-  currentUser,
   hasAnyRole,
   apiFetch,
   escapeHtml,
@@ -15,14 +9,9 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { initPage } from './layout.js';
 
-await initSession();
-applyRoleVisibility();
-document.getElementById('logout-button').addEventListener('click', logout);
-initSidebarToggle();
-loadTopbarGreeting();
-
-const user = currentUser();
+const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 // Managing material movements (loans, rentals, sales, acquisitions,
 // losses, abandonments, retirements, returns) is open to admin/board
