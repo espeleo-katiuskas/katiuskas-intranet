@@ -768,6 +768,15 @@ button.link-button {
   flex-wrap: wrap;
 }
 
+/* A money amount in a table (accounting.js's chart of accounts, later
+   its own transactions page) — right-aligned and set in tabular
+   figures so a column of them lines up on the decimal point instead of
+   ragged-left like ordinary text. */
+.balance-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .breadcrumbs {
   margin: 16px 0;
   color: var(--ink-muted);

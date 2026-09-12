@@ -302,6 +302,13 @@ function formatDate(isoDate) {
   return `${day}/${month}/${date.getFullYear()}`;
 }
 
+// The club's own money (internal/accounting) is always euros — shared by
+// accounting.js's chart-of-accounts balances and, later, its own
+// transactions page.
+function formatCurrency(amount) {
+  return `${Number(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
 // A plain <select> stops being usable once there are hundreds of
 // people or activities to choose from, especially with no obvious
 // ordering. These three helpers back a searchable alternative instead:
@@ -354,6 +361,7 @@ export {
   showFeedback,
   showError,
   formatDate,
+  formatCurrency,
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,

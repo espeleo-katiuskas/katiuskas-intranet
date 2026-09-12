@@ -722,6 +722,26 @@ document-relative link resolver, `downloadBlob`) both import, rather than each c
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
+`/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
+/accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's
+name, code, direct balance, and last movement date, with its own controls to create an
+account, correct one's name/code/parent (an inline edit panel per row, the same
+toggled-`<div class="edit-fields">` pattern `member.js` uses for a membership/board/leave
+period), and swap it up or down among its own siblings. Its own children-of-parent_id
+grouping never rebuilds the tree from scratch: `GET /accounts` already comes back as a
+pre-order, depth-first walk (see the `accounts` bullet under **Accounting** above), so
+filtering that flat list down to a single `parent_id`, in the order it already arrives in,
+*is* that group's own sibling order — one pass groups every parent_id at once
+(`childrenByParent`), and a `move`'s own response (the whole reordered list) re-renders
+directly from `applyAccountsList` rather than triggering a follow-up `GET`. Only admin and
+the optional "money" role ever see `/accounting` in the sidebar at all, or can even land on
+the page (`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than
+the API itself, which opens *reading* the chart to every baseline role the same as
+`GET /transactions` (see **Accounting** above); admin/money can already write here too, so
+nothing on the page needs a narrower check than that one gate. A future `/transactions`
+page (not built yet) will manage `Transaction`/`Entry` themselves — `accounting.js`
+intentionally stops at the chart of accounts.
+
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role
 requirements described in each path's `description`).
