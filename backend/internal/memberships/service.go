@@ -61,6 +61,10 @@ func (s *Service) Get(ctx context.Context, id int64) (Membership, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
+}
+
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Membership, error) {
 	return s.repo.ListByUser(ctx, userID)
 }

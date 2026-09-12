@@ -55,6 +55,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/memberships", h.authenticator.Protect(h.listActive, "admin", "board"))
 	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin"))
+	mux.Handle("DELETE /api/v1/memberships/{id}", h.authenticator.Protect(h.delete, "admin"))
 	mux.Handle("GET /api/v1/users/{login}/memberships", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/memberships", h.authenticator.Protect(h.create, "admin"))
 
@@ -223,6 +224,35 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, m)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	// Fetched before deleting, purely so the mutation notification below
+	// can still name the person and date afterward — there's nothing
+	// left to look up once Delete succeeds.
+	target, targetErr := h.service.Get(r.Context(), id)
+
+	err = h.service.Delete(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "membership not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete membership")
+		return
+	}
+	if targetErr == nil {
+		if login, err := h.users.LoginForUserID(r.Context(), target.UserID); err == nil {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado un alta de %s (desde %s).",
+				h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02")))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
 func (h *Handler) listLeavesByUser(w http.ResponseWriter, r *http.Request) {

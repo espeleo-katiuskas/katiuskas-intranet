@@ -259,6 +259,53 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	}
 }
 
+func TestHandlerDeleteMembershipRequiresAdminNotBoard(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	deletePath := fmt.Sprintf("/api/v1/memberships/%d", m.ID)
+
+	boardToken := testutil.TokenFor(resolver, 1, "board")
+	if rec := doRequest(mux, http.MethodDelete, deletePath, boardToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from deleting a membership, got %d", rec.Code)
+	}
+
+	adminToken := testutil.TokenFor(resolver, 2, "admin")
+	rec := doRequest(mux, http.MethodDelete, deletePath, adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	listRec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/memberships", target.Login), adminToken, nil)
+	var list []memberships.Membership
+	if err := json.Unmarshal(listRec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected the membership to be gone, got %+v", list)
+	}
+}
+
+func TestHandlerDeleteMembershipRejectsNonNumericID(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/memberships/not-a-number", adminToken, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerDeleteMembershipNotFound(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/memberships/999999", adminToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestHandlerUpdateRejectsShrinkingPeriodPastAnExistingLeave covers the
 // fix for a previously unchecked invariant: shrinking a membership's own
 // period past an existing temporary leave's dates used to succeed,
@@ -732,6 +779,25 @@ func TestHandlerDeleteLeaveNotifiesTelegram(t *testing.T) {
 	}
 
 	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/leaves/%d", leave.ID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor and target, got %q", msg)
+	}
+}
+
+func TestHandlerDeleteMembershipNotifiesTelegram(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken, nil)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}

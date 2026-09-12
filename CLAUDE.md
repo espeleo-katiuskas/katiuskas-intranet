@@ -349,7 +349,11 @@ ever had — so narrowing one period can't be blocked by a leave that actually b
 different one of their own periods. `POST /users/{login}/leaves`/`GET .../leaves` are
 admin-only-to-write, admin/board-to-read (not open to the person themselves, unlike most
 `/users/{login}/...` history routes) — `PATCH`/`DELETE /leaves/{id}` stay addressed by the
-leave's own id.
+leave's own id. `DELETE /memberships/{id}` (admin-only) removes a membership period
+outright — nothing references one by foreign key, so it never cascades — meant for the
+frontend's own "undo my last action" story on `/member` (see Frontend below), which only
+ever offers it for a person's single most recent alta/baja/baja-temporal entry; that's a
+UI-level rule, not something the endpoint itself enforces.
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host

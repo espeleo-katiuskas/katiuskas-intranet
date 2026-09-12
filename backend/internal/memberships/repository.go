@@ -83,6 +83,25 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Membership, error) 
 	return m, err
 }
 
+// Delete removes a membership period outright — nothing else
+// references memberships.id by foreign key (membership_leaves keys off
+// user_id instead, see migration 00016_membership_leaves_by_user.sql),
+// so this never cascades into anything. Used by the frontend's own
+// "undo my last action" story: only ever offered there for the single
+// most recent alta/baja/baja-temporal entry a person has, but that's a
+// UI-level rule, not something this method itself enforces — any
+// membership period can be deleted by id.
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM memberships WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Update also re-validates this user's own existing temporary leaves
 // against the period's new, possibly narrower start/end date —
 // shrinking a membership's own period could just as easily strand an

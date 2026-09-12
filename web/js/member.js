@@ -230,56 +230,76 @@ editForm.addEventListener('submit', async (event) => {
   }
 });
 
-// Each timeline event's own "Editar" (or "+ Baja temporal") opens one
-// of these shared dialogs rather than a per-event panel pre-rendered
-// inline — populating it from the record looked up by id (see the
-// *ById maps buildTimelineEvents fills in) instead of baking values
-// into markup that would otherwise sit hidden in the DOM once per
-// event, most of which nobody ever opens.
-const editMembershipDialog = document.getElementById('edit-membership-dialog');
-initModal(editMembershipDialog);
-let editingMembershipId = null;
-
-function openEditMembershipDialog(m) {
-  editingMembershipId = m.id;
-  document.getElementById('em-membership-start-date').value = m.start_date.slice(0, 10);
-  document.getElementById('em-membership-end-date').value = m.end_date ? m.end_date.slice(0, 10) : '';
-  editMembershipDialog.showModal();
+// today() is the shared upper bound for every alta/baja/baja-temporal
+// date this page ever asks for — none of them can be backdated into
+// the future.
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-// #leave-dialog is shared by "+ Baja temporal" (adding one, POST) and
-// "Editar" on an existing one (PATCH) — same three fields either way,
-// just a different title/submit target. A leave belongs to the person
-// directly (POST /users/{login}/leaves), not to one specific alta, so
-// adding one only needs leaveMode — memberLogin (already known, this
-// whole page is scoped to one person) is enough on its own; editing
-// still needs leaveTargetId, the leave's own id.
-const leaveDialog = document.getElementById('leave-dialog');
-initModal(leaveDialog);
-let leaveMode = null; // 'add' | 'edit'
-let leaveTargetId = null; // the leave's own id — only meaningful in 'edit' mode
+// #status-dialog is the one shared "pick a single date" dialog behind
+// every alta/baja/baja-temporal action on this page — both starting a
+// brand-new one (see membership-status-actions below) and correcting a
+// single field of an existing entry (see renderTimelineEvent): a
+// membership row and a leave row each carry two dates of their own
+// (start/end), but every action here only ever touches one of them at
+// a time, never both together, so a single date field is always
+// enough. openStatusDialog takes the bounds and the save action to
+// perform; validateStatusDate enforces those bounds before onSave ever
+// runs (the server enforces the real invariants regardless — this is
+// just so a bad date is caught before the round trip).
+const statusDialog = document.getElementById('status-dialog');
+initModal(statusDialog);
+let statusDialogBounds = {};
+let statusDialogOnSave = null;
+let statusDialogSuccessMessage = '';
 
-function openAddLeaveDialog() {
-  leaveMode = 'add';
-  document.getElementById('leave-dialog-title').textContent = 'Nueva baja temporal';
-  document.getElementById('leave-start-date').value = '';
-  document.getElementById('leave-end-date').value = '';
-  document.getElementById('leave-reason').value = '';
-  leaveDialog.showModal();
+function openStatusDialog({ title, hint, initial, minExclusive, minLabel, maxInclusive, onSave, successMessage }) {
+  document.getElementById('status-dialog-title').textContent = title;
+  const hintEl = document.getElementById('status-dialog-hint');
+  hintEl.textContent = hint ?? '';
+  hintEl.hidden = !hint;
+  document.getElementById('status-dialog-date').value = initial ?? today();
+  statusDialogBounds = { minExclusive, minLabel, maxInclusive };
+  statusDialogOnSave = onSave;
+  statusDialogSuccessMessage = successMessage;
+  statusDialog.showModal();
 }
 
-function openEditLeaveDialog(l) {
-  leaveMode = 'edit';
-  leaveTargetId = l.id;
-  document.getElementById('leave-dialog-title').textContent = 'Editar baja temporal';
-  document.getElementById('leave-start-date').value = l.start_date.slice(0, 10);
-  // l.end_date is null for a leave that's still ongoing — left blank
-  // rather than erroring, the same as a still-open membership's own
-  // end_date field elsewhere on this page.
-  document.getElementById('leave-end-date').value = l.end_date ? l.end_date.slice(0, 10) : '';
-  document.getElementById('leave-reason').value = l.reason ?? '';
-  leaveDialog.showModal();
+// minLabel is the whole "a/al ..." phrase (not just the bare noun), so
+// the Spanish contraction ("al alta", not "a el alta") is each call
+// site's own responsibility rather than something this template could
+// get right generically for every one of them.
+function validateStatusDate(value, { minExclusive, minLabel, maxInclusive }) {
+  if (!value) return 'Indica una fecha.';
+  if (maxInclusive && value > maxInclusive) return 'La fecha no puede ser posterior a hoy.';
+  if (minExclusive && value <= minExclusive) {
+    return `La fecha debe ser posterior ${minLabel ?? 'a la fecha anterior'} (${formatDate(minExclusive)}).`;
+  }
+  return null;
 }
+
+document.getElementById('save-status-dialog').addEventListener('click', async () => {
+  const value = document.getElementById('status-dialog-date').value;
+  const validationError = validateStatusDate(value, statusDialogBounds);
+  if (validationError) {
+    showError(validationError);
+    return;
+  }
+  const button = document.getElementById('save-status-dialog');
+  button.disabled = true;
+  try {
+    await statusDialogOnSave(value);
+    showFeedback(statusDialogSuccessMessage);
+    statusDialog.close();
+    await loadTimeline();
+    await loadMember();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 const editBoardDialog = document.getElementById('edit-board-dialog');
 initModal(editBoardDialog);
@@ -313,15 +333,29 @@ document.getElementById('el-license-type').addEventListener('change', (event) =>
   document.getElementById('el-other-detail-field').hidden = !chosen?.is_other;
 });
 
+// board_start/board_end aren't here — their own text always folds the
+// position in a fixed shape ("Nuevo cargo: X"/"Deja el cargo de X"),
+// never the generic "label · reason" every other event type uses (see
+// timelineEventText below), so a plain label to concatenate a reason
+// onto wouldn't fit them anyway.
 const eventLabels = {
   alta: 'Alta',
   baja: 'Baja',
   leave_start: 'Inicio de baja temporal',
   leave_end: 'Fin de baja temporal',
   license: 'Licencia federativa',
-  board_start: 'Entra en la Junta Directiva',
-  board_end: 'Sale de la Junta Directiva',
 };
+
+// The text a timeline row shows next to its date — every type but the
+// board ones is just "label" or "label · reason"; a board term's own
+// reason (see buildTimelineEvents) is always the position name, and
+// reads better folded directly into the sentence.
+function timelineEventText(event) {
+  if (event.type === 'board_start') return `Nuevo cargo: ${escapeHtml(event.reason)}`;
+  if (event.type === 'board_end') return `Deja el cargo de ${escapeHtml(event.reason)}`;
+  const reasonText = event.reason ? ` · ${escapeHtml(event.reason)}` : '';
+  return `${eventLabels[event.type]}${reasonText}`;
+}
 
 // Looked up by id when a timeline event's own button is clicked later
 // (open*Dialog above take the record itself, not just its id) — filled
@@ -331,6 +365,40 @@ let membershipsById = {};
 let leavesById = {};
 let licensesById = {};
 let boardTermsById = {};
+
+// The person's current alta/baja/baja-temporal status, recomputed by
+// buildTimelineEvents on every reload — drives which 0-2 buttons
+// renderMembershipStatusActions offers (see "Historial como socio"
+// below). openMembership is the one currently-open period, if any
+// (there can only ever be one — memberships' own EXCLUDE constraint
+// forbids two open periods overlapping into the infinite future at
+// once); openLeave is the one currently-open temporary leave, if any
+// (an open-ended leave only ever fits within a period that's itself
+// still open, so it's always openMembership's own, never a past
+// period's); lastMembership is the single most recent period on file
+// regardless of open/closed (GET /users/{login}/memberships already
+// comes back newest-first), used to find the last baja's own date when
+// there's no open period at all.
+let membershipStatus = { openMembership: null, openLeave: null, lastMembership: null };
+
+// Which single event — among only the "cambios de estado" (alta, baja,
+// inicio/fin de baja temporal), not licenses or board terms, which
+// have their own independent delete affordance already — is the most
+// recent one overall. Only that one ever gets a "Borrar" button (see
+// renderTimelineEvent): undoing history further back than the single
+// most recent action isn't offered, only correcting it (Editar).
+let lastStatusEventKey = null;
+const STATUS_EVENT_TYPES = new Set(['alta', 'baja', 'leave_start', 'leave_end']);
+
+// Same-date tie-break for the timeline sort below: an alta or a fin de
+// baja temporal (both "the person is active as of today") always shows
+// before a baja or an inicio de baja temporal dated the same day (both
+// "the person stops being active as of today") — otherwise it could
+// read as if they'd left before rejoining, or started a leave before
+// ending the previous one, on the very same day. Every other event
+// type (license, board terms) sits at the neutral middle priority and
+// keeps its original relative order among ties, same as before.
+const TIMELINE_TIE_BREAK_PRIORITY = { alta: 0, leave_end: 0, baja: 2, leave_start: 2 };
 
 // Builds one flat, chronological list of events out of every membership
 // period, every temporary leave this person has ever taken (belongs to
@@ -343,21 +411,24 @@ let boardTermsById = {};
 async function buildTimelineEvents(memberships) {
   const events = [];
   membershipsById = Object.fromEntries(memberships.map((m) => [m.id, m]));
+  const openMembership = memberships.find((m) => !m.end_date) ?? null;
   for (const m of memberships) {
-    events.push({ date: m.start_date, type: 'alta', membership: m });
+    events.push({ date: m.start_date, type: 'alta', membership: m, statusKey: `alta-${m.id}` });
     if (m.end_date) {
-      events.push({ date: m.end_date, type: 'baja', membership: m, reason: m.end_reason });
+      events.push({ date: m.end_date, type: 'baja', membership: m, reason: m.end_reason, statusKey: `baja-${m.id}` });
     }
   }
 
   const leaves = await apiFetch(`/users/${memberLogin}/leaves`).catch(() => []);
   leavesById = Object.fromEntries(leaves.map((l) => [l.id, l]));
+  const openLeave = leaves.find((l) => !l.end_date) ?? null;
   for (const l of leaves) {
-    events.push({ date: l.start_date, type: 'leave_start', leave: l, reason: l.reason });
+    events.push({ date: l.start_date, type: 'leave_start', leave: l, reason: l.reason, statusKey: `leave_start-${l.id}` });
     if (l.end_date) {
-      events.push({ date: l.end_date, type: 'leave_end', leave: l, reason: l.reason });
+      events.push({ date: l.end_date, type: 'leave_end', leave: l, reason: l.reason, statusKey: `leave_end-${l.id}` });
     }
   }
+  membershipStatus = { openMembership, openLeave, lastMembership: memberships[0] ?? null };
 
   const licenses = await apiFetch(`/users/${memberLogin}/licenses`).catch(() => []);
   licensesById = Object.fromEntries(licenses.map((l) => [l.id, l]));
@@ -375,26 +446,54 @@ async function buildTimelineEvents(memberships) {
     }
   }
 
-  events.sort((a, b) => a.date.localeCompare(b.date));
+  events.sort((a, b) => {
+    const dateCompare = a.date.localeCompare(b.date);
+    if (dateCompare !== 0) return dateCompare;
+    const priorityA = TIMELINE_TIE_BREAK_PRIORITY[a.type] ?? 1;
+    const priorityB = TIMELINE_TIE_BREAK_PRIORITY[b.type] ?? 1;
+    return priorityA - priorityB;
+  });
+  lastStatusEventKey = events.filter((e) => STATUS_EVENT_TYPES.has(e.type)).at(-1)?.statusKey ?? null;
   return events;
 }
 
 function renderTimelineEvent(event) {
-  const reasonText = event.reason ? ` · ${escapeHtml(event.reason)}` : '';
+  const isLastStatusEvent = event.statusKey && event.statusKey === lastStatusEventKey;
   let actions = '';
 
   // These buttons are rendered fresh on every timeline reload, so
   // data-roles in static HTML can't reach them — gating admin-only
-  // actions here is the only place it can happen.
+  // actions here is the only place it can happen. Editing here only
+  // ever corrects the one date this specific entry represents (start
+  // for alta/leave_start, end for baja/leave_end) — never the other
+  // date on the same underlying membership/leave row, and never the
+  // associated alta/leave_start it's paired with. "Borrar" only ever
+  // shows on the single most recent cambio de estado overall (see
+  // lastStatusEventKey) — deleting a "closing" entry (baja, leave_end)
+  // just undoes the close (clears that date back to open, via the same
+  // PATCH endpoint editing already uses); deleting an "opening" entry
+  // that has nothing after it (alta or leave_start with no closing
+  // counterpart) removes the whole record, since there's nothing left
+  // without it.
   if (isRealAdmin && event.type === 'alta') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-edit-membership="${event.membership.id}">Editar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-add-leave>+ Baja temporal</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-alta="${event.membership.id}">Editar</button>
+      ${isLastStatusEvent ? `<button type="button" class="btn btn-danger btn-small" data-delete-alta="${event.membership.id}">Borrar</button>` : ''}
+    `;
+  } else if (isRealAdmin && event.type === 'baja') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-edit-baja="${event.membership.id}">Editar</button>
+      ${isLastStatusEvent ? `<button type="button" class="btn btn-danger btn-small" data-delete-baja="${event.membership.id}">Borrar</button>` : ''}
     `;
   } else if (isRealAdmin && event.type === 'leave_start') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-edit-leave="${event.leave.id}">Editar</button>
-      <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-leave-start="${event.leave.id}">Editar</button>
+      ${isLastStatusEvent ? `<button type="button" class="btn btn-danger btn-small" data-delete-leave-start="${event.leave.id}">Borrar</button>` : ''}
+    `;
+  } else if (isRealAdmin && event.type === 'leave_end') {
+    actions = `
+      <button type="button" class="btn btn-secondary btn-small" data-edit-leave-end="${event.leave.id}">Editar</button>
+      ${isLastStatusEvent ? `<button type="button" class="btn btn-danger btn-small" data-delete-leave-end="${event.leave.id}">Borrar</button>` : ''}
     `;
   } else if (isRealAdmin && event.type === 'license') {
     actions = `
@@ -409,7 +508,7 @@ function renderTimelineEvent(event) {
 
   return `
     <div class="detail-row">
-      <span>${formatDate(event.date)} — ${eventLabels[event.type]}${reasonText}</span>
+      <span>${formatDate(event.date)} — ${timelineEventText(event)}</span>
       <span>${actions}</span>
     </div>
   `;
@@ -421,6 +520,7 @@ async function loadTimeline() {
   try {
     const memberships = await apiFetch(`/users/${memberLogin}/memberships`);
     const events = await buildTimelineEvents(memberships);
+    document.getElementById('membership-status-actions').innerHTML = renderMembershipStatusActions();
     container.innerHTML = events.length
       ? events.map(renderTimelineEvent).join('')
       : '<p>Todavía no ha sido socio.</p>';
@@ -429,110 +529,131 @@ async function loadTimeline() {
   }
 }
 
-// "Dar de alta"/"+ Licencia"/"+ Junta directiva" and their panels all
-// have data-roles="admin" in the markup — POST memberships/licenses/
-// board-members is admin-only now, so applyRoleVisibility() already
-// removed these elements for board; nothing to wire up in that case.
-const addMembershipDialog = document.getElementById('add-membership-dialog');
-initModal(addMembershipDialog);
-// No <form> here to reset for free on close (see initModal) — a plain
-// panel, like the original always was — so this clears its one field
-// by hand, on every close (cancel, ×, Escape, or after a successful
-// save), not just after saving the way the pre-modal version did.
-addMembershipDialog.addEventListener('close', () => {
-  document.getElementById('add-membership-start-date').value = '';
-});
+// The "Historial como socio" section header shows exactly one of three shapes,
+// computed from membershipStatus (see buildTimelineEvents):
+//   - no open membership at all: a single "Alta en el club" button.
+//   - an open membership, no open leave (activo): "Baja temporal" and
+//     "Baja definitiva".
+//   - an open membership *and* an open leave (de baja temporal ahora
+//     mismo): "Fin baja temporal" and "Baja definitiva" — the latter
+//     both ends the leave and the membership itself, with the same
+//     date, in one action (see the click handler below).
+// Re-rendered on every loadTimeline() alongside the rest of the
+// timeline, since the right shape depends on data that only arrives
+// with it.
+function renderMembershipStatusActions() {
+  const { openMembership, openLeave } = membershipStatus;
+  if (!openMembership) {
+    return '<button type="button" class="btn btn-secondary btn-small" data-status-action="alta">Alta en el club</button>';
+  }
+  if (openLeave) {
+    return `
+      <button type="button" class="btn btn-secondary btn-small" data-status-action="fin-baja-temporal">Fin baja temporal</button>
+      <button type="button" class="btn btn-secondary btn-small" data-status-action="baja-definitiva-en-baja-temporal">Baja definitiva</button>
+    `;
+  }
+  return `
+    <button type="button" class="btn btn-secondary btn-small" data-status-action="baja-temporal">Baja temporal</button>
+    <button type="button" class="btn btn-secondary btn-small" data-status-action="baja-definitiva">Baja definitiva</button>
+  `;
+}
 
 if (isRealAdmin) {
-  document.getElementById('start-membership').addEventListener('click', () => {
-    const input = document.getElementById('add-membership-start-date');
-    if (!input.value) {
-      input.value = new Date().toISOString().slice(0, 10);
-    }
-    addMembershipDialog.showModal();
-  });
+  document.getElementById('membership-status-actions').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-status-action]');
+    if (!button) return;
+    const { openMembership, openLeave } = membershipStatus;
 
-  document.getElementById('save-add-membership').addEventListener('click', async () => {
-    const input = document.getElementById('add-membership-start-date');
-    if (!input.value) {
-      showError('Indica la fecha de alta.');
+    if (button.dataset.statusAction === 'alta') {
+      const lastEnd = membershipStatus.lastMembership?.end_date ?? null;
+      openStatusDialog({
+        title: 'Alta en el club',
+        hint: lastEnd
+          ? `La fecha debe ser posterior a la última baja (${formatDate(lastEnd)}) y no puede ser posterior a hoy.`
+          : 'La fecha no puede ser posterior a hoy.',
+        minExclusive: lastEnd ? lastEnd.slice(0, 10) : null,
+        minLabel: 'a la última baja',
+        maxInclusive: today(),
+        successMessage: 'Alta registrada.',
+        onSave: (date) => apiFetch(`/users/${memberLogin}/memberships`, {
+          method: 'POST',
+          body: JSON.stringify({ start_date: date }),
+        }),
+      });
       return;
     }
 
-    const button = document.getElementById('save-add-membership');
-    button.disabled = true;
-    try {
-      await apiFetch(`/users/${memberLogin}/memberships`, {
-        method: 'POST',
-        body: JSON.stringify({ start_date: input.value }),
+    if (button.dataset.statusAction === 'baja-temporal') {
+      openStatusDialog({
+        title: 'Baja temporal',
+        hint: `La fecha debe ser posterior al alta actual (${formatDate(openMembership.start_date)}) y no puede ser posterior a hoy.`,
+        minExclusive: openMembership.start_date.slice(0, 10),
+        minLabel: 'al alta actual',
+        maxInclusive: today(),
+        successMessage: 'Baja temporal registrada.',
+        onSave: (date) => apiFetch(`/users/${memberLogin}/leaves`, {
+          method: 'POST',
+          body: JSON.stringify({ start_date: date, end_date: null, reason: null }),
+        }),
       });
-      showFeedback('Alta registrada.');
-      addMembershipDialog.close();
-      await loadTimeline();
-      await loadMember();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      button.disabled = false;
+      return;
+    }
+
+    if (button.dataset.statusAction === 'baja-definitiva') {
+      openStatusDialog({
+        title: 'Baja definitiva',
+        hint: `La fecha debe ser posterior al alta actual (${formatDate(openMembership.start_date)}) y no puede ser posterior a hoy.`,
+        minExclusive: openMembership.start_date.slice(0, 10),
+        minLabel: 'al alta actual',
+        maxInclusive: today(),
+        successMessage: 'Baja registrada.',
+        onSave: (date) => apiFetch(`/memberships/${openMembership.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ start_date: openMembership.start_date.slice(0, 10), end_date: date }),
+        }),
+      });
+      return;
+    }
+
+    if (button.dataset.statusAction === 'fin-baja-temporal') {
+      openStatusDialog({
+        title: 'Fin de la baja temporal',
+        hint: `La fecha debe ser posterior al inicio de la baja temporal (${formatDate(openLeave.start_date)}) y no puede ser posterior a hoy.`,
+        minExclusive: openLeave.start_date.slice(0, 10),
+        minLabel: 'al inicio de la baja temporal',
+        maxInclusive: today(),
+        successMessage: 'Baja temporal finalizada.',
+        onSave: (date) => apiFetch(`/leaves/${openLeave.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ start_date: openLeave.start_date.slice(0, 10), end_date: date, reason: openLeave.reason ?? null }),
+        }),
+      });
+      return;
+    }
+
+    if (button.dataset.statusAction === 'baja-definitiva-en-baja-temporal') {
+      openStatusDialog({
+        title: 'Baja definitiva',
+        hint: 'Termina la baja temporal actual y da de baja definitiva, con la misma fecha. '
+          + `Debe ser posterior al inicio de la baja temporal (${formatDate(openLeave.start_date)}) y no puede ser posterior a hoy.`,
+        minExclusive: openLeave.start_date.slice(0, 10),
+        minLabel: 'al inicio de la baja temporal',
+        maxInclusive: today(),
+        successMessage: 'Baja definitiva registrada.',
+        onSave: async (date) => {
+          await apiFetch(`/leaves/${openLeave.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ start_date: openLeave.start_date.slice(0, 10), end_date: date, reason: openLeave.reason ?? null }),
+          });
+          await apiFetch(`/memberships/${openMembership.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ start_date: openMembership.start_date.slice(0, 10), end_date: date }),
+          });
+        },
+      });
     }
   });
 }
-
-document.getElementById('save-edit-membership').addEventListener('click', async () => {
-  const body = {
-    start_date: document.getElementById('em-membership-start-date').value,
-    end_date: document.getElementById('em-membership-end-date').value || null,
-  };
-  const button = document.getElementById('save-edit-membership');
-  button.disabled = true;
-  try {
-    await apiFetch(`/memberships/${editingMembershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
-    showFeedback('Periodo actualizado.');
-    editMembershipDialog.close();
-    await loadTimeline();
-    await loadMember();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
-  }
-});
-
-document.getElementById('save-leave').addEventListener('click', async () => {
-  const startDate = document.getElementById('leave-start-date').value;
-  // end_date is optional — a leave still in progress has no end yet,
-  // the same as a membership period's own end_date elsewhere on this
-  // page; empty means "still ongoing", sent as null rather than "".
-  const endDate = document.getElementById('leave-end-date').value || null;
-  if (!startDate) {
-    showError('Indica al menos la fecha de inicio de la baja temporal.');
-    return;
-  }
-  const reason = document.getElementById('leave-reason').value.trim() || null;
-  const button = document.getElementById('save-leave');
-  button.disabled = true;
-  try {
-    if (leaveMode === 'add') {
-      await apiFetch(`/users/${memberLogin}/leaves`, {
-        method: 'POST',
-        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
-      });
-      showFeedback('Baja temporal registrada.');
-    } else {
-      await apiFetch(`/leaves/${leaveTargetId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
-      });
-      showFeedback('Baja temporal actualizada.');
-    }
-    leaveDialog.close();
-    await loadTimeline();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    button.disabled = false;
-  }
-});
 
 document.getElementById('save-edit-board').addEventListener('click', async () => {
   const body = {
@@ -583,36 +704,128 @@ document.getElementById('save-edit-license').addEventListener('click', async () 
   }
 });
 
+// A small helper so every "Borrar" below shares the same confirm +
+// disable + reload shape, differing only in the confirmation text and
+// the actual request.
+async function performTimelineDelete(button, confirmText, request) {
+  if (!confirm(confirmText)) return;
+  button.disabled = true;
+  try {
+    await request();
+    await loadTimeline();
+    await loadMember();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+}
+
 document.getElementById('timeline-list').addEventListener('click', async (event) => {
-  const editMembershipButton = event.target.closest('button[data-edit-membership]');
-  if (editMembershipButton) {
-    openEditMembershipDialog(membershipsById[Number(editMembershipButton.dataset.editMembership)]);
+  const editAltaButton = event.target.closest('button[data-edit-alta]');
+  if (editAltaButton) {
+    const m = membershipsById[Number(editAltaButton.dataset.editAlta)];
+    openStatusDialog({
+      title: 'Editar alta',
+      initial: m.start_date.slice(0, 10),
+      successMessage: 'Alta actualizada.',
+      onSave: (date) => apiFetch(`/memberships/${m.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: date, end_date: m.end_date ? m.end_date.slice(0, 10) : null }),
+      }),
+    });
     return;
   }
 
-  const addLeaveButton = event.target.closest('button[data-add-leave]');
-  if (addLeaveButton) {
-    openAddLeaveDialog();
+  const deleteAltaButton = event.target.closest('button[data-delete-alta]');
+  if (deleteAltaButton) {
+    await performTimelineDelete(
+      deleteAltaButton,
+      '¿Borrar esta alta? Esta acción no se puede deshacer.',
+      () => apiFetch(`/memberships/${deleteAltaButton.dataset.deleteAlta}`, { method: 'DELETE' }),
+    );
     return;
   }
 
-  const editLeaveButton = event.target.closest('button[data-edit-leave]');
-  if (editLeaveButton) {
-    openEditLeaveDialog(leavesById[Number(editLeaveButton.dataset.editLeave)]);
+  const editBajaButton = event.target.closest('button[data-edit-baja]');
+  if (editBajaButton) {
+    const m = membershipsById[Number(editBajaButton.dataset.editBaja)];
+    openStatusDialog({
+      title: 'Editar baja',
+      initial: m.end_date.slice(0, 10),
+      successMessage: 'Baja actualizada.',
+      onSave: (date) => apiFetch(`/memberships/${m.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: date }),
+      }),
+    });
     return;
   }
 
-  const deleteLeaveButton = event.target.closest('button[data-delete-leave]');
-  if (deleteLeaveButton) {
-    if (!confirm('¿Borrar esta baja temporal?')) return;
-    deleteLeaveButton.disabled = true;
-    try {
-      await apiFetch(`/leaves/${deleteLeaveButton.dataset.deleteLeave}`, { method: 'DELETE' });
-      await loadTimeline();
-    } catch (err) {
-      deleteLeaveButton.disabled = false;
-      showError(err.message);
-    }
+  const deleteBajaButton = event.target.closest('button[data-delete-baja]');
+  if (deleteBajaButton) {
+    const m = membershipsById[Number(deleteBajaButton.dataset.deleteBaja)];
+    await performTimelineDelete(
+      deleteBajaButton,
+      '¿Deshacer esta baja? La persona volverá a estar de alta.',
+      () => apiFetch(`/memberships/${m.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: null }),
+      }),
+    );
+    return;
+  }
+
+  const editLeaveStartButton = event.target.closest('button[data-edit-leave-start]');
+  if (editLeaveStartButton) {
+    const l = leavesById[Number(editLeaveStartButton.dataset.editLeaveStart)];
+    openStatusDialog({
+      title: 'Editar inicio de baja temporal',
+      initial: l.start_date.slice(0, 10),
+      successMessage: 'Baja temporal actualizada.',
+      onSave: (date) => apiFetch(`/leaves/${l.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: date, end_date: l.end_date ? l.end_date.slice(0, 10) : null, reason: l.reason ?? null }),
+      }),
+    });
+    return;
+  }
+
+  const deleteLeaveStartButton = event.target.closest('button[data-delete-leave-start]');
+  if (deleteLeaveStartButton) {
+    await performTimelineDelete(
+      deleteLeaveStartButton,
+      '¿Borrar esta baja temporal? Esta acción no se puede deshacer.',
+      () => apiFetch(`/leaves/${deleteLeaveStartButton.dataset.deleteLeaveStart}`, { method: 'DELETE' }),
+    );
+    return;
+  }
+
+  const editLeaveEndButton = event.target.closest('button[data-edit-leave-end]');
+  if (editLeaveEndButton) {
+    const l = leavesById[Number(editLeaveEndButton.dataset.editLeaveEnd)];
+    openStatusDialog({
+      title: 'Editar fin de baja temporal',
+      initial: l.end_date.slice(0, 10),
+      successMessage: 'Baja temporal actualizada.',
+      onSave: (date) => apiFetch(`/leaves/${l.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: l.start_date.slice(0, 10), end_date: date, reason: l.reason ?? null }),
+      }),
+    });
+    return;
+  }
+
+  const deleteLeaveEndButton = event.target.closest('button[data-delete-leave-end]');
+  if (deleteLeaveEndButton) {
+    const l = leavesById[Number(deleteLeaveEndButton.dataset.deleteLeaveEnd)];
+    await performTimelineDelete(
+      deleteLeaveEndButton,
+      '¿Deshacer el fin de esta baja temporal? Volverá a estar en curso.',
+      () => apiFetch(`/leaves/${l.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: l.start_date.slice(0, 10), end_date: null, reason: l.reason ?? null }),
+      }),
+    );
     return;
   }
 
@@ -756,7 +969,7 @@ async function loadMovements() {
 }
 
 // Board-term creation shows up as just another event on the same
-// altas-y-bajas timeline (see buildTimelineEvents). It has
+// "Historial como socio" timeline (see buildTimelineEvents). It has
 // data-roles="admin" on its own button/panel — POST board-members is
 // admin-only now, so board never has these elements. A federative
 // license's own creation isn't here at all: it now always happens from
@@ -768,7 +981,10 @@ if (isRealAdmin) {
   // (see docs/architecture.md) — there's no separate way to grant it.
   const addBoardDialog = document.getElementById('add-board-dialog');
   initModal(addBoardDialog);
-  // No <form> here (see the add-membership-dialog comment above for why).
+  // No <form> here — a plain panel, so this clears its own fields by
+  // hand on every close (cancel, ×, Escape, or after a successful save)
+  // instead of getting that for free the way initModal(dialog, form)
+  // would.
   addBoardDialog.addEventListener('close', () => {
     document.getElementById('add-board-position').selectedIndex = 0;
     document.getElementById('add-board-start-date').value = '';

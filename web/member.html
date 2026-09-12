@@ -106,9 +106,9 @@
   <div id="member-role-add"></div>
 
   <div class="section-header">
-    <h2>Altas y bajas</h2>
+    <h2>Historial como socio</h2>
     <span data-roles="admin">
-      <button id="start-membership" type="button" class="btn btn-secondary btn-small">Dar de alta</button>
+      <span id="membership-status-actions"></span>
       <button id="add-board-term" type="button" class="btn btn-secondary btn-small">+ Junta directiva</button>
     </span>
   </div>
@@ -118,17 +118,18 @@
     año que su fecha de obtención. Las licencias nuevas (y las cuotas anuales) se
     registran desde la transacción que las paga, en Contabilidad — no desde aquí.
   </p>
-  <dialog id="add-membership-dialog" class="panel modal">
+  <dialog id="status-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Dar de alta</h3>
+    <h3 id="status-dialog-title">Alta en el club</h3>
+    <p class="hint" id="status-dialog-hint" hidden></p>
     <div class="field-grid">
       <div class="field">
-        <label for="add-membership-start-date">Fecha de alta</label>
-        <input id="add-membership-start-date" type="date">
+        <label for="status-dialog-date" id="status-dialog-date-label">Fecha</label>
+        <input id="status-dialog-date" type="date">
       </div>
     </div>
     <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
+      <button type="button" class="btn btn-primary btn-small" id="save-status-dialog">Guardar</button>
       <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
     </div>
   </dialog>
@@ -153,48 +154,6 @@
     </div>
     <div class="panel-actions">
       <button type="button" class="btn btn-primary btn-small" id="save-add-board-term">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
-
-  <dialog id="edit-membership-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar alta</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="em-membership-start-date">Fecha de alta</label>
-        <input id="em-membership-start-date" type="date">
-      </div>
-      <div class="field">
-        <label for="em-membership-end-date">Fecha de baja <span class="optional">(vacío = sigue activa)</span></label>
-        <input id="em-membership-end-date" type="date">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-edit-membership">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
-
-  <dialog id="leave-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="leave-dialog-title">Baja temporal</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="leave-start-date">Fecha de inicio</label>
-        <input id="leave-start-date" type="date">
-      </div>
-      <div class="field">
-        <label for="leave-end-date">Fecha de fin <span class="optional">(opcional, si sigue en curso)</span></label>
-        <input id="leave-end-date" type="date">
-      </div>
-      <div class="field span-2">
-        <label for="leave-reason">Motivo <span class="optional">(opcional)</span></label>
-        <input id="leave-reason" type="text">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-leave">Guardar</button>
       <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
     </div>
   </dialog>

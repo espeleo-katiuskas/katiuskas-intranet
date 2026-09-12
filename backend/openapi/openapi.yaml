@@ -891,6 +891,23 @@ paths:
             period for this person), or outside_membership_period (the
             new dates would strand an existing temporary leave of this
             membership's own outside its period).
+    delete:
+      summary: Remove a membership period outright
+      description: >
+        Admin-only. Nothing else references a membership by foreign key
+        (membership_leaves keys off the person directly, not off a
+        specific period), so this never cascades into anything. Meant
+        for the frontend's own "undo my last action" story — in
+        practice only ever offered there for a person's single most
+        recent alta/baja/baja-temporal entry — but that's a UI-level
+        rule, not something this endpoint itself enforces.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Only admin can delete a membership period. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/board-members:
     get:
