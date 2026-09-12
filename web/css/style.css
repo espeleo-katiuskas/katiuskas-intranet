@@ -8,6 +8,11 @@
   --line: #dcded7;
   --danger: #a1453d;
   --success: #4c7a52;
+  /* A field an editor has changed but not yet saved (member.js/profile.js's
+     own "Datos" forms, via js/formDirty.js) — soft enough not to read as
+     an error or a validation warning, distinct enough from --surface to
+     spot at a glance which fields are actually pending a save. */
+  --field-dirty-bg: #fbf1da;
   /* Interactive links/actions inside content (phone numbers, "Copiar
      NIF", document links) — distinct from --accent, which stays
      reserved for the sidebar/brand. */
@@ -713,6 +718,16 @@ button.link-button {
 .field textarea {
   resize: vertical;
   min-height: 64px;
+}
+
+/* Applied by js/formDirty.js while a field's value differs from what the
+   form was last populated with (a fresh load, a successful save, or
+   "Cancelar") — cleared the moment it matches again, including a manual
+   edit back to the original value. */
+.field input.field-dirty,
+.field select.field-dirty,
+.field textarea.field-dirty {
+  background: var(--field-dirty-bg);
 }
 
 .panel-actions {

@@ -7,6 +7,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
+import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 
 const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin']);
@@ -32,6 +33,8 @@ if (!isAdmin) {
 // what was already loaded", not "re-fetch the latest from the server".
 let lastLoadedProfile = null;
 
+trackDirtyFields(editForm);
+
 function populateEditForm(profile) {
   editForm.first_name.value = profile.first_name;
   editForm.last_name.value = profile.last_name;
@@ -45,6 +48,7 @@ function populateEditForm(profile) {
   editForm.city.value = profile.city ?? '';
   editForm.province.value = profile.province ?? '';
   editForm.emergency_contact.value = profile.emergency_contact ?? '';
+  markFieldsClean(editForm);
 }
 
 document.getElementById('cancel-edit-profile').addEventListener('click', () => {

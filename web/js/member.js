@@ -15,6 +15,7 @@ import {
 import { initPage } from './layout.js';
 import { initModal } from './modal.js';
 import { initUserFilesBrowser } from './userFiles.js';
+import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
@@ -158,6 +159,8 @@ if (!isRealAdmin) {
 // was already loaded", not "re-fetch the latest from the server".
 let lastLoadedPerson = null;
 
+trackDirtyFields(editForm);
+
 function populateEditForm(person) {
   editForm.first_name.value = person.first_name;
   editForm.last_name.value = person.last_name;
@@ -171,6 +174,7 @@ function populateEditForm(person) {
   editForm.city.value = person.city ?? '';
   editForm.province.value = person.province ?? '';
   editForm.emergency_contact.value = person.emergency_contact ?? '';
+  markFieldsClean(editForm);
 }
 
 // #cancel-edit-member lives inside the same data-roles="admin" panel-actions
