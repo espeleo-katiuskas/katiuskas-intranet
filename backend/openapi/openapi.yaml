@@ -411,12 +411,11 @@ paths:
       summary: List every role
       description: >
         Open to any baseline role (admin/board/member) — the catalog
-        itself is just organizational labels, read-only here regardless
-        of who's asking. A plain member's own "Cargo" column on
-        /members is built from this (is_automatic tells an automatic
-        role like member/former_member/board apart from one that's
-        actually a distinct label to show) plus their own
-        MemberListing.roles.
+        itself is just organizational labels (names/descriptions), never
+        who holds which, read-only here regardless of who's asking. A
+        plain member's own "Cargo" column on /members is built from
+        GET /board-members instead, not from this — MemberListing has no
+        roles field at all (see its own schema).
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -2407,11 +2406,14 @@ components:
         not just themselves (someone with no membership period at all
         is left out of this listing entirely — see GET /users). Just
         enough to see who's a socio, since when, to whom, whether
-        they're currently on a temporary leave, which roles/cargo they
-        hold, and which kind of federative license they have (just the
-        type — license_issued_date/license_valid_until stay admin/
-        board-only); everything else User exposes (DNI, address,
-        contact info...) is left out entirely.
+        they're currently on a temporary leave, and which kind of
+        federative license they have (just the type —
+        license_issued_date/license_valid_until stay admin/board-only);
+        everything else User exposes (DNI, address, contact info,
+        roles...) is left out entirely — a plain member has no business
+        knowing which non-public roles someone else holds, only their
+        board position if any, which is public knowledge inside the
+        club and comes from the separate GET /board-members instead.
       properties:
         login: { type: string }
         first_name: { type: string }
@@ -2435,10 +2437,6 @@ components:
         on_leave:
           type: boolean
           description: Same meaning as User.on_leave — only ever true alongside a currently-active membership.
-        roles:
-          type: array
-          items: { type: string }
-          description: Same role names as User.roles.
         license_type:
           type: string
           nullable: true

@@ -255,10 +255,12 @@ func TestHandlerListRestrictsFieldsForAPlainMemberButNotBoardOrAdmin(t *testing.
 	}
 }
 
-// A plain member's own listing includes MemberListing.Roles now (not
-// just admin/board's full User) — this is what a "Cargo" column on
-// /members is built from client-side.
-func TestHandlerListIncludesRolesForAPlainMember(t *testing.T) {
+// A plain member's own listing never includes roles at all — a member
+// has no business knowing which non-public roles (admin, money,
+// material, a custom label...) anyone else holds; only their board
+// position is public, and that comes from the separate GET
+// /board-members instead (see MemberListing's own doc comment).
+func TestHandlerListNeverIncludesRolesForAPlainMember(t *testing.T) {
 	mux, authn, svc, membershipsService := newTestServerWithMemberships(t)
 	ctx := context.Background()
 
@@ -276,9 +278,9 @@ func TestHandlerListIncludesRolesForAPlainMember(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// target now has an open membership period, so "member" (automatic)
-	// is already part of their live-computed roles.
-	if !bytes.Contains(rec.Body.Bytes(), []byte(`"roles":["member"]`)) {
-		t.Errorf("expected a plain member's listing to include roles, got %s", rec.Body.String())
+	// would already show up here if roles were exposed at all.
+	if bytes.Contains(rec.Body.Bytes(), []byte(`"roles"`)) {
+		t.Errorf("expected a plain member's listing to omit roles entirely, got %s", rec.Body.String())
 	}
 }
 

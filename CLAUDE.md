@@ -209,26 +209,30 @@ licenses, roles) but can only write activities and material — every person-dat
 role-assignment, license, and Junta Directiva write endpoint rejects board even though it
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
-bucketed from — membership number, alta/baja dates, `roles`, and `license_type` — just the
+bucketed from — membership number, alta/baja dates, and `license_type` — just the
 type, never `license_issued_date`/`license_valid_until`; no DNI or contact info) and may
 only edit their own contact fields (`email`, `phone`, `address`,
 `postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
 anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
-`GET /users` also only ever includes people who are or have been a socio (a non-nil
-`membership_start_date`) in a plain member's own listing — someone with no membership
-period at all (an admin-only account, say) is left out of it entirely, even though
-admin/board still see them (`Handler.list`). That restriction is applied by
+`MemberListing` deliberately has no `roles` field at all: a plain member has no business
+knowing which non-public roles (`admin`, `money`, `material`, or any custom label an admin
+created) someone else holds — that's exactly the kind of internal, non-public information
+this narrower view exists to keep out, the same as DNI or contact info. The one exception
+is a board position, which *is* public knowledge inside the club — that comes from the
+separate, baseline-open `GET /board-members` instead, which is where `web/js/members.js`'s
+own "Cargo" column (shared by `FULL_COLUMNS` and `MEMBER_COLUMNS` alike, `cargoFor`) gets
+it from; a person with no current board position shows nothing in that column, never a
+role name. `GET /users` also only ever includes people who are or have been a socio (a
+non-nil `membership_start_date`) in a plain member's own listing — someone with no
+membership period at all (an admin-only account, say) is left out of it entirely, even
+though admin/board still see them (`Handler.list`). That restriction is applied by
 `users.Repository.List` itself (an `EXISTS` against `memberships`), not filtered back out
 in Go after the fact, so a non-socio row is never even fetched from Postgres. `GET /users`
 is deliberately unpaginated — the club's membership grows by roughly 15 people a year,
 nowhere near the scale where returning everyone on file in one response is a real cost.
-The role catalog itself (`GET /roles`) is
-open to any baseline role, read-only regardless of who's asking — assigning/revoking one
-is still admin-only — since it's just organizational labels, and a plain member's own
-"Cargo" column on `/members` needs `is_automatic` from it to tell an automatic role
-(`member`/`former_member`/`board`) apart from one that's actually a distinct label to
-show (`web/js/members.js`'s `cargoFor`, shared by `FULL_COLUMNS` and `MEMBER_COLUMNS`
-alike now).
+The role catalog itself (`GET /roles`) is open to any baseline role, read-only regardless
+of who's asking, and lists only the catalog's names/descriptions — never who holds which —
+since that much is just organizational labels; assigning/revoking one is still admin-only.
 
 **Activities**: every activity has a mandatory `leader_id` (exposed as `leader_login`; the
 organizer, defaulting to whoever creates it) who, along with admin/board, is the only one

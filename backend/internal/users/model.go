@@ -239,15 +239,22 @@ type DirectoryEntry struct {
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside
 // the club — just enough to see who's a socio, since when, to whom,
-// whether they're currently on a temporary leave, which roles/cargo
-// they hold, and which kind of federative license they have (just the
-// type — LicenseIssuedDate/LicenseValidUntil stay admin/board-only).
-// AgeCategory stands in for BirthDate itself, which isn't exposed
-// here: the coarse bracket is enough to know at a glance without
-// revealing everyone's exact birth date. Handler.list also only ever
-// includes people who are or have been a socio in this listing at all
-// — someone who's never had a membership period (an admin-only
-// account, say) isn't something a plain member needs to see here.
+// whether they're currently on a temporary leave, and which kind of
+// federative license they have (just the type —
+// LicenseIssuedDate/LicenseValidUntil stay admin/board-only).
+// Deliberately no Roles field here: a plain member has no business
+// knowing which non-public roles (admin, money, material, or any
+// custom label) someone else holds — only their board position, if
+// any, which is public knowledge inside the club and comes from the
+// separate, baseline-open GET /board-members instead (see
+// web/js/members.js's own "Cargo" column, built from that, not from
+// this). AgeCategory stands in for BirthDate itself, which isn't
+// exposed here: the coarse bracket is enough to know at a glance
+// without revealing everyone's exact birth date. Handler.list also
+// only ever includes people who are or have been a socio in this
+// listing at all — someone who's never had a membership period (an
+// admin-only account, say) isn't something a plain member needs to see
+// here.
 type MemberListing struct {
 	Login               string      `json:"login"`
 	FirstName           string      `json:"first_name"`
@@ -258,7 +265,6 @@ type MemberListing struct {
 	MembershipStartDate *time.Time  `json:"membership_start_date,omitempty"`
 	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
 	OnLeave             bool        `json:"on_leave"`
-	Roles               []string    `json:"roles"`
 	LicenseType         *string     `json:"license_type,omitempty"`
 }
 
@@ -277,6 +283,5 @@ func (u User) ForMemberListing() MemberListing {
 		MembershipEndDate:   u.MembershipEndDate,
 		LicenseType:         u.LicenseType,
 		OnLeave:             u.OnLeave,
-		Roles:               u.Roles,
 	}
 }

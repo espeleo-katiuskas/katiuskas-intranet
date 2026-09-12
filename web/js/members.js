@@ -21,32 +21,26 @@ const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
 
 let allRoles = [];
-// Role names is_automatic=true (member/former_member/board — see
-// db/migrations/00003_roles.sql) never belong in the "Cargo" column:
-// they're computed from alta/baja and board-term history, not
-// something anyone actually holds as a distinct position or label.
-let automaticRoleNames = new Set();
 // Filled by loadBoardPositions() — login → their current board
 // position, for whoever is on the board right now.
 let boardPositionByLogin = {};
 
-// A person's "cargo": their current board position if they have one,
-// otherwise whichever non-automatic roles they hold (admin, or any
-// custom role an admin created) — never both, since holding a board
-// position already implies being on the Junta Directiva.
+// A person's "cargo" is their current board position, and nothing
+// else: a plain member has no business knowing which other roles
+// (admin, money, material, any custom label) someone holds — that's
+// exactly the kind of internal, non-public information MemberListing
+// itself already omits for them (see CLAUDE.md's own Permission tiers
+// section) — so this never falls back to person.roles the way it once
+// did, even for admin/board's own richer view of this same column.
 function cargoFor(person) {
   const position = boardPositionByLogin[person.login];
-  if (position) return positionLabels[position] ?? position;
-  return (person.roles ?? []).filter((name) => !automaticRoleNames.has(name)).map(roleLabel).join(', ');
+  return position ? (positionLabels[position] ?? position) : '';
 }
 
-// Just the catalog fetch, no DOM — used by both loadRoles() below (the
-// admin/board-only roles table + "nueva persona" checkboxes) and, for
-// everyone else, only to know which role names are automatic, for
-// cargoFor.
+// Just the catalog fetch, no DOM — used by loadRoles() below, the
+// admin/board-only roles table + "nueva persona" checkboxes.
 async function loadRolesCatalog() {
   allRoles = await apiFetch('/roles');
-  automaticRoleNames = new Set(allRoles.filter((r) => r.is_automatic).map((r) => r.name));
 }
 
 async function loadRoles() {
@@ -660,19 +654,11 @@ if (isRealAdmin) {
   });
 }
 
-// Both feed the "Cargo" column, needed for admin/board and a plain
-// member alike now — loadRoles() also renders the admin/board-only
-// roles table and "nueva persona" checkboxes, so only that half is
-// gated to isAdmin.
+// The "Cargo" column only ever needs board positions now (see
+// cargoFor) — the role catalog itself is only for admin/board's own
+// roles table and "nueva persona" checkboxes.
 if (isAdmin) {
   await loadRoles();
-} else {
-  try {
-    await loadRolesCatalog();
-  } catch {
-    // Cargo just won't resolve non-automatic roles if this fails — not
-    // worth blocking the rest of the page over.
-  }
 }
 await loadBoardPositions();
 loadUsers();
