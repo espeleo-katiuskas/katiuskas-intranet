@@ -14,13 +14,19 @@ package accounting
 import "time"
 
 // Account is one node in the chart of accounts. Code is its own short,
-// unique identifier (e.g. "570" for "Caja"); ParentID nests it under a
-// broader one (nil for a top-level account).
+// unique identifier (e.g. "570" for "Caja") — optional, since a purely
+// organizational grouping node might never get one the way a real
+// ledger account does (see migration 00013_accounts_code_optional.sql);
+// nil rather than "" for "no code", so an empty string is never itself
+// a real value two different accounts could collide on under the
+// column's own UNIQUE constraint (see Handler.normalizeCode, which
+// keeps that distinction all the way from the request body down).
+// ParentID nests it under a broader one (nil for a top-level account).
 type Account struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Code     string `json:"code"`
-	ParentID *int64 `json:"parent_id,omitempty"`
+	ID       int64   `json:"id"`
+	Name     string  `json:"name"`
+	Code     *string `json:"code,omitempty"`
+	ParentID *int64  `json:"parent_id,omitempty"`
 	// Balance and LastTransactionAt are this account's own direct
 	// activity — the sum of every entry ever posted straight to it
 	// (never rolled up from child accounts) and when the most recent
@@ -38,7 +44,7 @@ type Account struct {
 
 type CreateAccountInput struct {
 	Name     string
-	Code     string
+	Code     *string
 	ParentID *int64
 }
 
@@ -47,10 +53,13 @@ type CreateAccountInput struct {
 // already use, since the edit form always resends the current values
 // rather than leaving anything ambiguous. There's no Position field
 // here — reordering only ever happens through MoveAccount/MoveDirection
-// below, never as a side effect of an otherwise ordinary edit.
+// below, never as a side effect of an otherwise ordinary edit. Code is
+// the one field that isn't actually required to be non-empty (see
+// Account's own doc comment) — resending nil/"" here clears an
+// existing code, same as never having set one.
 type UpdateAccountInput struct {
 	Name     string
-	Code     string
+	Code     *string
 	ParentID *int64
 }
 

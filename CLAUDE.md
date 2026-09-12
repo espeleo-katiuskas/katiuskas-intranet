@@ -568,7 +568,13 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   Telegram isn't configured is no noisier than logging it directly would've been anyway.
 
 **Accounting** (`internal/accounting`): the club's own money — a chart of accounts
-(`accounts`: name, a unique `code`, and an optional `parent_id` nesting it under a
+(`accounts`: name, an optional but unique-when-present `code` (migration
+`00013_accounts_code_optional.sql`; a real ledger account tends to have one, e.g. "570"
+for "Caja", but a purely organizational grouping node might never get one — `""`/blank is
+normalized to no code at all, `Handler.normalizeCode`, the same "not itself a storable
+value" treatment `licenses.normalizeOtherDetail` gives an empty `other_detail`, so two
+codeless accounts never collide under the column's own `UNIQUE` constraint the way two
+literal `""`s would), and an optional `parent_id` nesting it under a
 broader one — the frontend builds any tree view it wants client-side from that) and,
 against that chart, `transactions`: every real movement of money the club records, each
 made of two or more `entries` (an `account_id` and an `amount`, positive into that

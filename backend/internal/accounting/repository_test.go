@@ -16,9 +16,21 @@ func newRepo(t *testing.T) *accounting.Repository {
 	return accounting.NewRepository(tx)
 }
 
+func strPtr(s string) *string { return &s }
+
+// codeOf reads an Account's own Code back out as a plain string ("" for
+// nil) — Code is *string (see Account's own doc comment), but every
+// test that predates that still wants to compare/format it as one.
+func codeOf(a accounting.Account) string {
+	if a.Code == nil {
+		return ""
+	}
+	return *a.Code
+}
+
 func mustCreateAccount(t *testing.T, repo *accounting.Repository, name, code string) accounting.Account {
 	t.Helper()
-	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: name, Code: code})
+	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: name, Code: strPtr(code)})
 	if err != nil {
 		t.Fatalf("create account %s: %v", code, err)
 	}
@@ -27,11 +39,11 @@ func mustCreateAccount(t *testing.T, repo *accounting.Repository, name, code str
 
 func TestCreateAccount(t *testing.T) {
 	repo := newRepo(t)
-	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: "570"})
+	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: strPtr("570")})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
-	if a.ID == 0 || a.Name != "Caja" || a.Code != "570" || a.ParentID != nil {
+	if a.ID == 0 || a.Name != "Caja" || codeOf(a) != "570" || a.ParentID != nil {
 		t.Errorf("unexpected account: %+v", a)
 	}
 }
@@ -40,7 +52,7 @@ func TestCreateAccountWithParent(t *testing.T) {
 	repo := newRepo(t)
 	parent := mustCreateAccount(t, repo, "Tesorería", "57")
 	child, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{
-		Name: "Caja", Code: "570", ParentID: &parent.ID,
+		Name: "Caja", Code: strPtr("570"), ParentID: &parent.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -53,7 +65,7 @@ func TestCreateAccountWithParent(t *testing.T) {
 func TestCreateAccountRejectsUnknownParent(t *testing.T) {
 	repo := newRepo(t)
 	bogus := int64(999999)
-	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: "570", ParentID: &bogus})
+	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: strPtr("570"), ParentID: &bogus})
 	if !errors.Is(err, accounting.ErrUnknownAccount) {
 		t.Errorf("expected ErrUnknownAccount, got %v", err)
 	}
@@ -62,9 +74,52 @@ func TestCreateAccountRejectsUnknownParent(t *testing.T) {
 func TestCreateAccountRejectsDuplicateCode(t *testing.T) {
 	repo := newRepo(t)
 	mustCreateAccount(t, repo, "Caja", "570")
-	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Otra caja", Code: "570"})
+	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Otra caja", Code: strPtr("570")})
 	if !errors.Is(err, accounting.ErrDuplicateCode) {
 		t.Errorf("expected ErrDuplicateCode, got %v", err)
+	}
+}
+
+// TestCreateAccountWithoutCode and TestCreateAccountAllowsSeveralWithNoCode
+// cover code actually being optional (migration
+// 00013_accounts_code_optional.sql): a nil Code is stored as a real SQL
+// NULL, and — unlike two accounts sharing the same non-empty code,
+// which accounts.code's own UNIQUE constraint rejects — any number of
+// accounts can each have no code at all, since Postgres treats every
+// NULL as distinct from every other for uniqueness purposes.
+func TestCreateAccountWithoutCode(t *testing.T) {
+	repo := newRepo(t)
+	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Grupo de reporting"})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	if a.Code != nil {
+		t.Errorf("expected a nil code, got %q", *a.Code)
+	}
+}
+
+func TestCreateAccountAllowsSeveralWithNoCode(t *testing.T) {
+	repo := newRepo(t)
+	if _, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Primero"}); err != nil {
+		t.Fatalf("create 1st account with no code: %v", err)
+	}
+	if _, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Segundo"}); err != nil {
+		t.Errorf("expected a 2nd account with no code to succeed too, got %v", err)
+	}
+}
+
+// TestUpdateAccountCanClearCode covers the other direction: an account
+// created with a code can have it cleared back to nil through an
+// ordinary update, the same as it could never have had one at all.
+func TestUpdateAccountCanClearCode(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Caja", "570")
+	updated, err := repo.UpdateAccount(context.Background(), a.ID, accounting.UpdateAccountInput{Name: a.Name})
+	if err != nil {
+		t.Fatalf("UpdateAccount: %v", err)
+	}
+	if updated.Code != nil {
+		t.Errorf("expected the code to be cleared, got %q", *updated.Code)
 	}
 }
 
@@ -90,7 +145,7 @@ func TestListAccountsOrderedByCreationPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	if len(list) != 2 || list[0].Code != "700" || list[1].Code != "570" {
+	if len(list) != 2 || codeOf(list[0]) != "700" || codeOf(list[1]) != "570" {
 		t.Errorf("expected [700, 570] (creation order), got %+v", list)
 	}
 	// Neither has any entries yet: still a real, computed (non-nil)
@@ -98,10 +153,10 @@ func TestListAccountsOrderedByCreationPosition(t *testing.T) {
 	// (see GetAccount/CreateAccount/UpdateAccount, which leave it nil).
 	for _, a := range list {
 		if a.Balance == nil || *a.Balance != 0 {
-			t.Errorf("expected a zero (but non-nil) balance for %s, got %+v", a.Code, a.Balance)
+			t.Errorf("expected a zero (but non-nil) balance for %s, got %+v", codeOf(a), a.Balance)
 		}
 		if a.LastTransactionAt != nil {
-			t.Errorf("expected no last_transaction_at for %s, got %v", a.Code, a.LastTransactionAt)
+			t.Errorf("expected no last_transaction_at for %s, got %v", codeOf(a), a.LastTransactionAt)
 		}
 	}
 }
@@ -135,7 +190,7 @@ func TestListAccountsComputesBalanceAndLastTransactionAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	byCode := map[string]accounting.Account{list[0].Code: list[0], list[1].Code: list[1]}
+	byCode := map[string]accounting.Account{codeOf(list[0]): list[0], codeOf(list[1]): list[1]}
 
 	cajaListed := byCode["570"]
 	if cajaListed.Balance == nil || *cajaListed.Balance != 15 {
@@ -173,7 +228,7 @@ func TestGetCreateUpdateAccountLeaveBalanceNil(t *testing.T) {
 		t.Errorf("expected GetAccount to leave both nil, got %+v", fetched)
 	}
 
-	updated, err := repo.UpdateAccount(context.Background(), caja.ID, accounting.UpdateAccountInput{Name: "Caja chica", Code: "571"})
+	updated, err := repo.UpdateAccount(context.Background(), caja.ID, accounting.UpdateAccountInput{Name: "Caja chica", Code: strPtr("571")})
 	if err != nil {
 		t.Fatalf("UpdateAccount: %v", err)
 	}
@@ -184,7 +239,7 @@ func TestGetCreateUpdateAccountLeaveBalanceNil(t *testing.T) {
 
 func mustCreateChildAccount(t *testing.T, repo *accounting.Repository, name, code string, parentID int64) accounting.Account {
 	t.Helper()
-	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: name, Code: code, ParentID: &parentID})
+	a, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: name, Code: strPtr(code), ParentID: &parentID})
 	if err != nil {
 		t.Fatalf("create child account %s: %v", code, err)
 	}
@@ -194,7 +249,7 @@ func mustCreateChildAccount(t *testing.T, repo *accounting.Repository, name, cod
 func codesOf(list []accounting.Account) []string {
 	codes := make([]string, len(list))
 	for i, a := range list {
-		codes[i] = a.Code
+		codes[i] = codeOf(a)
 	}
 	return codes
 }
@@ -216,7 +271,7 @@ func TestListAccountsChildrenBeforeNextSibling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	want := []string{tesoreria.Code, caja.Code, cajaFuerte.Code, banco.Code, ingresos.Code}
+	want := []string{codeOf(tesoreria), codeOf(caja), codeOf(cajaFuerte), codeOf(banco), codeOf(ingresos)}
 	if got := codesOf(list); !reflect.DeepEqual(got, want) {
 		t.Errorf("expected %v, got %v", want, got)
 	}
@@ -235,7 +290,7 @@ func TestMoveAccountUpSwapsWithPrecedingSibling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	want := []string{a.Code, c.Code, b.Code}
+	want := []string{codeOf(a), codeOf(c), codeOf(b)}
 	if got := codesOf(list); !reflect.DeepEqual(got, want) {
 		t.Errorf("expected %v after moving Tercera up, got %v", want, got)
 	}
@@ -254,7 +309,7 @@ func TestMoveAccountDownSwapsWithFollowingSibling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	want := []string{b.Code, a.Code, c.Code}
+	want := []string{codeOf(b), codeOf(a), codeOf(c)}
 	if got := codesOf(list); !reflect.DeepEqual(got, want) {
 		t.Errorf("expected %v after moving Primera down, got %v", want, got)
 	}
@@ -272,7 +327,7 @@ func TestMoveAccountUpAtStartIsANoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	want := []string{a.Code, b.Code}
+	want := []string{codeOf(a), codeOf(b)}
 	if got := codesOf(list); !reflect.DeepEqual(got, want) {
 		t.Errorf("expected no change moving the first account up, got %v", got)
 	}
@@ -294,7 +349,7 @@ func TestMoveAccountOnlySwapsWithinSameParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAccounts: %v", err)
 	}
-	want := []string{tesoreria.Code, caja.Code, ingresos.Code}
+	want := []string{codeOf(tesoreria), codeOf(caja), codeOf(ingresos)}
 	if got := codesOf(list); !reflect.DeepEqual(got, want) {
 		t.Errorf("expected %v (unchanged), got %v", want, got)
 	}
@@ -345,18 +400,18 @@ func TestUpdateAccount(t *testing.T) {
 	repo := newRepo(t)
 	a := mustCreateAccount(t, repo, "Caja", "570")
 
-	updated, err := repo.UpdateAccount(context.Background(), a.ID, accounting.UpdateAccountInput{Name: "Caja chica", Code: "571"})
+	updated, err := repo.UpdateAccount(context.Background(), a.ID, accounting.UpdateAccountInput{Name: "Caja chica", Code: strPtr("571")})
 	if err != nil {
 		t.Fatalf("UpdateAccount: %v", err)
 	}
-	if updated.Name != "Caja chica" || updated.Code != "571" {
+	if updated.Name != "Caja chica" || codeOf(updated) != "571" {
 		t.Errorf("unexpected account after update: %+v", updated)
 	}
 }
 
 func TestUpdateAccountNotFound(t *testing.T) {
 	repo := newRepo(t)
-	_, err := repo.UpdateAccount(context.Background(), 999999, accounting.UpdateAccountInput{Name: "x", Code: "y"})
+	_, err := repo.UpdateAccount(context.Background(), 999999, accounting.UpdateAccountInput{Name: "x", Code: strPtr("y")})
 	if !errors.Is(err, accounting.ErrAccountNotFound) {
 		t.Errorf("expected ErrAccountNotFound, got %v", err)
 	}
@@ -388,7 +443,7 @@ func TestDeleteAccountNotFound(t *testing.T) {
 func TestDeleteAccountRejectedWhenUsedAsParent(t *testing.T) {
 	repo := newRepo(t)
 	parent := mustCreateAccount(t, repo, "Tesorería", "57")
-	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: "570", ParentID: &parent.ID})
+	_, err := repo.CreateAccount(context.Background(), accounting.CreateAccountInput{Name: "Caja", Code: strPtr("570"), ParentID: &parent.ID})
 	if err != nil {
 		t.Fatalf("create child account: %v", err)
 	}

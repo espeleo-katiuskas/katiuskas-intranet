@@ -108,14 +108,41 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 
 func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 	var body struct {
-		Name     string `json:"name"`
-		Code     string `json:"code"`
-		ParentID *int64 `json:"parent_id"`
+		Name     string  `json:"name"`
+		Code     *string `json:"code"`
+		ParentID *int64  `json:"parent_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return CreateAccountInput{}, err
 	}
-	return CreateAccountInput{Name: body.Name, Code: body.Code, ParentID: body.ParentID}, nil
+	return CreateAccountInput{Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID}, nil
+}
+
+// normalizeCode trims whitespace and treats an empty result the same
+// as an absent code (nil) — code is optional (see Account's own doc
+// comment), so "" and omitted both mean "no code" rather than ""
+// itself becoming a real, storable value: since accounts.code is still
+// UNIQUE, a second account also sent as "" would otherwise collide
+// with the first instead of the two simply both having no code.
+func normalizeCode(code *string) *string {
+	if code == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*code)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+// accountLabel names an account for a mutation notification: its name,
+// plus its code in parentheses when it has one — some accounts
+// deliberately don't (see Account's own doc comment).
+func accountLabel(a Account) string {
+	if a.Code != nil {
+		return fmt.Sprintf("%s (%s)", a.Name, *a.Code)
+	}
+	return a.Name
 }
 
 func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
@@ -124,16 +151,16 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Code) == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name and code are both required")
+	if strings.TrimSpace(in.Name) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name is required")
 		return
 	}
 	a, err := h.service.CreateAccount(r.Context(), in)
 	if writeAccountError(w, err) {
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la cuenta «%s» (%s).",
-		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la cuenta «%s».",
+		h.actorLogin(r.Context()), accountLabel(a)))
 	httpapi.WriteJSON(w, http.StatusCreated, a)
 }
 
@@ -148,8 +175,8 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Code) == "" {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name and code are both required")
+	if strings.TrimSpace(in.Name) == "" {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "name is required")
 		return
 	}
 
@@ -167,7 +194,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 	if beforeErr == nil {
 		if diff := httpapi.DiffFields(before, a, accountAuditableFields...); len(diff) > 0 {
 			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la cuenta «%s»:\n%s",
-				h.actorLogin(r.Context()), a.Code, strings.Join(diff, "\n")))
+				h.actorLogin(r.Context()), accountLabel(a), strings.Join(diff, "\n")))
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
@@ -191,8 +218,8 @@ func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.DeleteAccount(r.Context(), id); writeAccountError(w, err) {
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la cuenta «%s» (%s).",
-		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la cuenta «%s».",
+		h.actorLogin(r.Context()), accountLabel(a)))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -225,8 +252,8 @@ func (h *Handler) moveAccount(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list accounts")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha reordenado la cuenta «%s» (%s).",
-		h.actorLogin(r.Context()), a.Name, a.Code))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha reordenado la cuenta «%s».",
+		h.actorLogin(r.Context()), accountLabel(a)))
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 

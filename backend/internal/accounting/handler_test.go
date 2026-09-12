@@ -190,16 +190,53 @@ func TestCreateAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	}
 }
 
-func TestCreateAccountRejectsMissingFields(t *testing.T) {
+func TestCreateAccountRejectsMissingName(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]string{"name": "Caja"})
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]string{"code": "570"})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 missing_fields, got %d", rec.Code)
 	}
 	if code := errorCode(t, rec); code != "missing_fields" {
 		t.Errorf("expected missing_fields, got %q", code)
+	}
+}
+
+// TestCreateAccountAllowsMissingCode and TestCreateAccountAllowsTwoWithNoCode
+// cover code actually being optional: omitting it outright succeeds,
+// and — since a blank code is normalized to no code at all rather than
+// becoming a real, storable "" value (see Handler.normalizeCode) — so
+// does sending one that's blank, even for a second account that would
+// otherwise collide with the first under accounts.code's own UNIQUE
+// constraint.
+func TestCreateAccountAllowsMissingCode(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]string{"name": "Caja"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 (code is optional), got %d: %s", rec.Code, rec.Body.String())
+	}
+	var a accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if a.Code != nil {
+		t.Errorf("expected a nil code, got %q", *a.Code)
+	}
+}
+
+func TestCreateAccountAllowsTwoWithNoCode(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]string{"name": "Caja"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create 1st account with no code: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]string{"name": "Banco", "code": "   "})
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected a 2nd account with a blank code to succeed too, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -244,7 +281,7 @@ func TestUpdateAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if updated.Name != "Caja chica" || updated.Code != "571" {
+	if updated.Name != "Caja chica" || updated.Code == nil || *updated.Code != "571" {
 		t.Errorf("unexpected account after update: %+v", updated)
 	}
 }
@@ -288,7 +325,7 @@ func TestMoveAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list) != 2 || list[0].Code != "2" || list[1].Code != "1" {
+	if len(list) != 2 || codeOf(list[0]) != "2" || codeOf(list[1]) != "1" {
 		t.Errorf("expected [2, 1] after moving Segunda up, got %+v", list)
 	}
 }

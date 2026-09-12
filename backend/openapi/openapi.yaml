@@ -1857,10 +1857,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, code]
+              required: [name]
               properties:
                 name: { type: string }
-                code: { type: string, description: "Unique across every account." }
+                code:
+                  type: string
+                  nullable: true
+                  description: >
+                    Optional — unique across every account when given, but
+                    not every account needs one (a purely organizational
+                    grouping node might never get one). Omitted, null, or
+                    blank all mean the same thing: no code.
                 parent_id: { type: integer, nullable: true }
       responses:
         "201":
@@ -1869,7 +1876,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "400":
-          description: missing_fields, or unknown_parent_account (parent_id names no existing account)
+          description: missing_fields (name), or unknown_parent_account (parent_id names no existing account)
         "403": { description: Requires admin or the money role. }
         "409": { description: duplicate_code — another account already has this code. }
 
@@ -1888,7 +1895,11 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Correct an account's name, code, or parent
-      description: Requires admin or the money role (see POST /accounts). name/code/parent_id always replace the current values.
+      description: >
+        Requires admin or the money role (see POST /accounts).
+        name/code/parent_id always replace the current values — omitting,
+        nulling, or blanking code clears it, the same as an account that
+        never had one.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1898,10 +1909,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, code]
+              required: [name]
               properties:
                 name: { type: string }
-                code: { type: string }
+                code: { type: string, nullable: true }
                 parent_id: { type: integer, nullable: true }
       responses:
         "200":
@@ -1909,7 +1920,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
-        "400": { description: missing_fields, or unknown_parent_account. }
+        "400": { description: missing_fields (name), or unknown_parent_account. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_code, or circular_parent (parent_id is this account itself, or one of its own descendants). }
@@ -2798,7 +2809,9 @@ components:
       type: object
       description: >
         One node in the chart of accounts. code is unique across every
-        account; parent_id nests it under a broader one (null for a
+        account that has one, but not every account does — a purely
+        organizational grouping node might never get one, unlike a real
+        ledger account; parent_id nests it under a broader one (null for a
         top-level account) — the frontend builds any tree view it wants
         client-side from this. balance/last_transaction_at are only
         ever present from GET /accounts (never on GET/POST/PATCH
@@ -2808,7 +2821,7 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        code: { type: string }
+        code: { type: string, nullable: true }
         parent_id: { type: integer, nullable: true }
         balance:
           type: number

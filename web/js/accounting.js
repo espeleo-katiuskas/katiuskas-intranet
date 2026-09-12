@@ -80,7 +80,8 @@ function parentSelectOptions(selectedParentId, excludeId) {
     .filter(({ account }) => !excluded.has(account.id))
     .map(({ account, depth }) => {
       const selected = account.id === selectedParentId ? 'selected' : '';
-      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)} (${escapeHtml(account.code)})</option>`;
+      const codeSuffix = account.code ? ` (${escapeHtml(account.code)})` : '';
+      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)}${codeSuffix}</option>`;
     })
     .join('');
   const noneSelected = selectedParentId == null ? 'selected' : '';
@@ -96,8 +97,8 @@ function renderAccountEditPanel(account) {
           <input type="text" data-account-field="name" value="${escapeHtml(account.name)}">
         </div>
         <div class="field">
-          <label>Código</label>
-          <input type="text" data-account-field="code" value="${escapeHtml(account.code)}">
+          <label>Código <span class="optional">(opcional)</span></label>
+          <input type="text" data-account-field="code" value="${escapeHtml(account.code ?? '')}">
         </div>
         <div class="field">
           <label>Cuenta superior <span class="optional">(opcional)</span></label>
@@ -113,7 +114,7 @@ function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr>
       <td style="padding-left: ${1.25 * depth + 0.75}rem">${escapeHtml(account.name)}</td>
-      <td>${escapeHtml(account.code)}</td>
+      <td>${account.code ? escapeHtml(account.code) : '—'}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
       <td>
@@ -169,7 +170,10 @@ async function saveAccount(button) {
   const parentValue = panel.querySelector('[data-account-field="parent_id"]').value;
   const body = {
     name: panel.querySelector('[data-account-field="name"]').value.trim(),
-    code: panel.querySelector('[data-account-field="code"]').value.trim(),
+    // Optional — a blank input clears an existing code, same as an
+    // account that never had one (Handler.normalizeCode does the same
+    // normalization server-side too, so this isn't the only guard).
+    code: panel.querySelector('[data-account-field="code"]').value.trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
   };
 
@@ -228,7 +232,7 @@ newAccountForm.addEventListener('submit', async (event) => {
   const parentValue = formData.get('parent_id');
   const body = {
     name: formData.get('name').toString().trim(),
-    code: formData.get('code').toString().trim(),
+    code: formData.get('code').toString().trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
   };
 
