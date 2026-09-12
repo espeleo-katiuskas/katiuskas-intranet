@@ -175,6 +175,53 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	return list, rows.Err()
 }
 
+// ListAccountEntries returns every entry ever posted against this one
+// account (GET /accounts/{id}/transactions), each carrying its own
+// transaction's date/description and this account's own running
+// balance once that entry is applied. Queried in occurred_at (then id)
+// order specifically so BalanceAfter can be accumulated correctly in a
+// single pass — computed oldest first regardless of how the final
+// result is ordered, since a running balance only ever makes sense
+// walked forward through time — then the whole slice is reversed once
+// at the end so callers still see the newest entry first, the same
+// convention ListTransactions's own ORDER BY already uses. Doesn't
+// itself check the account exists (see Handler.listAccountEntries,
+// which calls GetAccount first) — an unknown id here would just come
+// back an empty, not-an-error list, indistinguishable from a real
+// account with no entries yet.
+func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64) ([]AccountEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT t.id, t.occurred_at, t.description, te.amount
+		FROM transaction_entries te
+		JOIN transactions t ON t.id = te.transaction_id
+		WHERE te.account_id = $1
+		ORDER BY t.occurred_at, t.id
+	`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []AccountEntry{}
+	var running float64
+	for rows.Next() {
+		var e AccountEntry
+		if err := rows.Scan(&e.TransactionID, &e.OccurredAt, &e.Description, &e.Amount); err != nil {
+			return nil, err
+		}
+		running += e.Amount
+		e.BalanceAfter = running
+		list = append(list, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+	return list, nil
+}
+
 func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) (Account, error) {
 	if in.ParentID != nil {
 		cyclic, err := r.wouldCreateCycle(ctx, id, *in.ParentID)

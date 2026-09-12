@@ -660,6 +660,17 @@ with; it would instead just silently vanish from the listing, which is exactly w
 pre-existing bad data, unlike the listing's own downward walk), so that one's own
 recursion is capped at a depth no real chart of accounts would ever approach, purely so
 it can't hang even then.
+`GET /accounts/{id}/transactions` is one account's own ledger — every `AccountEntry` it
+was ever posted against (not the same shape as a bare `Entry`: each one inlines its own
+transaction's `description`/`occurred_at`, and a `balance_after` instead of just an
+`amount`), newest first same as `GET /transactions` itself.
+`Repository.ListAccountEntries` computes that running balance in a single pass, but has
+to do it oldest-first internally (a running balance only ever makes sense walked forward
+through time) and reverse the whole slice once at the end — the opposite order from how
+it reads out. Open to any baseline role, same as every other read in this package;
+`Handler.listAccountEntries` checks the account actually exists first (404, not just an
+empty list) since `ListAccountEntries` alone can't tell "no such account" apart from "a
+real account nobody's ever posted against."
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
@@ -748,23 +759,48 @@ its own near-identical copy; `activity.js`'s own memoria-resource downloads impo
 
 `/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
 /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's
-name, code, direct balance, and last movement date, with its own controls to create an
-account, correct one's name/code/parent (an inline edit panel per row, the same
+name, code, direct balance, and last movement date (each name a plain `<a href="/account?
+id=…">` into that one account's own detail page, below), with its own controls to create
+an account, correct one's name/code/parent (an inline edit panel per row, the same
 toggled-`<div class="edit-fields">` pattern `member.js` uses for a membership/board/leave
-period), and swap it up or down among its own siblings. Its own children-of-parent_id
-grouping never rebuilds the tree from scratch: `GET /accounts` already comes back as a
-pre-order, depth-first walk (see the `accounts` bullet under **Accounting** above), so
-filtering that flat list down to a single `parent_id`, in the order it already arrives in,
-*is* that group's own sibling order — one pass groups every parent_id at once
-(`childrenByParent`), and a `move`'s own response (the whole reordered list) re-renders
-directly from `applyAccountsList` rather than triggering a follow-up `GET`. Only admin and
-the optional "money" role ever see `/accounting` in the sidebar at all, or can even land on
-the page (`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than
-the API itself, which opens *reading* the chart to every baseline role the same as
-`GET /transactions` (see **Accounting** above); admin/money can already write here too, so
-nothing on the page needs a narrower check than that one gate. A future `/transactions`
-page (not built yet) will manage `Transaction`/`Entry` themselves — `accounting.js`
-intentionally stops at the chart of accounts.
+period), and swap it up or down among its own siblings. `js/accountTree.js` holds the
+`childrenByParent`/`flattenAccountTree` pair both this page and `account.js` need:
+`GET /accounts` already comes back as a pre-order, depth-first walk (see the `accounts`
+bullet under **Accounting** above), so filtering that flat list down to a single
+`parent_id`, in the order it already arrives in, *is* that group's own sibling order — one
+pass groups every `parent_id` at once, no separate tree-building pass. A `move`'s own
+response (the whole reordered list) re-renders directly from `applyAccountsList` rather
+than triggering a follow-up `GET`. Only admin and the optional "money" role ever see
+`/accounting` in the sidebar at all, or can even land on the page
+(`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than the API
+itself, which opens *reading* the chart to every baseline role the same as
+`GET /transactions`; admin/money can already write here too, so nothing on the page needs
+a narrower check than that one gate.
+
+`/account?id=…` (`account.js`) is one account's own ledger — reached only by clicking an
+account's name on `/accounting`, never linked from the sidebar itself, so it shares that
+same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
+`/accounting` for the sidebar's own highlighting, the same `/activity`→`/activities`/
+`/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
+`GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date, description,
+this account's own entry amount, and its running balance after — and a "+ Nueva
+transacción" panel deliberately narrower than the full `POST /transactions` shape: just a
+date, a description, an amount, and one other account, always producing exactly two
+entries (this account's own, as typed, and the chosen other account's exact negative) —
+correcting an existing transaction, or one with more than two entries, still means going
+straight through the API, not this page. The date input only ever collects a plain date,
+but `occurred_at` is a real timestamp — sent as that date at noon UTC (not midnight)
+specifically so `formatDate`'s own local-timezone getters can never roll it back to the
+previous day for anyone viewing from behind UTC. The "otra cuenta" picker lists every
+other account (indented the same way `accounting.js`'s own pickers are, via
+`flattenAccountTree`) — excluding only this account itself, not its ordinary
+parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
+descendants: there's no circular relationship to guard against here, any two distinct
+accounts can be the two sides of a transaction. The page's own header (name, code, current
+balance) and that picker both come from one `GET /accounts` call — that listing already
+carries every account's own balance, so there's no need for a second, single-account fetch
+just for the header (`GET /accounts/{id}` alone never populates it — see **Accounting**
+above).
 
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role

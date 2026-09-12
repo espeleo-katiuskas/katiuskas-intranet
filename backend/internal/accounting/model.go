@@ -81,6 +81,25 @@ type Entry struct {
 	Amount    float64 `json:"amount"`
 }
 
+// AccountEntry is one line of a single account's own ledger — GET
+// /accounts/{id}/transactions's own view (see
+// Repository.ListAccountEntries), not a generic cross-account listing:
+// this account's own entry from one transaction that touched it,
+// alongside that transaction's own date/description and, unlike Entry
+// itself, this account's own running BalanceAfter once that entry is
+// applied (in occurred_at order — the same "at, then id" tiebreak
+// ListTransactions already sorts by, so two transactions dated the
+// same day still resolve deterministically). Listed newest first,
+// matching every other listing in this app, even though BalanceAfter
+// is necessarily computed oldest-first internally.
+type AccountEntry struct {
+	TransactionID int64     `json:"transaction_id"`
+	OccurredAt    time.Time `json:"occurred_at"`
+	Description   string    `json:"description"`
+	Amount        float64   `json:"amount"`
+	BalanceAfter  float64   `json:"balance_after"`
+}
+
 // EntryInput is one entry to write as part of CreateTransactionInput or
 // UpdateTransactionInput.
 type EntryInput struct {

@@ -1941,6 +1941,31 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: account_in_use — still referenced by a child account or a transaction entry. }
 
+  /accounts/{id}/transactions:
+    get:
+      summary: This account's own ledger
+      description: >
+        Every entry ever posted against this one account, each carrying
+        its own transaction's date/description and this account's own
+        running balance once that entry is applied — not a generic
+        cross-account listing (see GET /transactions for that). Listed
+        newest first, same as GET /transactions itself, even though
+        balance_after is necessarily computed oldest-first internally.
+        Open to any baseline role, same as everything else read-only in
+        this package.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: This account's own entries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AccountEntry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /accounts/{id}/move:
     post:
       summary: Swap an account's display order with an adjacent sibling
@@ -2832,6 +2857,27 @@ components:
           format: date-time
           nullable: true
           description: Only present from GET /accounts — null for an account with no entries at all.
+
+    AccountEntry:
+      type: object
+      description: >
+        One entry from a specific account's own ledger — see GET
+        /accounts/{id}/transactions. Not the same shape as Entry: this
+        one carries its own transaction's date/description inline, and
+        balance_after instead of just amount, since it only ever
+        appears in the context of one already-known account.
+      properties:
+        transaction_id: { type: integer }
+        occurred_at: { type: string, format: date-time }
+        description: { type: string }
+        amount:
+          type: number
+          format: double
+          description: This account's own entry from that transaction — positive if it moved in, negative if it moved out.
+        balance_after:
+          type: number
+          format: double
+          description: This account's own running balance immediately after this entry, computed in occurred_at order.
 
     Entry:
       type: object

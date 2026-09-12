@@ -61,6 +61,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/accounts", h.authenticator.Protect(h.listAccounts))
 	mux.Handle("POST /api/v1/accounts", h.authenticator.Protect(h.createAccount, "admin", "money"))
 	mux.Handle("GET /api/v1/accounts/{id}", h.authenticator.Protect(h.getAccount))
+	mux.Handle("GET /api/v1/accounts/{id}/transactions", h.authenticator.Protect(h.listAccountEntries))
 	mux.Handle("PATCH /api/v1/accounts/{id}", h.authenticator.Protect(h.updateAccount, "admin", "money"))
 	mux.Handle("DELETE /api/v1/accounts/{id}", h.authenticator.Protect(h.deleteAccount, "admin", "money"))
 	mux.Handle("POST /api/v1/accounts/{id}/move", h.authenticator.Protect(h.moveAccount, "admin", "money"))
@@ -104,6 +105,33 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
+}
+
+// listAccountEntries is this one account's own ledger — see
+// AccountEntry's own doc comment. Checks the account actually exists
+// first (GetAccount, discarded otherwise) purely to 404 rather than
+// silently answer an empty list the same way a real, entry-less
+// account would — ListAccountEntries itself can't tell those two cases
+// apart on its own.
+func (h *Handler) listAccountEntries(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if _, err := h.service.GetAccount(r.Context(), id); errors.Is(err, ErrAccountNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
+		return
+	} else if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get account")
+		return
+	}
+	list, err := h.service.ListAccountEntries(r.Context(), id)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list account entries")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {

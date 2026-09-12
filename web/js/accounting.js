@@ -7,6 +7,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { childrenByParent, flattenAccountTree } from './accountTree.js';
 
 // This whole page is restricted to admin/money, tighter than the API
 // itself (GET /accounts is open to every baseline role — see
@@ -18,38 +19,7 @@ import { initPage } from './layout.js';
 // this one gate.
 await initPage({ requireAnyRole: ['admin', 'money'] });
 
-// Everything below is keyed off the flat, pre-order list GET /accounts
-// returns (see accounting.Repository.ListAccounts) — grouping it back
-// into parent_id -> children preserves each group's own display order
-// exactly, since a pre-order walk always visits one parent's whole
-// subtree before its next sibling: filtering the flat list down to a
-// single parent_id, in the order it already comes in, *is* that
-// parent's sibling order. No separate tree-building pass needed.
-let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order
-
-function childrenByParent(accounts) {
-  const map = new Map();
-  for (const account of accounts) {
-    const key = account.parent_id ?? 'root';
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(account);
-  }
-  return map;
-}
-
-function flattenTree(accounts) {
-  const map = childrenByParent(accounts);
-  const result = [];
-  function walk(parentKey, depth) {
-    const siblings = map.get(parentKey) ?? [];
-    siblings.forEach((account, index) => {
-      result.push({ account, depth, isFirst: index === 0, isLast: index === siblings.length - 1 });
-      walk(account.id, depth + 1);
-    });
-  }
-  walk('root', 0);
-  return result;
-}
+let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see accountTree.js
 
 // Every id descending from (not including) accountId — used to keep an
 // edit's own "cuenta superior" picker from offering the account itself
@@ -113,7 +83,7 @@ function renderAccountEditPanel(account) {
 function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr>
-      <td style="padding-left: ${1.25 * depth + 0.75}rem">${escapeHtml(account.name)}</td>
+      <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/account?id=${account.id}">${escapeHtml(account.name)}</a></td>
       <td>${account.code ? escapeHtml(account.code) : '—'}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
@@ -142,7 +112,7 @@ function renderAccountsTable() {
 // reordered list POST /accounts/{id}/move already answers with —
 // either way the same shape) without a redundant extra round trip.
 function applyAccountsList(list) {
-  flattened = flattenTree(list);
+  flattened = flattenAccountTree(list);
   renderAccountsTable();
   document.getElementById('na-parent').innerHTML = parentSelectOptions(null, null);
 }

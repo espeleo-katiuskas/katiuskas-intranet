@@ -260,6 +260,60 @@ func TestHandlerGetAccountNotFound(t *testing.T) {
 	}
 }
 
+// ---- Accounts: an account's own ledger (GET .../transactions) ----
+
+func TestListAccountEntriesOpenToAnyBaselineRole(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+
+	for _, role := range []string{"admin", "board", "member"} {
+		token := testutil.TokenFor(resolver, 1, role)
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/accounts/"+itoa(caja.ID)+"/transactions", token, nil); rec.Code != http.StatusOK {
+			t.Errorf("expected %s to list account entries, got %d", role, rec.Code)
+		}
+	}
+}
+
+func TestListAccountEntriesNotFound(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	rec := doRequest(mux, http.MethodGet, "/api/v1/accounts/999999/transactions", adminToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+// TestListAccountEntriesShape covers the actual response fields
+// through a real HTTP + JSON round trip — repository_test.go covers
+// the running-balance/ordering logic itself more thoroughly.
+func TestListAccountEntriesShape(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	cuotas := createAccount(t, mux, adminToken, "Cuotas", "700")
+
+	body := transactionBody(time.Now(), "Cuota", entry(caja.ID, 15), entry(cuotas.ID, -15))
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken, body); rec.Code != http.StatusCreated {
+		t.Fatalf("create transaction: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/accounts/"+itoa(caja.ID)+"/transactions", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var entries []accounting.AccountEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Description != "Cuota" || entries[0].Amount != 15 || entries[0].BalanceAfter != 15 {
+		t.Errorf("unexpected entry: %+v", entries[0])
+	}
+}
+
 func TestUpdateAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")

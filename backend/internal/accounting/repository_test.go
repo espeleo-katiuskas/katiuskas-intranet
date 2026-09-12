@@ -482,6 +482,80 @@ func mustCreateTransaction(t *testing.T, repo *accounting.Repository, descriptio
 	return tr
 }
 
+// TestListAccountEntriesRunningBalanceAndNewestFirst covers the whole
+// point of the endpoint: each of an account's own entries, in
+// occurred_at order, accumulating into a running BalanceAfter — but
+// listed back newest first, the same convention every other listing
+// in this app uses.
+func TestListAccountEntriesRunningBalanceAndNewestFirst(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	cuotas := mustCreateAccount(t, repo, "Cuotas", "700")
+
+	older := time.Now().Add(-48 * time.Hour)
+	middle := time.Now().Add(-24 * time.Hour)
+	newer := time.Now()
+	mustCreateTransactionAt(t, repo, "Primera", older, caja.ID, 100, cuotas.ID, -100)
+	mustCreateTransactionAt(t, repo, "Segunda", middle, caja.ID, -30, cuotas.ID, 30)
+	mustCreateTransactionAt(t, repo, "Tercera", newer, caja.ID, 10, cuotas.ID, -10)
+
+	entries, err := repo.ListAccountEntries(context.Background(), caja.ID)
+	if err != nil {
+		t.Fatalf("ListAccountEntries: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %+v", len(entries), entries)
+	}
+
+	// Newest first: Tercera, Segunda, Primera.
+	wantDescriptions := []string{"Tercera", "Segunda", "Primera"}
+	wantAmounts := []float64{10, -30, 100}
+	wantBalances := []float64{80, 70, 100} // 100, then 100-30=70, then 70+10=80 — read newest first
+	for i, e := range entries {
+		if e.Description != wantDescriptions[i] {
+			t.Errorf("entry %d: expected description %q, got %q", i, wantDescriptions[i], e.Description)
+		}
+		if e.Amount != wantAmounts[i] {
+			t.Errorf("entry %d: expected amount %v, got %v", i, wantAmounts[i], e.Amount)
+		}
+		if e.BalanceAfter != wantBalances[i] {
+			t.Errorf("entry %d: expected balance_after %v, got %v", i, wantBalances[i], e.BalanceAfter)
+		}
+	}
+}
+
+func TestListAccountEntriesEmptyForAnAccountWithNoEntries(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+
+	entries, err := repo.ListAccountEntries(context.Background(), caja.ID)
+	if err != nil {
+		t.Fatalf("ListAccountEntries: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected no entries, got %+v", entries)
+	}
+}
+
+// mustCreateTransactionAt is mustCreateTransaction with an explicit
+// occurred_at, for tests that need entries in a specific chronological
+// order rather than whatever time.Now() happens to be at each call.
+func mustCreateTransactionAt(t *testing.T, repo *accounting.Repository, description string, occurredAt time.Time, accountA int64, amountA float64, accountB int64, amountB float64) accounting.Transaction {
+	t.Helper()
+	tr, err := repo.CreateTransaction(context.Background(), accounting.CreateTransactionInput{
+		Description: description,
+		OccurredAt:  occurredAt,
+		Entries: []accounting.EntryInput{
+			{AccountID: accountA, Amount: amountA},
+			{AccountID: accountB, Amount: amountB},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create transaction %q: %v", description, err)
+	}
+	return tr
+}
+
 func TestCreateTransactionBalanced(t *testing.T) {
 	repo := newRepo(t)
 	caja := mustCreateAccount(t, repo, "Caja", "570")

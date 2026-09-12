@@ -22,6 +22,10 @@ func (s *Service) ListAccounts(ctx context.Context) ([]Account, error) {
 	return s.repo.ListAccounts(ctx)
 }
 
+func (s *Service) ListAccountEntries(ctx context.Context, accountID int64) ([]AccountEntry, error) {
+	return s.repo.ListAccountEntries(ctx, accountID)
+}
+
 func (s *Service) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) (Account, error) {
 	return s.repo.UpdateAccount(ctx, id, in)
 }

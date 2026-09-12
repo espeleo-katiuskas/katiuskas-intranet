@@ -67,12 +67,13 @@ const NAV_ITEMS = [
 // A page reached *from* a nav item, rather than being one itself,
 // still highlights that item as the active one — /activity (a single
 // activity) from /activities, /member (a single person) from
-// /members — so the active link is computed through this alias rather
-// than by matching pathname against NAV_ITEMS directly. That also
-// means no page has to say which link is "its own" by hand (the
+// /members, /account (a single account's own ledger) from
+// /accounting — so the active link is computed through this alias
+// rather than by matching pathname against NAV_ITEMS directly. That
+// also means no page has to say which link is "its own" by hand (the
 // previous, per-file class="active" was one more thing to remember
 // when adding a page).
-const ACTIVE_ALIASES = { '/activity': '/activities', '/member': '/members' };
+const ACTIVE_ALIASES = { '/activity': '/activities', '/member': '/members', '/account': '/accounting' };
 
 function renderNavLink(item, activePath) {
   const activeClass = item.href === activePath ? ' class="active"' : '';
