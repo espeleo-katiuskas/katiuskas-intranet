@@ -333,7 +333,10 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 		t.Fatalf("parse issued date: %v", err)
 	}
 	licenseTypeID := testutil.LicenseTypeID(t, tx, "B1 PLUS")
-	if _, err := licensesService.Create(ctx, licenses.CreateInput{UserID: u.ID, LicenseTypeID: licenseTypeID, IssuedDate: issuedDate}); err != nil {
+	if _, err := licensesService.Create(ctx, licenses.CreateInput{
+		UserID: u.ID, LicenseTypeID: licenseTypeID, IssuedDate: issuedDate,
+		Year: issuedDate.Year(), TransactionID: testutil.InsertTransaction(t, tx),
+	}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 

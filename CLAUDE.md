@@ -291,7 +291,41 @@ re-checking membership status the way `POST` does — that gate is for assigning
 `issued_date`, not "right now" — assigning, after the fact, a license from a period when
 someone genuinely was a socio must still work even if they've since caused baja; only a
 date that never fell inside any of their membership periods is rejected
-(`ErrNotActiveMember`, HTTP 409 `not_active_member`).
+(`ErrNotActiveMember`, HTTP 409 `not_active_member`). A license also has its own `Year`
+(migration `00014_membership_dues_and_license_payments.sql`) — the calendar year it
+actually covers, *not* always the same as `issued_date`'s own year, since a license
+requested in December often covers the *following* year — and a required
+`TransactionID` naming the transaction that recorded its payment (see Accounting below):
+required at creation (`ErrUnknownTransaction`, 400 `unknown_transaction`, if it doesn't
+name a real transaction), and never itself editable afterward — `UpdateInput` deliberately
+has no `TransactionID` field, since correcting a license's type, date, or year is a
+different action from re-litigating which payment it belongs to (the same distinction
+`accounting.UpdateAccountInput`'s missing `Position` field draws).
+
+**Membership dues** (`membership_dues`, alongside `memberships`): every year a socio
+remains a member, they owe a cuota to cover it — the first one (alongside the one-time
+matrícula) the same day they join, then once more each following year for as long as they
+stay a socio. `memberships.Due` is one row per `(user_id, year)` covered
+(`UNIQUE`, `ErrDueAlreadyRecorded` on a second one for the same year), always tied to the
+`transaction_id` that actually recorded the payment — a due with no transaction behind it
+doesn't mean anything yet, so unlike a membership period itself there's no "unpaid" row to
+represent. Deliberately keyed by `user_id`, not `membership_id`: a rejoining member's due
+for a given year isn't naturally tied to one specific membership period, and this way a
+year never needs to be reconciled against period boundaries. `POST /users/{login}/dues`
+(admin-only) is `Service.RecordDue`: if the person has *no* membership period on file at
+all yet, this is treated as their very first due, so a new membership period is also
+started for them (the request's own `start_date` becomes its `StartDate`) — the same alta
+a person otherwise gets through `POST /users/{login}/memberships`; someone with a prior,
+since-closed membership who's rejoining is left entirely to that existing, separate alta
+flow instead (`HasAnyMembership` is already true for them, so nothing extra happens).
+`GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split. There's no
+endpoint to correct or remove a due, and no validation that a due's `year` actually falls
+within an active membership period — both deliberately out of scope for now.
+`membership_dues.transaction_id` cascades on delete (`ON DELETE CASCADE`) — a due is pure
+bookkeeping metadata with no meaning apart from its transaction — while
+`licenses.transaction_id` uses the default `ON DELETE RESTRICT` instead: a license is a
+real, independently meaningful record (proof of federation) even apart from its payment,
+so the transaction that paid for one can't be deleted out from under it at all.
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host

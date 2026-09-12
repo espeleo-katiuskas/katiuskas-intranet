@@ -68,3 +68,30 @@ type UpdateLeaveInput struct {
 	EndDate   time.Time
 	Reason    *string
 }
+
+// Due is one year's membership fee ("cuota"), always tied to the
+// transaction that recorded its payment (migration 00014_membership_
+// dues_and_license_payments.sql) — a due with no transaction behind it
+// doesn't mean anything yet, so there's no "unpaid due" row to
+// represent, unlike a membership period itself. Keyed by (UserID, Year)
+// rather than by a specific membership, since a rejoining member's due
+// for a given year isn't naturally tied to one particular period, and
+// this way a year never needs to be reconciled against period
+// boundaries. See Service.RecordDue for how the very first one (the
+// matrícula + first year's cuota) also starts the membership itself.
+type Due struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"-"`
+	// UserLogin is filled in by the handler, the same as License.UserLogin
+	// — every route here is scoped under a known /users/{login}.
+	UserLogin     string    `json:"user_login"`
+	Year          int       `json:"year"`
+	TransactionID int64     `json:"transaction_id"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type CreateDueInput struct {
+	UserID        int64
+	Year          int
+	TransactionID int64
+}

@@ -516,7 +516,8 @@ th.sortable:hover {
   align-items: center;
 }
 
-.role-add-row select {
+.role-add-row select,
+.role-add-row input {
   padding: 4px 6px;
   border: 1px solid var(--line);
   border-radius: 4px;

@@ -109,14 +109,14 @@
     <h2>Altas y bajas</h2>
     <span data-roles="admin">
       <button id="start-membership" type="button" class="btn btn-secondary btn-small">Dar de alta</button>
-      <button id="add-license" type="button" class="btn btn-secondary btn-small">+ Licencia</button>
       <button id="add-board-term" type="button" class="btn btn-secondary btn-small">+ Junta directiva</button>
     </span>
   </div>
   <p class="hint" data-roles="admin">
     Una licencia federativa solo se le puede asignar a quien tenga ahora mismo un alta
-    activa, y es válida desde su fecha de obtención hasta el 31 de diciembre de ese
-    mismo año.
+    activa, y es válida durante el año que se indique al crearla — no siempre el mismo
+    año que su fecha de obtención. Las licencias nuevas (y las cuotas anuales) se
+    registran desde la transacción que las paga, en Contabilidad — no desde aquí.
   </p>
   <dialog id="add-membership-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
@@ -129,28 +129,6 @@
     </div>
     <div class="panel-actions">
       <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
-  <dialog id="add-license-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nueva licencia</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="add-license-type">Tipo de licencia</label>
-        <select id="add-license-type"></select>
-      </div>
-      <div class="field" id="add-license-other-detail-field" hidden>
-        <label for="add-license-other-detail">¿Cuál?</label>
-        <input id="add-license-other-detail" type="text" placeholder="Especifica la licencia">
-      </div>
-      <div class="field">
-        <label for="add-license-issued-date">Fecha de obtención</label>
-        <input id="add-license-issued-date" type="date">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
       <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
     </div>
   </dialog>
@@ -265,6 +243,10 @@
       <div class="field">
         <label for="el-issued-date">Fecha de obtención</label>
         <input id="el-issued-date" type="date">
+      </div>
+      <div class="field">
+        <label for="el-year">Año que cubre</label>
+        <input id="el-year" type="number" step="1">
       </div>
     </div>
     <div class="panel-actions">

@@ -62,6 +62,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/memberships/{membershipID}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
 	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
 	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
+
+	// Dues follow the same self-or-admin/board read, admin-only write
+	// split as the rest of a person's data (licenses included) — see
+	// listByUser/create above.
+	mux.Handle("GET /api/v1/users/{login}/dues", h.authenticator.Protect(h.listDuesByUser))
+	mux.Handle("POST /api/v1/users/{login}/dues", h.authenticator.Protect(h.createDue, "admin"))
 }
 
 func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {
@@ -397,4 +403,75 @@ func (h *Handler) deleteLeave(w http.ResponseWriter, r *http.Request) {
 			h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02"), target.EndDate.Format("2006-01-02")))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) listDuesByUser(w http.ResponseWriter, r *http.Request) {
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	if !current.HasAnyRole("admin", "board") && current.ID != userID {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only view their own dues history")
+		return
+	}
+	list, err := h.service.ListDuesForUser(r.Context(), userID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list dues")
+		return
+	}
+	for i := range list {
+		list[i].UserLogin = login
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// createDue records a due (see Service.RecordDue) — start_date is only
+// actually used when this is the person's very first one, to start
+// their membership period alongside it; correcting or removing a due
+// isn't supported at all yet (see CLAUDE.md's Accounting section on
+// this feature's own additive-only editing story).
+func (h *Handler) createDue(w http.ResponseWriter, r *http.Request) {
+	login := r.PathValue("login")
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Year          int    `json:"year"`
+		TransactionID int64  `json:"transaction_id"`
+		StartDate     string `json:"start_date"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if body.Year == 0 || body.TransactionID == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "year and transaction_id are both required")
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", body.StartDate)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
+		return
+	}
+
+	d, err := h.service.RecordDue(r.Context(), userID, body.Year, body.TransactionID, startDate)
+	if errors.Is(err, ErrDueAlreadyRecorded) {
+		httpapi.WriteError(w, http.StatusConflict, "due_already_recorded", err.Error())
+		return
+	}
+	if errors.Is(err, ErrUnknownTransaction) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_transaction", err.Error())
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not record due")
+		return
+	}
+	d.UserLogin = login
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado la cuota de %d de %s.",
+		h.actorLogin(r.Context()), d.Year, login))
+	httpapi.WriteJSON(w, http.StatusCreated, d)
 }

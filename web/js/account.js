@@ -5,6 +5,10 @@ import {
   formatCurrency,
   showFeedback,
   showError,
+  hasAnyRole,
+  pickerLabel,
+  renderPickerOptions,
+  resolvePickerId,
 } from './api.js';
 import { initPage } from './layout.js';
 import { flattenAccountTree, accountLabel } from './accountTree.js';
@@ -14,7 +18,17 @@ import { initModal } from './modal.js';
 // gate as that page (see accounting.js's own doc comment for why this
 // is tighter than the API itself, which opens reading to every
 // baseline role).
-await initPage({ requireAnyRole: ['admin', 'money'] });
+const viewer = await initPage({ requireAnyRole: ['admin', 'money'] });
+
+// Attaching a due or a brand-new license to a transaction (see
+// setupDuesAndLicensesSection below) hits POST /users/{login}/dues and
+// POST /users/{login}/licenses, both admin-only at the API itself —
+// tighter than this whole page's own admin/money gate, so those two
+// sections only ever show for a real admin, never for someone who only
+// holds "money" (data-roles="admin" in account.html already hides the
+// markup for them; this just keeps this file from wiring up listeners
+// on elements that, for them, were never rendered in the first place).
+const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
 const accountId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!accountId) {
@@ -23,6 +37,200 @@ if (!accountId) {
 
 let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and edit alike
 let editingTransactionId = null; // which transaction #edit-transaction-dialog's fields currently belong to — set right before it opens, read back on save
+
+// userEntries/allLicenseTypes back the socio and license-type pickers in
+// both dialogs' own "cuotas anuales"/"licencias nuevas" sections — see
+// setupDuesAndLicensesSection. Loaded once, only for a real admin
+// (POST dues/licenses is admin-only, so there's nothing for anyone else
+// to pick here).
+let userEntries = [];
+let allLicenseTypes = [];
+let licenseTypesById = {};
+
+async function loadAdminPickerCatalogs() {
+  if (!isRealAdmin) return;
+  try {
+    const directory = await apiFetch('/users/directory');
+    userEntries = directory
+      .slice()
+      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+      .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
+    for (const id of ['nt-due-user-options', 'et-due-user-options', 'nt-license-user-options', 'et-license-user-options']) {
+      document.getElementById(id).innerHTML = renderPickerOptions(userEntries);
+    }
+  } catch {
+    showError('No se pudo cargar la lista de socios.');
+  }
+  try {
+    allLicenseTypes = await apiFetch('/license-types');
+    licenseTypesById = Object.fromEntries(allLicenseTypes.map((t) => [t.id, t]));
+    const options = allLicenseTypes.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    document.getElementById('nt-license-type').innerHTML = options;
+    document.getElementById('et-license-type').innerHTML = options;
+  } catch {
+    showError('No se pudo cargar el catálogo de licencias.');
+  }
+}
+
+// Backs both dialogs' "cuotas anuales"/"licencias nuevas" sections
+// (prefix "nt" for the create dialog, "et" for the edit one — see
+// account.html). Nothing added here is sent anywhere until the
+// transaction itself is actually saved: "+ Añadir cuota"/"+ Añadir
+// licencia" only appends to a pending, client-side-only list (rendered
+// as removable chips); submitPending walks that list afterward, one
+// sequential POST per item, once the transaction's own id and date are
+// known. A single transaction can cover several socios' cuotas, or a
+// mix of cuotas and brand-new licenses, all at once — see CLAUDE.md's
+// own Accounting section. Editing an existing transaction can only ever
+// add to what it already paid for: there's no way to remove, from this
+// dialog, a due/license some earlier save already linked to it.
+function setupDuesAndLicensesSection(prefix) {
+  let pendingDues = [];
+  let pendingLicenses = [];
+
+  function renderDueChips() {
+    document.getElementById(`${prefix}-dues-chips`).innerHTML = pendingDues
+      .map((due, index) => `<span class="badge-removable">${escapeHtml(due.label)}<button type="button" data-remove-due="${index}" title="Quitar">×</button></span>`)
+      .join('');
+  }
+
+  function renderLicenseChips() {
+    document.getElementById(`${prefix}-licenses-chips`).innerHTML = pendingLicenses
+      .map((license, index) => `<span class="badge-removable">${escapeHtml(license.label)}<button type="button" data-remove-license="${index}" title="Quitar">×</button></span>`)
+      .join('');
+  }
+
+  document.getElementById(`${prefix}-dues-chips`).addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-remove-due]');
+    if (!button) return;
+    pendingDues.splice(Number(button.dataset.removeDue), 1);
+    renderDueChips();
+  });
+
+  document.getElementById(`${prefix}-licenses-chips`).addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-remove-license]');
+    if (!button) return;
+    pendingLicenses.splice(Number(button.dataset.removeLicense), 1);
+    renderLicenseChips();
+  });
+
+  document.getElementById(`${prefix}-license-type`).addEventListener('change', (event) => {
+    const chosen = licenseTypesById[Number(event.target.value)];
+    document.getElementById(`${prefix}-license-other-detail`).hidden = !chosen?.is_other;
+  });
+
+  // Both "add" rows sit inside the transaction's own <form> (so their
+  // picker inputs can share its field-grid layout) — without this,
+  // pressing Enter while typing in one of them would submit the whole
+  // transaction early instead of just adding the chip, since that's a
+  // plain text input's default behavior inside any <form>. Enter here
+  // triggers the row's own "+ Añadir" button instead.
+  for (const rowPrefix of [`${prefix}-add-due`, `${prefix}-add-license`]) {
+    document.getElementById(rowPrefix).closest('.role-add-row').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      document.getElementById(rowPrefix).click();
+    });
+  }
+
+  document.getElementById(`${prefix}-add-due`).addEventListener('click', () => {
+    const userInput = document.getElementById(`${prefix}-due-user`);
+    const yearInput = document.getElementById(`${prefix}-due-year`);
+    const login = resolvePickerId(userEntries, userInput.value);
+    const year = Number(yearInput.value);
+    if (!login || !year) {
+      showError('Elige un socio de la lista e indica el año, antes de añadir la cuota.');
+      return;
+    }
+    const personLabel = userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+    pendingDues.push({ login, year, label: `${personLabel} · ${year}` });
+    userInput.value = '';
+    yearInput.value = '';
+    renderDueChips();
+  });
+
+  document.getElementById(`${prefix}-add-license`).addEventListener('click', () => {
+    const userInput = document.getElementById(`${prefix}-license-user`);
+    const typeSelect = document.getElementById(`${prefix}-license-type`);
+    const otherDetailInput = document.getElementById(`${prefix}-license-other-detail`);
+    const yearInput = document.getElementById(`${prefix}-license-year`);
+    const login = resolvePickerId(userEntries, userInput.value);
+    const licenseTypeId = Number(typeSelect.value);
+    const chosen = licenseTypesById[licenseTypeId];
+    const year = Number(yearInput.value);
+    if (!login || !licenseTypeId || !year) {
+      showError('Elige un socio y un tipo de licencia de la lista, e indica el año, antes de añadir la licencia.');
+      return;
+    }
+    const otherDetail = otherDetailInput.value.trim() || null;
+    if (chosen?.is_other && !otherDetail) {
+      showError('Indica de qué licencia se trata.');
+      return;
+    }
+    const personLabel = userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+    const typeLabel = chosen?.is_other ? `${chosen.name}: ${otherDetail}` : (chosen?.name ?? '?');
+    pendingLicenses.push({ login, licenseTypeId, otherDetail: chosen?.is_other ? otherDetail : null, year, label: `${personLabel} · ${typeLabel} · ${year}` });
+    userInput.value = '';
+    typeSelect.selectedIndex = 0;
+    otherDetailInput.value = '';
+    otherDetailInput.hidden = true;
+    yearInput.value = '';
+    renderLicenseChips();
+  });
+
+  function reset() {
+    pendingDues = [];
+    pendingLicenses = [];
+    renderDueChips();
+    renderLicenseChips();
+  }
+
+  // Sends every pending due/license, tied to transactionId, once the
+  // transaction itself is safely saved — sequential, not parallel: a
+  // clearer one-item-at-a-time failure story than Promise.all's
+  // all-or-nothing rejection, for what's expected to be at most a
+  // handful of calls. Each failure is collected rather than thrown
+  // immediately, since the transaction itself already succeeded by this
+  // point — one bad chip shouldn't stop the rest from going through.
+  async function submitPending(transactionId, occurredOnDate) {
+    const errors = [];
+    for (const due of pendingDues) {
+      try {
+        await apiFetch(`/users/${due.login}/dues`, {
+          method: 'POST',
+          body: JSON.stringify({ year: due.year, transaction_id: transactionId, start_date: occurredOnDate }),
+        });
+      } catch (err) {
+        errors.push(`cuota de ${due.label}: ${err.message}`);
+      }
+    }
+    for (const license of pendingLicenses) {
+      try {
+        await apiFetch(`/users/${license.login}/licenses`, {
+          method: 'POST',
+          body: JSON.stringify({
+            license_type_id: license.licenseTypeId,
+            other_detail: license.otherDetail,
+            issued_date: occurredOnDate,
+            year: license.year,
+            transaction_id: transactionId,
+          }),
+        });
+      } catch (err) {
+        errors.push(`licencia de ${license.label}: ${err.message}`);
+      }
+    }
+    reset();
+    return errors;
+  }
+
+  renderDueChips();
+  renderLicenseChips();
+  return { reset, submitPending };
+}
+
+const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt') : null;
+const editTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('et') : null;
 
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
@@ -122,6 +330,9 @@ async function loadEntries() {
 const editTransactionDialog = document.getElementById('edit-transaction-dialog');
 const editTransactionForm = document.getElementById('edit-transaction-form');
 initModal(editTransactionDialog, editTransactionForm);
+if (editTransactionDuesLicenses) {
+  editTransactionDialog.addEventListener('close', () => editTransactionDuesLicenses.reset());
+}
 
 // The ledger listing only ever carries this account's own side of each
 // transaction (see AccountEntry's own doc comment) — editing needs the
@@ -171,7 +382,19 @@ editTransactionForm.addEventListener('submit', async (event) => {
       method: 'PATCH',
       body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)),
     });
-    showFeedback('Transacción actualizada.');
+    // editingTransactionId itself never changes on a PATCH, so any
+    // dues/licenses added here are tied to the same transaction the
+    // edit just corrected — see setupDuesAndLicensesSection's own doc
+    // comment on why this can only ever add to it, never replace what a
+    // previous save already linked.
+    const pendingErrors = editTransactionDuesLicenses
+      ? await editTransactionDuesLicenses.submitPending(editingTransactionId, dateValue)
+      : [];
+    if (pendingErrors.length) {
+      showError(`Transacción actualizada, pero no se pudo registrar: ${pendingErrors.join(' · ')}`);
+    } else {
+      showFeedback('Transacción actualizada.');
+    }
     editTransactionDialog.close();
     await loadAccount();
     await loadEntries();
@@ -210,13 +433,19 @@ document.getElementById('entries-table-body').addEventListener('click', async (e
 const newTransactionDialog = document.getElementById('new-transaction-dialog');
 const newTransactionForm = document.getElementById('new-transaction-form');
 initModal(newTransactionDialog, newTransactionForm);
+if (newTransactionDuesLicenses) {
+  newTransactionDialog.addEventListener('close', () => newTransactionDuesLicenses.reset());
+}
 
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
   newTransactionDialog.showModal();
 });
 
-// Only four fields (date, description, amount, other account) —
-// always exactly two entries: see twoEntryBody.
+// Only four fields (date, description, amount, other account) drive the
+// transaction itself — always exactly two entries: see twoEntryBody.
+// Any pending dues/licenses (admin-only, see
+// setupDuesAndLicensesSection) are sent afterward, once the new
+// transaction's own id is known.
 newTransactionForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(newTransactionForm);
@@ -228,8 +457,15 @@ newTransactionForm.addEventListener('submit', async (event) => {
   const submitButton = newTransactionForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)) });
-    showFeedback('Transacción creada.');
+    const transaction = await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)) });
+    const pendingErrors = newTransactionDuesLicenses
+      ? await newTransactionDuesLicenses.submitPending(transaction.id, dateValue)
+      : [];
+    if (pendingErrors.length) {
+      showError(`Transacción creada, pero no se pudo registrar: ${pendingErrors.join(' · ')}`);
+    } else {
+      showFeedback('Transacción creada.');
+    }
     newTransactionDialog.close();
     await loadAccount();
     await loadEntries();
@@ -242,3 +478,4 @@ newTransactionForm.addEventListener('submit', async (event) => {
 
 await loadAccount();
 await loadEntries();
+await loadAdminPickerCatalogs();

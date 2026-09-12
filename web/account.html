@@ -47,7 +47,33 @@
           <label for="nt-other-account">Otra cuenta</label>
           <select id="nt-other-account" name="other_account_id" required></select>
         </div>
+        <div class="field span-2" data-roles="admin">
+          <label>Cuotas anuales a registrar en esta transacción</label>
+          <div id="nt-dues-chips"></div>
+          <div class="role-add-row">
+            <input type="text" id="nt-due-user" list="nt-due-user-options" autocomplete="off" placeholder="Socio…">
+            <datalist id="nt-due-user-options"></datalist>
+            <input type="number" id="nt-due-year" step="1" placeholder="Año" style="width:5.5em">
+            <button type="button" class="btn btn-secondary btn-small" id="nt-add-due">+ Añadir cuota</button>
+          </div>
+        </div>
+        <div class="field span-2" data-roles="admin">
+          <label>Licencias nuevas a registrar en esta transacción</label>
+          <div id="nt-licenses-chips"></div>
+          <div class="role-add-row">
+            <input type="text" id="nt-license-user" list="nt-license-user-options" autocomplete="off" placeholder="Socio…">
+            <datalist id="nt-license-user-options"></datalist>
+            <select id="nt-license-type"></select>
+            <input type="text" id="nt-license-other-detail" placeholder="¿Cuál?" hidden>
+            <input type="number" id="nt-license-year" step="1" placeholder="Año" style="width:5.5em">
+            <button type="button" class="btn btn-secondary btn-small" id="nt-add-license">+ Añadir licencia</button>
+          </div>
+        </div>
       </div>
+      <p class="hint" data-roles="admin">
+        La fecha de la transacción se usa como fecha de obtención de cada licencia nueva,
+        y como fecha de alta para cualquier socio sin alta previa cuya cuota se registre aquí.
+      </p>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear transacción</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
@@ -75,6 +101,29 @@
         <div class="field">
           <label for="et-other-account">Otra cuenta</label>
           <select id="et-other-account" required></select>
+        </div>
+        <div class="field span-2" data-roles="admin">
+          <label>Cuotas anuales a registrar en esta transacción</label>
+          <p class="hint">Solo añade cuotas nuevas — las ya registradas contra esta transacción no aparecen aquí ni se pueden quitar desde este diálogo.</p>
+          <div id="et-dues-chips"></div>
+          <div class="role-add-row">
+            <input type="text" id="et-due-user" list="et-due-user-options" autocomplete="off" placeholder="Socio…">
+            <datalist id="et-due-user-options"></datalist>
+            <input type="number" id="et-due-year" step="1" placeholder="Año" style="width:5.5em">
+            <button type="button" class="btn btn-secondary btn-small" id="et-add-due">+ Añadir cuota</button>
+          </div>
+        </div>
+        <div class="field span-2" data-roles="admin">
+          <label>Licencias nuevas a registrar en esta transacción</label>
+          <div id="et-licenses-chips"></div>
+          <div class="role-add-row">
+            <input type="text" id="et-license-user" list="et-license-user-options" autocomplete="off" placeholder="Socio…">
+            <datalist id="et-license-user-options"></datalist>
+            <select id="et-license-type"></select>
+            <input type="text" id="et-license-other-detail" placeholder="¿Cuál?" hidden>
+            <input type="number" id="et-license-year" step="1" placeholder="Año" style="width:5.5em">
+            <button type="button" class="btn btn-secondary btn-small" id="et-add-license">+ Añadir licencia</button>
+          </div>
         </div>
       </div>
       <div class="panel-actions">

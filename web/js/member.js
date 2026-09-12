@@ -47,9 +47,9 @@ async function loadRolesCatalog() {
   }
 }
 
-// Loaded once (admin-only endpoint) so both the "+ Licencia" form and
-// each existing license's inline edit panel can build their type
-// <select> from the same catalog.
+// Loaded once (admin-only endpoint) so the edit-license-dialog's own
+// type <select> can be built from it — a new license is no longer
+// created from this page at all (see account.js), only corrected here.
 let allLicenseTypes = [];
 let licenseTypesById = {};
 
@@ -64,7 +64,6 @@ async function loadLicenseTypesCatalog() {
   try {
     allLicenseTypes = await apiFetch('/license-types');
     licenseTypesById = Object.fromEntries(allLicenseTypes.map((t) => [t.id, t]));
-    document.getElementById('add-license-type').innerHTML = licenseTypeOptions();
   } catch {
     allLicenseTypes = [];
     licenseTypesById = {};
@@ -300,6 +299,7 @@ function openEditLicenseDialog(l) {
   document.getElementById('el-other-detail-field').hidden = !chosen?.is_other;
   document.getElementById('el-other-detail').value = l.other_detail ?? '';
   document.getElementById('el-issued-date').value = l.issued_date.slice(0, 10);
+  document.getElementById('el-year').value = l.year;
   editLicenseDialog.showModal();
 }
 
@@ -555,6 +555,7 @@ document.getElementById('save-edit-license').addEventListener('click', async () 
     license_type_id: licenseTypeId,
     other_detail: chosen?.is_other ? otherDetail : null,
     issued_date: document.getElementById('el-issued-date').value,
+    year: Number(document.getElementById('el-year').value),
   };
   const button = document.getElementById('save-edit-license');
   button.disabled = true;
@@ -742,72 +743,14 @@ async function loadMovements() {
   }
 }
 
-// A federative license shows up as just another event on the same
-// altas-y-bajas timeline (see buildTimelineEvents) rather than in a
-// section of its own. Both this and the board-term block below have
-// data-roles="admin" on their buttons/panels — POST licenses/
-// board-members is admin-only now, so board never has these elements.
+// Board-term creation shows up as just another event on the same
+// altas-y-bajas timeline (see buildTimelineEvents). It has
+// data-roles="admin" on its own button/panel — POST board-members is
+// admin-only now, so board never has these elements. A federative
+// license's own creation isn't here at all: it now always happens from
+// the transaction that pays for it (see account.js), never from this
+// page directly.
 if (isRealAdmin) {
-  const addLicenseDialog = document.getElementById('add-license-dialog');
-  initModal(addLicenseDialog);
-  // No <form> here (see the add-membership-dialog comment above for why).
-  addLicenseDialog.addEventListener('close', () => {
-    document.getElementById('add-license-type').selectedIndex = 0;
-    document.getElementById('add-license-other-detail').value = '';
-    document.getElementById('add-license-other-detail-field').hidden = true;
-    document.getElementById('add-license-issued-date').value = '';
-  });
-
-  document.getElementById('add-license').addEventListener('click', () => {
-    const dateInput = document.getElementById('add-license-issued-date');
-    if (!dateInput.value) {
-      dateInput.value = new Date().toISOString().slice(0, 10);
-    }
-    addLicenseDialog.showModal();
-  });
-
-  document.getElementById('add-license-type').addEventListener('change', (event) => {
-    const chosen = licenseTypesById[Number(event.target.value)];
-    document.getElementById('add-license-other-detail-field').hidden = !chosen?.is_other;
-  });
-
-  document.getElementById('save-add-license').addEventListener('click', async () => {
-    const typeSelect = document.getElementById('add-license-type');
-    const otherDetailInput = document.getElementById('add-license-other-detail');
-    const dateInput = document.getElementById('add-license-issued-date');
-    const licenseTypeId = Number(typeSelect.value);
-    const chosen = licenseTypesById[licenseTypeId];
-    if (!licenseTypeId || !dateInput.value) {
-      showError('Indica el tipo de licencia y la fecha de obtención.');
-      return;
-    }
-    const otherDetail = otherDetailInput.value.trim() || null;
-    if (chosen?.is_other && !otherDetail) {
-      showError('Indica de qué licencia se trata.');
-      return;
-    }
-
-    const button = document.getElementById('save-add-license');
-    button.disabled = true;
-    try {
-      await apiFetch(`/users/${memberLogin}/licenses`, {
-        method: 'POST',
-        body: JSON.stringify({
-          license_type_id: licenseTypeId,
-          other_detail: chosen?.is_other ? otherDetail : null,
-          issued_date: dateInput.value,
-        }),
-      });
-      showFeedback('Licencia registrada.');
-      addLicenseDialog.close();
-      await loadTimeline();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      button.disabled = false;
-    }
-  });
-
   // A board term is also just another event on the same timeline, and
   // holding one is what the automatic "board" role is computed from
   // (see docs/architecture.md) — there's no separate way to grant it.

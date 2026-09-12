@@ -152,7 +152,7 @@ func TestHandlerCreateRequiresAdmin(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
-	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"}
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)}
 	if rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from assigning a license, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -172,7 +172,7 @@ func TestHandlerCreateSucceedsForAnActiveMember(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"}
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)}
 	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -207,7 +207,7 @@ func TestHandlerCreateRejectsAnIssuedDateOutsideAnyMembership(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"}
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)}
 	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409 not_active_member, got %d: %s", rec.Code, rec.Body.String())
@@ -224,7 +224,7 @@ func TestHandlerCreateOtraRequiresOtherDetail(t *testing.T) {
 	otraID := testutil.LicenseTypeID(t, tx, "Otra")
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	body := map[string]any{"license_type_id": otraID, "issued_date": "2026-01-01"}
+	body := map[string]any{"license_type_id": otraID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)}
 	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_other_detail, got %d: %s", rec.Code, rec.Body.String())
@@ -245,7 +245,7 @@ func TestHandlerCreateRejectsOtherDetailForANonOtraType(t *testing.T) {
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	detail := "unexpected"
-	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "other_detail": detail}
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "other_detail": detail, "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)}
 	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_other_detail, got %d: %s", rec.Code, rec.Body.String())
@@ -262,7 +262,7 @@ func TestHandlerUpdateRequiresAdmin(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -271,7 +271,7 @@ func TestHandlerUpdateRequiresAdmin(t *testing.T) {
 	boardToken := testutil.TokenFor(resolver, 2, "board")
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
 	rec := doRequest(mux, http.MethodPatch, path, boardToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a license, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -283,7 +283,7 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	rec := doRequest(mux, http.MethodPatch, "/api/v1/licenses/999999999", adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -306,7 +306,7 @@ func TestHandlerUpdateDoesNotRecheckMembershipStatus(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -317,7 +317,7 @@ func TestHandlerUpdateDoesNotRecheckMembershipStatus(t *testing.T) {
 	// but Update must accept it.
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
 	rec := doRequest(mux, http.MethodPatch, path, adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "1999-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "1999-01-01", "year": 1999})
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200 despite the issued_date falling outside any membership period, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -333,7 +333,7 @@ func TestHandlerDeleteRequiresAdmin(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -375,7 +375,7 @@ func TestHandlerListByUserSelfVersusOthers(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 
 	path := fmt.Sprintf("/api/v1/users/%s/licenses", target.Login)
 
@@ -407,7 +407,7 @@ func TestHandlerCreateNotifiesTelegramWithActorAndTypeAndTarget(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -435,7 +435,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -445,7 +445,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
 	rec := doRequest(mux, http.MethodPatch, path, adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-06-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-06-01", "year": 2026})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -470,7 +470,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -480,7 +480,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
 	rec := doRequest(mux, http.MethodPatch, path, adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -503,7 +503,7 @@ func TestHandlerDeleteNotifiesTelegramWithActorAndTarget(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
 	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken,
-		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01"})
+		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
 	var created licenses.License
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode: %v", err)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
@@ -15,7 +16,15 @@ var (
 	ErrTypeNotFound = errors.New("license type not found")
 	// ErrNotFound means the given license id doesn't exist.
 	ErrNotFound = errors.New("license not found")
+	// ErrUnknownTransaction means the given transaction_id doesn't name
+	// an existing transaction — every license has to be tied to the
+	// payment that recorded it (migration
+	// 00014_membership_dues_and_license_payments.sql), so unlike
+	// OtherDetail/IssuedDate this can't just be left off.
+	ErrUnknownTransaction = errors.New("transaction_id does not name an existing transaction")
 )
+
+const foreignKeyViolationCode = "23503"
 
 type Repository struct {
 	pool db.PGX
@@ -25,10 +34,12 @@ func NewRepository(pool db.PGX) *Repository {
 	return &Repository{pool: pool}
 }
 
-// validUntil is December 31 of the year issuedDate falls in — a license
-// is annual, valid through the end of the calendar year it was issued.
-func validUntil(issuedDate time.Time) time.Time {
-	return time.Date(issuedDate.Year(), time.December, 31, 0, 0, 0, 0, time.UTC)
+// validUntil is December 31 of the license's own Year — a license is
+// annual, valid through the end of whichever calendar year it actually
+// covers (not necessarily the year it was issued in — see the package
+// doc comment).
+func validUntil(year int) time.Time {
+	return time.Date(year, time.December, 31, 0, 0, 0, 0, time.UTC)
 }
 
 func displayType(name string, otherDetail *string) string {
@@ -71,12 +82,16 @@ func (r *Repository) GetTypeByID(ctx context.Context, id int64) (LicenseType, er
 func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error) {
 	var l License
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO licenses (user_id, license_type_id, other_detail, issued_date)
-		VALUES ($1,$2,$3,$4)
-		RETURNING id, user_id, license_type_id, other_detail, issued_date, created_at
-	`, in.UserID, in.LicenseTypeID, in.OtherDetail, in.IssuedDate,
-	).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt)
+		INSERT INTO licenses (user_id, license_type_id, other_detail, issued_date, year, transaction_id)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		RETURNING id, user_id, license_type_id, other_detail, issued_date, year, transaction_id, created_at
+	`, in.UserID, in.LicenseTypeID, in.OtherDetail, in.IssuedDate, in.Year, in.TransactionID,
+	).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+			return l, ErrUnknownTransaction
+		}
 		return l, err
 	}
 	var name string
@@ -84,18 +99,18 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error
 		return l, err
 	}
 	l.Type = displayType(name, l.OtherDetail)
-	l.ValidUntil = validUntil(l.IssuedDate)
+	l.ValidUntil = validUntil(l.Year)
 	return l, nil
 }
 
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (License, error) {
 	var l License
 	err := r.pool.QueryRow(ctx, `
-		UPDATE licenses SET license_type_id=$1, other_detail=$2, issued_date=$3
-		WHERE id=$4
-		RETURNING id, user_id, license_type_id, other_detail, issued_date, created_at
-	`, in.LicenseTypeID, in.OtherDetail, in.IssuedDate, id,
-	).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt)
+		UPDATE licenses SET license_type_id=$1, other_detail=$2, issued_date=$3, year=$4
+		WHERE id=$5
+		RETURNING id, user_id, license_type_id, other_detail, issued_date, year, transaction_id, created_at
+	`, in.LicenseTypeID, in.OtherDetail, in.IssuedDate, in.Year, id,
+	).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return l, ErrNotFound
 	}
@@ -107,7 +122,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Lice
 		return l, err
 	}
 	l.Type = displayType(name, l.OtherDetail)
-	l.ValidUntil = validUntil(l.IssuedDate)
+	l.ValidUntil = validUntil(l.Year)
 	return l, nil
 }
 
@@ -119,10 +134,10 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (License, error) {
 	var l License
 	var name string
 	err := r.pool.QueryRow(ctx, `
-		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.created_at
+		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at
 		FROM licenses l JOIN license_types lt ON lt.id = l.license_type_id
 		WHERE l.id = $1
-	`, id).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt)
+	`, id).Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return l, ErrNotFound
 	}
@@ -130,7 +145,7 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (License, error) {
 		return l, err
 	}
 	l.Type = displayType(name, l.OtherDetail)
-	l.ValidUntil = validUntil(l.IssuedDate)
+	l.ValidUntil = validUntil(l.Year)
 	return l, nil
 }
 
@@ -147,7 +162,7 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.created_at
+		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at
 		FROM licenses l JOIN license_types lt ON lt.id = l.license_type_id
 		WHERE l.user_id = $1 ORDER BY l.issued_date DESC
 	`, userID)
@@ -160,11 +175,11 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, e
 	for rows.Next() {
 		var l License
 		var name string
-		if err := rows.Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		l.Type = displayType(name, l.OtherDetail)
-		l.ValidUntil = validUntil(l.IssuedDate)
+		l.ValidUntil = validUntil(l.Year)
 		list = append(list, l)
 	}
 	return list, rows.Err()

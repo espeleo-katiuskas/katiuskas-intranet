@@ -288,6 +288,28 @@ func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
 	return id
 }
 
+// InsertTransaction inserts a bare transactions row with no entries at
+// all, for tests that only need a real transactions.id to satisfy a
+// foreign key (licenses.transaction_id, membership_dues.transaction_id
+// — migration 00014) and don't care about actual double-entry
+// bookkeeping. This is safe because transaction_entries_balance (the
+// constraint trigger enforcing "at least two entries, summing to zero",
+// migration 00012) only ever fires on a transaction_entries row itself
+// being inserted/updated/deleted — a transactions row with zero entries
+// is never checked, let alone rejected, by that trigger.
+func InsertTransaction(t *testing.T, tx pgx.Tx) int64 {
+	t.Helper()
+	var id int64
+	err := tx.QueryRow(context.Background(), `
+		INSERT INTO transactions (description, occurred_at) VALUES ('test transaction', now())
+		RETURNING id
+	`).Scan(&id)
+	if err != nil {
+		t.Fatalf("insert test transaction: %v", err)
+	}
+	return id
+}
+
 // RoleID looks up a system role's id by name (they're seeded by migration
 // 00003: "admin", "board", "member", "former_member").
 func RoleID(t *testing.T, tx pgx.Tx, name string) int64 {

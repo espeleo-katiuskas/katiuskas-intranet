@@ -640,6 +640,67 @@ paths:
         "409":
           description: Overlaps an existing membership period for this user
 
+  /users/{login}/dues:
+    get:
+      summary: List a person's recorded membership dues ("cuotas")
+      description: >
+        Open to that person themselves, or to admin/board — the same
+        split as GET /users/{login}/licenses.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: login, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Dues history, newest year first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Due" }
+        "403": { description: Someone other than that person, admin, or board tried to view it. }
+    post:
+      summary: Record a due ("cuota") payment
+      description: >
+        Admin-only. transaction_id must name the transaction that
+        recorded this payment (see POST /transactions). If this person
+        has no membership period on file at all yet, this is treated as
+        their very first due (matrícula plus the current year's cuota),
+        so a new membership period is also started for them, dated from
+        start_date — someone rejoining after a prior, since-closed
+        membership isn't affected by this at all (they already have one
+        on file), and keeps using POST /users/{login}/memberships for
+        that instead. Editing or removing a due isn't supported.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: login, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year, transaction_id, start_date]
+              properties:
+                year: { type: integer }
+                transaction_id: { type: integer, description: The transaction that recorded this payment. }
+                start_date:
+                  type: string
+                  format: date
+                  description: Only actually used if this person has no membership period yet — becomes its start_date.
+      responses:
+        "201":
+          description: Due recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Due" }
+        "400":
+          description: >
+            missing_fields (year or transaction_id left out) or
+            unknown_transaction (transaction_id doesn't name an existing
+            transaction).
+        "403": { description: Only admin can record a due. }
+        "409": { description: due_already_recorded — this person already has a due on file for that year. }
+
   /users/{login}/licenses:
     get:
       summary: List a person's federative licenses
@@ -665,12 +726,17 @@ paths:
         Admin-only — board can see everyone's licenses but no longer
         assigns one. Only someone who currently has an open membership
         period (hasn't caused baja) can be assigned one. A license is
-        annual: valid from issued_date through December 31 of that same
-        year — the response includes that computed valid_until, but it
+        annual: valid from January 1 through December 31 of year — its
+        own field, not necessarily issued_date's calendar year (a
+        license requested in December often covers the *following*
+        year) — the response includes the computed valid_until, but it
         isn't something the caller sets. license_type_id must reference
         an entry from GET /license-types; other_detail is required when
         that entry is the catalog's "Otra" escape hatch (is_other) and
-        forbidden otherwise.
+        forbidden otherwise. transaction_id must name the transaction
+        that recorded the payment for this license (see POST
+        /transactions) — required, and never changed afterward (PATCH
+        has no transaction_id of its own).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -680,11 +746,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [license_type_id, issued_date]
+              required: [license_type_id, issued_date, year, transaction_id]
               properties:
                 license_type_id: { type: integer }
                 other_detail: { type: string, nullable: true }
                 issued_date: { type: string, format: date }
+                year: { type: integer, description: The calendar year this license covers. }
+                transaction_id: { type: integer, description: The transaction that recorded the payment for this license. }
       responses:
         "201":
           description: License created
@@ -693,9 +761,11 @@ paths:
               schema: { $ref: "#/components/schemas/License" }
         "400":
           description: >
-            invalid_license_type (unknown license_type_id) or
+            missing_fields (license_type_id, year, or transaction_id
+            left out), invalid_license_type (unknown license_type_id),
             invalid_other_detail (other_detail missing for "Otra", or
-            given for a type that isn't "Otra").
+            given for a type that isn't "Otra"), or unknown_transaction
+            (transaction_id doesn't name an existing transaction).
         "403": { description: Only admin can assign a license. }
         "409":
           description: not_active_member — this person didn't have an open membership period on issued_date.
@@ -708,7 +778,10 @@ paths:
         currently has an open membership period — it's fixing an
         existing record, not assigning a new one, so it also works for
         someone who has since left the club. Same license_type_id /
-        other_detail rule as creating one.
+        other_detail rule as creating one. There's no transaction_id
+        here on purpose — correcting a typo on a license's type, date,
+        or year is a different action from re-litigating which payment
+        it belongs to.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -718,11 +791,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [license_type_id, issued_date]
+              required: [license_type_id, issued_date, year]
               properties:
                 license_type_id: { type: integer }
                 other_detail: { type: string, nullable: true }
                 issued_date: { type: string, format: date }
+                year: { type: integer, description: The calendar year this license covers. }
       responses:
         "200":
           description: Updated license
@@ -2445,6 +2519,22 @@ components:
         end_date: { type: string, format: date }
         reason: { type: string, nullable: true }
 
+    Due:
+      type: object
+      description: >
+        One year's membership fee ("cuota"), always tied to the
+        transaction that recorded its payment — a due with no
+        transaction behind it doesn't mean anything yet, so there's no
+        "unpaid due" to represent. Keyed by (user, year) rather than a
+        specific membership period, since a rejoining member's due for a
+        given year isn't naturally tied to one particular period.
+      properties:
+        id: { type: integer }
+        user_login: { type: string }
+        year: { type: integer }
+        transaction_id: { type: integer, description: The transaction that recorded this payment. }
+        created_at: { type: string, format: date-time }
+
     LicenseType:
       type: object
       description: >
@@ -2463,8 +2553,10 @@ components:
     License:
       type: object
       description: >
-        A federative license ("licencia federativa"). Annual: valid from
-        issued_date through December 31 of that same year.
+        A federative license ("licencia federativa"). Annual: valid
+        through December 31 of year — its own field, not necessarily the
+        same calendar year as issued_date (a license requested in
+        December often covers the *following* year).
       properties:
         id: { type: integer }
         user_login: { type: string }
@@ -2479,10 +2571,16 @@ components:
           nullable: true
           description: Only set when license_type_id is the catalog's "Otra" entry.
         issued_date: { type: string, format: date }
+        year:
+          type: integer
+          description: The calendar year this license actually covers.
         valid_until:
           type: string
           format: date
-          description: Computed as December 31 of issued_date's year — never set directly.
+          description: Computed as December 31 of year — never set directly.
+        transaction_id:
+          type: integer
+          description: The transaction that recorded the payment for this license. Required at creation, never changed afterward.
         created_at: { type: string, format: date-time }
 
     BoardPosition:

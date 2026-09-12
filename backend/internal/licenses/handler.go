@@ -117,13 +117,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		LicenseTypeID int64   `json:"license_type_id"`
 		OtherDetail   *string `json:"other_detail"`
 		IssuedDate    string  `json:"issued_date"`
+		Year          int     `json:"year"`
+		TransactionID int64   `json:"transaction_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.LicenseTypeID == 0 {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id is required")
+	if body.LicenseTypeID == 0 || body.Year == 0 || body.TransactionID == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id, year and transaction_id are all required")
 		return
 	}
 	issuedDate, err := time.Parse("2006-01-02", body.IssuedDate)
@@ -133,7 +135,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l, err := h.service.Create(r.Context(), CreateInput{
-		UserID: userID, LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail, IssuedDate: issuedDate,
+		UserID: userID, LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail,
+		IssuedDate: issuedDate, Year: body.Year, TransactionID: body.TransactionID,
 	})
 	if errors.Is(err, ErrNotActiveMember) {
 		httpapi.WriteError(w, http.StatusConflict, "not_active_member", err.Error())
@@ -147,13 +150,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_other_detail", err.Error())
 		return
 	}
+	if errors.Is(err, ErrUnknownTransaction) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_transaction", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create license")
 		return
 	}
 	l.UserLogin = login
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha asignado la licencia «%s» a %s (emitida el %s).",
-		h.actorLogin(r.Context()), l.Type, login, l.IssuedDate.Format("2006-01-02")))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha asignado la licencia «%s» a %s (año %d, emitida el %s).",
+		h.actorLogin(r.Context()), l.Type, login, l.Year, l.IssuedDate.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusCreated, l)
 }
 
@@ -167,13 +174,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		LicenseTypeID int64   `json:"license_type_id"`
 		OtherDetail   *string `json:"other_detail"`
 		IssuedDate    string  `json:"issued_date"`
+		Year          int     `json:"year"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.LicenseTypeID == 0 {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id is required")
+	if body.LicenseTypeID == 0 || body.Year == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id and year are both required")
 		return
 	}
 	issuedDate, err := time.Parse("2006-01-02", body.IssuedDate)
@@ -189,7 +197,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	before, beforeErr := h.service.Get(r.Context(), id)
 
 	l, err := h.service.Update(r.Context(), id, UpdateInput{
-		LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail, IssuedDate: issuedDate,
+		LicenseTypeID: body.LicenseTypeID, OtherDetail: body.OtherDetail, IssuedDate: issuedDate, Year: body.Year,
 	})
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "license not found")
@@ -231,7 +239,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 // notification readable, and still shows an OtherDetail-only change
 // (a corrected "Otra" detail with the same LicenseTypeID) since that
 // changes Type's own text too.
-var auditableFields = []string{"Type", "IssuedDate"}
+var auditableFields = []string{"Type", "IssuedDate", "Year"}
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

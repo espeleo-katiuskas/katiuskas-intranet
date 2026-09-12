@@ -121,14 +121,14 @@ func (s *Service) LatestByUser(ctx context.Context, userID int64) (*License, err
 }
 
 // IsCurrentlyFederated reports whether the person's most recent license
-// is still valid — same calendar year as ValidUntil, comparing years
-// only (not the exact instant) so someone doesn't read as expired for
-// the rest of December 31st itself. Used to gate joining a caving or
-// canyoning activity to "socios federados".
+// is still valid — comparing Year directly against the current one
+// (not ValidUntil's exact instant), so someone doesn't read as expired
+// for the rest of December 31st itself. Used to gate joining a caving
+// or canyoning activity to "socios federados".
 func (s *Service) IsCurrentlyFederated(ctx context.Context, userID int64) (bool, error) {
 	latest, err := s.LatestByUser(ctx, userID)
 	if err != nil || latest == nil {
 		return false, err
 	}
-	return latest.ValidUntil.Year() == time.Now().Year(), nil
+	return latest.Year == time.Now().Year(), nil
 }

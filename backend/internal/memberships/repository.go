@@ -22,11 +22,27 @@ var (
 	// contained within its membership period — the one invariant this
 	// package has to check itself, since it spans two tables.
 	ErrLeaveOutsideMembership = errors.New("temporary leave must fall entirely within the membership period it belongs to")
+	// ErrDueAlreadyRecorded means this user already has a due on file for
+	// that year (membership_dues' own UNIQUE (user_id, year)) — one
+	// payment per person per year, never two.
+	ErrDueAlreadyRecorded = errors.New("a due for this user and year has already been recorded")
+	// ErrUnknownTransaction means the given transaction_id doesn't name an
+	// existing transaction — every due has to be tied to the payment that
+	// recorded it, the same requirement licenses.CreateInput places on a
+	// license.
+	ErrUnknownTransaction = errors.New("transaction_id does not name an existing transaction")
 )
 
 // exclusionViolationCode is the PostgreSQL error code raised when the
 // EXCLUDE USING gist constraint on memberships.period rejects an insert.
 const exclusionViolationCode = "23P01"
+
+// uniqueViolationCode and foreignKeyViolationCode are the PostgreSQL
+// error codes CreateDue maps to ErrDueAlreadyRecorded/ErrUnknownTransaction.
+const (
+	uniqueViolationCode     = "23505"
+	foreignKeyViolationCode = "23503"
+)
 
 type Repository struct {
 	pool db.PGX
@@ -306,6 +322,62 @@ func (r *Repository) ListLeavesByMembership(ctx context.Context, membershipID in
 			return nil, err
 		}
 		list = append(list, l)
+	}
+	return list, rows.Err()
+}
+
+// HasAnyMembership reports whether userID has ever had a membership
+// period at all, regardless of whether it's still open — used by
+// Service.RecordDue to tell "this is their very first due" (no period
+// on file yet, so one must be started alongside it) apart from a
+// rejoining former member, who's left to the existing, separate "dar de
+// alta" flow instead.
+func (r *Repository) HasAnyMembership(ctx context.Context, userID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE user_id = $1)`, userID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) CreateDue(ctx context.Context, in CreateDueInput) (Due, error) {
+	var d Due
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO membership_dues (user_id, year, transaction_id)
+		VALUES ($1,$2,$3)
+		RETURNING id, user_id, year, transaction_id, created_at
+	`, in.UserID, in.Year, in.TransactionID,
+	).Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case uniqueViolationCode:
+				return d, ErrDueAlreadyRecorded
+			case foreignKeyViolationCode:
+				return d, ErrUnknownTransaction
+			}
+		}
+		return d, err
+	}
+	return d, nil
+}
+
+func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_id, year, transaction_id, created_at
+		FROM membership_dues WHERE user_id = $1 ORDER BY year DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Due{}
+	for rows.Next() {
+		var d Due
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
 	}
 	return list, rows.Err()
 }

@@ -663,3 +663,131 @@ func TestHandlerDeleteLeaveNotifiesTelegram(t *testing.T) {
 		t.Errorf("expected the notification to name actor and target, got %q", msg)
 	}
 }
+
+func TestHandlerCreateDueRequiresAdmin(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+
+	boardToken := testutil.TokenFor(resolver, 1, "board")
+	body := map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"}
+	path := fmt.Sprintf("/api/v1/users/%s/dues", target.Login)
+	if rec := doRequest(mux, http.MethodPost, path, boardToken, body); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from recording a due, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateDueStartsAMembershipForANewSocio covers the auto-alta
+// behavior end to end through the HTTP layer: recording a due for
+// someone with no membership at all yet also opens one for them, dated
+// from start_date.
+func TestHandlerCreateDueStartsAMembershipForANewSocio(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	body := map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"}
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken, body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var due memberships.Due
+	if err := json.Unmarshal(rec.Body.Bytes(), &due); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if due.UserLogin != target.Login || due.Year != 2026 {
+		t.Errorf("expected user_login %q and year 2026, got %+v", target.Login, due)
+	}
+
+	listRec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/memberships", target.Login), adminToken, nil)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", listRec.Code, listRec.Body.String())
+	}
+	var list []memberships.Membership
+	if err := json.Unmarshal(listRec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 1 || list[0].StartDate.Format("2006-01-02") != "2026-03-01" {
+		t.Errorf("expected a membership started on 2026-03-01, got %+v", list)
+	}
+}
+
+func TestHandlerCreateDueRejectsMissingFields(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	path := fmt.Sprintf("/api/v1/users/%s/dues", target.Login)
+	rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"start_date": "2026-03-01"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 missing_fields, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateDueRejectsADuplicateYear(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/dues", target.Login)
+
+	first := doRequest(mux, http.MethodPost, path, adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("setup create due: %d %s", first.Code, first.Body.String())
+	}
+
+	rec := doRequest(mux, http.MethodPost, path, adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"})
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 due_already_recorded, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerListDuesByUserSelfVersusOthers mirrors licenses.Handler's
+// own listByUser test: the target can see their own dues, a different
+// plain member can't, and admin/board can see anyone's.
+func TestHandlerListDuesByUserSelfVersusOthers(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"})
+
+	path := fmt.Sprintf("/api/v1/users/%s/dues", target.Login)
+
+	selfToken := testutil.TokenFor(resolver, target.ID, "member")
+	if rec := doRequest(mux, http.MethodGet, path, selfToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected the target to view their own dues, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	otherToken := testutil.TokenFor(resolver, other.ID, "member")
+	if rec := doRequest(mux, http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a different plain member to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	boardToken := testutil.TokenFor(resolver, 2, "board")
+	if rec := doRequest(mux, http.MethodGet, path, boardToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected board to view anyone's dues, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerCreateDueNotifiesTelegramWithActorAndYearAndTarget(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	admin := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, admin.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name both actor and target, got %q", msg)
+	}
+	if !strings.Contains(msg, "2026") {
+		t.Errorf("expected the notification to name the year, got %q", msg)
+	}
+}

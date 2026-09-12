@@ -597,3 +597,117 @@ func TestWasMemberOn(t *testing.T) {
 		t.Error("expected a date before the period started to not count")
 	}
 }
+
+func TestHasAnyMembership(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	ctx := context.Background()
+
+	neverMember := testutil.InsertUser(t, tx, "")
+	if has, err := repo.HasAnyMembership(ctx, neverMember.ID); err != nil {
+		t.Fatalf("has any membership: %v", err)
+	} else if has {
+		t.Error("expected someone with no membership at all to report false")
+	}
+
+	pastMember := testutil.InsertUser(t, tx, "")
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: pastMember.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	pastEnd := date("2021-01-01")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &pastEnd}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+	if has, err := repo.HasAnyMembership(ctx, pastMember.ID); err != nil {
+		t.Fatalf("has any membership: %v", err)
+	} else if !has {
+		t.Error("expected a former member (now-closed period) to still report true")
+	}
+}
+
+func TestCreateDue(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	txID := testutil.InsertTransaction(t, tx)
+
+	d, err := repo.CreateDue(context.Background(), memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: txID,
+	})
+	if err != nil {
+		t.Fatalf("create due: %v", err)
+	}
+	if d.UserID != user.ID || d.Year != 2026 || d.TransactionID != txID {
+		t.Errorf("expected user id %d, year 2026, transaction id %d, got %+v", user.ID, txID, d)
+	}
+}
+
+func TestCreateDueRejectsASecondOneForTheSameYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	if _, err := repo.CreateDue(ctx, memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: testutil.InsertTransaction(t, tx),
+	}); err != nil {
+		t.Fatalf("create first due: %v", err)
+	}
+	_, err := repo.CreateDue(ctx, memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: testutil.InsertTransaction(t, tx),
+	})
+	if !errors.Is(err, memberships.ErrDueAlreadyRecorded) {
+		t.Errorf("expected ErrDueAlreadyRecorded, got %v", err)
+	}
+}
+
+func TestCreateDueRejectsAnUnknownTransaction(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+
+	_, err := repo.CreateDue(context.Background(), memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: 999999999,
+	})
+	if !errors.Is(err, memberships.ErrUnknownTransaction) {
+		t.Errorf("expected ErrUnknownTransaction, got %v", err)
+	}
+}
+
+func TestListDuesForUserOrdersNewestYearFirstAndScopesToTheUser(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	if _, err := repo.CreateDue(ctx, memberships.CreateDueInput{
+		UserID: other.ID, Year: 2026, TransactionID: testutil.InsertTransaction(t, tx),
+	}); err != nil {
+		t.Fatalf("create due for other: %v", err)
+	}
+	older, err := repo.CreateDue(ctx, memberships.CreateDueInput{
+		UserID: user.ID, Year: 2024, TransactionID: testutil.InsertTransaction(t, tx),
+	})
+	if err != nil {
+		t.Fatalf("create older due: %v", err)
+	}
+	newer, err := repo.CreateDue(ctx, memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: testutil.InsertTransaction(t, tx),
+	})
+	if err != nil {
+		t.Fatalf("create newer due: %v", err)
+	}
+
+	list, err := repo.ListDuesForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("list dues for user: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 dues for this user, got %d", len(list))
+	}
+	if list[0].ID != newer.ID || list[1].ID != older.ID {
+		t.Errorf("expected newest-year-first order [%d, %d], got [%d, %d]", newer.ID, older.ID, list[0].ID, list[1].ID)
+	}
+}

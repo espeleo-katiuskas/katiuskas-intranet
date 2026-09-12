@@ -98,3 +98,30 @@ func (s *Service) DeleteLeave(ctx context.Context, id int64) error {
 func (s *Service) ListLeavesByMembership(ctx context.Context, membershipID int64) ([]Leave, error) {
 	return s.repo.ListLeavesByMembership(ctx, membershipID)
 }
+
+// RecordDue records userID's cuota for year, tied to transactionID — the
+// payment that recorded it (see Due's own doc comment). If userID has no
+// membership period on file at all yet, this is their very first due —
+// the matrícula alongside the current year's cuota — so a new membership
+// period is started for them first, occurredOn as its StartDate, the
+// same "alta" a person otherwise gets through Create/POST
+// /users/{login}/memberships; someone with a prior, since-closed
+// membership who's rejoining isn't touched by this at all (HasAnyMembership
+// is true for them already), leaving that case to the existing, separate
+// alta flow instead of guessing whether a new period should open here too.
+func (s *Service) RecordDue(ctx context.Context, userID int64, year int, transactionID int64, occurredOn time.Time) (Due, error) {
+	hasAny, err := s.repo.HasAnyMembership(ctx, userID)
+	if err != nil {
+		return Due{}, err
+	}
+	if !hasAny {
+		if _, err := s.Create(ctx, CreateInput{UserID: userID, StartDate: occurredOn}); err != nil {
+			return Due{}, err
+		}
+	}
+	return s.repo.CreateDue(ctx, CreateDueInput{UserID: userID, Year: year, TransactionID: transactionID})
+}
+
+func (s *Service) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
+	return s.repo.ListDuesForUser(ctx, userID)
+}
