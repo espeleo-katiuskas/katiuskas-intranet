@@ -26,52 +26,11 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div class="section-header">
-    <h2>Datos</h2>
-    <button id="open-edit-member" type="button" class="btn btn-secondary btn-small" data-roles="admin">Editar</button>
-  </div>
-  <div class="field-grid" id="member-data-view">
-    <div class="field">
-      <label>Teléfono</label>
-      <p id="view-phone"></p>
-    </div>
-    <div class="field">
-      <label>DNI</label>
-      <p id="view-national-id"></p>
-    </div>
-    <div class="field">
-      <label>Fecha de nacimiento</label>
-      <p id="view-birth-date"></p>
-    </div>
-    <div class="field">
-      <label>Género</label>
-      <p id="view-gender"></p>
-    </div>
-    <div class="field span-2">
-      <label>Dirección</label>
-      <p id="view-address"></p>
-    </div>
-    <div class="field">
-      <label>Código postal</label>
-      <p id="view-postal-code"></p>
-    </div>
-    <div class="field">
-      <label>Ciudad</label>
-      <p id="view-city"></p>
-    </div>
-    <div class="field">
-      <label>Provincia</label>
-      <p id="view-province"></p>
-    </div>
-    <div class="field span-2">
-      <label>Contacto de emergencia</label>
-      <p id="view-emergency-contact"></p>
-    </div>
-  </div>
-
-  <dialog id="edit-member-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar datos</h3>
+  <div class="panel">
+    <h3>Datos</h3>
+    <p class="hint" id="board-readonly-hint" hidden>
+      Solo un administrador puede editar estos datos.
+    </p>
     <form id="edit-member-form">
       <div class="field-grid">
         <div class="field">
@@ -127,12 +86,12 @@
           <textarea id="em-emergency-contact" name="emergency_contact" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
         </div>
       </div>
-      <div class="panel-actions">
+      <div class="panel-actions" data-roles="admin">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+        <button type="button" class="btn btn-secondary" id="cancel-edit-member">Cancelar</button>
       </div>
     </form>
-  </dialog>
+  </div>
 
   <div class="section-header">
     <h2>Roles</h2>

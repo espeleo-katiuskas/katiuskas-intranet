@@ -136,27 +136,59 @@ document.getElementById('member-role-add').addEventListener('click', async (even
   }
 });
 
-const editMemberDialog = document.getElementById('edit-member-dialog');
 const editForm = document.getElementById('edit-member-form');
-// Deliberately not initModal(editMemberDialog, editForm) — unlike every
-// other dialog on this page, this one is a correction to an existing
-// record, always freshly populated by loadMember() rather than starting
-// blank each time, so resetting it back to blank defaults on close (the
-// behavior every *other* dialog here wants) would be wrong for this one.
-initModal(editMemberDialog);
-// The button itself has data-roles="admin" (board can already see
-// every field directly on the page now, via #member-data-view below —
-// this dialog is only for actually changing something), so it's
-// removed from the DOM entirely for board; nothing to wire up then.
-if (isRealAdmin) {
-  document.getElementById('open-edit-member').addEventListener('click', () => editMemberDialog.showModal());
+
+// Datos is a plain inline form now (the same shape profile.js's own "Mis
+// datos" already uses), not a modal — board can already see every field
+// directly on the page this way, so there's no separate read-only view to
+// keep in sync with it; a disabled field still shows its value, just not
+// editable. Only admin can submit at all here (the whole record, not just
+// the contact fields a plain member can self-edit on /profile), so every
+// field is disabled for board, not just the identity-ish ones profile.js
+// itself restricts.
+if (!isRealAdmin) {
+  for (const field of editForm.elements) {
+    field.disabled = true;
+  }
+  document.getElementById('board-readonly-hint').hidden = false;
 }
 
-const genderLabels = { male: 'Masculino', female: 'Femenino' };
+// The last record loadMember() fetched, so "Cancelar" can restore the form
+// to it without a round trip — reverting unsaved edits is "put back what
+// was already loaded", not "re-fetch the latest from the server".
+let lastLoadedPerson = null;
+
+function populateEditForm(person) {
+  editForm.first_name.value = person.first_name;
+  editForm.last_name.value = person.last_name;
+  editForm.email.value = person.email ?? '';
+  editForm.phone.value = person.phone ?? '';
+  editForm.national_id.value = person.national_id ?? '';
+  editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';
+  editForm.gender.value = person.gender ?? '';
+  editForm.address.value = person.address ?? '';
+  editForm.postal_code.value = person.postal_code ?? '';
+  editForm.city.value = person.city ?? '';
+  editForm.province.value = person.province ?? '';
+  editForm.emergency_contact.value = person.emergency_contact ?? '';
+}
+
+// #cancel-edit-member lives inside the same data-roles="admin" panel-actions
+// as the submit button, so it's removed from the DOM entirely for board —
+// nothing to wire up then (see the identical reasoning this page already
+// hit once for #open-edit-member, before Datos became this inline form).
+if (isRealAdmin) {
+  document.getElementById('cancel-edit-member').addEventListener('click', () => {
+    if (lastLoadedPerson) {
+      populateEditForm(lastLoadedPerson);
+    }
+  });
+}
 
 async function loadMember() {
   try {
     const person = await apiFetch(`/users/${memberLogin}`);
+    lastLoadedPerson = person;
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email ?? '';
     document.getElementById('member-number').textContent = person.membership_number != null
@@ -166,35 +198,7 @@ async function loadMember() {
       ? `Último acceso: ${formatDate(person.last_login_at)}${person.last_login_ip ? ` desde ${person.last_login_ip}` : ''}`
       : 'Todavía no ha iniciado sesión.';
     renderRoles(person);
-
-    // #member-data-view shows every field directly on the page (name and
-    // email are already up top in the header, so not repeated here) —
-    // admin/board alike, same as the rest of a person's data on this
-    // page; #edit-member-dialog (admin-only, see data-roles on its own
-    // toggle button) is only ever for actually changing something now,
-    // not for board to merely see it, the way it used to have to be.
-    document.getElementById('view-phone').textContent = person.phone ?? '—';
-    document.getElementById('view-national-id').textContent = person.national_id ?? '—';
-    document.getElementById('view-birth-date').textContent = person.birth_date ? formatDate(person.birth_date) : '—';
-    document.getElementById('view-gender').textContent = person.gender ? (genderLabels[person.gender] ?? person.gender) : '—';
-    document.getElementById('view-address').textContent = person.address ?? '—';
-    document.getElementById('view-postal-code').textContent = person.postal_code ?? '—';
-    document.getElementById('view-city').textContent = person.city ?? '—';
-    document.getElementById('view-province').textContent = person.province ?? '—';
-    document.getElementById('view-emergency-contact').textContent = person.emergency_contact ?? '—';
-
-    editForm.first_name.value = person.first_name;
-    editForm.last_name.value = person.last_name;
-    editForm.email.value = person.email ?? '';
-    editForm.phone.value = person.phone ?? '';
-    editForm.national_id.value = person.national_id ?? '';
-    editForm.birth_date.value = person.birth_date ? person.birth_date.slice(0, 10) : '';
-    editForm.gender.value = person.gender ?? '';
-    editForm.address.value = person.address ?? '';
-    editForm.postal_code.value = person.postal_code ?? '';
-    editForm.city.value = person.city ?? '';
-    editForm.province.value = person.province ?? '';
-    editForm.emergency_contact.value = person.emergency_contact ?? '';
+    populateEditForm(person);
   } catch (err) {
     document.getElementById('member-email').textContent = 'No se ha podido cargar esta persona.';
     showError(err.message);
@@ -226,11 +230,10 @@ editForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch(`/users/${memberLogin}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Datos actualizados.');
-    // Re-fetch rather than patching #member-data-view from `body` directly —
-    // the same pattern every other mutation on this page already follows —
-    // so the view reflects exactly what the server actually saved.
+    // Re-fetch rather than trusting `body` directly — the same pattern
+    // every other mutation on this page already follows — so the form
+    // reflects exactly what the server actually saved.
     await loadMember();
-    editMemberDialog.close();
   } catch (err) {
     showError(err.message);
   } finally {

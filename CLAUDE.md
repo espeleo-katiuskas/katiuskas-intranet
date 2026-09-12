@@ -795,18 +795,25 @@ caller: a static "+ Nueva X" button calling `showModal()` directly, or — for a
 shared by every row of a list rather than one pre-rendered per row (`accounting.js`'s own
 account edit, `account.js`'s transaction edit, three of `member.js`'s timeline dialogs) —
 an `open*Dialog(record)` function that fills the shared dialog's fields from that one
-record first. A dialog that's actually a *correction* to an existing record (`member.js`'s
-own "Datos", populated once by `loadMember()` and never re-opened with fresh values the
-way the shared timeline dialogs are) deliberately skips the `form` argument to
-`initModal` — resetting it back to blank on every close would be wrong for one of these,
-unlike every "create new X" dialog that wants exactly that. The platform itself is what
-actually makes the rest of the page unreachable while one is open (real modality, not a
-hand-rolled overlay to keep in sync) and closes it on Escape — nothing in `modal.js` or
-any page's own script needs to implement either. `profile.html`'s own "Mis datos" is the
-one exception left as a plain inline form: unlike every page above, editing your own data
-*is* this page's entire reason to exist, not one form competing for attention alongside
-several other unrelated sections, so hiding it behind a button would only cost a click for
-no corresponding gain in clarity.
+record first. The platform itself is what actually makes the rest of the page
+unreachable while one is open (real modality, not a hand-rolled overlay to keep in sync)
+and closes it on Escape — nothing in `modal.js` or any page's own script needs to
+implement either. `profile.html`'s own "Mis datos" and `member.js`'s own "Datos" are both
+left as a plain inline form instead, not a dialog: a person's own core data is prominent
+enough on both pages (the entire reason `/profile` exists at all; the very first thing an
+admin or board looks at on `/member`) that hiding it behind an "Editar" button added
+friction for no real gain in clarity — plain `<input>`s directly on the page double as
+the read-only view too, so there's no separate view-only rendering to keep in sync with
+whatever the form itself holds. Populated once by `loadProfile()`/`loadMember()` and
+never reset to blank the way a "create new X" dialog's own form is on close, both add a
+"Cancelar" button next to "Guardar cambios" that puts back exactly what was last loaded
+(a plain local re-populate, not a re-fetch) — the one bit of a modal's own behavior
+(`initModal`'s reset-on-close) an inline form doesn't get for free, since there's no
+`close` event here to hang it from. `member.js`'s own version disables every field
+instead (not just the identity ones `profile.js` restricts) for anyone who isn't a real
+admin — board can still see a person's full data this way, just not submit any change to
+it, the same read-only-but-visible treatment `profile.js` already gives a plain member's
+own name/DNI/birth date/gender.
 
 `js/api.js` is the
 underlying shared client `layout.js` itself is built on: it keeps the session token in
