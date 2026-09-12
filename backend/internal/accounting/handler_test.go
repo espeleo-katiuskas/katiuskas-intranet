@@ -602,6 +602,11 @@ func TestDeleteTransactionRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	}
 }
 
+// TestCreateTransactionNotifiesTelegram also covers positiveEntriesTotal
+// directly: the notification names the transaction's own amount (the
+// sum of only its positive entries — the actual amount of money moved,
+// since every transaction's entries always sum to zero on their own),
+// not an entry count or anything that would just read as zero.
 func TestCreateTransactionNotifiesTelegram(t *testing.T) {
 	mux, resolver, notifier := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
@@ -616,8 +621,32 @@ func TestCreateTransactionNotifiesTelegram(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 	msg := notifier.waitForMessage(t)
-	if !strings.Contains(msg, "Cuota mensual") {
-		t.Errorf("expected the notification to name the transaction, got %q", msg)
+	if !strings.Contains(msg, "ha creado la transacción «Cuota mensual» (10.00€)") {
+		t.Errorf("expected the notification to name the transaction and its amount, got %q", msg)
+	}
+}
+
+// TestCreateTransactionNotifiesTelegramSumsEveryPositiveEntry covers
+// positiveEntriesTotal with more than one entry on the positive side —
+// a two-entry transaction alone couldn't tell "sums every positive
+// entry" apart from a bug that just took the first one.
+func TestCreateTransactionNotifiesTelegramSumsEveryPositiveEntry(t *testing.T) {
+	mux, resolver, notifier := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	banco := createAccount(t, mux, adminToken, "Banco", "572")
+	cuotas := createAccount(t, mux, adminToken, "Cuotas", "700")
+	notifier.waitForCount(t, 3) // the three account-create notifications above
+	notifier.reset()
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken,
+		transactionBody(time.Now(), "Reparto de cuota", entry(caja.ID, 15), entry(banco.ID, 10), entry(cuotas.ID, -25)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, "(25.00€)") {
+		t.Errorf("expected the notification to sum both positive entries (15 + 10), got %q", msg)
 	}
 }
 

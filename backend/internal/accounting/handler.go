@@ -389,6 +389,21 @@ func toEntryInputs(entries []entryBody) []EntryInput {
 	return out
 }
 
+// positiveEntriesTotal sums only the positive side of a transaction's
+// entries — since every transaction's entries always sum to exactly
+// zero (see Transaction's own doc comment), that's the actual amount of
+// money the transaction moved, used in its own creation notification
+// below rather than a meaningless "sums to zero" or an entry count.
+func positiveEntriesTotal(entries []Entry) float64 {
+	var total float64
+	for _, e := range entries {
+		if e.Amount > 0 {
+			total += e.Amount
+		}
+	}
+	return total
+}
+
 func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	in, err := decodeTransactionBody(r)
 	if err != nil {
@@ -405,8 +420,8 @@ func (h *Handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	if writeTransactionError(w, err) {
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado la transacción «%s» (%d apuntes).",
-		h.actorLogin(r.Context()), t.Description, len(t.Entries)))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha creado la transacción «%s» (%.2f€).",
+		h.actorLogin(r.Context()), t.Description, positiveEntriesTotal(t.Entries)))
 	httpapi.WriteJSON(w, http.StatusCreated, t)
 }
 
