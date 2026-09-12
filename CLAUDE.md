@@ -485,7 +485,12 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   must never show up as a spurious "change" just because it was recomputed at a slightly
   different moment than "before" — comparing the pair and returning one "field: old →
   new" line per field that actually differs (a nil pointer formats as `(vacío)`, a date
-  as a plain `YYYY-MM-DD`). Every resource package with a mutating route (`users`,
+  as a plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and
+  one pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely
+  different values, but both display as `(vacío)`, so a field that merely swapped between
+  those two produces no line: the point of the message is what a human reading it would
+  actually notice changed, not every byte that did.
+  Every resource package with a mutating route (`users`,
   `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
   `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its own `NewHandler` —
   wired to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't

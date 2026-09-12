@@ -74,7 +74,21 @@ func DiffFields(before, after any, fields ...string) []string {
 		if reflect.DeepEqual(bf.Interface(), af.Interface()) {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%s: %s → %s", name, formatFieldValue(bf), formatFieldValue(af)))
+		before, after := formatFieldValue(bf), formatFieldValue(af)
+		// A nil pointer and one pointing at a zero value (an empty
+		// string, a zero time.Time) are genuinely different values —
+		// DeepEqual is right to say so — but they render identically
+		// as "(vacío)", so a line built from them would read
+		// "Field: (vacío) → (vacío)": true by DeepEqual, meaningless
+		// to whoever reads the notification. Saving a blank optional
+		// field over one already blank in a slightly different
+		// representation (NULL vs. an empty string left over from
+		// older data, say) shouldn't announce a change nobody would
+		// actually see.
+		if before == after {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s → %s", name, before, after))
 	}
 	return lines
 }

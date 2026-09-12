@@ -127,6 +127,31 @@ func TestDiffFieldsFormatsNilOptionalDateAsEmpty(t *testing.T) {
 	}
 }
 
+// TestDiffFieldsSkipsNilVersusEmptyStringOfTheSameField reproduces a
+// spurious "Field: (vacío) → (vacío)" notification: a nil pointer and a
+// pointer to "" are genuinely different by DeepEqual (exactly what a
+// no-op self-edit could produce — a blank optional field arriving as an
+// explicit null, saved over a value that was already blank but stored as
+// "" rather than NULL), but they're indistinguishable to whoever reads
+// the message, so neither direction should produce a line.
+func TestDiffFieldsSkipsNilVersusEmptyStringOfTheSameField(t *testing.T) {
+	cases := []struct {
+		name          string
+		before, after *string
+	}{
+		{"nil then empty", nil, strPtr("")},
+		{"empty then nil", strPtr(""), nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := DiffFields(diffSubject{Phone: c.before}, diffSubject{Phone: c.after}, "Phone")
+			if len(got) != 0 {
+				t.Errorf("expected no differences, got %v", got)
+			}
+		})
+	}
+}
+
 func TestDiffFieldsPanicsOnUnknownField(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
