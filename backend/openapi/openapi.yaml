@@ -1007,9 +1007,11 @@ paths:
     post:
       summary: Record a temporary leave ("baja temporal")
       description: >
-        Admin-only. Unlike a membership period, both dates are required
-        up front — a temporary leave is a bounded, planned thing. It
-        must fall entirely within its membership period's dates.
+        Admin-only. end_date can be left out (or sent empty/null) for a
+        leave that's still ongoing — the same "open" shape a membership
+        period's own end_date already has. It must fall entirely within
+        its membership period's dates; an open-ended leave only fits
+        within a membership period that's itself still open too.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: membershipID, in: path, required: true, schema: { type: integer } }
@@ -1019,10 +1021,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [start_date, end_date]
+              required: [start_date]
               properties:
                 start_date: { type: string, format: date }
-                end_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
                 reason: { type: string, nullable: true }
       responses:
         "201":
@@ -1043,10 +1045,13 @@ paths:
     patch:
       summary: Correct a temporary leave's dates or reason
       description: >
-        Admin-only. start_date and end_date are always required and
-        replace the current values; the containment check against the
-        membership period runs again on every correction. reason is a
-        true partial update: omit it to leave it as is.
+        Admin-only. start_date is always required and end_date always
+        replaces whatever was there — omitted or empty/null means the
+        leave is (again) still ongoing, which also lets an admin undo an
+        accidental end date the same way clearing a membership's own
+        end_date does. The containment check against the membership
+        period runs again on every correction. reason is a true partial
+        update: omit it to leave it as is.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1056,10 +1061,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [start_date, end_date]
+              required: [start_date]
               properties:
                 start_date: { type: string, format: date }
-                end_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
                 reason: { type: string, nullable: true }
       responses:
         "200":
@@ -2509,14 +2514,14 @@ components:
     Leave:
       type: object
       description: >
-        A "baja temporal": a bounded window within a membership period
-        where the person steps away for a while without actually leaving
-        the club.
+        A "baja temporal": a window within a membership period where the
+        person steps away for a while without actually leaving the club.
+        end_date is null while it's still ongoing.
       properties:
         id: { type: integer }
         membership_id: { type: integer }
         start_date: { type: string, format: date }
-        end_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
         reason: { type: string, nullable: true }
 
     Due:

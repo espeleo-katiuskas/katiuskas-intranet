@@ -266,7 +266,7 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		StartDate string  `json:"start_date"`
-		EndDate   string  `json:"end_date"`
+		EndDate   *string `json:"end_date"`
 		Reason    *string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -278,7 +278,7 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
 		return
 	}
-	endDate, err := time.Parse("2006-01-02", body.EndDate)
+	endDate, err := parseOptionalDate(body.EndDate)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
 		return
@@ -304,10 +304,35 @@ func (h *Handler) createLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if login := h.membershipOwnerLogin(r.Context(), membershipID); login != "" {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado una excedencia de %s (%s a %s).",
-			h.actorLogin(r.Context()), login, l.StartDate.Format("2006-01-02"), l.EndDate.Format("2006-01-02")))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha registrado una excedencia de %s (%s).",
+			h.actorLogin(r.Context()), login, leavePeriodText(l.StartDate, l.EndDate)))
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, l)
+}
+
+// parseOptionalDate parses a nullable YYYY-MM-DD field — nil or empty
+// both mean "not given" (a leave still ongoing, no end_date yet),
+// mirroring how Handler.update already treats membership's own optional
+// end_date.
+func parseOptionalDate(s *string) (*time.Time, error) {
+	if s == nil || *s == "" {
+		return nil, nil
+	}
+	d, err := time.Parse("2006-01-02", *s)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// leavePeriodText renders a leave's own date range for a mutation
+// notification — "<start> a <end>" once it's actually closed, or just
+// "desde <start>" while it's still ongoing.
+func leavePeriodText(start time.Time, end *time.Time) string {
+	if end == nil {
+		return fmt.Sprintf("desde %s, todavía en curso", start.Format("2006-01-02"))
+	}
+	return fmt.Sprintf("%s a %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
 }
 
 func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +343,7 @@ func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		StartDate string  `json:"start_date"`
-		EndDate   string  `json:"end_date"`
+		EndDate   *string `json:"end_date"`
 		Reason    *string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -330,7 +355,7 @@ func (h *Handler) updateLeave(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
 		return
 	}
-	endDate, err := time.Parse("2006-01-02", body.EndDate)
+	endDate, err := parseOptionalDate(body.EndDate)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
 		return

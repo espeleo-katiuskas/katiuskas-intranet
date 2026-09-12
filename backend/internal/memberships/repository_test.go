@@ -150,7 +150,7 @@ func TestUpdateRejectsShrinkingPeriodPastAnExistingLeave(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestUpdateAllowsShrinkingPeriodThatStillContainsExistingLeave(t *testing.T)
 		t.Fatalf("create membership: %v", err)
 	}
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestCreateLeaveWithinPeriod(t *testing.T) {
 
 	reason := "operación de rodilla"
 	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"), Reason: &reason,
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")), Reason: &reason,
 	})
 	if err != nil {
 		t.Fatalf("create leave: %v", err)
@@ -336,7 +336,7 @@ func TestCreateLeaveRejectsStartBeforeMembership(t *testing.T) {
 	}
 
 	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2019-12-01"), EndDate: date("2020-01-15"),
+		MembershipID: m.ID, StartDate: date("2019-12-01"), EndDate: ptr(date("2020-01-15")),
 	})
 	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
 		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
@@ -359,7 +359,7 @@ func TestCreateLeaveRejectsEndAfterMembershipEnds(t *testing.T) {
 	}
 
 	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-07-15"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-07-15")),
 	})
 	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
 		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
@@ -380,9 +380,120 @@ func TestCreateLeaveAllowedWhenMembershipStillOpen(t *testing.T) {
 	// The membership is still open (no end_date), so a leave far in the
 	// future is fine — there's no upper bound to violate yet.
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2030-01-01"), EndDate: date("2030-02-01"),
+		MembershipID: m.ID, StartDate: date("2030-01-01"), EndDate: ptr(date("2030-02-01")),
 	}); err != nil {
 		t.Errorf("expected the leave to be accepted, got %v", err)
+	}
+}
+
+// TestCreateLeaveAllowsOpenEndedLeave covers a leave that's still
+// ongoing, with no end_date known yet — the same "open" shape a
+// membership period itself already allows.
+func TestCreateLeaveAllowsOpenEndedLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"),
+	})
+	if err != nil {
+		t.Fatalf("expected an open-ended leave to be accepted, got %v", err)
+	}
+	if l.EndDate != nil {
+		t.Errorf("expected a nil end_date, got %v", l.EndDate)
+	}
+}
+
+// TestCreateLeaveRejectsOpenEndedLeaveWhenMembershipHasClosed is the
+// flip side: a leave with no end_date can't be contained within a
+// membership period that has itself already closed — there's nothing
+// bounding how far into the (nonexistent) future it would stretch.
+func TestCreateLeaveRejectsOpenEndedLeaveWhenMembershipHasClosed(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	closedEnd := date("2020-12-31")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &closedEnd}); err != nil {
+		t.Fatalf("close membership: %v", err)
+	}
+
+	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"),
+	})
+	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
+	}
+}
+
+// TestUpdateLeaveCanClearEndDateToReopenIt mirrors
+// memberships.Update's own "clear end_date to undo an accidental baja"
+// story, one level down: correcting a leave to remove its end_date
+// works, as long as it's still contained (open-ended) within its own
+// still-open membership period.
+func TestUpdateLeaveCanClearEndDateToReopenIt(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
+	})
+	if err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	updated, err := repo.UpdateLeave(ctx, l.ID, memberships.UpdateLeaveInput{StartDate: l.StartDate})
+	if err != nil {
+		t.Fatalf("expected clearing end_date to succeed, got %v", err)
+	}
+	if updated.EndDate != nil {
+		t.Errorf("expected a nil end_date, got %v", updated.EndDate)
+	}
+}
+
+// TestUpdateRejectsShrinkingPeriodPastAnOpenLeave is
+// TestUpdateRejectsShrinkingPeriodPastAnExistingLeave's own open-ended
+// counterpart: a membership can't be closed out from under a leave
+// that's still ongoing, for the same reason a new open-ended leave
+// can't be created against an already-closed one (see
+// TestCreateLeaveRejectsOpenEndedLeaveWhenMembershipHasClosed).
+func TestUpdateRejectsShrinkingPeriodPastAnOpenLeave(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: user.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
+		MembershipID: m.ID, StartDate: date("2020-06-01"),
+	}); err != nil {
+		t.Fatalf("create leave: %v", err)
+	}
+
+	closedEnd := date("2020-12-31")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &closedEnd}); !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
+		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
 	}
 }
 
@@ -397,13 +508,13 @@ func TestCreateLeaveRejectsOverlap(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	}); err != nil {
 		t.Fatalf("create first leave: %v", err)
 	}
 
 	_, err = repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-15"), EndDate: date("2020-07-15"),
+		MembershipID: m.ID, StartDate: date("2020-06-15"), EndDate: ptr(date("2020-07-15")),
 	})
 	if !errors.Is(err, memberships.ErrLeaveOverlap) {
 		t.Errorf("expected ErrLeaveOverlap, got %v", err)
@@ -425,7 +536,7 @@ func TestUpdateLeaveCorrectsDatesAndRevalidatesContainment(t *testing.T) {
 		t.Fatalf("close membership: %v", err)
 	}
 	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	})
 	if err != nil {
 		t.Fatalf("create leave: %v", err)
@@ -433,7 +544,7 @@ func TestUpdateLeaveCorrectsDatesAndRevalidatesContainment(t *testing.T) {
 
 	// A valid correction goes through.
 	updated, err := repo.UpdateLeave(ctx, l.ID, memberships.UpdateLeaveInput{
-		StartDate: date("2020-07-01"), EndDate: date("2020-07-31"),
+		StartDate: date("2020-07-01"), EndDate: ptr(date("2020-07-31")),
 	})
 	if err != nil {
 		t.Fatalf("update leave: %v", err)
@@ -444,7 +555,7 @@ func TestUpdateLeaveCorrectsDatesAndRevalidatesContainment(t *testing.T) {
 
 	// Pushing it past the membership's end date is rejected, same as at creation.
 	_, err = repo.UpdateLeave(ctx, l.ID, memberships.UpdateLeaveInput{
-		StartDate: date("2020-12-01"), EndDate: date("2021-01-15"),
+		StartDate: date("2020-12-01"), EndDate: ptr(date("2021-01-15")),
 	})
 	if !errors.Is(err, memberships.ErrLeaveOutsideMembership) {
 		t.Errorf("expected ErrLeaveOutsideMembership, got %v", err)
@@ -462,7 +573,7 @@ func TestDeleteLeave(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	l, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	})
 	if err != nil {
 		t.Fatalf("create leave: %v", err)
@@ -530,7 +641,7 @@ func TestIsOnLeave(t *testing.T) {
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m.ID, StartDate: date(yesterday), EndDate: date(tomorrow),
+		MembershipID: m.ID, StartDate: date(yesterday), EndDate: ptr(date(tomorrow)),
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}
@@ -546,7 +657,7 @@ func TestIsOnLeave(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	if _, err := repo.CreateLeave(ctx, memberships.CreateLeaveInput{
-		MembershipID: m2.ID, StartDate: date("2020-06-01"), EndDate: date("2020-06-30"),
+		MembershipID: m2.ID, StartDate: date("2020-06-01"), EndDate: ptr(date("2020-06-30")),
 	}); err != nil {
 		t.Fatalf("create leave: %v", err)
 	}

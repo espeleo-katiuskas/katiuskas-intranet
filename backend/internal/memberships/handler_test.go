@@ -432,6 +432,84 @@ func TestHandlerCreateLeaveRejectsOverlap(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateLeaveAllowsOmittedEndDate covers a leave that's
+// still ongoing: end_date can be left out (or sent empty) entirely,
+// same as memberships' own POST already allows for its own end_date.
+func TestHandlerCreateLeaveAllowsOmittedEndDate(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	path := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]string{"start_date": "2020-06-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var l memberships.Leave
+	if err := json.Unmarshal(rec.Body.Bytes(), &l); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if l.EndDate != nil {
+		t.Errorf("expected a nil end_date, got %v", l.EndDate)
+	}
+}
+
+// TestHandlerCreateLeaveRejectsOpenEndedWhenMembershipClosed is the
+// open-ended counterpart to TestHandlerCreateLeaveRejectsOutsideMembershipPeriod:
+// a leave with no end_date can't belong to a membership period that has
+// itself already ended.
+func TestHandlerCreateLeaveRejectsOpenEndedWhenMembershipClosed(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	updatePath := fmt.Sprintf("/api/v1/memberships/%d", m.ID)
+	if rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+		map[string]string{"start_date": "2020-01-01", "end_date": "2020-12-31"}); rec.Code != http.StatusOK {
+		t.Fatalf("close membership: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	leavesPath := fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID)
+	rec := doRequest(mux, http.MethodPost, leavesPath, adminToken, map[string]string{"start_date": "2020-06-01"})
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 outside_membership_period, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerUpdateLeaveCanClearEndDate mirrors memberships' own
+// "clear end_date to undo an accidental baja" story, one level down.
+func TestHandlerUpdateLeaveCanClearEndDate(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	m := createMembership(t, mux, resolver, target.Login, "2020-01-01")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/memberships/%d/leaves", m.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create leave: %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created memberships.Leave
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/leaves/%d", created.ID), adminToken,
+		map[string]string{"start_date": "2020-06-01"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated memberships.Leave
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.EndDate != nil {
+		t.Errorf("expected a nil end_date, got %v", updated.EndDate)
+	}
+}
+
 func TestHandlerUpdateLeaveRequiresAdminNotBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")

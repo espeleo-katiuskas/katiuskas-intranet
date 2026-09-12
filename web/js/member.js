@@ -271,7 +271,10 @@ function openEditLeaveDialog(l) {
   leaveTargetId = l.id;
   document.getElementById('leave-dialog-title').textContent = 'Editar baja temporal';
   document.getElementById('leave-start-date').value = l.start_date.slice(0, 10);
-  document.getElementById('leave-end-date').value = l.end_date.slice(0, 10);
+  // l.end_date is null for a leave that's still ongoing — left blank
+  // rather than erroring, the same as a still-open membership's own
+  // end_date field elsewhere on this page.
+  document.getElementById('leave-end-date').value = l.end_date ? l.end_date.slice(0, 10) : '';
   document.getElementById('leave-reason').value = l.reason ?? '';
   leaveDialog.showModal();
 }
@@ -346,7 +349,9 @@ async function buildTimelineEvents(memberships) {
     for (const l of leaves) {
       leavesById[l.id] = l;
       events.push({ date: l.start_date, type: 'leave_start', membership: m, leave: l, reason: l.reason });
-      events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
+      if (l.end_date) {
+        events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
+      }
     }
   }
 
@@ -491,9 +496,12 @@ document.getElementById('save-edit-membership').addEventListener('click', async 
 
 document.getElementById('save-leave').addEventListener('click', async () => {
   const startDate = document.getElementById('leave-start-date').value;
-  const endDate = document.getElementById('leave-end-date').value;
-  if (!startDate || !endDate) {
-    showError('Indica la fecha de inicio y de fin de la baja temporal.');
+  // end_date is optional — a leave still in progress has no end yet,
+  // the same as a membership period's own end_date elsewhere on this
+  // page; empty means "still ongoing", sent as null rather than "".
+  const endDate = document.getElementById('leave-end-date').value || null;
+  if (!startDate) {
+    showError('Indica al menos la fecha de inicio de la baja temporal.');
     return;
   }
   const reason = document.getElementById('leave-reason').value.trim() || null;

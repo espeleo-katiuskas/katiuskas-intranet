@@ -216,15 +216,20 @@ func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 // withinMembershipPeriod reports whether [start, end] falls entirely
 // within m's period — the containment check CreateLeave and UpdateLeave
 // run before ever touching the database, since a CHECK constraint can't
-// reach across to the memberships table.
-func withinMembershipPeriod(m Membership, start, end time.Time) bool {
+// reach across to the memberships table. end is nil for a leave that's
+// still ongoing (no end_date yet) — that only fits within a membership
+// period that's itself still open: a leave can't be left dangling past
+// a period that has since closed, so a nil end against an m.EndDate
+// that isn't nil is never contained, the same way a closed leave whose
+// own end_date falls after m.EndDate isn't.
+func withinMembershipPeriod(m Membership, start time.Time, end *time.Time) bool {
 	if start.Before(m.StartDate) {
 		return false
 	}
-	if m.EndDate != nil && end.After(*m.EndDate) {
-		return false
+	if m.EndDate == nil {
+		return true
 	}
-	return true
+	return end != nil && !end.After(*m.EndDate)
 }
 
 func (r *Repository) CreateLeave(ctx context.Context, in CreateLeaveInput) (Leave, error) {

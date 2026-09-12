@@ -45,27 +45,29 @@ type UpdateInput struct {
 
 // Leave is a "baja temporal": a bounded window, always entirely within
 // one membership period, where the person steps away for a while
-// without actually leaving the club. Unlike a membership period itself,
-// both dates are always known up front — a temporary leave is a planned,
-// finite thing, not something opened now and closed later.
+// without actually leaving the club. EndDate can be nil — the same
+// "still open" shape a membership period's own EndDate already has —
+// for a leave that's still ongoing and doesn't have a known end yet;
+// see withinMembershipPeriod for what that means for containment
+// (migration 00015_membership_leaves_open_end_date.sql).
 type Leave struct {
-	ID           int64     `json:"id"`
-	MembershipID int64     `json:"membership_id"`
-	StartDate    time.Time `json:"start_date"`
-	EndDate      time.Time `json:"end_date"`
-	Reason       *string   `json:"reason,omitempty"`
+	ID           int64      `json:"id"`
+	MembershipID int64      `json:"membership_id"`
+	StartDate    time.Time  `json:"start_date"`
+	EndDate      *time.Time `json:"end_date,omitempty"`
+	Reason       *string    `json:"reason,omitempty"`
 }
 
 type CreateLeaveInput struct {
 	MembershipID int64
 	StartDate    time.Time
-	EndDate      time.Time
+	EndDate      *time.Time
 	Reason       *string
 }
 
 type UpdateLeaveInput struct {
 	StartDate time.Time
-	EndDate   time.Time
+	EndDate   *time.Time
 	Reason    *string
 }
 
