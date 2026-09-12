@@ -28,13 +28,45 @@ function wireUpForms() {
   });
 }
 
-const token = new URLSearchParams(window.location.search).get('token');
+const magicLinkToken = new URLSearchParams(window.location.search).get('token');
 
-if (token) {
+if (magicLinkToken) {
   requestForm.hidden = true;
   consumingPanel.hidden = false;
-  consumeMagicLink(token);
+  consumeMagicLink(magicLinkToken);
 } else {
+  await redirectIfAlreadySignedIn();
+}
+
+// Someone already signed in on this browser has no reason to see the
+// sign-in form again — checked against a stored token's real validity
+// (GET /auth/me), not just its presence, since a stale/expired one
+// should fall through to the ordinary form instead of a redirect loop.
+// Skipped entirely when a fresh magic-link token is in the URL (handled
+// above instead) — consuming that one always takes priority.
+async function redirectIfAlreadySignedIn() {
+  const existing = localStorage.getItem('token');
+  if (!existing) {
+    wireUpForms();
+    return;
+  }
+  requestForm.hidden = true;
+  consumingPanel.hidden = false;
+  consumingMessage.textContent = 'Comprobando la sesión…';
+  try {
+    const response = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${existing}` },
+    });
+    if (response.ok) {
+      window.location.href = '/';
+      return;
+    }
+  } catch {
+    // Network hiccup — fall through to the ordinary sign-in form below
+    // rather than getting stuck on "Comprobando la sesión…" forever.
+  }
+  consumingPanel.hidden = true;
+  requestForm.hidden = false;
   wireUpForms();
 }
 
