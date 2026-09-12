@@ -14,6 +14,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal } from './modal.js';
 import { renderMarkdown } from './markdown.js';
 import { formatSize, downloadBlob } from './fileBrowser.js';
 
@@ -55,16 +56,19 @@ if (!activityId) {
 
 const visibilityLabels = { public: 'Pública', private: 'Privada' };
 
+const editActivityDialog = document.getElementById('edit-activity-dialog');
 const editForm = document.getElementById('edit-activity-form');
+initModal(editActivityDialog, editForm);
+document.getElementById('open-edit-activity').addEventListener('click', () => editActivityDialog.showModal());
 
-// Toggles every management-only control (edit panel, "+ Participante"
-// row) according to canManage — mirrors what data-roles/
-// applyRoleVisibility does for static, role-only elements, but for
-// something only knowable after this specific activity loads.
+// Toggles every management-only control ("Editar actividad", "+
+// Participante" row) according to canManage — mirrors what
+// data-roles/applyRoleVisibility does for static, role-only elements,
+// but for something only knowable after this specific activity loads.
 // Cancelling is just editing and setting status to "cancelada" (see
 // the edit form's Estado field) — no separate action for it.
 function applyManagementVisibility() {
-  document.getElementById('edit-activity-panel').hidden = !canManage;
+  document.getElementById('open-edit-activity').hidden = !canManage;
   document.getElementById('add-participant-row').hidden = !canAddOthers;
 }
 
@@ -139,6 +143,7 @@ editForm?.addEventListener('submit', async (event) => {
   try {
     await apiFetch(`/activities/${activityId}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Actividad actualizada.');
+    editActivityDialog.close();
     await loadActivity();
   } catch (err) {
     showError(err.message);
@@ -362,6 +367,8 @@ async function loadActivityLoans() {
   }
 }
 
+const newLoanDialog = document.getElementById('new-loan-dialog');
+const newLoanForm = document.getElementById('new-loan-form');
 const loanTypeSelect = document.getElementById('loan-type');
 const loanItemInput = document.getElementById('loan-item');
 const loanQuantityField = document.getElementById('loan-quantity-field');
@@ -386,30 +393,40 @@ function updateLoanSubmitLabel() {
 }
 loanTypeSelect?.addEventListener('change', updateLoanSubmitLabel);
 
-// Clicking "Devolver" on a row above jumps straight to the shared form
-// with this item and "Devolución" preselected, instead of a separate
-// per-row quantity control — the quantity to return still needs typing
-// in (it can be less than everything outstanding), so this only saves
-// picking the item and type by hand.
+if (newLoanDialog) {
+  initModal(newLoanDialog, newLoanForm);
+  // form.reset() (already wired via initModal above) reverts loan-type
+  // back to its default option and clears which item was picked —
+  // recompute what those two other bits of UI imply right after,
+  // regardless of how the dialog closed.
+  newLoanDialog.addEventListener('close', () => {
+    updateLoanQuantityVisibility();
+    updateLoanSubmitLabel();
+  });
+  document.getElementById('toggle-new-loan').addEventListener('click', () => newLoanDialog.showModal());
+}
+
+// Clicking "Devolver" on a row above opens the same shared dialog with
+// this item and "Devolución" preselected instead of a separate per-row
+// quantity control — the quantity to return still needs typing in (it
+// can be less than everything outstanding), so this only saves picking
+// the item and type by hand.
 document.getElementById('activity-loans-table-body')?.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-prefill-return]');
   if (!button || !loanItemInput) return;
   const itemId = Number(button.dataset.prefillReturn);
   const entry = itemEntries.find((e) => e.id === itemId);
   if (!entry) return;
+  newLoanDialog.showModal();
   if (loanTypeSelect) loanTypeSelect.value = 'return';
   updateLoanSubmitLabel();
   loanItemInput.value = entry.label;
   updateLoanQuantityVisibility();
-  document.getElementById('new-loan-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
   loanQuantityInput?.focus();
 });
 
-document.getElementById('new-loan-form')?.addEventListener('submit', async (event) => {
+newLoanForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  // event.currentTarget reverts to null once dispatch finishes, which
-  // happens before the `await apiFetch(...)` below resolves — capture
-  // it now, not after.
   const form = event.currentTarget;
   const type = loanTypeSelect ? loanTypeSelect.value : 'loan';
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
@@ -446,9 +463,7 @@ document.getElementById('new-loan-form')?.addEventListener('submit', async (even
   try {
     await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
     showFeedback(type === 'return' ? 'Devolución registrada.' : 'Préstamo registrado.');
-    form.reset();
-    updateLoanQuantityVisibility();
-    updateLoanSubmitLabel();
+    newLoanDialog.close();
     await loadActivityLoans();
   } catch (err) {
     showError(err.message);
@@ -509,29 +524,25 @@ async function loadMemoria() {
   } catch (err) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
-  const addPanel = document.getElementById('memoria-add-panel');
-  if (addPanel) addPanel.hidden = !canContributeToMemoria();
+  const toggleAddButton = document.getElementById('toggle-memoria-add');
+  if (toggleAddButton) toggleAddButton.hidden = !canContributeToMemoria();
 }
 
-function startMemoriaEdit(id) {
+// #edit-memoria-dialog is one shared dialog, not one per resource —
+// opening it for a given resource just fills in its own current title
+// (and description, for a text resource — a file resource can only
+// have its title renamed here, its file itself isn't replaceable this
+// way) first. editingMemoriaId tracks which one a save is actually for.
+let editingMemoriaId = null;
+
+function openEditMemoriaDialog(id) {
   const res = memoriaResources.find((r) => r.id === id);
-  const row = document.querySelector(`[data-memoria-row="${id}"]`);
-  if (!res || !row) return;
-  row.querySelector('.memoria-resource-body').innerHTML = `
-    <div class="field">
-      <label>Título</label>
-      <input type="text" value="${escapeHtml(res.title)}" data-memoria-edit-title>
-    </div>
-    ${res.type === 'text' ? `
-    <div class="field">
-      <label>Descripción</label>
-      <textarea data-memoria-edit-description>${escapeHtml(res.description ?? '')}</textarea>
-    </div>` : ''}
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" data-memoria-save="${id}">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-memoria-cancel="${id}">Cancelar</button>
-    </div>
-  `;
+  if (!res) return;
+  editingMemoriaId = id;
+  document.getElementById('em-title').value = res.title;
+  document.getElementById('em-description-field').hidden = res.type !== 'text';
+  document.getElementById('em-description').value = res.description ?? '';
+  document.getElementById('edit-memoria-dialog').showModal();
 }
 
 async function moveMemoriaResource(id, direction) {
@@ -576,7 +587,7 @@ document.getElementById('memoria-list')?.addEventListener('click', async (event)
 
   const editButton = event.target.closest('button[data-memoria-edit]');
   if (editButton) {
-    startMemoriaEdit(Number(editButton.dataset.memoriaEdit));
+    openEditMemoriaDialog(Number(editButton.dataset.memoriaEdit));
     return;
   }
 
@@ -589,33 +600,35 @@ document.getElementById('memoria-list')?.addEventListener('click', async (event)
     } catch (err) {
       showError(err.message);
     }
-    return;
-  }
-
-  const saveButton = event.target.closest('button[data-memoria-save]');
-  if (saveButton) {
-    const id = saveButton.dataset.memoriaSave;
-    const row = document.querySelector(`[data-memoria-row="${id}"]`);
-    const body = { title: row.querySelector('[data-memoria-edit-title]').value.trim() };
-    const descriptionInput = row.querySelector('[data-memoria-edit-description]');
-    if (descriptionInput) {
-      body.description = descriptionInput.value.trim();
-    }
-    try {
-      await apiFetch(`/activities/${activityId}/resources/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      await loadMemoria();
-    } catch (err) {
-      showError(err.message);
-    }
-    return;
-  }
-
-  const cancelButton = event.target.closest('button[data-memoria-cancel]');
-  if (cancelButton) {
-    await loadMemoria();
   }
 });
 
+const editMemoriaDialog = document.getElementById('edit-memoria-dialog');
+const editMemoriaForm = document.getElementById('edit-memoria-form');
+initModal(editMemoriaDialog, editMemoriaForm);
+
+editMemoriaForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const body = { title: document.getElementById('em-title').value.trim() };
+  if (!document.getElementById('em-description-field').hidden) {
+    body.description = document.getElementById('em-description').value.trim();
+  }
+  const submitButton = editMemoriaForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetch(`/activities/${activityId}/resources/${editingMemoriaId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showFeedback('Elemento de la memoria actualizado.');
+    editMemoriaDialog.close();
+    await loadMemoria();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+const memoriaAddDialog = document.getElementById('memoria-add-dialog');
+const memoriaAddForm = document.getElementById('memoria-add-form');
 const memoriaTypeSelect = document.getElementById('memoria-type');
 const memoriaDescriptionField = document.getElementById('memoria-description-field');
 const memoriaFileField = document.getElementById('memoria-file-field');
@@ -629,7 +642,13 @@ function updateMemoriaFormVisibility() {
 memoriaTypeSelect?.addEventListener('change', updateMemoriaFormVisibility);
 updateMemoriaFormVisibility();
 
-document.getElementById('memoria-add-form')?.addEventListener('submit', async (event) => {
+if (memoriaAddDialog) {
+  initModal(memoriaAddDialog, memoriaAddForm);
+  memoriaAddDialog.addEventListener('close', updateMemoriaFormVisibility);
+  document.getElementById('toggle-memoria-add').addEventListener('click', () => memoriaAddDialog.showModal());
+}
+
+memoriaAddForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const title = document.getElementById('memoria-title').value.trim();
@@ -661,8 +680,7 @@ document.getElementById('memoria-add-form')?.addEventListener('submit', async (e
   try {
     await apiFetchForm(`/activities/${activityId}/resources`, formData);
     showFeedback('Añadido a la memoria.');
-    form.reset();
-    updateMemoriaFormVisibility();
+    memoriaAddDialog.close();
     await loadMemoria();
   } catch (err) {
     showError(err.message);

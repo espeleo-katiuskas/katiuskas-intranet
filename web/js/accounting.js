@@ -8,6 +8,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { childrenByParent, flattenAccountTree } from './accountTree.js';
+import { initModal } from './modal.js';
 
 // This whole page is restricted to admin/money, tighter than the API
 // itself (GET /accounts is open to every baseline role — see
@@ -20,6 +21,8 @@ import { childrenByParent, flattenAccountTree } from './accountTree.js';
 await initPage({ requireAnyRole: ['admin', 'money'] });
 
 let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see accountTree.js
+let accountsById = {}; // rebuilt alongside flattened — so a row's own "Editar" can look its account up without a fresh fetch
+let editingAccountId = null; // which account #edit-account-dialog's fields currently belong to — set right before it opens, read back on save
 
 // Every id descending from (not including) accountId — used to keep an
 // edit's own "cuenta superior" picker from offering the account itself
@@ -58,28 +61,6 @@ function parentSelectOptions(selectedParentId, excludeId) {
   return `<option value="" ${noneSelected}>— Ninguna (cuenta de primer nivel) —</option>${options}`;
 }
 
-function renderAccountEditPanel(account) {
-  return `
-    <div class="edit-fields" data-edit-account-panel="${account.id}">
-      <div class="field-grid">
-        <div class="field">
-          <label>Nombre</label>
-          <input type="text" data-account-field="name" value="${escapeHtml(account.name)}">
-        </div>
-        <div class="field">
-          <label>Código <span class="optional">(opcional)</span></label>
-          <input type="text" data-account-field="code" value="${escapeHtml(account.code ?? '')}">
-        </div>
-        <div class="field">
-          <label>Cuenta superior <span class="optional">(opcional)</span></label>
-          <select data-account-field="parent_id">${parentSelectOptions(account.parent_id ?? null, account.id)}</select>
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-account="${account.id}">Guardar</button>
-    </div>
-  `;
-}
-
 function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr>
@@ -91,12 +72,9 @@ function renderAccountRow({ account, depth, isFirst, isLast }) {
         <div class="table-actions">
           ${isFirst ? '' : `<button type="button" class="btn btn-secondary btn-small" data-account-move-up="${account.id}">↑</button>`}
           ${isLast ? '' : `<button type="button" class="btn btn-secondary btn-small" data-account-move-down="${account.id}">↓</button>`}
-          <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-account="${account.id}">Editar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-edit-account="${account.id}">Editar</button>
         </div>
       </td>
-    </tr>
-    <tr data-edit-account-row="${account.id}" hidden>
-      <td colspan="5">${renderAccountEditPanel(account)}</td>
     </tr>
   `;
 }
@@ -113,6 +91,7 @@ function renderAccountsTable() {
 // either way the same shape) without a redundant extra round trip.
 function applyAccountsList(list) {
   flattened = flattenAccountTree(list);
+  accountsById = Object.fromEntries(list.map((account) => [account.id, account]));
   renderAccountsTable();
   document.getElementById('na-parent').innerHTML = parentSelectOptions(null, null);
 }
@@ -134,35 +113,52 @@ async function moveAccount(id, direction) {
   }
 }
 
-async function saveAccount(button) {
-  const accountId = button.dataset.saveAccount;
-  const panel = document.querySelector(`[data-edit-account-panel="${accountId}"]`);
-  const parentValue = panel.querySelector('[data-account-field="parent_id"]').value;
+// #edit-account-dialog is one shared dialog, not one per row — opening
+// it for a given account just fills in its own current values first
+// (editingAccountId tracks which one a save is actually for, since the
+// dialog's own fields carry no id of their own).
+const editAccountDialog = document.getElementById('edit-account-dialog');
+const editAccountForm = document.getElementById('edit-account-form');
+initModal(editAccountDialog, editAccountForm);
+
+function openEditAccountDialog(account) {
+  editingAccountId = account.id;
+  document.getElementById('ea-name').value = account.name;
+  document.getElementById('ea-code').value = account.code ?? '';
+  document.getElementById('ea-parent').innerHTML = parentSelectOptions(account.parent_id ?? null, account.id);
+  editAccountDialog.showModal();
+}
+
+editAccountForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const parentValue = document.getElementById('ea-parent').value;
   const body = {
-    name: panel.querySelector('[data-account-field="name"]').value.trim(),
+    name: document.getElementById('ea-name').value.trim(),
     // Optional — a blank input clears an existing code, same as an
     // account that never had one (Handler.normalizeCode does the same
     // normalization server-side too, so this isn't the only guard).
-    code: panel.querySelector('[data-account-field="code"]').value.trim() || null,
+    code: document.getElementById('ea-code').value.trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
   };
 
-  button.disabled = true;
+  const submitButton = editAccountForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
   try {
-    await apiFetch(`/accounts/${accountId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/accounts/${editingAccountId}`, { method: 'PATCH', body: JSON.stringify(body) });
     showFeedback('Cuenta actualizada.');
+    editAccountDialog.close();
     await loadAccounts();
   } catch (err) {
     showError(err.message);
-    button.disabled = false;
+  } finally {
+    submitButton.disabled = false;
   }
-}
+});
 
 document.getElementById('accounts-table-body').addEventListener('click', async (event) => {
-  const toggleButton = event.target.closest('button[data-toggle-edit-account]');
-  if (toggleButton) {
-    const row = document.querySelector(`[data-edit-account-row="${toggleButton.dataset.toggleEditAccount}"]`);
-    row.hidden = !row.hidden;
+  const editButton = event.target.closest('button[data-edit-account]');
+  if (editButton) {
+    openEditAccountDialog(accountsById[Number(editButton.dataset.editAccount)]);
     return;
   }
 
@@ -175,25 +171,15 @@ document.getElementById('accounts-table-body').addEventListener('click', async (
   const moveDownButton = event.target.closest('button[data-account-move-down]');
   if (moveDownButton) {
     await moveAccount(Number(moveDownButton.dataset.accountMoveDown), 'down');
-    return;
-  }
-
-  const saveButton = event.target.closest('button[data-save-account]');
-  if (saveButton) {
-    await saveAccount(saveButton);
   }
 });
 
-const newAccountPanel = document.getElementById('new-account-panel');
+const newAccountDialog = document.getElementById('new-account-dialog');
 const newAccountForm = document.getElementById('new-account-form');
+initModal(newAccountDialog, newAccountForm);
 
 document.getElementById('toggle-new-account').addEventListener('click', () => {
-  newAccountPanel.hidden = !newAccountPanel.hidden;
-});
-
-document.getElementById('cancel-new-account').addEventListener('click', () => {
-  newAccountForm.reset();
-  newAccountPanel.hidden = true;
+  newAccountDialog.showModal();
 });
 
 newAccountForm.addEventListener('submit', async (event) => {
@@ -211,8 +197,7 @@ newAccountForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch('/accounts', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Cuenta creada.');
-    newAccountForm.reset();
-    newAccountPanel.hidden = true;
+    newAccountDialog.close();
     await loadAccounts();
   } catch (err) {
     showError(err.message);

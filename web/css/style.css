@@ -722,6 +722,49 @@ button.link-button {
   margin-top: 18px;
 }
 
+/* Every "create" or "edit" form used to expand a hidden .panel in
+   place, on the same page — easy to lose track of, and nothing stopped
+   anyone from clicking elsewhere on the page before saving or
+   cancelling it. Every one of those is a <dialog class="panel modal">
+   now instead (see js/modal.js): a real native dialog, so the rest of
+   the page genuinely can't be interacted with while one is open (no
+   hand-rolled overlay to keep in sync), Escape already closes it, and
+   .panel's own existing rules (background/border/radius/padding,
+   h3, p.hint) still apply unchanged since they're a class selector,
+   not one scoped to <div>. Only what a plain .panel never needed is
+   added here: centering (the UA default for an open dialog), a
+   maximum width so a short form doesn't stretch edge to edge, and the
+   dimmed backdrop over everything behind it. */
+dialog.modal {
+  max-width: 560px;
+  width: calc(100% - 32px);
+  max-height: calc(100% - 64px);
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(28, 33, 30, 0.35);
+  position: relative;
+}
+
+dialog.modal::backdrop {
+  background: rgba(28, 33, 30, 0.55);
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-close:hover {
+  color: var(--ink);
+}
+
 /* Buttons: one shared base, three intents, one size variant. */
 .btn {
   display: inline-flex;

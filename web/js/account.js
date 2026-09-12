@@ -8,6 +8,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { flattenAccountTree, accountLabel } from './accountTree.js';
+import { initModal } from './modal.js';
 
 // Reached only from /accounting's own account tree — same admin/money
 // gate as that page (see accounting.js's own doc comment for why this
@@ -20,7 +21,8 @@ if (!accountId) {
   window.location.href = '/accounting';
 }
 
-let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and per-row edit alike
+let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and edit alike
+let editingTransactionId = null; // which transaction #edit-transaction-dialog's fields currently belong to — set right before it opens, read back on save
 
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
@@ -32,7 +34,7 @@ function renderHeader(account) {
 // relationship to guard against here: any two distinct accounts can be
 // the two sides of a transaction, including a child of this one or
 // this one's own parent. selectedId is nullable — unset for the "+
-// Nueva transacción" panel's own picker, set to the transaction's
+// Nueva transacción" dialog's own picker, set to the transaction's
 // current other account when reopening one for editing.
 function otherAccountOptions(selectedId) {
   return flattenAccountTree(allAccounts)
@@ -97,13 +99,10 @@ function renderEntryRow(entry) {
       <td class="balance-cell">${formatCurrency(entry.balance_after)}</td>
       <td>
         <div class="table-actions">
-          <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-entry="${entry.transaction_id}">Editar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>
           <button type="button" class="btn btn-danger btn-small" data-delete-entry="${entry.transaction_id}">Borrar</button>
         </div>
       </td>
-    </tr>
-    <tr data-edit-entry-row="${entry.transaction_id}" hidden>
-      <td colspan="5"><div class="edit-fields" data-edit-entry-panel="${entry.transaction_id}"></div></td>
     </tr>
   `;
 }
@@ -120,88 +119,68 @@ async function loadEntries() {
   }
 }
 
+const editTransactionDialog = document.getElementById('edit-transaction-dialog');
+const editTransactionForm = document.getElementById('edit-transaction-form');
+initModal(editTransactionDialog, editTransactionForm);
+
 // The ledger listing only ever carries this account's own side of each
 // transaction (see AccountEntry's own doc comment) — editing needs the
 // full transaction, entries included, so this fetches it fresh every
 // time a row's own "Editar" is opened rather than trying to keep a
-// second copy of every transaction in memory. Only ever offers the
-// simplified two-field edit this page's own create form uses; a
-// transaction with more than two entries (only possible by calling the
-// API directly — this page never creates one) is reported instead of
-// silently mis-edited.
-async function toggleEntryEdit(transactionId) {
-  const row = document.querySelector(`[data-edit-entry-row="${transactionId}"]`);
-  if (!row.hidden) {
-    row.hidden = true;
-    return;
-  }
-
-  const panel = row.querySelector(`[data-edit-entry-panel="${transactionId}"]`);
-  panel.innerHTML = 'Cargando…';
-  row.hidden = false;
+// second copy of every transaction in memory. #edit-transaction-dialog
+// is one shared dialog, not one per row — only ever offers the same
+// simplified two-field edit the create dialog uses; a transaction with
+// more than two entries (only possible by calling the API directly —
+// this page never creates one that way) is reported instead of
+// silently mis-edited, and the dialog never opens for it.
+async function openEditTransactionDialog(transactionId) {
   try {
     const transaction = await apiFetch(`/transactions/${transactionId}`);
     if (transaction.entries.length !== 2) {
-      row.hidden = true;
       showError('Esta transacción tiene más de dos apuntes: corrígela por la API — esta página solo edita transacciones simples de dos apuntes.');
       return;
     }
     const ownEntry = transaction.entries.find((e) => e.account_id === accountId);
     const otherEntry = transaction.entries.find((e) => e.account_id !== accountId);
     if (!ownEntry || !otherEntry) {
-      row.hidden = true;
       showError('No se han podido determinar los apuntes de esta transacción.');
       return;
     }
-    panel.innerHTML = `
-      <div class="field-grid">
-        <div class="field">
-          <label>Fecha</label>
-          <input type="date" data-entry-field="occurred_at" value="${transaction.occurred_at.slice(0, 10)}">
-        </div>
-        <div class="field span-2">
-          <label>Descripción</label>
-          <input type="text" data-entry-field="description" value="${escapeHtml(transaction.description)}">
-        </div>
-        <div class="field">
-          <label>Cantidad en esta cuenta</label>
-          <input type="number" step="0.01" data-entry-field="amount" value="${ownEntry.amount}">
-        </div>
-        <div class="field">
-          <label>Otra cuenta</label>
-          <select data-entry-field="other_account_id">${otherAccountOptions(otherEntry.account_id)}</select>
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-entry="${transactionId}">Guardar</button>
-    `;
+    editingTransactionId = transactionId;
+    document.getElementById('et-date').value = transaction.occurred_at.slice(0, 10);
+    document.getElementById('et-description').value = transaction.description;
+    document.getElementById('et-amount').value = ownEntry.amount;
+    document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
+    editTransactionDialog.showModal();
   } catch (err) {
-    row.hidden = true;
     showError(err.message);
   }
 }
 
-async function saveEntry(button) {
-  const transactionId = button.dataset.saveEntry;
-  const panel = document.querySelector(`[data-edit-entry-panel="${transactionId}"]`);
-  const dateValue = panel.querySelector('[data-entry-field="occurred_at"]').value;
-  const description = panel.querySelector('[data-entry-field="description"]').value.trim();
-  const amount = Number(panel.querySelector('[data-entry-field="amount"]').value);
-  const otherAccountId = Number(panel.querySelector('[data-entry-field="other_account_id"]').value);
+editTransactionForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const dateValue = document.getElementById('et-date').value;
+  const description = document.getElementById('et-description').value.trim();
+  const amount = Number(document.getElementById('et-amount').value);
+  const otherAccountId = Number(document.getElementById('et-other-account').value);
 
-  button.disabled = true;
+  const submitButton = editTransactionForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
   try {
-    await apiFetch(`/transactions/${transactionId}`, {
+    await apiFetch(`/transactions/${editingTransactionId}`, {
       method: 'PATCH',
       body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)),
     });
     showFeedback('Transacción actualizada.');
+    editTransactionDialog.close();
     await loadAccount();
     await loadEntries();
   } catch (err) {
     showError(err.message);
-    button.disabled = false;
+  } finally {
+    submitButton.disabled = false;
   }
-}
+});
 
 async function deleteTransaction(transactionId) {
   if (!confirm('¿Borrar esta transacción? También se elimina el apunte que crea en la otra cuenta.')) return;
@@ -216,34 +195,24 @@ async function deleteTransaction(transactionId) {
 }
 
 document.getElementById('entries-table-body').addEventListener('click', async (event) => {
-  const toggleButton = event.target.closest('button[data-toggle-edit-entry]');
-  if (toggleButton) {
-    await toggleEntryEdit(Number(toggleButton.dataset.toggleEditEntry));
+  const editButton = event.target.closest('button[data-edit-entry]');
+  if (editButton) {
+    await openEditTransactionDialog(Number(editButton.dataset.editEntry));
     return;
   }
 
   const deleteButton = event.target.closest('button[data-delete-entry]');
   if (deleteButton) {
     await deleteTransaction(Number(deleteButton.dataset.deleteEntry));
-    return;
-  }
-
-  const saveButton = event.target.closest('button[data-save-entry]');
-  if (saveButton) {
-    await saveEntry(saveButton);
   }
 });
 
-const newTransactionPanel = document.getElementById('new-transaction-panel');
+const newTransactionDialog = document.getElementById('new-transaction-dialog');
 const newTransactionForm = document.getElementById('new-transaction-form');
+initModal(newTransactionDialog, newTransactionForm);
 
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
-  newTransactionPanel.hidden = !newTransactionPanel.hidden;
-});
-
-document.getElementById('cancel-new-transaction').addEventListener('click', () => {
-  newTransactionForm.reset();
-  newTransactionPanel.hidden = true;
+  newTransactionDialog.showModal();
 });
 
 // Only four fields (date, description, amount, other account) —
@@ -261,8 +230,7 @@ newTransactionForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)) });
     showFeedback('Transacción creada.');
-    newTransactionForm.reset();
-    newTransactionPanel.hidden = true;
+    newTransactionDialog.close();
     await loadAccount();
     await loadEntries();
   } catch (err) {

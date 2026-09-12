@@ -10,6 +10,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal } from './modal.js';
 
 const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
@@ -144,7 +145,12 @@ function renderItemRow(item) {
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
-      <td><button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button></td>
+      <td>
+        <div class="table-actions">
+          <button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button>
+          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
+        </div>
+      </td>
     </tr>
     <tr data-item-movements-row="${item.id}" hidden>
       <td colspan="6"><div class="detail-list" data-item-movements-panel="${item.id}"></div></td>
@@ -166,84 +172,12 @@ function renderMovementDetail(m) {
   `;
 }
 
-// One inline "add movement" form per item, rendered into that item's
-// own expanded panel — there's no separate "nuevo movimiento" section
-// with its own material picker any more, since with 300+ items a
-// second search-to-find-the-item step would just duplicate the one
-// above. Rope/bag skip the quantity field entirely (always exactly one
-// unit — the server forces it anyway); every input reads/writes
-// through data- attributes rather than ids, since several of these
-// forms can exist in the DOM at once.
-function renderMovementAddForm(item) {
-  const isSingleUnit = item.item_type === 'rope' || item.item_type === 'bag';
-  return `
-    <form class="panel movement-add-form" data-new-movement-form="${item.id}">
-      <div class="field-grid">
-        <div class="field">
-          <label>Tipo</label>
-          <select data-mv-type>
-            ${movementTypeOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field" data-mv-user-field>
-          <label>Socio <span class="optional" data-mv-user-hint>(opcional)</span></label>
-          <input type="text" list="mv-user-options" autocomplete="off" data-mv-user placeholder="Escribe un nombre…">
-        </div>
-        <div class="field" data-mv-activity-field>
-          <label>Actividad <span class="optional" data-mv-activity-hint>(opcional)</span></label>
-          <input type="text" list="mv-activity-options" autocomplete="off" data-mv-activity placeholder="Escribe para buscar…">
-        </div>
-        ${isSingleUnit ? '' : `
-        <div class="field">
-          <label>Cantidad</label>
-          <input type="number" min="1" value="1" data-mv-quantity>
-        </div>`}
-        <div class="field span-2">
-          <label>Notas <span class="optional">(opcional)</span></label>
-          <input type="text" data-mv-notes placeholder="Motivo, contexto…">
-        </div>
-      </div>
-      <p class="hint">El precio (si aplica) es siempre el indicado en el material.</p>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary btn-small">Registrar movimiento</button>
-      </div>
-    </form>
-  `;
-}
-
-function updateMovementFormVisibility(form) {
-  const type = form.querySelector('[data-mv-type]').value;
-  // A rental can optionally be tied to an activity (a loan always is,
-  // but loan is never an option in this form — see
-  // movementTypeOptions). return is the other side of a loan and is
-  // always required to name the same activity it's returning material
-  // against — Repository.CreateMovement validates it against how much
-  // of that item this activity still has outstanding. Every other type
-  // has no such notion at all, so the field only shows for those two.
-  const activityField = form.querySelector('[data-mv-activity-field]');
-  const activityInput = form.querySelector('[data-mv-activity]');
-  activityField.hidden = type !== 'rental' && type !== 'return';
-  if (activityField.hidden) activityInput.value = '';
-  activityInput.required = type === 'return';
-  form.querySelector('[data-mv-activity-hint]').hidden = activityInput.required;
-
-  // Acquisition/loss/abandonment/retirement never have a recipient —
-  // the field is hidden outright (and cleared) rather than just left
-  // optional, matching recipient_only_for_loan_rental_sale.
-  const userField = form.querySelector('[data-mv-user-field]');
-  const userInput = form.querySelector('[data-mv-user]');
-  const forbidsRecipient = recipientForbiddenTypes.has(type);
-  userField.hidden = forbidsRecipient;
-  if (forbidsRecipient) userInput.value = '';
-  const requiresRecipient = recipientRequiredTypes.has(type);
-  userInput.required = requiresRecipient;
-  form.querySelector('[data-mv-user-hint]').hidden = requiresRecipient || forbidsRecipient;
-}
-
-// Fetches and renders one item's movement history plus (if allowed) its
-// inline add-movement form. Called both when a row's "Movimientos"
-// toggle opens it, and to restore that same open state after an action
-// (add/return) forces the whole table to reload.
+// Fetches and renders one item's movement history — read-only; adding
+// one is #new-movement-dialog below, a separate modal rather than
+// something embedded in this same expanded row. Called both when a
+// row's "Movimientos" toggle opens it, and to refresh that same view
+// after an action (add/return) elsewhere forces the whole table to
+// reload.
 async function expandItemMovements(itemId) {
   const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
   if (!row) return; // filtered out of the current search results
@@ -252,14 +186,62 @@ async function expandItemMovements(itemId) {
   panel.innerHTML = 'Cargando…';
   try {
     const movements = await apiFetch(`/items/${itemId}/movements`);
-    const item = itemsById[itemId];
-    const list = movements.length ? movements.map(renderMovementDetail).join('') : '<p>Todavía no tiene movimientos.</p>';
-    panel.innerHTML = list + (canManageMovements && item ? renderMovementAddForm(item) : '');
-    const form = panel.querySelector('form[data-new-movement-form]');
-    if (form) updateMovementFormVisibility(form);
+    panel.innerHTML = movements.length ? movements.map(renderMovementDetail).join('') : '<p>Todavía no tiene movimientos.</p>';
   } catch (err) {
     panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
+}
+
+// #new-movement-dialog is one shared dialog, not one per item — there's
+// no separate "nuevo movimiento" section with its own material picker
+// either, since with 300+ items a second search-to-find-the-item step
+// would just duplicate the one the items table itself already is;
+// opening it for a given item just remembers which one (movementItemId)
+// and shows its own label, rather than the dialog carrying an id of its
+// own. Rope/bag skip the quantity field entirely (always exactly one
+// unit — the server forces it anyway).
+let movementItemId = null;
+
+function updateMovementFormVisibility() {
+  const type = document.getElementById('mv-type').value;
+  // A rental can optionally be tied to an activity (a loan always is,
+  // but loan is never an option in this form — see
+  // movementTypeOptions). return is the other side of a loan and is
+  // always required to name the same activity it's returning material
+  // against — Repository.CreateMovement validates it against how much
+  // of that item this activity still has outstanding. Every other type
+  // has no such notion at all, so the field only shows for those two.
+  const activityField = document.getElementById('mv-activity-field');
+  const activityInput = document.getElementById('mv-activity');
+  activityField.hidden = type !== 'rental' && type !== 'return';
+  if (activityField.hidden) activityInput.value = '';
+  activityInput.required = type === 'return';
+  document.getElementById('mv-activity-hint').hidden = activityInput.required;
+
+  // Acquisition/loss/abandonment/retirement never have a recipient —
+  // the field is hidden outright (and cleared) rather than just left
+  // optional, matching recipient_only_for_loan_rental_sale.
+  const userField = document.getElementById('mv-user-field');
+  const userInput = document.getElementById('mv-user');
+  const forbidsRecipient = recipientForbiddenTypes.has(type);
+  userField.hidden = forbidsRecipient;
+  if (forbidsRecipient) userInput.value = '';
+  const requiresRecipient = recipientRequiredTypes.has(type);
+  userInput.required = requiresRecipient;
+  document.getElementById('mv-user-hint').hidden = requiresRecipient || forbidsRecipient;
+}
+
+document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
+
+function openNewMovementDialog(itemId) {
+  movementItemId = itemId;
+  const item = itemsById[itemId];
+  document.getElementById('new-movement-item-label').innerHTML = item ? itemLabel(item) : '';
+  const isSingleUnit = !!item && (item.item_type === 'rope' || item.item_type === 'bag');
+  document.getElementById('mv-quantity-field').hidden = isSingleUnit;
+  document.getElementById('mv-type').innerHTML = movementTypeOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  updateMovementFormVisibility();
+  document.getElementById('new-movement-dialog').showModal();
 }
 
 function renderFilteredItems() {
@@ -296,29 +278,32 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
     return;
   }
 
+  const addMovementButton = event.target.closest('button[data-add-movement]');
+  if (addMovementButton) {
+    openNewMovementDialog(Number(addMovementButton.dataset.addMovement));
+    return;
+  }
+
   const returnButton = event.target.closest('button[data-return]');
   if (returnButton) {
     await handleReturn(returnButton);
   }
 });
 
-document.getElementById('items-table-body').addEventListener('change', (event) => {
-  const select = event.target.closest('[data-mv-type]');
-  if (select) updateMovementFormVisibility(select.closest('form'));
-});
+const newMovementDialog = document.getElementById('new-movement-dialog');
+const newMovementForm = document.getElementById('new-movement-form');
+initModal(newMovementDialog, newMovementForm);
 
-document.getElementById('items-table-body').addEventListener('submit', async (event) => {
-  const form = event.target.closest('form[data-new-movement-form]');
-  if (!form) return;
+newMovementForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
-  const itemId = Number(form.dataset.newMovementForm);
-  const type = form.querySelector('[data-mv-type]').value;
-  const userInput = form.querySelector('[data-mv-user]');
-  const activityField = form.querySelector('[data-mv-activity-field]');
-  const activityInput = form.querySelector('[data-mv-activity]');
-  const quantityInput = form.querySelector('[data-mv-quantity]');
-  const notesInput = form.querySelector('[data-mv-notes]');
+  const type = document.getElementById('mv-type').value;
+  const userInput = document.getElementById('mv-user');
+  const activityField = document.getElementById('mv-activity-field');
+  const activityInput = document.getElementById('mv-activity');
+  const quantityField = document.getElementById('mv-quantity-field');
+  const quantityInput = document.getElementById('mv-quantity');
+  const notesInput = document.getElementById('mv-notes');
 
   let userLogin = null;
   if (userInput.value.trim()) {
@@ -344,26 +329,28 @@ document.getElementById('items-table-body').addEventListener('submit', async (ev
   }
 
   const body = {
-    item_id: itemId,
+    item_id: movementItemId,
     login: userLogin,
     type,
-    quantity: quantityInput ? Number(quantityInput.value) || 1 : 1,
+    quantity: quantityField.hidden ? 1 : Number(quantityInput.value) || 1,
     // No date field in this form — always today (transacted_at left
     // unset defaults to now() server-side).
     activity_id: activityId,
     notes: notesInput.value.trim() || null,
   };
 
-  const submitButton = form.querySelector('button[type="submit"]');
+  const submitButton = newMovementForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
     await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Movimiento registrado.');
+    newMovementDialog.close();
     await loadItems();
-    await expandItemMovements(itemId);
+    await expandItemMovements(movementItemId);
     await loadActiveMovements();
   } catch (err) {
     showError(err.message);
+  } finally {
     submitButton.disabled = false;
   }
 });
@@ -462,7 +449,7 @@ document.getElementById('loaned-material-table-body')?.addEventListener('click',
 });
 
 if (isAdmin) {
-  const newItemPanel = document.getElementById('new-item-panel');
+  const newItemDialog = document.getElementById('new-item-dialog');
   const newItemForm = document.getElementById('new-item-form');
   const itemTypeSelect = document.getElementById('ni-item-type');
   const descriptionField = document.getElementById('ni-description');
@@ -496,14 +483,15 @@ if (isAdmin) {
     })
     .catch(() => showError('No se pudo cargar la lista de categorías.'));
 
-  document.getElementById('toggle-new-item').addEventListener('click', () => {
-    newItemPanel.hidden = !newItemPanel.hidden;
-  });
+  initModal(newItemDialog, newItemForm);
+  // The dialog's own "close" (initModal already resets the form there,
+  // regardless of how it closed) reverts item_type back to its default
+  // option — recompute which fields that implies right after, same as
+  // the very first render below.
+  newItemDialog.addEventListener('close', updateItemTypeFieldsVisibility);
 
-  document.getElementById('cancel-new-item').addEventListener('click', () => {
-    newItemForm.reset();
-    newItemPanel.hidden = true;
-    updateItemTypeFieldsVisibility();
+  document.getElementById('toggle-new-item').addEventListener('click', () => {
+    newItemDialog.showModal();
   });
 
   newItemForm.addEventListener('submit', async (event) => {
@@ -544,9 +532,7 @@ if (isAdmin) {
     try {
       await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
       showFeedback('Material creado.');
-      newItemForm.reset();
-      newItemPanel.hidden = true;
-      updateItemTypeFieldsVisibility();
+      newItemDialog.close();
       await loadItems();
     } catch (err) {
       showError(err.message);

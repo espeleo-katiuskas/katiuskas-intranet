@@ -26,7 +26,13 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div class="panel">
+  <div class="section-header">
+    <h2>Datos</h2>
+    <button id="open-edit-member" type="button" class="btn btn-secondary btn-small">Datos</button>
+  </div>
+
+  <dialog id="edit-member-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Datos</h3>
     <p class="hint" id="board-readonly-hint" hidden>
       Puedes ver los datos de los socios, pero solo la administración puede modificarlos.
@@ -88,9 +94,10 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="section-header">
     <h2>Roles</h2>
@@ -111,16 +118,23 @@
     activa, y es válida desde su fecha de obtención hasta el 31 de diciembre de ese
     mismo año.
   </p>
-  <div class="edit-fields" id="add-membership-panel" hidden data-roles="admin">
+  <dialog id="add-membership-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Dar de alta</h3>
     <div class="field-grid">
       <div class="field">
         <label for="add-membership-start-date">Fecha de alta</label>
         <input id="add-membership-start-date" type="date">
       </div>
     </div>
-    <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
-  </div>
-  <div class="edit-fields" id="add-license-panel" hidden data-roles="admin">
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-add-membership">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+  <dialog id="add-license-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nueva licencia</h3>
     <div class="field-grid">
       <div class="field">
         <label for="add-license-type">Tipo de licencia</label>
@@ -135,9 +149,14 @@
         <input id="add-license-issued-date" type="date">
       </div>
     </div>
-    <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
-  </div>
-  <div class="edit-fields" id="add-board-panel" hidden data-roles="admin">
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+  <dialog id="add-board-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nuevo cargo en la Junta Directiva</h3>
     <div class="field-grid">
       <div class="field">
         <label for="add-board-position">Cargo</label>
@@ -154,8 +173,106 @@
         <input id="add-board-start-date" type="date">
       </div>
     </div>
-    <button type="button" class="btn btn-primary btn-small" id="save-add-board-term">Guardar</button>
-  </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-add-board-term">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
+  <dialog id="edit-membership-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar alta</h3>
+    <div class="field-grid">
+      <div class="field">
+        <label for="em-membership-start-date">Fecha de alta</label>
+        <input id="em-membership-start-date" type="date">
+      </div>
+      <div class="field">
+        <label for="em-membership-end-date">Fecha de baja <span class="optional">(vacío = sigue activa)</span></label>
+        <input id="em-membership-end-date" type="date">
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-edit-membership">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
+  <dialog id="leave-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="leave-dialog-title">Baja temporal</h3>
+    <div class="field-grid">
+      <div class="field">
+        <label for="leave-start-date">Fecha de inicio</label>
+        <input id="leave-start-date" type="date">
+      </div>
+      <div class="field">
+        <label for="leave-end-date">Fecha de fin</label>
+        <input id="leave-end-date" type="date">
+      </div>
+      <div class="field span-2">
+        <label for="leave-reason">Motivo <span class="optional">(opcional)</span></label>
+        <input id="leave-reason" type="text">
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-leave">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
+  <dialog id="edit-board-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar cargo</h3>
+    <div class="field-grid">
+      <div class="field">
+        <label for="eb-position">Cargo</label>
+        <select id="eb-position">
+          <option value="president">Presidente</option>
+          <option value="vice_president">Vicepresidente</option>
+          <option value="secretary">Secretario</option>
+          <option value="treasurer">Tesorero</option>
+          <option value="member_at_large">Vocal</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="eb-start-date">Fecha de inicio</label>
+        <input id="eb-start-date" type="date">
+      </div>
+      <div class="field">
+        <label for="eb-end-date">Fecha de fin <span class="optional">(vacío = sigue en la junta)</span></label>
+        <input id="eb-end-date" type="date">
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-edit-board">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
+  <dialog id="edit-license-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar licencia</h3>
+    <div class="field-grid">
+      <div class="field">
+        <label for="el-license-type">Tipo de licencia</label>
+        <select id="el-license-type"></select>
+      </div>
+      <div class="field" id="el-other-detail-field" hidden>
+        <label for="el-other-detail">¿Cuál?</label>
+        <input id="el-other-detail" type="text">
+      </div>
+      <div class="field">
+        <label for="el-issued-date">Fecha de obtención</label>
+        <input id="el-issued-date" type="date">
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-edit-license">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
   <div class="detail-list" id="timeline-list"></div>
 
   <h2>Actividades</h2>

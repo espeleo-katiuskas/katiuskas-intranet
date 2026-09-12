@@ -24,7 +24,8 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div id="new-transaction-panel" class="panel" hidden>
+  <dialog id="new-transaction-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nueva transacción</h3>
     <p class="hint">Se crean dos apuntes: uno en esta cuenta por la cantidad indicada, y otro en la cuenta elegida por la cantidad opuesta.</p>
     <form id="new-transaction-form">
@@ -49,10 +50,39 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear transacción</button>
-        <button id="cancel-new-transaction" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
+
+  <dialog id="edit-transaction-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar transacción</h3>
+    <form id="edit-transaction-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="et-date">Fecha</label>
+          <input id="et-date" type="date" required>
+        </div>
+        <div class="field span-2">
+          <label for="et-description">Descripción</label>
+          <input id="et-description" type="text" required>
+        </div>
+        <div class="field">
+          <label for="et-amount">Cantidad en esta cuenta</label>
+          <input id="et-amount" type="number" step="0.01" required>
+        </div>
+        <div class="field">
+          <label for="et-other-account">Otra cuenta</label>
+          <select id="et-other-account" required></select>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="table-wrap">
     <table>

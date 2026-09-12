@@ -23,7 +23,8 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div id="new-item-panel" class="panel" hidden data-roles="admin,board">
+  <dialog id="new-item-dialog" class="panel modal" data-roles="admin,board">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nuevo material</h3>
     <form id="new-item-form">
       <div class="field-grid">
@@ -109,10 +110,10 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear material</button>
-        <button id="cancel-new-item" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="field" id="item-search-field">
     <label for="item-search">Buscar material</label>
@@ -128,11 +129,44 @@
     </table>
   </div>
 
-  <!-- Shared by every item's inline "add movement" form (see
-       js/inventory.js renderMovementAddForm) — one set of options, many
-       inputs pointing at it via list="…". -->
+  <!-- Shared by #new-movement-dialog's own socio/actividad inputs below. -->
   <datalist id="mv-user-options"></datalist>
   <datalist id="mv-activity-options"></datalist>
+
+  <dialog id="new-movement-dialog" class="panel modal" data-roles="admin,board,material">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Registrar movimiento</h3>
+    <p class="hint" id="new-movement-item-label"></p>
+    <form id="new-movement-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="mv-type">Tipo</label>
+          <select id="mv-type"></select>
+        </div>
+        <div class="field" id="mv-user-field">
+          <label for="mv-user">Socio <span class="optional" id="mv-user-hint">(opcional)</span></label>
+          <input type="text" id="mv-user" list="mv-user-options" autocomplete="off" placeholder="Escribe un nombre…">
+        </div>
+        <div class="field" id="mv-activity-field">
+          <label for="mv-activity">Actividad <span class="optional" id="mv-activity-hint">(opcional)</span></label>
+          <input type="text" id="mv-activity" list="mv-activity-options" autocomplete="off" placeholder="Escribe para buscar…">
+        </div>
+        <div class="field" id="mv-quantity-field">
+          <label for="mv-quantity">Cantidad</label>
+          <input type="number" min="1" value="1" id="mv-quantity">
+        </div>
+        <div class="field span-2">
+          <label for="mv-notes">Notas <span class="optional">(opcional)</span></label>
+          <input type="text" id="mv-notes" placeholder="Motivo, contexto…">
+        </div>
+      </div>
+      <p class="hint">El precio (si aplica) es siempre el indicado en el material.</p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Registrar movimiento</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
   <div data-roles="admin,board,material">
     <h2>Material prestado</h2>

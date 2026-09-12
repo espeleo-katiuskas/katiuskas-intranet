@@ -714,7 +714,39 @@ enforces. Which sidebar link reads as "active" is computed from `location.pathna
 (`ACTIVE_ALIASES` mapping a detail page like `/activity` or `/member` to the listing it
 was reached from, `/activities`/`/members`) rather than a per-page `class="active"`
 written by hand — one less thing a new page could forget. `login.html` is the one page
-with no shell and no session yet, and never calls `initPage()`. `js/api.js` is the
+with no shell and no session yet, and never calls `initPage()`.
+
+Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already
+gives it the right background/border/padding/spacing — `dialog.modal`'s own
+`css/style.css` rules only add what a plain `.panel` never needed: the dimmed
+`::backdrop`, a max-width, and the "×" `.modal-close` button's own positioning) — never a
+`<div>` toggled to `hidden="false"` in place on the same page the way every one of these
+used to work. `js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call
+each page makes per dialog: it wires every `[data-modal-close]` element inside (the "×",
+a form's own "Cancelar") and a click that lands on the dialog element's own box rather
+than bubbling from its content (the standard way to detect a backdrop click on a native
+`<dialog>`) to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
+own `close` event, which fires no matter *how* it closed (×, Cancelar, backdrop, Escape,
+or a successful save that calls `close()` itself once done), so a caller's own submit
+handler never resets the form itself. Opening one is always page-specific and left to the
+caller: a static "+ Nueva X" button calling `showModal()` directly, or — for a dialog
+shared by every row of a list rather than one pre-rendered per row (`accounting.js`'s own
+account edit, `account.js`'s transaction edit, three of `member.js`'s timeline dialogs) —
+an `open*Dialog(record)` function that fills the shared dialog's fields from that one
+record first. A dialog that's actually a *correction* to an existing record (`member.js`'s
+own "Datos", populated once by `loadMember()` and never re-opened with fresh values the
+way the shared timeline dialogs are) deliberately skips the `form` argument to
+`initModal` — resetting it back to blank on every close would be wrong for one of these,
+unlike every "create new X" dialog that wants exactly that. The platform itself is what
+actually makes the rest of the page unreachable while one is open (real modality, not a
+hand-rolled overlay to keep in sync) and closes it on Escape — nothing in `modal.js` or
+any page's own script needs to implement either. `profile.html`'s own "Mis datos" is the
+one exception left as a plain inline form: unlike every page above, editing your own data
+*is* this page's entire reason to exist, not one form competing for attention alongside
+several other unrelated sections, so hiding it behind a button would only cost a click for
+no corresponding gain in clarity.
+
+`js/api.js` is the
 underlying shared client `layout.js` itself is built on: it keeps the session token in
 `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate
 the token and populate `currentUser()`. `applyRoleVisibility()` removes any

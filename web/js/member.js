@@ -13,6 +13,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal } from './modal.js';
 import { initUserFilesBrowser } from './userFiles.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
@@ -136,19 +137,32 @@ document.getElementById('member-role-add').addEventListener('click', async (even
   }
 });
 
+const editMemberDialog = document.getElementById('edit-member-dialog');
 const editForm = document.getElementById('edit-member-form');
+// Deliberately not initModal(editMemberDialog, editForm) — unlike every
+// other dialog on this page, this one is a correction to an existing
+// record, always freshly populated by loadMember() rather than starting
+// blank each time, so resetting it back to blank defaults on close (the
+// behavior every *other* dialog here wants) would be wrong for this one.
+initModal(editMemberDialog);
+document.getElementById('open-edit-member').addEventListener('click', () => editMemberDialog.showModal());
 
 // Board can still see every field here (loadMember populates them
 // regardless), but PATCH /users/{login} now only accepts a self-edit, and
 // board is never "self" on someone else's page — so there's nothing a
 // submit could do here but fail. Disabling the whole form instead of
 // just hiding the submit button keeps the fields visibly read-only
-// rather than looking editable and then erroring out.
+// rather than looking editable and then erroring out — the toggle
+// button itself is relabelled to match ("Ver datos", not "Editar
+// datos"), since board can open this dialog too, just not submit it.
 if (isAdmin && !isRealAdmin) {
   for (const field of editForm.elements) {
     field.disabled = true;
   }
   document.getElementById('board-readonly-hint').hidden = false;
+  document.getElementById('open-edit-member').textContent = 'Ver datos';
+} else {
+  document.getElementById('open-edit-member').textContent = 'Editar datos';
 }
 
 async function loadMember() {
@@ -209,6 +223,7 @@ editForm.addEventListener('submit', async (event) => {
     showFeedback('Datos actualizados.');
     document.getElementById('member-name').textContent = `${body.first_name} ${body.last_name}`;
     document.getElementById('member-email').textContent = body.email;
+    editMemberDialog.close();
   } catch (err) {
     showError(err.message);
   } finally {
@@ -216,122 +231,82 @@ editForm.addEventListener('submit', async (event) => {
   }
 });
 
-// The membership/leave edit panels are the same regardless of which
-// timeline event (alta/baja, inicio/fin) opened them — a period or a
-// leave is always corrected as a whole, both dates at once — so each is
-// rendered once per record and only ever attached to that record's
-// first (earliest) event: alta for a period, inicio for a leave.
-function renderMembershipEditPanel(m) {
-  return `
-    <div class="edit-fields" data-edit-membership-panel="${m.id}" hidden>
-      <div class="field-grid">
-        <div class="field">
-          <label>Fecha de alta</label>
-          <input type="date" data-membership-field="start_date" value="${m.start_date.slice(0, 10)}">
-        </div>
-        <div class="field">
-          <label>Fecha de baja <span class="optional">(vacío = sigue activa)</span></label>
-          <input type="date" data-membership-field="end_date" value="${m.end_date ? m.end_date.slice(0, 10) : ''}">
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-membership="${m.id}">Guardar</button>
-    </div>
-  `;
+// Each timeline event's own "Editar" (or "+ Baja temporal") opens one
+// of these shared dialogs rather than a per-event panel pre-rendered
+// inline — populating it from the record looked up by id (see the
+// *ById maps buildTimelineEvents fills in) instead of baking values
+// into markup that would otherwise sit hidden in the DOM once per
+// event, most of which nobody ever opens.
+const editMembershipDialog = document.getElementById('edit-membership-dialog');
+initModal(editMembershipDialog);
+let editingMembershipId = null;
+
+function openEditMembershipDialog(m) {
+  editingMembershipId = m.id;
+  document.getElementById('em-membership-start-date').value = m.start_date.slice(0, 10);
+  document.getElementById('em-membership-end-date').value = m.end_date ? m.end_date.slice(0, 10) : '';
+  editMembershipDialog.showModal();
 }
 
-// Same field-grid look as the edit panels, but with empty inputs — used
-// to create a new leave rather than correct an existing one.
-function renderLeaveAddPanel(membershipId) {
-  return `
-    <div class="edit-fields" data-add-leave-panel="${membershipId}" hidden>
-      <div class="field-grid">
-        <div class="field">
-          <label>Fecha de inicio</label>
-          <input type="date" data-new-leave-field="start_date">
-        </div>
-        <div class="field">
-          <label>Fecha de fin</label>
-          <input type="date" data-new-leave-field="end_date">
-        </div>
-        <div class="field span-2">
-          <label>Motivo <span class="optional">(opcional)</span></label>
-          <input type="text" data-new-leave-field="reason">
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-new-leave="${membershipId}">Guardar</button>
-    </div>
-  `;
+// #leave-dialog is shared by "+ Baja temporal" (adding one, POST) and
+// "Editar" on an existing one (PATCH) — same three fields either way,
+// just a different title/submit target. leaveMode/leaveTargetId track
+// which of the two a save is actually for.
+const leaveDialog = document.getElementById('leave-dialog');
+initModal(leaveDialog);
+let leaveMode = null; // 'add' | 'edit'
+let leaveTargetId = null; // a membership id (add) or a leave id (edit)
+
+function openAddLeaveDialog(membershipId) {
+  leaveMode = 'add';
+  leaveTargetId = membershipId;
+  document.getElementById('leave-dialog-title').textContent = 'Nueva baja temporal';
+  document.getElementById('leave-start-date').value = '';
+  document.getElementById('leave-end-date').value = '';
+  document.getElementById('leave-reason').value = '';
+  leaveDialog.showModal();
 }
 
-function renderBoardEditPanel(b) {
-  const options = Object.entries(positionLabels)
-    .map(([value, label]) => `<option value="${value}" ${value === b.position ? 'selected' : ''}>${label}</option>`)
-    .join('');
-  return `
-    <div class="edit-fields" data-edit-board-panel="${b.id}" hidden>
-      <div class="field-grid">
-        <div class="field">
-          <label>Cargo</label>
-          <select data-board-field="position">${options}</select>
-        </div>
-        <div class="field">
-          <label>Fecha de inicio</label>
-          <input type="date" data-board-field="start_date" value="${b.start_date.slice(0, 10)}">
-        </div>
-        <div class="field">
-          <label>Fecha de fin <span class="optional">(vacío = sigue en la junta)</span></label>
-          <input type="date" data-board-field="end_date" value="${b.end_date ? b.end_date.slice(0, 10) : ''}">
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-board="${b.id}">Guardar</button>
-    </div>
-  `;
+function openEditLeaveDialog(l) {
+  leaveMode = 'edit';
+  leaveTargetId = l.id;
+  document.getElementById('leave-dialog-title').textContent = 'Editar baja temporal';
+  document.getElementById('leave-start-date').value = l.start_date.slice(0, 10);
+  document.getElementById('leave-end-date').value = l.end_date.slice(0, 10);
+  document.getElementById('leave-reason').value = l.reason ?? '';
+  leaveDialog.showModal();
 }
 
-function renderLeaveEditPanel(l) {
-  return `
-    <div class="edit-fields" data-edit-leave-panel="${l.id}" hidden>
-      <div class="field-grid">
-        <div class="field">
-          <label>Fecha de inicio</label>
-          <input type="date" data-leave-field="start_date" value="${l.start_date.slice(0, 10)}">
-        </div>
-        <div class="field">
-          <label>Fecha de fin</label>
-          <input type="date" data-leave-field="end_date" value="${l.end_date.slice(0, 10)}">
-        </div>
-        <div class="field span-2">
-          <label>Motivo <span class="optional">(opcional)</span></label>
-          <input type="text" data-leave-field="reason" value="${escapeHtml(l.reason ?? '')}">
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-leave="${l.id}">Guardar</button>
-    </div>
-  `;
+const editBoardDialog = document.getElementById('edit-board-dialog');
+initModal(editBoardDialog);
+let editingBoardMemberId = null;
+
+function openEditBoardDialog(b) {
+  editingBoardMemberId = b.id;
+  document.getElementById('eb-position').value = b.position;
+  document.getElementById('eb-start-date').value = b.start_date.slice(0, 10);
+  document.getElementById('eb-end-date').value = b.end_date ? b.end_date.slice(0, 10) : '';
+  editBoardDialog.showModal();
 }
 
-function renderLicenseEditPanel(l) {
+const editLicenseDialog = document.getElementById('edit-license-dialog');
+initModal(editLicenseDialog);
+let editingLicenseId = null;
+
+function openEditLicenseDialog(l) {
+  editingLicenseId = l.id;
   const chosen = licenseTypesById[l.license_type_id];
-  return `
-    <div class="edit-fields" data-edit-license-panel="${l.id}" hidden>
-      <div class="field-grid">
-        <div class="field">
-          <label>Tipo de licencia</label>
-          <select data-license-field="license_type_id" data-license-type-select="${l.id}">${licenseTypeOptions(l.license_type_id)}</select>
-        </div>
-        <div class="field" data-license-other-detail-field="${l.id}" ${chosen?.is_other ? '' : 'hidden'}>
-          <label>¿Cuál?</label>
-          <input type="text" data-license-field="other_detail" value="${escapeHtml(l.other_detail ?? '')}">
-        </div>
-        <div class="field">
-          <label>Fecha de obtención</label>
-          <input type="date" data-license-field="issued_date" value="${l.issued_date.slice(0, 10)}">
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary btn-small" data-save-license="${l.id}">Guardar</button>
-    </div>
-  `;
+  document.getElementById('el-license-type').innerHTML = licenseTypeOptions(l.license_type_id);
+  document.getElementById('el-other-detail-field').hidden = !chosen?.is_other;
+  document.getElementById('el-other-detail').value = l.other_detail ?? '';
+  document.getElementById('el-issued-date').value = l.issued_date.slice(0, 10);
+  editLicenseDialog.showModal();
 }
+
+document.getElementById('el-license-type').addEventListener('change', (event) => {
+  const chosen = licenseTypesById[Number(event.target.value)];
+  document.getElementById('el-other-detail-field').hidden = !chosen?.is_other;
+});
 
 const eventLabels = {
   alta: 'Alta',
@@ -343,6 +318,15 @@ const eventLabels = {
   board_end: 'Sale de la Junta Directiva',
 };
 
+// Looked up by id when a timeline event's own button is clicked later
+// (open*Dialog above take the record itself, not just its id) — filled
+// in fresh by buildTimelineEvents on every reload, alongside the flat
+// events list itself.
+let membershipsById = {};
+let leavesById = {};
+let licensesById = {};
+let boardTermsById = {};
+
 // Builds one flat, chronological list of events out of every membership
 // period, every temporary leave within it (a "baja temporal" always
 // belongs to exactly one period — see docs/architecture.md), every
@@ -351,6 +335,8 @@ const eventLabels = {
 // any one membership period, the same way licenses are).
 async function buildTimelineEvents(memberships) {
   const events = [];
+  membershipsById = Object.fromEntries(memberships.map((m) => [m.id, m]));
+  leavesById = {};
   for (const m of memberships) {
     events.push({ date: m.start_date, type: 'alta', membership: m });
     if (m.end_date) {
@@ -358,17 +344,20 @@ async function buildTimelineEvents(memberships) {
     }
     const leaves = await apiFetch(`/memberships/${m.id}/leaves`).catch(() => []);
     for (const l of leaves) {
+      leavesById[l.id] = l;
       events.push({ date: l.start_date, type: 'leave_start', membership: m, leave: l, reason: l.reason });
       events.push({ date: l.end_date, type: 'leave_end', membership: m, leave: l, reason: l.reason });
     }
   }
 
   const licenses = await apiFetch(`/users/${memberLogin}/licenses`).catch(() => []);
+  licensesById = Object.fromEntries(licenses.map((l) => [l.id, l]));
   for (const l of licenses) {
     events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
   }
 
   const boardTerms = await apiFetch(`/users/${memberLogin}/board-members`).catch(() => []);
+  boardTermsById = Object.fromEntries(boardTerms.map((b) => [b.id, b]));
   for (const b of boardTerms) {
     const positionLabel = positionLabels[b.position] ?? b.position;
     events.push({ date: b.start_date, type: 'board_start', boardMember: b, reason: positionLabel });
@@ -384,34 +373,29 @@ async function buildTimelineEvents(memberships) {
 function renderTimelineEvent(event) {
   const reasonText = event.reason ? ` · ${escapeHtml(event.reason)}` : '';
   let actions = '';
-  let panel = '';
 
   // These buttons are rendered fresh on every timeline reload, so
   // data-roles in static HTML can't reach them — gating admin-only
   // actions here is the only place it can happen.
   if (isRealAdmin && event.type === 'alta') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-membership="${event.membership.id}">Editar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-add-leave="${event.membership.id}">+ Baja temporal</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-membership="${event.membership.id}">Editar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-leave="${event.membership.id}">+ Baja temporal</button>
     `;
-    panel = renderMembershipEditPanel(event.membership) + renderLeaveAddPanel(event.membership.id);
   } else if (isRealAdmin && event.type === 'leave_start') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-leave="${event.leave.id}">Editar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-leave="${event.leave.id}">Editar</button>
       <button type="button" class="btn btn-danger btn-small" data-delete-leave="${event.leave.id}">Borrar</button>
     `;
-    panel = renderLeaveEditPanel(event.leave);
   } else if (isRealAdmin && event.type === 'license') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-license="${event.license.id}">Editar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-license="${event.license.id}">Editar</button>
       <button type="button" class="btn btn-danger btn-small" data-delete-license="${event.license.id}">Borrar</button>
     `;
-    panel = renderLicenseEditPanel(event.license);
   } else if (isRealAdmin && event.type === 'board_start') {
     actions = `
-      <button type="button" class="btn btn-secondary btn-small" data-toggle-edit-board="${event.boardMember.id}">Editar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-edit-board="${event.boardMember.id}">Editar</button>
     `;
-    panel = renderBoardEditPanel(event.boardMember);
   }
 
   return `
@@ -419,7 +403,6 @@ function renderTimelineEvent(event) {
       <span>${formatDate(event.date)} — ${eventLabels[event.type]}${reasonText}</span>
       <span>${actions}</span>
     </div>
-    ${panel}
   `;
 }
 
@@ -441,14 +424,23 @@ async function loadTimeline() {
 // have data-roles="admin" in the markup — POST memberships/licenses/
 // board-members is admin-only now, so applyRoleVisibility() already
 // removed these elements for board; nothing to wire up in that case.
+const addMembershipDialog = document.getElementById('add-membership-dialog');
+initModal(addMembershipDialog);
+// No <form> here to reset for free on close (see initModal) — a plain
+// panel, like the original always was — so this clears its one field
+// by hand, on every close (cancel, ×, Escape, or after a successful
+// save), not just after saving the way the pre-modal version did.
+addMembershipDialog.addEventListener('close', () => {
+  document.getElementById('add-membership-start-date').value = '';
+});
+
 if (isRealAdmin) {
   document.getElementById('start-membership').addEventListener('click', () => {
-    const panel = document.getElementById('add-membership-panel');
     const input = document.getElementById('add-membership-start-date');
-    if (panel.hidden && !input.value) {
+    if (!input.value) {
       input.value = new Date().toISOString().slice(0, 10);
     }
-    panel.hidden = !panel.hidden;
+    addMembershipDialog.showModal();
   });
 
   document.getElementById('save-add-membership').addEventListener('click', async () => {
@@ -466,8 +458,7 @@ if (isRealAdmin) {
         body: JSON.stringify({ start_date: input.value }),
       });
       showFeedback('Alta registrada.');
-      document.getElementById('add-membership-panel').hidden = true;
-      input.value = '';
+      addMembershipDialog.close();
       await loadTimeline();
       await loadMember();
     } catch (err) {
@@ -478,83 +469,123 @@ if (isRealAdmin) {
   });
 }
 
-document.getElementById('timeline-list').addEventListener('change', (event) => {
-  const select = event.target.closest('select[data-license-type-select]');
-  if (!select) return;
-  const chosen = licenseTypesById[Number(select.value)];
-  const field = document.querySelector(`[data-license-other-detail-field="${select.dataset.licenseTypeSelect}"]`);
-  field.hidden = !chosen?.is_other;
+document.getElementById('save-edit-membership').addEventListener('click', async () => {
+  const body = {
+    start_date: document.getElementById('em-membership-start-date').value,
+    end_date: document.getElementById('em-membership-end-date').value || null,
+  };
+  const button = document.getElementById('save-edit-membership');
+  button.disabled = true;
+  try {
+    await apiFetch(`/memberships/${editingMembershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showFeedback('Periodo actualizado.');
+    editMembershipDialog.close();
+    await loadTimeline();
+    await loadMember();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById('save-leave').addEventListener('click', async () => {
+  const startDate = document.getElementById('leave-start-date').value;
+  const endDate = document.getElementById('leave-end-date').value;
+  if (!startDate || !endDate) {
+    showError('Indica la fecha de inicio y de fin de la baja temporal.');
+    return;
+  }
+  const reason = document.getElementById('leave-reason').value.trim() || null;
+  const button = document.getElementById('save-leave');
+  button.disabled = true;
+  try {
+    if (leaveMode === 'add') {
+      await apiFetch(`/memberships/${leaveTargetId}/leaves`, {
+        method: 'POST',
+        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
+      });
+      showFeedback('Baja temporal registrada.');
+    } else {
+      await apiFetch(`/leaves/${leaveTargetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason }),
+      });
+      showFeedback('Baja temporal actualizada.');
+    }
+    leaveDialog.close();
+    await loadTimeline();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById('save-edit-board').addEventListener('click', async () => {
+  const body = {
+    position: document.getElementById('eb-position').value,
+    start_date: document.getElementById('eb-start-date').value,
+    end_date: document.getElementById('eb-end-date').value || null,
+  };
+  const button = document.getElementById('save-edit-board');
+  button.disabled = true;
+  try {
+    await apiFetch(`/board-members/${editingBoardMemberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showFeedback('Cargo actualizado.');
+    editBoardDialog.close();
+    await loadTimeline();
+    await loadMember();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById('save-edit-license').addEventListener('click', async () => {
+  const licenseTypeId = Number(document.getElementById('el-license-type').value);
+  const chosen = licenseTypesById[licenseTypeId];
+  const otherDetail = document.getElementById('el-other-detail').value.trim() || null;
+  if (chosen?.is_other && !otherDetail) {
+    showError('Indica de qué licencia se trata.');
+    return;
+  }
+  const body = {
+    license_type_id: licenseTypeId,
+    other_detail: chosen?.is_other ? otherDetail : null,
+    issued_date: document.getElementById('el-issued-date').value,
+  };
+  const button = document.getElementById('save-edit-license');
+  button.disabled = true;
+  try {
+    await apiFetch(`/licenses/${editingLicenseId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showFeedback('Licencia actualizada.');
+    editLicenseDialog.close();
+    await loadTimeline();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 document.getElementById('timeline-list').addEventListener('click', async (event) => {
-  const toggleButton = event.target.closest('button[data-toggle-edit-membership]');
-  if (toggleButton) {
-    const panel = document.querySelector(`[data-edit-membership-panel="${toggleButton.dataset.toggleEditMembership}"]`);
-    panel.hidden = !panel.hidden;
+  const editMembershipButton = event.target.closest('button[data-edit-membership]');
+  if (editMembershipButton) {
+    openEditMembershipDialog(membershipsById[Number(editMembershipButton.dataset.editMembership)]);
     return;
   }
 
-  const toggleAddLeaveButton = event.target.closest('button[data-toggle-add-leave]');
-  if (toggleAddLeaveButton) {
-    const panel = document.querySelector(`[data-add-leave-panel="${toggleAddLeaveButton.dataset.toggleAddLeave}"]`);
-    panel.hidden = !panel.hidden;
+  const addLeaveButton = event.target.closest('button[data-add-leave]');
+  if (addLeaveButton) {
+    openAddLeaveDialog(Number(addLeaveButton.dataset.addLeave));
     return;
   }
 
-  const saveNewLeaveButton = event.target.closest('button[data-save-new-leave]');
-  if (saveNewLeaveButton) {
-    const membershipId = saveNewLeaveButton.dataset.saveNewLeave;
-    const panel = document.querySelector(`[data-add-leave-panel="${membershipId}"]`);
-    const field = (name) => panel.querySelector(`[data-new-leave-field="${name}"]`).value;
-    const startDate = field('start_date');
-    const endDate = field('end_date');
-    if (!startDate || !endDate) {
-      showError('Indica la fecha de inicio y de fin de la baja temporal.');
-      return;
-    }
-
-    saveNewLeaveButton.disabled = true;
-    try {
-      await apiFetch(`/memberships/${membershipId}/leaves`, {
-        method: 'POST',
-        body: JSON.stringify({ start_date: startDate, end_date: endDate, reason: field('reason').trim() || null }),
-      });
-      showFeedback('Baja temporal registrada.');
-      await loadTimeline();
-    } catch (err) {
-      saveNewLeaveButton.disabled = false;
-      showError(err.message);
-    }
-    return;
-  }
-
-  const toggleEditLeaveButton = event.target.closest('button[data-toggle-edit-leave]');
-  if (toggleEditLeaveButton) {
-    const panel = document.querySelector(`[data-edit-leave-panel="${toggleEditLeaveButton.dataset.toggleEditLeave}"]`);
-    panel.hidden = !panel.hidden;
-    return;
-  }
-
-  const saveLeaveButton = event.target.closest('button[data-save-leave]');
-  if (saveLeaveButton) {
-    const leaveId = saveLeaveButton.dataset.saveLeave;
-    const editPanel = document.querySelector(`[data-edit-leave-panel="${leaveId}"]`);
-    const field = (name) => editPanel.querySelector(`[data-leave-field="${name}"]`).value;
-    const body = {
-      start_date: field('start_date'),
-      end_date: field('end_date'),
-      reason: field('reason').trim() || null,
-    };
-
-    saveLeaveButton.disabled = true;
-    try {
-      await apiFetch(`/leaves/${leaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showFeedback('Baja temporal actualizada.');
-      await loadTimeline();
-    } catch (err) {
-      saveLeaveButton.disabled = false;
-      showError(err.message);
-    }
+  const editLeaveButton = event.target.closest('button[data-edit-leave]');
+  if (editLeaveButton) {
+    openEditLeaveDialog(leavesById[Number(editLeaveButton.dataset.editLeave)]);
     return;
   }
 
@@ -572,40 +603,9 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     return;
   }
 
-  const toggleEditLicenseButton = event.target.closest('button[data-toggle-edit-license]');
-  if (toggleEditLicenseButton) {
-    const panel = document.querySelector(`[data-edit-license-panel="${toggleEditLicenseButton.dataset.toggleEditLicense}"]`);
-    panel.hidden = !panel.hidden;
-    return;
-  }
-
-  const saveLicenseButton = event.target.closest('button[data-save-license]');
-  if (saveLicenseButton) {
-    const licenseId = saveLicenseButton.dataset.saveLicense;
-    const editPanel = document.querySelector(`[data-edit-license-panel="${licenseId}"]`);
-    const field = (name) => editPanel.querySelector(`[data-license-field="${name}"]`).value;
-    const licenseTypeId = Number(field('license_type_id'));
-    const chosen = licenseTypesById[licenseTypeId];
-    const otherDetail = field('other_detail').trim() || null;
-    if (chosen?.is_other && !otherDetail) {
-      showError('Indica de qué licencia se trata.');
-      return;
-    }
-    const body = {
-      license_type_id: licenseTypeId,
-      other_detail: chosen?.is_other ? otherDetail : null,
-      issued_date: field('issued_date'),
-    };
-
-    saveLicenseButton.disabled = true;
-    try {
-      await apiFetch(`/licenses/${licenseId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showFeedback('Licencia actualizada.');
-      await loadTimeline();
-    } catch (err) {
-      saveLicenseButton.disabled = false;
-      showError(err.message);
-    }
+  const editLicenseButton = event.target.closest('button[data-edit-license]');
+  if (editLicenseButton) {
+    openEditLicenseDialog(licensesById[Number(editLicenseButton.dataset.editLicense)]);
     return;
   }
 
@@ -623,59 +623,9 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     return;
   }
 
-  const saveButton = event.target.closest('button[data-save-membership]');
-  if (saveButton) {
-    const membershipId = saveButton.dataset.saveMembership;
-    const panel = document.querySelector(`[data-edit-membership-panel="${membershipId}"]`);
-    const field = (name) => panel.querySelector(`[data-membership-field="${name}"]`).value;
-
-    const body = {
-      start_date: field('start_date'),
-      end_date: field('end_date') || null,
-    };
-
-    saveButton.disabled = true;
-    try {
-      await apiFetch(`/memberships/${membershipId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showFeedback('Periodo actualizado.');
-      await loadTimeline();
-      await loadMember();
-    } catch (err) {
-      saveButton.disabled = false;
-      showError(err.message);
-    }
-    return;
-  }
-
-  const toggleEditBoardButton = event.target.closest('button[data-toggle-edit-board]');
-  if (toggleEditBoardButton) {
-    const panel = document.querySelector(`[data-edit-board-panel="${toggleEditBoardButton.dataset.toggleEditBoard}"]`);
-    panel.hidden = !panel.hidden;
-    return;
-  }
-
-  const saveBoardButton = event.target.closest('button[data-save-board]');
-  if (saveBoardButton) {
-    const boardMemberId = saveBoardButton.dataset.saveBoard;
-    const panel = document.querySelector(`[data-edit-board-panel="${boardMemberId}"]`);
-    const field = (name) => panel.querySelector(`[data-board-field="${name}"]`).value;
-
-    const body = {
-      position: field('position'),
-      start_date: field('start_date'),
-      end_date: field('end_date') || null,
-    };
-
-    saveBoardButton.disabled = true;
-    try {
-      await apiFetch(`/board-members/${boardMemberId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showFeedback('Cargo actualizado.');
-      await loadTimeline();
-      await loadMember();
-    } catch (err) {
-      saveBoardButton.disabled = false;
-      showError(err.message);
-    }
+  const editBoardButton = event.target.closest('button[data-edit-board]');
+  if (editBoardButton) {
+    openEditBoardDialog(boardTermsById[Number(editBoardButton.dataset.editBoard)]);
   }
 });
 
@@ -798,13 +748,22 @@ async function loadMovements() {
 // data-roles="admin" on their buttons/panels — POST licenses/
 // board-members is admin-only now, so board never has these elements.
 if (isRealAdmin) {
+  const addLicenseDialog = document.getElementById('add-license-dialog');
+  initModal(addLicenseDialog);
+  // No <form> here (see the add-membership-dialog comment above for why).
+  addLicenseDialog.addEventListener('close', () => {
+    document.getElementById('add-license-type').selectedIndex = 0;
+    document.getElementById('add-license-other-detail').value = '';
+    document.getElementById('add-license-other-detail-field').hidden = true;
+    document.getElementById('add-license-issued-date').value = '';
+  });
+
   document.getElementById('add-license').addEventListener('click', () => {
-    const panel = document.getElementById('add-license-panel');
     const dateInput = document.getElementById('add-license-issued-date');
-    if (panel.hidden && !dateInput.value) {
+    if (!dateInput.value) {
       dateInput.value = new Date().toISOString().slice(0, 10);
     }
-    panel.hidden = !panel.hidden;
+    addLicenseDialog.showModal();
   });
 
   document.getElementById('add-license-type').addEventListener('change', (event) => {
@@ -840,10 +799,7 @@ if (isRealAdmin) {
         }),
       });
       showFeedback('Licencia registrada.');
-      document.getElementById('add-license-panel').hidden = true;
-      otherDetailInput.value = '';
-      document.getElementById('add-license-other-detail-field').hidden = true;
-      dateInput.value = '';
+      addLicenseDialog.close();
       await loadTimeline();
     } catch (err) {
       showError(err.message);
@@ -855,13 +811,20 @@ if (isRealAdmin) {
   // A board term is also just another event on the same timeline, and
   // holding one is what the automatic "board" role is computed from
   // (see docs/architecture.md) — there's no separate way to grant it.
+  const addBoardDialog = document.getElementById('add-board-dialog');
+  initModal(addBoardDialog);
+  // No <form> here (see the add-membership-dialog comment above for why).
+  addBoardDialog.addEventListener('close', () => {
+    document.getElementById('add-board-position').selectedIndex = 0;
+    document.getElementById('add-board-start-date').value = '';
+  });
+
   document.getElementById('add-board-term').addEventListener('click', () => {
-    const panel = document.getElementById('add-board-panel');
     const dateInput = document.getElementById('add-board-start-date');
-    if (panel.hidden && !dateInput.value) {
+    if (!dateInput.value) {
       dateInput.value = new Date().toISOString().slice(0, 10);
     }
-    panel.hidden = !panel.hidden;
+    addBoardDialog.showModal();
   });
 
   document.getElementById('save-add-board-term').addEventListener('click', async () => {
@@ -880,8 +843,7 @@ if (isRealAdmin) {
         body: JSON.stringify({ position: positionSelect.value, start_date: dateInput.value }),
       });
       showFeedback('Cargo registrado.');
-      document.getElementById('add-board-panel').hidden = true;
-      dateInput.value = '';
+      addBoardDialog.close();
       await loadTimeline();
       await loadMember();
     } catch (err) {

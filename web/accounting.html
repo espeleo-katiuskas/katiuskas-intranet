@@ -23,7 +23,8 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div id="new-account-panel" class="panel" hidden>
+  <dialog id="new-account-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nueva cuenta</h3>
     <form id="new-account-form">
       <div class="field-grid">
@@ -42,10 +43,35 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear cuenta</button>
-        <button id="cancel-new-account" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
+
+  <dialog id="edit-account-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar cuenta</h3>
+    <form id="edit-account-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="ea-name">Nombre</label>
+          <input id="ea-name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="ea-code">Código <span class="optional">(opcional)</span></label>
+          <input id="ea-code" type="text">
+        </div>
+        <div class="field">
+          <label for="ea-parent">Cuenta superior <span class="optional">(opcional)</span></label>
+          <select id="ea-parent"></select>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="table-wrap">
     <table>

@@ -10,6 +10,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal } from './modal.js';
 
 const user = await initPage();
 // isAdmin means "full read access" (admin or board) — a plain member
@@ -117,16 +118,12 @@ if (isAdmin) {
 }
 
 if (isRealAdmin) {
-  const newRolePanel = document.getElementById('new-role-panel');
+  const newRoleDialog = document.getElementById('new-role-dialog');
   const newRoleForm = document.getElementById('new-role-form');
+  initModal(newRoleDialog, newRoleForm);
 
   document.getElementById('toggle-new-role').addEventListener('click', () => {
-    newRolePanel.hidden = !newRolePanel.hidden;
-  });
-
-  document.getElementById('cancel-new-role').addEventListener('click', () => {
-    newRoleForm.reset();
-    newRolePanel.hidden = true;
+    newRoleDialog.showModal();
   });
 
   newRoleForm.addEventListener('submit', async (event) => {
@@ -142,8 +139,7 @@ if (isRealAdmin) {
     try {
       await apiFetch('/roles', { method: 'POST', body: JSON.stringify(body) });
       showFeedback('Rol creado.');
-      newRoleForm.reset();
-      newRolePanel.hidden = true;
+      newRoleDialog.close();
       await loadRoles();
     } catch (err) {
       showError(err.message);
@@ -606,16 +602,12 @@ async function loadUsers() {
 // is admin-only now, so there's nothing to wire up for anyone else
 // (applyRoleVisibility already removed the button, panel, and form).
 if (isRealAdmin) {
-  const newPersonPanel = document.getElementById('new-person-panel');
+  const newPersonDialog = document.getElementById('new-person-dialog');
   const newPersonForm = document.getElementById('new-person-form');
+  initModal(newPersonDialog, newPersonForm);
 
   document.getElementById('toggle-new-person').addEventListener('click', () => {
-    newPersonPanel.hidden = !newPersonPanel.hidden;
-  });
-
-  document.getElementById('cancel-new-person').addEventListener('click', () => {
-    newPersonForm.reset();
-    newPersonPanel.hidden = true;
+    newPersonDialog.showModal();
   });
 
   newPersonForm.addEventListener('submit', async (event) => {
@@ -658,8 +650,7 @@ if (isRealAdmin) {
         }
       }
       showFeedback(feedback);
-      newPersonForm.reset();
-      newPersonPanel.hidden = true;
+      newPersonDialog.close();
       await loadUsers();
     } catch (err) {
       showError(err.message);

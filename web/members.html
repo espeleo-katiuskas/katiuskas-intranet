@@ -27,7 +27,8 @@
       <tbody id="roles-table-body"></tbody>
     </table>
   </div>
-  <div id="new-role-panel" class="panel" hidden data-roles="admin">
+  <dialog id="new-role-dialog" class="panel modal" data-roles="admin">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nuevo rol</h3>
     <p class="hint">
       Los roles del sistema (admin, junta, socio) son los únicos que dan permisos
@@ -47,16 +48,17 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear rol</button>
-        <button id="cancel-new-role" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="section-header">
     <h1>Socios</h1>
     <button id="toggle-new-person" type="button" class="btn btn-secondary btn-small" data-roles="admin">+ Nueva persona</button>
   </div>
-  <div id="new-person-panel" class="panel" hidden data-roles="admin">
+  <dialog id="new-person-dialog" class="panel modal" data-roles="admin">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nueva persona</h3>
     <p class="hint">
       No hay contraseñas: para entrar, pedirá un enlace de un solo uso desde la página
@@ -131,10 +133,10 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear persona</button>
-        <button id="cancel-new-person" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
   <p class="hint" data-roles="admin,board">
     Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
     último acceso, sus roles y su historial de altas y bajas se gestionan ahí.

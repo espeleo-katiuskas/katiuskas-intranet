@@ -23,7 +23,8 @@
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
-  <div id="new-activity-panel" class="panel" hidden>
+  <dialog id="new-activity-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nueva actividad</h3>
     <p class="hint">
       En una actividad pública cualquiera puede apuntarse. En una privada, solo el
@@ -81,10 +82,10 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Crear actividad</button>
-        <button id="cancel-new-activity" type="button" class="btn btn-secondary">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="section-header">
     <h2>Actividades</h2>

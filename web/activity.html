@@ -23,9 +23,11 @@
   <div class="panel-actions">
     <button id="join-activity" type="button" class="btn btn-secondary btn-small" hidden>Apuntarme</button>
     <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
+    <button id="open-edit-activity" type="button" class="btn btn-secondary btn-small" hidden>Editar actividad</button>
   </div>
 
-  <div class="panel" id="edit-activity-panel" hidden>
+  <dialog id="edit-activity-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Editar</h3>
     <form id="edit-activity-form">
       <div class="field-grid">
@@ -78,9 +80,10 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="section-header">
     <h2>Participantes</h2>
@@ -94,6 +97,7 @@
 
   <div class="section-header" data-roles="admin,board,material">
     <h2>Material prestado</h2>
+    <button id="toggle-new-loan" type="button" class="btn btn-secondary btn-small">+ Préstamo/devolución</button>
   </div>
   <div class="table-wrap" data-roles="admin,board,material">
     <table>
@@ -103,7 +107,8 @@
       <tbody id="activity-loans-table-body"></tbody>
     </table>
   </div>
-  <div class="panel" data-roles="admin,board,material">
+  <dialog id="new-loan-dialog" class="panel modal" data-roles="admin,board,material">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Registrar préstamo o devolución</h3>
     <form id="new-loan-form">
       <div class="field-grid">
@@ -135,15 +140,18 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary btn-small" id="loan-submit">Registrar préstamo</button>
+        <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
 
   <div class="section-header">
     <h2>Memoria</h2>
+    <button id="toggle-memoria-add" type="button" class="btn btn-secondary btn-small" hidden>+ Añadir a la memoria</button>
   </div>
   <div class="detail-list" id="memoria-list"></div>
-  <div class="panel" id="memoria-add-panel" hidden>
+  <dialog id="memoria-add-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Añadir a la memoria</h3>
     <form id="memoria-add-form">
       <div class="field-grid">
@@ -169,9 +177,31 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary btn-small">Añadir</button>
+        <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
       </div>
     </form>
-  </div>
+  </dialog>
+
+  <dialog id="edit-memoria-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar elemento de la memoria</h3>
+    <form id="edit-memoria-form">
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="em-title">Título</label>
+          <input id="em-title" type="text" required>
+        </div>
+        <div class="field span-2" id="em-description-field">
+          <label for="em-description">Descripción</label>
+          <textarea id="em-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
     </main>
   </div>

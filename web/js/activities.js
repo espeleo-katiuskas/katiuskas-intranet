@@ -11,6 +11,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal } from './modal.js';
 
 await initPage();
 
@@ -101,7 +102,7 @@ activitiesList.addEventListener('click', (event) => {
 });
 
 // Creating an activity is open to any signed-in member, not just admin/board.
-const newActivityPanel = document.getElementById('new-activity-panel');
+const newActivityDialog = document.getElementById('new-activity-dialog');
 const newActivityForm = document.getElementById('new-activity-form');
 const participantSearchInput = document.getElementById('na-participant-search');
 const participantOptions = document.getElementById('na-participant-options');
@@ -148,15 +149,18 @@ participantOptions.innerHTML = renderPickerOptions(personEntries);
 const leaderOptions = document.getElementById('na-leader-options');
 if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
 
-document.getElementById('toggle-new-activity').addEventListener('click', () => {
-  newActivityPanel.hidden = !newActivityPanel.hidden;
-});
-
-document.getElementById('cancel-new-activity').addEventListener('click', () => {
-  newActivityForm.reset();
+initModal(newActivityDialog, newActivityForm);
+// Participant chips are separate state (a Map), outside the form's own
+// fields — form.reset() (already wired via initModal above) never
+// touches it, so the dialog's own "close" clears it too, regardless of
+// how it closed.
+newActivityDialog.addEventListener('close', () => {
   chosenParticipants.clear();
   renderParticipantChips();
-  newActivityPanel.hidden = true;
+});
+
+document.getElementById('toggle-new-activity').addEventListener('click', () => {
+  newActivityDialog.showModal();
 });
 
 newActivityForm.addEventListener('submit', async (event) => {
@@ -191,10 +195,7 @@ newActivityForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch('/activities', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Actividad creada.');
-    newActivityForm.reset();
-    chosenParticipants.clear();
-    renderParticipantChips();
-    newActivityPanel.hidden = true;
+    newActivityDialog.close();
     offset = 0;
     await loadActivities();
   } catch (err) {
