@@ -99,7 +99,7 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not start impersonation")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha iniciado una suplantación de %s.",
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha impersonado a %s.",
 		h.actorLogin(r.Context()), r.PathValue("login")))
 	// Also carried as a cookie (see auth.SetSessionCookie) so a file
 	// opened straight in a new tab from library/userfiles while
