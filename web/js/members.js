@@ -255,7 +255,7 @@ const MEMBERSHIP_STATUS_ORDER = ['active', 'on_leave', 'former', 'none'];
 const membershipStatusColumn = {
   key: 'membership_status',
   label: 'Tipo de socio',
-  default: true,
+  default: false,
   value: (p) => membershipStatusLabels[membershipStatusFor(p)],
   render: (person) => membershipStatusLabels[membershipStatusFor(person)],
   compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
@@ -264,14 +264,14 @@ const membershipStatusColumn = {
 // Same reasoning — a plain member's own MemberListing carries
 // license_type too now (just the type, not the issued/valid-until
 // dates admin/board still get).
-const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: false };
+const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: true };
 
 // Row filters narrow which people show, independent of which columns are
 // visible — same show/hide idea as COLUMNS, but for rows. Each groups
 // people into a fixed, known-in-advance set of values (not derived from
 // whatever happens to be loaded) so the filter UI can render before the
-// data even arrives, and every value starts checked so filtering opens
-// as a no-op.
+// data even arrives; every value starts checked (a no-op) except
+// membership_status's own "Ex-socio" — see activeFilterValues below.
 const FULL_FILTERS = [
   {
     key: 'gender',
@@ -295,7 +295,7 @@ const FULL_FILTERS = [
 
 // GET /users gives a plain member first_name/last_name/gender/
 // membership_number/membership_start_date/membership_end_date/
-// on_leave/age_category/roles (see users.MemberListing) — enough to
+// on_leave/age_category (see users.MemberListing) — enough to
 // offer the same filters as FULL_FILTERS, just built from
 // memberCategoryFor instead of categoryFor (age_category, not
 // birth_date, is what's actually there). membership_status drops
@@ -325,7 +325,18 @@ const MEMBER_FILTERS = [
 
 const FILTERS = isAdmin ? FULL_FILTERS : MEMBER_FILTERS;
 
-const activeFilterValues = Object.fromEntries(FILTERS.map((f) => [f.key, new Set(f.options)]));
+// Every filter starts with every option checked (a no-op) except
+// membership_status, which starts with "Ex-socio" unchecked — this
+// page's own default view is meant for the club's current membership,
+// not its history, so a former member shouldn't show up until someone
+// deliberately asks for them. restoreViewState() below still overrides
+// this from localStorage when a saved preference exists.
+const activeFilterValues = Object.fromEntries(FILTERS.map((f) => {
+  const options = f.key === 'membership_status'
+    ? f.options.filter((opt) => opt !== membershipStatusLabels.former)
+    : f.options;
+  return [f.key, new Set(options)];
+}));
 
 function renderFilters() {
   const container = document.getElementById('row-filters');
@@ -364,12 +375,12 @@ function filteredPeople() {
 }
 
 const FULL_COLUMNS = [
-  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: false },
+  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
   { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
-  { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: true },
+  { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: false },
   { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
   { ...textColumn('email', 'Email', (p) => p.email ?? ''), default: false },
   { ...textColumn('address', 'Dirección', (p) => p.address ?? ''), default: false },
@@ -377,11 +388,11 @@ const FULL_COLUMNS = [
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },
   { ...textColumn('province', 'Provincia', (p) => p.province ?? ''), default: false },
   { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
-  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: true },
+  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
   {
     key: 'category',
     label: 'Categoría',
-    default: false,
+    default: true,
     value: categoryFor,
     render: categoryFor,
     compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
@@ -390,7 +401,7 @@ const FULL_COLUMNS = [
   {
     key: 'cargo',
     label: 'Cargo',
-    default: true,
+    default: false,
     value: cargoFor,
     render: (person) => cargoFor(person) || '—',
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
@@ -405,13 +416,13 @@ const MEMBER_COLUMNS = [
   { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
-  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: true },
+  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
   { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
-  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: true },
+  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
   {
     key: 'category',
     label: 'Categoría',
-    default: false,
+    default: true,
     value: memberCategoryFor,
     render: memberCategoryFor,
     compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
@@ -420,7 +431,7 @@ const MEMBER_COLUMNS = [
   {
     key: 'cargo',
     label: 'Cargo',
-    default: true,
+    default: false,
     value: cargoFor,
     render: (person) => cargoFor(person) || '—',
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
@@ -432,7 +443,7 @@ const COLUMNS = isAdmin ? FULL_COLUMNS : MEMBER_COLUMNS;
 const columnsByKey = Object.fromEntries(COLUMNS.map((c) => [c.key, c]));
 
 let visibleColumns = new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
-let sortKey = 'last_name';
+let sortKey = 'first_name';
 let sortDir = 'asc';
 let people = [];
 
