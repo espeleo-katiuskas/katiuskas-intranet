@@ -381,6 +381,12 @@ let boardTermsById = {};
 // there's no open period at all.
 let membershipStatus = { openMembership: null, openLeave: null, lastMembership: null };
 
+// This person's own currently-open board term, if any — drives
+// renderBoardStatusActions' own "+ Junta directiva"/"Deja el cargo de
+// X" toggle the same way membershipStatus drives
+// renderMembershipStatusActions.
+let currentBoardTerm = null;
+
 // Which single event — among only the "cambios de estado" (alta, baja,
 // inicio/fin de baja temporal), not licenses or board terms, which
 // have their own independent delete affordance already — is the most
@@ -438,6 +444,7 @@ async function buildTimelineEvents(memberships) {
 
   const boardTerms = await apiFetch(`/users/${memberLogin}/board-members`).catch(() => []);
   boardTermsById = Object.fromEntries(boardTerms.map((b) => [b.id, b]));
+  currentBoardTerm = boardTerms.find((b) => !b.end_date) ?? null;
   for (const b of boardTerms) {
     const positionLabel = positionLabels[b.position] ?? b.position;
     events.push({ date: b.start_date, type: 'board_start', boardMember: b, reason: positionLabel });
@@ -521,6 +528,7 @@ async function loadTimeline() {
     const memberships = await apiFetch(`/users/${memberLogin}/memberships`);
     const events = await buildTimelineEvents(memberships);
     document.getElementById('membership-status-actions').innerHTML = renderMembershipStatusActions();
+    document.getElementById('board-status-actions').innerHTML = renderBoardStatusActions();
     container.innerHTML = events.length
       ? events.map(renderTimelineEvent).join('')
       : '<p>Todavía no ha sido socio.</p>';
@@ -556,6 +564,19 @@ function renderMembershipStatusActions() {
     <button type="button" class="btn btn-secondary btn-small" data-status-action="baja-temporal">Baja temporal</button>
     <button type="button" class="btn btn-secondary btn-small" data-status-action="baja-definitiva">Baja definitiva</button>
   `;
+}
+
+// Alongside membership-status-actions: "+ Junta directiva" only for a
+// currently active socio (no open membership at all means there's
+// nobody here to put on the board) — toggling to "Deja el cargo de X"
+// once they actually hold one, rather than showing both at once.
+function renderBoardStatusActions() {
+  if (!membershipStatus.openMembership) return '';
+  if (currentBoardTerm) {
+    const label = escapeHtml(positionLabels[currentBoardTerm.position] ?? currentBoardTerm.position);
+    return `<button type="button" class="btn btn-secondary btn-small" data-status-action="leave-board">Deja el cargo de ${label}</button>`;
+  }
+  return '<button type="button" class="btn btn-secondary btn-small" data-status-action="join-board">+ Junta directiva</button>';
 }
 
 if (isRealAdmin) {
@@ -990,12 +1011,38 @@ if (isRealAdmin) {
     document.getElementById('add-board-start-date').value = '';
   });
 
-  document.getElementById('add-board-term').addEventListener('click', () => {
-    const dateInput = document.getElementById('add-board-start-date');
-    if (!dateInput.value) {
-      dateInput.value = new Date().toISOString().slice(0, 10);
+  document.getElementById('board-status-actions').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-status-action]');
+    if (!button) return;
+
+    if (button.dataset.statusAction === 'join-board') {
+      const dateInput = document.getElementById('add-board-start-date');
+      if (!dateInput.value) {
+        dateInput.value = today();
+      }
+      addBoardDialog.showModal();
+      return;
     }
-    addBoardDialog.showModal();
+
+    if (button.dataset.statusAction === 'leave-board') {
+      const label = positionLabels[currentBoardTerm.position] ?? currentBoardTerm.position;
+      openStatusDialog({
+        title: `Dejar el cargo de ${label}`,
+        hint: `La fecha debe ser posterior al inicio en el cargo (${formatDate(currentBoardTerm.start_date)}) y no puede ser posterior a hoy.`,
+        minExclusive: currentBoardTerm.start_date.slice(0, 10),
+        minLabel: 'al inicio en el cargo',
+        maxInclusive: today(),
+        successMessage: 'Cargo finalizado.',
+        onSave: (date) => apiFetch(`/board-members/${currentBoardTerm.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            position: currentBoardTerm.position,
+            start_date: currentBoardTerm.start_date.slice(0, 10),
+            end_date: date,
+          }),
+        }),
+      });
+    }
   });
 
   document.getElementById('save-add-board-term').addEventListener('click', async () => {

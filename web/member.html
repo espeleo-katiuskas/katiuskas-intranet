@@ -107,16 +107,10 @@
 
   <div class="section-header">
     <h2>Historial como socio</h2>
-    <span data-roles="admin">
-      <span id="membership-status-actions"></span>
-      <button id="add-board-term" type="button" class="btn btn-secondary btn-small">+ Junta directiva</button>
-    </span>
   </div>
   <p class="hint" data-roles="admin">
-    Una licencia federativa solo se le puede asignar a quien tenga ahora mismo un alta
-    activa, y es válida durante el año que se indique al crearla — no siempre el mismo
-    año que su fecha de obtención. Las licencias nuevas (y las cuotas anuales) se
-    registran desde la transacción que las paga, en Contabilidad — no desde aquí.
+    Las licencias y las cuotas anuales se registran desde la transacción que las paga,
+    en Contabilidad — no desde aquí.
   </p>
   <dialog id="status-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
@@ -215,6 +209,11 @@
   </dialog>
 
   <div class="detail-list" id="timeline-list"></div>
+
+  <div class="panel-actions" data-roles="admin">
+    <span id="membership-status-actions"></span>
+    <span id="board-status-actions"></span>
+  </div>
 
   <h2>Actividades</h2>
   <div class="table-wrap">
