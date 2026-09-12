@@ -783,16 +783,24 @@ same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
 `/accounting` for the sidebar's own highlighting, the same `/activity`→`/activities`/
 `/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
 `GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date, description,
-this account's own entry amount, and its running balance after — and a "+ Nueva
-transacción" panel deliberately narrower than the full `POST /transactions` shape: just a
-date, a description, an amount, and one other account, always producing exactly two
-entries (this account's own, as typed, and the chosen other account's exact negative) —
-correcting an existing transaction, or one with more than two entries, still means going
-straight through the API, not this page. The date input only ever collects a plain date,
-but `occurred_at` is a real timestamp — sent as that date at noon UTC (not midnight)
-specifically so `formatDate`'s own local-timezone getters can never roll it back to the
-previous day for anyone viewing from behind UTC. The "otra cuenta" picker lists every
-other account (indented the same way `accounting.js`'s own pickers are, via
+this account's own entry amount, its running balance after, and per-row Editar/Borrar — and
+a "+ Nueva transacción" panel deliberately narrower than the full `POST /transactions`
+shape: just a date, a description, an amount, and one other account, always producing
+exactly two entries (this account's own, as typed, and the chosen other account's exact
+negative — `twoEntryBody`, shared by creating a new transaction and correcting an existing
+one). A row's own "Editar" fetches that one transaction fresh (`GET /transactions/{id}`,
+never kept in memory alongside the ledger listing, which only ever carries this account's
+own side of each one) and only ever offers this same simplified two-field edit — if it
+doesn't have exactly two entries (only possible by calling the API directly; this page
+never creates one that way), editing is refused with an explanation instead of silently
+mis-editing it; "Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete
+buttons use) removes the whole transaction, both entries included. The date input only
+ever collects a plain date, but `occurred_at` is a real timestamp — sent as that date at
+noon UTC (not midnight) specifically so `formatDate`'s own local-timezone getters can never
+roll it back to the previous day for anyone viewing from behind UTC; editing an existing
+transaction collapses whatever time of day it actually had down to this same convention.
+The "otra cuenta" picker (shared by the create panel and every row's own edit panel) lists
+every other account (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary
 parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
 descendants: there's no circular relationship to guard against here, any two distinct
