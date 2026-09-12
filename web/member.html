@@ -28,15 +28,50 @@
 
   <div class="section-header">
     <h2>Datos</h2>
-    <button id="open-edit-member" type="button" class="btn btn-secondary btn-small">Datos</button>
+    <button id="open-edit-member" type="button" class="btn btn-secondary btn-small" data-roles="admin">Editar</button>
+  </div>
+  <div class="field-grid" id="member-data-view">
+    <div class="field">
+      <label>Teléfono</label>
+      <p id="view-phone"></p>
+    </div>
+    <div class="field">
+      <label>DNI</label>
+      <p id="view-national-id"></p>
+    </div>
+    <div class="field">
+      <label>Fecha de nacimiento</label>
+      <p id="view-birth-date"></p>
+    </div>
+    <div class="field">
+      <label>Género</label>
+      <p id="view-gender"></p>
+    </div>
+    <div class="field span-2">
+      <label>Dirección</label>
+      <p id="view-address"></p>
+    </div>
+    <div class="field">
+      <label>Código postal</label>
+      <p id="view-postal-code"></p>
+    </div>
+    <div class="field">
+      <label>Ciudad</label>
+      <p id="view-city"></p>
+    </div>
+    <div class="field">
+      <label>Provincia</label>
+      <p id="view-province"></p>
+    </div>
+    <div class="field span-2">
+      <label>Contacto de emergencia</label>
+      <p id="view-emergency-contact"></p>
+    </div>
   </div>
 
   <dialog id="edit-member-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Datos</h3>
-    <p class="hint" id="board-readonly-hint" hidden>
-      Puedes ver los datos de los socios, pero solo la administración puede modificarlos.
-    </p>
+    <h3>Editar datos</h3>
     <form id="edit-member-form">
       <div class="field-grid">
         <div class="field">

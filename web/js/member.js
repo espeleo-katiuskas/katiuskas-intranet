@@ -144,25 +144,15 @@ const editForm = document.getElementById('edit-member-form');
 // blank each time, so resetting it back to blank defaults on close (the
 // behavior every *other* dialog here wants) would be wrong for this one.
 initModal(editMemberDialog);
-document.getElementById('open-edit-member').addEventListener('click', () => editMemberDialog.showModal());
-
-// Board can still see every field here (loadMember populates them
-// regardless), but PATCH /users/{login} now only accepts a self-edit, and
-// board is never "self" on someone else's page — so there's nothing a
-// submit could do here but fail. Disabling the whole form instead of
-// just hiding the submit button keeps the fields visibly read-only
-// rather than looking editable and then erroring out — the toggle
-// button itself is relabelled to match ("Ver datos", not "Editar
-// datos"), since board can open this dialog too, just not submit it.
-if (isAdmin && !isRealAdmin) {
-  for (const field of editForm.elements) {
-    field.disabled = true;
-  }
-  document.getElementById('board-readonly-hint').hidden = false;
-  document.getElementById('open-edit-member').textContent = 'Ver datos';
-} else {
-  document.getElementById('open-edit-member').textContent = 'Editar datos';
+// The button itself has data-roles="admin" (board can already see
+// every field directly on the page now, via #member-data-view below —
+// this dialog is only for actually changing something), so it's
+// removed from the DOM entirely for board; nothing to wire up then.
+if (isRealAdmin) {
+  document.getElementById('open-edit-member').addEventListener('click', () => editMemberDialog.showModal());
 }
+
+const genderLabels = { male: 'Masculino', female: 'Femenino' };
 
 async function loadMember() {
   try {
@@ -176,6 +166,22 @@ async function loadMember() {
       ? `Último acceso: ${formatDate(person.last_login_at)}${person.last_login_ip ? ` desde ${person.last_login_ip}` : ''}`
       : 'Todavía no ha iniciado sesión.';
     renderRoles(person);
+
+    // #member-data-view shows every field directly on the page (name and
+    // email are already up top in the header, so not repeated here) —
+    // admin/board alike, same as the rest of a person's data on this
+    // page; #edit-member-dialog (admin-only, see data-roles on its own
+    // toggle button) is only ever for actually changing something now,
+    // not for board to merely see it, the way it used to have to be.
+    document.getElementById('view-phone').textContent = person.phone ?? '—';
+    document.getElementById('view-national-id').textContent = person.national_id ?? '—';
+    document.getElementById('view-birth-date').textContent = person.birth_date ? formatDate(person.birth_date) : '—';
+    document.getElementById('view-gender').textContent = person.gender ? (genderLabels[person.gender] ?? person.gender) : '—';
+    document.getElementById('view-address').textContent = person.address ?? '—';
+    document.getElementById('view-postal-code').textContent = person.postal_code ?? '—';
+    document.getElementById('view-city').textContent = person.city ?? '—';
+    document.getElementById('view-province').textContent = person.province ?? '—';
+    document.getElementById('view-emergency-contact').textContent = person.emergency_contact ?? '—';
 
     editForm.first_name.value = person.first_name;
     editForm.last_name.value = person.last_name;
