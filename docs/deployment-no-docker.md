@@ -81,9 +81,10 @@ go build -o katiuskas-api ./cmd/api
 go build -o seed-admin ./cmd/seed-admin
 
 # goose no es una dependencia del módulo (ver go.mod) — se compila aparte,
-# fijado a v3.22.1: es la última versión que sigue soportando Go 1.22 (la
-# versión mínima que pide backend/go.mod). No hace falta instalar goose de
-# forma permanente en ninguna máquina; solo compilar este binario una vez.
+# fijado a v3.22.1 en vez de a `@latest`, para que compilar este binario dé
+# siempre el mismo goose sin importar cuándo o dónde se haga. No hace falta
+# instalar goose de forma permanente en ninguna máquina; solo compilar este
+# binario una vez.
 GOBIN="$(pwd)" go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
 ```
 

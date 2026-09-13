@@ -113,9 +113,8 @@ services:
     volumes:
       - ./db:/db:ro
     working_dir: /src
-    # Pinned to v3.22.1: the newest goose release that still supports the
-    # Go 1.22 toolchain backend/Dockerfile's build stage uses — a newer
-    # `@latest` will fail to compile against it.
+    # Pinned to v3.22.1 rather than `@latest`, so a migration run always
+    # uses the same goose build regardless of when or where it's run.
     entrypoint: ["sh", "-c", "go run github.com/pressly/goose/v3/cmd/goose@v3.22.1 -dir /db/migrations postgres \"$$DATABASE_URL\" up"]
     depends_on:
       postgres:
