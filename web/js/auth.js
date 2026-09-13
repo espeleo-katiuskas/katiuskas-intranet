@@ -111,7 +111,7 @@ async function consumeMagicLink(rawToken) {
     consumingPanel.hidden = true;
     requestForm.hidden = false;
     wireUpForms();
-    errorBox.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo aquí abajo.';
+    errorBox.textContent = 'Este enlace no es válido o ha caducado. Por favor, pide uno nuevo.';
     errorBox.hidden = false;
   }
 }
