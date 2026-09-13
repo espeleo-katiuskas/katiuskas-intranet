@@ -64,10 +64,7 @@
   font-weight: 600;
 }
 
-/* A small blue "pill" link/button — used for "Copiar NIF/IBAN" and
-   every "Descargar ..." action. Some of the "Logos" ones are still
-   static placeholders (see .static-placeholder in index.html) with no
-   endpoint behind them yet. */
+/* A small blue "pill" link/button — used for "Copiar NIF/IBAN". */
 .link-pill {
   display: inline-block;
   padding: 3px 10px;
@@ -90,59 +87,6 @@
   margin-left: 6px;
   padding: 1px 8px;
   font-size: 0.72rem;
-}
-
-.logos-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
-
-.logo-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
-}
-
-.logo-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 10px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-}
-
-.logo-preview-circular {
-  border-radius: 50%;
-}
-
-.logo-preview-triangular {
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
-
-.logo-preview-apaisado {
-  width: 100px;
-  border-radius: 6px;
-}
-
-.logo-name {
-  margin: 0 0 10px;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.logo-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
 }
 
 .info-card {

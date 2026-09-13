@@ -16,54 +16,6 @@
     <main class="content">
       <div class="columns">
         <div class="col-main">
-          <h2>Junta directiva</h2>
-          <div class="board-grid" id="board-grid"></div>
-
-          <!-- Logos y descargas de ejemplo: contenido estático de
-               momento, no hay ficheros reales detrás ni un endpoint que
-               los sirva — los enlaces no llevan a ningún sitio. -->
-          <h2>Logos</h2>
-          <div class="logos-grid static-placeholder">
-            <div class="logo-card">
-              <div class="logo-preview logo-preview-circular">K</div>
-              <p class="logo-name">Circular</p>
-              <div class="logo-actions">
-                <a href="#" class="link-pill">Descargar imprimir</a>
-                <a href="#" class="link-pill">Descargar web</a>
-                <a href="#" class="link-pill">Descargar negro</a>
-                <a href="#" class="link-pill">Descargar blanco</a>
-              </div>
-            </div>
-            <div class="logo-card">
-              <div class="logo-preview logo-preview-triangular">K</div>
-              <p class="logo-name">Triangular</p>
-              <div class="logo-actions">
-                <a href="#" class="link-pill">Descargar imprimir</a>
-                <a href="#" class="link-pill">Descargar web</a>
-                <a href="#" class="link-pill">Descargar negro</a>
-                <a href="#" class="link-pill">Descargar blanco</a>
-              </div>
-            </div>
-            <div class="logo-card">
-              <div class="logo-preview logo-preview-apaisado">K</div>
-              <p class="logo-name">Apaisado</p>
-              <div class="logo-actions">
-                <a href="#" class="link-pill">Descargar imprimir</a>
-                <a href="#" class="link-pill">Descargar web</a>
-                <a href="#" class="link-pill">Descargar negro</a>
-                <a href="#" class="link-pill">Descargar blanco</a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Datos de interés: datos reales del club. Documentos, Actas y
-             Memorias se cargan dinámicamente desde /library (ver
-             js/dashboard.js) — cada uno es una carpeta con los PDF
-             directamente dentro (library/documentos, library/actas,
-             library/memorias) y un .order.json opcional para fijar el
-             orden de aparición. -->
-        <aside class="col-side">
           <h2>Datos de interés</h2>
           <div class="info-card">
             <dl class="info-list">
@@ -92,6 +44,16 @@
             </dl>
           </div>
 
+          <h2>Junta directiva</h2>
+          <div class="board-grid" id="board-grid"></div>
+        </div>
+
+        <!-- Documentos, Actas y Memorias se cargan dinámicamente desde
+             /library (ver js/dashboard.js) — cada uno es una carpeta
+             con los PDF directamente dentro (library/documentos,
+             library/actas, library/memorias) y un .order.json opcional
+             para fijar el orden de aparición. -->
+        <aside class="col-side">
           <h2>Documentos</h2>
           <div class="info-card">
             <ul class="link-list" id="documentos-list"></ul>

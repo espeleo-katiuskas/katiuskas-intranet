@@ -182,10 +182,7 @@ loadDocumentos();
 loadActas();
 loadMemorias();
 
-// "Copiar NIF"/"Copiar IBAN" — the only two buttons here backed by
-// real data (see index.html); everything in the "Logos" grid below is
-// still a static placeholder with no endpoint behind it, so those links
-// are just kept from navigating anywhere.
+// "Copiar NIF"/"Copiar IBAN".
 document.querySelectorAll('[data-copy]').forEach((button) => {
   const originalLabel = button.textContent;
   button.addEventListener('click', async () => {
@@ -199,8 +196,4 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
       button.textContent = originalLabel;
     }, 1500);
   });
-});
-
-document.querySelectorAll('.static-placeholder a[href="#"]').forEach((link) => {
-  link.addEventListener('click', (event) => event.preventDefault());
 });
