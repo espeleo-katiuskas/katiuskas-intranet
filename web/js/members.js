@@ -38,9 +38,10 @@ let boardPositionByLogin = {};
 // else: a plain member has no business knowing which other roles
 // (admin, money, material, any custom label) someone holds — that's
 // exactly the kind of internal, non-public information MemberListing
-// itself already omits for them (see CLAUDE.md's own Permission tiers
-// section) — so this never falls back to person.roles the way it once
-// did, even for admin/board's own richer view of this same column.
+// itself already omits for them (see docs/architecture.md's own
+// Permisos section) — so this never falls back to person.roles the way
+// it once did, even for admin/board's own richer view of this same
+// column.
 function cargoFor(person) {
   const position = boardPositionByLogin[person.login];
   return position ? (positionLabels[position] ?? position) : '';

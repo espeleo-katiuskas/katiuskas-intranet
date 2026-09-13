@@ -100,13 +100,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/magic-link/consume", h.ConsumeMagicLink)
 	// Also rate-limited, unlike the link itself: the link's token is 128
 	// bits, long enough that entropy alone carries its security (see
-	// CLAUDE.md) with no per-row attempt counter at all — but this
-	// endpoint identifies its caller by email+phone first (see
-	// ConsumeMagicLinkCode below), before its own per-row attempt
-	// counter on the short 6-digit code is even in play. Without this,
-	// an attacker could scan many email/phone combinations for a match
-	// with no throttle whatsoever, unlike guessing one known person's
-	// code, which the attempt counter already bounds.
+	// docs/architecture.md's own magic_link_tokens section) with no
+	// per-row attempt counter at all — but this endpoint identifies its
+	// caller by email+phone first (see ConsumeMagicLinkCode below),
+	// before its own per-row attempt counter on the short 6-digit code
+	// is even in play. Without this, an attacker could scan many
+	// email/phone combinations for a match with no throttle whatsoever,
+	// unlike guessing one known person's code, which the attempt
+	// counter already bounds.
 	mux.Handle("POST /api/v1/auth/magic-link/consume-code", h.ipLimiter.Limit(h.ConsumeMagicLinkCode))
 	mux.HandleFunc("POST /api/v1/auth/logout", h.Logout)
 	mux.HandleFunc("GET /api/v1/auth/telegram-bot", h.TelegramBotInfo)

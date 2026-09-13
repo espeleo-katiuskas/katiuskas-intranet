@@ -627,7 +627,7 @@ exactamente igual que si lo hubiera pedido desde la web
 "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
 servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
 el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada
-perceptible (ver `CLAUDE.md` para el detalle de los seis). Los tres primeros (logs de
+perceptible. Los tres primeros (logs de
 error, login, magic-link por Telegram) y el de arranque son incondicionales — sin
 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados, caen a registrar el mensaje en
 el log (igual que `mail` sin `SMTP_HOST`) o, en el caso del magic-link por Telegram,

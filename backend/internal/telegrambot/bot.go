@@ -1,9 +1,9 @@
 // Package telegrambot lets the club's Telegram bot react to messages
 // from people, not just send logs and notifications the other way — see
 // internal/telegram for the low-level client this is built on, and
-// CLAUDE.md for how this fits alongside the other five notifications
-// (error logs, logins, magic-link DMs, mutating API calls, and the
-// startup ping).
+// docs/architecture.md for how this fits alongside the other five
+// notifications (error logs, logins, magic-link DMs, mutating API
+// calls, and the startup ping).
 //
 // It does two things. First, turn "someone we don't yet recognize
 // messages the bot" into a linked Telegram account, by asking them to

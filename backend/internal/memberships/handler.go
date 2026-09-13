@@ -483,8 +483,9 @@ func (h *Handler) listDuesByUser(w http.ResponseWriter, r *http.Request) {
 // createDue records a due (see Service.RecordDue) — start_date is only
 // actually used when this is the person's very first one, to start
 // their membership period alongside it; correcting or removing a due
-// isn't supported at all yet (see CLAUDE.md's Accounting section on
-// this feature's own additive-only editing story).
+// isn't supported at all yet (see docs/architecture.md's own
+// membership_dues section on this feature's own additive-only editing
+// story).
 func (h *Handler) createDue(w http.ResponseWriter, r *http.Request) {
 	login := r.PathValue("login")
 	userID, ok := h.resolveUserLogin(w, r)

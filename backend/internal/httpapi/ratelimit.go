@@ -8,8 +8,7 @@ import (
 
 // IPRateLimiter throttles repeated calls to one endpoint from the same
 // client address using a plain in-memory fixed-window counter — no new
-// dependency, matching this project's already-lean go.mod (see the
-// backend/ commands in CLAUDE.md).
+// dependency, matching this project's already-lean go.mod.
 //
 // Keyed by ClientIP(r), whose own doc comment calls it "purely
 // informational... never used for any access decision" — this is the

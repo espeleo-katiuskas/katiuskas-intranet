@@ -51,9 +51,10 @@ const (
 type AgeCategory string
 
 // These six mirror the club's own normativa exactly — the English
-// identifiers are this codebase's own convention (see CLAUDE.md,
-// "Language"), not a translation the normativa itself uses, so each one
-// carries its real Spanish name in a comment.
+// identifiers are this codebase's own convention (every identifier in
+// this repo is English, regardless of the language a document it
+// mirrors uses), not a translation the normativa itself uses, so each
+// one carries its real Spanish name in a comment.
 const (
 	AgeCategoryYouth    AgeCategory = "youth"     // alevín
 	AgeCategoryChild    AgeCategory = "child"     // infantil

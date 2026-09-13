@@ -12,12 +12,12 @@ import { initModal, openModal } from './modal.js';
 
 // This whole page is restricted to admin/money, tighter than the API
 // itself (GET /accounts is open to every baseline role — see
-// CLAUDE.md's own Accounting section) — reading the club's finances is
-// fine for any socio, but managing the chart of accounts itself isn't
-// something to even show as a destination in the nav for anyone else.
-// Both roles can also write here (POST/PATCH/move all accept "admin"
-// or "money"), so nothing on this page needs a narrower check than
-// this one gate.
+// docs/architecture.md's own accounts section) — reading the club's
+// finances is fine for any socio, but managing the chart of accounts
+// itself isn't something to even show as a destination in the nav for
+// anyone else. Both roles can also write here (POST/PATCH/move all
+// accept "admin" or "money"), so nothing on this page needs a narrower
+// check than this one gate.
 await initPage({ requireAnyRole: ['admin', 'money'] });
 
 let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see accountTree.js
@@ -27,9 +27,9 @@ let editingAccountId = null; // which account #edit-account-dialog's fields curr
 // Every id descending from (not including) accountId — used to keep an
 // edit's own "cuenta superior" picker from offering the account itself
 // or one of its own descendants, the same circular_parent case
-// UpdateAccount rejects server-side (see CLAUDE.md's Accounting
-// section); checking client-side too just means a bad choice is
-// obviously wrong before submitting instead of only after.
+// UpdateAccount rejects server-side (see docs/architecture.md's own
+// accounts section); checking client-side too just means a bad choice
+// is obviously wrong before submitting instead of only after.
 function descendantIds(accountId) {
   const map = childrenByParent(flattened.map((entry) => entry.account));
   const ids = new Set();

@@ -73,9 +73,8 @@ type CreateInput struct {
 // OtherDetail rule as CreateInput; see Service.Update. There's no
 // TransactionID here on purpose — correcting a typo on a license's type,
 // date or year is a different action from re-litigating which payment
-// it belongs to, the same distinction accounting.UpdateAccountInput
-// (no Position field) and CLAUDE.md's own Accounting section already
-// draw for a different resource.
+// it belongs to, the same distinction accounting.UpdateAccountInput (no
+// Position field) draws for a different resource.
 type UpdateInput struct {
 	LicenseTypeID int64
 	OtherDetail   *string

@@ -129,7 +129,7 @@ func TestHandlerListActiveOpenToAnyBaselineRole(t *testing.T) {
 	}
 }
 
-// TestHandlerCreateRequiresAdminNotBoard covers the CLAUDE.md rule
+// TestHandlerCreateRequiresAdminNotBoard covers this permission tier
 // directly: board can read everything here but can't write — changing
 // who's on the Junta Directiva is person data, same as the rest of a
 // profile, which board lost write access to entirely.

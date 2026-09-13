@@ -144,7 +144,7 @@ func TestHandlerListActiveRequiresAdminOrBoard(t *testing.T) {
 	}
 }
 
-// TestHandlerCreateRequiresAdminNotBoard covers the CLAUDE.md rule
+// TestHandlerCreateRequiresAdminNotBoard covers this permission tier
 // directly: board can read every membership period but can't start,
 // correct, or end one — that write access is admin-only now, same as
 // the rest of a person's own data.

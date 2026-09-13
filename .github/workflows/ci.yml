@@ -59,7 +59,7 @@ jobs:
           # internal/testutil.NewTx migrates this database itself (parsing
           # the goose markers directly, no goose binary needed) the first
           # time any test touches it. Without this var set, DB-backed tests
-          # just t.Skip instead of failing — see CLAUDE.md.
+          # just t.Skip instead of failing.
           TEST_DATABASE_URL: postgres://intranet:intranet@localhost:5432/intranet_test?sslmode=disable
         run: go test ./... -cover
 

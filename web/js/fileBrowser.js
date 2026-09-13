@@ -67,9 +67,12 @@ export function resolveRelativePath(baseDir, href) {
 
 // Triggers a browser "save as" for an already-fetched Blob — used
 // instead of a plain <a href> wherever the file was fetched via
-// apiFetchBlob rather than linked directly (no session cookie to ride
-// along on a bare link outside library/userfiles' own file-serving
-// routes — see CLAUDE.md).
+// apiFetchBlob rather than linked directly. Only library's and
+// userfiles' own file-serving GET routes mirror the session token into
+// a cookie too, specifically so a document/file can be a plain,
+// browser-navigable link there — everywhere else, a bare link has
+// nothing to authenticate it, so this Blob-based download is the only
+// option.
 export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

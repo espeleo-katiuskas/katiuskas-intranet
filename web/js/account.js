@@ -80,10 +80,10 @@ async function loadAdminPickerCatalogs() {
 // as removable chips); submitPending walks that list afterward, one
 // sequential POST per item, once the transaction's own id and date are
 // known. A single transaction can cover several socios' cuotas, or a
-// mix of cuotas and brand-new licenses, all at once — see CLAUDE.md's
-// own Accounting section. Editing an existing transaction can only ever
-// add to what it already paid for: there's no way to remove, from this
-// dialog, a due/license some earlier save already linked to it.
+// mix of cuotas and brand-new licenses, all at once. Editing an
+// existing transaction can only ever add to what it already paid for:
+// there's no way to remove, from this dialog, a due/license some
+// earlier save already linked to it.
 function setupDuesAndLicensesSection(prefix) {
   let pendingDues = [];
   let pendingLicenses = [];
@@ -257,8 +257,8 @@ function otherAccountOptions(selectedId) {
 // Both the header's own current balance and the "otra cuenta" options
 // come from the one GET /accounts call — that listing already carries
 // every account's own balance (GET /accounts/{id} alone doesn't, see
-// CLAUDE.md's own Accounting section), so there's no need for a
-// second, single-account fetch just for this page's own header.
+// docs/architecture.md's own accounts section), so there's no need for
+// a second, single-account fetch just for this page's own header.
 async function loadAccount() {
   try {
     allAccounts = await apiFetch('/accounts');
