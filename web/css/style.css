@@ -748,16 +748,28 @@ button.link-button {
    .panel's own existing rules (background/border/radius/padding,
    h3, p.hint) still apply unchanged since they're a class selector,
    not one scoped to <div>. Only what a plain .panel never needed is
-   added here: centering (the UA default for an open dialog), a
-   maximum width so a short form doesn't stretch edge to edge, and the
-   dimmed backdrop over everything behind it. */
+   added here: a maximum width so a short form doesn't stretch edge to
+   edge, and the dimmed backdrop over everything behind it — centering
+   itself is left to the UA default for an open dialog (position: fixed,
+   inset: 0, margin: auto), deliberately not overridden with a
+   position of our own: this rule used to set position: relative,
+   which — silently, since the UA's own fixed positioning otherwise
+   looked the same on screen — took the dialog out of that fixed/
+   centered top-layer behavior and back into normal document flow at
+   wherever the <dialog> tag happens to sit in the page. That only
+   surfaced once js/modal.js's openModal() stopped letting the browser
+   scroll the page to bring a mispositioned-back-into-flow dialog into
+   view: with nothing left compensating for it, the dialog rendered
+   exactly where it sat in the HTML instead of centered in the
+   viewport, needing a manual scroll to find it. Still a valid
+   containing block for .modal-close's own position: absolute below,
+   the same as position: relative was. */
 dialog.modal {
   max-width: 560px;
   width: calc(100% - 32px);
   max-height: calc(100% - 64px);
   overflow-y: auto;
   box-shadow: 0 24px 60px rgba(28, 33, 30, 0.35);
-  position: relative;
 }
 
 dialog.modal::backdrop {
