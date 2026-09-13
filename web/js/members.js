@@ -20,6 +20,15 @@ const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(user, ['admin']);
 
+// Row filters and column visibility both start hidden behind one
+// "Filtros…" button — plain rows/columns, not a dialog, so there's
+// nothing to initModal() here; just toggling .hidden on the panel
+// underneath the button.
+const filtersPanel = document.getElementById('filters-panel');
+document.getElementById('toggle-filters').addEventListener('click', () => {
+  filtersPanel.hidden = !filtersPanel.hidden;
+});
+
 let allRoles = [];
 // Filled by loadBoardPositions() — login → their current board
 // position, for whoever is on the board right now.

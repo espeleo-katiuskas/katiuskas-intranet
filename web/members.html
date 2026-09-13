@@ -138,12 +138,11 @@
       </div>
     </form>
   </dialog>
-  <p class="hint" data-roles="admin,board">
-    Haz clic en una fila para ver la ficha completa de esa persona — sus datos, su
-    último acceso, sus roles y su historial de altas y bajas se gestionan ahí.
-  </p>
-  <div class="filter-groups" id="row-filters"></div>
-  <div class="role-checkbox-group" id="column-toggle"></div>
+  <button id="toggle-filters" type="button" class="btn btn-secondary btn-small">Filtros…</button>
+  <div id="filters-panel" hidden>
+    <div class="filter-groups" id="row-filters"></div>
+    <div class="role-checkbox-group" id="column-toggle"></div>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
