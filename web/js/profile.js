@@ -35,6 +35,27 @@ let lastLoadedProfile = null;
 
 trackDirtyFields(editForm);
 
+// Chrome's address-autofill heuristic recognizes this field cluster
+// (street/postal code/city/province) by name/id/label, independent of
+// autocomplete="off" — Chrome deliberately ignores that attribute for
+// address/payment fields specifically, precisely to stop this kind of
+// page-author workaround, so it alone didn't stop the "save this
+// address?" prompt in practice (reported against /member's own version
+// of this form). A field Chrome's autofill excludes outright —
+// readonly, unlike disabled, still submits its value normally — never
+// looks like a real address form to it, so these start readonly and
+// only become editable while actually focused, reverting the instant
+// focus leaves (a click on any other element blurs the field
+// synchronously, before that click's own handler runs — so even an
+// edit abandoned mid-typing is already readonly again by the time
+// anything else on the page reacts to the click).
+const ADDRESS_CLUSTER_FIELDS = ['address', 'postal_code', 'city', 'province'];
+for (const name of ADDRESS_CLUSTER_FIELDS) {
+  const field = editForm.elements[name];
+  field.addEventListener('focus', () => { field.readOnly = false; });
+  field.addEventListener('blur', () => { field.readOnly = true; });
+}
+
 function populateEditForm(profile) {
   editForm.first_name.value = profile.first_name;
   editForm.last_name.value = profile.last_name;
@@ -48,6 +69,9 @@ function populateEditForm(profile) {
   editForm.city.value = profile.city ?? '';
   editForm.province.value = profile.province ?? '';
   editForm.emergency_contact.value = profile.emergency_contact ?? '';
+  for (const name of ADDRESS_CLUSTER_FIELDS) {
+    editForm.elements[name].readOnly = true;
+  }
   markFieldsClean(editForm);
 }
 
