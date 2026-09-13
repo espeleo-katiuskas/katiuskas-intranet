@@ -36,7 +36,7 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
-  número de socio, fecha de alta y de baja, `on_leave`, `roles`, y `license_type` — solo
+  número de socio, fecha de alta y de baja, `on_leave`, y `license_type` — solo
   el tipo de la licencia federativa más reciente, nunca su fecha de obtención ni de
   validez, que siguen reservadas a admin/board) — y solo de quien es o ha sido socio
   (`membership_start_date` no nulo); a quien nunca ha tenido un alta
@@ -48,15 +48,19 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   lo que hace falta ver de un vistazo sin revelar la fecha de nacimiento de nadie.
   `users.Handler.list`
   decide qué forma devolver según el rol de quien pregunta — no hay una ruta aparte.
-  También puede ver `GET /board-members` (la Junta Directiva actual, con cargo,
-  teléfono y correo) y ahora también `GET /roles` (el catálogo — de solo lectura para
-  cualquiera, aunque asignar o quitar un rol sigue siendo cosa exclusiva de admin):
-  combinando `roles` de su propia ficha con `is_automatic` del catálogo,
-  `web/js/members.js` calcula la columna "Cargo" (cargo actual en la Junta, o si no
-  tiene, sus roles no automáticos) igual para member que para admin/board, y con
-  `on_leave` calcula "Tipo de socio" (Activo/Baja temporal/Ex-socio) también igual para
-  los dos — el filtro correspondiente para member ya no ofrece "Nunca ha sido socio",
-  porque `GET /users` nunca le manda a un member alguien que nunca haya sido socio.
+  `MemberListing` no lleva un campo `roles` en absoluto: a un socio cualquiera no le hace
+  falta saber qué roles internos (`admin`, `money`, `material`, o cualquier etiqueta que
+  haya creado un admin) tiene otra persona — es exactamente el tipo de información no
+  pública que esta vista reducida existe para no enseñar, igual que el DNI o el contacto.
+  La única excepción es el cargo en la Junta, que sí es público dentro del club: viene de
+  `GET /board-members` (abierto también a member), de donde `web/js/members.js` saca su
+  columna "Cargo" (`cargoFor`, compartida por `FULL_COLUMNS` y `MEMBER_COLUMNS`) — quien no
+  tiene cargo actual no muestra nada ahí, nunca un rol. `GET /roles` (el catálogo de
+  nombres/descripciones, de solo lectura para cualquiera, aunque asignar o quitar uno sigue
+  siendo cosa exclusiva de admin) no dice quién tiene cada rol, solo qué roles existen. Con
+  `on_leave` se calcula igual para todos "Tipo de socio" (Activo/Baja temporal/Ex-socio) —
+  el filtro correspondiente para member ya no ofrece "Nunca ha sido socio", porque
+  `GET /users` nunca le manda a un member alguien que nunca haya sido socio.
   Sobre su propio registro, puede seguir editando datos de contacto — email, phone,
   address, postal_code, city, province, emergency_contact — pero no nombre, apellidos,
   DNI, fecha de nacimiento ni
@@ -265,6 +269,35 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   que alguien que ha estado varias veces en el club siga mostrando su alta original en
   vez de la fecha de su último reingreso. Así la lista de personas puede mostrar y
   ordenar por fecha de alta/baja sin una petición aparte por persona.
+  `PATCH /memberships/{id}` corrige un periodo (fechas, motivo de baja) y revalida contra
+  él las bajas temporales de esa misma persona que cayeran dentro del periodo *tal como
+  estaba antes* de la edición — estrechar un periodo no puede verse bloqueado por una baja
+  que en realidad pertenece a otro periodo suyo distinto. `DELETE /memberships/{id}` (solo
+  admin) lo borra sin más — nada lo referencia por clave foránea, así que nunca produce
+  cascada —, pensado para el "deshacer mi última acción" del frontend en `/member`, que
+  solo lo ofrece para la entrada de alta/baja/baja-temporal más reciente de la persona;
+  esa restricción vive en el frontend, no en el propio endpoint.
+- **`membership_dues`** (junto a `memberships`) — cada año que un socio lo sigue siendo
+  debe una cuota que lo cubra: la primera, junto con la matrícula, el mismo día que se da
+  de alta, y luego una más cada año siguiente mientras siga siendo socio. Una fila por
+  `(user_id, year)` cubierto (`UNIQUE`, `ErrDueAlreadyRecorded` si se intenta una segunda
+  para el mismo año), siempre ligada a la `transaction_id` que registró el pago de verdad
+  — una cuota sin transacción detrás todavía no significa nada, así que, a diferencia de
+  un periodo de alta, no hay fila para "impagada". A propósito clave por `user_id`, no por
+  `membership_id`: la cuota de un año de quien se reincorpora no está ligada de forma
+  natural a un periodo de alta concreto, y así un año nunca necesita casar con los límites
+  de un periodo. `POST /users/{login}/dues` (solo admin) es `Service.RecordDue`: si la
+  persona todavía no tiene ningún periodo de alta, se trata como su primera cuota, así que
+  también se le abre un periodo nuevo (la propia `start_date` de la petición); a quien ya
+  tuvo un alta y se reincorpora se le deja enteramente al flujo de alta normal, aparte.
+  `GET /users/{login}/dues` sigue el mismo reparto propia-persona-o-admin/board que las
+  licencias. No hay endpoint para corregir o borrar una cuota, ni validación de que el año
+  caiga dentro de un periodo de alta activo — ambas cosas fuera de alcance a propósito por
+  ahora. `membership_dues.transaction_id` usa `ON DELETE CASCADE` (una cuota es pura
+  anotación contable sin sentido aparte de su transacción), mientras que
+  `licenses.transaction_id` usa el `ON DELETE RESTRICT` por defecto — una licencia es un
+  registro real con sentido propio (prueba de estar federado) incluso aparte de su pago,
+  así que la transacción que la pagó no se puede borrar de debajo.
 - **`membership_leaves`** — "bajas temporales": una ventana con fecha de inicio (fecha
   de fin opcional, para una baja que sigue en curso — igual que el propio `end_date` de
   un periodo de socio) que cuelga de la persona (`user_id`) directamente, no de un
@@ -294,7 +327,13 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   además `other_detail` diciendo cuál es en realidad, validación que vive en
   `licenses.Service.Create` (un `CHECK` no puede alcanzar `license_types.is_other` desde
   otra tabla). `GET /license-types` expone el catálogo, solo admin, igual que la propia
-  asignación. De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de
+  asignación. Tiene también su propio `year` (migración 00014) — el año natural que de
+  verdad cubre, no siempre el mismo que el de `issued_date`, ya que una licencia pedida en
+  diciembre suele cubrir el año siguiente — y un `transaction_id` obligatorio que señala
+  la transacción que la pagó (ver Contabilidad más abajo): exigido al crearla (400
+  `unknown_transaction` si no señala una transacción real), pero no editable después —
+  corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece.
+  De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de
   ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
   almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
   algo que se deriva trivialmente de otro campo). Solo se le puede asignar una licencia a
@@ -329,8 +368,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   automático. Rutas bajo
   `/users/{login}/board-members` (`GET` propia persona o admin/board, `POST` solo
   admin), `GET /board-members` (la Junta Directiva actual, abierta también a member), y
-  `PATCH /board-members/{id}` para corregir cargo o fechas. En `/member`, un cargo
-  aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas.
+  `PATCH /board-members/{id}` para corregir cargo o fechas, y `DELETE /board-members/{id}`
+  para borrarlo entero — igual que con un periodo de alta, nada lo referencia por clave
+  foránea, así que nunca produce cascada, pero aquí no hay "mitad de cierre" a la que
+  volver limpiando un campo en su lugar: al ser una sola fila con su propio inicio y fin
+  juntos, borrar siempre quita el cargo completo, se pinche desde el evento que sea de los
+  dos. En `/member`, un cargo
+  aparece como dos eventos más (inicio y fin) en el mismo timeline de altas y bajas, cada
+  uno con su botón de "Editar", y solo el de inicio lleva además "Borrar".
 - **`activities`** / **`activity_participants`** — actividades del club y quién participa.
   Crear una actividad está abierto a cualquier socio con acceso (no solo admin/board), que
   además puede apuntar de una vez a los participantes iniciales. Toda actividad tiene un
@@ -357,6 +402,25 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   gestionada por el mismo paquete `activities`/`activities.Handler` (`GET /holidays`
   abierto a baseline, `POST`/`DELETE` admin/board) — usada solo por la vista de calendario
   del frontend.
+- **`activity_resources`** — la memoria de una actividad: una lista ordenada de recursos
+  que escribe quien participó en ella después de la salida, bien una entrada de texto
+  (título + `description` en texto/Markdown), bien un fichero subido (título + el propio
+  fichero, normalmente una foto o un PDF), distinguidos por `type` con un juego de `CHECK`
+  que mantiene cada forma consistente (`description` solo para texto, los campos de
+  fichero solo para fichero). Los metadatos viven en PostgreSQL; el contenido de un
+  recurso de tipo fichero vive aparte en disco (`config.ActivityResourcesRoot`, un volumen
+  Docker con nombre, no un bind mount como `library`/`userfiles`, porque aquí los ficheros
+  solo llegan por `POST /activities/{id}/resources`, nunca puestos a mano), indexado por
+  el id de la propia fila. Ese mismo `POST` siempre es `multipart/form-data`, incluso para
+  una entrada de texto (sin parte de fichero), con un límite de 25 MiB. Cada recurso tiene
+  una `position` densa 1..N dentro de su actividad; `PUT /activities/{id}/resources/order`
+  sustituye el orden entero a la vez a partir de una lista completa de ids (rechaza
+  cualquier lista que no case exactamente, en vez de intentar conciliar una parcial).
+  Leerlos está abierto a cualquier rol baseline, igual que el resto de una actividad;
+  escribir (crear uno, reordenarlos) exige admin/board, el propio organizador, o
+  cualquiera que conste como participante; corregir o borrar un recurso concreto es más
+  estricto todavía — solo quien lo escribió, o admin/board, aunque sea otro participante
+  de la misma actividad.
 - **`inventory_items`** / **`item_movements`** — catálogo de material y sus movimientos,
   modelados en una única tabla con un discriminador de tipo (`type`) en vez de una tabla
   por tipo, con `CHECK`s que impiden combinaciones sin sentido (una venta con fecha de
@@ -571,8 +635,8 @@ simplemente no se intenta (nadie puede tener `telegram_chat_id` sin el bot corri
 pero ni el aviso de mutaciones ni el bot se activan siquiera sin esas variables, para no
 generar una línea de log por cada escritura ni un bot que no podría avisar al canal de
 nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
-dominio (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`,
-`accounting`), cada uno con
+dominio (`users`, `roles`, `tokens`, `memberships`, `licenses`, `board`, `activities`,
+`activityresources`, `inventory`, `accounting`), cada uno con
 `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
 de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e
 `internal/userfiles` son la excepción a ese patrón de capas: como no hay nada en

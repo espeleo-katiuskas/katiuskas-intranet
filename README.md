@@ -38,8 +38,8 @@ make seed-admin
 exige ser `admin`, así que sin ella no habría forma de entrar en una base de
 datos recién migrada. No hay contraseña: por defecto crea `admin@club.test` con el
 teléfono `600000000`; para otros valores, exporta `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PHONE`,
-`SEED_ADMIN_FIRST_NAME` o `SEED_ADMIN_LAST_NAME` antes de ejecutarlo. Es idempotente: si
-el email ya existe, no hace nada.
+`SEED_ADMIN_FIRST_NAME`, `SEED_ADMIN_LAST_NAME` o `SEED_ADMIN_BIRTH_DATE` (`YYYY-MM-DD`)
+antes de ejecutarlo. Es idempotente: si el email ya existe, no hace nada.
 
 Para entrar, ve a `http://localhost:64710/login`, escribe ese email y ese teléfono, y
 mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
@@ -56,10 +56,11 @@ cd backend && go test ./...
 ```
 
 Cada paquete que toca PostgreSQL (todos menos `auth`, `config`, `mail`, `httpapi`,
-`library` y `userfiles` — los dos últimos sirven ficheros del disco, no de la base de
-datos) usa una base de datos de pruebas real — no hay mocks del acceso a datos, las
-restricciones de PostgreSQL (solapes, claves foráneas, uniqueness) son parte de lo que se
-prueba. `internal/testutil` aplica las migraciones una sola vez y le da a cada test su
-propia transacción, deshecha al terminar, así que los tests no interfieren entre sí. Sin
+`telegram`, `library` y `userfiles` — estos dos últimos sirven ficheros del disco, no de
+la base de datos; los demás no persisten nada en absoluto) usa una base de datos de
+pruebas real — no hay mocks del acceso a datos, las restricciones de PostgreSQL (solapes,
+claves foráneas, uniqueness) son parte de lo que se prueba. `internal/testutil` aplica
+las migraciones una sola vez y le da a cada test su propia transacción, deshecha al
+terminar, así que los tests no interfieren entre sí. Sin
 `TEST_DATABASE_URL` (o si no hay Postgres accesible), esos tests se saltan solos en vez de
 fallar — `go test ./...` funciona igual en una máquina sin Postgres.
