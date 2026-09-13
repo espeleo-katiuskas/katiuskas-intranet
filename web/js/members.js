@@ -335,14 +335,16 @@ const MEMBER_FILTERS = [
 const FILTERS = isAdmin ? FULL_FILTERS : MEMBER_FILTERS;
 
 // Every filter starts with every option checked (a no-op) except
-// membership_status, which starts with "Ex-socio" unchecked — this
-// page's own default view is meant for the club's current membership,
-// not its history, so a former member shouldn't show up until someone
-// deliberately asks for them. restoreViewState() below still overrides
-// this from localStorage when a saved preference exists.
+// membership_status, which starts with only "Activo"/"Baja temporal"
+// checked — this page's own default view is meant for the club's
+// current membership, not its history or people who never joined at
+// all, so neither a former member nor someone who's never been a socio
+// shows up until someone deliberately asks for them.
+// restoreViewState() below still overrides this from localStorage when
+// a saved preference exists.
 const activeFilterValues = Object.fromEntries(FILTERS.map((f) => {
   const options = f.key === 'membership_status'
-    ? f.options.filter((opt) => opt !== membershipStatusLabels.former)
+    ? f.options.filter((opt) => opt === membershipStatusLabels.active || opt === membershipStatusLabels.on_leave)
     : f.options;
   return [f.key, new Set(options)];
 }));
