@@ -579,8 +579,16 @@ async function loadTimeline() {
   try {
     const memberships = await apiFetch(`/users/${memberLogin}/memberships`);
     const events = await buildTimelineEvents(memberships);
-    document.getElementById('membership-status-actions').innerHTML = renderMembershipStatusActions();
-    document.getElementById('board-status-actions').innerHTML = renderBoardStatusActions();
+    // #membership-status-actions/#board-status-actions live inside the
+    // same data-roles="admin" panel-actions their own click listeners
+    // are already guarded for (see below) — removed from the DOM
+    // entirely for board, so setting their innerHTML unconditionally
+    // threw here for every board viewer, landing the error's own
+    // message in this section instead of the timeline.
+    if (isRealAdmin) {
+      document.getElementById('membership-status-actions').innerHTML = renderMembershipStatusActions();
+      document.getElementById('board-status-actions').innerHTML = renderBoardStatusActions();
+    }
     container.innerHTML = events.length
       ? events.map(renderTimelineEvent).join('')
       : '<p>Todavía no ha sido socio.</p>';
