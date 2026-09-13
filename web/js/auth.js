@@ -104,10 +104,15 @@ async function consumeMagicLink(rawToken) {
     setToken(data.token);
     window.location.href = '/';
   } catch {
-    consumingMessage.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo a continuación.';
+    // consumingMessage lives inside #consuming-panel, which gets hidden
+    // right below — setting the error there was a bug, never actually
+    // visible to anyone: requestForm is what's on screen at this point,
+    // so the error belongs on its own #request-error box instead.
     consumingPanel.hidden = true;
     requestForm.hidden = false;
     wireUpForms();
+    errorBox.textContent = 'Este enlace no es válido o ha caducado. Pide uno nuevo aquí abajo.';
+    errorBox.hidden = false;
   }
 }
 
