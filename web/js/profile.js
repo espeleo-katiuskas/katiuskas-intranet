@@ -51,6 +51,19 @@ function populateEditForm(profile) {
   markFieldsClean(editForm);
 }
 
+// Chrome can offer to save this address the instant the page is left —
+// a link click, browser back/forward — just from noticing a filled
+// address-shaped form in the DOM at that moment, even though it's never
+// actually submitted (autocomplete="off" on every field here, on its
+// own, didn't stop this in practice on /member's own version of this
+// form). Clearing the form right before unload is the backstop: nothing
+// address-shaped left for Chrome to notice. A beforeunload listener
+// also opts this page out of the back/forward cache, so a real
+// back-navigation always re-runs this script and refetches fresh data
+// rather than restoring a JS-preserved page with these fields already
+// blanked out.
+window.addEventListener('beforeunload', () => editForm.reset());
+
 document.getElementById('cancel-edit-profile').addEventListener('click', () => {
   if (lastLoadedProfile) {
     populateEditForm(lastLoadedProfile);
