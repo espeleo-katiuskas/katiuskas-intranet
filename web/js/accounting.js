@@ -8,7 +8,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { childrenByParent, flattenAccountTree } from './accountTree.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 
 // This whole page is restricted to admin/money, tighter than the API
 // itself (GET /accounts is open to every baseline role — see
@@ -126,7 +126,7 @@ function openEditAccountDialog(account) {
   document.getElementById('ea-name').value = account.name;
   document.getElementById('ea-code').value = account.code ?? '';
   document.getElementById('ea-parent').innerHTML = parentSelectOptions(account.parent_id ?? null, account.id);
-  editAccountDialog.showModal();
+  openModal(editAccountDialog);
 }
 
 editAccountForm.addEventListener('submit', async (event) => {
@@ -179,7 +179,7 @@ const newAccountForm = document.getElementById('new-account-form');
 initModal(newAccountDialog, newAccountForm);
 
 document.getElementById('toggle-new-account').addEventListener('click', () => {
-  newAccountDialog.showModal();
+  openModal(newAccountDialog);
 });
 
 newAccountForm.addEventListener('submit', async (event) => {

@@ -35,4 +35,19 @@ function initModal(dialog, form) {
   });
 }
 
-export { initModal };
+// showModal() moves focus into the dialog — expected, good accessibility
+// — but browsers also reset the page's own scroll position to the top
+// when they do that, even though a modal dialog renders in the top
+// layer (fixed/centered) with nothing to do with where the page
+// happened to be scrolled. Every caller opens its own dialog through
+// this instead of calling showModal() directly, so a modal opened
+// partway down a long page (common — most of these sit well below at
+// least some content) doesn't unexpectedly jump the whole page back to
+// the top underneath it.
+function openModal(dialog) {
+  const { scrollX, scrollY } = window;
+  dialog.showModal();
+  window.scrollTo(scrollX, scrollY);
+}
+
+export { initModal, openModal };

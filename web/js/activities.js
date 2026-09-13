@@ -11,7 +11,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 
 await initPage();
 
@@ -160,7 +160,7 @@ newActivityDialog.addEventListener('close', () => {
 });
 
 document.getElementById('toggle-new-activity').addEventListener('click', () => {
-  newActivityDialog.showModal();
+  openModal(newActivityDialog);
 });
 
 newActivityForm.addEventListener('submit', async (event) => {

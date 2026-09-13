@@ -12,7 +12,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { flattenAccountTree, accountLabel } from './accountTree.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 
 // Reached only from /accounting's own account tree — same admin/money
 // gate as that page (see accounting.js's own doc comment for why this
@@ -362,7 +362,7 @@ async function openEditTransactionDialog(transactionId) {
     document.getElementById('et-description').value = transaction.description;
     document.getElementById('et-amount').value = ownEntry.amount;
     document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
-    editTransactionDialog.showModal();
+    openModal(editTransactionDialog);
   } catch (err) {
     showError(err.message);
   }
@@ -438,7 +438,7 @@ if (newTransactionDuesLicenses) {
 }
 
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
-  newTransactionDialog.showModal();
+  openModal(newTransactionDialog);
 });
 
 // Only four fields (date, description, amount, other account) drive the

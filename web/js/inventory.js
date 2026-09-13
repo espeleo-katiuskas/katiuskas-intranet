@@ -10,7 +10,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 
 const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin', 'board']);
@@ -241,7 +241,7 @@ function openNewMovementDialog(itemId) {
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
   document.getElementById('mv-type').innerHTML = movementTypeOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
   updateMovementFormVisibility();
-  document.getElementById('new-movement-dialog').showModal();
+  openModal(document.getElementById('new-movement-dialog'));
 }
 
 function renderFilteredItems() {
@@ -491,7 +491,7 @@ if (isAdmin) {
   newItemDialog.addEventListener('close', updateItemTypeFieldsVisibility);
 
   document.getElementById('toggle-new-item').addEventListener('click', () => {
-    newItemDialog.showModal();
+    openModal(newItemDialog);
   });
 
   newItemForm.addEventListener('submit', async (event) => {

@@ -13,7 +13,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 
@@ -291,7 +291,7 @@ function openStatusDialog({ title, hint, initial, minExclusive, minLabel, maxInc
   statusDialogBounds = { minExclusive, minLabel, maxInclusive };
   statusDialogOnSave = onSave;
   statusDialogSuccessMessage = successMessage;
-  statusDialog.showModal();
+  openModal(statusDialog);
 }
 
 // minLabel is the whole "a/al ..." phrase (not just the bare noun), so
@@ -338,7 +338,7 @@ function openEditBoardDialog(b) {
   document.getElementById('eb-position').value = b.position;
   document.getElementById('eb-start-date').value = b.start_date.slice(0, 10);
   document.getElementById('eb-end-date').value = b.end_date ? b.end_date.slice(0, 10) : '';
-  editBoardDialog.showModal();
+  openModal(editBoardDialog);
 }
 
 const editLicenseDialog = document.getElementById('edit-license-dialog');
@@ -353,7 +353,7 @@ function openEditLicenseDialog(l) {
   document.getElementById('el-other-detail').value = l.other_detail ?? '';
   document.getElementById('el-issued-date').value = l.issued_date.slice(0, 10);
   document.getElementById('el-year').value = l.year;
-  editLicenseDialog.showModal();
+  openModal(editLicenseDialog);
 }
 
 document.getElementById('el-license-type').addEventListener('change', (event) => {
@@ -1048,7 +1048,7 @@ if (isRealAdmin) {
       if (!dateInput.value) {
         dateInput.value = today();
       }
-      addBoardDialog.showModal();
+      openModal(addBoardDialog);
       return;
     }
 

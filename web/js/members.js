@@ -10,7 +10,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 
 const user = await initPage();
 // isAdmin means "full read access" (admin or board) — a plain member
@@ -126,7 +126,7 @@ if (isRealAdmin) {
   initModal(newRoleDialog, newRoleForm);
 
   document.getElementById('toggle-new-role').addEventListener('click', () => {
-    newRoleDialog.showModal();
+    openModal(newRoleDialog);
   });
 
   newRoleForm.addEventListener('submit', async (event) => {
@@ -621,7 +621,7 @@ if (isRealAdmin) {
   initModal(newPersonDialog, newPersonForm);
 
   document.getElementById('toggle-new-person').addEventListener('click', () => {
-    newPersonDialog.showModal();
+    openModal(newPersonDialog);
   });
 
   newPersonForm.addEventListener('submit', async (event) => {

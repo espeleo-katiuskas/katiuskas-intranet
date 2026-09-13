@@ -14,7 +14,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { initModal } from './modal.js';
+import { initModal, openModal } from './modal.js';
 import { renderMarkdown } from './markdown.js';
 import { formatSize, downloadBlob } from './fileBrowser.js';
 
@@ -59,7 +59,7 @@ const visibilityLabels = { public: 'Pública', private: 'Privada' };
 const editActivityDialog = document.getElementById('edit-activity-dialog');
 const editForm = document.getElementById('edit-activity-form');
 initModal(editActivityDialog, editForm);
-document.getElementById('open-edit-activity').addEventListener('click', () => editActivityDialog.showModal());
+document.getElementById('open-edit-activity').addEventListener('click', () => openModal(editActivityDialog));
 
 // Toggles every management-only control ("Editar actividad", "+
 // Participante" row) according to canManage — mirrors what
@@ -403,7 +403,7 @@ if (newLoanDialog) {
     updateLoanQuantityVisibility();
     updateLoanSubmitLabel();
   });
-  document.getElementById('toggle-new-loan').addEventListener('click', () => newLoanDialog.showModal());
+  document.getElementById('toggle-new-loan').addEventListener('click', () => openModal(newLoanDialog));
 }
 
 // Clicking "Devolver" on a row above opens the same shared dialog with
@@ -417,7 +417,7 @@ document.getElementById('activity-loans-table-body')?.addEventListener('click', 
   const itemId = Number(button.dataset.prefillReturn);
   const entry = itemEntries.find((e) => e.id === itemId);
   if (!entry) return;
-  newLoanDialog.showModal();
+  openModal(newLoanDialog);
   if (loanTypeSelect) loanTypeSelect.value = 'return';
   updateLoanSubmitLabel();
   loanItemInput.value = entry.label;
@@ -542,7 +542,7 @@ function openEditMemoriaDialog(id) {
   document.getElementById('em-title').value = res.title;
   document.getElementById('em-description-field').hidden = res.type !== 'text';
   document.getElementById('em-description').value = res.description ?? '';
-  document.getElementById('edit-memoria-dialog').showModal();
+  openModal(document.getElementById('edit-memoria-dialog'));
 }
 
 async function moveMemoriaResource(id, direction) {
@@ -645,7 +645,7 @@ updateMemoriaFormVisibility();
 if (memoriaAddDialog) {
   initModal(memoriaAddDialog, memoriaAddForm);
   memoriaAddDialog.addEventListener('close', updateMemoriaFormVisibility);
-  document.getElementById('toggle-memoria-add').addEventListener('click', () => memoriaAddDialog.showModal());
+  document.getElementById('toggle-memoria-add').addEventListener('click', () => openModal(memoriaAddDialog));
 }
 
 memoriaAddForm?.addEventListener('submit', async (event) => {
