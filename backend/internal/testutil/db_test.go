@@ -38,3 +38,45 @@ func TestNewTxRollsBackBetweenTests(t *testing.T) {
 		t.Fatalf("expected no leftover users from other tests, found %d", count)
 	}
 }
+
+// TestSqlStatementsHandlesStatementBeginEndBlocks reproduces a real bug:
+// migrateIfNeeded's plain semicolon-splitting broke on
+// 00012_accounting.sql's own StatementBegin/StatementEnd-wrapped trigger
+// function ("unterminated dollar-quoted string"), since the ";"s inside
+// the $$-quoted body look like statement terminators to a splitter that
+// doesn't know about goose's own markers for exactly this case. That
+// only ever surfaced against a genuinely fresh database — every
+// developer's already-migrated intranet_test short-circuits past the
+// whole migration loop (see migrateIfNeeded's own "already migrated"
+// check) — which is exactly what CI's own fresh Postgres service hits
+// on every single run.
+func TestSqlStatementsHandlesStatementBeginEndBlocks(t *testing.T) {
+	input := `CREATE TABLE foo (id int);
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION bar() RETURNS trigger AS $$
+DECLARE
+    x int := 1;
+BEGIN
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
+
+CREATE INDEX idx_foo ON foo(id);
+`
+	got := sqlStatements(input)
+	want := []string{
+		"CREATE TABLE foo (id int)",
+		"CREATE OR REPLACE FUNCTION bar() RETURNS trigger AS $$\nDECLARE\n    x int := 1;\nBEGIN\n    RETURN NULL;\nEND;\n$$ LANGUAGE plpgsql;",
+		"CREATE INDEX idx_foo ON foo(id)",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d statements, got %d: %v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("statement %d:\n got:  %q\n want: %q", i, got[i], want[i])
+		}
+	}
+}

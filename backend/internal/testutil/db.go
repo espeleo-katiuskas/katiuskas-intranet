@@ -187,12 +187,51 @@ func upSection(content string) (string, error) {
 	return rest, nil
 }
 
-// sqlStatements splits a block of SQL into individual statements. It
-// strips "--" line comments first — a semicolon inside one (e.g. "can't
-// be deleted; see below") would otherwise look like a statement
-// terminator. None of these migrations put a semicolon inside a string
-// literal, so a plain split on ";" is otherwise enough.
+const stmtBeginMarker = "-- +goose StatementBegin"
+const stmtEndMarker = "-- +goose StatementEnd"
+
+// sqlStatements splits a block of SQL into individual statements. Outside
+// a goose StatementBegin/StatementEnd pair, it strips "--" line comments
+// first — a semicolon inside one (e.g. "can't be deleted; see below")
+// would otherwise look like a statement terminator — then splits on
+// plain ";" (none of these migrations put a semicolon inside a string
+// literal, so that's otherwise enough). A StatementBegin/StatementEnd
+// block (00012_accounting.sql's own trigger function, the one migration
+// here that needs it) is passed straight through as a single statement
+// instead: goose's own convention for exactly this case, a body that
+// contains semicolons of its own ($$-quoted PL/pgSQL) that must reach
+// Postgres as one unsplit unit rather than being cut apart the way a
+// plain multi-statement block is.
 func sqlStatements(sql string) []string {
+	var statements []string
+	var plain strings.Builder
+	flushPlain := func() {
+		statements = append(statements, splitPlainStatements(plain.String())...)
+		plain.Reset()
+	}
+
+	lines := strings.Split(sql, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != stmtBeginMarker {
+			plain.WriteString(lines[i])
+			plain.WriteString("\n")
+			continue
+		}
+		flushPlain()
+		var block strings.Builder
+		for i++; i < len(lines) && strings.TrimSpace(lines[i]) != stmtEndMarker; i++ {
+			block.WriteString(lines[i])
+			block.WriteString("\n")
+		}
+		if stmt := strings.TrimSpace(block.String()); stmt != "" {
+			statements = append(statements, stmt)
+		}
+	}
+	flushPlain()
+	return statements
+}
+
+func splitPlainStatements(sql string) []string {
 	var statements []string
 	for _, raw := range strings.Split(stripLineComments(sql), ";") {
 		stmt := strings.TrimSpace(raw)
