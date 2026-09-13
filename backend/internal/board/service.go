@@ -25,6 +25,10 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Member,
 	return s.repo.Update(ctx, id, in)
 }
 
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
+}
+
 func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Member, error) {
 	return s.repo.ListByUser(ctx, userID)
 }

@@ -58,6 +58,24 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Member, error) {
 	return m, err
 }
 
+// Delete removes a board term outright — nothing else references
+// board_members.id by foreign key, so this never cascades. Unlike
+// memberships/leaves, a board term is a single row covering both its
+// own start and end (see Member/UpdateInput), so there's no "closing
+// half" to fall back to clearing instead — deleting it is always a
+// real DELETE, whichever end of the term the frontend's own "Borrar"
+// button was clicked from.
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM board_members WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Member, error) {
 	m, err := r.GetByID(ctx, id)
 	if err != nil {

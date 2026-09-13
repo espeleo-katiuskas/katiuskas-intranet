@@ -171,6 +171,39 @@ func TestUpdateNotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteTerm(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := board.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	m, err := repo.Create(ctx, board.CreateInput{
+		UserID: user.ID, Position: board.PositionSecretary, StartDate: date("2020-01-01"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := repo.Delete(ctx, m.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	list, err := repo.ListByUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected the term to be gone, got %+v", list)
+	}
+}
+
+func TestDeleteTermNotFound(t *testing.T) {
+	repo := board.NewRepository(testutil.NewTx(t))
+	if err := repo.Delete(context.Background(), 999999); !errors.Is(err, board.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestListByUser(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := board.NewRepository(tx)

@@ -254,6 +254,84 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	}
 }
 
+func TestHandlerDeleteTermRequiresAdminNotBoard(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/board-members", target.Login), adminToken,
+		map[string]string{"position": "secretary", "start_date": "2020-01-01"})
+	var created board.Member
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	deletePath := fmt.Sprintf("/api/v1/board-members/%d", created.ID)
+
+	boardToken := testutil.TokenFor(resolver, 2, "board")
+	if rec := doRequest(mux, http.MethodDelete, deletePath, boardToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from deleting a board term, got %d", rec.Code)
+	}
+
+	rec := doRequest(mux, http.MethodDelete, deletePath, adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	listRec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/board-members", target.Login), adminToken, nil)
+	var list []board.Member
+	if err := json.Unmarshal(listRec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected the term to be gone, got %+v", list)
+	}
+}
+
+func TestHandlerDeleteTermRejectsNonNumericID(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/board-members/not-a-number", adminToken, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerDeleteTermNotFound(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/board-members/999999", adminToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerDeleteTermNotifiesTelegram(t *testing.T) {
+	mux, resolver, tx, notifier := newHandlerTestServerWithNotifier(t)
+	actor := testutil.InsertUser(t, tx, "")
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
+
+	createRec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/board-members", target.Login), adminToken,
+		map[string]string{"position": "secretary", "start_date": "2020-01-01"})
+	var created board.Member
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	notifier.reset() // discard the create's own notification
+
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/board-members/%d", created.ID), adminToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	msg := notifier.waitForMessage(t)
+	if !strings.Contains(msg, actor.Login) || !strings.Contains(msg, target.Login) {
+		t.Errorf("expected the notification to name actor and target, got %q", msg)
+	}
+}
+
 // TestHandlerListByUserIsSelfOrPrivileged covers listByUser's own
 // access check directly: a plain member may see their own board
 // history, admin/board may see anyone's, but a different plain member

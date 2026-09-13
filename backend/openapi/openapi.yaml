@@ -1005,6 +1005,21 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: The corrected dates overlap another board term for this person.
+    delete:
+      summary: Remove a board term outright
+      description: >
+        Admin-only. Nothing else references a board term by foreign
+        key, so this never cascades. Unlike a membership period or a
+        temporary leave, a board term is a single row covering both its
+        own start and end, so there's no "closing half" to fall back to
+        clearing instead — deleting it always removes the whole term.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Only admin can delete a board term. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/leaves:
     get:

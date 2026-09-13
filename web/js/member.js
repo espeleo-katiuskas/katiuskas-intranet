@@ -562,6 +562,7 @@ function renderTimelineEvent(event) {
   } else if (isRealAdmin && event.type === 'board_start') {
     actions = `
       <button type="button" class="btn btn-secondary btn-small" data-edit-board="${event.boardMember.id}">Editar</button>
+      <button type="button" class="btn btn-danger btn-small" data-delete-board="${event.boardMember.id}">Borrar</button>
     `;
   }
 
@@ -933,6 +934,16 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
   const editBoardButton = event.target.closest('button[data-edit-board]');
   if (editBoardButton) {
     openEditBoardDialog(boardTermsById[Number(editBoardButton.dataset.editBoard)]);
+    return;
+  }
+
+  const deleteBoardButton = event.target.closest('button[data-delete-board]');
+  if (deleteBoardButton) {
+    await performTimelineDelete(
+      deleteBoardButton,
+      '¿Borrar este cargo en la junta directiva? Esta acción no se puede deshacer.',
+      () => apiFetch(`/board-members/${deleteBoardButton.dataset.deleteBoard}`, { method: 'DELETE' }),
+    );
   }
 });
 

@@ -353,7 +353,12 @@ leave's own id. `DELETE /memberships/{id}` (admin-only) removes a membership per
 outright — nothing references one by foreign key, so it never cascades — meant for the
 frontend's own "undo my last action" story on `/member` (see Frontend below), which only
 ever offers it for a person's single most recent alta/baja/baja-temporal entry; that's a
-UI-level rule, not something the endpoint itself enforces.
+UI-level rule, not something the endpoint itself enforces. `DELETE /board-members/{id}`
+(admin-only) is the same idea for a board term — also never cascades, nothing references
+one by foreign key either — but with no "closing half" distinction to make: unlike a
+membership period or a leave, a board term is a single row covering both its own start and
+end (see `board.Member`), so deleting it always removes the whole term, not just clears a
+field back to open.
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host
