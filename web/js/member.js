@@ -937,6 +937,12 @@ if (impersonateButton) {
   } else {
     impersonateButton.addEventListener('click', async () => {
       if (!confirm('¿Entrar en la intranet como esta persona? Podrás salir de la impersonación en cualquier momento.')) return;
+      // Readonly-until-focused and the beforeunload reset (see
+      // ADDRESS_CLUSTER_FIELDS above) still weren't enough on their own
+      // to stop Chrome from offering to save this address specifically
+      // when leaving via this button — cleared directly, right here,
+      // before anything else happens.
+      editForm.address.value = '';
       impersonateButton.disabled = true;
       try {
         const result = await apiFetch(`/users/${memberLogin}/impersonate`, { method: 'POST' });
