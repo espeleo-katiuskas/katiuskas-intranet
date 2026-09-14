@@ -1,11 +1,18 @@
-import { API_BASE, apiFetch, escapeHtml, encodeFilePath, positionLabels } from './api.js';
+import { API_BASE, apiFetch, escapeHtml, encodeFilePath, positionLabels, hasAnyRole } from './api.js';
 import { initPage } from './layout.js';
 
-await initPage();
+const viewer = await initPage();
 
 // Same endpoint the Junta Directiva table used before this page existed —
 // GET /board-members is open to anyone with a baseline role, rendered
 // here as cards instead of a table row.
+
+// /member?login=… is still admin/board-only (member.js's own
+// requireAnyRole) — the same gate members.js already applies to its own
+// row click (see its isAdmin) — so the whole card only becomes a link
+// for admin/board; a plain member clicking through would just land back
+// on / via that page's own redirect, with nothing to show for it.
+const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 
 // A person's phone can hold more than one number, space-separated (see
 // users.User.Phone) — board-members exposes whatever's on file as one
@@ -34,7 +41,7 @@ async function loadBoardMembers() {
       ? boardMembers
           .map(
             (b) => `
-              <div class="board-card">
+              <div class="board-card" data-person-login="${b.user_login}">
                 <span class="board-dot"></span>
                 <div class="board-info">
                   <div class="board-name">${escapeHtml(b.first_name)}</div>
@@ -59,6 +66,22 @@ async function loadBoardMembers() {
 }
 
 loadBoardMembers();
+
+// One delegated listener on the grid itself, wired once, rather than
+// re-attaching it every time loadBoardMembers() re-renders its cards —
+// the same event-delegation shape #member-roles-list's own click
+// handler already uses elsewhere. A click on the WhatsApp phone link
+// (the only <a> a card contains) is left alone to behave as a normal
+// link instead of also navigating the whole card.
+if (isAdmin) {
+  document.getElementById('board-grid').classList.add('board-grid-clickable');
+  document.getElementById('board-grid').addEventListener('click', (event) => {
+    if (event.target.closest('a')) return;
+    const card = event.target.closest('.board-card[data-person-login]');
+    if (!card) return;
+    window.location.href = `/member?login=${card.dataset.personLogin}`;
+  });
+}
 
 // Documentos/Actas asambleas/Memorias de actividades all read straight
 // from a fixed /library folder (library/documentos, library/actas,
