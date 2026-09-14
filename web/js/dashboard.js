@@ -15,6 +15,17 @@ function firstPhone(phone) {
   return (phone ?? '').split(' ')[0];
 }
 
+// A wa.me link needs the full international number, digits only, no
+// leading "+" — phone numbers stored here never carry a country code
+// of their own (see docs/architecture.md's own Telegram section, which
+// prepends this same "34" for exactly that reason when matching an
+// incoming Telegram contact's shared phone number), so this always
+// adds Spain's before building the link. Stripping non-digits first
+// also covers a number entered with spaces or hyphens.
+function whatsappLink(phone) {
+  return `https://wa.me/34${phone.replace(/\D/g, '')}`;
+}
+
 async function loadBoardMembers() {
   const grid = document.getElementById('board-grid');
   try {
@@ -25,12 +36,16 @@ async function loadBoardMembers() {
             (b) => `
               <div class="board-card">
                 <span class="board-dot"></span>
-                <div>
+                <div class="board-info">
                   <div class="board-name">${escapeHtml(b.first_name)}</div>
                   <div class="board-lastname">${escapeHtml(b.last_name)}</div>
                   <div class="board-meta">
                     <span>${escapeHtml(positionLabels[b.position] ?? b.position)}</span>
-                    <span class="board-phone">${escapeHtml(firstPhone(b.phone))}</span>
+                    ${
+                      firstPhone(b.phone)
+                        ? `<a class="board-phone" href="${whatsappLink(firstPhone(b.phone))}" target="_blank" rel="noopener">${escapeHtml(firstPhone(b.phone))}</a>`
+                        : ''
+                    }
                   </div>
                 </div>
               </div>

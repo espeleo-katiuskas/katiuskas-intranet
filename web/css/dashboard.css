@@ -41,6 +41,16 @@
   background: var(--accent);
 }
 
+/* Without this, .board-card's flex layout leaves this div sized to its
+   own content (name/lastname/meta) rather than filling what's left of
+   the card next to .board-dot — and .board-meta's own
+   justify-content: space-between only has that shrunk width to push
+   the phone link across, not the full card. */
+.board-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .board-name {
   font-weight: 600;
 }
@@ -62,6 +72,12 @@
 .board-phone {
   color: var(--link);
   font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.board-phone:hover {
+  text-decoration: underline;
 }
 
 /* A small blue "pill" link/button — used for "Copiar NIF/IBAN". */
