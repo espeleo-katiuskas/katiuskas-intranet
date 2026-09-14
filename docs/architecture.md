@@ -228,6 +228,17 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   ahora mismo. Ese cálculo es lo que resuelve cada petición autenticada (ver más abajo),
   así que los permisos basados en "soy socio" o "soy de la junta" siempre reflejan el
   estado real de alta, no una etiqueta que alguien olvidó quitar.
+  Quitar el rol "admin" (que sí se asigna/quita a mano) tiene dos salvaguardas propias,
+  aparte de la comprobación de rol automático de arriba: `DELETE /users/{login}/roles/
+  {roleID}` rechaza con 409 `last_admin` dejar a la última persona con admin sin ese rol
+  — para que siempre quede alguien que pueda gestionar personas y roles —, y rechaza con
+  409 `self_admin_removal` que un admin se quite su propio rol de admin a sí mismo,
+  incluso habiendo otros admins de sobra: ese click es fácil de dar por error (el propio
+  botón "×" de su propia fila en `/member`) y, a diferencia de perder cualquier otro rol,
+  nadie más está mirando en ese momento para devolvérselo — tiene que ser otro admin quien
+  lo haga. `roles.Service.Remove` comprueba esto último (`actorID == userID`) antes que
+  `last_admin`, ya que es la regla más específica y no depende de cuántos admins más
+  existan.
 - **`tokens`** — el token de sesión de cada persona: opaco (hash SHA-256 guardado, nunca
   el valor en claro), revocable, con `expires_at`, y `last_used_at`/`last_used_ip` (misma
   lógica de `X-Forwarded-For` que `users.last_login_ip`) actualizados en cada petición

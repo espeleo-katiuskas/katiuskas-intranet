@@ -7,6 +7,14 @@ import (
 
 var ErrLastAdmin = errors.New("cannot remove the admin role from the only remaining admin")
 
+// ErrSelfAdminRemoval guards a narrower case than ErrLastAdmin: even
+// with other admins still around, the one thing every admin keeps is
+// the ability to manage roles at all, and stripping your own admin
+// role is easy to do by accident (a stray click on your own row's "×")
+// with no admin left in the room to hand it back — someone else has to
+// be the one to take it from you.
+var ErrSelfAdminRemoval = errors.New("an admin cannot remove their own admin role")
+
 type Service struct {
 	repo *Repository
 }
@@ -72,10 +80,14 @@ func (s *Service) Assign(ctx context.Context, userID, roleID int64) error {
 	return s.repo.Assign(ctx, userID, roleID)
 }
 
-// Remove refuses to strip an automatic role (nothing to revoke by hand)
-// and refuses to strip the "admin" role from the last person who has
-// it — otherwise nobody would be left who could manage users or roles.
-func (s *Service) Remove(ctx context.Context, userID, roleID int64) error {
+// Remove refuses to strip an automatic role (nothing to revoke by
+// hand), refuses to let actorID strip the "admin" role from themselves
+// (ErrSelfAdminRemoval, checked first since it doesn't need a query and
+// applies regardless of how many other admins exist — a different
+// admin has to be the one to do it instead), and refuses to strip
+// "admin" from the last person who has it at all (ErrLastAdmin) —
+// otherwise nobody would be left who could manage users or roles.
+func (s *Service) Remove(ctx context.Context, actorID, userID, roleID int64) error {
 	role, err := s.repo.GetByID(ctx, roleID)
 	if err != nil {
 		return err
@@ -84,6 +96,9 @@ func (s *Service) Remove(ctx context.Context, userID, roleID int64) error {
 		return ErrAutomaticRole
 	}
 	if role.Name == "admin" {
+		if actorID == userID {
+			return ErrSelfAdminRemoval
+		}
 		hasIt, err := s.repo.UserHasRoleName(ctx, userID, "admin")
 		if err != nil {
 			return err

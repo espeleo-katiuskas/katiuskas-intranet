@@ -169,7 +169,17 @@ to real behavior; anything else an admin creates is just an organizational label
 by hand (rejected with 409), computed live in `roles.Repository.ListNamesForUser` from
 whether the person currently has an open `board_members` or `memberships` period — so
 losing membership, or a board term ending, revokes access on the very next request, no
-stale role to clean up.
+stale role to clean up. Revoking the one non-automatic system role, "admin", has two
+guards of its own beyond the automatic-role check above: `roles.Service.Remove` rejects
+(`ErrLastAdmin`, 409 `last_admin`) taking it from the last person who holds it — someone
+has to be left who can still manage people and roles at all — and, checked first since
+it's the more specific rule and doesn't depend on how many other admins exist,
+(`ErrSelfAdminRemoval`, 409 `self_admin_removal`) an admin trying to remove their own
+admin role, full stop. Losing your own admin access has to be something another admin
+does to you, not a mistake you make removing it yourself — a stray click on your own row's
+"×" on `/member` (`web/js/member.js`'s own `renderRoleBadges`, which doesn't even render
+that button for your own admin badge, though the API enforces this regardless of what any
+particular client does) is exactly the failure mode this exists to rule out.
 
 **Login is the only external identifier for a person**: `users.login` (`text UNIQUE NOT
 NULL`, migration `00002_users.sql`) is generated automatically at creation — first

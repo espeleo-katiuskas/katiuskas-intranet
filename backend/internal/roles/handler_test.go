@@ -225,6 +225,24 @@ func TestHandlerAdminCanGrantTheAdminRole(t *testing.T) {
 	}
 }
 
+// The service-level rule (see TestRemoveBlocksAdminRemovingOwnAdminRole
+// in service_test.go) end-to-end: an admin hitting DELETE on their own
+// admin badge gets a specific 409, not a silent success or a 403.
+func TestHandlerRemoveRefusesSelfAdminRemoval(t *testing.T) {
+	mux, authn, _, tx := newRolesTestServer(t)
+	actor := testutil.InsertUser(t, tx, "")
+	adminRoleID := testutil.RoleID(t, tx, "admin")
+	adminToken := rolesToken(t, authn, actor.ID, "admin")
+
+	rec := rolesDoRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/roles/%d", actor.Login, adminRoleID), adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 removing your own admin role, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := rolesErrorCode(t, rec); code != "self_admin_removal" {
+		t.Errorf("expected error code self_admin_removal, got %q", code)
+	}
+}
+
 func TestHandlerDeleteRefusesSystemRole(t *testing.T) {
 	mux, authn, _, tx := newRolesTestServer(t)
 	adminRoleID := testutil.RoleID(t, tx, "admin")

@@ -78,8 +78,15 @@ function renderRoleBadges(person) {
   return person.roles
     .map((name) => {
       const label = escapeHtml(roleLabel(name));
-      if (!canManageRole(name)) {
-        return `<span class="badge">${label}</span>`;
+      // The API itself refuses this the same way regardless (409
+      // self_admin_removal — see docs/architecture.md's Roles section):
+      // someone else has to be the one to take your own admin away.
+      // Never rendering the "×" for it here just means the viewer never
+      // sees that request fail in the first place.
+      const isOwnAdminRole = name === 'admin' && memberLogin === viewer.login;
+      if (!canManageRole(name) || isOwnAdminRole) {
+        const title = isOwnAdminRole ? ' title="No puedes quitarte a ti mismo el rol de admin"' : '';
+        return `<span class="badge"${title}>${label}</span>`;
       }
       const roleId = rolesByName[name]?.id;
       return `<span class="badge-removable">${label}<button type="button" data-remove-role="${roleId}" title="Quitar rol">×</button></span>`;

@@ -74,7 +74,7 @@ func TestAssignAndRemoveRejectAutomaticRoles(t *testing.T) {
 	if err := svc.AssignByName(ctx, user.ID, []string{"member"}); !errors.Is(err, roles.ErrAutomaticRole) {
 		t.Errorf("expected ErrAutomaticRole assigning member by name, got %v", err)
 	}
-	if err := svc.Remove(ctx, user.ID, memberID); !errors.Is(err, roles.ErrAutomaticRole) {
+	if err := svc.Remove(ctx, user.ID, user.ID, memberID); !errors.Is(err, roles.ErrAutomaticRole) {
 		t.Errorf("expected ErrAutomaticRole removing member, got %v", err)
 	}
 }
@@ -87,11 +87,15 @@ func TestRemoveBlocksStrippingTheLastAdmin(t *testing.T) {
 
 	adminID := testutil.RoleID(t, tx, "admin")
 	solo := testutil.InsertUser(t, tx, "")
+	// A distinct actor from the target throughout — solo removing their
+	// own admin role is ErrSelfAdminRemoval's own case (see
+	// TestRemoveBlocksAdminRemovingOwnAdminRole below), not this one.
+	actor := testutil.InsertUser(t, tx, "")
 	if err := svc.Assign(ctx, solo.ID, adminID); err != nil {
 		t.Fatalf("assign admin: %v", err)
 	}
 
-	if err := svc.Remove(ctx, solo.ID, adminID); !errors.Is(err, roles.ErrLastAdmin) {
+	if err := svc.Remove(ctx, actor.ID, solo.ID, adminID); !errors.Is(err, roles.ErrLastAdmin) {
 		t.Fatalf("expected ErrLastAdmin, got %v", err)
 	}
 
@@ -100,8 +104,40 @@ func TestRemoveBlocksStrippingTheLastAdmin(t *testing.T) {
 	if err := svc.Assign(ctx, second.ID, adminID); err != nil {
 		t.Fatalf("assign second admin: %v", err)
 	}
-	if err := svc.Remove(ctx, solo.ID, adminID); err != nil {
+	if err := svc.Remove(ctx, actor.ID, solo.ID, adminID); err != nil {
 		t.Fatalf("expected removal to succeed with a second admin present: %v", err)
+	}
+}
+
+// ErrSelfAdminRemoval is a narrower, unconditional rule alongside
+// ErrLastAdmin: it fires even with plenty of other admins around,
+// since the point isn't "would this leave nobody in charge" but
+// "you personally can't be the one to take your own admin away".
+func TestRemoveBlocksAdminRemovingOwnAdminRole(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := roles.NewRepository(tx)
+	svc := roles.NewService(repo)
+	ctx := context.Background()
+
+	adminID := testutil.RoleID(t, tx, "admin")
+	solo := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+	if err := svc.Assign(ctx, solo.ID, adminID); err != nil {
+		t.Fatalf("assign admin: %v", err)
+	}
+	if err := svc.Assign(ctx, other.ID, adminID); err != nil {
+		t.Fatalf("assign second admin: %v", err)
+	}
+
+	// Even with a second admin around (so ErrLastAdmin wouldn't fire on
+	// its own), solo still can't strip their own admin role.
+	if err := svc.Remove(ctx, solo.ID, solo.ID, adminID); !errors.Is(err, roles.ErrSelfAdminRemoval) {
+		t.Fatalf("expected ErrSelfAdminRemoval, got %v", err)
+	}
+
+	// Another admin removing solo's admin role is still fine.
+	if err := svc.Remove(ctx, other.ID, solo.ID, adminID); err != nil {
+		t.Fatalf("expected another admin to be able to remove it: %v", err)
 	}
 }
 
@@ -116,7 +152,9 @@ func TestRemoveNonAdminRoleIsUnaffectedByLastAdminCheck(t *testing.T) {
 	if err := svc.Assign(ctx, user.ID, materialID); err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	if err := svc.Remove(ctx, user.ID, materialID); err != nil {
+	// Self-removal is fine here too — ErrSelfAdminRemoval is specific to
+	// the "admin" role, not a general "can't touch your own roles" rule.
+	if err := svc.Remove(ctx, user.ID, user.ID, materialID); err != nil {
 		t.Errorf("expected removing a non-admin role to succeed even as the only holder, got %v", err)
 	}
 }

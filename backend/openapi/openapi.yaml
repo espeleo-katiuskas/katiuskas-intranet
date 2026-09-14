@@ -493,9 +493,12 @@ paths:
     delete:
       summary: Revoke a role from a person
       description: >
-        Same admin-only rule as granting; also refuses to revoke "admin"
-        from the last person who has it, and refuses to revoke an
-        automatic role (member/former_member/board) at all.
+        Same admin-only rule as granting; also refuses to let an admin
+        revoke their own "admin" role (self_admin_removal — someone else
+        has to be the one to do it, even with other admins around),
+        refuses to revoke "admin" from the last person who has it
+        (last_admin), and refuses to revoke an automatic role
+        (member/former_member/board) at all.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -507,9 +510,10 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
-            Either "admin" from the only remaining admin, or an automatic
-            role (member/former_member/board), neither of which can be
-            revoked this way.
+            self_admin_removal (the caller is trying to revoke their own
+            "admin" role), last_admin (they're the only remaining admin),
+            or automatic_role (member/former_member/board can't be
+            revoked this way at all).
 
   /users/{login}/tokens:
     get:

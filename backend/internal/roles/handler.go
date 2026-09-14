@@ -197,13 +197,18 @@ func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not look up role")
 		return
 	}
-	err = h.service.Remove(r.Context(), userID, roleID)
+	current, _ := auth.UserFromContext(r.Context())
+	err = h.service.Remove(r.Context(), current.ID, userID, roleID)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "that person doesn't have this role")
 		return
 	}
 	if errors.Is(err, ErrAutomaticRole) {
 		httpapi.WriteError(w, http.StatusConflict, "automatic_role", err.Error())
+		return
+	}
+	if errors.Is(err, ErrSelfAdminRemoval) {
+		httpapi.WriteError(w, http.StatusConflict, "self_admin_removal", err.Error())
 		return
 	}
 	if errors.Is(err, ErrLastAdmin) {
