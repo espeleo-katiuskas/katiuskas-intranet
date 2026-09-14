@@ -63,6 +63,47 @@ body {
   color: var(--ink);
 }
 
+/* Every navigation between pages is still a plain, full document load
+   (see docs/architecture.md's Frontend section — no SPA, no router, a
+   deliberate choice) but Chrome/Edge's cross-document View Transitions
+   API smooths the visible swap anyway, for free: opting in with
+   @view-transition below makes the browser cross-fade the outgoing and
+   incoming page instead of the default instant, sometimes-flickery
+   replace — no JS involved, and a browser that doesn't support it
+   (Firefox, Safari as of this writing) just keeps today's plain
+   navigation, so this is pure progressive enhancement. Naming #sidebar
+   and #topbar below goes one step further: since both render the exact
+   same markup on every page (js/layout.js's renderShell(), synchronous
+   before first paint), the browser treats them as the *same* element
+   persisting across the navigation and morphs it in place instead of
+   fading it out and back in — which is the part of a hard navigation
+   that actually reads as a "flicker", since the rest of the page (the
+   sidebar/topbar) never visually changes at all between two
+   authenticated pages. */
+@view-transition {
+  navigation: auto;
+}
+
+#sidebar {
+  view-transition-name: page-sidebar;
+}
+
+#topbar {
+  view-transition-name: page-topbar;
+}
+
+/* The View Transitions API doesn't honor prefers-reduced-motion on its
+   own — it's on the page to turn the animation off, not just shorten
+   it, since ::view-transition-group(*)'s default is still a fade/move
+   either way. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* Shared page shell: an orange sidebar (just nav — the club logo lives
    in the topbar instead, see .topbar-brand, so it isn't repeated here
    too) down the left, everything else — a topbar with the logo/title
