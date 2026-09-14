@@ -103,18 +103,31 @@ function fileLink(dirPath, name, label) {
 }
 
 // Actas are named YYYY-MM-DD.pdf so alphabetical order doubles as
-// chronological order; only the display label gets reformatted to
-// DD-MM-YYYY. actaYear pulls the year out for the year <select> below;
-// both return null for a name that doesn't match the convention, so
-// such a file is simply left out of the year-filtered view.
+// chronological order; the display label reformats to DD-MM-YYYY. Some
+// days have more than one assembly — those are named
+// YYYY-MM-DD-xxxxx.pdf (xxxxx any suffix, usually digits, just to tell
+// the files apart) and show with that suffix in the label instead:
+// "DD/MM/YYYY (xxxxx)". parseActaName pulls year/month/day/suffix out
+// of either shape for both actaYear (the year <select> below) and
+// formatActaDate (the display label); a name matching neither shape
+// returns null, so such a file is simply left out of the year-filtered
+// view.
+function parseActaName(name) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:-(.+))?$/.exec(stripExtension(name));
+  if (!match) return null;
+  const [, year, month, day, suffix] = match;
+  return { year, month, day, suffix };
+}
+
 function formatActaDate(name) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(stripExtension(name));
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : stripExtension(name);
+  const parsed = parseActaName(name);
+  if (!parsed) return stripExtension(name);
+  const { year, month, day, suffix } = parsed;
+  return suffix ? `${day}/${month}/${year} (${suffix})` : `${day}-${month}-${year}`;
 }
 
 function actaYear(name) {
-  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(stripExtension(name));
-  return match ? match[1] : null;
+  return parseActaName(name)?.year ?? null;
 }
 
 async function loadDocumentos() {
@@ -153,7 +166,20 @@ async function loadActas() {
     yearSelect.value = years[years.length - 1];
 
     const renderSelectedYear = () => {
-      const yearFiles = files.filter((f) => actaYear(f.name) === yearSelect.value);
+      // Sorted by (month, day, suffix) rather than trusting the raw
+      // filename string or loadOrderedFiles' own listing order: a plain
+      // "2024-01-23.pdf" sorts after "2024-01-23-2.pdf" as bare strings
+      // ("-" is before "." in ASCII), which would wrongly put a
+      // single-acta file after a same-day suffixed one.
+      const yearFiles = files
+        .filter((f) => actaYear(f.name) === yearSelect.value)
+        .sort((a, b) => {
+          const pa = parseActaName(a.name);
+          const pb = parseActaName(b.name);
+          const keyA = `${pa.month}-${pa.day}-${pa.suffix ?? ''}`;
+          const keyB = `${pb.month}-${pb.day}-${pb.suffix ?? ''}`;
+          return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+        });
       list.innerHTML = yearFiles
         .map((f) => `<li>${fileLink('actas', f.name, formatActaDate(f.name))}</li>`)
         .join('');
