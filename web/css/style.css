@@ -696,10 +696,12 @@ button.link-button {
   font-size: 0.85rem;
 }
 
-/* Bordered card used to wrap a plain "list of download links" section
-   (Documentos/Actas/Memorias on index.html, Licencias federativas on
-   profile.html/member.html) — same look, nothing page-specific about
-   it, which is why it lives here rather than in dashboard.css. */
+/* Bordered card used to wrap a "documents from this folder" section —
+   Documentos/Actas/Memorias on index.html, Licencias federativas on
+   profile.html/member.html — same look regardless of whether what's
+   inside is a plain .link-list or the thumbnail grid below, and
+   nothing page-specific about the card itself, which is why it lives
+   here rather than in dashboard.css. */
 .info-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -742,6 +744,59 @@ button.link-button {
 .year-select {
   font: inherit;
   font-size: 0.85rem;
+}
+
+/* Licencias federativas' own per-year list (js/licenseFiles.js): a
+   small grid of clickable thumbnails instead of a plain .link-list of
+   text links, so a license is recognizable at a glance. Each
+   thumbnail displays at 140px on its longest side — the file actually
+   dropped in at "licencias/.thumbnails/<name>.jpg" alongside a
+   license should be about twice that, 280px, so it still looks sharp
+   on a high-DPI screen. */
+.license-thumbnail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.license-thumbnail-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 140px;
+  text-align: center;
+}
+
+.license-thumbnail,
+.license-thumbnail-placeholder {
+  width: 140px;
+  height: 140px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.license-thumbnail {
+  object-fit: contain;
+}
+
+/* Shown in place of a thumbnail <img> that failed to load (see
+   wireThumbnailFallbacks) — a license with no thumbnail dropped in yet
+   whose own file also isn't itself an image (a PDF, say). */
+.license-thumbnail-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+}
+
+.license-thumbnail-label {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
 }
 
 /* Field grid: label-above-input pairs, wrapping into columns on wide screens. */

@@ -73,8 +73,10 @@ Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login
 drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,
 auto-create, gitignored, no rebuild/restart story as `./library` above), one subdirectory
 per login. A copy of each federative license goes in that same person's `licencias/`
-subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF) — see **Frontend**
-below for how `/profile` and `/member` read that convention back out.
+subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optional
+thumbnail for one goes in `licencias/.thumbnails/`, named after that same original
+filename plus `.jpg` (e.g. `licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see
+**Frontend** below for how `/profile` and `/member` read both conventions back out.
 
 ## Architecture
 
@@ -881,37 +883,57 @@ its own near-identical copy; `activity.js`'s own memoria-resource downloads impo
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
 `profile.html`/`member.html` each also render a "Licencias federativas" section — a year
-`<select>` plus a plain list of links, mirroring `dashboard.js`'s own Actas asambleas
-almost exactly — instead of pointing at that person's `licencias/` subdirectory (see
-Commands above) through `userFiles.js`'s generic browser: `js/licenseFiles.js`'s
-`initLicenseFiles(login, opts)` fetches that one directory's listing
-(`GET /users/{login}/files?path=licencias`), builds the `<select>` from whatever years
-actually have a license on file (ascending, most recent selected by default — nothing
-conjures up an empty year the way `loadActas` doesn't either), and renders that year's
-files as bare `<a href>`s straight at `GET /users/{login}/files/file/licencias/<name>` —
-the same cookie-authenticated plain-link shape `dashboard.js`'s own `fileLink` already
-uses for Documentos/Actas/Memorias, since this route accepts the session cookie too (see
-`internal/userfiles` above) and there's no need for `apiFetchBlob`'s Blob dance just to
-open or download one. Each file's name is parsed as `yyyy-mm-dd-tipo_de_licencia.ext` —
-the year for the `<select>`, and a "DD/MM/YYYY — Tipo de licencia" label (underscores
-become spaces, first letter capitalized) once a year is picked — the same way
+`<select>`, mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small
+clickable thumbnails rather than a plain list of text links — instead of pointing at
+that person's `licencias/` subdirectory (see Commands above) through `userFiles.js`'s
+generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches that one
+directory's listing (`GET /users/{login}/files?path=licencias`), builds the `<select>`
+from whatever years actually have a license on file (ascending, most recent selected by
+default — nothing conjures up an empty year the way `loadActas` doesn't either), and
+renders each of that year's files as a `licenseCard`: a thumbnail linking straight at
+`GET /users/{login}/files/file/licencias/<name>` (a bare `<img>`/`<a href>`, the same
+cookie-authenticated plain-link shape `dashboard.js`'s own `fileLink` already uses for
+Documentos/Actas/Memorias, since this route accepts the session cookie too — see
+`internal/userfiles` above — so there's no need for `apiFetchBlob`'s Blob dance), with a
+"DD/MM/YYYY — Tipo de licencia" label underneath parsed the same way
 `dashboard.js`'s own `parseActaName`/`actaYear`/`formatActaDate` read
 `yyyy-mm-dd(-suffix).pdf` back out of an acta's filename; within a year, files sort by
 `(month, day, tipo_de_licencia)` rather than trusting the raw filename string, the same
 reasoning `loadActas`' own `renderSelectedYear` sorts by `(month, day, suffix)`. A file
 whose name doesn't match that convention has no year to file it under, so — the same as
-an acta named anything else — it's simply left out rather than shown with some fallback
-label. A missing `licencias/` subdirectory 404s the same as any other unknown one
+an acta named anything else — it's simply left out.
+
+The thumbnail itself is a manually-dropped-in companion file at
+`licencias/.thumbnails/<full original filename>.jpg` (any original extension — not just
+a PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing
+this module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
+starting with "."), the same "invisible companion file, fetched by exact path" trick
+`dashboard.js`'s own `.order.json` already relies on. Nothing in this app generates one;
+whoever drops a license's own file in is expected to drop its thumbnail in alongside it,
+at 280px on its longest side — twice `.license-thumbnail`'s own 140px display size in
+`style.css`, so it still looks sharp on a high-DPI screen. `licenseCard`'s `<img
+data-fallback-src>` tries that thumbnail first; `wireThumbnailFallbacks` catches a load
+failure (the common case, since generating one is manual) and falls back to the
+license's own file directly only if that file is itself an image (`fileKind`,
+`fileBrowser.js`) — nothing to generate a thumbnail for when the real file already is a
+small, displayable image — and, failing that too (a PDF or anything else with no
+thumbnail dropped in for it yet), swaps in a plain 📄 placeholder of the same size rather
+than the browser's own broken-image icon, so the grid stays visually consistent whether
+or not every license has a real thumbnail yet.
+
+A missing `licencias/` subdirectory 404s the same as any other unknown one
 (`userfiles.Service.ListDirectory`), caught and shown as "no hay copias" rather than an
 error — nobody's dropped a license copy in yet is the common case, not a real failure.
 `profile.js` passes `hideWhenEmpty: true` (mirroring `initUserFilesBrowser`'s own option)
 so "Mi perfil" doesn't show an empty section for the common case of no license on file
 yet; `member.js` leaves it on by default (always shown) so admin/board reviewing someone
 else's page can tell "no license copies yet" apart from a page that failed to load
-anything at all. `.info-card`/`.link-list`/`.info-card label`/`.year-select` (the
+anything at all. `.info-card`/`.info-card label`/`.year-select` (the
 bordered-card-with-a-year-filter look Actas asambleas already had) live in the shared
 `style.css` rather than the page-specific `dashboard.css` precisely because these two
-pages need them too now.
+pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
+`.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
+this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
 `/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
 /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's
