@@ -490,7 +490,46 @@ function renderMemoriaBody(res) {
   if (res.type === 'text') {
     return `<div class="document-text">${renderMarkdown(res.description ?? '')}</div>`;
   }
-  return `<p><a href="#" data-memoria-file="${res.id}">${escapeHtml(res.file_name ?? res.title)}</a> <span class="hint">(${formatSize(res.file_size)})</span></p>`;
+  const fileLine = `<p><a href="#" data-memoria-file="${res.id}">${escapeHtml(res.file_name ?? res.title)}</a> <span class="hint">(${formatSize(res.file_size)})</span></p>`;
+  // An image resource also gets an inline preview, filled in
+  // asynchronously by loadMemoriaImagePreviews() below once the blob
+  // itself has been fetched — this placeholder is what that function
+  // looks up by resource id. The file-name/size line above still shows
+  // either way, same as any other file resource, so the image itself
+  // failing to load (or still being an unsupported type) never leaves
+  // this resource with nothing to click to actually get the file.
+  if ((res.content_type ?? '').startsWith('image/')) {
+    return `<div class="memoria-image-wrap" data-memoria-image="${res.id}"></div>${fileLine}`;
+  }
+  return fileLine;
+}
+
+// Fetches every image-type file resource's own bytes (same
+// GET .../resources/{id}/file every download already uses — there's no
+// cookie-based auth on this route the way library/userfiles' file
+// routes have, so a plain <img src="..."> pointing straight at the API
+// URL can't work; this is the same apiFetchBlob-then-object-URL dance
+// library.js's own image preview uses) and drops each one into its
+// resource's own placeholder. Run once after loadMemoria() re-renders
+// the list, in parallel rather than one at a time, since there's
+// normally at most a handful of photos in one activity's memoria.
+async function loadMemoriaImagePreviews() {
+  await Promise.all(
+    memoriaResources
+      .filter((res) => res.type !== 'text' && (res.content_type ?? '').startsWith('image/'))
+      .map(async (res) => {
+        const wrap = document.querySelector(`[data-memoria-image="${res.id}"]`);
+        if (!wrap) return;
+        try {
+          const blob = await apiFetchBlob(`/activities/${activityId}/resources/${res.id}/file`);
+          const url = URL.createObjectURL(blob);
+          wrap.innerHTML = `<img src="${url}" alt="${escapeHtml(res.file_name ?? res.title)}" class="memoria-image">`;
+        } catch {
+          // Left empty — the file-name/size line rendered alongside it
+          // still lets the file itself be downloaded.
+        }
+      })
+  );
 }
 
 function renderMemoriaRow(res, index) {
@@ -521,6 +560,7 @@ async function loadMemoria() {
     container.innerHTML = memoriaResources.length
       ? memoriaResources.map((res, i) => renderMemoriaRow(res, i)).join('')
       : '<p>Todavía no hay nada en la memoria de esta actividad.</p>';
+    await loadMemoriaImagePreviews();
   } catch (err) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }

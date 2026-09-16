@@ -932,6 +932,22 @@ dialog.modal::backdrop {
   border-radius: 6px;
 }
 
+/* An image resource in an activity's memoria (activity.js's own
+   loadMemoriaImagePreviews) — unlike .document-image above (a
+   dedicated, full-page preview pane with room to scroll), this sits
+   inline among a list of memoria entries, so height is capped too —
+   max-width alone still lets a tall portrait photo tower over
+   everything else in the list. Both together just scale the image down
+   to fit, preserving its own aspect ratio, since there's no fixed box
+   around it forcing a crop. */
+.memoria-image {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
 /* Activities calendar view */
 
 .calendar-legend {
