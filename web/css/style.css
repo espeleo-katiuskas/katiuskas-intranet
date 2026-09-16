@@ -729,6 +729,21 @@ button.link-button {
   text-decoration: underline;
 }
 
+/* A year filter above one of the .link-list sections above (Actas
+   asambleas, Licencias federativas) — the label sits inline with the
+   <select>, both separated from the (re-rendered on change) list below
+   by the same top margin .link-list already uses. */
+.info-card label {
+  margin-right: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.year-select {
+  font: inherit;
+  font-size: 0.85rem;
+}
+
 /* Field grid: label-above-input pairs, wrapping into columns on wide screens. */
 .field-grid {
   display: grid;

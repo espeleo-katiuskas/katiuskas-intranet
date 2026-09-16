@@ -139,20 +139,6 @@
   margin: 2px 0 0;
 }
 
-/* Actas asambleas' own year filter — the label sits inline with the
-   <select>, and both are separated from the (re-rendered on change)
-   list below by the same top margin .link-list already uses. */
-.info-card label {
-  margin-right: 6px;
-  font-size: 0.85rem;
-  color: var(--ink-muted);
-}
-
-.year-select {
-  font: inherit;
-  font-size: 0.85rem;
-}
-
 /* Memorias de actividades: a year per entry, but there can be many, so
    — unlike Documentos/Actas asambleas above — they run inline and wrap
    instead of one per line. */
