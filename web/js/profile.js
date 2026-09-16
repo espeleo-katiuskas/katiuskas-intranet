@@ -7,6 +7,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
+import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 
 const user = await initPage();
@@ -168,5 +169,6 @@ editForm.addEventListener('submit', async (event) => {
 
 loadProfile();
 if (user) {
+  initLicenseFiles(user.login, { hideWhenEmpty: true });
   initUserFilesBrowser(user.login, { hideWhenEmpty: true });
 }

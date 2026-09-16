@@ -696,6 +696,39 @@ button.link-button {
   font-size: 0.85rem;
 }
 
+/* Bordered card used to wrap a plain "list of download links" section
+   (Documentos/Actas/Memorias on index.html, Licencias federativas on
+   profile.html/member.html) — same look, nothing page-specific about
+   it, which is why it lives here rather than in dashboard.css. */
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 0.88rem;
+}
+
+.link-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.link-list li {
+  margin-bottom: 8px;
+}
+
+.link-list a {
+  color: var(--link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.link-list a:hover {
+  text-decoration: underline;
+}
+
 /* Field grid: label-above-input pairs, wrapping into columns on wide screens. */
 .field-grid {
   display: grid;

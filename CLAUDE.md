@@ -72,7 +72,9 @@ rebuild, no restart, nothing through the API itself. That directory is gitignore
 Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`:
 drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,
 auto-create, gitignored, no rebuild/restart story as `./library` above), one subdirectory
-per login.
+per login. A copy of each federative license goes in that same person's `licencias/`
+subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF) — see **Frontend**
+below for how `/profile` and `/member` read that convention back out.
 
 ## Architecture
 
@@ -877,6 +879,31 @@ common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
 document-relative link resolver, `downloadBlob`) both import, rather than each carrying
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
+
+`profile.html`/`member.html` each also render a "Licencias federativas" section — a
+plain list of links, one per file under that person's own `licencias/` subdirectory
+(see Commands above) — instead of pointing at that folder through `userFiles.js`'s
+generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches that one
+directory's listing (`GET /users/{login}/files?path=licencias`) and renders each file as
+a bare `<a href>` straight at `GET /users/{login}/files/file/licencias/<name>` — the same
+cookie-authenticated plain-link shape `dashboard.js`'s own `fileLink` already uses for
+Documentos/Actas/Memorias, since this route accepts the session cookie too (see
+`internal/userfiles` above) and there's no need for `apiFetchBlob`'s Blob dance just to
+open or download one. Each file's name is parsed as `yyyy-mm-dd-tipo_de_licencia.ext`
+into a "DD/MM/YYYY — Tipo de licencia" label (underscores become spaces, first letter
+capitalized) the same way `dashboard.js`'s own `parseActaName`/`formatActaDate` read
+`yyyy-mm-dd(-suffix).pdf` back out of an acta's filename; a name that doesn't match the
+convention just falls back to its own filename, extension stripped, same fallback
+`formatActaDate` uses. A missing `licencias/` subdirectory 404s the same as any other
+unknown one (`userfiles.Service.ListDirectory`), caught and shown as "no hay copias"
+rather than an error — nobody's dropped a license copy in yet is the common case, not a
+real failure. `profile.js` passes `hideWhenEmpty: true` (mirroring `initUserFilesBrowser`'s
+own option) so "Mi perfil" doesn't show an empty section for the common case of no license
+on file yet; `member.js` leaves it on by default (always shown) so admin/board reviewing
+someone else's page can tell "no license copies yet" apart from a page that failed to
+load anything at all. `.info-card`/`.link-list` (the "bordered card wrapping a plain list
+of download links" look) live in the shared `style.css` rather than the page-specific
+`dashboard.css` precisely because these two pages need them too now.
 
 `/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
 /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's

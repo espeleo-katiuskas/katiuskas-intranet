@@ -15,6 +15,7 @@ import {
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { initUserFilesBrowser } from './userFiles.js';
+import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
@@ -1162,4 +1163,5 @@ loadMember();
 loadTimeline();
 loadActivities();
 loadMovements();
+initLicenseFiles(memberLogin);
 initUserFilesBrowser(memberLogin);

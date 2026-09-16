@@ -116,15 +116,6 @@
   font-size: 0.72rem;
 }
 
-.info-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 16px;
-  font-size: 0.88rem;
-}
-
 .info-list {
   margin: 0;
 }
@@ -160,29 +151,6 @@
 .year-select {
   font: inherit;
   font-size: 0.85rem;
-}
-
-/* Shared by every plain "list of download links" side-column card
-   (Documentos, Actas asambleas, Memorias de actividades) — same look,
-   nothing card-specific about it. */
-.link-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-}
-
-.link-list li {
-  margin-bottom: 8px;
-}
-
-.link-list a {
-  color: var(--link);
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-
-.link-list a:hover {
-  text-decoration: underline;
 }
 
 /* Memorias de actividades: a year per entry, but there can be many, so
