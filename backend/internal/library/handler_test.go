@@ -202,4 +202,3 @@ func TestHandlerListRejectsSessionCookie(t *testing.T) {
 		t.Errorf("expected 401 (GET /library must not accept the session cookie), got %d", rec.Code)
 	}
 }
-

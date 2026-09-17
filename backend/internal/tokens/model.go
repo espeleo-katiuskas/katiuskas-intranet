@@ -8,8 +8,8 @@ package tokens
 import "time"
 
 type Token struct {
-	ID     int64  `json:"id"`
-	UserID int64  `json:"-"`
+	ID     int64 `json:"id"`
+	UserID int64 `json:"-"`
 	// UserLogin is only populated by queries that JOIN against users
 	// (GetByID, ListForUser) — Create and CreateImpersonation return a
 	// Token whose caller only ever checks the error, so they skip the
