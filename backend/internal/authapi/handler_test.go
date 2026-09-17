@@ -176,6 +176,16 @@ func (c *capturingTelegramClient) assertNothingSent(t *testing.T) {
 	}
 }
 
+func (c *capturingTelegramClient) assertNothingDeleted(t *testing.T) {
+	t.Helper()
+	time.Sleep(20 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.deleted) != 0 {
+		t.Errorf("expected no Telegram message deleted, got %v", c.deleted)
+	}
+}
+
 type testServer struct {
 	mux            *http.ServeMux
 	handler        *authapi.Handler
@@ -496,6 +506,76 @@ func TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM(t *testing.T) {
 	if deleted != 0 {
 		t.Errorf("expected no delete for a web-triggered DM, got %d deletes", deleted)
 	}
+}
+
+// TestConsumeMagicLinkDeletesTheBotFlowDMImmediately: signing in with
+// the link from a bot-flow DM (see notifyMagicLinkViaTelegram) is
+// exactly the moment that DM has served its purpose — this checks the
+// delete happens right away, rather than only once the scheduled
+// TelegramBotDMLinkTTL cleanup gets around to it. Built with a TTL long
+// enough (a full minute) that waitForDelete below could only pass this
+// quickly because ConsumeMagicLink triggered it directly.
+func TestConsumeMagicLinkDeletesTheBotFlowDMImmediately(t *testing.T) {
+	s := newTestServerWithMagicLinkTTL(t, time.Minute)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+	sentChatID, text := s.telegramClient.waitForMessage(t)
+	m := tokenInLink.FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("expected a sign-in link in the DM, got %q", text)
+	}
+
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": m[1]})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	deletedChatID, deletedMessageID := s.telegramClient.waitForDelete(t)
+	if deletedChatID != sentChatID {
+		t.Errorf("expected the delete to target the same chat the DM was sent to, got sent=%d deleted=%d", sentChatID, deletedChatID)
+	}
+	s.telegramClient.mu.Lock()
+	wantMessageID := s.telegramClient.sent[0].messageID
+	s.telegramClient.mu.Unlock()
+	if deletedMessageID != wantMessageID {
+		t.Errorf("expected the delete to target the sent message's own id %d, got %d", wantMessageID, deletedMessageID)
+	}
+}
+
+// TestConsumeMagicLinkCodeDoesNotDeleteAnUnrelatedBotFlowDM: signing in
+// with a code has nothing to do with a bot-flow DM at all (that DM never
+// even includes one, see notifyMagicLinkViaTelegram) — but
+// deletePendingTelegramDM runs for every successful sign-in regardless
+// of channel, so this checks it still only ever targets a DM actually
+// tracked for that same user, not, say, an unrelated one for somebody
+// else.
+func TestConsumeMagicLinkCodeDoesNotDeleteAnUnrelatedBotFlowDM(t *testing.T) {
+	s := newTestServerWithMagicLinkTTL(t, time.Minute)
+	botUser := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), botUser.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), botUser.ID); err != nil {
+		t.Fatalf("IssueMagicLinkForTelegramUser: %v", err)
+	}
+	s.telegramClient.waitForMessage(t)
+
+	otherUser := s.insertUserWithRole(t, "622333444", "admin")
+	code := s.requestAndExtractCode(t, otherUser.Email, otherUser.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{
+		"email": otherUser.Email, "phone": otherUser.Phone, "code": code,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	s.telegramClient.assertNothingDeleted(t)
 }
 
 // TestIssueMagicLinkForTelegramUserDMStatesShorterValidity checks the
