@@ -160,8 +160,11 @@ const pollTimeoutSeconds = 30
 // failures it takes for Run to treat one as a real, ongoing problem
 // (see logGetUpdatesFailure) rather than a one-off blip — Telegram's
 // own long-poll connection dropping or timing out for a moment, almost
-// always resolved by the very next attempt.
-const getUpdatesFailureLogThreshold = 2
+// always resolved by the very next attempt. Was 2 until a run of
+// exactly 2 consecutive failures turned out to still be common enough
+// in practice (roughly once a week) to be its own kind of blip, not a
+// real problem worth surfacing at ERROR.
+const getUpdatesFailureLogThreshold = 3
 
 // botClient is the subset of *telegram.Client this package needs — a
 // local interface, the same pattern other packages use for UserLookup,

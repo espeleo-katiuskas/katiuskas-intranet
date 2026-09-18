@@ -660,9 +660,10 @@ func TestShouldEscalateGetUpdatesFailure(t *testing.T) {
 		want                bool
 	}{
 		{1, false},
-		{2, true},
-		{3, false},
+		{2, false},
+		{3, true},
 		{4, false},
+		{5, false},
 	}
 	for _, c := range cases {
 		if got := shouldEscalateGetUpdatesFailure(c.consecutiveFailures); got != c.want {
