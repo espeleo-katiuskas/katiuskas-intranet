@@ -78,6 +78,28 @@ thumbnail for one goes in `licencias/.thumbnails/`, named after that same origin
 filename plus `.jpg` (e.g. `licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see
 **Frontend** below for how `/profile` and `/member` read both conventions back out.
 
+Checking how a page actually looks, in an environment with no GUI: Claude Code's own
+browser-automation tool ("Claude in Chrome") needs a real, windowed Google Chrome plus a
+direct Anthropic plan login, neither of which exists on a headless dev box — but
+`chromium` (`sudo apt-get install chromium`; a system package, not part of this repo) run
+headless and driven over the Chrome DevTools Protocol works just as well for a quick
+visual check. Launch it once, keeping it running in the background:
+```sh
+chromium --headless=new --disable-gpu --no-sandbox \
+  --user-data-dir=/tmp/chromium-profile --remote-debugging-port=9333 about:blank &
+```
+Then script it — no Node/Playwright available either, so a plain Python script talking
+raw WebSocket frames to `ws://localhost:9333/devtools/page/<id>` (the id comes from
+`PUT http://localhost:9333/json/new?<url>`) works, needing nothing beyond the standard
+library (`socket`, `hashlib`, `struct`, `json`). To view a page that requires being
+signed in: mint a session token with `scripts/get-token.sh <login>` (see above), navigate
+to the app's own origin first, run `Runtime.evaluate` with
+`localStorage.setItem('token', '<token>')` — the same key `js/api.js` itself reads on
+every page load — then `Page.navigate` to the real page and, once
+`Page.loadEventFired` fires and a couple of seconds have passed for that page's own
+client-side fetches to resolve, `Page.captureScreenshot` (`captureBeyondViewport: true`
+to get the whole page, not just the current viewport).
+
 ## Architecture
 
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
