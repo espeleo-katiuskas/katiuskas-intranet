@@ -42,7 +42,7 @@ function formatLicenseLabel(name) {
   if (!parsed) return stripExtension(name);
   const { year, month, day, rawType } = parsed;
   const type = rawType.replace(/_/g, ' ');
-  return `${day}/${month}/${year} — ${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+  return `${day}-${month}-${year} — ${type.charAt(0).toUpperCase()}${type.slice(1)}`;
 }
 
 function licenseYear(name) {

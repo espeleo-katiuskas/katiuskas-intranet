@@ -908,7 +908,7 @@ renders each of that year's files as a `licenseCard`: a thumbnail linking straig
 cookie-authenticated plain-link shape `dashboard.js`'s own `fileLink` already uses for
 Documentos/Actas/Memorias, since this route accepts the session cookie too — see
 `internal/userfiles` above — so there's no need for `apiFetchBlob`'s Blob dance), with a
-"DD/MM/YYYY — Tipo de licencia" label underneath parsed the same way
+"DD-MM-YYYY — Tipo de licencia" label underneath parsed the same way
 `dashboard.js`'s own `parseActaName`/`actaYear`/`formatActaDate` read
 `yyyy-mm-dd(-suffix).pdf` back out of an acta's filename; within a year, files sort by
 `(month, day, tipo_de_licencia)` rather than trusting the raw filename string, the same

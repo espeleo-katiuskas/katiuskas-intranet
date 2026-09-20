@@ -145,7 +145,7 @@ function fileLink(dirPath, name, label) {
 // days have more than one assembly — those are named
 // YYYY-MM-DD-xxxxx.pdf (xxxxx any suffix, usually digits, just to tell
 // the files apart) and show with that suffix in the label instead:
-// "DD/MM/YYYY (xxxxx)". parseActaName pulls year/month/day/suffix out
+// "DD-MM-YYYY (xxxxx)". parseActaName pulls year/month/day/suffix out
 // of either shape for both actaYear (the year <select> below) and
 // formatActaDate (the display label); a name matching neither shape
 // returns null, so such a file is simply left out of the year-filtered
@@ -161,7 +161,7 @@ function formatActaDate(name) {
   const parsed = parseActaName(name);
   if (!parsed) return stripExtension(name);
   const { year, month, day, suffix } = parsed;
-  return suffix ? `${day}/${month}/${year} (${suffix})` : `${day}-${month}-${year}`;
+  return suffix ? `${day}-${month}-${year} (${suffix})` : `${day}-${month}-${year}`;
 }
 
 function actaYear(name) {
