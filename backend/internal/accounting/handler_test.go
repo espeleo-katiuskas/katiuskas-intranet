@@ -865,3 +865,24 @@ func TestListTransactionsRejectsBadDates(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerAccountHiddenFlag(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Antigua", "code": "999", "hidden": true})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil || !created.Hidden {
+		t.Fatalf("expected a hidden account, got %+v (%v)", created, err)
+	}
+	if !strings.Contains(rec.Body.String(), `"hidden":true`) {
+		t.Errorf("expected hidden in the JSON, got %s", rec.Body.String())
+	}
+	// Still listed: hiding is a presentation matter, the API never filters.
+	list := doRequest(mux, http.MethodGet, "/api/v1/accounts", adminToken, nil)
+	if !strings.Contains(list.Body.String(), `"hidden":true`) {
+		t.Errorf("expected the hidden account in the listing, got %s", list.Body.String())
+	}
+}

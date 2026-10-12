@@ -2019,6 +2019,14 @@ paths:
                     Marks this account as one a transaction can use to
                     record federative licenses: see POST
                     /users/{login}/licenses. Omitted means false.
+                hidden:
+                  type: boolean
+                  default: false
+                  description: >
+                    Marks the account as no longer used (closed, obsolete).
+                    Purely informational for clients: the API still lists,
+                    reads, edits and posts to it like any other. Omitted
+                    means false.
       responses:
         "201":
           description: Created account
@@ -2047,10 +2055,10 @@ paths:
       summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
-        name/code/parent_id/allows_dues/allows_licenses always replace
+        name/code/parent_id/allows_dues/allows_licenses/hidden always replace
         the current values — omitting, nulling, or blanking code clears
         it, the same as an account that never had one, and omitting
-        either flag turns it off rather than keeping it.
+        any flag turns it off rather than keeping it.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2067,6 +2075,7 @@ paths:
                 parent_id: { type: integer, nullable: true }
                 allows_dues: { type: boolean, default: false }
                 allows_licenses: { type: boolean, default: false }
+                hidden: { type: boolean, default: false }
       responses:
         "200":
           description: Updated account
@@ -3064,7 +3073,9 @@ components:
         or the money role marks them) — enforced by POST
         /users/{login}/dues and POST /users/{login}/licenses, and used by
         the frontend to only offer the corresponding section when it
-        could succeed.
+        could succeed. hidden marks an account that's no longer used: it
+        stays in every response (its history has to), and it's up to the
+        client to leave it out of what it shows by default.
       properties:
         id: { type: integer }
         name: { type: string }
@@ -3072,6 +3083,7 @@ components:
         parent_id: { type: integer, nullable: true }
         allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
         allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
+        hidden: { type: boolean, description: The account is no longer used; clients leave it out unless asked. }
         balance:
           type: number
           format: double

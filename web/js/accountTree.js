@@ -34,6 +34,21 @@ function flattenAccountTree(accounts) {
   return result;
 }
 
+// The accounts to show when some are left out (hidden ones): those for
+// which isShown(account) holds, each re-parented onto its nearest shown
+// ancestor so a shown account under a hidden one still hangs from
+// something in the tree — dropping the hidden row alone would leave its
+// children out of the walk altogether, since flattenAccountTree only
+// reaches what descends from a root. Order is kept (still pre-order).
+function shownAccounts(accounts, isShown) {
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  return accounts.filter(isShown).map((account) => {
+    let parentId = account.parent_id ?? null;
+    while (parentId != null && !isShown(byId.get(parentId))) parentId = byId.get(parentId).parent_id ?? null;
+    return { ...account, parent_id: parentId ?? undefined };
+  });
+}
+
 // An account's own name, plus its code in parentheses when it has one
 // (see Account's own doc comment — not every account does) — shared
 // label text for anywhere an account shows up in a dropdown or a
@@ -43,4 +58,4 @@ function accountLabel(account) {
   return `${account.name}${codeSuffix}`;
 }
 
-export { childrenByParent, flattenAccountTree, accountLabel };
+export { childrenByParent, flattenAccountTree, shownAccounts, accountLabel };

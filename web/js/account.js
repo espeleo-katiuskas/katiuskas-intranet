@@ -11,7 +11,7 @@ import {
   resolvePickerId,
 } from './api.js';
 import { initPage } from './layout.js';
-import { flattenAccountTree, accountLabel } from './accountTree.js';
+import { flattenAccountTree, shownAccounts, accountLabel } from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
 // Reached only from /accounting's own account tree — same admin/money
@@ -367,6 +367,8 @@ const editTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('e
 // new line would already count as filled the moment it appeared.
 function setupEntryLines(prefix, onChange) {
   const container = document.getElementById(`${prefix}-lines`);
+  // Hidden accounts this dialog's transaction already uses (edit only).
+  let keepHidden = new Set();
   const noAccount = '<option value="">— Elige una cuenta —</option>';
 
   // Only the first line carries visible labels; the rest line up under it
@@ -380,7 +382,7 @@ function setupEntryLines(prefix, onChange) {
         </div>
         <div class="field">
           ${isFirst ? '<label>Otra cuenta</label>' : ''}
-          <select data-line-account aria-label="Otra cuenta">${noAccount}${otherAccountOptions(accountId)}</select>
+          <select data-line-account aria-label="Otra cuenta">${noAccount}${otherAccountOptions(accountId, keepHidden)}</select>
         </div>
       </div>`;
   }
@@ -388,6 +390,7 @@ function setupEntryLines(prefix, onChange) {
   // Replaces every line with the given ones, plus the empty one that
   // always sits last.
   function setLines(lines) {
+    keepHidden = new Set(lines.map((line) => line.accountId));
     container.innerHTML = [...lines, {}].map((line, index) => lineHtml(index === 0, line)).join('');
   }
 
@@ -480,9 +483,12 @@ function renderHeader(account) {
 // the two sides of a transaction, including a child of this one or
 // this one's own parent. selectedId is nullable — unset for a new
 // empty line, set to the line's own account when reopening a
-// transaction for editing.
-function otherAccountOptions(selectedId) {
-  return flattenAccountTree(allAccounts)
+// transaction for editing. Hidden accounts (no longer used — see
+// Account.Hidden) are left out, except those in keepHidden: the ones the
+// transaction being edited already uses, which have to stay choosable
+// or the dialog couldn't even show what it currently says.
+function otherAccountOptions(selectedId, keepHidden = new Set()) {
+  return flattenAccountTree(shownAccounts(allAccounts, (a) => !a.hidden || keepHidden.has(a.id) || a.id === accountId))
     .filter(({ account }) => account.id !== accountId)
     .map(({ account, depth }) => {
       const selected = account.id === selectedId ? 'selected' : '';

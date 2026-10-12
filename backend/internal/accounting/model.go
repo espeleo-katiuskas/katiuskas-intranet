@@ -28,7 +28,12 @@ import "time"
 // memberships.Service.RecordDue/licenses.Service.Create, which refuse a
 // transaction with no entry on a flagged account). Unlike Code or
 // ParentID they're plain bools, always present in the JSON — false is a
-// real answer, not an absent value.
+// real answer, not an absent value. Hidden marks an account that's no
+// longer used (closed, obsolete): it can't be deleted — its history has
+// to stay — so it's only left out of what the frontend shows by default
+// (see migration 00019_accounts_hidden.sql). Nothing in the API treats
+// it differently: it's listed, readable, editable and postable like any
+// other, and the flag is only ever acted on by whoever reads it.
 type Account struct {
 	ID             int64   `json:"id"`
 	Name           string  `json:"name"`
@@ -36,6 +41,7 @@ type Account struct {
 	ParentID       *int64  `json:"parent_id,omitempty"`
 	AllowsDues     bool    `json:"allows_dues"`
 	AllowsLicenses bool    `json:"allows_licenses"`
+	Hidden         bool    `json:"hidden"`
 	// Balance and LastTransactionAt are this account's own direct
 	// activity — the sum of every entry ever posted straight to it
 	// (never rolled up from child accounts) and when the most recent
@@ -57,6 +63,7 @@ type CreateAccountInput struct {
 	ParentID       *int64
 	AllowsDues     bool
 	AllowsLicenses bool
+	Hidden         bool
 }
 
 // UpdateAccountInput replaces every field at once — the same
@@ -69,13 +76,14 @@ type CreateAccountInput struct {
 // Account's own doc comment) — resending nil/"" here clears an
 // existing code, same as never having set one. The two flags follow the
 // same replace-everything rule: leaving one out of the request means
-// false, not "keep what it was".
+// false, not "keep what it was" — Hidden included.
 type UpdateAccountInput struct {
 	Name           string
 	Code           *string
 	ParentID       *int64
 	AllowsDues     bool
 	AllowsLicenses bool
+	Hidden         bool
 }
 
 // MoveDirection is which adjacent sibling (same parent_id) to swap an

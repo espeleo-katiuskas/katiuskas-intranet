@@ -998,3 +998,43 @@ func TestListTransactionsPagingAndRange(t *testing.T) {
 		t.Errorf("second page: expected B, A, got %+v", page)
 	}
 }
+
+// TestAccountHiddenFlagRoundTrips covers the flag everywhere an account
+// is read back: it starts false, is stored on create, shows in the
+// listing, and is replaced (so cleared again) by an update.
+func TestAccountHiddenFlagRoundTrips(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+
+	plain := mustCreateAccount(t, repo, "Caja", "570")
+	if plain.Hidden {
+		t.Errorf("expected an account to start visible, got %+v", plain)
+	}
+	old, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Antigua", Code: strPtr("999"), Hidden: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !old.Hidden {
+		t.Errorf("expected the created account to be hidden, got %+v", old)
+	}
+
+	listed, err := repo.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden := map[string]bool{}
+	for _, a := range listed {
+		hidden[a.Name] = a.Hidden
+	}
+	if hidden["Caja"] || !hidden["Antigua"] {
+		t.Errorf("listing should carry the flag, got %v", hidden)
+	}
+
+	shown, err := repo.UpdateAccount(ctx, old.ID, accounting.UpdateAccountInput{Name: "Antigua", Code: strPtr("999")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown.Hidden {
+		t.Errorf("expected an update that leaves hidden out to clear it, got %+v", shown)
+	}
+}

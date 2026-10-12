@@ -21,6 +21,10 @@
     <button id="toggle-new-account" type="button" class="btn btn-secondary btn-small">+ Nueva cuenta</button>
   </div>
 
+  <p class="filter-bar" id="show-hidden-wrap" hidden>
+    <label class="checkbox-label" for="show-hidden-accounts"><input id="show-hidden-accounts" type="checkbox"> <span id="show-hidden-label">Mostrar cuentas ocultas</span></label>
+  </p>
+
   <p id="feedback" class="success-message" hidden></p>
   <p id="error" class="error-message" hidden></p>
 
@@ -48,6 +52,10 @@
         <div class="field span-2">
           <label class="checkbox-label" for="na-allows-licenses"><input id="na-allows-licenses" type="checkbox"> Para licencias</label>
           <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas.</p>
+        </div>
+        <div class="field span-2">
+          <label class="checkbox-label" for="na-hidden"><input id="na-hidden" type="checkbox"> Oculta</label>
+          <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
         </div>
       </div>
       <div class="panel-actions">
@@ -81,6 +89,10 @@
         <div class="field span-2">
           <label class="checkbox-label" for="ea-allows-licenses"><input id="ea-allows-licenses" type="checkbox"> Para licencias</label>
           <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas.</p>
+        </div>
+        <div class="field span-2">
+          <label class="checkbox-label" for="ea-hidden"><input id="ea-hidden" type="checkbox"> Oculta</label>
+          <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
         </div>
       </div>
       <div class="panel-actions">

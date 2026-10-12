@@ -897,6 +897,7 @@ button.link-button {
    one. */
 .filter-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
 .filter-bar .field { margin-bottom: 0; }
+.account-hidden td { opacity: 0.6; }
 .load-more { text-align: center; margin: 12px 0; }
 
 .entry-line {

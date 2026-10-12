@@ -769,7 +769,10 @@ membership dues or federative licenses, enforced by `memberships.Service.RecordD
 `licenses.Service.Create` (see **Membership dues**/**Licenses** above) and always present
 in every `Account` JSON, `false` included, unlike the omitted-when-absent `code`/`parent_id`;
 like every other field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that
-leaves one out turns it off) and,
+leaves one out turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
+always-present/replaced-wholesale shape): an account that's no longer used. It can't be deleted — its
+entries are history — so it's flagged instead, and *only the frontend acts on it*: the API
+lists, reads, edits and posts to a hidden account like any other and,
 against that chart, `transactions`: every real movement of money the club records, each
 made of two or more `entries` (an `account_id` and an `amount`, positive into that
 account or negative out of it) whose amounts always sum to exactly zero — standard
@@ -1080,7 +1083,16 @@ one. `js/accountTree.js` holds the
 `GET /accounts` already comes back as a pre-order, depth-first walk (see the `accounts`
 bullet under **Accounting** above), so filtering that flat list down to a single
 `parent_id`, in the order it already arrives in, *is* that group's own sibling order — one
-pass groups every `parent_id` at once, no separate tree-building pass. A `move`'s own
+pass groups every `parent_id` at once, no separate tree-building pass. Hidden accounts
+(`hidden`) are left out of the table unless a "Mostrar cuentas ocultas (N)" checkbox — shown
+only when there are any — is on, and each is tagged "Oculta" and dimmed when shown;
+`shownAccounts` (`accountTree.js`) drops them while re-parenting their shown children onto the
+nearest shown ancestor, since filtering the flat list alone would lose those children from the
+tree walk. The ↑/↓ arrows follow the real sibling groups but count only shown siblings, and a
+move repeats once per hidden sibling it has to pass (the endpoint swaps with the very next one,
+which would otherwise look like nothing happened). A hidden account stays offered as the parent
+picker's choice when it is the current parent — dropping it would move the account to the top
+level on save. A `move`'s own
 response (the whole reordered list) re-renders directly from `applyAccountsList` rather
 than triggering a follow-up `GET`. Only admin and the optional "money" role ever see
 `/accounting` in the sidebar at all, or can even land on the page
@@ -1157,7 +1169,9 @@ year (`suggestedYear`). The inputs keep following the date until the person type
 which is then left alone until the dialog is next opened (`editedYearInputs`, cleared by
 `reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
 dialog does the same from its own date.
-Each line's "otra cuenta" picker (the same list in the create and edit dialogs) lists
+Each line's "otra cuenta" picker (the same list in the create and edit dialogs) leaves hidden
+accounts out — except those the transaction being edited already uses, which stay choosable
+(`otherAccountOptions`'s `keepHidden`) — and lists
 every other account (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary
 parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
