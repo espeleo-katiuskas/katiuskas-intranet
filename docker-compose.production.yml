@@ -17,7 +17,8 @@
 # http://127.0.0.1:64710 for the domain you want this intranet on. All
 # three long-running services restart automatically on crash or host
 # reboot (restart: unless-stopped); deploying a new version after this
-# initial setup is still a manual step (see docs/deployment.md).
+# initial setup is a manual step unless the host has automatic updates
+# (see docs/deployment.md and docs/environments.md).
 
 services:
   postgres:

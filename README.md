@@ -11,6 +11,7 @@ información sobre el club en [katiuskas.es](https://katiuskas.es/).
 - `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo junto.
 - `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con Docker.
 - `docs/deployment-no-docker.md` — lo mismo sin Docker, para un servidor con poco disco.
+- `docs/environments.md` — los tres entornos (local con Docker, y testing y producción con systemd en el host del club) y cómo se actualiza cada uno.
 
 ## Idioma
 

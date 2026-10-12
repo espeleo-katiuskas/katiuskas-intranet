@@ -20,6 +20,13 @@ Traefik...) que no puede servir ficheros estáticos y reenviar `/api/*` con la m
 facilidad, el paso 5 explica también la alternativa de un Caddy local propio en
 `127.0.0.1:64710` — el mismo punto de entrada que usa la guía con Docker.
 
+> **Varios entornos en un mismo host.** Esta es la guía que sigue el host del club: ejecuta
+> testing y producción una junto a la otra en una misma máquina, cada una actualizada
+> automáticamente por push (a `main` y a etiquetas semver, respectivamente). Para instalar
+> un segundo entorno, repite esta guía con su propio directorio, unidad, base de datos y
+> puertos — ver [`environments.md`](environments.md) para lo que debe ser distinto y lo que
+> se comparte.
+
 ## Resumen de la máquina de destino
 
 ```
@@ -274,6 +281,10 @@ dominio elegido que reenvíe a `http://127.0.0.1:64710` — el mismo paso que en
 `docs/deployment.md`.
 
 ## Actualizar a una versión nueva
+
+Procedimiento manual. En el host del club, en su lugar, los push a `main` (testing) y a
+etiquetas semver (producción) disparan las actualizaciones automáticamente — ver
+[`environments.md`](environments.md).
 
 En la máquina de compilación:
 

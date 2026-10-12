@@ -12,12 +12,12 @@ Docker (el motor más las imágenes de PostgreSQL/Caddy/Go), ver en su lugar
 [`docs/deployment-no-docker.md`](deployment-no-docker.md), la misma idea con procesos
 nativos gestionados por `systemd`.
 
-Todo lo que sigue lo ejecutas tú directamente en la máquina de destino — no hay ningún
-paso de despliegue automático (ni CI/CD, ni redeploy en cada `git push`). Lo único
-"automático" es que los contenedores se reinician solos si se caen o si la máquina
-arranca de nuevo (`restart: unless-stopped` en `docker-compose.production.yml`); publicar
-una versión nueva del código sigue siendo un paso manual, ver [Actualizar a una versión
-nueva](#actualizar-a-una-versión-nueva) más abajo.
+> **Nota.** El host del propio club no usa esta guía: ejecuta sus entornos de testing y
+> producción como unidades de systemd, sin Docker (ver
+> [`deployment-no-docker.md`](deployment-no-docker.md) y [`environments.md`](environments.md)),
+> y allí las actualizaciones son automáticas. Esta guía es la alternativa con Docker, y todo
+> lo que sigue se ejecuta a mano. Los contenedores sí se reinician solos si se caen o si la
+> máquina arranca de nuevo (`restart: unless-stopped` en `docker-compose.production.yml`).
 
 ## Requisitos previos
 
@@ -113,8 +113,9 @@ parecido a producción.
 
 ## Actualizar a una versión nueva
 
-Publicar una versión nueva del código es un paso manual: no hay redeploy automático en
-cada `git push`. En la máquina de producción:
+Procedimiento manual: las actualizaciones automáticas del host del club (ver
+[`environments.md`](environments.md)) son para la variante sin Docker; con Docker se hace a
+mano. En la máquina de producción:
 
 ```sh
 git pull

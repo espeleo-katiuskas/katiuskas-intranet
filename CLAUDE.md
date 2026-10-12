@@ -30,11 +30,31 @@ to mint a session token directly in the database for local testing, bypassing th
 flow entirely.
 
 Production deployment (self-hosted, behind a reverse proxy the host already runs for
-TLS): see `docs/deployment.md`, `docker-compose.production.yml`,
-`.env.production.example`. `scripts/get-token.sh` is dev-only — never use it there. For a
-disk-constrained host, `docs/deployment-no-docker.md` covers the same deploy without
-Docker — native PostgreSQL/Caddy plus systemd-managed Go binaries cross-compiled
-elsewhere and copied over.
+TLS): the club's own host runs without Docker, as systemd units —
+`docs/deployment-no-docker.md`: native PostgreSQL/Caddy plus systemd-managed Go binaries
+cross-compiled elsewhere and copied over. `docs/deployment.md`,
+`docker-compose.production.yml` and `.env.production.example` are the Docker-based
+alternative, which the club's host doesn't use. `scripts/get-token.sh` is dev-only — never
+use it there.
+
+There are three environments (full detail in `docs/environments.md`): the local Docker
+stack above, where changes are tried before committing or pushing, and testing
+(`testing.katiuskas.es`) and production (`intranet.katiuskas.es`), two systemd
+installations side by side on the club's host, each with its own database, install
+directory and Telegram bot, sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and
+`ACTIVITY_RESOURCES_ROOT`. Updates are automatic and triggered by pushes: **every push to
+`main` updates testing, and every push of a semver tag updates production**, so pushing to
+`main` is a live deploy rather than just publishing commits. That automation isn't defined
+in this repo (`ci.yml` only tests). Testing's database holds a copy of production's data,
+refreshed on every production deploy (the two databases are separate only because the
+schema can differ while `main` carries migrations production hasn't received), so testing
+contains real personal data and anything done there is overwritten at the next production
+deploy. The shared directories make two things dangerous to do in testing: because
+`user-files/<login>/` is keyed by login, granting someone admin/board there gives them
+read access to every member's personal documents; and because `activityresources.Storage`
+writes and deletes `<activity id>/<resource id>` files and testing's rows carry
+production's ids, uploading or deleting a memoria file in testing can overwrite or delete
+the real file production still references.
 
 Backend tests (from `backend/`):
 ```sh
