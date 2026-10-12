@@ -431,16 +431,21 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   recurso de tipo fichero vive aparte en disco (`config.ActivityResourcesRoot`, un volumen
   Docker con nombre, no un bind mount como `library`/`userfiles`, porque aquí los ficheros
   solo llegan por `POST /activities/{id}/resources`, nunca puestos a mano), indexado por
-  el id de la propia fila. Ese mismo `POST` siempre es `multipart/form-data`, incluso para
-  una entrada de texto (sin parte de fichero), con un límite de 25 MiB. Cada recurso tiene
-  una `position` densa 1..N dentro de su actividad; `PUT /activities/{id}/resources/order`
-  sustituye el orden entero a la vez a partir de una lista completa de ids (rechaza
-  cualquier lista que no case exactamente, en vez de intentar conciliar una parcial).
-  Leerlos está abierto a cualquier rol baseline, igual que el resto de una actividad;
-  escribir (crear uno, reordenarlos) exige admin/board, el propio organizador, o
-  cualquiera que conste como participante; corregir o borrar un recurso concreto es más
-  estricto todavía — solo quien lo escribió, o admin/board, aunque sea otro participante
-  de la misma actividad.
+  el id de la propia fila. Un fichero se crea una sola vez y nunca se modifica: no hay
+  forma de reemplazar sus bytes (se borra el recurso y se añade otro), y `Storage.Save` lo
+  crea con `O_EXCL`, de modo que se niega a pisar uno que ya exista en vez de truncarlo.
+  Eso es lo que permite que otro árbol de directorios comparta los mismos ficheros con
+  hard-links (ver [`environments.md`](environments.md)) sin que escribir en uno cambie el
+  otro; borrar solo quita una entrada de directorio. Ese mismo `POST` siempre es
+  `multipart/form-data`, incluso para una entrada de texto (sin parte de fichero), con un
+  límite de 25 MiB. Cada recurso tiene una `position` densa 1..N dentro de su actividad;
+  `PUT /activities/{id}/resources/order` sustituye el orden entero a la vez a partir de
+  una lista completa de ids (rechaza cualquier lista que no case exactamente, en vez de
+  intentar conciliar una parcial). Leerlos está abierto a cualquier rol baseline, igual
+  que el resto de una actividad; escribir (crear uno, reordenarlos) exige admin/board, el
+  propio organizador, o cualquiera que conste como participante; corregir o borrar un
+  recurso concreto es más estricto todavía — solo quien lo escribió, o admin/board, aunque
+  sea otro participante de la misma actividad.
 - **`inventory_items`** / **`item_movements`** — catálogo de material y sus movimientos,
   modelados en una única tabla con un discriminador de tipo (`type`) en vez de una tabla
   por tipo, con `CHECK`s que impiden combinaciones sin sentido (una venta con fecha de

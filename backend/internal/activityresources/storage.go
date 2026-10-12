@@ -43,16 +43,21 @@ func (s *Storage) pathFor(activityID, resourceID int64) string {
 
 // Save writes content to disk under activityID/resourceID, creating
 // that activity's own subdirectory the first time one of its resources
-// gets a file. Overwrites anything already there, though in practice
-// every resourceID is only ever saved to once (a file resource's bytes
-// are never replaced in place — see UpdateInput's own doc comment).
+// gets a file. It refuses (os.ErrExist) to touch a file that's already
+// there: every resourceID is only ever saved to once, and a file's bytes
+// are never modified afterward (see UpdateInput's own doc comment), so
+// an existing file means something other than this resource put it
+// there. Files that are hard-linked from another directory tree, such
+// as a copy of production's files made with `cp -al`, rely on exactly
+// this — truncating one in place would silently change every tree
+// linked to it.
 func (s *Storage) Save(activityID, resourceID int64, content io.Reader) error {
 	dir := filepath.Join(s.root, strconv.FormatInt(activityID, 10))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	path := s.pathFor(activityID, resourceID)
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return err
 	}

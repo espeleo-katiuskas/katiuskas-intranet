@@ -52,9 +52,13 @@ contains real personal data and anything done there is overwritten at the next p
 deploy. The shared directories make two things dangerous to do in testing: because
 `user-files/<login>/` is keyed by login, granting someone admin/board there gives them
 read access to every member's personal documents; and because `activityresources.Storage`
-writes and deletes `<activity id>/<resource id>` files and testing's rows carry
-production's ids, uploading or deleting a memoria file in testing can overwrite or delete
-the real file production still references.
+creates and deletes `<activity id>/<resource id>` files and testing's rows carry
+production's ids, deleting a memoria file in testing deletes the real file production still
+references, and uploading one can occupy a path production's own next upload then fails on
+(`Save` refuses to overwrite). `docs/environments.md` lays out the options for
+`ACTIVITY_RESOURCES_ROOT`, including a separate directory copied from production with hard
+links (no extra disk space; since `Save` never overwrites, no copy order or sequence state
+can corrupt a shared file — at worst a testing upload fails).
 
 Backend tests (from `backend/`):
 ```sh
@@ -320,7 +324,13 @@ already uses for its own type-specific fields. Metadata lives in Postgres
 mount like `library`/`userfiles`, since files arrive exclusively through
 `POST /activities/{id}/resources` rather than being dropped in by hand), keyed by the
 row's own id rather than any caller-given path, so unlike `library`/`userfiles` there's no
-directory tree to browse and no path-escape risk to guard against. That same `POST` is
+directory tree to browse and no path-escape risk to guard against. A file is created once
+and never modified afterward — there's no way to replace its bytes (delete the resource
+and add another), `Storage.Save` creates it with `O_EXCL` so it refuses (`os.ErrExist`) to
+touch one that already exists, and `Delete` is a plain unlink. That invariant is what lets
+another directory tree share the same files by hard link (see `docs/environments.md`)
+without a write in one changing the other: any future code that rewrites a stored file in
+place would silently break it. That same `POST` is
 always `multipart/form-data`, even for a text resource (just one with no file part), since
 a file resource has to carry an actual upload — capped at 25 MiB
 (`activityresources.maxUploadSize`). Every resource has a `position`, a dense `1..N` per

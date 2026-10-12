@@ -97,20 +97,86 @@ escribir donde haga falta.
   documentos personales reales de todos los socios** (un DNI escaneado, una autorización
   firmada...), porque el directorio es el mismo que el de producción.
 - **`ACTIVITY_RESOURCES_ROOT` sí se escribe desde la API, y eso lo hace delicado.** Cada
-  fichero se guarda como `<id de actividad>/<id de recurso>`, y la API lo crea al subir un
-  recurso de tipo fichero (sobrescribiendo lo que hubiera en esa ruta) y lo elimina del
-  disco al borrar ese recurso. Como la base de datos de testing es una copia de la de
-  producción, sus recursos tienen los mismos ids y, por tanto, las mismas rutas. Mientras el
-  directorio sea el mismo:
+  fichero se guarda como `<id de actividad>/<id de recurso>`; la API lo crea al subir un
+  recurso de tipo fichero (y se niega, con un error, a pisar uno que ya exista) y lo
+  elimina del disco al borrar ese recurso. Como la base de datos de testing es una copia de
+  la de producción, sus recursos tienen los mismos ids y, por tanto, las mismas rutas.
+  Mientras el directorio sea el mismo:
   - **borrar en testing un recurso de tipo fichero borra el fichero real**, que producción
     sigue referenciando;
-  - **subir un fichero en testing escribe en una ruta que producción puede estar usando**:
+  - **subir un fichero en testing ocupa una ruta que producción puede necesitar después**:
     cada base de datos asigna los ids de recurso desde su propia secuencia, y los de
-    testing y producción pueden coincidir, así que un fichero puede pisar a otro.
+    testing y producción pueden coincidir. Quien suba segundo recibe un error (500), sea
+    testing o producción; sin esa negativa a pisar, el segundo habría sobrescrito en
+    silencio el fichero del primero.
 
   Hasta que este directorio deje de compartirse, subir o borrar ficheros de memorias en
   testing no es seguro; el texto de una memoria, que solo vive en la base de datos, sí se
-  puede tocar sin riesgo.
+  puede tocar sin riesgo. Las opciones para dejar de compartirlo están en la sección
+  siguiente.
+
+## Opciones para `ACTIVITY_RESOURCES_ROOT`
+
+1. **Compartido (la situación actual).** No hay copia ni espacio extra, pero sí los dos
+   riesgos de arriba: solo es seguro si en testing no se suben ni se borran ficheros de
+   memorias.
+2. **Directorio propio de testing, con una copia normal de producción.** Cada despliegue
+   en producción vuelve a copiar el directorio, siempre de producción hacia testing (por
+   ejemplo con `rsync -a --delete`). Aísla por completo los dos entornos; el coste es el
+   espacio y el tiempo de copia, porque son fotos y PDFs.
+3. **Directorio propio de testing, copiado con hard-links.** Los ficheros no se duplican:
+   cada uno es el mismo inodo con una entrada en cada árbol, así que testing no ocupa
+   espacio extra (salvo los directorios y lo que se suba en testing). Después de la copia,
+   subir un fichero en testing crea uno nuevo solo en testing, y borrar un recurso en
+   testing deja intacto el fichero de producción. Es seguro porque la API nunca modifica un
+   fichero ya guardado:
+   - al crear, `Storage.Save` abre el fichero con `O_EXCL`, así que nunca trunca uno
+     existente, que es lo único que cambiaría el contenido en los dos árboles a la vez;
+   - al borrar, `os.Remove` quita solo la entrada de ese árbol, y el fichero sigue en el
+     otro;
+   - no hay ninguna operación que reescriba los bytes de un recurso (para cambiarlos hay
+     que borrar el recurso y crear otro).
+
+   Condiciones:
+   - los dos directorios tienen que estar en el mismo sistema de ficheros (`stat -c %d`
+     da el mismo número para ambos);
+   - la copia tiene que hacerla el usuario dueño de los ficheros (`katiuskas`) o root: con
+     `fs.protected_hardlinks=1`, que es lo habitual, Linux no deja crear un hard-link a un
+     fichero ajeno.
+
+   Ejemplo, con `<producción>` y `<testing>` las raíces de datos de cada entorno:
+
+   ```sh
+   rm -rf <testing>/activity-resources
+   cp -al <producción>/activity-resources <testing>/activity-resources
+   # y después, volcar la base de datos de producción, con sus secuencias, a la de testing
+   ```
+
+   El `rm -rf` solo quita las entradas de testing; los ficheros de producción siguen en su
+   árbol. Aun así, conviene comprobar dos veces que la ruta que se borra es la de testing.
+
+   Limitación: depende de que ningún código futuro modifique en sitio un fichero guardado
+   (miniaturas, redimensionado de imágenes...), porque lo haría también en producción sin
+   avisar. `Storage.Save` lo deja anotado en su comentario.
+
+**Secuencias y orden de la copia (opciones 2 y 3).** Cada id de recurso sale de una
+secuencia de PostgreSQL (`bigserial`), y una subida en testing solo puede chocar con un
+fichero que ya exista en su árbol si la secuencia de testing llega a un id que ese árbol
+ya tiene. Eso no se puede garantizar copiando en un orden u otro: depende de cómo se copie
+la base de datos y de qué ids haya en cada lado. Lo que sí se puede es reducir la
+probabilidad:
+
+- si la base de datos se copia entera (`pg_dump` y restauración, que arrastran el valor de
+  las secuencias), copia los ficheros *antes* del volcado, para que producción no pueda
+  haber creado ninguno entre una cosa y la otra y dejado en el árbol un id por delante de
+  la secuencia;
+- si solo se copian las filas, hay que ajustar después la secuencia de testing con
+  `setval`, al menos por encima del id más alto del árbol de ficheros.
+
+Aun así, ni el orden ni el estado de las secuencias pueden corromper nada: `Save` nunca
+pisa un fichero existente, así que lo peor que puede ocurrir es que una subida concreta en
+testing falle con un error (un id nuevo que cae en un fichero que ya existe, por ejemplo
+uno huérfano de producción), lo cual en testing es asumible.
 
 ## Montar el segundo entorno a partir de la guía de despliegue
 
