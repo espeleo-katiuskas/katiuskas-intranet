@@ -56,13 +56,18 @@ vacía la base de datos de testing, restaura en ella un volcado completo de la d
 `goose` las migraciones en las que testing va por delante. Además, salvo con `--no-files`,
 sustituye los ficheros de `ACTIVITY_RESOURCES_ROOT` de testing por hard-links a los de
 producción (ver la sección "Opciones para `ACTIVITY_RESOURCES_ROOT`"). Producción solo se
-lee. Se ejecuta como root, o como un usuario que pueda parar y arrancar la unidad de
-testing:
+lee. Se ejecuta como root o como un usuario que pueda parar y arrancar la unidad de testing:
 
 ```sh
 TESTING_SERVICE=<unidad de testing> \
   scripts/copy-prod-to-testing.sh [--yes] [--no-files] <api.env de producción> <api.env de testing>
 ```
+
+Si ese usuario lo hace con `sudo`, `SYSTEMCTL="sudo systemctl"` (admite argumentos, por
+ejemplo `"sudo -n systemctl"`) hace que pare y arranque la unidad con él. Es lo único que
+usa `sudo`: el resto no necesita privilegios, pero sí poder leer los dos `api.env` (la guía
+de despliegue los deja con `chmod 600`, propiedad de `katiuskas`) y, para el paso de
+ficheros, ser el dueño de los de producción (`katiuskas`) o root.
 
 Lee `DATABASE_URL` y `ACTIVITY_RESOURCES_ROOT` de los dos `api.env` (sin ejecutarlos) y
 necesita `psql`, `pg_dump` y el binario de `goose`; pide teclear el nombre de la base de

@@ -41,7 +41,9 @@
 #                    and started again at the end (required)
 #   GOOSE_BIN        default: <directory of the testing env file>/bin/goose
 #   MIGRATIONS_DIR   default: <directory of the testing env file>/db/migrations
-#   SYSTEMCTL        default: systemctl
+#   SYSTEMCTL        command used to stop and start the unit; it may carry
+#                    arguments, e.g. SYSTEMCTL="sudo systemctl" when running as
+#                    a user allowed to run that with sudo (default: systemctl)
 #
 # Needs psql and pg_dump on PATH (the postgresql-client package), with a
 # pg_dump at least as new as production's server.
@@ -64,7 +66,8 @@ done
 prod_env=$1
 testing_env=$2
 : "${TESTING_SERVICE:?set TESTING_SERVICE to the systemd unit of the testing API}"
-SYSTEMCTL=${SYSTEMCTL:-systemctl}
+# Split once on whitespace (no globbing) so SYSTEMCTL can be "sudo systemctl".
+read -r -a systemctl_cmd <<<"${SYSTEMCTL:-systemctl}"
 testing_dir=$(dirname "$testing_env")
 GOOSE_BIN=${GOOSE_BIN:-$testing_dir/bin/goose}
 MIGRATIONS_DIR=${MIGRATIONS_DIR:-$testing_dir/db/migrations}
@@ -72,6 +75,7 @@ MIGRATIONS_DIR=${MIGRATIONS_DIR:-$testing_dir/db/migrations}
 for f in "$prod_env" "$testing_env"; do
   [[ -r $f ]] || die "cannot read $f"
 done
+command -v "${systemctl_cmd[0]}" >/dev/null || die "${systemctl_cmd[0]} not found (set SYSTEMCTL)"
 command -v psql >/dev/null || die "psql not found (install postgresql-client)"
 command -v pg_dump >/dev/null || die "pg_dump not found (install postgresql-client)"
 command -v "$GOOSE_BIN" >/dev/null || die "goose not found at $GOOSE_BIN (set GOOSE_BIN)"
@@ -217,7 +221,7 @@ if ((!assume_yes)); then
 fi
 
 log "stopping $TESTING_SERVICE"
-"$SYSTEMCTL" stop "$TESTING_SERVICE"
+"${systemctl_cmd[@]}" stop "$TESTING_SERVICE"
 trap 'echo "error: the copy failed; $TESTING_SERVICE was left stopped" >&2' ERR
 
 if ((copy_files)); then
@@ -241,7 +245,7 @@ log "applying testing's own migrations"
 GOOSE_DRIVER=postgres GOOSE_DBSTRING="$testing_url" "$GOOSE_BIN" -dir "$MIGRATIONS_DIR" up
 
 log "starting $TESTING_SERVICE"
-"$SYSTEMCTL" start "$TESTING_SERVICE"
+"${systemctl_cmd[@]}" start "$TESTING_SERVICE"
 trap - ERR
 
 testing_version=$(pg tgt psql -qAt -c 'SELECT COALESCE(max(version_id), 0) FROM goose_db_version WHERE is_applied' </dev/null)
