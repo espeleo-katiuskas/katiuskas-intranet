@@ -74,7 +74,8 @@ func TestNewLoginCodeIsSixDigitsAndVaries(t *testing.T) {
 }
 
 func TestHashTokenIsDeterministicAndDistinct(t *testing.T) {
-	if HashToken("same") != HashToken("same") {
+	first, second := HashToken("same"), HashToken("same")
+	if first != second {
 		t.Errorf("expected hashing the same input twice to produce the same hash")
 	}
 	if HashToken("one") == HashToken("two") {

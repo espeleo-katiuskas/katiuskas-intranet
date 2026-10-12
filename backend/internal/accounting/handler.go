@@ -215,7 +215,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 	// succeeded. Same pattern board.Handler.update uses.
 	before, beforeErr := h.service.GetAccount(r.Context(), id)
 
-	a, err := h.service.UpdateAccount(r.Context(), id, UpdateAccountInput{Name: in.Name, Code: in.Code, ParentID: in.ParentID})
+	a, err := h.service.UpdateAccount(r.Context(), id, UpdateAccountInput(in))
 	if writeAccountError(w, err) {
 		return
 	}
@@ -384,7 +384,7 @@ func decodeTransactionBody(r *http.Request) (transactionBody, error) {
 func toEntryInputs(entries []entryBody) []EntryInput {
 	out := make([]EntryInput, len(entries))
 	for i, e := range entries {
-		out[i] = EntryInput{AccountID: e.AccountID, Amount: e.Amount}
+		out[i] = EntryInput(e)
 	}
 	return out
 }
