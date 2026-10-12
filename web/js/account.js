@@ -544,12 +544,14 @@ editTransactionForm.addEventListener('submit', async (event) => {
     const pendingErrors = editTransactionDuesLicenses
       ? await editTransactionDuesLicenses.submitPending(editingTransactionId, dateValue)
       : [];
+    // Closed first: while a dialog is open, showError writes into it (see
+    // api.js), and this message has to outlive it.
+    editTransactionDialog.close();
     if (pendingErrors.length) {
       showError(`Transacción actualizada, pero no se pudo registrar: ${pendingErrors.join(' · ')}`);
     } else {
       showFeedback('Transacción actualizada.');
     }
-    editTransactionDialog.close();
     await loadAccount();
     await loadEntries();
   } catch (err) {
@@ -627,12 +629,13 @@ newTransactionForm.addEventListener('submit', async (event) => {
     const pendingErrors = newTransactionDuesLicenses
       ? await newTransactionDuesLicenses.submitPending(transaction.id, dateValue)
       : [];
+    // Closed first: see the same note in the edit handler above.
+    newTransactionDialog.close();
     if (pendingErrors.length) {
       showError(`Transacción creada, pero no se pudo registrar: ${pendingErrors.join(' · ')}`);
     } else {
       showFeedback('Transacción creada.');
     }
-    newTransactionDialog.close();
     await loadAccount();
     await loadEntries();
   } catch (err) {

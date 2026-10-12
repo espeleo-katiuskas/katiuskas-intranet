@@ -285,7 +285,56 @@ function showFeedback(message) {
   }
 }
 
+// A modal <dialog> sits in the top layer, over everything else, behind a
+// dimmed backdrop: a message written to the page's own #error box would
+// show up underneath it, practically out of sight, while the person is
+// still looking at the form that caused it. So while one is open, the
+// error goes into that dialog instead — right above its action buttons,
+// where the person's attention already is. The box is created the first
+// time it's needed (no dialog has to carry its own markup for it), and
+// cleared as soon as the person does anything in the form again, or the
+// dialog closes, so it never outlives the attempt it was about.
+function dialogErrorBox(dialog) {
+  let box = dialog.querySelector('[data-dialog-error]');
+  if (box) return box;
+  box = document.createElement('p');
+  box.className = 'error-message';
+  box.dataset.dialogError = '';
+  box.setAttribute('role', 'alert');
+  box.hidden = true;
+  const actions = dialog.querySelector('.panel-actions');
+  if (actions) actions.before(box);
+  else (dialog.querySelector('form') ?? dialog).append(box);
+
+  const clear = () => {
+    box.hidden = true;
+    box.textContent = '';
+  };
+  dialog.addEventListener('close', clear);
+  dialog.addEventListener('input', clear);
+  dialog.addEventListener('change', clear);
+  // Capture phase: runs before the clicked button's own handler, so an
+  // action that fails again simply shows its error again, while one that
+  // succeeds leaves the old message gone.
+  dialog.addEventListener('click', (event) => {
+    if (event.target.closest('button')) clear();
+  }, true);
+  return box;
+}
+
+// Callers that report something after saving and then close the dialog
+// (see account.js's "creada, pero no se pudo registrar") must close it
+// first: an error shown while it's still open goes into it, and would
+// vanish with it.
 function showError(message) {
+  const dialog = document.querySelector('dialog[open]');
+  if (dialog) {
+    const box = dialogErrorBox(dialog);
+    box.textContent = message;
+    box.hidden = false;
+    box.scrollIntoView({ block: 'nearest' });
+    return;
+  }
   const feedbackBox = document.getElementById('feedback');
   const errorBox = document.getElementById('error');
   if (feedbackBox) feedbackBox.hidden = true;

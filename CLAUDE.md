@@ -933,7 +933,16 @@ an `open*Dialog(record)` function that fills the shared dialog's fields from tha
 record first. The platform itself is what actually makes the rest of the page
 unreachable while one is open (real modality, not a hand-rolled overlay to keep in sync)
 and closes it on Escape — nothing in `modal.js` or any page's own script needs to
-implement either. `profile.html`'s own "Mis datos" and `member.js`'s own "Datos" are both
+implement either. The same goes for errors: `showError` (`api.js`) writes into the open
+`dialog[open]` — a `[data-dialog-error]` box created on demand just above its
+`.panel-actions` — instead of the page's own `#error`, which a modal's backdrop would leave
+underneath it, out of sight of whoever's looking at the form that caused it. That box clears
+when the person types, changes a field or clicks a button in the dialog (capture phase, so an
+action that fails again just shows it again), and when it closes. So a call that reports
+something after saving and then closes the dialog has to close it first — an error shown
+while it's still open goes into it and vanishes with it (`account.js`'s "creada, pero no se
+pudo registrar" messages do exactly that); `showFeedback`, which isn't redirected, doesn't
+care. With no dialog open, `showError` behaves as it always did. `profile.html`'s own "Mis datos" and `member.js`'s own "Datos" are both
 left as a plain inline form instead, not a dialog: a person's own core data is prominent
 enough on both pages (the entire reason `/profile` exists at all; the very first thing an
 admin or board looks at on `/member`) that hiding it behind an "Editar" button added
