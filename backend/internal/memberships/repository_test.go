@@ -981,3 +981,51 @@ func TestListDuesForUserOrdersNewestYearFirstAndScopesToTheUser(t *testing.T) {
 		t.Errorf("expected newest-year-first order [%d, %d], got [%d, %d]", newer.ID, older.ID, list[0].ID, list[1].ID)
 	}
 }
+
+// PaidAt is when the payment happened — its transaction's occurred_at —
+// not when the due was recorded (created_at): an admin can register a
+// past year's due long after it was paid, and the history has to show
+// the payment's own date.
+func TestListDuesForUserReportsThePaymentDateNotTheRecordingDate(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	txID := testutil.InsertTransaction(t, tx)
+	paid := time.Date(2024, 3, 15, 12, 0, 0, 0, time.UTC)
+	if _, err := tx.Exec(ctx, `UPDATE transactions SET occurred_at = $1 WHERE id = $2`, paid, txID); err != nil {
+		t.Fatalf("backdate the transaction: %v", err)
+	}
+	if _, err := repo.CreateDue(ctx, memberships.CreateDueInput{UserID: user.ID, Year: 2024, TransactionID: txID}); err != nil {
+		t.Fatalf("create due: %v", err)
+	}
+
+	list, err := repo.ListDuesForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("list dues for user: %v", err)
+	}
+	if len(list) != 1 || list[0].PaidAt == nil || !list[0].PaidAt.Equal(paid) {
+		t.Fatalf("expected PaidAt %v, got %+v", paid, list)
+	}
+	if !list[0].CreatedAt.After(paid) {
+		t.Errorf("expected the recording date to be later than the payment's, got created_at %v", list[0].CreatedAt)
+	}
+}
+
+// CreateDue's own RETURNING has no join, so PaidAt stays nil there.
+func TestCreateDueLeavesPaidAtNil(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	user := testutil.InsertUser(t, tx, "")
+
+	d, err := repo.CreateDue(context.Background(), memberships.CreateDueInput{
+		UserID: user.ID, Year: 2026, TransactionID: testutil.InsertTransaction(t, tx),
+	})
+	if err != nil {
+		t.Fatalf("create due: %v", err)
+	}
+	if d.PaidAt != nil {
+		t.Errorf("expected PaidAt to be unset on a freshly created due, got %v", d.PaidAt)
+	}
+}

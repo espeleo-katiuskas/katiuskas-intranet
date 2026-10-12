@@ -404,6 +404,7 @@ const eventLabels = {
   leave_start: 'Inicio de baja temporal',
   leave_end: 'Fin de baja temporal',
   license: 'Licencia federativa',
+  due: 'Cuota anual',
 };
 
 // The text a timeline row shows next to its date — every type but the
@@ -471,7 +472,10 @@ const TIMELINE_TIE_BREAK_PRIORITY = { alta: 0, leave_end: 0, baja: 2, leave_star
 // them directly, not to one specific period — a single GET
 // /users/{login}/leaves covers every alta/baja span they've had, not
 // just whichever one happens to be current), every federative license
-// this person has ever been issued, and every board term they've
+// this person has ever been issued, every annual cuota they've paid
+// (dated by the payment itself — paid_at, its transaction's date — not
+// by when it was recorded; there's no edit or delete for one, so unlike
+// a license it never gets buttons), and every board term they've
 // served (those are scoped to the person directly, not to any one
 // membership period, the same way licenses are).
 async function buildTimelineEvents(memberships) {
@@ -500,6 +504,17 @@ async function buildTimelineEvents(memberships) {
   licensesById = Object.fromEntries(licenses.map((l) => [l.id, l]));
   for (const l of licenses) {
     events.push({ date: l.issued_date, type: 'license', license: l, reason: l.type });
+  }
+
+  const dues = await apiFetch(`/users/${memberLogin}/dues`).catch(() => []);
+  for (const d of dues) {
+    // Same midnight-UTC shape every other event's date has (an alta's
+    // start_date, a license's issued_date): the sort below compares these
+    // as plain strings, so a bare "YYYY-MM-DD" would sort before an alta
+    // dated the very same day instead of tying with it, and the
+    // same-day tie-break (alta first) would never get to apply.
+    const paidOn = `${(d.paid_at ?? d.created_at).slice(0, 10)}T00:00:00Z`;
+    events.push({ date: paidOn, type: 'due', due: d, reason: String(d.year) });
   }
 
   const boardTerms = await apiFetch(`/users/${memberLogin}/board-members`).catch(() => []);

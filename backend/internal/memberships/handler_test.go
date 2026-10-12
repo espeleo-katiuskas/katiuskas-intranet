@@ -950,3 +950,33 @@ func TestHandlerCreateDueRejectsATransactionWithoutADuesAccount(t *testing.T) {
 		t.Errorf("expected the error code transaction_not_for_dues, got %s", rec.Body.String())
 	}
 }
+
+// paid_at only comes from the listing: POST's own response (no join)
+// leaves it out of the JSON altogether, GET carries it.
+func TestHandlerDuesCarryPaidAtOnlyWhenListed(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/dues", target.Login)
+
+	rec := doRequest(mux, http.MethodPost, path, adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "2026-03-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "paid_at") {
+		t.Errorf("expected the POST response to leave paid_at out, got %s", rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodGet, path, adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 1 || list[0]["paid_at"] == nil {
+		t.Errorf("expected the listing to carry paid_at, got %v", list)
+	}
+}

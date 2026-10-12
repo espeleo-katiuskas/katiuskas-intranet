@@ -2613,7 +2613,14 @@ components:
         user_login: { type: string }
         year: { type: integer }
         transaction_id: { type: integer, description: The transaction that recorded this payment. }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, description: When this due was recorded — not when it was paid (see paid_at). }
+        paid_at:
+          type: string
+          format: date-time
+          description: >
+            When the payment actually happened — its transaction's
+            occurred_at. Only present from GET /users/{login}/dues, never
+            on the POST response.
 
     LicenseType:
       type: object

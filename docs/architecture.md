@@ -315,7 +315,13 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   `allows_dues` (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`), de modo que
   una cuota rechazada nunca deja un periodo de alta abierto como efecto secundario.
   `GET /users/{login}/dues` sigue el mismo reparto propia-persona-o-admin/board que las
-  licencias. No hay endpoint para corregir o borrar una cuota, ni validación de que el año
+  licencias, y une la transacción de cada cuota para añadir `paid_at` (el `occurred_at` del
+  pago, no `created_at`: la cuota de un año pasado puede registrarse mucho después de
+  haberse pagado), solo en este listado y nunca en la respuesta del `POST`. En `/member`,
+  cada cuota aparece como un evento más ("Cuota anual · año") del timeline de "Historial
+  como socio", con la fecha del pago y sin botones de editar ni borrar (no hay endpoint
+  para ninguna de las dos cosas); en `/profile`, en una tabla "Cuotas anuales" bajo la de
+  altas y bajas. No hay endpoint para corregir o borrar una cuota, ni validación de que el año
   caiga dentro de un periodo de alta activo — ambas cosas fuera de alcance a propósito por
   ahora. `membership_dues.transaction_id` usa `ON DELETE CASCADE` (una cuota es pura
   anotación contable sin sentido aparte de su transacción), mientras que

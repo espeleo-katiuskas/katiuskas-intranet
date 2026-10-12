@@ -107,6 +107,14 @@ type Due struct {
 	Year          int       `json:"year"`
 	TransactionID int64     `json:"transaction_id"`
 	CreatedAt     time.Time `json:"created_at"`
+	// PaidAt is when the payment actually happened — its transaction's
+	// occurred_at, which is not CreatedAt (when the due was recorded:
+	// an admin can register a past year's due long after paying it).
+	// Only populated by ListDuesForUser (GET /users/{login}/dues), which
+	// joins the transaction; nil, and omitted from the JSON, everywhere
+	// else (CreateDue's own RETURNING has no join), the same
+	// "only from the listing" pattern accounting.Account.Balance uses.
+	PaidAt *time.Time `json:"paid_at,omitempty"`
 }
 
 type CreateDueInput struct {

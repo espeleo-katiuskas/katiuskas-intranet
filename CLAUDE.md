@@ -414,7 +414,16 @@ Before any of that, `RecordDue` checks the transaction itself — it has to exis
 (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`; `Repository.
 TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a rejected due
 can never leave a membership period started as a side effect.
-`GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split. There's no
+`GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split, and joins
+each due's transaction to add `paid_at` (the payment's own `occurred_at` — not
+`created_at`, since a past year's due can be registered long after it was paid), only from
+this listing, never on `POST`'s response, the same "only from the listing" pattern as
+`Account.Balance`. That is what `/member` and `/profile` show: `/member`'s "Historial como
+socio" timeline gets one "Cuota anual · <year>" event per due, dated by `paid_at` and with
+no Editar/Borrar (there's no endpoint for either) — its date has to keep the same
+midnight-UTC string shape every other event's has, since the timeline sorts them as plain
+strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
+with it — and `/profile` lists them in a "Cuotas anuales" table under the membership table. There's no
 endpoint to correct or remove a due, and no validation that a due's `year` actually falls
 within an active membership period — both deliberately out of scope for now.
 `membership_dues.transaction_id` cascades on delete (`ON DELETE CASCADE`) — a due is pure

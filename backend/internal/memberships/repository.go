@@ -426,8 +426,10 @@ func (r *Repository) CreateDue(ctx context.Context, in CreateDueInput) (Due, err
 
 func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, year, transaction_id, created_at
-		FROM membership_dues WHERE user_id = $1 ORDER BY year DESC
+		SELECT d.id, d.user_id, d.year, d.transaction_id, d.created_at, t.occurred_at
+		FROM membership_dues d
+		JOIN transactions t ON t.id = d.transaction_id
+		WHERE d.user_id = $1 ORDER BY d.year DESC
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -437,7 +439,7 @@ func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, 
 	list := []Due{}
 	for rows.Next() {
 		var d Due
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt, &d.PaidAt); err != nil {
 			return nil, err
 		}
 		list = append(list, d)

@@ -107,12 +107,24 @@ async function loadProfile() {
     populateEditForm(profile);
 
     const memberships = await apiFetch(`/users/${user.login}/memberships`);
-    document.getElementById('memberships-section').hidden = memberships.length === 0;
+    // A failed cuotas request shouldn't take the rest of the history
+    // down with it — it just shows none.
+    const dues = await apiFetch(`/users/${user.login}/dues`).catch(() => []);
+    document.getElementById('memberships-section').hidden = memberships.length === 0 && dues.length === 0;
     document.getElementById('memberships-table-body').innerHTML = memberships
       .map((membership) => `
         <tr>
           <td>${formatDate(membership.start_date)}</td>
           <td>${membership.end_date ? formatDate(membership.end_date) : 'Activa'}</td>
+        </tr>
+      `)
+      .join('');
+    document.getElementById('dues-block').hidden = dues.length === 0;
+    document.getElementById('dues-table-body').innerHTML = dues
+      .map((due) => `
+        <tr>
+          <td>${due.year}</td>
+          <td>${formatDate(due.paid_at ?? due.created_at)}</td>
         </tr>
       `)
       .join('');
