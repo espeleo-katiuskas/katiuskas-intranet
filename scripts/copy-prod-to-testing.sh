@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Replaces the testing database with a copy of production's data, then
-# migrates it up to the schema testing's own code expects.
+# migrates it up to the schema testing's own code expects, and replaces
+# testing's activity resource files with hard links to production's.
 #
 # Why a full drop-and-restore rather than copying rows: testing runs `main`,
 # which can carry migrations production hasn't received yet, so the two
@@ -13,14 +14,27 @@
 # Production is only read (pg_dump takes a consistent snapshot without
 # blocking writers). Everything in the testing database is lost.
 #
+# ACTIVITY_RESOURCES_ROOT holds the files the database's activity_resources
+# rows point at, so it has to follow the database. Its files are hard-linked,
+# not copied: the API never modifies a stored file (Storage.Save refuses to
+# overwrite one and deleting is a plain unlink), so testing shares production's
+# files without using more disk, and a write or delete in one tree can't change
+# the other's. They are linked before the database is dumped, which keeps
+# testing's id sequence from starting behind a file already in its tree (if it
+# ever lands on one, Save refuses to overwrite it and that one upload fails).
+# This needs testing to have its own ACTIVITY_RESOURCES_ROOT, different from
+# production's, on the same filesystem, and a user allowed to link production's
+# files (root, or their owner: see fs.protected_hardlinks). Pass --no-files to
+# leave the files alone and only copy the database.
+#
 # Usage, as root or as a user allowed to stop/start the testing unit:
 #   TESTING_SERVICE=<testing systemd unit> \
-#     scripts/copy-prod-to-testing.sh [--yes] <prod-env-file> <testing-env-file>
+#     scripts/copy-prod-to-testing.sh [--yes] [--no-files] <prod-env-file> <testing-env-file>
 #
 # The two env files are the systemd EnvironmentFile (api.env) of each
-# environment. Only DATABASE_URL (and PUBLIC_BASE_URL, to label the prompt) is
-# read from them; they are parsed, never sourced. --yes skips the confirmation
-# prompt, for running from automation.
+# environment. Only DATABASE_URL, ACTIVITY_RESOURCES_ROOT (and PUBLIC_BASE_URL,
+# to label the prompt) are read from them; they are parsed, never sourced.
+# --yes skips the confirmation prompt, for running from automation.
 #
 # Environment:
 #   TESTING_SERVICE  systemd unit of the testing API, stopped during the copy
@@ -37,11 +51,16 @@ die() { echo "error: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
 
 assume_yes=0
-if [[ ${1:-} == --yes ]]; then
-  assume_yes=1
+copy_files=1
+while [[ ${1:-} == --* ]]; do
+  case $1 in
+    --yes) assume_yes=1 ;;
+    --no-files) copy_files=0 ;;
+    *) die "unknown option $1" ;;
+  esac
   shift
-fi
-[[ $# -eq 2 ]] || die "usage: TESTING_SERVICE=<unit> $0 [--yes] <prod-env-file> <testing-env-file>"
+done
+[[ $# -eq 2 ]] || die "usage: TESTING_SERVICE=<unit> $0 [--yes] [--no-files] <prod-env-file> <testing-env-file>"
 prod_env=$1
 testing_env=$2
 : "${TESTING_SERVICE:?set TESTING_SERVICE to the systemd unit of the testing API}"
@@ -138,13 +157,58 @@ latest_migration=$(ls "$MIGRATIONS_DIR" | sed -n 's/^0*\([0-9][0-9]*\)_.*\.sql$/
 ((prod_version <= latest_migration)) \
   || die "production is at migration $prod_version but testing's migrations only go up to $latest_migration"
 
+if ((copy_files)); then
+  # config.go's default when ACTIVITY_RESOURCES_ROOT is unset.
+  prod_files=$(env_value "$prod_env" ACTIVITY_RESOURCES_ROOT)
+  testing_files=$(env_value "$testing_env" ACTIVITY_RESOURCES_ROOT)
+  prod_files=$(realpath -m -- "${prod_files:-/data/activity-resources}")
+  testing_files=$(realpath -m -- "${testing_files:-/data/activity-resources}")
+
+  [[ -d $prod_files ]] || die "production's ACTIVITY_RESOURCES_ROOT ($prod_files) is not a directory"
+  [[ $prod_files != "$testing_files" ]] \
+    || die "production and testing share the same ACTIVITY_RESOURCES_ROOT ($prod_files); give testing its own directory first (see docs/environments.md), or pass --no-files"
+  case "$prod_files/" in "$testing_files"/*) die "production's ACTIVITY_RESOURCES_ROOT is inside testing's ($testing_files)" ;; esac
+  case "$testing_files/" in "$prod_files"/*) die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) is inside production's" ;; esac
+  # The contents of testing's directory are about to be deleted, so refuse
+  # anything that isn't clearly an activity resources tree: a top-level
+  # directory, or one holding anything but numeric activity-id directories.
+  [[ $testing_files =~ ^/[^/]+(/[^/]+)+$ ]] \
+    || die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) is too close to the filesystem root to empty safely"
+  if [[ -d $testing_files ]]; then
+    stray=$(find "$testing_files" -regextype posix-extended -mindepth 1 -maxdepth 1 \( ! -type d -o ! -regex '.*/[0-9]+' \) -print -quit)
+    [[ -z $stray ]] \
+      || die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) contains $stray, which is not an activity directory; refusing to empty it"
+    probe_dir=$testing_files
+  else
+    probe_dir=$(dirname "$testing_files")
+    [[ -d $probe_dir ]] || die "the parent of testing's ACTIVITY_RESOURCES_ROOT ($probe_dir) does not exist"
+  fi
+  [[ $(stat -c %d "$prod_files") == "$(stat -c %d "$probe_dir")" ]] \
+    || die "$prod_files and $probe_dir are on different filesystems, so hard links between them are impossible"
+  sample=$(find "$prod_files" -type f -print -quit)
+  if [[ -n $sample ]]; then
+    probe="$probe_dir/.link-probe.$$"
+    ln -- "$sample" "$probe" 2>/dev/null \
+      || die "cannot hard-link production's files from here (fs.protected_hardlinks only lets a user link files they own, other than root)"
+    rm -f -- "$probe"
+  fi
+fi
+
 label() { [[ -z $1 ]] || printf ' (%s)' "$1"; }
+if ((copy_files)); then
+  files_line="activity files:      $testing_files emptied, then hard-linked from $prod_files"
+  lost="the testing database and its activity files"
+else
+  files_line="activity files:      left alone (--no-files)"
+  lost="the testing database"
+fi
 cat <<EOF
 About to REPLACE the testing database with a copy of production's data:
   production (source): ${conn[src.db]} on ${conn[src.host]:-local}:${conn[src.port]}$(label "$(env_value "$prod_env" PUBLIC_BASE_URL)"), migration $prod_version
   testing    (target): ${conn[tgt.db]} on ${conn[tgt.host]:-local}:${conn[tgt.port]}$(label "$(env_value "$testing_env" PUBLIC_BASE_URL)")
+  $files_line
   testing service:     $TESTING_SERVICE (stopped during the copy)
-Everything currently in the testing database will be lost.
+Everything currently in $lost will be lost.
 EOF
 if ((!assume_yes)); then
   read -r -p "Type the name of the testing database (${conn[tgt.db]}) to continue: " answer \
@@ -156,8 +220,15 @@ log "stopping $TESTING_SERVICE"
 "$SYSTEMCTL" stop "$TESTING_SERVICE"
 trap 'echo "error: the copy failed; $TESTING_SERVICE was left stopped" >&2' ERR
 
-# If ACTIVITY_RESOURCES_ROOT is copied from production too (see
-# docs/environments.md), do it here: before dumping the database.
+if ((copy_files)); then
+  # Before dumping the database, so no file in testing's tree can be newer than
+  # the database snapshot (see the note at the top).
+  log "replacing testing's activity files with hard links to production's"
+  mkdir -p -- "$testing_files"
+  find "$testing_files" -mindepth 1 -delete
+  cp -al -- "$prod_files"/. "$testing_files"/
+  log "linked $(find "$testing_files" -type f | wc -l) files"
+fi
 
 log "emptying the testing database"
 PGOPTIONS='-c client_min_messages=warning' \

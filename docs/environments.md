@@ -53,20 +53,24 @@ dispara esa copia en cada despliegue no forma parte de este repositorio, pero s�
 que la hace, [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh):
 vacía la base de datos de testing, restaura en ella un volcado completo de la de producción
 (esquema, datos, valores de las secuencias y la tabla de versiones de goose) y aplica con
-`goose` las migraciones en las que testing va por delante. Producción solo se lee. Se
-ejecuta como root, o como un usuario que pueda parar y arrancar la unidad de testing:
+`goose` las migraciones en las que testing va por delante. Además, salvo con `--no-files`,
+sustituye los ficheros de `ACTIVITY_RESOURCES_ROOT` de testing por hard-links a los de
+producción (ver la sección "Opciones para `ACTIVITY_RESOURCES_ROOT`"). Producción solo se
+lee. Se ejecuta como root, o como un usuario que pueda parar y arrancar la unidad de
+testing:
 
 ```sh
 TESTING_SERVICE=<unidad de testing> \
-  scripts/copy-prod-to-testing.sh [--yes] <api.env de producción> <api.env de testing>
+  scripts/copy-prod-to-testing.sh [--yes] [--no-files] <api.env de producción> <api.env de testing>
 ```
 
-Lee `DATABASE_URL` de los dos `api.env` (sin ejecutarlos) y necesita `psql`, `pg_dump` y el
-binario de `goose`; pide teclear el nombre de la base de datos de testing
-antes de borrarla (`--yes` lo omite, para automatizarlo); se niega a continuar si las dos
-URLs apuntan a la misma base de datos, si el rol de testing no es el dueño del esquema
-`public` o si producción tiene una migración que el código de testing no conoce; y, si algo
-falla una vez parada la unidad, la deja parada. Consecuencias de la copia:
+Lee `DATABASE_URL` y `ACTIVITY_RESOURCES_ROOT` de los dos `api.env` (sin ejecutarlos) y
+necesita `psql`, `pg_dump` y el binario de `goose`; pide teclear el nombre de la base de
+datos de testing antes de borrarla (`--yes` lo omite, para automatizarlo); se niega a
+continuar si las dos URLs apuntan a la misma base de datos, si el rol de testing no es el
+dueño del esquema `public` o si producción tiene una migración que el código de testing no
+conoce; y, si algo falla una vez parada la unidad, la deja parada. Consecuencias de la
+copia:
 
 - **Lo que se haga en testing se pierde en el siguiente despliegue en producción.** Altas,
   ediciones, roles, vínculos de Telegram... Entre dos despliegues testing diverge de
@@ -159,18 +163,23 @@ escribir donde haga falta.
      da el mismo número para ambos);
    - la copia tiene que hacerla el usuario dueño de los ficheros (`katiuskas`) o root: con
      `fs.protected_hardlinks=1`, que es lo habitual, Linux no deja crear un hard-link a un
-     fichero ajeno.
+     fichero ajeno;
+   - testing tiene que tener su propio `ACTIVITY_RESOURCES_ROOT`, distinto del de producción;
+   - el servicio de testing tiene que ejecutarse con el mismo usuario que el de producción:
+     los directorios de actividad se crean con el mismo dueño y modo que los de producción
+     (`cp -a`), así que otro usuario podría leer los ficheros pero no subir ni borrar en
+     ellos.
 
-   Ejemplo, con `<producción>` y `<testing>` las raíces de datos de cada entorno:
-
-   ```sh
-   rm -rf <testing>/activity-resources
-   cp -al <producción>/activity-resources <testing>/activity-resources
-   # y después, volcar la base de datos de producción, con sus secuencias, a la de testing
-   ```
-
-   El `rm -rf` solo quita las entradas de testing; los ficheros de producción siguen en su
-   árbol. Aun así, conviene comprobar dos veces que la ruta que se borra es la de testing.
+   Es lo que hace `scripts/copy-prod-to-testing.sh` (salvo con `--no-files`): con testing
+   parado y antes del volcado de la base de datos, vacía el contenido del directorio de
+   testing, sin borrar el directorio en sí, y lo rellena con `cp -al` desde el de
+   producción. Antes de parar nada comprueba que testing tiene un directorio propio (no el
+   mismo que el de producción, ni uno dentro del otro), que no está en la raíz del
+   sistema de ficheros, que solo contiene directorios numéricos de actividad (si hay algo
+   más, se niega a vaciarlo), que los dos están en el mismo sistema de ficheros y que se
+   puede crear un hard-link. Mientras los dos entornos sigan compartiendo directorio, el
+   script se niega a ejecutar este paso: cambia primero el `ACTIVITY_RESOURCES_ROOT` de
+   testing, o usa `--no-files` para copiar solo la base de datos.
 
    Limitación: depende de que ningún código futuro modifique en sitio un fichero guardado
    (miniaturas, redimensionado de imágenes...), porque lo haría también en producción sin

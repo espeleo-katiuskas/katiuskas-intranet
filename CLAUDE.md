@@ -47,9 +47,11 @@ directory and Telegram bot, sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and
 `main` is a live deploy rather than just publishing commits. That automation isn't defined
 in this repo (`ci.yml` only tests). Testing's database holds a copy of production's data,
 refreshed on every production deploy by `scripts/copy-prod-to-testing.sh` (a full
-dump/restore of production followed by `goose up`; the two databases are separate only
-because the schema can differ while `main` carries migrations production hasn't
-received), so testing
+dump/restore of production followed by `goose up`, plus — unless `--no-files` — replacing
+testing's own `ACTIVITY_RESOURCES_ROOT` with hard links to production's files, which it
+refuses to do while the two environments share one directory; the two databases are
+separate only because the schema can differ while `main` carries migrations production
+hasn't received), so testing
 contains real personal data and anything done there is overwritten at the next production
 deploy. The shared directories make two things dangerous to do in testing: because
 `user-files/<login>/` is keyed by login, granting someone admin/board there gives them
