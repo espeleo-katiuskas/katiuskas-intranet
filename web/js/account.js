@@ -114,6 +114,36 @@ function setupDuesAndLicensesSection(prefix) {
     renderLicenseChips();
   });
 
+  // The cuota's and the license's "Año" inputs start out filled with the
+  // year the transaction's date points at — that date's own year, or the
+  // next one if it falls in December, since a payment that late is almost
+  // always for the following year (the same reasoning behind a license
+  // having its own year, separate from issued_date: see
+  // licenses.CreateInput.Year). They follow the date while the person
+  // hasn't typed in them; one they've edited themselves is left alone
+  // from then on, until the dialog is next opened.
+  const dateInput = document.getElementById(`${prefix}-date`);
+  const yearInputs = [document.getElementById(`${prefix}-due-year`), document.getElementById(`${prefix}-license-year`)];
+  const editedYearInputs = new Set();
+
+  function suggestedYear() {
+    const [year, month] = dateInput.value.split('-').map(Number);
+    if (!year || !month) return '';
+    return String(month === 12 ? year + 1 : year);
+  }
+
+  function fillYears() {
+    const suggested = suggestedYear();
+    for (const input of yearInputs) {
+      if (!editedYearInputs.has(input)) input.value = suggested;
+    }
+  }
+
+  for (const input of yearInputs) {
+    input.addEventListener('input', () => editedYearInputs.add(input));
+  }
+  dateInput.addEventListener('input', fillYears);
+
   document.getElementById(`${prefix}-license-type`).addEventListener('change', (event) => {
     const chosen = licenseTypesById[Number(event.target.value)];
     document.getElementById(`${prefix}-license-other-detail`).hidden = !chosen?.is_other;
@@ -145,7 +175,8 @@ function setupDuesAndLicensesSection(prefix) {
     const personLabel = userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
     pendingDues.push({ login, year, label: `${personLabel} · ${year}` });
     userInput.value = '';
-    yearInput.value = '';
+    editedYearInputs.delete(yearInput);
+    fillYears();
     renderDueChips();
   });
 
@@ -174,15 +205,24 @@ function setupDuesAndLicensesSection(prefix) {
     typeSelect.selectedIndex = 0;
     otherDetailInput.value = '';
     otherDetailInput.hidden = true;
-    yearInput.value = '';
+    editedYearInputs.delete(yearInput);
+    fillYears();
     renderLicenseChips();
   });
 
   function reset() {
     pendingDues = [];
     pendingLicenses = [];
+    editedYearInputs.clear();
     renderDueChips();
     renderLicenseChips();
+  }
+
+  // Called each time the dialog opens, once its date is filled in: starts
+  // both year inputs over from the date, whatever was typed last time.
+  function syncYears() {
+    editedYearInputs.clear();
+    fillYears();
   }
 
   // Which of the two sections apply to the transaction as it currently
@@ -256,7 +296,7 @@ function setupDuesAndLicensesSection(prefix) {
   renderDueChips();
   renderLicenseChips();
   setVisibility({ dues: false, licenses: false });
-  return { reset, submitPending, setVisibility };
+  return { reset, submitPending, setVisibility, syncYears };
 }
 
 const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt') : null;
@@ -418,6 +458,7 @@ async function openEditTransactionDialog(transactionId) {
     }
     editingTransactionId = transactionId;
     document.getElementById('et-date').value = transaction.occurred_at.slice(0, 10);
+    editTransactionDuesLicenses?.syncYears();
     document.getElementById('et-description').value = transaction.description;
     document.getElementById('et-amount').value = ownEntry.amount;
     document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
@@ -497,7 +538,18 @@ if (newTransactionDuesLicenses) {
   newTransactionDialog.addEventListener('close', () => newTransactionDuesLicenses.reset());
 }
 
+// Today in the viewer's own timezone, as the YYYY-MM-DD an <input
+// type="date"> wants — toISOString() would be UTC's date, which is
+// already tomorrow's for part of the evening anywhere east of it.
+function todayAsInputValue() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
+  document.getElementById('nt-date').value = todayAsInputValue();
+  newTransactionDuesLicenses?.syncYears();
   refreshDuesLicensesSections('nt');
   openModal(newTransactionDialog);
 });

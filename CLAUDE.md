@@ -1097,7 +1097,15 @@ this account or the chosen "otra cuenta" has `allows_dues`, licenses if either h
 and a section that gets hidden also drops its pending chips — otherwise one added while a
 qualifying account was selected would still be sent, and only rejected by the API after the
 transaction was already saved. When neither section applies, a hint explains that an
-account has to be marked for it, in Contabilidad, instead of showing nothing.
+account has to be marked for it, in Contabilidad, instead of showing nothing. The "+ Nueva
+transacción" dialog opens with today's date (`todayAsInputValue`, built from local getters:
+`toISOString()` would be UTC's date, already tomorrow's for part of the evening east of it),
+and each section's "Año" input starts from the transaction's date — that date's own year,
+or the next one in December, since a payment that late is almost always for the following
+year (`suggestedYear`). The inputs keep following the date until the person types in one,
+which is then left alone until the dialog is next opened (`editedYearInputs`, cleared by
+`reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
+dialog does the same from its own date.
 The "otra cuenta" picker (shared by the create panel and every row's own edit panel) lists
 every other account (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary
