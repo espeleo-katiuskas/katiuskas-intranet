@@ -1134,7 +1134,7 @@ sections follow every account picked on any line (`sectionsFor`), not just one. 
 transaction, every entry included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
 below it — starting under "Descripción" (an empty first cell), with no line between the two
 and the same background, so it reads as the continuation of the row above rather than as
-another row — listing the transaction's *other* accounts — each name linking to that account's own
+another row — listing the transaction's *other* accounts — each name (just the name, no code — the code only appears in the page's own header) linking to that account's own
 ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
 `GET /transactions/{id}` the first time (the listing only ever carries this account's own
 side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
@@ -1174,7 +1174,7 @@ dialog does the same from its own date.
 Each line's "otra cuenta" picker (the same list in the create and edit dialogs) leaves hidden
 accounts out — except those the transaction being edited already uses, which stay choosable
 (`otherAccountOptions`'s `keepHidden`) — and lists
-every other account (indented the same way `accounting.js`'s own pickers are, via
+every other account by name only, no code (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary
 parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
 descendants: there's no circular relationship to guard against here, any two distinct

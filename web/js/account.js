@@ -492,7 +492,7 @@ function otherAccountOptions(selectedId, keepHidden = new Set()) {
     .filter(({ account }) => account.id !== accountId)
     .map(({ account, depth }) => {
       const selected = account.id === selectedId ? 'selected' : '';
-      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(accountLabel(account))}</option>`;
+      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)}</option>`;
     })
     .join('');
 }
@@ -649,7 +649,7 @@ function renderEntryDetail(transaction) {
   const items = others
     .map((e) => {
       const account = allAccounts.find((a) => a.id === e.account_id);
-      const name = account ? accountLabel(account) : `Cuenta #${e.account_id}`;
+      const name = account ? account.name : `Cuenta #${e.account_id}`;
       return `<li><a href="/account?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
     })
     .join('');
