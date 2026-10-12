@@ -715,6 +715,7 @@ async function openEditTransactionDialog(transactionId) {
     // anyone else, who never has these sections at all.
     editTransactionDuesLicenses?.setExisting({ dues: transaction.dues ?? [], licenses: transaction.licenses ?? [] });
     openModal(editTransactionDialog);
+    document.getElementById('et-description').focus();
   } catch (err) {
     showError(err.message);
   }
@@ -820,6 +821,18 @@ document.getElementById('toggle-new-transaction').addEventListener('click', () =
   transactionLines.nt.setLines([]);
   refreshDuesLicensesSections('nt');
   openModal(newTransactionDialog);
+  document.getElementById('nt-date').focus();
+});
+
+// "n" opens the new-transaction dialog, as long as the keystroke isn't
+// meant for something else: a modifier held (Ctrl+N and friends belong
+// to the browser), a field being typed in, or a dialog already open.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'n' || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.closest('input, textarea, select, [contenteditable]')) return;
+  if (document.querySelector('dialog[open]')) return;
+  event.preventDefault();
+  document.getElementById('toggle-new-transaction').click();
 });
 
 // The date, the description and the lines (see setupEntryLines) drive the

@@ -1126,7 +1126,9 @@ ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fe
 side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
 has; it works for transactions of any number of entries. Clicking
 the row again collapses it, a click on Editar/Borrar or on a link never toggles it, and any
-reload of the list starts every row collapsed. The date input only
+reload of the list starts every row collapsed. Pressing "n" anywhere on the page opens the new-transaction dialog (ignored while typing in
+a field, with a modifier held, or with a dialog already open), which puts focus on the date;
+the edit dialog puts it on the description. The date input only
 ever collects a plain date, but `occurred_at` is a real timestamp — sent as that date at
 noon UTC (not midnight) specifically so `formatDate`'s own local-timezone getters can never
 roll it back to the previous day for anyone viewing from behind UTC; editing an existing
