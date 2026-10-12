@@ -42,6 +42,10 @@ var (
 	// ErrTooFewEntries means fewer than two entries were given — a
 	// transaction always moves money between at least two accounts.
 	ErrTooFewEntries = errors.New("a transaction needs at least two entries")
+	// ErrDuplicateAccount means the same account appears on more than one
+	// entry of one transaction — each account gets a single entry, whose
+	// amount already says everything that moved through it.
+	ErrDuplicateAccount = errors.New("an account can appear only once in a transaction")
 	// ErrInvalidAmount means one of the given entries has a zero
 	// amount — a no-op leg, meaningless in a ledger.
 	ErrInvalidAmount = errors.New("entry amount must not be zero")
@@ -660,6 +664,8 @@ func insertEntries(ctx context.Context, tx pgx.Tx, transactionID int64, inputs [
 				return nil, ErrUnknownAccount
 			case checkViolationCode:
 				return nil, ErrInvalidAmount
+			case uniqueViolationCode:
+				return nil, ErrDuplicateAccount
 			}
 			return nil, err
 		}
@@ -669,18 +675,24 @@ func insertEntries(ctx context.Context, tx pgx.Tx, transactionID int64, inputs [
 }
 
 // validateEntries catches what's cheap to check in Go, before ever
-// touching the database: fewer than two entries, or one with a zero
-// amount. Whether they actually sum to zero is left to the database's
+// touching the database: fewer than two entries (so never none), one with
+// a zero amount, or the same account twice (also enforced by the
+// transaction_entries_account_once unique constraint). Whether they actually sum to zero is left to the database's
 // own deferred constraint trigger (see the doc comment on
 // CreateTransaction).
 func validateEntries(entries []EntryInput) error {
 	if len(entries) < 2 {
 		return ErrTooFewEntries
 	}
+	seen := make(map[int64]bool, len(entries))
 	for _, e := range entries {
 		if e.Amount == 0 {
 			return ErrInvalidAmount
 		}
+		if seen[e.AccountID] {
+			return ErrDuplicateAccount
+		}
+		seen[e.AccountID] = true
 	}
 	return nil
 }

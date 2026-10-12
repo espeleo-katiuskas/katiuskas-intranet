@@ -910,3 +910,22 @@ func TestDeleteTransactionNotFound(t *testing.T) {
 		t.Errorf("expected ErrTransactionNotFound, got %v", err)
 	}
 }
+
+func TestCreateTransactionRejectsDuplicateAccount(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	cuotas := mustCreateAccount(t, repo, "Cuotas", "700")
+
+	_, err := repo.CreateTransaction(context.Background(), accounting.CreateTransactionInput{
+		Description: "Cuenta repetida",
+		OccurredAt:  time.Now(),
+		Entries: []accounting.EntryInput{
+			{AccountID: caja.ID, Amount: 10},
+			{AccountID: caja.ID, Amount: 5},
+			{AccountID: cuotas.ID, Amount: -15},
+		},
+	})
+	if !errors.Is(err, accounting.ErrDuplicateAccount) {
+		t.Errorf("expected ErrDuplicateAccount, got %v", err)
+	}
+}

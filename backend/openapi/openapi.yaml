@@ -2202,7 +2202,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: missing_fields, too_few_entries, invalid_amount (a zero-amount entry), or unknown_account. }
+        "400": { description: missing_fields, too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account. }
         "403": { description: Requires admin or the money role. }
         "409": { description: unbalanced — entries don't sum to zero. }
 
@@ -2268,7 +2268,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: missing_fields, too_few_entries, invalid_amount, or unknown_account. }
+        "400": { description: missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: unbalanced. }

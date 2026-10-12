@@ -834,3 +834,19 @@ func TestGetTransactionListsAreEmptyNotAbsentForAdminWhenItPaidForNothing(t *tes
 		t.Errorf("expected empty dues and licenses arrays, got %s", body)
 	}
 }
+
+func TestHandlerCreateTransactionRejectsDuplicateAccount(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	cuotas := createAccount(t, mux, adminToken, "Cuotas", "700")
+
+	body := transactionBody(time.Now(), "Repetida", entry(caja.ID, 10), entry(caja.ID, 5), entry(cuotas.ID, -15))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken, body)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 duplicate_account, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "duplicate_account" {
+		t.Errorf("expected error code duplicate_account, got %q", code)
+	}
+}

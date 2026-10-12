@@ -550,6 +550,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusBadRequest, "too_few_entries", err.Error())
 	case errors.Is(err, ErrInvalidAmount):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_amount", err.Error())
+	case errors.Is(err, ErrDuplicateAccount):
+		httpapi.WriteError(w, http.StatusBadRequest, "duplicate_account", err.Error())
 	case errors.Is(err, ErrUnknownAccount):
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_account", err.Error())
 	case errors.Is(err, ErrUnbalanced):

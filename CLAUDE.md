@@ -774,7 +774,12 @@ against that chart, `transactions`: every real movement of money the club record
 made of two or more `entries` (an `account_id` and an `amount`, positive into that
 account or negative out of it) whose amounts always sum to exactly zero — standard
 double-entry bookkeeping, so a transaction always says both where money came from and
-where it went, never just one side of it. `GET /accounts` also joins in each account's
+where it went, never just one side of it. Each account also appears at
+most once per transaction (`transaction_entries_account_once`, a `UNIQUE (transaction_id,
+account_id)` from migration `00018`; `validateEntries` checks it first, `ErrDuplicateAccount`,
+400 `duplicate_account`) — its one entry's amount already says everything that moved
+through it, and the ledger's per-account running balance and "other accounts" detail
+both assume it. `GET /accounts` also joins in each account's
 own direct `balance` (summed from every entry ever posted straight to it) and
 `last_transaction_at` (the most recent one's `occurred_at`) — never rolled up from a
 child account, and never present on any other `accounts` route (`GET`/`POST`/`PATCH

@@ -419,6 +419,9 @@ function setupEntryLines(prefix, onChange) {
       }
       lines.push({ amount, accountId: Number(row.accountValue) });
     }
+    if (new Set(lines.map((line) => line.accountId)).size !== lines.length) {
+      throw new Error('Una misma cuenta no puede aparecer en dos líneas: suma sus cantidades en una sola.');
+    }
     if (!lines.length) throw new Error('Añade al menos una línea, con su cantidad y su otra cuenta.');
     if (lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0) === 0) {
       throw new Error('La suma de las cantidades no puede ser cero: esta cuenta se quedaría sin apunte.');
