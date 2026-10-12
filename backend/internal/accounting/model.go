@@ -98,6 +98,19 @@ type Entry struct {
 
 // AccountEntry is one line of a single account's own ledger — GET
 // /accounts/{id}/transactions's own view (see
+// ListFilter pages and narrows GET /transactions and
+// GET /accounts/{id}/transactions: Limit/Offset page through the
+// newest-first order, and From/To (both optional, both inclusive, whole
+// UTC days) keep only what occurred within that range. Both listings
+// grow without bound as years of ledger pile up, so neither ever answers
+// with everything.
+type ListFilter struct {
+	Limit  int
+	Offset int
+	From   *time.Time // start of the first day included
+	To     *time.Time // start of the last day included
+}
+
 // Repository.ListAccountEntries), not a generic cross-account listing:
 // this account's own entry from one transaction that touched it,
 // alongside that transaction's own date/description and, unlike Entry

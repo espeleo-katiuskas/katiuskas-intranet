@@ -136,6 +136,19 @@
     </form>
   </dialog>
 
+  <form id="entries-filter" class="filter-bar">
+    <div class="field">
+      <label for="entries-from">Desde</label>
+      <input type="date" id="entries-from">
+    </div>
+    <div class="field">
+      <label for="entries-to">Hasta</label>
+      <input type="date" id="entries-to">
+    </div>
+    <button type="submit" class="btn btn-secondary btn-small">Filtrar</button>
+    <button type="button" id="entries-filter-clear" class="btn btn-secondary btn-small">Quitar filtro</button>
+  </form>
+
   <div class="table-wrap">
     <table>
       <thead>
@@ -144,6 +157,9 @@
       <tbody id="entries-table-body"></tbody>
     </table>
   </div>
+  <p class="load-more">
+    <button type="button" id="entries-load-more" class="btn btn-secondary" hidden>Ver más</button>
+  </p>
     </main>
   </div>
 </div>

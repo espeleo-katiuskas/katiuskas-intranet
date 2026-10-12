@@ -594,7 +594,7 @@ func TestListAccountEntriesRunningBalanceAndNewestFirst(t *testing.T) {
 	mustCreateTransactionAt(t, repo, "Segunda", middle, caja.ID, -30, cuotas.ID, 30)
 	mustCreateTransactionAt(t, repo, "Tercera", newer, caja.ID, 10, cuotas.ID, -10)
 
-	entries, err := repo.ListAccountEntries(context.Background(), caja.ID)
+	entries, err := repo.ListAccountEntries(context.Background(), caja.ID, accounting.ListFilter{Limit: 50})
 	if err != nil {
 		t.Fatalf("ListAccountEntries: %v", err)
 	}
@@ -623,7 +623,7 @@ func TestListAccountEntriesEmptyForAnAccountWithNoEntries(t *testing.T) {
 	repo := newRepo(t)
 	caja := mustCreateAccount(t, repo, "Caja", "570")
 
-	entries, err := repo.ListAccountEntries(context.Background(), caja.ID)
+	entries, err := repo.ListAccountEntries(context.Background(), caja.ID, accounting.ListFilter{Limit: 50})
 	if err != nil {
 		t.Fatalf("ListAccountEntries: %v", err)
 	}
@@ -744,7 +744,7 @@ func TestCreateTransactionRejectsUnbalancedEntries(t *testing.T) {
 
 	// Nothing should have been left behind — the whole write rolls
 	// back, transaction row included, not just the entries.
-	list, listErr := repo.ListTransactions(context.Background(), 10, 0)
+	list, listErr := repo.ListTransactions(context.Background(), accounting.ListFilter{Limit: 10})
 	if listErr != nil {
 		t.Fatalf("ListTransactions: %v", listErr)
 	}
@@ -793,7 +793,7 @@ func TestListTransactionsMostRecentFirst(t *testing.T) {
 	}
 	newer := mustCreateTransaction(t, repo, "Más reciente", caja.ID, 2, cuotas.ID, -2)
 
-	list, err := repo.ListTransactions(context.Background(), 10, 0)
+	list, err := repo.ListTransactions(context.Background(), accounting.ListFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -927,5 +927,74 @@ func TestCreateTransactionRejectsDuplicateAccount(t *testing.T) {
 	})
 	if !errors.Is(err, accounting.ErrDuplicateAccount) {
 		t.Errorf("expected ErrDuplicateAccount, got %v", err)
+	}
+}
+
+// TestListAccountEntriesPagingAndRangeKeepRunningBalance checks that a
+// page or a date range is just a window over the same ledger: the
+// balance_after of an entry doesn't restart from zero at the window's
+// edge.
+func TestListAccountEntriesPagingAndRangeKeepRunningBalance(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	cuotas := mustCreateAccount(t, repo, "Cuotas", "700")
+	day := func(s string) time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Add(12 * time.Hour)
+	}
+	mustCreateTransactionAt(t, repo, "Enero", day("2024-01-10"), caja.ID, 100, cuotas.ID, -100)
+	mustCreateTransactionAt(t, repo, "Febrero", day("2024-02-10"), caja.ID, -30, cuotas.ID, 30)
+	mustCreateTransactionAt(t, repo, "Marzo", day("2024-03-10"), caja.ID, 10, cuotas.ID, -10)
+
+	page, err := repo.ListAccountEntries(context.Background(), caja.ID, accounting.ListFilter{Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 1 || page[0].Description != "Febrero" || page[0].BalanceAfter != 70 {
+		t.Errorf("second page: expected Febrero with balance 70, got %+v", page)
+	}
+
+	from, to := day("2024-02-10").Truncate(24*time.Hour), day("2024-03-10").Truncate(24*time.Hour)
+	ranged, err := repo.ListAccountEntries(context.Background(), caja.ID, accounting.ListFilter{Limit: 50, From: &from, To: &to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ranged) != 2 || ranged[0].Description != "Marzo" || ranged[0].BalanceAfter != 80 || ranged[1].BalanceAfter != 70 {
+		t.Errorf("range: expected Marzo (80) and Febrero (70), got %+v", ranged)
+	}
+}
+
+func TestListTransactionsPagingAndRange(t *testing.T) {
+	repo := newRepo(t)
+	caja := mustCreateAccount(t, repo, "Caja", "570")
+	cuotas := mustCreateAccount(t, repo, "Cuotas", "700")
+	day := func(s string) time.Time {
+		d, _ := time.Parse("2006-01-02", s)
+		return d.Add(12 * time.Hour)
+	}
+	mustCreateTransactionAt(t, repo, "A", day("2023-12-31"), caja.ID, 1, cuotas.ID, -1)
+	mustCreateTransactionAt(t, repo, "B", day("2024-01-01"), caja.ID, 1, cuotas.ID, -1)
+	mustCreateTransactionAt(t, repo, "C", day("2024-12-31"), caja.ID, 1, cuotas.ID, -1)
+	mustCreateTransactionAt(t, repo, "D", day("2025-01-01"), caja.ID, 1, cuotas.ID, -1)
+
+	from, _ := time.Parse("2006-01-02", "2024-01-01")
+	to, _ := time.Parse("2006-01-02", "2024-12-31")
+	list, err := repo.ListTransactions(context.Background(), accounting.ListFilter{Limit: 50, From: &from, To: &to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[0].Description != "C" || list[1].Description != "B" {
+		t.Errorf("2024 range (both ends inclusive): expected C, B, got %+v", list)
+	}
+
+	page, err := repo.ListTransactions(context.Background(), accounting.ListFilter{Limit: 2, Offset: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 2 || page[0].Description != "B" || page[1].Description != "A" {
+		t.Errorf("second page: expected B, A, got %+v", page)
 	}
 }

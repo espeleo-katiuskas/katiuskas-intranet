@@ -143,12 +143,57 @@ func (h *Handler) listAccountEntries(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get account")
 		return
 	}
-	list, err := h.service.ListAccountEntries(r.Context(), id)
+	filter, ok := parseListFilter(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.service.ListAccountEntries(r.Context(), id, filter)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list account entries")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// parseListFilter reads the shared paging and date-range query
+// parameters of both transaction listings: limit (default 50, at most
+// 100), offset, and from/to as plain YYYY-MM-DD dates, both inclusive.
+// An out-of-range limit or a negative offset (a malformed or hand-edited
+// query string, which Postgres's own LIMIT/OFFSET would reject outright
+// as a raw 500) falls back to its default rather than failing; a date
+// that isn't one, or a range that ends before it starts, is the caller's
+// mistake and gets a 400 instead of silently listing something else.
+func parseListFilter(w http.ResponseWriter, r *http.Request) (ListFilter, bool) {
+	q := r.URL.Query()
+	filter := ListFilter{}
+	filter.Limit, _ = strconv.Atoi(q.Get("limit"))
+	filter.Offset, _ = strconv.Atoi(q.Get("offset"))
+	if filter.Limit <= 0 || filter.Limit > 100 {
+		filter.Limit = 50
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	for _, field := range []struct {
+		name string
+		dest **time.Time
+	}{{"from", &filter.From}, {"to", &filter.To}} {
+		raw := q.Get(field.name)
+		if raw == "" {
+			continue
+		}
+		day, err := time.Parse("2006-01-02", raw)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", field.name+" must be a date as YYYY-MM-DD")
+			return ListFilter{}, false
+		}
+		*field.dest = &day
+	}
+	if filter.From != nil && filter.To != nil && filter.To.Before(*filter.From) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", "to must not be before from")
+		return ListFilter{}, false
+	}
+	return filter, true
 }
 
 func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
@@ -340,20 +385,11 @@ var accountAuditableFields = []string{"Name", "Code", "ParentID", "AllowsDues", 
 // ---- Transactions ----
 
 func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	if limit <= 0 || limit > 100 {
-		limit = 50
+	filter, ok := parseListFilter(w, r)
+	if !ok {
+		return
 	}
-	// A negative offset (a malformed or hand-edited query string) used to
-	// reach Postgres's own OFFSET clause untouched, which rejects it
-	// outright — a raw, unhandled 500 instead of just starting from the
-	// beginning, the same way limit above is defaulted rather than
-	// rejected for an out-of-range value.
-	if offset < 0 {
-		offset = 0
-	}
-	list, err := h.service.ListTransactions(r.Context(), limit, offset)
+	list, err := h.service.ListTransactions(r.Context(), filter)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list transactions")
 		return

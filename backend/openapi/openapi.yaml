@@ -2098,17 +2098,26 @@ paths:
     get:
       summary: This account's own ledger
       description: >
-        Every entry ever posted against this one account, each carrying
+        The entries posted against this one account, a page at a time
+        (limit/offset, newest first) and optionally within a from/to date
+        range — an account holds thousands after a few years, so this
+        never answers with all of them. Each carrying
         its own transaction's date/description and this account's own
         running balance once that entry is applied — not a generic
         cross-account listing (see GET /transactions for that). Listed
         newest first, same as GET /transactions itself, even though
-        balance_after is necessarily computed oldest-first internally.
-        Open to any baseline role, same as everything else read-only in
-        this package.
+        balance_after is necessarily computed oldest-first internally —
+        over the whole account, not the page, so it doesn't restart from
+        zero at a page or range boundary. Open to any baseline role, same
+        as everything else read-only in this package. A malformed date, or
+        a to before from, is a 400 invalid_date / invalid_date_range.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 }, description: Page size; a value outside 1-100 falls back to 50. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
+        - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
+        - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
       responses:
         "200":
           description: This account's own entries, newest first
@@ -2162,8 +2171,11 @@ paths:
       description: Open to admin, board, and plain members alike, same as GET /accounts. Each transaction carries its own entries inline.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
-        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 }, description: Page size; a value outside 1-100 falls back to 50. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
+        - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
+        - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
+      # A malformed date, or a to before from, is a 400 invalid_date / invalid_date_range.
       responses:
         "200":
           description: Transactions, most recent occurred_at first

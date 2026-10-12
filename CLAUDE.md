@@ -867,14 +867,16 @@ with; it would instead just silently vanish from the listing, which is exactly w
 pre-existing bad data, unlike the listing's own downward walk), so that one's own
 recursion is capped at a depth no real chart of accounts would ever approach, purely so
 it can't hang even then.
-`GET /accounts/{id}/transactions` is one account's own ledger — every `AccountEntry` it
-was ever posted against (not the same shape as a bare `Entry`: each one inlines its own
+`GET /accounts/{id}/transactions` is one account's own ledger — the `AccountEntry` rows it
+was posted against, a page at a time (not the same shape as a bare `Entry`: each one inlines its own
 transaction's `description`/`occurred_at`, and a `balance_after` instead of just an
 `amount`), newest first same as `GET /transactions` itself.
-`Repository.ListAccountEntries` computes that running balance in a single pass, but has
-to do it oldest-first internally (a running balance only ever makes sense walked forward
-through time) and reverse the whole slice once at the end — the opposite order from how
-it reads out. Open to any baseline role, same as every other read in this package;
+`Repository.ListAccountEntries` computes that running balance oldest-first (a running balance only ever makes sense walked forward through time) and serves the page newest-first, the opposite order from how it accumulates. Both this and `GET /transactions` take the same `limit`/`offset` (default 50,
+at most 100) and optional `from`/`to` (inclusive `YYYY-MM-DD` days; `parseListFilter`, a bad
+one is 400 `invalid_date`/`invalid_date_range`) — `ListFilter` — since a few years of ledger
+is thousands of rows. The ledger's `balance_after` is a window `SUM` over the account's
+*whole* history, computed in a subquery before the range and page are applied, so it never
+restarts from zero at the edge of a window. Open to any baseline role, same as every other read in this package;
 `Handler.listAccountEntries` checks the account actually exists first (404, not just an
 empty list) since `ListAccountEntries` alone can't tell "no such account" apart from "a
 real account nobody's ever posted against."
@@ -1092,7 +1094,9 @@ account's name on `/accounting`, never linked from the sidebar itself, so it sha
 same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
 `/accounting` for the sidebar's own highlighting, the same `/activity`→`/activities`/
 `/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
-`GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date, description,
+`GET /accounts/{id}/transactions` (see **Accounting** above) as a table (the newest 50, "Ver más" for the next ones, and a Desde/Hasta filter above it —
+`loadEntries`; it asks for one entry more than a page just to know whether to show "Ver más")
+— date, description,
 this account's own entry amount, its running balance after, and per-row Editar/Borrar (a row
 also opens on a click anywhere but those buttons, or Enter/Space when focused — see below) — and
 a "+ Nueva transacción" dialog deliberately narrower than the full `POST /transactions`

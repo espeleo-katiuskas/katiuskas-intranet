@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -848,5 +849,19 @@ func TestHandlerCreateTransactionRejectsDuplicateAccount(t *testing.T) {
 	}
 	if code := errorCode(t, rec); code != "duplicate_account" {
 		t.Errorf("expected error code duplicate_account, got %q", code)
+	}
+}
+
+func TestListTransactionsRejectsBadDates(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, token, "Caja", "570")
+	for _, query := range []string{"from=ayer", "to=2024-13-01", "from=2024-05-02&to=2024-05-01"} {
+		for _, path := range []string{"/api/v1/transactions?", fmt.Sprintf("/api/v1/accounts/%d/transactions?", caja.ID)} {
+			rec := doRequest(mux, http.MethodGet, path+query, token, nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("%s%s: expected 400, got %d: %s", path, query, rec.Code, rec.Body.String())
+			}
+		}
 	}
 }

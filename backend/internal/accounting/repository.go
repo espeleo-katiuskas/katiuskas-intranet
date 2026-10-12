@@ -184,47 +184,47 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 // account (GET /accounts/{id}/transactions), each carrying its own
 // transaction's date/description and this account's own running
 // balance once that entry is applied. Queried in occurred_at (then id)
-// order specifically so BalanceAfter can be accumulated correctly in a
-// single pass — computed oldest first regardless of how the final
-// result is ordered, since a running balance only ever makes sense
-// walked forward through time — then the whole slice is reversed once
-// at the end so callers still see the newest entry first, the same
-// convention ListTransactions's own ORDER BY already uses. Doesn't
+// order specifically so BalanceAfter can be accumulated correctly —
+// oldest first, since a running balance only ever makes sense walked
+// forward through time — and the page itself is served newest first,
+// the same convention ListTransactions's own ORDER BY already uses. Doesn't
 // itself check the account exists (see Handler.listAccountEntries,
 // which calls GetAccount first) — an unknown id here would just come
 // back an empty, not-an-error list, indistinguishable from a real
 // account with no entries yet.
-func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64) ([]AccountEntry, error) {
+func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, filter ListFilter) ([]AccountEntry, error) {
+	// The running balance is a window over *every* entry of the account,
+	// computed in the inner query before the date range and the page are
+	// applied outside it — so an entry's balance_after is the same
+	// whichever window it's seen through, not a balance restarting from
+	// zero at the top of the page.
 	rows, err := r.pool.Query(ctx, `
-		SELECT t.id, t.occurred_at, t.description, te.amount
-		FROM transaction_entries te
-		JOIN transactions t ON t.id = te.transaction_id
-		WHERE te.account_id = $1
-		ORDER BY t.occurred_at, t.id
-	`, accountID)
+		SELECT transaction_id, occurred_at, description, amount, balance_after FROM (
+			SELECT t.id AS transaction_id, t.occurred_at, t.description, te.amount::float8 AS amount,
+				(SUM(te.amount) OVER (ORDER BY t.occurred_at, t.id))::float8 AS balance_after
+			FROM transaction_entries te
+			JOIN transactions t ON t.id = te.transaction_id
+			WHERE te.account_id = $1
+		) ledger
+		WHERE ($2::timestamptz IS NULL OR occurred_at >= $2)
+		  AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz + interval '1 day')
+		ORDER BY occurred_at DESC, transaction_id DESC
+		LIMIT $4 OFFSET $5
+	`, accountID, filter.From, filter.To, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	list := []AccountEntry{}
-	var running float64
 	for rows.Next() {
 		var e AccountEntry
-		if err := rows.Scan(&e.TransactionID, &e.OccurredAt, &e.Description, &e.Amount); err != nil {
+		if err := rows.Scan(&e.TransactionID, &e.OccurredAt, &e.Description, &e.Amount, &e.BalanceAfter); err != nil {
 			return nil, err
 		}
-		running += e.Amount
-		e.BalanceAfter = running
 		list = append(list, e)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
-		list[i], list[j] = list[j], list[i]
-	}
-	return list, nil
+	return list, rows.Err()
 }
 
 func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) (Account, error) {
@@ -476,16 +476,18 @@ func (r *Repository) GetTransaction(ctx context.Context, id int64) (Transaction,
 	return t, nil
 }
 
-// ListTransactions returns the limit most recent transactions (most
-// recently occurred first), each with its own entries — one query for
+// ListTransactions returns one page of transactions (most recently
+// occurred first), optionally limited to a date range, each with its own entries — one query for
 // the transactions themselves, then one batched query for every one of
 // their entries (rather than one query per transaction) to keep this to
 // two round trips regardless of how many transactions are returned.
-func (r *Repository) ListTransactions(ctx context.Context, limit, offset int) ([]Transaction, error) {
+func (r *Repository) ListTransactions(ctx context.Context, filter ListFilter) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, description, occurred_at, created_at FROM transactions
-		ORDER BY occurred_at DESC, id DESC LIMIT $1 OFFSET $2
-	`, limit, offset)
+		WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
+		  AND ($2::timestamptz IS NULL OR occurred_at < $2::timestamptz + interval '1 day')
+		ORDER BY occurred_at DESC, id DESC LIMIT $3 OFFSET $4
+	`, filter.From, filter.To, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, err
 	}

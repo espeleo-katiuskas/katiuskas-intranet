@@ -22,8 +22,8 @@ func (s *Service) ListAccounts(ctx context.Context) ([]Account, error) {
 	return s.repo.ListAccounts(ctx)
 }
 
-func (s *Service) ListAccountEntries(ctx context.Context, accountID int64) ([]AccountEntry, error) {
-	return s.repo.ListAccountEntries(ctx, accountID)
+func (s *Service) ListAccountEntries(ctx context.Context, accountID int64, filter ListFilter) ([]AccountEntry, error) {
+	return s.repo.ListAccountEntries(ctx, accountID, filter)
 }
 
 func (s *Service) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) (Account, error) {
@@ -49,8 +49,8 @@ func (s *Service) GetTransaction(ctx context.Context, id int64) (Transaction, er
 	return s.repo.GetTransaction(ctx, id)
 }
 
-func (s *Service) ListTransactions(ctx context.Context, limit, offset int) ([]Transaction, error) {
-	return s.repo.ListTransactions(ctx, limit, offset)
+func (s *Service) ListTransactions(ctx context.Context, filter ListFilter) ([]Transaction, error) {
+	return s.repo.ListTransactions(ctx, filter)
 }
 
 func (s *Service) UpdateTransaction(ctx context.Context, id int64, in UpdateTransactionInput) (Transaction, error) {
