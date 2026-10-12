@@ -1067,7 +1067,9 @@ this section's own, `style.css` as well since `dashboard.css` stays index.html-s
 
 `/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
 /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's
-name, code, direct balance, and last movement date (each name a plain `<a href="/account?
+name, direct balance, and last movement date — deliberately no code column, nor in the parent
+pickers: a code only shows on that account's own `/account` page, though the create/edit dialogs
+still have the field to set it (each name a plain `<a href="/account?
 id=…">` into that one account's own detail page, below), with its own controls to create
 an account, correct one's name/code/parent (an inline edit panel per row, the same
 toggled-`<div class="edit-fields">` pattern `member.js` uses for a membership/board/leave

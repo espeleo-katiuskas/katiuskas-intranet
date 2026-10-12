@@ -59,8 +59,7 @@ function parentSelectOptions(selectedParentId, excludeId) {
     .filter(({ account }) => !excluded.has(account.id))
     .map(({ account, depth }) => {
       const selected = account.id === selectedParentId ? 'selected' : '';
-      const codeSuffix = account.code ? ` (${escapeHtml(account.code)})` : '';
-      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)}${codeSuffix}</option>`;
+      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)}</option>`;
     })
     .join('');
   const noneSelected = selectedParentId == null ? 'selected' : '';
@@ -83,7 +82,6 @@ function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr${account.hidden ? ' class="account-hidden"' : ''}>
       <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/account?id=${account.id}">${escapeHtml(account.name)}</a>${accountTags(account)}</td>
-      <td>${account.code ? escapeHtml(account.code) : '—'}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
       <td>
@@ -101,7 +99,7 @@ function renderAccountsTable() {
   const tableBody = document.getElementById('accounts-table-body');
   tableBody.innerHTML = flattened.length
     ? flattened.map(renderAccountRow).join('')
-    : '<tr><td colspan="5">Todavía no hay ninguna cuenta creada.</td></tr>';
+    : '<tr><td colspan="4">Todavía no hay ninguna cuenta creada.</td></tr>';
 }
 
 // Applies a fresh accounts list (from GET /accounts, or from the
@@ -145,7 +143,7 @@ async function loadAccounts() {
   try {
     applyAccountsList(await apiFetch('/accounts'));
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el plan de cuentas.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="4">No se pudo cargar el plan de cuentas.</td></tr>';
   }
 }
 
