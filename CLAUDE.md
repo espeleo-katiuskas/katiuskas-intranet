@@ -869,14 +869,6 @@ needs none of the Postgres fixtures — each package's own `service_test.go` bui
 `handler_test.go`s reach for `FakeResolver`/`TokenFor` to mint bearer tokens for the
 role/self checks their routes enforce.
 
-**Migrations** (`db/migrations/`, goose-numbered): kept squashed to the *current* schema
-shape, not the historical sequence of changes — no renamed columns, no lossy "down"
-transformations, no comments about what something used to be called. When schema work
-piles up several incremental migrations, squash them back into the relevant per-resource
-file(s) and verify schema-equivalence by applying the old and new sets to throwaway
-databases and diffing `pg_dump --schema-only` output, rather than leaving the ALTER trail
-in place.
-
 **Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate
 choice, not just an unexamined default: every page already revalidates its own session
 and re-fetches its own data on load, so there's no cross-page state an SPA would actually
