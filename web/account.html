@@ -112,8 +112,9 @@
           <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
         </div>
         <div class="field span-2" data-roles="admin" id="et-dues-field" hidden>
-          <label>Cuotas anuales a registrar en esta transacción</label>
-          <p class="hint">Solo añade cuotas nuevas — las ya registradas contra esta transacción no aparecen aquí ni se pueden quitar desde este diálogo.</p>
+          <label>Cuotas anuales de esta transacción</label>
+          <div id="et-dues-existing"></div>
+          <p class="hint" id="et-dues-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden cuotas nuevas.</p>
           <div id="et-dues-chips"></div>
           <div class="role-add-row">
             <input type="text" id="et-due-user" list="et-due-user-options" autocomplete="off" placeholder="Socio…">
@@ -123,7 +124,9 @@
           </div>
         </div>
         <div class="field span-2" data-roles="admin" id="et-licenses-field" hidden>
-          <label>Licencias nuevas a registrar en esta transacción</label>
+          <label>Licencias de esta transacción</label>
+          <div id="et-licenses-existing"></div>
+          <p class="hint" id="et-licenses-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden licencias nuevas.</p>
           <div id="et-licenses-chips"></div>
           <div class="role-add-row">
             <input type="text" id="et-license-user" list="et-license-user-options" autocomplete="off" placeholder="Socio…">

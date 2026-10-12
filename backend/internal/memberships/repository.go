@@ -424,6 +424,36 @@ func (r *Repository) CreateDue(ctx context.Context, in CreateDueInput) (Due, err
 	return d, nil
 }
 
+// ListDuesForTransaction returns every due recorded against one
+// transaction — a single payment can cover several socios' cuotas — each
+// with its person's login (joined here, since unlike ListDuesForUser's
+// callers nobody has a single known /users/{login} to fill it in from)
+// and its PaidAt, ordered by that person's name.
+func (r *Repository) ListDuesForTransaction(ctx context.Context, transactionID int64) ([]Due, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT d.id, d.user_id, u.login, d.year, d.transaction_id, d.created_at, t.occurred_at
+		FROM membership_dues d
+		JOIN users u ON u.id = d.user_id
+		JOIN transactions t ON t.id = d.transaction_id
+		WHERE d.transaction_id = $1
+		ORDER BY u.last_name, u.first_name, d.year
+	`, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Due{}
+	for rows.Next() {
+		var d Due
+		if err := rows.Scan(&d.ID, &d.UserID, &d.UserLogin, &d.Year, &d.TransactionID, &d.CreatedAt, &d.PaidAt); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT d.id, d.user_id, d.year, d.transaction_id, d.created_at, t.occurred_at

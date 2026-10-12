@@ -548,7 +548,13 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   todas las entradas de esa transacción. Corregir una transacción (`PATCH`) sustituye su
   descripción, fecha y el conjunto entero de entradas a la vez; no hay edición de una
   entrada suelta. Lectura abierta a cualquier rol baseline — las cuentas del club son
-  algo que cualquier socio puede ver, no solo admin/board —; escritura reservada a admin
+  algo que cualquier socio puede ver, no solo admin/board —, con una salvedad: solo para
+  admin/board, `GET /transactions/{id}` incluye además `dues` y `licenses`, las cuotas y
+  licencias que esa transacción pagó (siempre presentes para ellos, `[]` si no pagó ninguna;
+  ausentes para cualquier otro rol, porque quién ha pagado qué es privado de esa persona,
+  admin y board). Las rellena `Handler.getTransaction` a través de dos interfaces mínimas
+  (`DuesLookup`, `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`;
+  el diálogo de editar transacción de `/account` las muestra de solo lectura; escritura reservada a admin
   o al rol opcional `money` (sembrado por la migración, no de sistema, la misma forma que
   `material` en `inventory`) — board no tiene aquí ningún acceso de escritura especial,
   igual que no lo tiene sobre licencias ni sobre los datos de una persona.

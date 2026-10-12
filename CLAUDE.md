@@ -817,7 +817,15 @@ edit endpoint. `occurred_at` is a real timestamp, not just a date the way
 `time.Parse` every plain-date field elsewhere needs.
 Reading (`GET /accounts`, `GET /transactions`, and their `/{id}` forms) is open to any
 baseline role — the club's own finances are something every socio can see, not just
-admin/board. Writing needs admin or the optional, non-system "money" role (seeded by
+admin/board — with one addition: for admin/board only, `GET /transactions/{id}` also carries
+`dues` and `licenses`, the cuotas and licenses that transaction paid for (always present for
+them, `[]` when none; absent for anyone else, since who paid which is private to that person,
+admin and board — see `GET /users/{login}/dues`). `Handler.getTransaction` fills them from
+`DuesLookup`/`LicensesLookup`, two narrow interfaces `*memberships.Service`
+(`ListDuesForTransaction`) and `*licenses.Service` (`ListByTransaction`) satisfy structurally —
+the same pattern as `UserLookup` — rather than this package joining their tables itself; the
+wrapper type `transactionWithPayments` exists only for that one response, never for
+create/update/list. Writing needs admin or the optional, non-system "money" role (seeded by
 migration `00012_accounting.sql`, deletable by a club that doesn't want the distinction),
 the same "admin plus one optional custom role" shape `material` already has for
 inventory movements — board itself gets no special write access here, same as it has
@@ -1096,7 +1104,12 @@ this account or the chosen "otra cuenta" has `allows_dues`, licenses if either h
 `allows_licenses`, re-evaluated whenever that picker changes and whenever a dialog opens,
 and a section that gets hidden also drops its pending chips — otherwise one added while a
 qualifying account was selected would still be sent, and only rejected by the API after the
-transaction was already saved. When neither section applies, a hint explains that an
+transaction was already saved. Separately from that, the edit dialog lists what earlier saves
+already registered against the transaction, read-only (no ×: nothing removes a due) from the
+`dues`/`licenses` its own `GET /transactions/{id}` already returns (`setExisting`): a section
+stays visible for as long as it has something to list even when no account qualifies any more
+(the flag was since turned off, or the accounts changed) — a record of what was paid, not
+something about to be sent — while its add controls follow the qualifying rule above. When neither section applies, a hint explains that an
 account has to be marked for it, in Contabilidad, instead of showing nothing. The "+ Nueva
 transacción" dialog opens with today's date (`todayAsInputValue`, built from local getters:
 `toISOString()` would be UTC's date, already tomorrow's for part of the evening east of it),

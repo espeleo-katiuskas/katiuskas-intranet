@@ -123,6 +123,13 @@ func (s *Service) ListByUser(ctx context.Context, userID int64) ([]License, erro
 	return s.repo.ListByUser(ctx, userID)
 }
 
+// ListByTransaction returns every license recorded against the
+// transaction. An unknown transaction id just comes back an empty list,
+// the same as one that paid for no licenses.
+func (s *Service) ListByTransaction(ctx context.Context, transactionID int64) ([]License, error) {
+	return s.repo.ListByTransaction(ctx, transactionID)
+}
+
 // LatestByUser returns the person's most recently issued license, or nil
 // if they've never had one — used to show a "current" license on the
 // people list without a separate per-person round trip for full history.

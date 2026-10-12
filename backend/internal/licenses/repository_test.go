@@ -203,3 +203,44 @@ func TestGetTypeByIDNotFound(t *testing.T) {
 		t.Errorf("expected ErrTypeNotFound, got %v", err)
 	}
 }
+
+// One payment can cover several socios' licenses: listing a transaction's
+// licenses returns all of them, each with its owner's login and type
+// label, and none of another transaction's.
+func TestListByTransactionReturnsOnlyThatTransactionsLicenses(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := licenses.NewRepository(tx)
+	first := testutil.InsertUser(t, tx, "")
+	second := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	shared := testutil.InsertTransaction(t, tx)
+	for _, person := range []testutil.TestUser{first, second} {
+		if _, err := repo.Create(ctx, licenses.CreateInput{
+			UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: shared,
+		}); err != nil {
+			t.Fatalf("create license for %s: %v", person.Login, err)
+		}
+	}
+	if _, err := repo.Create(ctx, licenses.CreateInput{
+		UserID: first.ID, LicenseTypeID: typeID, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: testutil.InsertTransaction(t, tx),
+	}); err != nil {
+		t.Fatalf("create the other transaction's license: %v", err)
+	}
+
+	list, err := repo.ListByTransaction(ctx, shared)
+	if err != nil {
+		t.Fatalf("ListByTransaction: %v", err)
+	}
+	logins := map[string]bool{}
+	for _, l := range list {
+		logins[l.UserLogin] = true
+		if l.Year != 2026 || l.TransactionID != shared || l.Type != "A BASICA" {
+			t.Errorf("unexpected license in the listing: %+v", l)
+		}
+	}
+	if len(list) != 2 || !logins[first.Login] || !logins[second.Login] {
+		t.Errorf("expected exactly the two licenses of the shared transaction, got %+v", list)
+	}
+}

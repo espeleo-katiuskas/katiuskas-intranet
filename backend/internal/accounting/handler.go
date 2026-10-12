@@ -12,6 +12,8 @@ import (
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 )
 
 // UserLookup resolves the calling session's own login, for the "who
@@ -23,15 +25,30 @@ type UserLookup interface {
 	LoginForUserID(ctx context.Context, id int64) (string, error)
 }
 
+// DuesLookup and LicensesLookup say which cuotas and licencias a
+// transaction paid for, for GET /transactions/{id} to include — answered
+// by *memberships.Service and *licenses.Service structurally, the same
+// narrow-dependency pattern as UserLookup, so this package doesn't take
+// either whole service.
+type DuesLookup interface {
+	ListDuesForTransaction(ctx context.Context, transactionID int64) ([]memberships.Due, error)
+}
+
+type LicensesLookup interface {
+	ListByTransaction(ctx context.Context, transactionID int64) ([]licenses.License, error)
+}
+
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
 	users         UserLookup
+	dues          DuesLookup
+	licenses      LicensesLookup
 	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, dues DuesLookup, licenses LicensesLookup, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, users: users, dues: dues, licenses: licenses, notifier: notifier}
 }
 
 // actorLogin resolves the calling session's own login, for the "who
@@ -359,7 +376,37 @@ func (h *Handler) getTransaction(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not get transaction")
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, t)
+
+	// Who paid which cuota or licencia is something only that person,
+	// admin and board see (see GET /users/{login}/dues), while a
+	// transaction itself is open to every baseline role — so the two
+	// lists only go out to admin/board, always present for them (empty
+	// when the transaction paid for none), and absent for anyone else.
+	current, _ := auth.UserFromContext(r.Context())
+	if !current.HasAnyRole("admin", "board") {
+		httpapi.WriteJSON(w, http.StatusOK, t)
+		return
+	}
+	dues, err := h.dues.ListDuesForTransaction(r.Context(), id)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the transaction's dues")
+		return
+	}
+	paidLicenses, err := h.licenses.ListByTransaction(r.Context(), id)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the transaction's licenses")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, transactionWithPayments{Transaction: t, Dues: dues, Licenses: paidLicenses})
+}
+
+// transactionWithPayments is a Transaction plus what it paid for — only
+// ever the shape of GET /transactions/{id} for admin/board, never what
+// create/update/list answer with.
+type transactionWithPayments struct {
+	Transaction
+	Dues     []memberships.Due  `json:"dues"`
+	Licenses []licenses.License `json:"licenses"`
 }
 
 type entryBody struct {

@@ -1029,3 +1029,51 @@ func TestCreateDueLeavesPaidAtNil(t *testing.T) {
 		t.Errorf("expected PaidAt to be unset on a freshly created due, got %v", d.PaidAt)
 	}
 }
+
+// One payment can cover several socios' cuotas: listing a transaction's
+// dues returns all of them, each with its person's login, and none of
+// another transaction's.
+func TestListDuesForTransactionReturnsOnlyThatTransactionsDues(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+	first := testutil.InsertUser(t, tx, "")
+	second := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	shared := testutil.InsertTransaction(t, tx)
+	for _, person := range []testutil.TestUser{first, second} {
+		if _, err := repo.CreateDue(ctx, memberships.CreateDueInput{UserID: person.ID, Year: 2026, TransactionID: shared}); err != nil {
+			t.Fatalf("create due for %s: %v", person.Login, err)
+		}
+	}
+	if _, err := repo.CreateDue(ctx, memberships.CreateDueInput{UserID: first.ID, Year: 2025, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+		t.Fatalf("create the other transaction's due: %v", err)
+	}
+
+	list, err := repo.ListDuesForTransaction(ctx, shared)
+	if err != nil {
+		t.Fatalf("ListDuesForTransaction: %v", err)
+	}
+	logins := map[string]bool{}
+	for _, d := range list {
+		logins[d.UserLogin] = true
+		if d.Year != 2026 || d.TransactionID != shared || d.PaidAt == nil {
+			t.Errorf("unexpected due in the listing: %+v", d)
+		}
+	}
+	if len(list) != 2 || !logins[first.Login] || !logins[second.Login] {
+		t.Errorf("expected exactly the two dues of the shared transaction, got %+v", list)
+	}
+}
+
+func TestListDuesForTransactionIsEmptyForOneThatPaidForNone(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := memberships.NewRepository(tx)
+
+	for _, id := range []int64{testutil.InsertTransaction(t, tx), 999999999} {
+		list, err := repo.ListDuesForTransaction(context.Background(), id)
+		if err != nil || len(list) != 0 {
+			t.Errorf("transaction %d: expected an empty list, got %+v, %v", id, list, err)
+		}
+	}
+}

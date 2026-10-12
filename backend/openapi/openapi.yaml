@@ -2209,6 +2209,14 @@ paths:
   /transactions/{id}:
     get:
       summary: Get a single transaction, with its entries
+      description: >
+        Open to every baseline role. For admin and board only, the
+        response also carries dues and licenses — the cuotas anuales and
+        federative licenses this transaction paid for (see POST
+        /users/{login}/dues and /licenses) — always present for them,
+        empty when it paid for none. Who paid which is private to that
+        person, admin and board (see GET /users/{login}/dues), so anyone
+        else gets the plain transaction, without either key.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2217,7 +2225,18 @@ paths:
           description: The transaction
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Transaction" }
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Transaction"
+                  - type: object
+                    description: Only present for admin and board.
+                    properties:
+                      dues:
+                        type: array
+                        items: { $ref: "#/components/schemas/Due" }
+                      licenses:
+                        type: array
+                        items: { $ref: "#/components/schemas/License" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Correct a transaction's description, timestamp, or entries

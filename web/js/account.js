@@ -216,6 +216,7 @@ function setupDuesAndLicensesSection(prefix) {
     editedYearInputs.clear();
     renderDueChips();
     renderLicenseChips();
+    setExisting({ dues: [], licenses: [] });
   }
 
   // Called each time the dialog opens, once its date is filled in: starts
@@ -225,25 +226,47 @@ function setupDuesAndLicensesSection(prefix) {
     fillYears();
   }
 
-  // Which of the two sections apply to the transaction as it currently
-  // stands: dues if either of its two accounts is marked allows_dues,
-  // licenses if either is marked allows_licenses (see sectionsFor).
-  // Whatever's hidden is also emptied — a chip added while the other
-  // account was selected must not still be sent once the person has
-  // switched to one that doesn't qualify, since the API would only
-  // reject it (transaction_not_for_dues/_licenses) after the transaction
-  // itself was already saved. When neither applies, a hint says why
-  // there's nothing to fill in and where to change that.
+  // Each section shows up for one of two reasons, tracked separately:
+  //  - it can ADD: dues if either of the transaction's two accounts is
+  //    marked allows_dues, licenses if either is marked allows_licenses
+  //    (see sectionsFor, setVisibility). Whatever can't add is also
+  //    emptied — a chip added while the other account was selected must
+  //    not still be sent once the person has switched to one that
+  //    doesn't qualify, since the API would only reject it
+  //    (transaction_not_for_dues/_licenses) after the transaction itself
+  //    was already saved;
+  //  - it already HAS something to show: what an earlier save registered
+  //    against this transaction (setExisting — only the edit dialog ever
+  //    has any). That stays visible even if no account qualifies any
+  //    more (the flag was since turned off, or the accounts changed): it
+  //    is a record of what was paid, not something about to be sent.
+  // When neither section can add, a hint says why and where to change it.
   const duesField = document.getElementById(`${prefix}-dues-field`);
   const licensesField = document.getElementById(`${prefix}-licenses-field`);
+  const duesAddRow = document.getElementById(`${prefix}-add-due`).closest('.role-add-row');
+  const licensesAddRow = document.getElementById(`${prefix}-add-license`).closest('.role-add-row');
+  const duesHint = document.getElementById(`${prefix}-dues-hint`);
+  const licensesHint = document.getElementById(`${prefix}-licenses-hint`);
   const flagsHint = document.getElementById(`${prefix}-flags-hint`);
   const datesHint = document.getElementById(`${prefix}-dates-hint`);
+  const duesExisting = document.getElementById(`${prefix}-dues-existing`);
+  const licensesExisting = document.getElementById(`${prefix}-licenses-existing`);
+  let canAdd = { dues: false, licenses: false };
+  let existing = { dues: [], licenses: [] };
+
+  function applyVisibility() {
+    duesField.hidden = !(canAdd.dues || existing.dues.length);
+    licensesField.hidden = !(canAdd.licenses || existing.licenses.length);
+    duesAddRow.hidden = !canAdd.dues;
+    licensesAddRow.hidden = !canAdd.licenses;
+    if (duesHint) duesHint.hidden = !canAdd.dues;
+    if (licensesHint) licensesHint.hidden = !canAdd.licenses;
+    flagsHint.hidden = canAdd.dues || canAdd.licenses;
+    if (datesHint) datesHint.hidden = !(canAdd.dues || canAdd.licenses);
+  }
 
   function setVisibility({ dues, licenses }) {
-    duesField.hidden = !dues;
-    licensesField.hidden = !licenses;
-    flagsHint.hidden = dues || licenses;
-    if (datesHint) datesHint.hidden = !(dues || licenses);
+    canAdd = { dues, licenses };
     if (!dues) {
       pendingDues = [];
       renderDueChips();
@@ -252,6 +275,31 @@ function setupDuesAndLicensesSection(prefix) {
       pendingLicenses = [];
       renderLicenseChips();
     }
+    applyVisibility();
+  }
+
+  // What an earlier save already registered against this transaction,
+  // as read-only chips (no ×: there's no endpoint to remove a due, and
+  // removing a license isn't something this dialog offers) — only the
+  // edit dialog has the containers for them; the create dialog never
+  // has anything to show.
+  function personName(login) {
+    return userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+  }
+
+  function setExisting({ dues, licenses }) {
+    existing = { dues, licenses };
+    if (duesExisting) {
+      duesExisting.innerHTML = dues
+        .map((due) => `<span class="badge">${escapeHtml(`${personName(due.user_login)} · ${due.year}`)}</span>`)
+        .join(' ');
+    }
+    if (licensesExisting) {
+      licensesExisting.innerHTML = licenses
+        .map((license) => `<span class="badge">${escapeHtml(`${personName(license.user_login)} · ${license.type} · ${license.year}`)}</span>`)
+        .join(' ');
+    }
+    applyVisibility();
   }
 
   // Sends every pending due/license, tied to transactionId, once the
@@ -296,7 +344,7 @@ function setupDuesAndLicensesSection(prefix) {
   renderDueChips();
   renderLicenseChips();
   setVisibility({ dues: false, licenses: false });
-  return { reset, submitPending, setVisibility, syncYears };
+  return { reset, submitPending, setVisibility, setExisting, syncYears };
 }
 
 const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt') : null;
@@ -463,6 +511,11 @@ async function openEditTransactionDialog(transactionId) {
     document.getElementById('et-amount').value = ownEntry.amount;
     document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
     refreshDuesLicensesSections('et');
+    // GET /transactions/{id} also says which cuotas and licencias this
+    // transaction already paid for, but only to admin/board — read-only
+    // here (see setupDuesAndLicensesSection's setExisting). Absent for
+    // anyone else, who never has these sections at all.
+    editTransactionDuesLicenses?.setExisting({ dues: transaction.dues ?? [], licenses: transaction.licenses ?? [] });
     openModal(editTransactionDialog);
   } catch (err) {
     showError(err.message);

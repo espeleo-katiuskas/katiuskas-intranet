@@ -144,3 +144,11 @@ func (s *Service) RecordDue(ctx context.Context, userID int64, year int, transac
 func (s *Service) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
 	return s.repo.ListDuesForUser(ctx, userID)
 }
+
+// ListDuesForTransaction returns every due recorded against the
+// transaction. An unknown transaction id just comes back an empty list,
+// the same as one that paid for no dues — nothing here needs to tell the
+// two apart.
+func (s *Service) ListDuesForTransaction(ctx context.Context, transactionID int64) ([]Due, error) {
+	return s.repo.ListDuesForTransaction(ctx, transactionID)
+}

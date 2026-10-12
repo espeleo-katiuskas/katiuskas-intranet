@@ -35,7 +35,9 @@ type License struct {
 	// every route here is either scoped under a known /users/{login}, or
 	// resolves the owner separately after the fact (see
 	// Handler.update) — cheaper than joining against users on every
-	// query just to expose an identifier the caller already gave us.
+	// query just to expose an identifier the caller already gave us. The
+	// one exception is ListByTransaction, which spans several people and
+	// so joins users itself.
 	UserLogin     string `json:"user_login"`
 	LicenseTypeID int64  `json:"license_type_id"`
 	// Type is the human-readable label: the catalog name, or

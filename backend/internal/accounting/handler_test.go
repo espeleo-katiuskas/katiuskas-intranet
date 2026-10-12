@@ -13,7 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounting"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
@@ -95,15 +99,32 @@ func (fakeUsers) LoginForUserID(_ context.Context, id int64) (string, error) {
 	return "", errors.New("no such user")
 }
 
-func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *fakeNotifier) {
+// payments are the real memberships/licenses services (on the same test
+// transaction) behind GET /transactions/{id}'s "dues"/"licenses" — kept
+// separate so only the tests that record a cuota or a licencia need them.
+type payments struct {
+	tx          pgx.Tx
+	memberships *memberships.Service
+	licenses    *licenses.Service
+}
+
+func newHandlerTestServerWithPayments(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *fakeNotifier, payments) {
 	t.Helper()
 	tx := testutil.NewTx(t)
 	service := accounting.NewService(accounting.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 
 	mux := http.NewServeMux()
-	accounting.NewHandler(service, authenticator, fakeUsers{}, notifier).RegisterRoutes(mux)
+	accounting.NewHandler(service, authenticator, fakeUsers{}, membershipsService, licensesService, notifier).RegisterRoutes(mux)
+	return mux, resolver, notifier, payments{tx: tx, memberships: membershipsService, licenses: licensesService}
+}
+
+func newHandlerTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, *fakeNotifier) {
+	t.Helper()
+	mux, resolver, notifier, _ := newHandlerTestServerWithPayments(t)
 	return mux, resolver, notifier
 }
 
@@ -723,4 +744,93 @@ func TestCreateTransactionNotifiesTelegramSumsEveryPositiveEntry(t *testing.T) {
 
 func itoa(id int64) string {
 	return strconv.FormatInt(id, 10)
+}
+
+// GET /transactions/{id} also says which cuotas and licencias the
+// transaction paid for — but only to admin/board: who paid which is
+// private to that person, admin and board (GET /users/{login}/dues),
+// while a transaction itself is open to every baseline role.
+func TestGetTransactionIncludesWhatItPaidForOnlyForAdminAndBoard(t *testing.T) {
+	mux, resolver, _, p := newHandlerTestServerWithPayments(t)
+	ctx := context.Background()
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	cuotas := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
+		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+	var cuotasAccount accounting.Account
+	if err := json.Unmarshal(cuotas.Body.Bytes(), &cuotasAccount); err != nil {
+		t.Fatalf("decode account: %v", err)
+	}
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken,
+		transactionBody(time.Now(), "Cuota y licencia", entry(caja.ID, 100), entry(cuotasAccount.ID, -100)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created accounting.Transaction
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode transaction: %v", err)
+	}
+
+	person := testutil.InsertUser(t, p.tx, "")
+	if _, err := p.memberships.RecordDue(ctx, person.ID, 2026, created.ID, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("record due: %v", err)
+	}
+	if _, err := p.licenses.Create(ctx, licenses.CreateInput{
+		UserID: person.ID, LicenseTypeID: testutil.LicenseTypeID(t, p.tx, "A BASICA"),
+		IssuedDate: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Year: 2026, TransactionID: created.ID,
+	}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+	path := "/api/v1/transactions/" + itoa(created.ID)
+
+	for _, role := range []string{"admin", "board"} {
+		rec := doRequest(mux, http.MethodGet, path, testutil.TokenFor(resolver, 2, role), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", role, rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Dues     []map[string]any `json:"dues"`
+			Licenses []map[string]any `json:"licenses"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(got.Dues) != 1 || got.Dues[0]["user_login"] != person.Login || got.Dues[0]["year"] != float64(2026) {
+			t.Errorf("%s: expected the one due, with its person's login, got %v", role, got.Dues)
+		}
+		if len(got.Licenses) != 1 || got.Licenses[0]["user_login"] != person.Login || got.Licenses[0]["type"] != "A BASICA" {
+			t.Errorf("%s: expected the one license, with its owner's login, got %v", role, got.Licenses)
+		}
+	}
+
+	rec = doRequest(mux, http.MethodGet, path, testutil.TokenFor(resolver, person.ID, "member"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a plain member to still read the transaction, got %d", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, `"dues"`) || strings.Contains(body, `"licenses"`) || strings.Contains(body, person.Login) {
+		t.Errorf("expected nothing about who paid for what to reach a plain member, got %s", body)
+	}
+}
+
+// For admin/board the two lists are always there — empty, not absent,
+// when the transaction paid for none — so a client can tell "none" from
+// "not allowed to see".
+func TestGetTransactionListsAreEmptyNotAbsentForAdminWhenItPaidForNothing(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	banco := createAccount(t, mux, adminToken, "Banco", "572")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken,
+		transactionBody(time.Now(), "Traspaso", entry(caja.ID, 5), entry(banco.ID, -5)))
+	var created accounting.Transaction
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/transactions/"+itoa(created.ID), adminToken, nil)
+	body := rec.Body.String()
+	if !strings.Contains(body, `"dues":[]`) || !strings.Contains(body, `"licenses":[]`) {
+		t.Errorf("expected empty dues and licenses arrays, got %s", body)
+	}
 }

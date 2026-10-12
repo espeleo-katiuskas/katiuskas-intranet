@@ -184,6 +184,39 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ListByTransaction returns every license recorded against one
+// transaction — a single payment can cover several socios' licenses —
+// each with its owner's login (joined here, unlike every other query in
+// this package, since nobody has a single known /users/{login} to fill
+// it in from), ordered by that person's name.
+func (r *Repository) ListByTransaction(ctx context.Context, transactionID int64) ([]License, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT l.id, l.user_id, u.login, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at
+		FROM licenses l
+		JOIN users u ON u.id = l.user_id
+		JOIN license_types lt ON lt.id = l.license_type_id
+		WHERE l.transaction_id = $1
+		ORDER BY u.last_name, u.first_name, l.issued_date
+	`, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []License{}
+	for rows.Next() {
+		var l License
+		var name string
+		if err := rows.Scan(&l.ID, &l.UserID, &l.UserLogin, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		l.Type = displayType(name, l.OtherDetail)
+		l.ValidUntil = validUntil(l.Year)
+		list = append(list, l)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at

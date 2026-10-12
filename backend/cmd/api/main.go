@@ -205,7 +205,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Library:           library.NewHandler(libraryService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
-		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, telegramSender),
+		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
 	})
 
 	return router, authHandler, usersService, nil
