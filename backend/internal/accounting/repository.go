@@ -86,11 +86,12 @@ func NewRepository(pool db.PGX) *Repository {
 func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO accounts (name, code, parent_id, position)
-		SELECT $1, $2, $3, COALESCE(MAX(position), 0) + 1
+		INSERT INTO accounts (name, code, parent_id, allows_dues, allows_licenses, position)
+		SELECT $1, $2, $3, $4, $5, COALESCE(MAX(position), 0) + 1
 		FROM accounts WHERE parent_id IS NOT DISTINCT FROM $3
-		RETURNING id, name, code, parent_id
-	`, in.Name, in.Code, in.ParentID).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID)
+		RETURNING id, name, code, parent_id, allows_dues, allows_licenses
+	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.AllowsDues, &a.AllowsLicenses)
 	switch pgErrCode(err) {
 	case uniqueViolationCode:
 		return Account{}, ErrDuplicateCode
@@ -103,8 +104,8 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, name, code, parent_id FROM accounts WHERE id = $1
-	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID)
+		SELECT id, name, code, parent_id, allows_dues, allows_licenses FROM accounts WHERE id = $1
+	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.AllowsDues, &a.AllowsLicenses)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -147,7 +148,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			SELECT a.id, tree.path || a.position
 			FROM accounts a JOIN tree ON a.parent_id = tree.id
 		)
-		SELECT a.id, a.name, a.code, a.parent_id,
+		SELECT a.id, a.name, a.code, a.parent_id, a.allows_dues, a.allows_licenses,
 			COALESCE(SUM(te.amount), 0) AS balance,
 			MAX(t.occurred_at) AS last_transaction_at
 		FROM accounts a
@@ -166,7 +167,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		var balance float64
-		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &balance, &a.LastTransactionAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.AllowsDues, &a.AllowsLicenses, &balance, &a.LastTransactionAt); err != nil {
 			return nil, err
 		}
 		a.Balance = &balance
@@ -235,10 +236,11 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		UPDATE accounts SET name = $1, code = $2, parent_id = $3
-		WHERE id = $4
-		RETURNING id, name, code, parent_id
-	`, in.Name, in.Code, in.ParentID, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID)
+		UPDATE accounts SET name = $1, code = $2, parent_id = $3, allows_dues = $4, allows_licenses = $5
+		WHERE id = $6
+		RETURNING id, name, code, parent_id, allows_dues, allows_licenses
+	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, id,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.AllowsDues, &a.AllowsLicenses)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -339,7 +341,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, name, code, parent_id, position FROM accounts
+		SELECT id, name, code, parent_id, allows_dues, allows_licenses, position FROM accounts
 		WHERE parent_id IS NOT DISTINCT FROM $1
 		ORDER BY id
 		FOR UPDATE
@@ -358,7 +360,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	siblings := []sibling{}
 	for rows.Next() {
 		var s sibling
-		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.position); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.AllowsDues, &s.AllowsLicenses, &s.position); err != nil {
 			return Account{}, err
 		}
 		if s.ID == id {

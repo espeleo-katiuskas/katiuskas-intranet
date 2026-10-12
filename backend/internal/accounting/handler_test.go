@@ -421,6 +421,77 @@ func TestCreateAccountNotifiesTelegram(t *testing.T) {
 	}
 }
 
+// The flags are plain bools, always present in the JSON — false is a
+// real answer a client can read, not a key that's simply missing.
+func TestAccountJSONAlwaysCarriesBothFlags(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created["allows_dues"] != true || created["allows_licenses"] != false {
+		t.Errorf("expected allows_dues true and allows_licenses false, got %v", created)
+	}
+
+	rec = doRequest(mux, http.MethodGet, "/api/v1/accounts", adminToken, nil)
+	var listed []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listed) != 1 || listed[0]["allows_dues"] != true || listed[0]["allows_licenses"] != false {
+		t.Errorf("expected the listing to carry both flags, got %v", listed)
+	}
+}
+
+// PATCH replaces every field, the flags too: leaving one out turns it
+// off, the same as leaving out code or parent_id clears those.
+func TestUpdateAccountReplacesTheFlagsAndAnOmittedOneMeansFalse(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
+		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+	var a accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := "/api/v1/accounts/" + itoa(a.ID)
+
+	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Cuotas", "code": "700", "allows_licenses": true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.AllowsDues || !updated.AllowsLicenses {
+		t.Errorf("expected allows_dues off (omitted) and allows_licenses on, got %+v", updated)
+	}
+}
+
+func TestUpdateAccountNotificationNamesAChangedFlag(t *testing.T) {
+	mux, resolver, notifier := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	a := createAccount(t, mux, adminToken, "Cuotas", "700")
+	notifier.waitForMessage(t)
+	notifier.reset()
+
+	rec := doRequest(mux, http.MethodPatch, "/api/v1/accounts/"+itoa(a.ID), adminToken,
+		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if msg := notifier.waitForMessage(t); !strings.Contains(msg, "AllowsDues: false → true") {
+		t.Errorf("expected the notification to name the flag that changed, got %q", msg)
+	}
+}
+
 // ---- Transactions: reading is open to every baseline role ----
 
 func TestListTransactionsOpenToAnyBaselineRole(t *testing.T) {

@@ -61,10 +61,21 @@ function parentSelectOptions(selectedParentId, excludeId) {
   return `<option value="" ${noneSelected}>— Ninguna (cuenta de primer nivel) —</option>${options}`;
 }
 
+// Small tags next to an account's name for the two things it's marked for
+// (allows_dues/allows_licenses), so which accounts a transaction can
+// record cuotas or licencias against is visible at a glance, not only
+// by opening each one's edit dialog.
+function accountTags(account) {
+  const tags = [];
+  if (account.allows_dues) tags.push('<span class="badge">Cuotas</span>');
+  if (account.allows_licenses) tags.push('<span class="badge">Licencias</span>');
+  return tags.length ? ` ${tags.join(' ')}` : '';
+}
+
 function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr>
-      <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/account?id=${account.id}">${escapeHtml(account.name)}</a></td>
+      <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/account?id=${account.id}">${escapeHtml(account.name)}</a>${accountTags(account)}</td>
       <td>${account.code ? escapeHtml(account.code) : '—'}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
@@ -126,6 +137,8 @@ function openEditAccountDialog(account) {
   document.getElementById('ea-name').value = account.name;
   document.getElementById('ea-code').value = account.code ?? '';
   document.getElementById('ea-parent').innerHTML = parentSelectOptions(account.parent_id ?? null, account.id);
+  document.getElementById('ea-allows-dues').checked = Boolean(account.allows_dues);
+  document.getElementById('ea-allows-licenses').checked = Boolean(account.allows_licenses);
   openModal(editAccountDialog);
 }
 
@@ -139,6 +152,10 @@ editAccountForm.addEventListener('submit', async (event) => {
     // normalization server-side too, so this isn't the only guard).
     code: document.getElementById('ea-code').value.trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
+    // PATCH replaces every field, these two included — a box left
+    // unchecked is sent as false, not omitted.
+    allows_dues: document.getElementById('ea-allows-dues').checked,
+    allows_licenses: document.getElementById('ea-allows-licenses').checked,
   };
 
   const submitButton = editAccountForm.querySelector('button[type="submit"]');
@@ -190,6 +207,8 @@ newAccountForm.addEventListener('submit', async (event) => {
     name: formData.get('name').toString().trim(),
     code: formData.get('code').toString().trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
+    allows_dues: document.getElementById('na-allows-dues').checked,
+    allows_licenses: document.getElementById('na-allows-licenses').checked,
   };
 
   const submitButton = newAccountForm.querySelector('button[type="submit"]');

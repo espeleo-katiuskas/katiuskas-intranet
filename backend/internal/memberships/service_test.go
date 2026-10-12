@@ -130,3 +130,64 @@ func TestRecordDueRejectsAnUnknownTransaction(t *testing.T) {
 		t.Errorf("expected ErrUnknownTransaction, got %v", err)
 	}
 }
+
+// A due can only be tied to a transaction that touches an account marked
+// allows_dues (migration 00017): one that only has an account for
+// licenses, or for neither, is rejected.
+func TestRecordDueRejectsATransactionWithoutADuesAccount(t *testing.T) {
+	for _, c := range []struct {
+		name               string
+		allowsDues, allows bool
+	}{
+		{"an account for licenses only", false, true},
+		{"no flagged account at all", false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			tx := testutil.NewTx(t)
+			svc := memberships.NewService(memberships.NewRepository(tx))
+			person := testutil.InsertUser(t, tx, "")
+
+			_, err := svc.RecordDue(context.Background(), person.ID, 2026,
+				testutil.InsertTransactionOn(t, tx, c.allowsDues, c.allows), date("2026-03-01"))
+			if !errors.Is(err, memberships.ErrTransactionNotForDues) {
+				t.Errorf("expected ErrTransactionNotForDues, got %v", err)
+			}
+		})
+	}
+}
+
+func TestRecordDueAcceptsATransactionOnADuesAccountThatIsNotAlsoForLicenses(t *testing.T) {
+	tx := testutil.NewTx(t)
+	svc := memberships.NewService(memberships.NewRepository(tx))
+	person := testutil.InsertUser(t, tx, "")
+
+	if _, err := svc.RecordDue(context.Background(), person.ID, 2026,
+		testutil.InsertTransactionOn(t, tx, true, false), date("2026-03-01")); err != nil {
+		t.Errorf("expected a dues-only account to be enough, got %v", err)
+	}
+}
+
+// A rejected due must not leave anything behind: the automatic alta for a
+// socio with no membership yet only happens once the transaction itself
+// has been accepted.
+func TestRecordDueRejectedForItsTransactionStartsNoMembership(t *testing.T) {
+	tx := testutil.NewTx(t)
+	svc := memberships.NewService(memberships.NewRepository(tx))
+	person := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+
+	if _, err := svc.RecordDue(ctx, person.ID, 2026, testutil.InsertTransactionOn(t, tx, false, true), date("2026-03-01")); !errors.Is(err, memberships.ErrTransactionNotForDues) {
+		t.Fatalf("expected ErrTransactionNotForDues, got %v", err)
+	}
+	if _, err := svc.RecordDue(ctx, person.ID, 2026, 999999999, date("2026-03-01")); !errors.Is(err, memberships.ErrUnknownTransaction) {
+		t.Fatalf("expected ErrUnknownTransaction, got %v", err)
+	}
+
+	list, err := svc.ListByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected no membership to have been started by a rejected due, got %+v", list)
+	}
+}

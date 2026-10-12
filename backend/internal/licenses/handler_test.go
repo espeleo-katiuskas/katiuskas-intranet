@@ -521,3 +521,23 @@ func TestHandlerDeleteNotifiesTelegramWithActorAndTarget(t *testing.T) {
 		t.Errorf("expected the notification to name both actor and target, got %q", msg)
 	}
 }
+
+func TestHandlerCreateRejectsATransactionWithoutALicensesAccount(t *testing.T) {
+	mux, resolver, memberships_, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := memberships_.Create(ctx, memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026, "transaction_id": testutil.InsertTransactionOn(t, tx, true, false)}
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "transaction_not_for_licenses") {
+		t.Errorf("expected the error code transaction_not_for_licenses, got %s", rec.Body.String())
+	}
+}

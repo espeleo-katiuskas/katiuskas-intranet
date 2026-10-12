@@ -154,6 +154,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_transaction", err.Error())
 		return
 	}
+	if errors.Is(err, ErrTransactionNotForLicenses) {
+		httpapi.WriteError(w, http.StatusConflict, "transaction_not_for_licenses", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create license")
 		return

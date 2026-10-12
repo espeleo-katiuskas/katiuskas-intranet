@@ -520,6 +520,10 @@ func (h *Handler) createDue(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_transaction", err.Error())
 		return
 	}
+	if errors.Is(err, ErrTransactionNotForDues) {
+		httpapi.WriteError(w, http.StatusConflict, "transaction_not_for_dues", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not record due")
 		return

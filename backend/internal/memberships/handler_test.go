@@ -935,3 +935,18 @@ func TestHandlerCreateDueNotifiesTelegramWithActorAndYearAndTarget(t *testing.T)
 		t.Errorf("expected the notification to name the year, got %q", msg)
 	}
 }
+
+func TestHandlerCreateDueRejectsATransactionWithoutADuesAccount(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	body := map[string]any{"year": 2026, "transaction_id": testutil.InsertTransactionOn(t, tx, false, true), "start_date": "2026-03-01"}
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken, body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "transaction_not_for_dues") {
+		t.Errorf("expected the error code transaction_not_for_dues, got %s", rec.Body.String())
+	}
+}

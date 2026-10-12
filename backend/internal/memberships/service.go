@@ -113,7 +113,22 @@ func (s *Service) ListLeavesByUser(ctx context.Context, userID int64) ([]Leave, 
 // membership who's rejoining isn't touched by this at all (HasAnyMembership
 // is true for them already), leaving that case to the existing, separate
 // alta flow instead of guessing whether a new period should open here too.
+//
+// The transaction is checked first — it has to exist (ErrUnknownTransaction)
+// and have an entry on an account flagged allows_dues
+// (ErrTransactionNotForDues) — so that a rejected due can't have already
+// started a membership period for someone as a side effect.
 func (s *Service) RecordDue(ctx context.Context, userID int64, year int, transactionID int64, occurredOn time.Time) (Due, error) {
+	exists, allowed, err := s.repo.TransactionAllowsDues(ctx, transactionID)
+	if err != nil {
+		return Due{}, err
+	}
+	if !exists {
+		return Due{}, ErrUnknownTransaction
+	}
+	if !allowed {
+		return Due{}, ErrTransactionNotForDues
+	}
 	hasAny, err := s.repo.HasAnyMembership(ctx, userID)
 	if err != nil {
 		return Due{}, err

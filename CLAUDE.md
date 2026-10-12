@@ -77,7 +77,11 @@ Every package touching Postgres (all but `auth`, `config`, `mail`, `httpapi`, `t
 Postgres constraints (exclusion, foreign keys, uniqueness) are part of what's under test.
 `internal/testutil.NewTx`
 migrates once and hands each test its own transaction, rolled back on cleanup. Without
-`TEST_DATABASE_URL` reachable, those tests `t.Skip` instead of failing.
+`TEST_DATABASE_URL` reachable, those tests `t.Skip` instead of failing. It only checks
+whether the schema exists at all, never which migrations it has: a test database created
+before a new migration was added has to be dropped and recreated (`DROP DATABASE
+intranet_test` then the `CREATE DATABASE` above), or tests fail with errors like "column
+... does not exist". CI starts from a fresh one every run.
 
 Other:
 ```sh
@@ -374,7 +378,14 @@ required at creation (`ErrUnknownTransaction`, 400 `unknown_transaction`, if it 
 name a real transaction), and never itself editable afterward — `UpdateInput` deliberately
 has no `TransactionID` field, since correcting a license's type, date, or year is a
 different action from re-litigating which payment it belongs to (the same distinction
-`accounting.UpdateAccountInput`'s missing `Position` field draws).
+`accounting.UpdateAccountInput`'s missing `Position` field draws). That transaction must
+also have at least one entry on an account marked `allows_licenses` (migration
+`00017_accounts_dues_licenses_flags.sql`; see Accounting below): `Service.Create` asks
+`Repository.TransactionAllowsLicenses` — a SQL check against accounting's own tables, the
+same way a license already references its transaction by foreign key, without importing
+`internal/accounting` — and answers `ErrTransactionNotForLicenses`, 409
+`transaction_not_for_licenses`, otherwise. It runs last, after every check that only needs
+the request itself, so an existing request keeps the error it always got first.
 
 **Membership dues** (`membership_dues`, alongside `memberships`): every year a socio
 remains a member, they owe a cuota to cover it — the first one (alongside the one-time
@@ -392,6 +403,11 @@ started for them (the request's own `start_date` becomes its `StartDate`) — th
 a person otherwise gets through `POST /users/{login}/memberships`; someone with a prior,
 since-closed membership who's rejoining is left entirely to that existing, separate alta
 flow instead (`HasAnyMembership` is already true for them, so nothing extra happens).
+Before any of that, `RecordDue` checks the transaction itself — it has to exist
+(`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
+(`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`; `Repository.
+TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a rejected due
+can never leave a membership period started as a side effect.
 `GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split. There's no
 endpoint to correct or remove a due, and no validation that a due's `year` actually falls
 within an active membership period — both deliberately out of scope for now.
@@ -729,8 +745,16 @@ for "Caja", but a purely organizational grouping node might never get one — `"
 normalized to no code at all, `Handler.normalizeCode`, the same "not itself a storable
 value" treatment `licenses.normalizeOtherDetail` gives an empty `other_detail`, so two
 codeless accounts never collide under the column's own `UNIQUE` constraint the way two
-literal `""`s would), and an optional `parent_id` nesting it under a
-broader one — the frontend builds any tree view it wants client-side from that) and,
+literal `""`s would), an optional `parent_id` nesting it under a
+broader one — the frontend builds any tree view it wants client-side from that — and
+two plain booleans, `allows_dues` and `allows_licenses` (migration
+`00017_accounts_dues_licenses_flags.sql`, both `false` until an admin or the "money" role
+marks them): which accounts a transaction has to have an entry on to be allowed to record
+membership dues or federative licenses, enforced by `memberships.Service.RecordDue` and
+`licenses.Service.Create` (see **Membership dues**/**Licenses** above) and always present
+in every `Account` JSON, `false` included, unlike the omitted-when-absent `code`/`parent_id`;
+like every other field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that
+leaves one out turns it off) and,
 against that chart, `transactions`: every real movement of money the club records, each
 made of two or more `entries` (an `account_id` and an `amount`, positive into that
 account or negative out of it) whose amounts always sum to exactly zero — standard
@@ -830,7 +854,10 @@ real account nobody's ever posted against."
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
 `TestUser` `InsertUser` returns carries a `Login` too, for tests exercising a
-login-addressed route), and
+login-addressed route), `InsertTransaction`/`InsertTransactionOn` (a real, balanced
+two-entry transaction for tests that record a due or a license against one:
+`InsertTransaction` posts it to an account that allows both, `InsertTransactionOn(t, tx,
+allowsDues, allowsLicenses)` picks the flags, for the cases that must be rejected), and
 `FakeResolver` + `NewTestAuthenticator`/`TokenFor` — an in-memory `auth.SessionResolver`
 so handler tests in every *other* package can mint bearer tokens for arbitrary
 users/roles without hitting the real `tokens` table (only the `auth` and `tokens`
@@ -1010,7 +1037,14 @@ name, code, direct balance, and last movement date (each name a plain `<a href="
 id=…">` into that one account's own detail page, below), with its own controls to create
 an account, correct one's name/code/parent (an inline edit panel per row, the same
 toggled-`<div class="edit-fields">` pattern `member.js` uses for a membership/board/leave
-period), and swap it up or down among its own siblings. `js/accountTree.js` holds the
+period), and swap it up or down among its own siblings. Both the create and edit dialogs
+carry two checkboxes, "Para cuotas anuales" and "Para licencias" (`allows_dues`/
+`allows_licenses`, styled by `.checkbox-label` in `style.css` so the box sits next to its
+text instead of being stretched by `.field input`'s `width: 100%`), always sent explicitly
+— unchecked is `false`, not omitted, since `PATCH` replaces every field — and each row
+shows a small "Cuotas"/"Licencias" badge next to the account's name for whichever are on,
+so which accounts a transaction can record those against is visible without opening each
+one. `js/accountTree.js` holds the
 `childrenByParent`/`flattenAccountTree` pair both this page and `account.js` need:
 `GET /accounts` already comes back as a pre-order, depth-first walk (see the `accounts`
 bullet under **Accounting** above), so filtering that flat list down to a single
@@ -1046,6 +1080,17 @@ ever collects a plain date, but `occurred_at` is a real timestamp — sent as th
 noon UTC (not midnight) specifically so `formatDate`'s own local-timezone getters can never
 roll it back to the previous day for anyone viewing from behind UTC; editing an existing
 transaction collapses whatever time of day it actually had down to this same convention.
+Both dialogs also carry, for a real admin only (`data-roles="admin"`; POST dues/licenses
+is admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registrar"
+section (`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips
+sent as `POST /users/{login}/dues`/`licenses` once the transaction itself is saved. Each
+section is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues if
+this account or the chosen "otra cuenta" has `allows_dues`, licenses if either has
+`allows_licenses`, re-evaluated whenever that picker changes and whenever a dialog opens,
+and a section that gets hidden also drops its pending chips — otherwise one added while a
+qualifying account was selected would still be sent, and only rejected by the API after the
+transaction was already saved. When neither section applies, a hint explains that an
+account has to be marked for it, in Contabilidad, instead of showing nothing.
 The "otra cuenta" picker (shared by the create panel and every row's own edit panel) lists
 every other account (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary

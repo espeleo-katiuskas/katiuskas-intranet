@@ -48,7 +48,10 @@
           <label for="nt-other-account">Otra cuenta</label>
           <select id="nt-other-account" name="other_account_id" required></select>
         </div>
-        <div class="field span-2" data-roles="admin">
+        <div class="field span-2" data-roles="admin" id="nt-flags-hint">
+          <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
+        </div>
+        <div class="field span-2" data-roles="admin" id="nt-dues-field" hidden>
           <label>Cuotas anuales a registrar en esta transacción</label>
           <div id="nt-dues-chips"></div>
           <div class="role-add-row">
@@ -58,7 +61,7 @@
             <button type="button" class="btn btn-secondary btn-small" id="nt-add-due">+ Añadir cuota</button>
           </div>
         </div>
-        <div class="field span-2" data-roles="admin">
+        <div class="field span-2" data-roles="admin" id="nt-licenses-field" hidden>
           <label>Licencias nuevas a registrar en esta transacción</label>
           <div id="nt-licenses-chips"></div>
           <div class="role-add-row">
@@ -71,7 +74,7 @@
           </div>
         </div>
       </div>
-      <p class="hint" data-roles="admin">
+      <p class="hint" data-roles="admin" id="nt-dates-hint" hidden>
         La fecha de la transacción se usa como fecha de obtención de cada licencia nueva,
         y como fecha de alta para cualquier socio sin alta previa cuya cuota se registre aquí.
       </p>
@@ -103,7 +106,10 @@
           <label for="et-other-account">Otra cuenta</label>
           <select id="et-other-account" required></select>
         </div>
-        <div class="field span-2" data-roles="admin">
+        <div class="field span-2" data-roles="admin" id="et-flags-hint">
+          <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
+        </div>
+        <div class="field span-2" data-roles="admin" id="et-dues-field" hidden>
           <label>Cuotas anuales a registrar en esta transacción</label>
           <p class="hint">Solo añade cuotas nuevas — las ya registradas contra esta transacción no aparecen aquí ni se pueden quitar desde este diálogo.</p>
           <div id="et-dues-chips"></div>
@@ -114,7 +120,7 @@
             <button type="button" class="btn btn-secondary btn-small" id="et-add-due">+ Añadir cuota</button>
           </div>
         </div>
-        <div class="field span-2" data-roles="admin">
+        <div class="field span-2" data-roles="admin" id="et-licenses-field" hidden>
           <label>Licencias nuevas a registrar en esta transacción</label>
           <div id="et-licenses-chips"></div>
           <div class="role-add-row">

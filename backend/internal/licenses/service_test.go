@@ -401,3 +401,53 @@ func TestIsCurrentlyFederatedFalseForAnExpiredLicense(t *testing.T) {
 		t.Error("expected a license issued last year (valid_until December 31st of last year) to no longer be federated")
 	}
 }
+
+// A license can only be tied to a transaction that touches an account
+// marked allows_licenses (migration 00017): one that only has an account
+// for dues, or for neither, is rejected.
+func TestServiceCreateRejectsATransactionWithoutALicensesAccount(t *testing.T) {
+	for _, c := range []struct {
+		name                     string
+		allowsDues, allowsLicens bool
+	}{
+		{"an account for dues only", true, false},
+		{"no flagged account at all", false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			tx := testutil.NewTx(t)
+			membershipsService := memberships.NewService(memberships.NewRepository(tx))
+			svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+			person := testutil.InsertUser(t, tx, "")
+			typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+			ctx := context.Background()
+			if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+				t.Fatalf("create membership: %v", err)
+			}
+
+			_, err := svc.Create(ctx, licenses.CreateInput{
+				UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026,
+				TransactionID: testutil.InsertTransactionOn(t, tx, c.allowsDues, c.allowsLicens)})
+			if !errors.Is(err, licenses.ErrTransactionNotForLicenses) {
+				t.Errorf("expected ErrTransactionNotForLicenses, got %v", err)
+			}
+		})
+	}
+}
+
+func TestServiceCreateAcceptsATransactionOnALicensesAccountThatIsNotAlsoForDues(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	if _, err := svc.Create(ctx, licenses.CreateInput{
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026,
+		TransactionID: testutil.InsertTransactionOn(t, tx, false, true)}); err != nil {
+		t.Errorf("expected a licenses-only account to be enough, got %v", err)
+	}
+}

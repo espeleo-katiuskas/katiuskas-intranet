@@ -22,6 +22,12 @@ var (
 	// 00014_membership_dues_and_license_payments.sql), so unlike
 	// OtherDetail/IssuedDate this can't just be left off.
 	ErrUnknownTransaction = errors.New("transaction_id does not name an existing transaction")
+	// ErrTransactionNotForLicenses means the transaction exists but none
+	// of its entries is posted to an account flagged allows_licenses
+	// (migration 00017_accounts_dues_licenses_flags.sql) — only a
+	// transaction that touches such an account can be the payment behind
+	// a new license.
+	ErrTransactionNotForLicenses = errors.New("transaction has no entry on an account that accepts licenses")
 )
 
 const foreignKeyViolationCode = "23503"
@@ -77,6 +83,24 @@ func (r *Repository) GetTypeByID(ctx context.Context, id int64) (LicenseType, er
 		return lt, ErrTypeNotFound
 	}
 	return lt, err
+}
+
+// TransactionAllowsLicenses reports whether transactionID exists and, if
+// it does, whether at least one of its entries is posted to an account
+// flagged allows_licenses. Answered in SQL against accounting's own
+// tables — the same way a license already references its transaction by
+// foreign key — rather than by importing internal/accounting.
+func (r *Repository) TransactionAllowsLicenses(ctx context.Context, transactionID int64) (exists, allowed bool, err error) {
+	err = r.pool.QueryRow(ctx, `
+		SELECT
+			EXISTS (SELECT 1 FROM transactions WHERE id = $1),
+			EXISTS (
+				SELECT 1 FROM transaction_entries te
+				JOIN accounts a ON a.id = te.account_id
+				WHERE te.transaction_id = $1 AND a.allows_licenses
+			)
+	`, transactionID).Scan(&exists, &allowed)
+	return exists, allowed, err
 }
 
 func (r *Repository) Create(ctx context.Context, in CreateInput) (License, error) {

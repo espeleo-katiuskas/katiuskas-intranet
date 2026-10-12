@@ -846,6 +846,20 @@ button.link-button {
   font-weight: 400;
 }
 
+/* A checkbox next to its own text. Without this, .field input's
+   width: 100% below makes the box stretch to the field's full width and
+   sit centered above the label instead. */
+.field label.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field label.checkbox-label input {
+  width: auto;
+  padding: 0;
+}
+
 .field input,
 .field select,
 .field textarea {

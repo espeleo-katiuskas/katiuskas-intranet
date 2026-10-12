@@ -310,6 +310,10 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   persona todavía no tiene ningún periodo de alta, se trata como su primera cuota, así que
   también se le abre un periodo nuevo (la propia `start_date` de la petición); a quien ya
   tuvo un alta y se reincorpora se le deja enteramente al flujo de alta normal, aparte.
+  Antes de nada, `RecordDue` comprueba la propia transacción: tiene que existir
+  (`ErrUnknownTransaction`) y tener al menos una entrada en una cuenta marcada
+  `allows_dues` (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`), de modo que
+  una cuota rechazada nunca deja un periodo de alta abierto como efecto secundario.
   `GET /users/{login}/dues` sigue el mismo reparto propia-persona-o-admin/board que las
   licencias. No hay endpoint para corregir o borrar una cuota, ni validación de que el año
   caiga dentro de un periodo de alta activo — ambas cosas fuera de alcance a propósito por
@@ -352,7 +356,12 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   diciembre suele cubrir el año siguiente — y un `transaction_id` obligatorio que señala
   la transacción que la pagó (ver Contabilidad más abajo): exigido al crearla (400
   `unknown_transaction` si no señala una transacción real), pero no editable después —
-  corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece.
+  corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece. Esa
+  transacción tiene además que tener al menos una entrada en una cuenta marcada
+  `allows_licenses` (migración 00017; ver Contabilidad más abajo): si no, 409
+  `transaction_not_for_licenses`. La comprobación es una consulta SQL contra las tablas de
+  contabilidad, igual que la clave foránea de la propia licencia, sin importar
+  `internal/accounting`, y va la última, tras todo lo que solo depende de la petición.
   De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de
   ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
   almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
@@ -513,7 +522,12 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
 
 - **`accounts`** / **`transactions`** / **`transaction_entries`** — el dinero del club.
   `accounts` es un plan contable en árbol (`name`, `code` único, `parent_id` opcional
-  hacia otra cuenta) con una `position` propia entre hermanos (mismo `parent_id`, `NULL`
+  hacia otra cuenta) con dos booleanos, `allows_dues` y `allows_licenses` (migración 00017,
+  ambos `false` hasta que un admin o el rol `money` los marca): qué cuentas tiene que usar
+  una transacción para poder registrar cuotas anuales o licencias federativas, que exigen
+  `POST /users/{login}/dues` y `POST /users/{login}/licenses`. Aparecen siempre en el JSON
+  de una cuenta (también como `false`) y, como el resto de campos, un `PATCH` los
+  sustituye: omitir uno lo desactiva. Tiene además una `position` propia entre hermanos (mismo `parent_id`, `NULL`
   contado como un grupo más) que solo sirve para ordenar, nunca para identificar una fila
   — `POST /accounts/{id}/move` (`{"direction": "up"|"down"}`) intercambia la posición con
   el hermano inmediatamente antes o después, sin error si ya es el primero/último de su

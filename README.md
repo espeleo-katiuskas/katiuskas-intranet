@@ -62,6 +62,8 @@ la base de datos; los demás no persisten nada en absoluto) usa una base de dato
 pruebas real — no hay mocks del acceso a datos, las restricciones de PostgreSQL (solapes,
 claves foráneas, uniqueness) son parte de lo que se prueba. `internal/testutil` aplica
 las migraciones una sola vez y le da a cada test su propia transacción, deshecha al
-terminar, así que los tests no interfieren entre sí. Sin
+terminar, así que los tests no interfieren entre sí. Solo comprueba si el esquema existe,
+no qué migraciones tiene: tras añadirse una migración nueva hay que borrar y volver a crear
+`intranet_test`, o los tests fallan con errores del tipo "column ... does not exist". Sin
 `TEST_DATABASE_URL` (o si no hay Postgres accesible), esos tests se saltan solos en vez de
 fallar — `go test ./...` funciona igual en una máquina sin Postgres.

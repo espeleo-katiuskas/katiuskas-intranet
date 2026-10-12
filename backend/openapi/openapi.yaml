@@ -672,7 +672,10 @@ paths:
         start_date — someone rejoining after a prior, since-closed
         membership isn't affected by this at all (they already have one
         on file), and keeps using POST /users/{login}/memberships for
-        that instead. Editing or removing a due isn't supported.
+        that instead. Editing or removing a due isn't supported. The
+        transaction must also have an entry on an account marked
+        allows_dues (see PATCH /accounts/{id}) — checked before anything
+        else, so a rejected due never starts a membership period either.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -702,7 +705,11 @@ paths:
             unknown_transaction (transaction_id doesn't name an existing
             transaction).
         "403": { description: Only admin can record a due. }
-        "409": { description: due_already_recorded — this person already has a due on file for that year. }
+        "409":
+          description: >
+            due_already_recorded (this person already has a due on file
+            for that year) or transaction_not_for_dues (none of the
+            transaction's entries is on an account marked allows_dues).
 
   /users/{login}/licenses:
     get:
@@ -739,7 +746,9 @@ paths:
         forbidden otherwise. transaction_id must name the transaction
         that recorded the payment for this license (see POST
         /transactions) — required, and never changed afterward (PATCH
-        has no transaction_id of its own).
+        has no transaction_id of its own). That transaction must also
+        have an entry on an account marked allows_licenses (see PATCH
+        /accounts/{id}).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -771,7 +780,11 @@ paths:
             (transaction_id doesn't name an existing transaction).
         "403": { description: Only admin can assign a license. }
         "409":
-          description: not_active_member — this person didn't have an open membership period on issued_date.
+          description: >
+            not_active_member (this person didn't have an open membership
+            period on issued_date) or transaction_not_for_licenses (none
+            of the transaction's entries is on an account marked
+            allows_licenses).
 
   /licenses/{id}:
     patch:
@@ -1992,6 +2005,20 @@ paths:
                     grouping node might never get one). Omitted, null, or
                     blank all mean the same thing: no code.
                 parent_id: { type: integer, nullable: true }
+                allows_dues:
+                  type: boolean
+                  default: false
+                  description: >
+                    Marks this account as one a transaction can use to
+                    record membership dues (cuotas anuales): see POST
+                    /users/{login}/dues. Omitted means false.
+                allows_licenses:
+                  type: boolean
+                  default: false
+                  description: >
+                    Marks this account as one a transaction can use to
+                    record federative licenses: see POST
+                    /users/{login}/licenses. Omitted means false.
       responses:
         "201":
           description: Created account
@@ -2017,12 +2044,13 @@ paths:
               schema: { $ref: "#/components/schemas/Account" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
-      summary: Correct an account's name, code, or parent
+      summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
-        name/code/parent_id always replace the current values — omitting,
-        nulling, or blanking code clears it, the same as an account that
-        never had one.
+        name/code/parent_id/allows_dues/allows_licenses always replace
+        the current values — omitting, nulling, or blanking code clears
+        it, the same as an account that never had one, and omitting
+        either flag turns it off rather than keeping it.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2037,6 +2065,8 @@ paths:
                 name: { type: string }
                 code: { type: string, nullable: true }
                 parent_id: { type: integer, nullable: true }
+                allows_dues: { type: boolean, default: false }
+                allows_licenses: { type: boolean, default: false }
       responses:
         "200":
           description: Updated account
@@ -2990,12 +3020,20 @@ components:
         ever present from GET /accounts (never on GET/POST/PATCH
         /accounts/{id}) — this account's own direct activity, summing
         every entry ever posted straight to it, never rolled up from
-        any child account.
+        any child account. allows_dues/allows_licenses mark the accounts a
+        transaction has to have an entry on to be allowed to record
+        membership dues or federative licenses (both false until an admin
+        or the money role marks them) — enforced by POST
+        /users/{login}/dues and POST /users/{login}/licenses, and used by
+        the frontend to only offer the corresponding section when it
+        could succeed.
       properties:
         id: { type: integer }
         name: { type: string }
         code: { type: string, nullable: true }
         parent_id: { type: integer, nullable: true }
+        allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
+        allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
         balance:
           type: number
           format: double

@@ -327,17 +327,29 @@ func InsertActivity(t *testing.T, tx pgx.Tx) int64 {
 	return id
 }
 
-// InsertTransaction inserts a bare transactions row with no entries at
-// all, for tests that only need a real transactions.id to satisfy a
-// foreign key (licenses.transaction_id, membership_dues.transaction_id
-// — migration 00014) and don't care about actual double-entry
-// bookkeeping. This is safe because transaction_entries_balance (the
-// constraint trigger enforcing "at least two entries, summing to zero",
-// migration 00012) only ever fires on a transaction_entries row itself
-// being inserted/updated/deleted — a transactions row with zero entries
-// is never checked, let alone rejected, by that trigger.
+// InsertTransaction inserts a real, balanced two-entry transaction posted
+// to an account that allows both membership dues and federative
+// licenses — what a test needs when it records a due or a license
+// against some transaction and doesn't care which (licenses.transaction_id,
+// membership_dues.transaction_id, migration 00014; the accounts' own
+// allows_dues/allows_licenses flags, migration 00017, are what
+// memberships.Service.RecordDue and licenses.Service.Create check). Use
+// InsertTransactionOn instead to get one that doesn't qualify.
 func InsertTransaction(t *testing.T, tx pgx.Tx) int64 {
 	t.Helper()
+	return InsertTransactionOn(t, tx, true, true)
+}
+
+// InsertTransactionOn inserts a balanced two-entry transaction whose
+// first entry is posted to an account with the given allows_dues and
+// allows_licenses flags, and whose second goes to a plain counterpart
+// account with neither. The accounts are looked up by a code derived
+// from the flags, so repeated calls in one test reuse them.
+func InsertTransactionOn(t *testing.T, tx pgx.Tx, allowsDues, allowsLicenses bool) int64 {
+	t.Helper()
+	flagged := insertTestAccount(t, tx, fmt.Sprintf("test-dues-%t-licenses-%t", allowsDues, allowsLicenses), allowsDues, allowsLicenses)
+	counterpart := insertTestAccount(t, tx, "test-counterpart", false, false)
+
 	var id int64
 	err := tx.QueryRow(context.Background(), `
 		INSERT INTO transactions (description, occurred_at) VALUES ('test transaction', now())
@@ -345,6 +357,33 @@ func InsertTransaction(t *testing.T, tx pgx.Tx) int64 {
 	`).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert test transaction: %v", err)
+	}
+	for _, entry := range []struct {
+		accountID int64
+		amount    float64
+	}{{flagged, 10}, {counterpart, -10}} {
+		if _, err := tx.Exec(context.Background(), `
+			INSERT INTO transaction_entries (transaction_id, account_id, amount) VALUES ($1, $2, $3)
+		`, id, entry.accountID, entry.amount); err != nil {
+			t.Fatalf("insert test transaction entry: %v", err)
+		}
+	}
+	return id
+}
+
+// insertTestAccount returns the id of the account with the given code,
+// creating it with the given flags the first time.
+func insertTestAccount(t *testing.T, tx pgx.Tx, code string, allowsDues, allowsLicenses bool) int64 {
+	t.Helper()
+	var id int64
+	err := tx.QueryRow(context.Background(), `
+		INSERT INTO accounts (name, code, allows_dues, allows_licenses, position)
+		VALUES ($1, $1, $2, $3, 1)
+		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+		RETURNING id
+	`, code, allowsDues, allowsLicenses).Scan(&id)
+	if err != nil {
+		t.Fatalf("insert test account %q: %v", code, err)
 	}
 	return id
 }

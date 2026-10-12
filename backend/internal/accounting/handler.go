@@ -136,14 +136,19 @@ func (h *Handler) listAccountEntries(w http.ResponseWriter, r *http.Request) {
 
 func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 	var body struct {
-		Name     string  `json:"name"`
-		Code     *string `json:"code"`
-		ParentID *int64  `json:"parent_id"`
+		Name           string  `json:"name"`
+		Code           *string `json:"code"`
+		ParentID       *int64  `json:"parent_id"`
+		AllowsDues     bool    `json:"allows_dues"`
+		AllowsLicenses bool    `json:"allows_licenses"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return CreateAccountInput{}, err
 	}
-	return CreateAccountInput{Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID}, nil
+	return CreateAccountInput{
+		Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID,
+		AllowsDues: body.AllowsDues, AllowsLicenses: body.AllowsLicenses,
+	}, nil
 }
 
 // normalizeCode trims whitespace and treats an empty result the same
@@ -313,7 +318,7 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 // accountAuditableFields are the Account fields updateAccount's own
 // mutation notification diffs (see httpapi.DiffFields) — matching
 // UpdateAccountInput's field set exactly.
-var accountAuditableFields = []string{"Name", "Code", "ParentID"}
+var accountAuditableFields = []string{"Name", "Code", "ParentID", "AllowsDues", "AllowsLicenses"}
 
 // ---- Transactions ----
 

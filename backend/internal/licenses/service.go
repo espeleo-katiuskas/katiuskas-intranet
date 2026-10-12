@@ -73,6 +73,20 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	}
 	in.OtherDetail = otherDetail
 
+	// Last, after every check that only needs the request itself: the
+	// transaction has to exist and have an entry on an account flagged
+	// allows_licenses.
+	exists, allowed, err := s.repo.TransactionAllowsLicenses(ctx, in.TransactionID)
+	if err != nil {
+		return License{}, err
+	}
+	if !exists {
+		return License{}, ErrUnknownTransaction
+	}
+	if !allowed {
+		return License{}, ErrTransactionNotForLicenses
+	}
+
 	return s.repo.Create(ctx, in)
 }
 

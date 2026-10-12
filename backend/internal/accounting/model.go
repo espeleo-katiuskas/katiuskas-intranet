@@ -22,11 +22,20 @@ import "time"
 // column's own UNIQUE constraint (see Handler.normalizeCode, which
 // keeps that distinction all the way from the request body down).
 // ParentID nests it under a broader one (nil for a top-level account).
+// AllowsDues/AllowsLicenses mark the accounts a transaction has to touch
+// to be allowed to record membership dues (cuotas anuales) or federative
+// licenses (see migration 00017_accounts_dues_licenses_flags.sql, and
+// memberships.Service.RecordDue/licenses.Service.Create, which refuse a
+// transaction with no entry on a flagged account). Unlike Code or
+// ParentID they're plain bools, always present in the JSON — false is a
+// real answer, not an absent value.
 type Account struct {
-	ID       int64   `json:"id"`
-	Name     string  `json:"name"`
-	Code     *string `json:"code,omitempty"`
-	ParentID *int64  `json:"parent_id,omitempty"`
+	ID             int64   `json:"id"`
+	Name           string  `json:"name"`
+	Code           *string `json:"code,omitempty"`
+	ParentID       *int64  `json:"parent_id,omitempty"`
+	AllowsDues     bool    `json:"allows_dues"`
+	AllowsLicenses bool    `json:"allows_licenses"`
 	// Balance and LastTransactionAt are this account's own direct
 	// activity — the sum of every entry ever posted straight to it
 	// (never rolled up from child accounts) and when the most recent
@@ -43,9 +52,11 @@ type Account struct {
 }
 
 type CreateAccountInput struct {
-	Name     string
-	Code     *string
-	ParentID *int64
+	Name           string
+	Code           *string
+	ParentID       *int64
+	AllowsDues     bool
+	AllowsLicenses bool
 }
 
 // UpdateAccountInput replaces every field at once — the same
@@ -56,11 +67,15 @@ type CreateAccountInput struct {
 // below, never as a side effect of an otherwise ordinary edit. Code is
 // the one field that isn't actually required to be non-empty (see
 // Account's own doc comment) — resending nil/"" here clears an
-// existing code, same as never having set one.
+// existing code, same as never having set one. The two flags follow the
+// same replace-everything rule: leaving one out of the request means
+// false, not "keep what it was".
 type UpdateAccountInput struct {
-	Name     string
-	Code     *string
-	ParentID *int64
+	Name           string
+	Code           *string
+	ParentID       *int64
+	AllowsDues     bool
+	AllowsLicenses bool
 }
 
 // MoveDirection is which adjacent sibling (same parent_id) to swap an

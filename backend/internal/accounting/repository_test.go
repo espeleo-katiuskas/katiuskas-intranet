@@ -123,6 +123,101 @@ func TestUpdateAccountCanClearCode(t *testing.T) {
 	}
 }
 
+// An account allows neither dues nor licenses until told otherwise —
+// nothing can be recorded against a transaction until an admin marks the
+// accounts that actually receive those payments (migration 00017).
+func TestCreateAccountFlagsDefaultToFalse(t *testing.T) {
+	repo := newRepo(t)
+	a := mustCreateAccount(t, repo, "Caja", "570")
+	if a.AllowsDues || a.AllowsLicenses {
+		t.Errorf("expected both flags false by default, got %+v", a)
+	}
+}
+
+func TestCreateAccountStoresTheFlagsAndEveryReadSeesThem(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	created, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{
+		Name: "Cuotas", Code: strPtr("700"), AllowsDues: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	if !created.AllowsDues || created.AllowsLicenses {
+		t.Errorf("expected only allows_dues on the created account, got %+v", created)
+	}
+
+	got, err := repo.GetAccount(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetAccount: %v", err)
+	}
+	if !got.AllowsDues || got.AllowsLicenses {
+		t.Errorf("GetAccount lost the flags: %+v", got)
+	}
+
+	list, err := repo.ListAccounts(ctx)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	var listed *accounting.Account
+	for i := range list {
+		if list[i].ID == created.ID {
+			listed = &list[i]
+		}
+	}
+	if listed == nil || !listed.AllowsDues || listed.AllowsLicenses {
+		t.Errorf("ListAccounts lost the flags: %+v", listed)
+	}
+}
+
+// UpdateAccountInput replaces every field at once, the two flags
+// included: sending neither turns both off rather than keeping them.
+func TestUpdateAccountReplacesTheFlags(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	a, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{
+		Name: "Cuotas y licencias", Code: strPtr("700"), AllowsDues: true, AllowsLicenses: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	onlyLicenses, err := repo.UpdateAccount(ctx, a.ID, accounting.UpdateAccountInput{
+		Name: a.Name, Code: a.Code, AllowsLicenses: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAccount: %v", err)
+	}
+	if onlyLicenses.AllowsDues || !onlyLicenses.AllowsLicenses {
+		t.Errorf("expected only allows_licenses to remain, got %+v", onlyLicenses)
+	}
+
+	neither, err := repo.UpdateAccount(ctx, a.ID, accounting.UpdateAccountInput{Name: a.Name, Code: a.Code})
+	if err != nil {
+		t.Fatalf("UpdateAccount: %v", err)
+	}
+	if neither.AllowsDues || neither.AllowsLicenses {
+		t.Errorf("expected both flags cleared, got %+v", neither)
+	}
+}
+
+func TestMoveAccountReturnsTheFlags(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	mustCreateAccount(t, repo, "Primera", "1")
+	second, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Segunda", Code: strPtr("2"), AllowsDues: true})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	moved, err := repo.MoveAccount(ctx, second.ID, accounting.MoveUp)
+	if err != nil {
+		t.Fatalf("MoveAccount: %v", err)
+	}
+	if !moved.AllowsDues || moved.AllowsLicenses {
+		t.Errorf("expected MoveAccount to return the account's flags, got %+v", moved)
+	}
+}
+
 func TestGetAccountNotFound(t *testing.T) {
 	repo := newRepo(t)
 	_, err := repo.GetAccount(context.Background(), 999999)

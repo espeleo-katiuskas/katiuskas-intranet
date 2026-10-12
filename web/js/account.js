@@ -185,6 +185,35 @@ function setupDuesAndLicensesSection(prefix) {
     renderLicenseChips();
   }
 
+  // Which of the two sections apply to the transaction as it currently
+  // stands: dues if either of its two accounts is marked allows_dues,
+  // licenses if either is marked allows_licenses (see sectionsFor).
+  // Whatever's hidden is also emptied — a chip added while the other
+  // account was selected must not still be sent once the person has
+  // switched to one that doesn't qualify, since the API would only
+  // reject it (transaction_not_for_dues/_licenses) after the transaction
+  // itself was already saved. When neither applies, a hint says why
+  // there's nothing to fill in and where to change that.
+  const duesField = document.getElementById(`${prefix}-dues-field`);
+  const licensesField = document.getElementById(`${prefix}-licenses-field`);
+  const flagsHint = document.getElementById(`${prefix}-flags-hint`);
+  const datesHint = document.getElementById(`${prefix}-dates-hint`);
+
+  function setVisibility({ dues, licenses }) {
+    duesField.hidden = !dues;
+    licensesField.hidden = !licenses;
+    flagsHint.hidden = dues || licenses;
+    if (datesHint) datesHint.hidden = !(dues || licenses);
+    if (!dues) {
+      pendingDues = [];
+      renderDueChips();
+    }
+    if (!licenses) {
+      pendingLicenses = [];
+      renderLicenseChips();
+    }
+  }
+
   // Sends every pending due/license, tied to transactionId, once the
   // transaction itself is safely saved — sequential, not parallel: a
   // clearer one-item-at-a-time failure story than Promise.all's
@@ -226,11 +255,40 @@ function setupDuesAndLicensesSection(prefix) {
 
   renderDueChips();
   renderLicenseChips();
-  return { reset, submitPending };
+  setVisibility({ dues: false, licenses: false });
+  return { reset, submitPending, setVisibility };
 }
 
 const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt') : null;
 const editTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('et') : null;
+
+// A transaction made here always has exactly two entries: this page's own
+// account and the "otra cuenta" picked. It can record cuotas if either of
+// them is marked allows_dues, and licencias if either is marked
+// allows_licenses (the API refuses it otherwise — see
+// memberships.Service.RecordDue/licenses.Service.Create — so these
+// sections only ever appear when they could actually succeed).
+function sectionsFor(otherAccountId) {
+  const own = allAccounts.find((a) => a.id === accountId);
+  const other = allAccounts.find((a) => a.id === otherAccountId);
+  return {
+    dues: Boolean(own?.allows_dues || other?.allows_dues),
+    licenses: Boolean(own?.allows_licenses || other?.allows_licenses),
+  };
+}
+
+// Re-evaluates one dialog's sections from its own "otra cuenta" picker as
+// it stands right now. A no-op for anyone who isn't a real admin, who
+// never gets the sections at all.
+function refreshDuesLicensesSections(prefix) {
+  const section = prefix === 'nt' ? newTransactionDuesLicenses : editTransactionDuesLicenses;
+  if (!section) return;
+  section.setVisibility(sectionsFor(Number(document.getElementById(`${prefix}-other-account`).value)));
+}
+
+for (const prefix of ['nt', 'et']) {
+  document.getElementById(`${prefix}-other-account`).addEventListener('change', () => refreshDuesLicensesSections(prefix));
+}
 
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
@@ -269,6 +327,7 @@ async function loadAccount() {
     }
     renderHeader(account);
     document.getElementById('nt-other-account').innerHTML = otherAccountOptions(null);
+    refreshDuesLicensesSections('nt');
   } catch {
     showError('No se pudo cargar la cuenta.');
   }
@@ -362,6 +421,7 @@ async function openEditTransactionDialog(transactionId) {
     document.getElementById('et-description').value = transaction.description;
     document.getElementById('et-amount').value = ownEntry.amount;
     document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
+    refreshDuesLicensesSections('et');
     openModal(editTransactionDialog);
   } catch (err) {
     showError(err.message);
@@ -438,6 +498,7 @@ if (newTransactionDuesLicenses) {
 }
 
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
+  refreshDuesLicensesSections('nt');
   openModal(newTransactionDialog);
 });
 
