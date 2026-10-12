@@ -223,6 +223,7 @@ intranet.tudominio.org {
 	}
 	handle {
 		root * /opt/katiuskas-intranet/web
+		header Cache-Control "no-cache"
 		try_files {path} {path}.html
 		file_server
 	}
@@ -232,6 +233,15 @@ intranet.tudominio.org {
 ```sh
 sudo systemctl reload caddy
 ```
+
+La línea `header Cache-Control "no-cache"` no es opcional. Sin ninguna cabecera de caché, los
+navegadores calculan por su cuenta cuánto tiempo vale un fichero (una décima parte de su
+antigüedad), así que tras un despliegue uno que ya tenía copia de un fichero sin cambios
+desde hacía semanas puede seguir usándola durante días, y mezclarla con una página HTML
+nueva: secciones que nunca aparecen, formularios que no envían campos nuevos... `no-cache`
+no desactiva la caché, solo obliga a preguntar al servidor cada vez, que contesta con un
+`304` sin cuerpo mientras el fichero no haya cambiado. Quien ya tenga una copia antigua
+guardada necesita una recarga forzada (Ctrl+F5) la primera vez.
 
 Si ese Caddy corre como un usuario que no puede leer `/opt/katiuskas-intranet/web`
 (propiedad de `katiuskas`), dale acceso de lectura, por ejemplo añadiendo a ese usuario al
@@ -268,6 +278,7 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 	}
 	handle {
 		root * /opt/katiuskas-intranet/web
+		header Cache-Control "no-cache"
 		try_files {path} {path}.html
 		file_server
 	}

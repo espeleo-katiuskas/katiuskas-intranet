@@ -95,7 +95,13 @@ Rebuilding/redeploying just the API after a backend change:
 ```sh
 docker compose build api && docker compose up -d api
 ```
-The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Caddyfile`).
+The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Caddyfile`),
+and sends `Cache-Control: no-cache` for everything it serves from there: without any
+cache header, browsers guess a freshness lifetime of a tenth of the file's age, so one
+holding an old copy of a file unchanged for weeks keeps using it for days after a deploy and
+mixes it with newer HTML (a new page whose sections are `hidden` by default, an old script
+that never shows them). The club's own Caddy, outside this repo, needs the same line in its
+site block (`docs/deployment-no-docker.md`).
 
 Club documents (estatutos, actas...) shown at `/library`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no

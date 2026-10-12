@@ -4,6 +4,12 @@
 	}
 	handle {
 		root * /srv
+		# No Cache-Control at all leaves browsers to guess how long a file
+		# stays fresh (a tenth of its age), so after a deploy one that already
+		# holds a copy of a file unchanged for weeks can keep serving the old
+		# one for days — and mix it with a newer HTML page. "no-cache" means
+		# revalidate every time: a cheap 304 via the ETag when nothing changed.
+		header Cache-Control "no-cache"
 		try_files {path} {path}.html
 		file_server
 	}
