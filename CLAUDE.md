@@ -46,8 +46,10 @@ directory and Telegram bot, sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and
 `main` updates testing, and every push of a semver tag updates production**, so pushing to
 `main` is a live deploy rather than just publishing commits. That automation isn't defined
 in this repo (`ci.yml` only tests). Testing's database holds a copy of production's data,
-refreshed on every production deploy (the two databases are separate only because the
-schema can differ while `main` carries migrations production hasn't received), so testing
+refreshed on every production deploy by `scripts/copy-prod-to-testing.sh` (a full
+dump/restore of production followed by `goose up`; the two databases are separate only
+because the schema can differ while `main` carries migrations production hasn't
+received), so testing
 contains real personal data and anything done there is overwritten at the next production
 deploy. The shared directories make two things dangerous to do in testing: because
 `user-files/<login>/` is keyed by login, granting someone admin/board there gives them

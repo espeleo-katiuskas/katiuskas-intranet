@@ -48,8 +48,25 @@ actualización.
 
 Cada vez que se despliega en producción, los datos de producción se copian a la base de
 datos de testing. Las dos bases de datos están separadas solo porque el esquema puede ser
-distinto: un commit de `main` con migraciones llega a testing antes que a producción. Esa
-copia tampoco forma parte de este repositorio. Consecuencias:
+distinto: un commit de `main` con migraciones llega a testing antes que a producción. Quien
+dispara esa copia en cada despliegue no forma parte de este repositorio, pero sí el script
+que la hace, [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh):
+vacía la base de datos de testing, restaura en ella un volcado completo de la de producción
+(esquema, datos, valores de las secuencias y la tabla de versiones de goose) y aplica con
+`goose` las migraciones en las que testing va por delante. Producción solo se lee. Se
+ejecuta como root, o como un usuario que pueda parar y arrancar la unidad de testing:
+
+```sh
+TESTING_SERVICE=<unidad de testing> \
+  scripts/copy-prod-to-testing.sh [--yes] <api.env de producción> <api.env de testing>
+```
+
+Lee `DATABASE_URL` de los dos `api.env` (sin ejecutarlos) y necesita `psql`, `pg_dump` y el
+binario de `goose`; pide teclear el nombre de la base de datos de testing
+antes de borrarla (`--yes` lo omite, para automatizarlo); se niega a continuar si las dos
+URLs apuntan a la misma base de datos, si el rol de testing no es el dueño del esquema
+`public` o si producción tiene una migración que el código de testing no conoce; y, si algo
+falla una vez parada la unidad, la deja parada. Consecuencias de la copia:
 
 - **Lo que se haga en testing se pierde en el siguiente despliegue en producción.** Altas,
   ediciones, roles, vínculos de Telegram... Entre dos despliegues testing diverge de
