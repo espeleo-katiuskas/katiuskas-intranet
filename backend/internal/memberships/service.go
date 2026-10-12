@@ -141,6 +141,12 @@ func (s *Service) RecordDue(ctx context.Context, userID int64, year int, transac
 	return s.repo.CreateDue(ctx, CreateDueInput{UserID: userID, Year: year, TransactionID: transactionID})
 }
 
+// LatestDue is the due for the latest year this person has paid, nil if
+// none — see Repository.LatestDueForUser.
+func (s *Service) LatestDue(ctx context.Context, userID int64) (*Due, error) {
+	return s.repo.LatestDueForUser(ctx, userID)
+}
+
 func (s *Service) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
 	return s.repo.ListDuesForUser(ctx, userID)
 }

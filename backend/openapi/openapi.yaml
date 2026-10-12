@@ -2497,19 +2497,32 @@ components:
             belongs to, so this is the only way to tell "activo" apart from
             "baja temporal". Read-only here — set through
             POST /users/{login}/leaves and PATCH/DELETE /leaves/{id}.
-        license_type: { type: string, nullable: true }
-        license_issued_date: { type: string, format: date, nullable: true }
-        license_valid_until:
-          type: string
-          format: date
+        last_due_year:
+          type: integer
           nullable: true
           description: >
-            Together, license_* reflect this person's most recently
-            issued federative license (December 31 of license_issued_date's
-            year), or all null if they've never had one. Read-only here —
-            not settable through PATCH /users/{login}, only through
-            POST /users/{login}/licenses. See GET /users/{login}/licenses
-            for the full history.
+            The latest year this person has paid their cuota (see
+            GET /users/{login}/dues), absent if they've never paid one.
+            Also on MemberListing — who is up to date is open to every
+            member. "A corriente de pago" is last_due_year >= the current year.
+        last_due_paid_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When that latest cuota was paid (its transaction's
+            occurred_at). Admin/board only — not on MemberListing.
+        license_type: { type: string, nullable: true }
+        license_year: { type: integer, nullable: true }
+        license_issued_date: { type: string, format: date, nullable: true }
+          # Together, license_* reflect this person's federative license for
+          # the CURRENT YEAR only, and are all absent without one: an older
+          # license, or one only for next year, says nothing about today.
+          # It always runs to December 31st of license_year, so there's no
+          # end date. Having a license_type is being federated this year.
+          # Read-only here — not settable through PATCH /users/{login},
+          # only through POST /users/{login}/licenses. See
+          # GET /users/{login}/licenses for the full history.
         created_at: { type: string, format: date-time }
 
     MemberListing:
@@ -2521,8 +2534,11 @@ components:
         is left out of this listing entirely — see GET /users). Just
         enough to see who's a socio, since when, to whom, whether
         they're currently on a temporary leave, and which kind of
-        federative license they have (just the type —
-        license_issued_date/license_valid_until stay admin/board-only);
+        federative license they have this year (license_type and
+        license_year — a license for any other year isn't shown;
+        license_issued_date stays admin/board-only), and the latest year they paid
+        their cuota (last_due_year; the date, last_due_paid_at, stays
+        admin/board-only);
         everything else User exposes (DNI, address, contact info,
         roles...) is left out entirely — a plain member has no business
         knowing which non-public roles someone else holds, only their
@@ -2555,9 +2571,17 @@ components:
           type: string
           nullable: true
           description: >
-            Just the type of this person's most recently issued
-            federative license (same value as User.license_type) — the
-            dates it was issued/valid until stay admin/board-only.
+            The type of this person's federative license for the current
+            year (same value as User.license_type), absent without one.
+            The date it was issued stays admin/board-only.
+        license_year:
+          type: integer
+          nullable: true
+          description: The year license_type refers to — always the current one.
+        last_due_year:
+          type: integer
+          nullable: true
+          description: Same as User.last_due_year — the payment date (last_due_paid_at) is not included.
 
     DirectoryEntry:
       type: object

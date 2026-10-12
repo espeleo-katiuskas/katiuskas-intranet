@@ -157,15 +157,27 @@ type User struct {
 	// can tell "baja temporal" apart from "activo" too, not just
 	// admin/board.
 	OnLeave bool `json:"on_leave"`
-	// License* reflect the person's most recently issued federative
-	// license (see licenses.Service.LatestByUser) — not settable through
-	// this package, only through POST /users/{login}/licenses.
-	// LicenseType alone (not LicenseIssuedDate/LicenseValidUntil) is also
-	// exposed on MemberListing (see ForMemberListing).
+	// License* reflect the person's federative license for the *current
+	// year* (see licenses.Service.CurrentByUser) and are all absent
+	// without one — an older license, or one only for next year, says
+	// nothing about today, so it isn't shown. A license always runs to
+	// December 31st of LicenseYear, so there's no end date; LicenseYear
+	// is there so the year the type refers to is explicit. Not settable
+	// through this package, only through POST /users/{login}/licenses.
+	// LicenseType and LicenseYear (not LicenseIssuedDate) are also exposed
+	// on MemberListing (see ForMemberListing): having a LicenseType *is*
+	// being federated this year.
 	LicenseType       *string    `json:"license_type,omitempty"`
+	LicenseYear       *int       `json:"license_year,omitempty"`
 	LicenseIssuedDate *time.Time `json:"license_issued_date,omitempty"`
-	LicenseValidUntil *time.Time `json:"license_valid_until,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
+	// LastDueYear/LastDuePaidAt are the latest year the person has paid
+	// their cuota (see memberships.Service.LatestDue) and the date that
+	// payment was made — both absent if they've never paid one. Only
+	// LastDueYear is also on MemberListing: who is up to date is open to
+	// everyone, the date they paid is not.
+	LastDueYear   *int       `json:"last_due_year,omitempty"`
+	LastDuePaidAt *time.Time `json:"last_due_paid_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 	// TelegramChatID is set once this person links their Telegram account
 	// by sharing their contact with the club's bot and it matches one of
 	// the phones above (see internal/telegrambot) — never settable
@@ -242,7 +254,10 @@ type DirectoryEntry struct {
 // the club — just enough to see who's a socio, since when, to whom,
 // whether they're currently on a temporary leave, and which kind of
 // federative license they have (just the type —
-// LicenseIssuedDate/LicenseValidUntil stay admin/board-only).
+// LicenseIssuedDate stays admin/board-only — only a license for the
+// current year counts, so having one is being federated), and the latest year they've paid their cuota
+// (LastDueYear; the date they paid it, LastDuePaidAt, stays
+// admin/board-only).
 // Deliberately no Roles field here: a plain member has no business
 // knowing which non-public roles (admin, money, material, or any
 // custom label) someone else holds — only their board position, if
@@ -267,6 +282,8 @@ type MemberListing struct {
 	MembershipEndDate   *time.Time  `json:"membership_end_date,omitempty"`
 	OnLeave             bool        `json:"on_leave"`
 	LicenseType         *string     `json:"license_type,omitempty"`
+	LicenseYear         *int        `json:"license_year,omitempty"`
+	LastDueYear         *int        `json:"last_due_year,omitempty"`
 }
 
 // ForMemberListing narrows a full User down to what MemberListing
@@ -283,6 +300,8 @@ func (u User) ForMemberListing() MemberListing {
 		MembershipStartDate: u.MembershipStartDate,
 		MembershipEndDate:   u.MembershipEndDate,
 		LicenseType:         u.LicenseType,
+		LicenseYear:         u.LicenseYear,
+		LastDueYear:         u.LastDueYear,
 		OnLeave:             u.OnLeave,
 	}
 }

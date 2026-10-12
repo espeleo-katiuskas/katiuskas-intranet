@@ -130,26 +130,31 @@ func (s *Service) ListByTransaction(ctx context.Context, transactionID int64) ([
 	return s.repo.ListByTransaction(ctx, transactionID)
 }
 
-// LatestByUser returns the person's most recently issued license, or nil
-// if they've never had one — used to show a "current" license on the
-// people list without a separate per-person round trip for full history.
-func (s *Service) LatestByUser(ctx context.Context, userID int64) (*License, error) {
+// CurrentByUser returns the person's license for the current year, nil if
+// they have none — the newest issued if a correction left several. It
+// looks for the year itself rather than taking the latest issued: a
+// license for next year bought in December is the latest, but it isn't
+// the one that covers today.
+func (s *Service) CurrentByUser(ctx context.Context, userID int64) (*License, error) {
 	list, err := s.repo.ListByUser(ctx, userID)
-	if err != nil || len(list) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	return &list[0], nil
+	year := time.Now().Year()
+	for i := range list {
+		if list[i].Year == year {
+			return &list[i], nil
+		}
+	}
+	return nil, nil
 }
 
-// IsCurrentlyFederated reports whether the person's most recent license
-// is still valid — comparing Year directly against the current one
-// (not ValidUntil's exact instant), so someone doesn't read as expired
-// for the rest of December 31st itself. Used to gate joining a caving
-// or canyoning activity to "socios federados".
+// IsCurrentlyFederated reports whether the person has a license for the
+// current year — compared by Year (not ValidUntil's exact instant), so
+// someone doesn't read as expired for the rest of December 31st itself.
+// Used to gate joining a caving or canyoning activity to "socios
+// federados".
 func (s *Service) IsCurrentlyFederated(ctx context.Context, userID int64) (bool, error) {
-	latest, err := s.LatestByUser(ctx, userID)
-	if err != nil || latest == nil {
-		return false, err
-	}
-	return latest.Year == time.Now().Year(), nil
+	current, err := s.CurrentByUser(ctx, userID)
+	return current != nil, err
 }

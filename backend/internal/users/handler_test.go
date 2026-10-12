@@ -316,9 +316,9 @@ func TestHandlerListIncludesOnLeaveForAPlainMember(t *testing.T) {
 	}
 }
 
-// A plain member's own listing includes MemberListing.LicenseType now
-// too (just the type — not license_issued_date/license_valid_until,
-// which stay admin/board-only).
+// A plain member's own listing includes MemberListing.LicenseType and
+// LicenseYear (the license for the current year — not license_issued_date,
+// which stays admin/board-only).
 func TestHandlerListIncludesLicenseTypeForAPlainMember(t *testing.T) {
 	mux, authn, svc, membershipsService, licensesService, tx := newTestServerWithLicenses(t)
 	ctx := context.Background()
@@ -346,7 +346,10 @@ func TestHandlerListIncludesLicenseTypeForAPlainMember(t *testing.T) {
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"license_type":"A BASICA"`)) {
 		t.Errorf("expected a plain member's listing to include license_type, got %s", rec.Body.String())
 	}
-	if bytes.Contains(rec.Body.Bytes(), []byte("license_issued_date")) {
+	if !bytes.Contains(rec.Body.Bytes(), []byte(fmt.Sprintf(`"license_year":%d`, time.Now().UTC().Year()))) {
+		t.Errorf("expected a plain member's listing to include license_year, got %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("license_issued_date")) || bytes.Contains(rec.Body.Bytes(), []byte("license_valid_until")) {
 		t.Errorf("expected a plain member's listing to still hide license_issued_date, got %s", rec.Body.String())
 	}
 }
@@ -859,5 +862,54 @@ func TestHandlerDeleteNotifiesTelegramWithActorAndDeletedPerson(t *testing.T) {
 	}
 	if !strings.Contains(msg, target.Login) {
 		t.Errorf("expected the notification to name the deleted person %q, got %q", target.Login, msg)
+	}
+}
+
+// Who is up to date with their cuota is open to every member — the
+// latest year paid — while the
+// date it was paid stays admin/board-only.
+func TestHandlerListExposesLastDueYearButNotItsDateToAPlainMember(t *testing.T) {
+	mux, authn, svc, membershipsService, _, tx := newTestServerWithLicenses(t)
+	ctx := context.Background()
+
+	target, err := svc.Create(ctx, users.CreateInput{FirstName: "Pays", LastName: "Dues", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	paid := time.Date(2025, 2, 3, 12, 0, 0, 0, time.UTC)
+	if _, err := membershipsService.RecordDue(ctx, target.ID, 2025, testutil.InsertTransactionAt(t, tx, paid), paid); err != nil {
+		t.Fatalf("record due: %v", err)
+	}
+
+	memberRec := doRequest(mux, http.MethodGet, "/api/v1/users", tokenFor(t, authn, 1, "member"), nil)
+	if memberRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", memberRec.Code, memberRec.Body.String())
+	}
+	if !bytes.Contains(memberRec.Body.Bytes(), []byte(`"last_due_year":2025`)) {
+		t.Errorf("expected a plain member to see last_due_year, got %s", memberRec.Body.String())
+	}
+	if bytes.Contains(memberRec.Body.Bytes(), []byte("last_due_paid_at")) {
+		t.Errorf("expected the payment date to stay hidden from a plain member, got %s", memberRec.Body.String())
+	}
+
+	adminRec := doRequest(mux, http.MethodGet, "/api/v1/users", tokenFor(t, authn, 1, "admin"), nil)
+	var adminList []struct {
+		Login         string     `json:"login"`
+		LastDuePaidAt *time.Time `json:"last_due_paid_at"`
+	}
+	if err := json.Unmarshal(adminRec.Body.Bytes(), &adminList); err != nil {
+		t.Fatalf("decode admin listing: %v", err)
+	}
+	found := false
+	for _, u := range adminList {
+		if u.Login == target.Login {
+			found = true
+			if u.LastDuePaidAt == nil || !u.LastDuePaidAt.Equal(paid) {
+				t.Errorf("expected admin to see last_due_paid_at %v, got %v", paid, u.LastDuePaidAt)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected admin's listing to include %s", target.Login)
 	}
 }

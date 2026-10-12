@@ -454,6 +454,27 @@ func (r *Repository) ListDuesForTransaction(ctx context.Context, transactionID i
 	return list, rows.Err()
 }
 
+// LatestDueForUser returns the person's due for the most recent year
+// they've paid (nil if they've never paid one), with PaidAt filled in
+// like ListDuesForUser — the one row users.Service.enrich needs, without
+// reading every year just to look at the first.
+func (r *Repository) LatestDueForUser(ctx context.Context, userID int64) (*Due, error) {
+	var d Due
+	err := r.pool.QueryRow(ctx, `
+		SELECT d.id, d.user_id, d.year, d.transaction_id, d.created_at, t.occurred_at
+		FROM membership_dues d
+		JOIN transactions t ON t.id = d.transaction_id
+		WHERE d.user_id = $1 ORDER BY d.year DESC LIMIT 1
+	`, userID).Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt, &d.PaidAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT d.id, d.user_id, d.year, d.transaction_id, d.created_at, t.occurred_at

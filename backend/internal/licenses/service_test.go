@@ -248,12 +248,12 @@ func TestServiceDelete(t *testing.T) {
 	if err := svc.Delete(ctx, created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	latest, err := svc.LatestByUser(ctx, person.ID)
+	left, err := svc.ListByUser(ctx, person.ID)
 	if err != nil {
-		t.Fatalf("latest by user: %v", err)
+		t.Fatalf("list by user: %v", err)
 	}
-	if latest != nil {
-		t.Errorf("expected no license left after delete, got %+v", latest)
+	if len(left) != 0 {
+		t.Errorf("expected no license left after delete, got %+v", left)
 	}
 }
 
@@ -287,21 +287,23 @@ func TestServiceListTypesIncludesTheFullCatalog(t *testing.T) {
 	}
 }
 
-func TestServiceLatestByUserReturnsNilWhenNeverLicensed(t *testing.T) {
+func TestServiceCurrentByUserReturnsNilWhenNeverLicensed(t *testing.T) {
 	tx := testutil.NewTx(t)
 	svc := licenses.NewService(licenses.NewRepository(tx), memberships.NewService(memberships.NewRepository(tx)))
 	person := testutil.InsertUser(t, tx, "")
 
-	latest, err := svc.LatestByUser(context.Background(), person.ID)
+	current, err := svc.CurrentByUser(context.Background(), person.ID)
 	if err != nil {
-		t.Fatalf("latest by user: %v", err)
+		t.Fatalf("current by user: %v", err)
 	}
-	if latest != nil {
-		t.Errorf("expected nil, got %+v", latest)
+	if current != nil {
+		t.Errorf("expected nil, got %+v", current)
 	}
 }
 
-func TestServiceLatestByUserReturnsTheMostRecentlyIssued(t *testing.T) {
+// This year's license is the current one, not last year's — and it runs
+// to December 31st.
+func TestServiceCurrentByUserReturnsThisYearsLicense(t *testing.T) {
 	tx := testutil.NewTx(t)
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
@@ -310,26 +312,27 @@ func TestServiceLatestByUserReturnsTheMostRecentlyIssued(t *testing.T) {
 	typeB := testutil.LicenseTypeID(t, tx, "B PLUS")
 	ctx := context.Background()
 
-	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2015-01-01")}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
-		t.Fatalf("create 2025 license: %v", err)
+	year := time.Now().Year()
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: time.Date(year-1, 1, 1, 0, 0, 0, 0, time.UTC), Year: year - 1, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+		t.Fatalf("create last year's license: %v", err)
 	}
-	current, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeB, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	thisYears, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeB, IssuedDate: time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC), Year: year, TransactionID: testutil.InsertTransaction(t, tx)})
 	if err != nil {
-		t.Fatalf("create 2026 license: %v", err)
+		t.Fatalf("create this year's license: %v", err)
 	}
 
-	latest, err := svc.LatestByUser(ctx, person.ID)
+	current, err := svc.CurrentByUser(ctx, person.ID)
 	if err != nil {
-		t.Fatalf("latest by user: %v", err)
+		t.Fatalf("current by user: %v", err)
 	}
-	if latest == nil || latest.ID != current.ID {
-		t.Fatalf("expected the 2026 license, got %+v", latest)
+	if current == nil || current.ID != thisYears.ID {
+		t.Fatalf("expected this year's license, got %+v", current)
 	}
-	if !latest.ValidUntil.Equal(date("2026-12-31")) {
-		t.Errorf("expected valid_until 2026-12-31, got %v", latest.ValidUntil)
+	if want := time.Date(year, 12, 31, 0, 0, 0, 0, time.UTC); !current.ValidUntil.Equal(want) {
+		t.Errorf("expected valid_until %v, got %v", want, current.ValidUntil)
 	}
 }
 
@@ -449,5 +452,40 @@ func TestServiceCreateAcceptsATransactionOnALicensesAccountThatIsNotAlsoForDues(
 		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026,
 		TransactionID: testutil.InsertTransactionOn(t, tx, false, true)}); err != nil {
 		t.Errorf("expected a licenses-only account to be enough, got %v", err)
+	}
+}
+
+// A license bought in December for next year is the latest issued, but
+// the one covering today is still this year's.
+func TestCurrentByUserIgnoresALaterLicenseForNextYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2015-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	year := time.Now().Year()
+	for _, l := range []struct {
+		issued time.Time
+		year   int
+	}{{time.Date(year, 1, 10, 0, 0, 0, 0, time.UTC), year}, {time.Date(year, 1, 11, 0, 0, 0, 0, time.UTC), year + 1}} {
+		if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: l.issued, Year: l.year, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+			t.Fatalf("create license: %v", err)
+		}
+	}
+
+	current, err := svc.CurrentByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("current by user: %v", err)
+	}
+	if current == nil || current.Year != year {
+		t.Errorf("expected this year's license, got %+v", current)
+	}
+	if federated, _ := svc.IsCurrentlyFederated(ctx, person.ID); !federated {
+		t.Error("expected to be federated through this year's license")
 	}
 }

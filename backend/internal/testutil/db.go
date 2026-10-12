@@ -347,14 +347,26 @@ func InsertTransaction(t *testing.T, tx pgx.Tx) int64 {
 // from the flags, so repeated calls in one test reuse them.
 func InsertTransactionOn(t *testing.T, tx pgx.Tx, allowsDues, allowsLicenses bool) int64 {
 	t.Helper()
+	return insertTransaction(t, tx, allowsDues, allowsLicenses, time.Now())
+}
+
+// InsertTransactionAt is InsertTransaction with a chosen occurred_at, for
+// tests that care when a payment happened.
+func InsertTransactionAt(t *testing.T, tx pgx.Tx, occurredAt time.Time) int64 {
+	t.Helper()
+	return insertTransaction(t, tx, true, true, occurredAt)
+}
+
+func insertTransaction(t *testing.T, tx pgx.Tx, allowsDues, allowsLicenses bool, occurredAt time.Time) int64 {
+	t.Helper()
 	flagged := insertTestAccount(t, tx, fmt.Sprintf("test-dues-%t-licenses-%t", allowsDues, allowsLicenses), allowsDues, allowsLicenses)
 	counterpart := insertTestAccount(t, tx, "test-counterpart", false, false)
 
 	var id int64
 	err := tx.QueryRow(context.Background(), `
-		INSERT INTO transactions (description, occurred_at) VALUES ('test transaction', now())
+		INSERT INTO transactions (description, occurred_at) VALUES ('test transaction', $1)
 		RETURNING id
-	`).Scan(&id)
+	`, occurredAt).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert test transaction: %v", err)
 	}

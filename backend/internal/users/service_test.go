@@ -327,10 +327,8 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: startDate}); err != nil {
 		t.Fatalf("start membership: %v", err)
 	}
-	issuedDate, err := time.Parse("2006-01-02", "2026-03-01")
-	if err != nil {
-		t.Fatalf("parse issued date: %v", err)
-	}
+	thisYear := time.Now().Year()
+	issuedDate := time.Date(thisYear, 3, 1, 0, 0, 0, 0, time.UTC)
 	licenseTypeID := testutil.LicenseTypeID(t, tx, "B1 PLUS")
 	if _, err := licensesService.Create(ctx, licenses.CreateInput{
 		UserID: u.ID, LicenseTypeID: licenseTypeID, IssuedDate: issuedDate,
@@ -349,9 +347,89 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	if current.LicenseIssuedDate == nil || !current.LicenseIssuedDate.Equal(issuedDate) {
 		t.Errorf("expected license_issued_date %v, got %v", issuedDate, current.LicenseIssuedDate)
 	}
-	wantValidUntil, _ := time.Parse("2006-01-02", "2026-12-31")
-	if current.LicenseValidUntil == nil || !current.LicenseValidUntil.Equal(wantValidUntil) {
-		t.Errorf("expected license_valid_until %v, got %v", wantValidUntil, current.LicenseValidUntil)
+	if current.LicenseYear == nil || *current.LicenseYear != thisYear {
+		t.Errorf("expected license_year %d, got %v", thisYear, current.LicenseYear)
+	}
+}
+
+// Only the license for the current year is reported: an older one says
+// nothing about today, and one bought in December for next year must not
+// hide the one that covers this year.
+func TestServiceReportsOnlyTheCurrentYearsLicense(t *testing.T) {
+	svc, _, membershipsService, licensesService, tx := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: u.ID, StartDate: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)}); err != nil {
+		t.Fatalf("start membership: %v", err)
+	}
+	thisYear := time.Now().Year()
+	addLicense := func(typeName string, year int, issued time.Time) {
+		t.Helper()
+		if _, err := licensesService.Create(ctx, licenses.CreateInput{
+			UserID: u.ID, LicenseTypeID: testutil.LicenseTypeID(t, tx, typeName), IssuedDate: issued,
+			Year: year, TransactionID: testutil.InsertTransaction(t, tx),
+		}); err != nil {
+			t.Fatalf("create %s license for %d: %v", typeName, year, err)
+		}
+	}
+
+	addLicense("A BASICA", thisYear-1, time.Date(thisYear-1, 2, 1, 0, 0, 0, 0, time.UTC))
+	got, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.LicenseType != nil || got.LicenseYear != nil || got.LicenseIssuedDate != nil {
+		t.Errorf("expected last year's license not to be reported, got %v / %v", got.LicenseType, got.LicenseYear)
+	}
+
+	// Issued later than this year's, but for next year.
+	addLicense("B1 PLUS", thisYear, time.Date(thisYear, 1, 10, 0, 0, 0, 0, time.UTC))
+	addLicense("A BASICA", thisYear+1, time.Date(thisYear, 12, 20, 0, 0, 0, 0, time.UTC))
+	got, err = svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.LicenseType == nil || *got.LicenseType != "B1 PLUS" || got.LicenseYear == nil || *got.LicenseYear != thisYear {
+		t.Errorf("expected this year's B1 PLUS license, got %v / %v", got.LicenseType, got.LicenseYear)
+	}
+}
+
+func TestServiceReportsLatestDue(t *testing.T) {
+	svc, _, membershipsService, _, tx := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	u, err := svc.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if u.LastDueYear != nil || u.LastDuePaidAt != nil {
+		t.Errorf("expected no due on a brand-new person, got %v / %v", u.LastDueYear, u.LastDuePaidAt)
+	}
+
+	paid2025 := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+	paid2026 := time.Date(2026, 1, 20, 12, 0, 0, 0, time.UTC)
+	for _, due := range []struct {
+		year int
+		paid time.Time
+	}{{2026, paid2026}, {2025, paid2025}} { // newest first on purpose: the latest year wins, not the last one recorded
+		if _, err := membershipsService.RecordDue(ctx, u.ID, due.year, testutil.InsertTransactionAt(t, tx, due.paid), due.paid); err != nil {
+			t.Fatalf("record due %d: %v", due.year, err)
+		}
+	}
+
+	current, err := svc.Get(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if current.LastDueYear == nil || *current.LastDueYear != 2026 {
+		t.Errorf("expected last_due_year 2026, got %v", current.LastDueYear)
+	}
+	if current.LastDuePaidAt == nil || !current.LastDuePaidAt.Equal(paid2026) {
+		t.Errorf("expected last_due_paid_at %v, got %v", paid2026, current.LastDuePaidAt)
 	}
 }
 

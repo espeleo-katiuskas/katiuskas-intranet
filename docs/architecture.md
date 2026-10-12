@@ -36,9 +36,12 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
-  número de socio, fecha de alta y de baja, `on_leave`, y `license_type` — solo
-  el tipo de la licencia federativa más reciente, nunca su fecha de obtención ni de
-  validez, que siguen reservadas a admin/board) — y solo de quien es o ha sido socio
+  número de socio, fecha de alta y de baja, `on_leave`, `license_type` y
+  `license_year` — la licencia federativa **del año actual**, si la hay (una de otro año
+  no se muestra; tener `license_type` es estar federado), nunca su fecha de obtención, que
+  sigue reservada a admin/board, ni fecha de fin, porque siempre es el 31 de diciembre —
+  y `last_due_year`, el último año cuya cuota ha pagado; la fecha en que la
+  pagó, `last_due_paid_at`, también queda reservada a admin/board) — y solo de quien es o ha sido socio
   (`membership_start_date` no nulo); a quien nunca ha tenido un alta
   (una cuenta solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este
   listado para member, aunque admin/board lo sigan viendo. `age_category` (youth/child/
@@ -376,9 +379,9 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   licencia — no necesariamente ahora mismo (`memberships.Service.WasMemberOn`), así que
   una licencia de cuando alguien sí era socio se puede dar de alta después de que haya
   causado baja. Intentarlo con una fecha que nunca cayó dentro de ningún periodo de socio
-  devuelve 409 `not_active_member`. `users.Service` incorpora la
-  licencia más reciente de cada persona a `User` (`licenses.Service.LatestByUser`), igual
-  que hace con el periodo de socio más reciente. Rutas bajo `/users/{login}/licenses`:
+  devuelve 409 `not_active_member`. `users.Service` incorpora a `User` la
+  licencia del año actual de cada persona (`licenses.Service.CurrentByUser`; una de otro
+  año no cuenta), mientras que del periodo de socio toma el más reciente. Rutas bajo `/users/{login}/licenses`:
   `GET` abierto a la propia persona o admin/board, `POST` solo admin;
   `PATCH`/`DELETE /licenses/{id}` (por id de licencia, no anidadas bajo el usuario, igual
   que `/leaves/{id}`) también solo admin — `PATCH` no vuelve a exigir alta activa, porque

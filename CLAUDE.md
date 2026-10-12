@@ -283,8 +283,16 @@ licenses, roles) but can only write activities and material — every person-dat
 role-assignment, license, and Junta Directiva write endpoint rejects board even though it
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
-bucketed from — membership number, alta/baja dates, and `license_type` — just the
-type, never `license_issued_date`/`license_valid_until`; no DNI or contact info) and may
+bucketed from — membership number, alta/baja dates, `license_type` and `license_year` —
+the license for the *current year* only (`licenses.Service.CurrentByUser`; an older one, or
+one bought in December for next year, isn't reported, so having a `license_type` is being
+federated; there's no end date because a license always runs to December 31st), never
+`license_issued_date` — and `last_due_year` (the latest year whose cuota they paid; the
+date, `last_due_paid_at`, stays admin/board-only, both computed in `users.Service.enrich`
+via `memberships.Service.LatestDue`); no DNI or contact info). `/members` filters on those
+two for everyone — "A corriente de pago" is `last_due_year` ≥ the current year,
+"Federado" is having a `license_type` — and offers `last_due_year` as an optional "Última cuota pagada"
+column) and may
 only edit their own contact fields (`email`, `phone`, `address`,
 `postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
 anything else in that body gets 403 `restricted_fields` instead of being silently ignored.

@@ -276,6 +276,33 @@ const membershipStatusColumn = {
 // dates admin/board still get).
 const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: true };
 
+// Latest year the person has paid their cuota (users.User.LastDueYear,
+// also on MemberListing — the date it was paid is not public). Hidden
+// by default: it is for checking who is up to date, which the
+// "a corriente de pago" filter below does without a column.
+const lastDueYearColumn = { ...numberColumn('last_due_year', 'Última cuota pagada', (p) => p.last_due_year ?? null), default: false };
+
+// "A corriente de pago" means the cuota of the current year is paid.
+const duesStatusLabels = { upToDate: 'A corriente de pago', behind: 'No a corriente de pago' };
+function duesStatusFor(person) {
+  return (person.last_due_year ?? 0) >= new Date().getFullYear() ? duesStatusLabels.upToDate : duesStatusLabels.behind;
+}
+// "Federado" means having a license_type: GET /users only reports the
+// license for the current year, so there is one exactly when they are.
+const federatedLabels = { yes: 'Federado', no: 'No federado' };
+const duesFilter = {
+  key: 'dues_status',
+  label: 'Cuota anual',
+  options: Object.values(duesStatusLabels),
+  value: duesStatusFor,
+};
+const federatedFilter = {
+  key: 'federated',
+  label: 'Federación',
+  options: Object.values(federatedLabels),
+  value: (p) => (p.license_type ? federatedLabels.yes : federatedLabels.no),
+};
+
 // Row filters narrow which people show, independent of which columns are
 // visible — same show/hide idea as COLUMNS, but for rows. Each groups
 // people into a fixed, known-in-advance set of values (not derived from
@@ -301,6 +328,8 @@ const FULL_FILTERS = [
     options: [...CATEGORY_ORDER],
     value: categoryFor,
   },
+  duesFilter,
+  federatedFilter,
 ];
 
 // GET /users gives a plain member first_name/last_name/gender/
@@ -331,6 +360,8 @@ const MEMBER_FILTERS = [
     options: [...CATEGORY_ORDER],
     value: memberCategoryFor,
   },
+  duesFilter,
+  federatedFilter,
 ];
 
 const FILTERS = isAdmin ? FULL_FILTERS : MEMBER_FILTERS;
@@ -419,6 +450,7 @@ const FULL_COLUMNS = [
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
   },
   { ...licenseTypeColumn },
+  { ...lastDueYearColumn },
 ];
 
 // GET /users only sends a plain member these fields for anyone but
@@ -449,6 +481,7 @@ const MEMBER_COLUMNS = [
     compare: (a, b) => cargoFor(a).localeCompare(cargoFor(b), 'es'),
   },
   { ...licenseTypeColumn },
+  { ...lastDueYearColumn },
 ];
 
 const COLUMNS = isAdmin ? FULL_COLUMNS : MEMBER_COLUMNS;

@@ -128,14 +128,23 @@ func (s *Service) enrich(ctx context.Context, user User) (User, error) {
 		}
 	}
 
-	latestLicense, err := s.licenses.LatestByUser(ctx, user.ID)
+	currentLicense, err := s.licenses.CurrentByUser(ctx, user.ID)
 	if err != nil {
 		return user, err
 	}
-	if latestLicense != nil {
-		user.LicenseType = &latestLicense.Type
-		user.LicenseIssuedDate = &latestLicense.IssuedDate
-		user.LicenseValidUntil = &latestLicense.ValidUntil
+	if currentLicense != nil {
+		user.LicenseType = &currentLicense.Type
+		user.LicenseYear = &currentLicense.Year
+		user.LicenseIssuedDate = &currentLicense.IssuedDate
+	}
+
+	latestDue, err := s.memberships.LatestDue(ctx, user.ID)
+	if err != nil {
+		return user, err
+	}
+	if latestDue != nil {
+		user.LastDueYear = &latestDue.Year
+		user.LastDuePaidAt = latestDue.PaidAt
 	}
 	return user, nil
 }
