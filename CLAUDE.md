@@ -1088,7 +1088,8 @@ same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
 `/accounting` for the sidebar's own highlighting, the same `/activity`→`/activities`/
 `/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
 `GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date, description,
-this account's own entry amount, its running balance after, and per-row Editar/Borrar — and
+this account's own entry amount, its running balance after, and per-row Editar/Borrar (a row
+also opens on a click anywhere but those buttons, or Enter/Space when focused — see below) — and
 a "+ Nueva transacción" panel deliberately narrower than the full `POST /transactions`
 shape: just a date, a description, an amount, and one other account, always producing
 exactly two entries (this account's own, as typed, and the chosen other account's exact
@@ -1099,7 +1100,14 @@ own side of each one) and only ever offers this same simplified two-field edit �
 doesn't have exactly two entries (only possible by calling the API directly; this page
 never creates one that way), editing is refused with an explanation instead of silently
 mis-editing it; "Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete
-buttons use) removes the whole transaction, both entries included. The date input only
+buttons use) removes the whole transaction, both entries included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
+below it listing the transaction's *other* accounts — each name linking to that account's own
+ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
+`GET /transactions/{id}` the first time (the listing only ever carries this account's own
+side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
+has; it works for transactions of more than two entries too, unlike the edit dialog. Clicking
+the row again collapses it, a click on Editar/Borrar or on a link never toggles it, and any
+reload of the list starts every row collapsed. The date input only
 ever collects a plain date, but `occurred_at` is a real timestamp — sent as that date at
 noon UTC (not midnight) specifically so `formatDate`'s own local-timezone getters can never
 roll it back to the previous day for anyone viewing from behind UTC; editing an existing

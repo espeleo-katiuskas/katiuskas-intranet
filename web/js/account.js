@@ -445,9 +445,15 @@ function twoEntryBody(dateValue, description, amount, otherAccountId) {
   };
 }
 
+// A money amount with an explicit "+" when it's positive, so which way it
+// moved reads at a glance (formatCurrency already carries the "-").
+function signedCurrency(amount) {
+  return `${amount > 0 ? '+' : ''}${formatCurrency(amount)}`;
+}
+
 function renderEntryRow(entry) {
   return `
-    <tr>
+    <tr class="entry-row" data-entry-row="${entry.transaction_id}" tabindex="0" aria-expanded="false">
       <td>${formatDate(entry.occurred_at)}</td>
       <td>${escapeHtml(entry.description)}</td>
       <td class="balance-cell">${formatCurrency(entry.amount)}</td>
@@ -471,6 +477,49 @@ async function loadEntries() {
       : '<tr><td colspan="5">Todavía no hay transacciones en esta cuenta.</td></tr>';
   } catch {
     tableBody.innerHTML = '<tr><td colspan="5">No se pudieron cargar las transacciones.</td></tr>';
+  }
+}
+
+// The other accounts this transaction touched, each with what it added to
+// (+) or took out of (−) that account. The ledger listing only ever
+// carries this account's own side of each transaction (see
+// AccountEntry's doc comment), so the full transaction is fetched the
+// first time a row is opened; account names come from allAccounts,
+// which this page already has.
+function renderEntryDetail(transaction) {
+  const others = transaction.entries.filter((e) => e.account_id !== accountId);
+  if (!others.length) return '<p class="entry-detail-title">Esta transacción no afecta a ninguna otra cuenta.</p>';
+  const items = others
+    .map((e) => {
+      const account = allAccounts.find((a) => a.id === e.account_id);
+      const name = account ? accountLabel(account) : `Cuenta #${e.account_id}`;
+      return `<li><a href="/account?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
+    })
+    .join('');
+  return `<div class="entry-detail-title">Otras cuentas de esta transacción (+ entra, − sale)</div><ul class="entry-detail-list">${items}</ul>`;
+}
+
+// Expands (or collapses) the row right below the clicked one. The detail
+// row is created empty first and filled in once the fetch answers, so
+// the click feels instant; closing it while that's still loading just
+// detaches it, and the late answer lands on a node nobody sees.
+async function toggleEntryDetail(row) {
+  const existing = row.nextElementSibling;
+  if (existing?.classList.contains('entry-detail')) {
+    existing.remove();
+    row.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  const detail = document.createElement('tr');
+  detail.className = 'entry-detail';
+  detail.innerHTML = '<td colspan="5">Cargando…</td>';
+  row.after(detail);
+  row.setAttribute('aria-expanded', 'true');
+  try {
+    const transaction = await apiFetch(`/transactions/${row.dataset.entryRow}`);
+    detail.firstElementChild.innerHTML = renderEntryDetail(transaction);
+  } catch {
+    detail.firstElementChild.textContent = 'No se pudo cargar el detalle de esta transacción.';
   }
 }
 
@@ -583,7 +632,22 @@ document.getElementById('entries-table-body').addEventListener('click', async (e
   const deleteButton = event.target.closest('button[data-delete-entry]');
   if (deleteButton) {
     await deleteTransaction(Number(deleteButton.dataset.deleteEntry));
+    return;
   }
+
+  // Anywhere else on a row — never on the buttons above, nor a link
+  // inside an already expanded detail (that's another row entirely).
+  const row = event.target.closest('tr.entry-row');
+  if (row && !event.target.closest('a, button')) await toggleEntryDetail(row);
+});
+
+// The same for the keyboard: a focused row (tabindex="0") opens with
+// Enter or Space, as a button would.
+document.getElementById('entries-table-body').addEventListener('keydown', async (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  if (!event.target.matches('tr.entry-row')) return;
+  event.preventDefault();
+  await toggleEntryDetail(event.target);
 });
 
 const newTransactionDialog = document.getElementById('new-transaction-dialog');
