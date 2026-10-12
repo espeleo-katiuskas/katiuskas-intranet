@@ -28,7 +28,7 @@
   <dialog id="new-transaction-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nueva transacción</h3>
-    <p class="hint">Se crean dos apuntes: uno en esta cuenta por la cantidad indicada, y otro en la cuenta elegida por la cantidad opuesta.</p>
+    <p class="hint">Una línea por cada otra cuenta. Esta cuenta recibe la suma de las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
     <form id="new-transaction-form">
       <div class="field-grid">
         <div class="field">
@@ -39,14 +39,9 @@
           <label for="nt-description">Descripción</label>
           <input id="nt-description" name="description" type="text" required>
         </div>
-        <div class="field">
-          <label for="nt-amount">Cantidad en esta cuenta</label>
-          <input id="nt-amount" name="amount" type="number" step="0.01" required>
-          <p class="hint">Positiva si entra en esta cuenta, negativa si sale.</p>
-        </div>
-        <div class="field">
-          <label for="nt-other-account">Otra cuenta</label>
-          <select id="nt-other-account" name="other_account_id" required></select>
+        <div class="field span-2">
+          <div id="nt-lines" class="entry-lines"></div>
+          <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
         </div>
         <div class="field span-2" data-roles="admin" id="nt-flags-hint">
           <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
@@ -100,13 +95,9 @@
           <label for="et-description">Descripción</label>
           <input id="et-description" type="text" required>
         </div>
-        <div class="field">
-          <label for="et-amount">Cantidad en esta cuenta</label>
-          <input id="et-amount" type="number" step="0.01" required>
-        </div>
-        <div class="field">
-          <label for="et-other-account">Otra cuenta</label>
-          <select id="et-other-account" required></select>
+        <div class="field span-2">
+          <div id="et-lines" class="entry-lines"></div>
+          <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
         </div>
         <div class="field span-2" data-roles="admin" id="et-flags-hint">
           <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>

@@ -1090,24 +1090,32 @@ same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
 `GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date, description,
 this account's own entry amount, its running balance after, and per-row Editar/Borrar (a row
 also opens on a click anywhere but those buttons, or Enter/Space when focused — see below) — and
-a "+ Nueva transacción" panel deliberately narrower than the full `POST /transactions`
-shape: just a date, a description, an amount, and one other account, always producing
-exactly two entries (this account's own, as typed, and the chosen other account's exact
-negative — `twoEntryBody`, shared by creating a new transaction and correcting an existing
-one). A row's own "Editar" fetches that one transaction fresh (`GET /transactions/{id}`,
-never kept in memory alongside the ledger listing, which only ever carries this account's
-own side of each one) and only ever offers this same simplified two-field edit — if it
-doesn't have exactly two entries (only possible by calling the API directly; this page
-never creates one that way), editing is refused with an explanation instead of silently
-mis-editing it; "Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete
-buttons use) removes the whole transaction, both entries included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
+a "+ Nueva transacción" dialog deliberately narrower than the full `POST /transactions`
+shape: a date, a description, and a growing list of *lines* (`setupEntryLines`), each an
+amount "en esta cuenta" plus the "otra cuenta" it comes from or goes to. As soon as the
+last line has both fields a new empty one appears below it; a line with neither is ignored,
+one with only one is an error, and the account picker starts on a "— Elige una cuenta —"
+placeholder precisely so "filled" means something. On save (`entriesBody`, shared by
+creating a new transaction and correcting an existing one) this account gets one entry for
+the *sum* of every line's amount, added up in whole cents so floating point never shows up
+in the result, and each other account gets the exact negative of its own line — so
+the entries sum to zero without whoever is typing having to think about the balancing side.
+Amounts that cancel out (this account would get a zero entry) are refused. A row's own
+"Editar" fetches that one transaction fresh (`GET /transactions/{id}`, never kept in memory
+alongside the ledger listing, which only ever carries this account's own side of each one)
+and turns each of its *other* entries into a line (amount negated back); if it has anything
+other than exactly one entry on this account (only possible by calling the API directly),
+editing is refused with an explanation instead of silently merging them. The dues/licenses
+sections follow every account picked on any line (`sectionsFor`), not just one. "Borrar"
+(`confirm`-gated, the same pattern `member.js`'s own delete buttons use) removes the whole
+transaction, every entry included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
 below it — starting under "Descripción" (an empty first cell), with no line between the two
 and the same background, so it reads as the continuation of the row above rather than as
 another row — listing the transaction's *other* accounts — each name linking to that account's own
 ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
 `GET /transactions/{id}` the first time (the listing only ever carries this account's own
 side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
-has; it works for transactions of more than two entries too, unlike the edit dialog. Clicking
+has; it works for transactions of any number of entries. Clicking
 the row again collapses it, a click on Editar/Borrar or on a link never toggles it, and any
 reload of the list starts every row collapsed. The date input only
 ever collects a plain date, but `occurred_at` is a real timestamp — sent as that date at
@@ -1119,8 +1127,8 @@ is admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registr
 section (`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips
 sent as `POST /users/{login}/dues`/`licenses` once the transaction itself is saved. Each
 section is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues if
-this account or the chosen "otra cuenta" has `allows_dues`, licenses if either has
-`allows_licenses`, re-evaluated whenever that picker changes and whenever a dialog opens,
+this account or any account picked on a line has `allows_dues`, licenses if any has
+`allows_licenses`, re-evaluated whenever a line's picker changes and whenever a dialog opens,
 and a section that gets hidden also drops its pending chips — otherwise one added while a
 qualifying account was selected would still be sent, and only rejected by the API after the
 transaction was already saved. Separately from that, the edit dialog lists what earlier saves
@@ -1138,12 +1146,12 @@ year (`suggestedYear`). The inputs keep following the date until the person type
 which is then left alone until the dialog is next opened (`editedYearInputs`, cleared by
 `reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
 dialog does the same from its own date.
-The "otra cuenta" picker (shared by the create panel and every row's own edit panel) lists
+Each line's "otra cuenta" picker (the same list in the create and edit dialogs) lists
 every other account (indented the same way `accounting.js`'s own pickers are, via
 `flattenAccountTree`) — excluding only this account itself, not its ordinary
 parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
 descendants: there's no circular relationship to guard against here, any two distinct
-accounts can be the two sides of a transaction. The page's own header (name, code, current
+accounts can be on the two sides of a transaction. The page's own header (name, code, current
 balance) and that picker both come from one `GET /accounts` call — that listing already
 carries every account's own balance, so there's no need for a second, single-account fetch
 just for the header (`GET /accounts/{id}` alone never populates it — see **Accounting**

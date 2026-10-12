@@ -350,32 +350,120 @@ function setupDuesAndLicensesSection(prefix) {
 const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt') : null;
 const editTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('et') : null;
 
-// A transaction made here always has exactly two entries: this page's own
-// account and the "otra cuenta" picked. It can record cuotas if either of
-// them is marked allows_dues, and licencias if either is marked
-// allows_licenses (the API refuses it otherwise — see
+// Backs both dialogs' "cantidad + otra cuenta" lines (prefix "nt"/"et", the
+// #nt-lines/#et-lines containers in account.html). A transaction made here
+// has as many lines as the person fills in: each one is an amount for
+// THIS account and the other account that amount comes from or goes to,
+// and as soon as the last line has both, a new empty one appears below it.
+// On save this account gets the sum of every amount, and each other
+// account the opposite of its own line (see entriesBody) — so the
+// entries always sum to zero without anyone having to think about the
+// balancing side.
+//
+// A line with neither field filled is ignored; one with only one is an
+// error, so a half-typed line can't be silently dropped. The account
+// picker starts on "— Elige una cuenta —" rather than on the first
+// account, which is what lets "filled" mean something: otherwise every
+// new line would already count as filled the moment it appeared.
+function setupEntryLines(prefix, onChange) {
+  const container = document.getElementById(`${prefix}-lines`);
+  const noAccount = '<option value="">— Elige una cuenta —</option>';
+
+  // Only the first line carries visible labels; the rest line up under it
+  // and are named for screen readers by aria-label.
+  function lineHtml(isFirst, { amount = '', accountId = null } = {}) {
+    return `
+      <div class="entry-line">
+        <div class="field">
+          ${isFirst ? '<label>Cantidad en esta cuenta</label>' : ''}
+          <input type="number" step="0.01" data-line-amount aria-label="Cantidad en esta cuenta" value="${amount}">
+        </div>
+        <div class="field">
+          ${isFirst ? '<label>Otra cuenta</label>' : ''}
+          <select data-line-account aria-label="Otra cuenta">${noAccount}${otherAccountOptions(accountId)}</select>
+        </div>
+      </div>`;
+  }
+
+  // Replaces every line with the given ones, plus the empty one that
+  // always sits last.
+  function setLines(lines) {
+    container.innerHTML = [...lines, {}].map((line, index) => lineHtml(index === 0, line)).join('');
+  }
+
+  function rows() {
+    return [...container.querySelectorAll('.entry-line')].map((element) => ({
+      amountText: element.querySelector('[data-line-amount]').value.trim(),
+      accountValue: element.querySelector('[data-line-account]').value,
+    }));
+  }
+
+  function selectedAccountIds() {
+    return rows().filter((row) => row.accountValue !== '').map((row) => Number(row.accountValue));
+  }
+
+  // The lines the person filled in, validated — throws with a message for
+  // the submit handler to show if they aren't usable: a half-filled line,
+  // a zero amount (an entry can't be zero), no lines at all, or amounts
+  // that cancel out (this account would be left with a zero entry).
+  function read() {
+    const lines = [];
+    for (const row of rows()) {
+      if (row.amountText === '' && row.accountValue === '') continue;
+      if (row.amountText === '' || row.accountValue === '') {
+        throw new Error('Completa la cantidad y la otra cuenta de cada línea, o déjala vacía.');
+      }
+      const amount = Number(row.amountText);
+      if (!Number.isFinite(amount) || amount === 0) {
+        throw new Error('La cantidad de una línea no puede ser cero.');
+      }
+      lines.push({ amount, accountId: Number(row.accountValue) });
+    }
+    if (!lines.length) throw new Error('Añade al menos una línea, con su cantidad y su otra cuenta.');
+    if (lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0) === 0) {
+      throw new Error('La suma de las cantidades no puede ser cero: esta cuenta se quedaría sin apunte.');
+    }
+    return lines;
+  }
+
+  function onEdited() {
+    const last = rows().at(-1);
+    if (last && last.amountText !== '' && last.accountValue !== '') {
+      container.insertAdjacentHTML('beforeend', lineHtml(false));
+    }
+    onChange();
+  }
+  container.addEventListener('input', onEdited);
+  container.addEventListener('change', onEdited);
+
+  return { setLines, read, selectedAccountIds };
+}
+
+const transactionLines = {
+  nt: setupEntryLines('nt', () => refreshDuesLicensesSections('nt')),
+  et: setupEntryLines('et', () => refreshDuesLicensesSections('et')),
+};
+
+// A transaction can record cuotas if this account or any of the other
+// accounts on its lines is marked allows_dues, and licencias if any is
+// marked allows_licenses (the API refuses it otherwise — see
 // memberships.Service.RecordDue/licenses.Service.Create — so these
 // sections only ever appear when they could actually succeed).
-function sectionsFor(otherAccountId) {
-  const own = allAccounts.find((a) => a.id === accountId);
-  const other = allAccounts.find((a) => a.id === otherAccountId);
+function sectionsFor(otherAccountIds) {
+  const involved = [accountId, ...otherAccountIds].map((id) => allAccounts.find((a) => a.id === id));
   return {
-    dues: Boolean(own?.allows_dues || other?.allows_dues),
-    licenses: Boolean(own?.allows_licenses || other?.allows_licenses),
+    dues: involved.some((account) => account?.allows_dues),
+    licenses: involved.some((account) => account?.allows_licenses),
   };
 }
 
-// Re-evaluates one dialog's sections from its own "otra cuenta" picker as
-// it stands right now. A no-op for anyone who isn't a real admin, who
-// never gets the sections at all.
+// Re-evaluates one dialog's sections from the accounts its lines have
+// picked so far. A no-op for anyone who isn't a real admin, who never
+// gets the sections at all.
 function refreshDuesLicensesSections(prefix) {
   const section = prefix === 'nt' ? newTransactionDuesLicenses : editTransactionDuesLicenses;
   if (!section) return;
-  section.setVisibility(sectionsFor(Number(document.getElementById(`${prefix}-other-account`).value)));
-}
-
-for (const prefix of ['nt', 'et']) {
-  document.getElementById(`${prefix}-other-account`).addEventListener('change', () => refreshDuesLicensesSections(prefix));
+  section.setVisibility(sectionsFor(transactionLines[prefix].selectedAccountIds()));
 }
 
 function renderHeader(account) {
@@ -383,13 +471,13 @@ function renderHeader(account) {
   document.getElementById('account-balance-line').textContent = `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
 }
 
-// The "otra cuenta" picker excludes only this account itself — unlike
+// The "otra cuenta" pickers exclude only this account itself — unlike
 // accounting.js's own "cuenta superior" picker, there's no circular
 // relationship to guard against here: any two distinct accounts can be
 // the two sides of a transaction, including a child of this one or
-// this one's own parent. selectedId is nullable — unset for the "+
-// Nueva transacción" dialog's own picker, set to the transaction's
-// current other account when reopening one for editing.
+// this one's own parent. selectedId is nullable — unset for a new
+// empty line, set to the line's own account when reopening a
+// transaction for editing.
 function otherAccountOptions(selectedId) {
   return flattenAccountTree(allAccounts)
     .filter(({ account }) => account.id !== accountId)
@@ -414,19 +502,23 @@ async function loadAccount() {
       return;
     }
     renderHeader(account);
-    document.getElementById('nt-other-account').innerHTML = otherAccountOptions(null);
+    transactionLines.nt.setLines([]);
     refreshDuesLicensesSections('nt');
   } catch {
     showError('No se pudo cargar la cuenta.');
   }
 }
 
-// The two-entry transaction shape shared by creating a new one and
-// correcting an existing one: this account gets amount as typed, the
-// chosen other account gets its exact negative, so the pair already
-// sums to zero without whoever's filling this in ever having to think
-// about the second side of the entry themselves.
-function twoEntryBody(dateValue, description, amount, otherAccountId) {
+// The transaction shape shared by creating a new one and correcting an
+// existing one. Each line is an amount for THIS account plus the other
+// account it comes from or goes to: this account's own entry is the sum
+// of every amount, each other account's its line's exact negative, so the
+// entries already sum to zero without whoever's filling this in ever
+// having to think about the balancing side. The sum is added up in whole
+// cents — 0.1 + 0.2 in floating point is 0.30000000000000004, not an
+// amount anyone typed.
+function entriesBody(dateValue, description, lines) {
+  const totalCents = lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0);
   return {
     description,
     // occurred_at is a real timestamp server-side, but this form only
@@ -439,8 +531,8 @@ function twoEntryBody(dateValue, description, amount, otherAccountId) {
     // asking for a date, never a time.
     occurred_at: `${dateValue}T12:00:00Z`,
     entries: [
-      { account_id: accountId, amount },
-      { account_id: otherAccountId, amount: -amount },
+      { account_id: accountId, amount: totalCents / 100 },
+      ...lines.map((line) => ({ account_id: line.accountId, amount: -line.amount })),
     ],
   };
 }
@@ -538,30 +630,25 @@ if (editTransactionDuesLicenses) {
 // full transaction, entries included, so this fetches it fresh every
 // time a row's own "Editar" is opened rather than trying to keep a
 // second copy of every transaction in memory. #edit-transaction-dialog
-// is one shared dialog, not one per row — only ever offers the same
-// simplified two-field edit the create dialog uses; a transaction with
-// more than two entries (only possible by calling the API directly —
-// this page never creates one that way) is reported instead of
-// silently mis-edited, and the dialog never opens for it.
+// is one shared dialog, not one per row. Each of the transaction's other
+// entries becomes a line (its amount negated back into "cantidad en esta
+// cuenta"); a transaction with more than one entry on THIS account (only
+// possible by calling the API directly) is reported instead of silently
+// merged into one, and the dialog never opens for it.
 async function openEditTransactionDialog(transactionId) {
   try {
     const transaction = await apiFetch(`/transactions/${transactionId}`);
-    if (transaction.entries.length !== 2) {
-      showError('Esta transacción tiene más de dos apuntes: corrígela por la API — esta página solo edita transacciones simples de dos apuntes.');
-      return;
-    }
-    const ownEntry = transaction.entries.find((e) => e.account_id === accountId);
-    const otherEntry = transaction.entries.find((e) => e.account_id !== accountId);
-    if (!ownEntry || !otherEntry) {
-      showError('No se han podido determinar los apuntes de esta transacción.');
+    const ownEntries = transaction.entries.filter((e) => e.account_id === accountId);
+    const otherEntries = transaction.entries.filter((e) => e.account_id !== accountId);
+    if (ownEntries.length !== 1 || !otherEntries.length) {
+      showError('Esta transacción tiene más de un apunte en esta cuenta, o ninguno: corrígela por la API — aquí cada línea es una otra cuenta.');
       return;
     }
     editingTransactionId = transactionId;
     document.getElementById('et-date').value = transaction.occurred_at.slice(0, 10);
     editTransactionDuesLicenses?.syncYears();
     document.getElementById('et-description').value = transaction.description;
-    document.getElementById('et-amount').value = ownEntry.amount;
-    document.getElementById('et-other-account').innerHTML = otherAccountOptions(otherEntry.account_id);
+    transactionLines.et.setLines(otherEntries.map((e) => ({ amount: -e.amount, accountId: e.account_id })));
     refreshDuesLicensesSections('et');
     // GET /transactions/{id} also says which cuotas and licencias this
     // transaction already paid for, but only to admin/board — read-only
@@ -578,15 +665,14 @@ editTransactionForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const dateValue = document.getElementById('et-date').value;
   const description = document.getElementById('et-description').value.trim();
-  const amount = Number(document.getElementById('et-amount').value);
-  const otherAccountId = Number(document.getElementById('et-other-account').value);
 
   const submitButton = editTransactionForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
+    const lines = transactionLines.et.read();
     await apiFetch(`/transactions/${editingTransactionId}`, {
       method: 'PATCH',
-      body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)),
+      body: JSON.stringify(entriesBody(dateValue, description, lines)),
     });
     // editingTransactionId itself never changes on a PATCH, so any
     // dues/licenses added here are tied to the same transaction the
@@ -672,27 +758,26 @@ function todayAsInputValue() {
 document.getElementById('toggle-new-transaction').addEventListener('click', () => {
   document.getElementById('nt-date').value = todayAsInputValue();
   newTransactionDuesLicenses?.syncYears();
+  transactionLines.nt.setLines([]);
   refreshDuesLicensesSections('nt');
   openModal(newTransactionDialog);
 });
 
-// Only four fields (date, description, amount, other account) drive the
-// transaction itself — always exactly two entries: see twoEntryBody.
-// Any pending dues/licenses (admin-only, see
+// The date, the description and the lines (see setupEntryLines) drive the
+// transaction itself — this account's entry plus one per line: see
+// entriesBody. Any pending dues/licenses (admin-only, see
 // setupDuesAndLicensesSection) are sent afterward, once the new
 // transaction's own id is known.
 newTransactionForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const formData = new FormData(newTransactionForm);
-  const amount = Number(formData.get('amount'));
-  const otherAccountId = Number(formData.get('other_account_id'));
-  const dateValue = formData.get('occurred_at');
-  const description = formData.get('description').toString().trim();
+  const dateValue = document.getElementById('nt-date').value;
+  const description = document.getElementById('nt-description').value.trim();
 
   const submitButton = newTransactionForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    const transaction = await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(twoEntryBody(dateValue, description, amount, otherAccountId)) });
+    const lines = transactionLines.nt.read();
+    const transaction = await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(entriesBody(dateValue, description, lines)) });
     const pendingErrors = newTransactionDuesLicenses
       ? await newTransactionDuesLicenses.submitPending(transaction.id, dateValue)
       : [];

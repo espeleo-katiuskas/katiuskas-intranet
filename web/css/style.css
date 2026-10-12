@@ -891,6 +891,23 @@ button.link-button {
   font-weight: 400;
 }
 
+/* One "cantidad + otra cuenta" line of a transaction's dialog
+   (account.js's setupEntryLines): a transaction can have as many as the
+   person fills in. The amount is the narrow column, the account the wide
+   one. */
+.entry-line {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 640px) {
+  .entry-line {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* A checkbox next to its own text. Without this, .field input's
    width: 100% below makes the box stretch to the field's full width and
    sit centered above the label instead. */
