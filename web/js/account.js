@@ -512,14 +512,17 @@ async function toggleEntryDetail(row) {
   }
   const detail = document.createElement('tr');
   detail.className = 'entry-detail';
-  detail.innerHTML = '<td colspan="5">Cargando…</td>';
+  // An empty first cell, so the detail lines up under "Descripción" rather
+  // than starting at the row's left edge, where it would read as another
+  // row of the table instead of the continuation of the one above it.
+  detail.innerHTML = '<td></td><td colspan="4">Cargando…</td>';
   row.after(detail);
   row.setAttribute('aria-expanded', 'true');
   try {
     const transaction = await apiFetch(`/transactions/${row.dataset.entryRow}`);
-    detail.firstElementChild.innerHTML = renderEntryDetail(transaction);
+    detail.lastElementChild.innerHTML = renderEntryDetail(transaction);
   } catch {
-    detail.firstElementChild.textContent = 'No se pudo cargar el detalle de esta transacción.';
+    detail.lastElementChild.textContent = 'No se pudo cargar el detalle de esta transacción.';
   }
 }
 

@@ -1101,7 +1101,9 @@ doesn't have exactly two entries (only possible by calling the API directly; thi
 never creates one that way), editing is refused with an explanation instead of silently
 mis-editing it; "Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete
 buttons use) removes the whole transaction, both entries included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
-below it listing the transaction's *other* accounts — each name linking to that account's own
+below it — starting under "Descripción" (an empty first cell), with no line between the two
+and the same background, so it reads as the continuation of the row above rather than as
+another row — listing the transaction's *other* accounts — each name linking to that account's own
 ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
 `GET /transactions/{id}` the first time (the listing only ever carries this account's own
 side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already

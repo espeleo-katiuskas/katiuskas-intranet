@@ -419,9 +419,16 @@ th.sortable:hover {
   background: var(--surface-muted);
 }
 
+/* An expanded row and its detail read as one block: same background, and
+   no line between them (only the one below the detail remains). */
+.entry-row[aria-expanded="true"] td {
+  background: var(--surface-muted);
+  border-bottom: none;
+}
+
 .entry-detail td {
   background: var(--surface-muted);
-  padding-top: 6px;
+  padding-top: 0;
   padding-bottom: 12px;
 }
 
