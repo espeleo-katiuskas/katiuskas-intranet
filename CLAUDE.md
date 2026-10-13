@@ -150,15 +150,14 @@ to get the whole page, not just the current viewport).
 
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
 panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
-`roles`, `memberships`, `licenses`, `board`, `activities`, `inventory`, `tokens`,
-`accounting`), each
-split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain
-layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
-owns and registers its own routes via `RegisterRoutes(mux)`, wired together in
-`cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**, see below) is the
-one exception to this shape: it serves a read-only document tree from disk
-(`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go` works
-directly against the filesystem, resolving and
+`roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
+`inventory`, `tokens`, `accounting`), each split into `model.go` / `repository.go` (pgx) /
+`service.go` / `handler.go`. The domain layer never imports `net/http`; only `handler.go`
+knows HTTP exists. Each resource package owns and registers its own routes via
+`RegisterRoutes(mux)`, wired together in `cmd/api/main.go`. **`internal/library`** (and
+**`internal/userfiles`**, see below) is the one exception to this shape: it serves a
+read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
+`repository.go` — `service.go` works directly against the filesystem, resolving and
 validating every caller-given path against root before touching disk (`Service.resolve`),
 since there's no database constraint to lean on for that instead.
 
@@ -203,8 +202,7 @@ still the OWASP-recommended *minimum* for a session identifier, astronomically o
 reach for brute-forcing in that window given `POST /auth/magic-link/consume` has no
 rate limit of its own (unlike the login code below, capped by a per-row attempt
 counter) — token entropy alone is what carries this endpoint's security. A magic-link
-email also
-carries a 6-digit login code — hashed alongside the link's token in the same
+email also carries a 6-digit login code — hashed alongside the link's token in the same
 `magic_link_tokens` row, so consuming either one consumes both — for signing in on a
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`
 identifies the caller by email+phone (the code alone is too short to look someone up by)
@@ -251,7 +249,10 @@ admin role, full stop. Losing your own admin access has to be something another 
 does to you, not a mistake you make removing it yourself — a stray click on your own row's
 "×" on `/member` (`web/js/member.js`'s own `renderRoleBadges`, which doesn't even render
 that button for your own admin badge, though the API enforces this regardless of what any
-particular client does) is exactly the failure mode this exists to rule out.
+particular client does) is exactly the failure mode this exists to rule out. Deleting a
+person (`DELETE /users/{login}`, admin-only) has the same last-admin guard:
+`users.Service.Delete` returns `roles.ErrLastAdmin` (409 `last_admin`) for the only
+remaining admin.
 
 **Login is the only external identifier for a person**: `users.login` (`text UNIQUE NOT
 NULL`, migration `00002_users.sql`) is generated automatically at creation — first
@@ -287,24 +288,27 @@ phone-based account resolution (`users.Repository.FindByPhoneNumber`) for phone.
 
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,
-licenses, roles) but can only write activities and material — every person-data,
+licenses, roles) but can only write activities (and the holiday calendar) and inventory
+(creating items, lending/returning material) — every person-data,
 role-assignment, license, and Junta Directiva write endpoint rejects board even though it
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
-bucketed from — membership number, alta/baja dates, `license_type` and `license_year` —
+bucketed from — membership number, alta/baja dates, `on_leave` (currently on a temporary
+leave), `license_type` and `license_year` —
 the license for the *current year* only (`licenses.Service.CurrentByUser`; an older one,
 or one bought in December for next year, isn't reported, so having a `license_type` is
 being federated; there's no end date because a license always runs to December 31st),
 never `license_issued_date` — and `last_due_year` (the latest year whose cuota they paid;
 the date, `last_due_paid_at`, stays admin/board-only, both computed in
 `users.Service.enrich` via `memberships.Service.LatestDue`); no DNI or contact info).
-`/members` filters on those two for everyone — "A corriente de pago" is `last_due_year` ≥
-the current year, "Federado" is having a `license_type` — and offers `last_due_year` as an
-optional "Última cuota" column, and a line between the filters and the table reading "N
-personas en esta vista" — `setPeopleCount`: the rows the current filters leave, not
-everyone on file) and may only edit their own contact fields (`email`, `phone`, `address`,
-`postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
-anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
+`/members` (`web/js/members.js`) filters on those two for everyone — "A corriente de pago"
+is `last_due_year` ≥ the current year, "Federado" is having a `license_type` — offers
+`last_due_year` as an optional "Última cuota" column, and shows a line between the filters
+and the table reading "N personas en esta vista" (`setPeopleCount`: the rows the current
+filters leave, not everyone on file). A member may also edit their own contact fields
+(`email`, `phone`, `address`, `postal_code`, `city`, `province`, `emergency_contact`) via
+`PATCH /users/{login}`; anything else in that body gets 403 `restricted_fields` instead of
+being silently ignored.
 `MemberListing` deliberately has no `roles` field at all: a plain member has no business
 knowing which non-public roles (`admin`, `money`, `material`, or any custom label an admin
 created) someone else holds — that's exactly the kind of internal, non-public information
@@ -321,6 +325,10 @@ though admin/board still see them (`Handler.list`). That restriction is applied 
 in Go after the fact, so a non-socio row is never even fetched from Postgres. `GET /users`
 is deliberately unpaginated — the club's membership grows by roughly 15 people a year,
 nowhere near the scale where returning everyone on file in one response is a real cost.
+`GET /users/directory` (any baseline role) is the name-only alternative: `login`,
+`first_name` and `last_name` of everyone on file, with no socio filter — what the
+activity, inventory and accounting pickers use to choose a person without seeing personal
+data.
 The role catalog itself (`GET /roles`) is open to any baseline role, read-only regardless
 of who's asking, and lists only the catalog's names/descriptions — never who holds which —
 since that much is just organizational labels; assigning/revoking one is still admin-only.
@@ -349,19 +357,18 @@ entry (title + a plain-text/Markdown `description`) or an uploaded file (title +
 itself, typically a photo or PDF), discriminated by `activity_resources.type` and kept
 consistent with a set of `CHECK` constraints (migration `00010_activity_resources.sql`),
 the same "description only for text, file fields only for file" shape `item_movements`
-already uses for its own type-specific fields. Metadata lives in Postgres
-(`Repository`); a file resource's bytes live on disk instead
-(`Storage`, `config.ActivityResourcesRoot` — a *named Docker volume*, not a host bind
-mount like `library`/`userfiles`, since files arrive exclusively through
-`POST /activities/{id}/resources` rather than being dropped in by hand), keyed by the
-row's own id rather than any caller-given path, so unlike `library`/`userfiles` there's no
-directory tree to browse and no path-escape risk to guard against. A file is created once
-and never modified afterward — there's no way to replace its bytes (delete the resource
-and add another), `Storage.Save` creates it with `O_EXCL` so it refuses (`os.ErrExist`) to
-touch one that already exists, and `Delete` is a plain unlink. That invariant is what lets
-another directory tree share the same files by hard link (see `docs/environments.md`)
-without a write in one changing the other: any future code that rewrites a stored file in
-place would silently break it. That same `POST` is
+already uses for its own type-specific fields. Metadata lives in Postgres (`Repository`);
+a file resource's bytes live on disk instead (`Storage`, `config.ActivityResourcesRoot` —
+a *named Docker volume*, not a host bind mount like `library`/`userfiles`, since files
+arrive exclusively through `POST /activities/{id}/resources` rather than being dropped in
+by hand), keyed by the row's own id rather than any caller-given path, so unlike
+`library`/`userfiles` there's no directory tree to browse and no path-escape risk to guard
+against. A file is created once and never modified afterward — there's no way to replace
+its bytes (delete the resource and add another), `Storage.Save` creates it with `O_EXCL`
+so it refuses (`os.ErrExist`) to touch one that already exists, and `Delete` is a plain
+unlink. That invariant is what lets another directory tree share the same files by hard
+link (see `docs/environments.md`) without a write in one changing the other: any future
+code that rewrites a stored file in place would silently break it. That same `POST` is
 always `multipart/form-data`, even for a text resource (just one with no file part), since
 a file resource has to carry an actual upload — capped at 25 MiB
 (`activityresources.maxUploadSize`). Every resource has a `position`, a dense `1..N` per
@@ -369,25 +376,28 @@ activity that a fresh one is appended after; `PUT /activities/{id}/resources/ord
 replaces the whole order at once from a caller-given list of every resource id (rejecting
 anything short of an exact match, `reorder_mismatch`, rather than reconciling a partial or
 stale one) instead of a move-this-one-item endpoint that would have to shuffle the rest
-itself. Reading (`GET`) is open to any baseline role, same as the rest of an activity's own
-data; contributing (`POST`, the reorder `PUT`) requires admin/board, the activity's own
-organizer, or anyone signed up in `activity_participants` (`Handler.requireContributor`) —
-note the organizer isn't automatically a participant row unless they happened to list
-themselves when creating the activity (see `activities.Repository.Create`), so this checks
-`Activity.LeaderID` *and* `activities.Service.IsParticipant` separately, not just the
-latter; editing or deleting a specific resource (`PATCH`/`DELETE`) is narrower still —
-only that resource's own author, or admin/board, even for someone else who took part in
-the same activity.
+itself. Reading (`GET`) is open to any baseline role, same as the rest of an activity's
+own data; contributing (`POST`, the reorder `PUT`) requires admin/board, the activity's
+own organizer, or anyone signed up in `activity_participants`
+(`Handler.requireContributor`) — note the organizer isn't automatically a participant row
+unless they happened to list themselves when creating the activity (see
+`activities.Repository.Create`), so this checks `Activity.LeaderID` *and*
+`activities.Service.IsParticipant` separately, not just the latter; editing or deleting a
+specific resource (`PATCH`/`DELETE`) is narrower still — only that resource's own author,
+or admin/board, even for someone else who took part in the same activity. A file's bytes
+come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
+`library`/`userfiles` file routes takes only the bearer header (no cookie).
 
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
 than a Go enum, so the list can grow with an `INSERT` instead of a deploy. Its `is_other`
 escape-hatch entry ("Otra") requires an `other_detail` string saying which license it
 actually is; every other entry forbids one (shared validation:
-`licenses.normalizeOtherDetail`, used by both `Create` and `Update`).
-`PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license without
-re-checking membership status the way `POST` does — that gate is for assigning a *new*
-license, not fixing a typo on one someone already has. `POST`'s own gate
+`licenses.normalizeOtherDetail`, used by both `Create` and `Update`). The catalog itself
+is `GET /license-types` (admin-only, like `POST`: it only feeds the "assign a license"
+form). `PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license
+without re-checking membership status the way `POST` does — that gate is for assigning a
+*new* license, not fixing a typo on one someone already has. `POST`'s own gate
 (`memberships.Repository.WasMemberDuringYear`) checks that the person was a socio at some
 point of the license's own `Year` — not "right now", and not on `issued_date` either:
 assigning, after the fact, a license for a year someone genuinely belonged to the club
@@ -434,7 +444,7 @@ flow instead (`HasAnyMembership` is already true for them, so nothing extra happ
 Before any of that, `RecordDue` checks the transaction itself — it has to exist
 (`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
 (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`;
-`Repository. TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a
+`Repository.TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a
 rejected due can never leave a membership period started as a side effect.
 `GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split, and joins
 each due's transaction to add `paid_at` (the payment's own `occurred_at` — not
@@ -493,22 +503,24 @@ field back to open.
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host
 — see Commands above — not the database. `GET /library?path=...` lists a directory
 (subdirectories first, then files, both alphabetical; dotfiles never listed);
-`GET /library/file?path=...` streams a file's raw bytes, inline by default or as an
-attachment with `?download=1`, with HTTP Range support via `http.ServeContent`. Both are
-open to any baseline role and read-only — nothing here lets a caller upload, rename, or
-delete anything.
+`GET /library/file/{path...}` streams a file's raw bytes (the path is the rest of the URL,
+slashes included — e.g. `/library/file/actas/2026-02-01.pdf` — not a `?path=` query
+parameter), inline by default or as an attachment with `?download=1`, with HTTP Range
+support via `http.ServeContent`. Both are open to any baseline role and read-only —
+nothing here lets a caller upload, rename, or delete anything.
 
-**Per-person files** (`internal/userfiles`): the same read-only, filesystem-backed model as
-the document library, one subdirectory per login instead of one shared tree — a scanned
+**Per-person files** (`internal/userfiles`): the same read-only, filesystem-backed model
+as the document library, one subdirectory per login instead of one shared tree — a scanned
 DNI, a signed waiver, medical paperwork. `GET /users/{login}/files[?path=...]` and
-`GET /users/{login}/files/file?path=...` mirror `/library`'s own listing/streaming shape
-exactly (including `?download=1` and Range support), but are *not* open to every baseline
-role: only that person themselves, or admin/board, may see them (403 otherwise) — checked
-inline in the handler (`Handler.resolveAccess`), the same self-or-privileged pattern
-`memberships.Handler.listByUser`/`inventory.Handler.listMovementsByUser` use, since who may
-see a specific person's files isn't a fixed role list the way `/library`'s is. A login with
-no subdirectory of its own yet — most people, until someone drops a file in for them — gets
-an empty listing at their own root rather than a 404.
+`GET /users/{login}/files/file/{path...}` mirror `/library`'s own listing/streaming shape
+exactly (including the path-in-URL file route, `?download=1` and Range support), but are
+*not* open to every baseline role: only that person themselves, or admin/board, may see
+them (403 otherwise) — checked inline in the handler (`Handler.resolveAccess`), the same
+self-or-privileged pattern
+`memberships.Handler.listByUser`/`inventory.Handler.listMovementsByUser` use, since who
+may see a specific person's files isn't a fixed role list the way `/library`'s is. A login
+with no subdirectory of its own yet — most people, until someone drops a file in for them
+— gets an empty listing at their own root rather than a 404.
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API
 (https://core.telegram.org/bots/api) — plain `net/http`/`encoding/json`, no SDK
@@ -526,9 +538,11 @@ existing magic-link/login code by Telegram DM too (see `authapi.Handler.
 notifyMagicLinkViaTelegram` below) is as far as this goes — a dedicated Telegram-native
 login flow that skips email entirely is still a separate, larger piece of future work,
 not built here. Six things currently talk to Telegram, all independent of each other.
-Five are fire-and-forget (their own goroutine, a bounded timeout, a background context
-detached from the request/statement that triggered them — so a slow or unreachable
-Telegram API never adds latency anywhere); startup is the one exception, described below:
+One of them (the bot) also receives; the rest only send. Their sends are fire-and-forget
+(their own goroutine, a bounded timeout, a background context detached from the
+request/statement that triggered them — so a slow or unreachable Telegram API never adds
+latency anywhere), with two deliberate exceptions described below: the startup message and
+the send of a bot-flow magic-link DM.
 - `LogHandler` wraps the root `slog.Handler` in `cmd/api/main.go` and forwards every
   record at `slog.LevelError` or above (panics, JSON-encode failures — see
   `httpapi.RequestLogger`/`middleware.go`) in addition to (never instead of) logging it
@@ -622,153 +636,156 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   code in it, especially, might still be typed into the login page from a different device
   well after it arrives.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
-  every resource package's own mutation notifications are built from. `NotifyAsync` is the
-  fire-and-forget goroutine/timeout dance every Telegram send in this app already used,
-  pulled out once so nobody duplicates it. `DiffFields(before, after, fields...)` reflects
-  over a *named* subset of a struct's fields — never every field on it, since a
-  derived/computed one (a computed role list, a membership date recalculated elsewhere)
-  must never show up as a spurious "change" just because it was recomputed at a slightly
-  different moment than "before" — comparing the pair and returning one "field: old → new"
-  line per field that actually differs (a nil pointer formats as `(vacío)`, a date as a
-  plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and one
-  pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely
-  different values, but both display as `(vacío)`, so a field that merely swapped between
-  those two produces no line: the point of the message is what a human reading it would
-  actually notice changed, not every byte that did. Every resource package with a mutating
-  route (`users`, `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`,
-  `board`, `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its
-  own `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not gated
+  every resource package's own mutation notifications are built from. `NotifyAsync` (a
+  no-op for a `nil` notifier, i.e. Telegram not configured) is the fire-and-forget
+  goroutine/timeout dance every Telegram send in this app already used, pulled out once so
+  nobody duplicates it. `DiffFields(before, after, fields...)` reflects over a *named*
+  subset of a struct's fields — never every field on it, since a derived/computed one (a
+  computed role list, a membership date recalculated elsewhere) must never show up as a
+  spurious "change" just because it was recomputed at a slightly different moment than
+  "before" — comparing the pair and returning one "field: old → new" line per field that
+  actually differs (a nil pointer formats as `(vacío)`, a date as a plain `YYYY-MM-DD`),
+  *and* renders differently once formatted — a nil pointer and one pointing at a zero
+  value (an empty string, a zero `time.Time`) are still genuinely different values, but
+  both display as `(vacío)`, so a field that merely swapped between those two produces no
+  line: the point of the message is what a human reading it would actually notice changed,
+  not every byte that did. Every resource package with a mutating route (`users`, `roles`,
+  `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
+  `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its own
+  `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not gated
   behind a "don't spam every single request" check the way the predecessor of this whole
   thing needed, since one message per meaningful action isn't noisy the way one per every
   mutating request (a routine token touch included) was — and sends its own specific
   message once a create/update/delete actually succeeds: who did it (`actorLogin`,
   resolved from the session's own id through that package's existing `UserLookup`, falling
   back to `user#<id>` rather than failing the whole request if the lookup itself errors)
-  and what changed. An `update` handler fetches the record via `Service.Get` *before*
-  applying the patch and diffs it against the result using `auditableFields` — a
-  package-level var whose names exactly match that endpoint's own `UpdateInput` — so
-  nothing that endpoint can't actually touch can appear as a spurious change; an edit
-  whose diff comes back empty (every field resent unchanged) sends nothing, rather than an
-  "edited" message with nothing in it. A `delete` handler fetches the target the same way,
-  purely so it can still be named once it's gone. This whole mechanism replaced an earlier
+  and what changed. A diffing `update` handler fetches the record via `Service.Get`
+  *before* applying the patch and diffs it against the result using a package-level list
+  of field names (`auditableFields`; `accounting` has `accountAuditableFields` and
+  `transactionAuditableFields`; `memberships` names its fields inline) that exactly
+  matches that endpoint's own `UpdateInput` — so nothing that endpoint can't actually
+  touch can appear as a spurious change; `roles` and `inventory` have no diffed update at
+  all, and `tokens` reports an expiry change by hand. An edit whose diff comes back empty
+  (every field resent unchanged) sends nothing, rather than an "edited" message with
+  nothing in it. A `delete` handler fetches the target the same way, purely so it can
+  still be named once it's gone. This whole mechanism replaced an earlier
   `httpapi.NotifyMutatingCalls` middleware that sent a blanket "[API] `<method>` `<path>`
   -> `<status>`" for literally every write regardless of what it actually changed — every
-  route it covered now has a strictly more informative replacement, except `authapi`'s own
-  session-lifecycle routes (magic-link request/consume, logout, impersonate/exit), which
-  were never business-data mutations and already have their own dedicated notifications
-  elsewhere in this list.
-- `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather
-  than only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook —
-  no public HTTPS endpoint to expose or coordinate with a reverse proxy, works the same
-  behind NAT or with no domain at all) in a loop started with `go bot.Run(ctx)` from
+  business-data route it covered now has a strictly more informative replacement.
+  `authapi`'s session-lifecycle routes (magic-link request, logout, impersonate/exit) were
+  never business-data mutations and send nothing now; only a successful sign-in
+  (`notifyLogin` above) and the start of an impersonation (`tokens`: "🎭 ... ha impersonado
+  a ...") are reported.
+- `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather than
+  only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook — no public
+  HTTPS endpoint to expose or coordinate with a reverse proxy, works the same behind NAT
+  or with no domain at all) in a loop started with `go bot.Run(ctx)` from
   `cmd/api/main.go`, gated on the same `telegramConfigured` flag (both
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` set) as `telegramClient` above — every linking
-  attempt has to reach the log channel, so a bot with no channel configured can't do its
-  job anyway. A failed `GetUpdates` call (Telegram's own long-poll connection dropping or
-  timing out for a moment — near-daily in practice, almost always resolved by the very
-  next attempt) is logged at `WARN`, below `telegram.LogHandler`'s own forwarding
-  threshold (`slog.LevelError`, see below) — only once failures actually repeat
-  (`getUpdatesFailureLogThreshold` consecutive ones) does `Run` escalate to `ERROR`, and
-  only for that one call, not for every one of however many more follow — a longer real
-  outage doesn't re-notify the log channel on every 5-second retry for as long as it
-  lasts. `users.Repository.UserIDForTelegramChatID` tells apart a chat this
-  doesn't recognize yet — every other message from one gets a greeting plus a "share your
-  contact" keyboard button (`Client.SendMessageRequestingContact`, sent with
-  `is_persistent: true` so the client shows that keyboard open by default instead of
-  collapsed behind its own keyboard-icon toggle; the greeting text also spells out where
-  that button is and how to reveal it if a client doesn't honor the flag, since nothing
-  about a Telegram custom keyboard is otherwise self-explanatory to someone who's never
-  seen one) — from one it does:
-  an already-linked chat no longer gets the contact-share menu again, but a message from
-  one doesn't *instantly* trigger a sign-in link either — that was tried and reverted as
-  a security regression: it reduced logging in via Telegram to merely having the phone/
-  session (whoever's holding an already-open Telegram app), dropping the "must know
-  *both* phone and email" requirement the web flow enforces. Being linked doesn't imply
-  being eligible to sign in at all, either — `canUseTelegramLogin` gates both this and the
-  link confirmation below on the same baseline-role check every route in this API
-  enforces (`auth.HasBaselineRole`, in practice an active socio via the automatic
-  "member" role, or admin/board) plus having both an email and a phone on file: the web
-  magic-link request already requires both as input just to find a match
-  (`FindActiveByEmailAndPhone`), but a Telegram-linked account is resolved straight from
-  its chat id, so nothing there guarantees either is actually on file the way
-  `issueMagicLink`'s own tolerance for a missing email (see below) might suggest. Someone
-  who fails this check never gets asked for their email — every message from them instead
-  gets `unauthorizedMessage` ("este bot está disponible únicamente para usuarios
-  autorizados. Si crees que deberías tener acceso, ponte en contacto con el club para
-  comprobar tu situación"). Otherwise, `Bot.handleRecognizedChat` asks a first factor be
-  proven a second time: it replies with `emailPrompt` ("si quieres entrar en la intranet,
-  envíame tu dirección de correo electrónico") to any message that isn't the account's
-  own registered email (`emailMatchesUser`, checked case-insensitively against the same
-  space-separated multi-email convention `FindActiveByEmailAndPhone` uses) — but
-  `emailAttemptReply` gives a specific, actionable reply for *why* a given message didn't
-  match instead of that same generic prompt every time: `nonTextEmailReply` for an
-  attachment instead of text (an empty `Text` always means something that isn't text —
-  Telegram never sends a real text message with an empty body), `onlyEmailReply` for more
-  than one word, `notAnEmailReplyFormat` for a single word with no "@" at all (repeating
-  the word back), and `unknownEmailReplyFormat` for something shaped like an email that
-  just isn't one of this account's own (repeating the address back, plus a "contact the
-  club if you think this is wrong" suggestion) — only a genuine single-word match skips
-  all of these and proceeds. Once it matches, it
-  calls `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
-  private chat — to scrub that email out of the chat history for whoever might get hold of
-  the phone/session afterward (best-effort: a failed delete, e.g. an old message past
-  Telegram's 48h window, still lets `magicLinkIssuer.IssueMagicLinkForTelegramUser` go
-  through), then finally issues the fresh sign-in link exactly as if they'd requested one
-  from the web (see `authapi.Handler` below).
-  `magicLinkIssuer` is a local interface (`*authapi.Handler` satisfies it structurally,
-  the same pattern as `botClient`) wired in from `cmd/api/main.go`, which is also where
-  `authHandler` is hoisted into its own variable instead of being built inline in
-  `httpapi.Routes`, purely so both the router and the bot can share the one instance. A
-  shared contact's phone number is matched
-  against `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the
-  exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests, because
-  Telegram always includes the country code (`"34611222333"`) while a phone on file here
-  never does (see `CreateInput`/every `SEED_ADMIN_PHONE` default), so digits must equal a
-  candidate exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
-  same-length-agnostic suffix match: that also matched a French `"+33666777888"` against
-  a Spanish `"666777888"` on file (every digit but the country code is shared), letting
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` set) that gates the `botClient` shared with
+  `authapi`'s DM above — every linking attempt has to reach the log channel, so a bot with
+  no channel configured can't do its job anyway. A failed `GetUpdates` call (Telegram's
+  own long-poll connection dropping or timing out for a moment — near-daily in practice,
+  almost always resolved by the very next attempt) is logged at `WARN`, below
+  `telegram.LogHandler`'s own forwarding threshold (`slog.LevelError`, see the first
+  bullet) — only once failures actually repeat (`getUpdatesFailureLogThreshold`
+  consecutive ones) does `Run` escalate to `ERROR`, and only for that one call, not for
+  every one of however many more follow — a longer real outage doesn't re-notify the log
+  channel on every 5-second retry for as long as it lasts.
+  `users.Repository.UserIDForTelegramChatID` tells apart a chat this doesn't recognize yet
+  — every message from one gets a greeting plus a "share your contact" keyboard button
+  (`Client.SendMessageRequestingContact`, sent with `is_persistent: true` so the client
+  shows that keyboard open by default instead of collapsed behind its own keyboard-icon
+  toggle; the greeting text also spells out where that button is and how to reveal it if a
+  client doesn't honor the flag, since nothing about a Telegram custom keyboard is
+  otherwise self-explanatory to someone who's never seen one). An already-linked chat no
+  longer gets the contact-share menu again, but a message from one doesn't *instantly*
+  trigger a sign-in link either — that was tried and reverted as a security regression: it
+  reduced logging in via Telegram to merely having the phone/ session (whoever's holding
+  an already-open Telegram app), dropping the "must know *both* phone and email"
+  requirement the web flow enforces. Being linked doesn't imply being eligible to sign in
+  at all, either — `canUseTelegramLogin` gates both this and the link confirmation below
+  on the same baseline-role check every route in this API enforces
+  (`auth.HasBaselineRole`, in practice an active socio via the automatic "member" role, or
+  admin/board) plus having both an email and a phone on file: the web magic-link request
+  already requires both as input just to find a match (`FindActiveByEmailAndPhone`), but a
+  Telegram-linked account is resolved straight from its chat id, so nothing there
+  guarantees either is actually on file the way `issueMagicLink`'s own tolerance for a
+  missing email (see the magic-link DM bullet above) might suggest. Someone who fails this
+  check never gets asked for their email — every message from them instead gets
+  `unauthorizedMessage` ("Este bot está disponible únicamente para usuarios autorizados.
+  Si crees que deberías tener acceso, ponte en contacto con el club para comprobar tu
+  situación"). Otherwise, `Bot.handleRecognizedChat` asks a first factor be proven a
+  second time: nothing happens until a message is the account's own registered email
+  (`emailMatchesUser`, checked case-insensitively against the same space-separated
+  multi-email convention `FindActiveByEmailAndPhone` uses). Any other message gets a
+  specific, actionable reply from `emailAttemptReply` saying *why* it didn't match
+  (`emailPrompt`, "Si quieres entrar en la intranet, envíame tu dirección de correo
+  electrónico", is no longer the reply to a failed attempt; it only follows the link
+  confirmation, see below): `nonTextEmailReply` for an attachment instead of text (an
+  empty `Text` always means something that isn't text — Telegram never sends a real text
+  message with an empty body), `onlyEmailReply` for more than one word,
+  `notAnEmailReplyFormat` for a single word with no "@" at all (repeating the word back),
+  and `unknownEmailReplyFormat` for something shaped like an email that just isn't one of
+  this account's own (repeating the address back, plus a "contact the club if you think
+  this is wrong" suggestion) — only a genuine single-word match skips all of these and
+  proceeds. Once it matches, it calls `Client.DeleteMessage` — Telegram lets a bot delete
+  a message it received in a private chat — to scrub that email out of the chat history
+  for whoever might get hold of the phone/session afterward (best-effort: a failed delete,
+  e.g. an old message past Telegram's 48h window, still lets
+  `magicLinkIssuer.IssueMagicLinkForTelegramUser` go through), then finally issues the
+  fresh sign-in link exactly as if they'd requested one from the web (see
+  `authapi.Handler` above). `magicLinkIssuer` is a local interface (`*authapi.Handler`
+  satisfies it structurally, the same pattern as `botClient`) wired in from
+  `cmd/api/main.go`, which is also where `authHandler` is hoisted into its own variable
+  instead of being built inline in `httpapi.Routes`, purely so both the router and the bot
+  can share the one instance. A shared contact's phone number is matched against
+  `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the exact-digits
+  match `FindActiveByEmailAndPhone` uses for magic-link requests, because Telegram always
+  includes the country code (`"34611222333"`) while a phone on file here never does (see
+  `CreateInput`/every `SEED_ADMIN_PHONE` default), so digits must equal a candidate
+  exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
+  same-length-agnostic suffix match: that also matched a French `"+33666777888"` against a
+  Spanish `"666777888"` on file (every digit but the country code is shared), letting
   anyone claim to be whoever's number happened to end the same way. Before any of that,
-  `isOwnContact` checks the shared contact is actually the sender's own — Telegram lets
-  a message carry *any* contact card, not just the sender's (a manually typed vCard, or
-  someone else's saved contact), and only the "share contact" button this bot itself
-  sends guarantees `Contact.UserID` equals the sender's own `From.ID`. Skipping this
-  check was a real vulnerability, found and fixed after shipping: sharing a real socio's
-  phone number in someone else's name linked *that socio's* account to the *sender's*
-  chat, handing the sender that socio's magic-link/login code from then on — an
-  impersonation path, not just a data-quality one, the same shape as the
-  `FindByPhoneNumber` country-code issue above. A mismatch gets a rejection reply and its
-  own `Bot.notifyChannelRejectedForeignContact` warning (worth flagging above a routine
-  no-match, since it's a possible impersonation attempt) and goes no further — the "share
-  contact" keyboard stays up so they can retry with their real one. A match calls
-  `users.Repository.SetTelegramChatID` and confirms via `Bot.replyToLinkedContact`, which
-  checks the same `canUseTelegramLogin` eligibility gate right away rather than waiting
-  for a later message to find out (`emailPrompt` follows the confirmation as a second
-  message for someone actually eligible; someone who isn't gets a single combined reply
-  instead — `unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te hemos identificado como
-  Nombre Apellidos. Sin embargo, este bot está disponible únicamente para usuarios
-  autorizados. ..." — rather than "you're linked" followed by "but you can't use this" as
-  two separate messages with nothing useful in between); no match replies saying so, plus
-  `contactClubHint` ("si crees que
-  deberías tener acceso, ponte en contacto con el club para comprobar tu situación" — the
-  same suggestion `unauthorizedMessage` ends with) since a phone genuinely not on file is
-  exactly the kind of thing worth a human checking. Both the match and no-match replies
-  use `Client.SendMessageRemovingKeyboard` instead of a plain `SendMessage`, since it
-  really was their own contact either way and tapping the button again could only ever
-  resend that same phone number for the same answer — unlike the rejection case above,
-  where the button staying up is the point. Either way, `Bot.notifyChannel` reports the
-  attempt to the log channel — who sent it,
-  the phone number, and whether it matched — telling the club about every attempt, not
-  just successful ones. `users.User.TelegramChatID` is deliberately left
-  out of `userSelect`/`scanUser` (the query every other `users` method uses) since
-  nothing else needs it yet — checking or reading it always goes through
-  `UserIDForTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`.
-  A link made this way is only as trustworthy as the phone number it was matched
-  against, so `users.Repository.Update` clears `telegram_chat_id` back to `NULL`
-  whenever a `PATCH` actually changes `phone` (including clearing it to nothing) —
-  otherwise a chat linked to an old number would keep resolving to the person who
-  used to have it. Sending the same phone back, or a `PATCH` that doesn't touch
-  `phone` at all, leaves an existing link alone (`stringPtrsEqual`, treating two
-  `nil`s as equal); only an actual change to the value clears it.
+  `isOwnContact` checks the shared contact is actually the sender's own — Telegram lets a
+  message carry *any* contact card, not just the sender's (a manually typed vCard, or
+  someone else's saved contact), and only the "share contact" button this bot itself sends
+  guarantees `Contact.UserID` equals the sender's own `From.ID`. Skipping this check was a
+  real vulnerability, found and fixed after shipping: sharing a real socio's phone number
+  in someone else's name linked *that socio's* account to the *sender's* chat, handing the
+  sender that socio's magic-link/login code from then on — an impersonation path, not just
+  a data-quality one, the same shape as the `FindByPhoneNumber` country-code issue above.
+  A mismatch gets a rejection reply and its own `Bot.notifyChannelRejectedForeignContact`
+  warning (worth flagging above a routine no-match, since it's a possible impersonation
+  attempt) and goes no further — the "share contact" keyboard stays up so they can retry
+  with their real one. A match calls `users.Repository.SetTelegramChatID` and confirms via
+  `Bot.replyToLinkedContact`, which checks the same `canUseTelegramLogin` eligibility gate
+  right away rather than waiting for a later message to find out (`emailPrompt` follows
+  the confirmation as a second message for someone actually eligible; someone who isn't
+  gets a single combined reply instead — `unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te
+  hemos identificado como Nombre Apellidos. Sin embargo, este bot está disponible
+  únicamente para usuarios autorizados. ..." — rather than "you're linked" followed by
+  "but you can't use this" as two separate messages with nothing useful in between); no
+  match replies saying so, plus `contactClubHint` ("Si crees que deberías tener acceso,
+  ponte en contacto con el club para comprobar tu situación" — the same suggestion
+  `unauthorizedMessage` ends with) since a phone genuinely not on file is exactly the kind
+  of thing worth a human checking. Both the match and no-match replies use
+  `Client.SendMessageRemovingKeyboard` instead of a plain `SendMessage`, since it really
+  was their own contact either way and tapping the button again could only ever resend
+  that same phone number for the same answer — unlike the rejection case above, where the
+  button staying up is the point. Either way, `Bot.notifyChannel` reports the attempt to
+  the log channel — who sent it, the phone number, and whether it matched — telling the
+  club about every attempt, not just successful ones. `users.User.TelegramChatID` is
+  deliberately left out of `userSelect`/`scanUser` (the query every other `users` method
+  uses) since nothing else needs it yet — checking or reading it always goes through
+  `UserIDForTelegramChatID`/`FindByPhoneNumber` directly, never through a generic `Get`. A
+  link made this way is only as trustworthy as the phone number it was matched against, so
+  `users.Repository.Update` clears `telegram_chat_id` back to `NULL` whenever a `PATCH`
+  actually changes `phone` (including clearing it to nothing) — otherwise a chat linked to
+  an old number would keep resolving to the person who used to have it. Sending the same
+  phone back, or a `PATCH` that doesn't touch `phone` at all, leaves an existing link
+  alone (`stringPtrsEqual`, treating two `nil`s as equal); only an actual change to the
+  value clears it.
 - `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it
@@ -795,16 +812,20 @@ enforced by `memberships.Service.RecordDue` and `licenses.Service.Create` (see
 `false` included, unlike the omitted-when-absent `code`/`parent_id`; like every other
 field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that leaves one out
 turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
-always-present/replaced-wholesale shape): an account that's no longer used. It can't be
-deleted — its entries are history — so it's flagged instead, and *only the frontend acts
-on it*: the API lists, reads, edits and posts to a hidden account like any other and,
-against that chart, `transactions`: every real movement of money the club records, each
+always-present/replaced-wholesale shape): an account that's no longer used. One with
+entries can't be deleted — they're history — so it's flagged instead, and *only the
+frontend acts on it*: the API lists, reads, edits and posts to a hidden account like any
+other. `DELETE /accounts/{id}` (admin/money) exists only for an account nothing references
+yet — one with a child account or a posted entry answers 409 `account_in_use`
+(`ErrAccountInUse`, from the foreign-key violation). Against that chart sit
+`transactions`: every real movement of money the club records, each
 made of two or more `entries` (an `account_id` and an `amount`, positive into that account
 or negative out of it) whose amounts always sum to exactly zero — standard double-entry
 bookkeeping, so a transaction always says both where money came from and where it went,
 never just one side of it. Each account also appears at most once per transaction
 (`transaction_entries_account_once`, a `UNIQUE (transaction_id, account_id)` from
-migration `00018`; `validateEntries` checks it first, `ErrDuplicateAccount`, 400
+migration `00018`; `validateEntries` checks it in Go before touching the database,
+alongside the two-entry minimum and non-zero amounts, `ErrDuplicateAccount`, 400
 `duplicate_account`) — its one entry's amount already says everything that moved through
 it, and the ledger's per-account running balance and "other accounts" detail both assume
 it. `GET /accounts` also joins in each account's own direct `balance` (summed from every
@@ -918,6 +939,10 @@ login-addressed route), `InsertTransaction`/`InsertTransactionOn` (a real, balan
 two-entry transaction for tests that record a due or a license against one:
 `InsertTransaction` posts it to an account that allows both, `InsertTransactionOn(t, tx,
 allowsDues, allowsLicenses)` picks the flags, for the cases that must be rejected), and
+`InsertTransactionAt(t, tx, occurredAt)` (the same as `InsertTransaction` with a chosen
+`occurred_at`, for tests that care when a payment happened), `MaterialCategoryID` (looks
+up a seeded inventory category by name, like `RoleID`/`LicenseTypeID`), `UniqueEmail` (a
+per-test, per-call unique address, which `InsertUser` itself uses), and
 `FakeResolver` + `NewTestAuthenticator`/`TokenFor` — an in-memory `auth.SessionResolver`
 so handler tests in every *other* package can mint bearer tokens for arbitrary
 users/roles without hitting the real `tokens` table (only the `auth` and `tokens`
@@ -930,8 +955,8 @@ needs none of the Postgres fixtures — each package's own `service_test.go` bui
 role/self checks their routes enforce.
 
 **Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate
-choice, not just an unexamined default: every page already revalidates its own session
-and re-fetches its own data on load, so there's no cross-page state an SPA would actually
+choice, not just an unexamined default: every page already revalidates its own session and
+re-fetches its own data on load, so there's no cross-page state an SPA would actually
 save, and this stays free of a bundler or any client-side router), one `<page>.html` +
 `js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/members` resolve
 to `members.html`. The sidebar and topbar, identical on every authenticated page, are
@@ -942,13 +967,14 @@ session bootstrap (in place of what used to be five near-identical lines re-type
 top of every `<page>.js`): it validates the session, applies role-based visibility, and
 wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
 same as `currentUser()` would. Its own `requireAnyRole` option additionally redirects home
-if the signed-in user holds none of the listed roles — `member.js`/`accounting.js`'s own
-whole-page gates, tighter than the ordinary baseline check every API route already
-enforces. Which sidebar link reads as "active" is computed from `location.pathname`
-(`ACTIVE_ALIASES` mapping a detail page like `/activity` or `/member` to the listing it
-was reached from, `/activities`/`/members`) rather than a per-page `class="active"`
-written by hand — one less thing a new page could forget. `login.html` is the one page
-with no shell and no session yet, and never calls `initPage()`.
+if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
+(admin/board) and of `accounting.js`/`account.js` (admin/money), tighter than the ordinary
+baseline check every API route already enforces. Which sidebar link reads as "active" is
+computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/activity`
+or `/member` to the listing it was reached from, `/activities`/`/members`) rather than a
+per-page `class="active"` written by hand — one less thing a new page could forget.
+`login.html` is the one page with no shell and no session yet, and never calls
+`initPage()`.
 
 Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
 it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
@@ -963,29 +989,32 @@ bubbling from its content (the standard way to detect a backdrop click on a nati
 own `close` event, which fires no matter *how* it closed (×, Cancelar, backdrop, Escape,
 or a successful save that calls `close()` itself once done), so a caller's own submit
 handler never resets the form itself. Opening one is always page-specific and left to the
-caller: a static "+ Nueva X" button calling `showModal()` directly, or — for a dialog
-shared by every row of a list rather than one pre-rendered per row (`accounting.js`'s own
-account edit, `account.js`'s transaction edit, three of `member.js`'s timeline dialogs) —
-an `open*Dialog(record)` function that fills the shared dialog's fields from that one
-record first. The platform itself is what actually makes the rest of the page unreachable
-while one is open (real modality, not a hand-rolled overlay to keep in sync) and closes it
-on Escape — nothing in `modal.js` or any page's own script needs to implement either. The
-same goes for errors: `showError` (`api.js`) writes into the open `dialog[open]` — a
-`[data-dialog-error]` box created on demand just above its `.panel-actions` — instead of
-the page's own `#error`, which a modal's backdrop would leave underneath it, out of sight
-of whoever's looking at the form that caused it. That box clears when the person types,
-changes a field or clicks a button in the dialog (capture phase, so an action that fails
-again just shows it again), and when it closes. So a call that reports something after
-saving and then closes the dialog has to close it first — an error shown while it's still
-open goes into it and vanishes with it (`account.js`'s "creada, pero no se pudo registrar"
-messages do exactly that); `showFeedback`, which isn't redirected, doesn't care. With no
-dialog open, `showError` behaves as it always did. `profile.html`'s own "Mis datos" and
-`member.js`'s own "Datos" are both left as a plain inline form instead, not a dialog: a
-person's own core data is prominent enough on both pages (the entire reason `/profile`
-exists at all; the very first thing an admin or board looks at on `/member`) that hiding
-it behind an "Editar" button added friction for no real gain in clarity — plain `<input>`s
-directly on the page double as the read-only view too, so there's no separate view-only
-rendering to keep in sync with whatever the form itself holds. Populated once by
+caller, through `openModal(dialog)` (same file: `showModal()` plus restoring the page's
+scroll position, which browsers otherwise reset to the top): a static "+ Nueva X" button
+calling it directly, or — for a dialog shared by every row of a list rather than one
+pre-rendered per row (`accounting.js`'s own account edit, `account.js`'s transaction edit,
+three of `member.js`'s timeline dialogs) — an `open*Dialog(record)` function that fills
+the shared dialog's fields from that one record first (`member.js`'s are
+`openStatusDialog`, `openEditBoardDialog` and `openEditLicenseDialog`). The platform
+itself is what actually makes the rest of the page unreachable while one is open (real
+modality, not a hand-rolled overlay to keep in sync) and closes it on Escape — nothing in
+`modal.js` or any page's own script needs to implement either. The same goes for errors:
+`showError` (`api.js`) writes into the open `dialog[open]` — a `[data-dialog-error]` box
+created on demand just above its `.panel-actions` — instead of the page's own `#error`,
+which a modal's backdrop would leave underneath it, out of sight of whoever's looking at
+the form that caused it. That box clears when the person types, changes a field or clicks
+a button in the dialog (capture phase, so an action that fails again just shows it again),
+and when it closes. So a call that reports something after saving and then closes the
+dialog has to close it first — an error shown while it's still open goes into it and
+vanishes with it (`account.js`'s "creada, pero no se pudo registrar" messages do exactly
+that); `showFeedback`, which isn't redirected, doesn't care. With no dialog open,
+`showError` behaves as it always did. `profile.html`'s own "Mis datos" and `member.js`'s
+own "Datos" are both left as a plain inline form instead, not a dialog: a person's own
+core data is prominent enough on both pages (the entire reason `/profile` exists at all;
+the very first thing an admin or board looks at on `/member`) that hiding it behind an
+"Editar" button added friction for no real gain in clarity — plain `<input>`s directly on
+the page double as the read-only view too, so there's no separate view-only rendering to
+keep in sync with whatever the form itself holds. Populated once by
 `loadProfile()`/`loadMember()` and never reset to blank the way a "create new X" dialog's
 own form is on close, both add a "Cancelar" button next to "Guardar cambios" that puts
 back exactly what was last loaded (a plain local re-populate, not a re-fetch) — the one
@@ -996,30 +1025,29 @@ anyone who isn't a real admin — board can still see a person's full data this 
 not submit any change to it, the same read-only-but-visible treatment `profile.js` already
 gives a plain member's own name/DNI/birth date/gender.
 
-`js/api.js` is the
-underlying shared client `layout.js` itself is built on: it keeps the session token in
-`localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate
-the token and populate `currentUser()`. `applyRoleVisibility()` removes any
-`data-roles="admin,board"` element the current user's roles don't satisfy — client-side
-UI hiding only; the API is the actual authority. A permission that depends on data loaded
-asynchronously for one specific record (e.g. "is the viewer this activity's organizer?")
-can't be a static `data-roles` attribute, since `applyRoleVisibility()` only runs once at
-page load — that case computes a plain JS boolean after the data arrives and toggles
-`.hidden` directly instead (see `activity.js`'s `canManage`/`canJoinSelf`/`canAddOthers`).
-Detail pages read a login from the query string (`/member?login=<login>`,
-`new URLSearchParams(window.location.search)`), same pattern `login.html` uses for the
-magic-link token from an emailed URL. Its login code has no URL of its own to arrive
-in — `login.html`'s second panel gets it typed in by hand — so the email/phone from the
-first step are instead remembered in a plain JS variable across that two-step flow.
-`login.html` also offers Telegram as a second way in, alongside (never instead of) the
-email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the unauthenticated
-`GET /auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
+`js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the
+session token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page
+load to validate the token and populate `currentUser()`. `applyRoleVisibility()` removes
+any `data-roles="admin,board"` element the current user's roles don't satisfy —
+client-side UI hiding only; the API is the actual authority. A permission that depends on
+data loaded asynchronously for one specific record (e.g. "is the viewer this activity's
+organizer?") can't be a static `data-roles` attribute, since `applyRoleVisibility()` only
+runs once at page load — that case computes a plain JS boolean after the data arrives and
+toggles `.hidden` directly instead (see `activity.js`'s
+`canManage`/`canJoinSelf`/`canAddOthers`). Detail pages read a login from the query string
+(`/member?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern
+`login.html` uses for the magic-link token from an emailed URL. Its login code has no URL
+of its own to arrive in — `login.html`'s second panel gets it typed in by hand — so the
+email/phone from the first step are instead remembered in a plain JS variable across that
+two-step flow. `login.html` also offers Telegram as a second way in, alongside (never
+instead of) the email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the
+unauthenticated `GET /auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
 `config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since
-it's only the public "@name" a `t.me/<username>` link needs) and, only if a username
-comes back non-empty, un-hides a note linking straight to the bot's chat — left hidden
-by default so there's no dead link (or flash of one) when Telegram isn't configured at
-all, or the request itself fails.
+it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes
+back non-empty, un-hides a note linking straight to the bot's chat — left hidden by
+default so there's no dead link (or flash of one) when Telegram isn't configured at all,
+or the request itself fails.
 
 `library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
 own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
@@ -1094,27 +1122,28 @@ this section's own, `style.css` as well since `dashboard.css` stays index.html-s
 
 `/accounting` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,
-of every account's name, direct balance, and last movement date — deliberately no code
-column, nor in the parent pickers: a code only shows on that account's own `/account`
-page, though the create/edit dialogs still have the field to set it (each name a plain
-`<a href="/account? id=…">` into that one account's own detail page, below), with its own
-controls to create an account, correct one's name/code/parent (an inline edit panel per
-row, the same toggled-`<div class="edit-fields">` pattern `member.js` uses for a
-membership/board/leave period), and swap it up or down among its own siblings. Both the
-create and edit dialogs carry two checkboxes, "Para cuotas anuales" and "Para licencias"
-(`allows_dues`/ `allows_licenses`, styled by `.checkbox-label` in `style.css` so the box
-sits next to its text instead of being stretched by `.field input`'s `width: 100%`),
-always sent explicitly — unchecked is `false`, not omitted, since `PATCH` replaces every
-field — and each row shows a small "Cuotas"/"Licencias" badge next to the account's name
-for whichever are on, so which accounts a transaction can record those against is visible
-without opening each one. `js/accountTree.js` holds the
+of every account's name, direct balance, and last movement date (each name a plain
+`<a href="/account?id=…">` into that one account's own detail page, below). There is
+deliberately no code column, nor codes in the parent pickers: a code only shows on that
+account's own `/account` page, though the create/edit dialogs still have the field to set
+it. The page also has the controls to create an account ("+ Nueva cuenta" dialog), correct
+one's name/code/parent (one shared edit dialog, `openEditAccountDialog`), and swap it up
+or down among its own siblings. Both dialogs carry three checkboxes, "Para cuotas
+anuales", "Para licencias" and "Oculta" (`allows_dues`/`allows_licenses`/`hidden`, styled
+by `.checkbox-label` in `style.css` so the box sits next to its text instead of being
+stretched by `.field input`'s `width: 100%`), always sent explicitly — unchecked is
+`false`, not omitted, since `PATCH` replaces every field — and each row shows a small
+"Cuotas"/"Licencias"/"Oculta" badge next to the account's name for whichever are on, so
+which accounts a transaction can record those against is visible without opening each
+one. `js/accountTree.js` holds the
 `childrenByParent`/`flattenAccountTree` pair both this page and `account.js` need:
 `GET /accounts` already comes back as a pre-order, depth-first walk (see the `accounts`
 bullet under **Accounting** above), so filtering that flat list down to a single
 `parent_id`, in the order it already arrives in, *is* that group's own sibling order — one
 pass groups every `parent_id` at once, no separate tree-building pass. Hidden accounts
-(`hidden`) are left out of the table unless a "Mostrar cuentas ocultas (N)" checkbox —
-shown only when there are any — is on, and each is tagged "Oculta" and dimmed when shown;
+(`hidden`) are left out of the table, and of the parent pickers, unless a "Mostrar cuentas
+ocultas (N)" checkbox — shown only when there are any — is on (a view choice, never
+persisted); each is tagged "Oculta" and dimmed when shown;
 `shownAccounts` (`accountTree.js`) drops them while re-parenting their shown children onto
 the nearest shown ancestor, since filtering the flat list alone would lose those children
 from the tree walk. The ↑/↓ arrows follow the real sibling groups but count only shown
@@ -1134,20 +1163,22 @@ account's name on `/accounting`, never linked from the sidebar itself, so it sha
 same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/accounting`
 for the sidebar's own highlighting, the same `/activity`→`/activities`/
 `/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
-`GET /accounts/{id}/transactions` (see **Accounting** above) as a table (the newest 50,
-"Ver más" for the next ones, and a Desde/Hasta filter above it — `loadEntries`; it asks
-for one entry more than a page just to know whether to show "Ver más") — date,
+`GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date,
 description, this account's own entry amount, its running balance after, and per-row
 Editar/Borrar (a row also opens on a click anywhere but those buttons, or Enter/Space when
-focused — see below) — and a "+ Nueva transacción" dialog deliberately narrower than the
-full `POST /transactions` shape: a date, a description, and a growing list of *lines*
-(`setupEntryLines`), each an amount "en esta cuenta" plus the "otra cuenta" it comes from
-or goes to. As soon as the last line has both fields a new empty one appears below it; a
-line with neither is ignored, one with only one is an error, and the account picker starts
-on a "— Elige una cuenta —" placeholder precisely so "filled" means something. On save
-(`entriesBody`, shared by creating a new transaction and correcting an existing one) this
-account gets one entry for the *sum* of every line's amount, added up in whole cents so
-floating point never shows up in the result, and each other account gets the exact
+focused — see below). The listing is paginated (`loadEntries`): the newest 50
+(`ENTRIES_PAGE_SIZE`) first, "Ver más" for the next ones, and a Desde/Hasta filter above
+it (the `limit`/`offset`/`from`/`to` query parameters of that route; it asks for one entry
+more than a page just to know whether to show "Ver más"). A "+ Nueva transacción" dialog,
+deliberately narrower than the full `POST /transactions` shape, creates transactions: a
+date, a description, and a growing list of *lines* (`setupEntryLines`), each an amount "en
+esta cuenta" plus the "otra cuenta" it comes from or goes to. As soon as the last line has
+both fields a new empty one appears below it; a line with neither is ignored, one with
+only one is an error, the same account can't be on two lines, and the account picker
+starts on a "— Elige una cuenta —" placeholder precisely so "filled" means something. On
+save (`entriesBody`, shared by creating a new transaction and correcting an existing one)
+this account gets one entry for the *sum* of every line's amount, added up in whole cents
+so floating point never shows up in the result, and each other account gets the exact
 negative of its own line — so the entries sum to zero without whoever is typing having to
 think about the balancing side. Amounts that cancel out (this account would get a zero
 entry) are refused. A read-only "Total en esta cuenta" next to the date (`updateTotal`)
@@ -1155,10 +1186,10 @@ shows that sum live, on every keystroke, so it counts a line whose account isn't
 yet and ignores an empty or non-numeric amount. A row's own "Editar" fetches that one
 transaction fresh (`GET /transactions/{id}`, never kept in memory alongside the ledger
 listing, which only ever carries this account's own side of each one) and turns each of
-its *other* entries into a line (amount negated back); if it has anything other than
-exactly one entry on this account (only possible by calling the API directly), editing is
-refused with an explanation instead of silently merging them. The dues/licenses sections
-follow every account picked on any line (`sectionsFor`), not just one. "Borrar"
+its *other* entries into a line (amount negated back); if it doesn't have exactly one
+entry on this account, or has no other entry (only possible by calling the API directly),
+editing is refused with an explanation instead of silently merging them. The dues/licenses
+sections follow every account picked on any line (`sectionsFor`), not just one. "Borrar"
 (`confirm`-gated, the same pattern `member.js`'s own delete buttons use) removes the whole
 transaction, every entry included. Clicking a ledger row (`tr.entry-row`,
 `toggleEntryDetail`) expands a detail row right below it — starting under "Descripción"
@@ -1171,20 +1202,20 @@ time (the listing only ever carries this account's own side, see `AccountEntry`)
 resolved to names from `allAccounts`, which the page already has; it works for
 transactions of any number of entries. Under them it also lists the cuotas anuales and
 licencias the transaction paid for — each as the person's name (from
-`GET /users/directory`, which the page now loads for everyone, not just for the admin
-pickers) linking to `/member`, plus year (and license type) — from the `dues`/`licenses`
-that same response carries for admin/board only, so they simply don't appear for anyone
-else. Clicking the row again collapses it, a click on Editar/Borrar or on a link never
-toggles it, and any reload of the list starts every row collapsed. Pressing "n" anywhere
-on the page opens the new-transaction dialog (ignored while typing in a field, with a
-modifier held, or with a dialog already open), which puts focus on the date; the edit
-dialog puts it on the description. The date input only ever collects a plain date, but
-`occurred_at` is a real timestamp — sent as that date at noon UTC (not midnight)
-specifically so `formatDate`'s own local-timezone getters can never roll it back to the
-previous day for anyone viewing from behind UTC; editing an existing transaction collapses
-whatever time of day it actually had down to this same convention. Both dialogs also
-carry, for a real admin only (`data-roles="admin"`; POST dues/licenses is admin-only), a
-"Cuotas anuales a registrar" and a "Licencias nuevas a registrar" section
+`GET /users/directory`, which the page loads for everyone who can reach it, not just for
+the admin pickers) linking to `/member`, plus year (and license type) — from the
+`dues`/`licenses` that same response carries for admin/board only, so they simply don't
+appear for anyone else. Clicking the row again collapses it, a click on Editar/Borrar or
+on a link never toggles it, and any reload of the list starts every row collapsed.
+Pressing "n" anywhere on the page opens the new-transaction dialog (ignored while typing
+in a field, with a modifier held, or with a dialog already open), which puts focus on the
+date; the edit dialog puts it on the description. The date input only ever collects a
+plain date, but `occurred_at` is a real timestamp — sent as that date at noon UTC (not
+midnight) specifically so `formatDate`'s own local-timezone getters can never roll it back
+to the previous day for anyone viewing from behind UTC; editing an existing transaction
+collapses whatever time of day it actually had down to this same convention. Both dialogs
+also carry, for a real admin only (`data-roles="admin"`; POST dues/licenses is
+admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registrar" section
 (`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips sent as
 `POST /users/{login}/dues`/`licenses` once the transaction itself is saved. Each section
 is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues if this
@@ -1219,6 +1250,27 @@ transaction. The page's own header (name, code, current balance) and that picker
 from one `GET /accounts` call — that listing already carries every account's own balance,
 so there's no need for a second, single-account fetch just for the header
 (`GET /accounts/{id}` alone never populates it — see **Accounting** above).
+
+`/members` (`members.js`) is a read-only, sortable table of people; every action about a
+person lives on their own `/member?login=<login>` page, which a row opens for admin/board
+only. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
+`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see
+**Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual",
+"Federación") and the column toggles sit behind a "Filtros…" button. Every filter starts
+with every option checked except "Tipo de socio", which starts with only "Activo" and
+"Baja temporal", so the default view is the current membership. "Cuota anual" splits
+people on whether `last_due_year` is the current year ("A corriente de pago"), and
+"Federación" on whether `license_type` is present — `GET /users` only reports a license
+for the current year, so having one *is* being federated. Filters, visible columns and
+sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so "Volver a
+socios" from a person's page lands on the same view, and a counter shows how many people
+the current filters leave.
+
+On `/member`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
+that records a license with no transaction (`POST /users/{login}/licenses` without
+`transaction_id`) — the way to register one the club didn't collect, such as someone
+federated elsewhere. Licenses the club does collect are registered from their transaction
+on `/account`, as above.
 
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role

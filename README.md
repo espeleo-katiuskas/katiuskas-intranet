@@ -31,7 +31,8 @@ docker compose up --build
 
 Esto levanta PostgreSQL, la API en `http://localhost:64711` y el frontend en
 `http://localhost:64710` (con `/api/*` proxificado hacia la API). Falta aplicar las
-migraciones la primera vez:
+migraciones la primera vez (hace falta tener Go y el binario `goose` instalados en la
+máquina; `seed-admin` se ejecuta con `go run`):
 
 ```sh
 export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
@@ -50,7 +51,8 @@ Para entrar, ve a `http://localhost:64710/login`, escribe ese email y ese teléf
 mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
-Para desarrollo sin Docker, ver `docs/architecture.md`.
+Para desarrollo sin Docker, `make run` sirve la API en `:64711` (necesita `DATABASE_URL`
+apuntando a un PostgreSQL accesible); más detalles en `docs/architecture.md`.
 
 ## Tests
 
@@ -70,4 +72,10 @@ terminar, así que los tests no interfieren entre sí. Solo comprueba si el esqu
 no qué migraciones tiene: tras añadirse una migración nueva hay que borrar y volver a crear
 `intranet_test`, o los tests fallan con errores del tipo "column ... does not exist". Sin
 `TEST_DATABASE_URL` (o si no hay Postgres accesible), esos tests se saltan solos en vez de
-fallar — `go test ./...` funciona igual en una máquina sin Postgres.
+fallar — `go test ./...` funciona igual en una máquina sin Postgres. Para borrar y volver a
+crear la base de datos de pruebas:
+
+```sh
+docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "DROP DATABASE intranet_test;"
+docker exec -it katiuskas-intranet-postgres-1 psql -U intranet -d postgres -c "CREATE DATABASE intranet_test;"
+```

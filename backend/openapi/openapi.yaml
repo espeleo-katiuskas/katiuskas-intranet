@@ -23,6 +23,20 @@ info:
     unique, admin-editable slug like "maria.garcia"), generated
     automatically when they're created. Every other resource (an
     activity, a license, a token...) still has its own opaque numeric id.
+
+    Dates. Fields documented as `format: date` are sent by clients as
+    plain `YYYY-MM-DD`, but the server serializes them in responses as
+    RFC 3339 timestamps at midnight UTC (e.g. `2024-03-15T00:00:00Z`),
+    because they are Go `time.Time` values; clients should read only the
+    first 10 characters. Fields documented as `date-time` (e.g.
+    `created_at`, transactions' `occurred_at`) are real timestamps.
+
+    Errors. Every error response has the shape
+    `{"error": {"code": "...", "message": "..."}}` (see the Error
+    schema). Wherever an endpoint below names a lowercase_snake_case code
+    it is the `error.code` value; a malformed JSON body is always
+    `400 invalid_body` and an unexpected failure `500 internal_error`,
+    neither repeated on every endpoint.
 servers:
   - url: /api/v1
 
@@ -97,6 +111,14 @@ paths:
       responses:
         "200":
           description: Always returned, regardless of whether a link was actually sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, description: A fixed, generic confirmation text. }
+        "400":
+          description: invalid_body (malformed JSON) or missing_fields (email and phone are both required).
         "429":
           description: rate_limited — too many requests from this address recently; try again later.
 
@@ -128,8 +150,9 @@ paths:
                 type: object
                 properties:
                   token: { type: string }
+        "400": { description: invalid_body — malformed JSON. }
         "401":
-          description: The link is invalid, already used, or expired.
+          description: invalid_token — the link is invalid, already used, or expired.
 
   /auth/magic-link/consume-code:
     post:
@@ -170,6 +193,7 @@ paths:
                 type: object
                 properties:
                   token: { type: string }
+        "400": { description: "invalid_body (malformed JSON) or missing_fields (email, phone and code are all required)." }
         "401":
           description: invalid_code — wrong, expired, already-used, or too-many-attempts code, or no match at all.
         "429":
@@ -178,6 +202,10 @@ paths:
   /auth/logout:
     post:
       summary: Revoke a session token
+      description: >
+        No authentication required: knowing the token is the proof.
+        Always answers 204 for well-formed JSON, whether or not the token
+        existed, and also clears the session cookie.
       requestBody:
         required: true
         content:
@@ -189,6 +217,7 @@ paths:
                 token: { type: string }
       responses:
         "204": { description: Session revoked }
+        "400": { description: invalid_body — malformed JSON. }
 
   /auth/telegram-bot:
     get:
@@ -277,6 +306,10 @@ paths:
       summary: List users
       description: >
         admin/board get every field (User, below) for everyone on file.
+        Besides the personal data, each entry carries a few computed
+        fields: membership dates, on_leave, license_type/license_year
+        (only for a license covering the current year) and
+        last_due_year/last_due_paid_at (the latest year paid, and when).
         A plain member gets MemberListing's much narrower view instead —
         no DNI, address, contact info, or anything else that isn't
         already effectively public knowledge inside the club — and only
@@ -320,8 +353,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
         "403": { description: Only admin can create a person. }
+        "400":
+          description: >
+            invalid_body (malformed JSON), invalid_date (birth_date is
+            missing or not YYYY-MM-DD), unknown_role (a name in
+            role_names doesn't exist) or automatic_role (role_names
+            includes member, former_member or board).
         "409":
-          description: The email, phone, or national ID already belongs to another person.
+          description: duplicate — the email, phone, or national ID already belongs to another person.
 
   /users/directory:
     get:
@@ -380,14 +419,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
         "400":
-          description: invalid_login — the given login isn't lowercase letters, digits, dots, or hyphens.
+          description: >
+            invalid_body (malformed JSON), invalid_date (birth_date isn't
+            YYYY-MM-DD) or invalid_login (the given login isn't
+            lowercase letters, digits, dots, or hyphens).
         "403":
           description: >
             forbidden — not admin, and not editing your own record; or
             restricted_fields — a non-admin tried to change a field
             beyond the contact ones.
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: The email, phone, national ID, or login being set already belongs to another person.
+          description: duplicate — the email, phone, national ID, or login being set already belongs to another person.
     delete:
       summary: Delete a person (and their login, membership history and activity sign-ups)
       description: Admin-only — board can no longer modify a person's data at all.
@@ -427,6 +470,7 @@ paths:
                 items: { $ref: "#/components/schemas/Role" }
     post:
       summary: Create a role
+      description: Admin-only.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -444,22 +488,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Role" }
+        "400":
+          description: invalid_body (malformed JSON) or invalid_name (name is empty).
         "409":
-          description: A role with this name already exists.
+          description: duplicate — a role with this name already exists.
 
   /roles/{id}:
     delete:
       summary: Delete a role
+      description: Admin-only.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
+        "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
-            This is a system role (admin/board/member) — it's wired to
-            permissions elsewhere in the API and can't be deleted.
+            system_role — this is a system role (admin, board, member,
+            former_member): it's wired to permissions or automatic
+            behavior elsewhere in the API and can't be deleted.
 
   /users/{login}/roles:
     post:
@@ -485,9 +534,10 @@ paths:
         "204": { description: Granted }
         "403":
           description: Only admin can grant a role.
-        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { description: invalid_body — malformed JSON. }
+        "404": { description: not_found — no such person or no such role. }
         "409":
-          description: The role is automatic (member/former_member/board) and can't be granted by hand.
+          description: automatic_role — the role is automatic (member/former_member/board) and can't be granted by hand.
 
   /users/{login}/roles/{roleID}:
     delete:
@@ -505,9 +555,10 @@ paths:
         - { name: roleID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Revoked }
+        "400": { description: invalid_id — roleID isn't numeric. }
         "403":
           description: Only admin can revoke a role.
-        "404": { $ref: "#/components/responses/NotFound" }
+        "404": { description: not_found — no such person or role, or that person doesn't hold this role. }
         "409":
           description: >
             self_admin_removal (the caller is trying to revoke their own
@@ -551,8 +602,8 @@ paths:
         GET /auth/me, which also reports impersonated_by, and
         POST /auth/impersonate/exit, reachable regardless of the target's
         own roles. Rejected (409) for yourself, or for someone with no
-        baseline role (including a login that doesn't exist) — their
-        session couldn't call anything anyway. The token is shorter-lived
+        baseline role — their session couldn't call anything anyway. An
+        unknown login is a 404. The token is shorter-lived
         than a normal sign-in on purpose.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -567,8 +618,9 @@ paths:
                 properties:
                   token: { type: string }
         "403": { description: Only admin can impersonate. }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: cannot_impersonate_self, or not_eligible (no baseline role).
+          description: cannot_impersonate_self, or not_eligible (the person has no baseline role).
 
   /users/{login}/tokens/{tokenID}:
     patch:
@@ -589,6 +641,7 @@ paths:
                 expires_at: { type: string, format: date-time }
       responses:
         "204": { description: Expiry updated }
+        "400": { description: invalid_body, missing_fields (expires_at is required) or invalid_id (tokenID isn't numeric). }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       summary: Revoke a token
@@ -602,11 +655,13 @@ paths:
         - { name: tokenID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Revoked }
+        "400": { description: invalid_id — tokenID isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/memberships:
     get:
       summary: List a user's membership periods
+      description: Open to that person themselves, or to admin/board.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -618,6 +673,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Membership" }
+        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Start a new membership period
       description: Admin-only — board can see every membership period but no longer starts, corrects, or ends one.
@@ -639,9 +696,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "400": { description: invalid_body (malformed JSON) or invalid_date (start_date missing or not YYYY-MM-DD). }
         "403": { description: Only admin can start a membership period. }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Overlaps an existing membership period for this user
+          description: overlapping_period — overlaps an existing membership period for this user.
 
   /users/{login}/dues:
     get:
@@ -661,6 +720,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Due" }
         "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Record a due ("cuota") payment
       description: >
@@ -701,10 +761,13 @@ paths:
               schema: { $ref: "#/components/schemas/Due" }
         "400":
           description: >
-            missing_fields (year or transaction_id left out) or
+            invalid_body (malformed JSON), missing_fields (year or
+            transaction_id left out), invalid_date (start_date missing or
+            not YYYY-MM-DD — required even when it ends up unused) or
             unknown_transaction (transaction_id doesn't name an existing
             transaction).
         "403": { description: Only admin can record a due. }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
             due_already_recorded (this person already has a due on file
@@ -730,6 +793,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/License" }
         "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Assign a federative license ("licencia federativa")
       description: >
@@ -775,11 +839,14 @@ paths:
               schema: { $ref: "#/components/schemas/License" }
         "400":
           description: >
-            missing_fields (license_type_id or year left out), invalid_license_type (unknown license_type_id),
+            invalid_body (malformed JSON), missing_fields (license_type_id
+            or year left out), invalid_date (issued_date missing or not
+            YYYY-MM-DD), invalid_license_type (unknown license_type_id),
             invalid_other_detail (other_detail missing for "Otra", or
             given for a type that isn't "Otra"), or unknown_transaction
             (transaction_id doesn't name an existing transaction).
         "403": { description: Only admin can assign a license. }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: >
             not_active_member (this person was never a socio during the
@@ -792,7 +859,7 @@ paths:
       summary: Correct a license
       description: >
         Admin-only. Unlike POST, this doesn't re-check that the person
-        currently has an open membership period — it's fixing an
+        was a socio during the license's year — it's fixing an
         existing record, not assigning a new one, so it also works for
         someone who has since left the club. Same license_type_id /
         other_detail rule as creating one. There's no transaction_id
@@ -822,9 +889,11 @@ paths:
               schema: { $ref: "#/components/schemas/License" }
         "400":
           description: >
-            invalid_license_type (unknown license_type_id) or
-            invalid_other_detail (other_detail missing for "Otra", or
-            given for a type that isn't "Otra").
+            invalid_id, invalid_body (malformed JSON), missing_fields
+            (license_type_id or year left out), invalid_date (issued_date
+            missing or not YYYY-MM-DD), invalid_license_type (unknown
+            license_type_id) or invalid_other_detail (other_detail
+            missing for "Otra", or given for a type that isn't "Otra").
         "403": { description: Only admin can correct a license. }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -901,6 +970,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
         "403": { description: Only admin can correct a membership period. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -930,6 +1000,7 @@ paths:
   /users/{login}/board-members:
     get:
       summary: List a person's board (Junta Directiva) terms
+      description: Open to that person themselves, or to admin/board.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -941,6 +1012,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/BoardMember" }
+        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Start a new board term
       description: >
@@ -968,9 +1041,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
+        "400": { description: invalid_body (malformed JSON) or invalid_date (start_date missing or not YYYY-MM-DD). }
         "403": { description: Only admin can start a board term. }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Overlaps an existing board term for this person.
+          description: overlapping_period — overlaps an existing board term for this person.
 
   /board-members:
     get:
@@ -1019,10 +1094,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
+        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
         "403": { description: Only admin can correct a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: The corrected dates overlap another board term for this person.
+          description: overlapping_period — the corrected dates overlap another board term for this person.
     delete:
       summary: Remove a board term outright
       description: >
@@ -1090,6 +1166,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
+        "400": { description: invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
         "403": { description: Only admin can record a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1130,6 +1207,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
+        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
         "403": { description: Only admin can correct a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1148,7 +1226,8 @@ paths:
     get:
       summary: List activities
       description: >
-        Defaults to every activity (paginated, newest first). Pass
+        Defaults to every activity (paginated, newest first by start_date;
+        limit defaults to 50). Pass
         status=active to instead get only the ones still needing
         attention: not yet completed/cancelled, or completed but still
         with a loan/rental linked to it that hasn't been returned — the
@@ -1163,8 +1242,8 @@ paths:
           in: query
           schema: { type: string, enum: [asc, desc], default: desc }
           description: asc sorts oldest-first; anything else (including omitted) is newest-first.
-        - { name: limit, in: query, schema: { type: integer } }
-        - { name: offset, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 }, description: "Page size. Omitted, zero, negative or above 100 all fall back to 50 (not clamped to 100)." }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: Negative values are treated as 0. }
       responses:
         "200":
           description: A page of activities
@@ -1194,11 +1273,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
         "400":
-          description: One of the given participant_logins doesn't exist.
+          description: >
+            invalid_body (malformed JSON), invalid_date (start_date or
+            end_date missing or not YYYY-MM-DD) or unknown_participant
+            (one of the given participant_logins doesn't exist).
         "403":
-          description: leader_login was given by someone who isn't admin/board.
+          description: forbidden — leader_login was given by someone who isn't admin/board.
         "404":
-          description: leader_login doesn't belong to anyone.
+          description: not_found — leader_login doesn't belong to anyone.
         "409":
           description: >
             not_federated — the activity is caving or canyoning and one of
@@ -1216,6 +1298,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
+        "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update an activity
@@ -1237,12 +1320,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
+        "400": { description: invalid_id, invalid_body, or invalid_date (start_date/end_date given but not YYYY-MM-DD). }
         "403":
           description: >
             forbidden — not the organizer, board, or admin; or
             leader_login was given by someone who isn't admin/board.
         "404":
-          description: The activity doesn't exist, or leader_login doesn't belong to anyone.
+          description: not_found — the activity doesn't exist, or leader_login doesn't belong to anyone.
     delete:
       summary: Cancel an activity
       description: >
@@ -1253,6 +1337,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Activity cancelled }
+        "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Only the organizer, board, or admin can cancel this activity. }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1270,6 +1355,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Participant" }
+        "400": { description: invalid_id — id isn't numeric. }
     post:
       summary: Join an activity, or (admin/board, or the organizer) add someone else to it
       description: >
@@ -1295,13 +1381,14 @@ paths:
                 login: { type: string, nullable: true }
       responses:
         "204": { description: Joined }
+        "400": { description: invalid_id or invalid_body. }
         "403":
           description: >
             A plain member tried to add someone other than themselves to
             a public activity, or anyone other than the organizer/board/
             admin tried to add a participant (self included) to a private
             one.
-        "404": { $ref: "#/components/responses/NotFound" }
+        "404": { description: not_found — no such activity, or the given login doesn't belong to anyone. }
         "409":
           description: >
             not_federated — the activity is caving or canyoning and the
@@ -1322,6 +1409,7 @@ paths:
         - { name: login, in: path, required: true, schema: { type: string } }
       responses:
         "204": { description: Removed }
+        "400": { description: invalid_id — id isn't numeric. }
         "403":
           description: >
             A plain member tried to remove someone other than
@@ -1343,12 +1431,13 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
-          description: This activity's resources, in memoria order
+          description: This activity's resources, in memoria order (an empty list for an unknown activity id)
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ActivityResource" }
+        "400": { description: invalid_id — id isn't numeric. }
     post:
       summary: Add a resource to an activity's memoria
       description: >
@@ -1376,8 +1465,8 @@ paths:
               properties:
                 type: { type: string, enum: [text, file] }
                 title: { type: string }
-                description: { type: string, description: Required for type=text; rejected for type=file. }
-                file: { type: string, format: binary, description: Required for type=file; rejected for type=text. }
+                description: { type: string, description: Required (non-blank) for type=text; ignored for type=file. }
+                file: { type: string, format: binary, description: Required for type=file; ignored for type=text. }
       responses:
         "201":
           description: Resource created
@@ -1386,6 +1475,7 @@ paths:
               schema: { $ref: "#/components/schemas/ActivityResource" }
         "400":
           description: >
+            invalid_id, invalid_body (malformed multipart form),
             invalid_type, title_required, description_required (type=text
             with no description), or file_required (type=file with no
             file part).
@@ -1427,6 +1517,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ActivityResource" }
+        "400": { description: invalid_id or invalid_body. }
         "403": { description: Neither admin/board, the organizer, nor a participant. }
         "404": { description: Activity not found. }
         "409": { description: reorder_mismatch — resource_ids doesn't match this activity's current resources exactly. }
@@ -1444,7 +1535,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ActivityResource" }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { description: invalid_id — id or resourceID isn't numeric. }
+        "404": { description: not_found — no such resource under this activity. }
     patch:
       summary: Edit a memoria resource's title or description
       description: >
@@ -1473,7 +1565,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ActivityResource" }
-        "400": { description: description_not_allowed — description given for a type=file resource. }
+        "400": { description: invalid_id, invalid_body, description_not_allowed (description given for a type=file resource), or invalid_fields (the fields given don't match the resource's type). }
         "403": { description: Neither this resource's own author nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -1488,6 +1580,7 @@ paths:
         - { name: resourceID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
+        "400": { description: invalid_id — id or resourceID isn't numeric. }
         "403": { description: Neither this resource's own author nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1534,6 +1627,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Activity" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /holidays:
     get:
@@ -1575,7 +1669,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Holiday" }
-        "400": { description: invalid_date, or invalid_name (empty). }
+        "400": { description: invalid_body, invalid_date (not YYYY-MM-DD), or invalid_name (empty). }
         "409": { description: duplicate_holiday — that date already has one. }
 
   /holidays/{id}:
@@ -1589,6 +1683,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Holiday deleted }
+        "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/movements:
@@ -1614,6 +1709,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Movement" }
         "403": { description: Neither the person themselves nor admin/board/material. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/files:
     get:
@@ -1688,6 +1784,7 @@ paths:
   /items:
     get:
       summary: List inventory items
+      description: Open to any baseline role.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -1713,7 +1810,8 @@ paths:
               schema: { $ref: "#/components/schemas/Item" }
         "400":
           description: >
-            invalid_item_type, invalid_date, unknown_category
+            invalid_body, invalid_item_type (item_type isn't rope, bag
+            or gear), invalid_date (acquired_at not YYYY-MM-DD), unknown_category
             (category_id isn't in the catalog), single_unit_item
             (total_quantity above 1 for a rope or bag — they're always
             exactly one individually-tracked object), or
@@ -1755,6 +1853,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Movement" }
+        "400": { description: invalid_id — id isn't numeric. }
 
   /movements:
     get:
@@ -1769,7 +1868,7 @@ paths:
         computing what's still outstanding item by item client-side.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, completed, overdue, cancelled], default: active }, description: Ignored when activity_id is given. }
         - { name: activity_id, in: query, schema: { type: integer } }
       responses:
         "200":
@@ -1779,6 +1878,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Movement" }
+        "400": { description: invalid_activity_id — activity_id isn't numeric. }
     post:
       summary: Record a movement against an item
       description: >
@@ -1848,6 +1948,7 @@ paths:
               schema: { $ref: "#/components/schemas/Movement" }
         "400":
           description: >
+            invalid_body, invalid_date (transacted_at not YYYY-MM-DD),
             invalid_type, login_required (rental without a login),
             recipient_not_allowed (a login given for
             acquisition/loss/abandonment/retirement), or
@@ -1886,6 +1987,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Movement" }
+        "400": { description: invalid_id — id isn't numeric. }
         "404":
           description: not_found — no active rental with this id.
 
@@ -1970,7 +2072,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200":
-          description: Every account, ordered by code
+          description: Every account, in the tree order described above
           content:
             application/json:
               schema:
@@ -2035,7 +2137,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "400":
-          description: missing_fields (name), or unknown_parent_account (parent_id names no existing account)
+          description: invalid_body, missing_fields (name is empty), or unknown_parent_account (parent_id names no existing account)
         "403": { description: Requires admin or the money role. }
         "409": { description: duplicate_code — another account already has this code. }
 
@@ -2051,6 +2153,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
+        "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Correct an account's name, code, parent, or what it's for
@@ -2083,7 +2186,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
-        "400": { description: missing_fields (name), or unknown_parent_account. }
+        "400": { description: invalid_id, invalid_body, missing_fields (name is empty), or unknown_parent_account. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_code, or circular_parent (parent_id is this account itself, or one of its own descendants). }
@@ -2100,6 +2203,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
+        "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: account_in_use — still referenced by a child account or a transaction entry. }
@@ -2136,6 +2240,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AccountEntry" }
+        "400": { description: invalid_id, invalid_date (from or to isn't YYYY-MM-DD) or invalid_date_range (to is before from). }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /accounts/{id}/move:
@@ -2171,7 +2276,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Account" }
-        "400": { description: invalid_id, or invalid_direction (direction wasn't "up" or "down"). }
+        "400": { description: invalid_id, invalid_body, or invalid_direction (direction wasn't "up" or "down"). }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -2185,7 +2290,6 @@ paths:
         - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
         - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
         - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
-      # A malformed date, or a to before from, is a 400 invalid_date / invalid_date_range.
       responses:
         "200":
           description: Transactions, most recent occurred_at first
@@ -2194,6 +2298,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Transaction" }
+        "400": { description: invalid_date (from or to isn't YYYY-MM-DD) or invalid_date_range (to is before from). }
     post:
       summary: Record a transaction
       description: >
@@ -2202,7 +2307,9 @@ paths:
         double-entry bookkeeping: a transaction always says both where
         money came from and where it went. This is enforced by a
         deferred database constraint regardless of what calls this
-        endpoint, not just checked here.
+        endpoint, not just checked here. An account can appear on at most
+        one entry of a transaction (duplicate_account), and no entry may
+        have a zero amount.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2224,7 +2331,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: missing_fields, too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account. }
+        "400": { description: invalid_body (malformed JSON, or occurred_at isn't RFC 3339), missing_fields (description is empty), too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account. }
         "403": { description: Requires admin or the money role. }
         "409": { description: unbalanced — entries don't sum to zero. }
 
@@ -2259,6 +2366,7 @@ paths:
                       licenses:
                         type: array
                         items: { $ref: "#/components/schemas/License" }
+        "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Correct a transaction's description, timestamp, or entries
@@ -2290,17 +2398,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account. }
+        "400": { description: invalid_id, invalid_body, missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account — same as POST. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: unbalanced. }
     delete:
       summary: Delete a transaction (and its entries)
+      description: >
+        Requires admin or the money role. Also removes the membership
+        dues it recorded (they cascade). A transaction that a license
+        references can't be deleted; that case currently surfaces as a
+        generic 500 internal_error, not a dedicated code.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
+        "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -2602,9 +2716,9 @@ components:
               type: array
               items: { type: string }
               description: >
-                Optional, empty by default. Can't include "member" or
-                "former_member" — those are automatic, computed from
-                membership history instead.
+                Optional, empty by default. Can't include "member",
+                "former_member" or "board" — those are automatic, computed
+                from membership and board history instead.
 
     UpdateUserInput:
       description: >
@@ -2753,6 +2867,8 @@ components:
         user_login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
+        email: { type: string, nullable: true, description: "The person's own email field. Only present on GET /board-members, joined in from their profile." }
+        phone: { type: string, nullable: true, description: "The person's own phone field. Only present on GET /board-members." }
         position: { $ref: "#/components/schemas/BoardPosition" }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date, nullable: true }

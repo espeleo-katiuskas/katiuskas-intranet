@@ -107,6 +107,11 @@ scp -r ../db/migrations/. usuario@servidor:/opt/katiuskas-intranet/db/migrations
 ssh usuario@servidor sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
 ```
 
+Como `/opt/katiuskas-intranet` es propiedad de `katiuskas`, el usuario con el que haces
+`scp` necesita permiso de escritura ahí (por ejemplo, un grupo común con permisos `g+w`
+sobre esos directorios); si no, copia los ficheros a su propio `$HOME` y muévelos después
+con `sudo`.
+
 ## 3. Migraciones y primera cuenta de administración
 
 Desde el servidor (o en remoto, con `DATABASE_URL` apuntando a él si PostgreSQL fuera
@@ -115,7 +120,7 @@ alcanzable desde fuera — no es el caso aquí, así que hazlo en el propio serv
 ```sh
 export DATABASE_URL="postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable"
 
-sudo -u katiuskas DATABASE_URL="$DATABASE_URL" \
+sudo -u katiuskas \
   /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "$DATABASE_URL" up
 
 sudo -u katiuskas env DATABASE_URL="$DATABASE_URL" \
@@ -316,13 +321,14 @@ En el servidor:
 ```sh
 scp katiuskas-api usuario@servidor:/opt/katiuskas-intranet/bin/katiuskas-api.new
 ssh usuario@servidor 'sudo -u katiuskas mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
-scp -r db/migrations/. usuario@servidor:/opt/katiuskas-intranet/db/migrations/
-ssh usuario@servidor 'sudo -u katiuskas DATABASE_URL="postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable" /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "$DATABASE_URL" up'
+scp -r ../db/migrations/. usuario@servidor:/opt/katiuskas-intranet/db/migrations/
+ssh usuario@servidor 'sudo -u katiuskas /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable" up'
 ssh usuario@servidor 'sudo systemctl restart katiuskas-api'
 ```
 
 El frontend (`web/`) no necesita reconstruirse ni reiniciar Caddy — vuelve a copiar el
-árbol con `scp -r` si ha cambiado; Caddy lo sirve directamente desde disco.
+árbol con `scp -r ../web/. usuario@servidor:/opt/katiuskas-intranet/web/` si ha cambiado;
+Caddy lo sirve directamente desde disco (con la caché de una hora descrita en el paso 5).
 
 ## Copias de seguridad
 

@@ -1,9 +1,9 @@
 // The sidebar and topbar are identical, static markup on every
-// authenticated page — nine of them now, a tenth (transactions) still
-// to come — that used to be copy-pasted by hand into each <page>.html.
-// That's exactly the kind of thing that quietly drifts: adding
-// Contabilidad's own nav link meant editing eight files by hand in one
-// go, and a future icon or wording tweak would mean the same again.
+// authenticated page — every page but login — that used to be
+// copy-pasted by hand into each <page>.html. That's exactly the kind of
+// thing that quietly drifts: adding Contabilidad's own nav link meant
+// editing every file by hand in one go, and a future icon or wording
+// tweak would mean the same again.
 // initPage() renders it once from here into the two empty containers
 // every page's <body> now has (#sidebar, #topbar) and runs the same
 // session bootstrap every page needs — collapsing what used to be five

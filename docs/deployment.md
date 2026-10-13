@@ -126,7 +126,9 @@ docker compose -f docker-compose.production.yml up -d
 ```
 
 El frontend (`web/`) no necesita reconstruirse ni reiniciar Caddy — se sirve directamente
-desde el árbol de ficheros bind-mounted, igual que en desarrollo.
+desde el árbol de ficheros bind-mounted, igual que en desarrollo. Eso sí, `deploy/Caddyfile`
+manda `Cache-Control: max-age=3600` con todo lo que sirve de `web/`, así que un navegador
+puede seguir usando una página o un script antiguos hasta una hora después de actualizar.
 
 ## Copias de seguridad
 

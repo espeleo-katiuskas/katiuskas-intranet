@@ -70,12 +70,15 @@ de despliegue los deja con `chmod 600`, propiedad de `katiuskas`) y, para el pas
 ficheros, ser el dueño de los de producción (`katiuskas`) o root.
 
 Lee `DATABASE_URL` y `ACTIVITY_RESOURCES_ROOT` de los dos `api.env` (sin ejecutarlos) y
-necesita `psql`, `pg_dump` y el binario de `goose`; pide teclear el nombre de la base de
-datos de testing antes de borrarla (`--yes` lo omite, para automatizarlo); se niega a
-continuar si las dos URLs apuntan a la misma base de datos, si el rol de testing no es el
-dueño del esquema `public` o si producción tiene una migración que el código de testing no
-conoce; y, si algo falla una vez parada la unidad, la deja parada. Consecuencias de la
-copia:
+necesita `psql` y `pg_dump` (paquete `postgresql-client`, con un `pg_dump` al menos tan
+nuevo como el servidor de producción) y el binario de `goose`, que por defecto busca en
+`bin/goose` junto al `api.env` de testing, con las migraciones en `db/migrations/` (como
+en la guía de despliegue; `GOOSE_BIN` y `MIGRATIONS_DIR` lo cambian); pide teclear el
+nombre de la base de datos de testing antes de borrarla (`--yes` lo omite, para
+automatizarlo); se niega a continuar si las dos URLs apuntan a la misma base de datos, si
+el rol de testing no es el dueño del esquema `public` o si producción tiene una migración
+que el código de testing no conoce; y, si algo falla una vez parada la unidad, la deja
+parada. Consecuencias de la copia:
 
 - **Lo que se haga en testing se pierde en el siguiente despliegue en producción.** Altas,
   ediciones, roles, vínculos de Telegram... Entre dos despliegues testing diverge de
