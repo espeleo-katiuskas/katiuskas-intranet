@@ -398,6 +398,20 @@ function setupEntryLines(prefix, onChange) {
   function setLines(lines) {
     keepHidden = new Set(lines.map((line) => line.accountId));
     container.innerHTML = [...lines, {}].map((line, index) => lineHtml(index === 0, line)).join('');
+    updateTotal();
+  }
+
+  // The read-only "Total en esta cuenta" next to the date: what this
+  // account will receive, i.e. the sum of every amount typed so far (in
+  // whole cents, like entriesBody), updated on every keystroke — so it
+  // counts a line whose account isn't chosen yet, and ignores one whose
+  // amount is empty or not a number.
+  function updateTotal() {
+    const cents = rows().reduce((sum, row) => {
+      const amount = Number(row.amountText);
+      return row.amountText !== '' && Number.isFinite(amount) ? sum + Math.round(amount * 100) : sum;
+    }, 0);
+    document.getElementById(`${prefix}-total`).value = formatCurrency(cents / 100);
   }
 
   function rows() {
@@ -443,6 +457,7 @@ function setupEntryLines(prefix, onChange) {
     if (last && last.amountText !== '' && last.accountValue !== '') {
       container.insertAdjacentHTML('beforeend', lineHtml(false));
     }
+    updateTotal();
     onChange();
   }
   container.addEventListener('input', onEdited);

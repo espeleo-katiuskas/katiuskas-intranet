@@ -1132,7 +1132,9 @@ creating a new transaction and correcting an existing one) this account gets one
 the *sum* of every line's amount, added up in whole cents so floating point never shows up
 in the result, and each other account gets the exact negative of its own line — so
 the entries sum to zero without whoever is typing having to think about the balancing side.
-Amounts that cancel out (this account would get a zero entry) are refused. A row's own
+Amounts that cancel out (this account would get a zero entry) are refused. A read-only "Total en esta cuenta"
+next to the date (`updateTotal`) shows that sum live, on every keystroke, so it counts a line whose
+account isn't picked yet and ignores an empty or non-numeric amount. A row's own
 "Editar" fetches that one transaction fresh (`GET /transactions/{id}`, never kept in memory
 alongside the ledger listing, which only ever carries this account's own side of each one)
 and turns each of its *other* entries into a line (amount negated back); if it has anything
