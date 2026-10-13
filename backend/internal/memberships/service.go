@@ -73,8 +73,8 @@ func (s *Service) ListActive(ctx context.Context) ([]Membership, error) {
 	return s.repo.ListActive(ctx)
 }
 
-func (s *Service) WasMemberOn(ctx context.Context, userID int64, date time.Time) (bool, error) {
-	return s.repo.WasMemberOn(ctx, userID, date)
+func (s *Service) WasMemberDuringYear(ctx context.Context, userID int64, year int) (bool, error) {
+	return s.repo.WasMemberDuringYear(ctx, userID, year)
 }
 
 func (s *Service) IsOnLeave(ctx context.Context, userID int64) (bool, error) {

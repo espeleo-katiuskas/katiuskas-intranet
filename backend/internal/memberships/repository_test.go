@@ -827,44 +827,64 @@ func TestIsOnLeave(t *testing.T) {
 	}
 }
 
-func TestWasMemberOn(t *testing.T) {
+func TestWasMemberDuringYear(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := memberships.NewRepository(tx)
 	ctx := context.Background()
+	was := func(userID int64, year int) bool {
+		t.Helper()
+		got, err := repo.WasMemberDuringYear(ctx, userID, year)
+		if err != nil {
+			t.Fatalf("WasMemberDuringYear(%d): %v", year, err)
+		}
+		return got
+	}
 
 	currentlyActive := testutil.InsertUser(t, tx, "")
 	if _, err := repo.Create(ctx, memberships.CreateInput{UserID: currentlyActive.ID, StartDate: date("2020-01-01")}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	if was, err := repo.WasMemberOn(ctx, currentlyActive.ID, time.Now()); err != nil {
-		t.Fatalf("WasMemberOn: %v", err)
-	} else if !was {
-		t.Error("expected a currently open membership to cover today")
+	if !was(currentlyActive.ID, time.Now().Year()) {
+		t.Error("expected a currently open membership to cover this year")
+	}
+	if was(currentlyActive.ID, 2019) {
+		t.Error("expected the year before the membership started to not count")
 	}
 
+	// A period from 2020-06-15 to 2023-03-10: the years it touches count,
+	// even if only for a day, and the ones outside it don't.
 	hasLeft := testutil.InsertUser(t, tx, "")
-	m, err := repo.Create(ctx, memberships.CreateInput{UserID: hasLeft.ID, StartDate: date("2020-01-01")})
+	m, err := repo.Create(ctx, memberships.CreateInput{UserID: hasLeft.ID, StartDate: date("2020-06-15")})
 	if err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	pastEnd := date("2024-01-01")
-	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &pastEnd}); err != nil {
+	end := date("2023-03-10")
+	if _, err := repo.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &end}); err != nil {
 		t.Fatalf("end membership: %v", err)
 	}
-	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, date("2023-06-01")); err != nil {
-		t.Fatalf("WasMemberOn: %v", err)
-	} else if !was {
-		t.Error("expected a date inside the now-closed period to still count")
+	for year, want := range map[int]bool{2019: false, 2020: true, 2021: true, 2022: true, 2023: true, 2024: false} {
+		if got := was(hasLeft.ID, year); got != want {
+			t.Errorf("year %d: expected %v, got %v", year, want, got)
+		}
 	}
-	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, time.Now()); err != nil {
-		t.Fatalf("WasMemberOn: %v", err)
-	} else if was {
-		t.Error("expected today, after the period closed, to not count")
+
+	// Ending on December 31st still counts for that year; starting on
+	// January 1st counts for its own.
+	edge := testutil.InsertUser(t, tx, "")
+	em, err := repo.Create(ctx, memberships.CreateInput{UserID: edge.ID, StartDate: date("2021-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
 	}
-	if was, err := repo.WasMemberOn(ctx, hasLeft.ID, date("2019-01-01")); err != nil {
-		t.Fatalf("WasMemberOn: %v", err)
-	} else if was {
-		t.Error("expected a date before the period started to not count")
+	edgeEnd := date("2021-12-31")
+	if _, err := repo.Update(ctx, em.ID, memberships.UpdateInput{StartDate: em.StartDate, EndDate: &edgeEnd}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+	if !was(edge.ID, 2021) || was(edge.ID, 2020) || was(edge.ID, 2022) {
+		t.Error("expected exactly 2021 to count for a membership running Jan 1 to Dec 31 2021")
+	}
+
+	if was(testutil.InsertUser(t, tx, "").ID, 2022) {
+		t.Error("expected someone who was never a member to not count")
 	}
 }
 

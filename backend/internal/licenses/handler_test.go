@@ -186,6 +186,32 @@ func TestHandlerCreateSucceedsForAnActiveMember(t *testing.T) {
 	}
 }
 
+// transaction_id is optional: a license the club didn't collect (someone
+// federated elsewhere) is recorded without one, and the response then
+// has no transaction_id at all.
+func TestHandlerCreateWithoutATransactionID(t *testing.T) {
+	mux, resolver, memberships_, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	if _, err := memberships_.Create(context.Background(), memberships.CreateInput{UserID: target.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	body := map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026}
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 without a transaction_id, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "transaction_id") {
+		t.Errorf("expected no transaction_id in the response, got %s", rec.Body.String())
+	}
+	list := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/licenses", target.Login), adminToken, nil)
+	if list.Code != http.StatusOK || strings.Contains(list.Body.String(), "transaction_id") {
+		t.Errorf("expected the listing to carry no transaction_id either, got %d: %s", list.Code, list.Body.String())
+	}
+}
+
 func TestHandlerCreateRejectsMissingLicenseType(t *testing.T) {
 	mux, resolver, _, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")

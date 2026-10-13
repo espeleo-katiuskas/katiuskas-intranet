@@ -362,11 +362,14 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   otra tabla). `GET /license-types` expone el catálogo, solo admin, igual que la propia
   asignación. Tiene también su propio `year` (migración 00014) — el año natural que de
   verdad cubre, no siempre el mismo que el de `issued_date`, ya que una licencia pedida en
-  diciembre suele cubrir el año siguiente — y un `transaction_id` obligatorio que señala
-  la transacción que la pagó (ver Contabilidad más abajo): exigido al crearla (400
-  `unknown_transaction` si no señala una transacción real), pero no editable después —
+  diciembre suele cubrir el año siguiente — y un `transaction_id` opcional (nulo desde
+  la migración 00020) que señala la transacción que la pagó (ver Contabilidad más abajo):
+  omitirlo es la única forma de registrar una licencia que el club no ha cobrado — por
+  ejemplo, alguien federado en otro sitio — y entonces no hay nada que comprobar; si se
+  da, tiene que existir (400 `unknown_transaction` si no señala una transacción real), y
+  no es editable después —
   corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece. Esa
-  transacción tiene además que tener al menos una entrada en una cuenta marcada
+  transacción, si la hay, tiene además que tener al menos una entrada en una cuenta marcada
   `allows_licenses` (migración 00017; ver Contabilidad más abajo): si no, 409
   `transaction_not_for_licenses`. La comprobación es una consulta SQL contra las tablas de
   contabilidad, igual que la clave foránea de la propia licencia, sin importar
@@ -375,11 +378,12 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
   almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
   algo que se deriva trivialmente de otro campo). Solo se le puede asignar una licencia a
-  quien tuviera un periodo de `memberships` abierto en la fecha de `issued_date` de esa
-  licencia — no necesariamente ahora mismo (`memberships.Service.WasMemberOn`), así que
-  una licencia de cuando alguien sí era socio se puede dar de alta después de que haya
-  causado baja. Intentarlo con una fecha que nunca cayó dentro de ningún periodo de socio
-  devuelve 409 `not_active_member`. `users.Service` incorpora a `User` la
+  quien fuera socio en algún momento del año de esa licencia (su `year`) — no
+  necesariamente ahora mismo, ni justo el día de `issued_date`
+  (`memberships.Service.WasMemberDuringYear`), así que una licencia de un año en que
+  alguien sí era socio se puede dar de alta después de que haya causado baja, o con una
+  fecha anterior a su alta de ese mismo año. Intentarlo con un año que no toca ningún
+  periodo de socio devuelve 409 `not_active_member`. `users.Service` incorpora a `User` la
   licencia del año actual de cada persona (`licenses.Service.CurrentByUser`; una de otro
   año no cuenta), mientras que del periodo de socio toma el más reciente. Rutas bajo `/users/{login}/licenses`:
   `GET` abierto a la propia persona o admin/board, `POST` solo admin;

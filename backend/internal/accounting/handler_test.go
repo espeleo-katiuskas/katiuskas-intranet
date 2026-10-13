@@ -779,7 +779,7 @@ func TestGetTransactionIncludesWhatItPaidForOnlyForAdminAndBoard(t *testing.T) {
 	}
 	if _, err := p.licenses.Create(ctx, licenses.CreateInput{
 		UserID: person.ID, LicenseTypeID: testutil.LicenseTypeID(t, p.tx, "A BASICA"),
-		IssuedDate: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Year: 2026, TransactionID: created.ID,
+		IssuedDate: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Year: 2026, TransactionID: &created.ID,
 	}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}

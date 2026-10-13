@@ -186,18 +186,22 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	return list, rows.Err()
 }
 
-// WasMemberOn reports whether userID had an open membership period
-// covering date — used to gate assigning a federative license: not to
-// "is this person a member right now", but to "were they a member on
-// the day this license says it was issued", so a license from while
-// someone was still a socio can still be recorded after they've since
-// caused baja. Pass time.Now() for the "currently a member" question
-// itself.
-func (r *Repository) WasMemberOn(ctx context.Context, userID int64, date time.Time) (bool, error) {
+// WasMemberDuringYear reports whether userID had a membership period
+// covering at least one day of the given calendar year — used to gate
+// assigning a federative license: not "is this person a member right
+// now" nor "were they one on a particular day", but "were they a socio
+// at some point in the year the license covers", so a license for a
+// year someone belonged to the club can still be recorded after they've
+// since caused baja, and one whose issued date falls before they joined
+// (or after they left) that same year still counts.
+func (r *Repository) WasMemberDuringYear(ctx context.Context, userID int64, year int) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM memberships WHERE user_id = $1 AND period @> $2::date)
-	`, userID, date).Scan(&exists)
+		SELECT EXISTS(
+			SELECT 1 FROM memberships
+			WHERE user_id = $1 AND period && daterange(make_date($2, 1, 1), make_date($2, 12, 31), '[]')
+		)
+	`, userID, year).Scan(&exists)
 	return exists, err
 }
 

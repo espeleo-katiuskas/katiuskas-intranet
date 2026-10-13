@@ -7,13 +7,13 @@
 // December 31 of Year — its own field, not always the same calendar
 // year as IssuedDate (a license requested in December often covers the
 // *following* year — see migration 00014). Only someone who had an
-// open membership period on IssuedDate itself can be assigned one —
-// not necessarily right now, so a license from while someone was a
-// socio can still be recorded after they've since caused baja; see
-// Service.Create. Every license also carries the TransactionID of
-// whatever payment recorded it (migration 00014_membership_dues_and_
-// license_payments.sql) — required at creation, never changed
-// afterward (see UpdateInput's own doc comment).
+// membership period at some point of Year can be assigned one — not
+// necessarily right now, nor on IssuedDate itself, so a license for a
+// year someone was a socio can still be recorded after they've since
+// caused baja; see Service.Create. A license may also carry the
+// TransactionID of whatever payment recorded it (migrations 00014 and
+// 00020) — optional, since one the club didn't collect has none — and
+// it's never changed afterward (see UpdateInput's own doc comment).
 package licenses
 
 import "time"
@@ -51,10 +51,12 @@ type License struct {
 	// from it, never stored on its own.
 	Year       int       `json:"year"`
 	ValidUntil time.Time `json:"valid_until"`
-	// TransactionID is the payment that recorded this license — always
-	// required (see migration 00014), and never itself corrected by
-	// Update; see UpdateInput's own doc comment.
-	TransactionID int64     `json:"transaction_id"`
+	// TransactionID is the payment that recorded this license, nil (and
+	// omitted from the JSON) for one the club didn't collect — someone
+	// federated elsewhere, say, which is the only way to record that
+	// (migration 00020). Never itself corrected by Update; see
+	// UpdateInput's own doc comment.
+	TransactionID *int64    `json:"transaction_id,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -63,10 +65,11 @@ type CreateInput struct {
 	LicenseTypeID int64
 	// OtherDetail is required when LicenseTypeID refers to the "Otra"
 	// entry, and forbidden otherwise — see Service.Create.
-	OtherDetail   *string
-	IssuedDate    time.Time
-	Year          int
-	TransactionID int64
+	OtherDetail *string
+	IssuedDate  time.Time
+	Year        int
+	// TransactionID is optional: see License.TransactionID.
+	TransactionID *int64
 }
 
 // UpdateInput corrects a license: every field is always sent together

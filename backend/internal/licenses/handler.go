@@ -118,14 +118,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		OtherDetail   *string `json:"other_detail"`
 		IssuedDate    string  `json:"issued_date"`
 		Year          int     `json:"year"`
-		TransactionID int64   `json:"transaction_id"`
+		TransactionID *int64  `json:"transaction_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.LicenseTypeID == 0 || body.Year == 0 || body.TransactionID == 0 {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id, year and transaction_id are all required")
+	if body.LicenseTypeID == 0 || body.Year == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "license_type_id and year are required")
 		return
 	}
 	issuedDate, err := time.Parse("2006-01-02", body.IssuedDate)

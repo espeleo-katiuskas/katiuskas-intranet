@@ -333,7 +333,7 @@ func TestHandlerListIncludesLicenseTypeForAPlainMember(t *testing.T) {
 	licenseTypeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 	if _, err := licensesService.Create(ctx, licenses.CreateInput{
 		UserID: target.ID, LicenseTypeID: licenseTypeID, IssuedDate: time.Now().UTC(),
-		Year: time.Now().UTC().Year(), TransactionID: testutil.InsertTransaction(t, tx),
+		Year: time.Now().UTC().Year(), TransactionID: new(testutil.InsertTransaction(t, tx)),
 	}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}

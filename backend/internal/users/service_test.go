@@ -332,7 +332,7 @@ func TestServiceReportsLatestLicense(t *testing.T) {
 	licenseTypeID := testutil.LicenseTypeID(t, tx, "B1 PLUS")
 	if _, err := licensesService.Create(ctx, licenses.CreateInput{
 		UserID: u.ID, LicenseTypeID: licenseTypeID, IssuedDate: issuedDate,
-		Year: issuedDate.Year(), TransactionID: testutil.InsertTransaction(t, tx),
+		Year: issuedDate.Year(), TransactionID: new(testutil.InsertTransaction(t, tx)),
 	}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestServiceReportsOnlyTheCurrentYearsLicense(t *testing.T) {
 		t.Helper()
 		if _, err := licensesService.Create(ctx, licenses.CreateInput{
 			UserID: u.ID, LicenseTypeID: testutil.LicenseTypeID(t, tx, typeName), IssuedDate: issued,
-			Year: year, TransactionID: testutil.InsertTransaction(t, tx),
+			Year: year, TransactionID: new(testutil.InsertTransaction(t, tx)),
 		}); err != nil {
 			t.Fatalf("create %s license for %d: %v", typeName, year, err)
 		}

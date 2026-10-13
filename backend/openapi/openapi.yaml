@@ -734,8 +734,9 @@ paths:
       summary: Assign a federative license ("licencia federativa")
       description: >
         Admin-only — board can see everyone's licenses but no longer
-        assigns one. Only someone who currently has an open membership
-        period (hasn't caused baja) can be assigned one. A license is
+        assigns one. Only someone who was a socio at some point of the
+        license's year can be assigned one — not necessarily now, nor on
+        issued_date itself. A license is
         annual: valid from January 1 through December 31 of year — its
         own field, not necessarily issued_date's calendar year (a
         license requested in December often covers the *following*
@@ -743,12 +744,13 @@ paths:
         isn't something the caller sets. license_type_id must reference
         an entry from GET /license-types; other_detail is required when
         that entry is the catalog's "Otra" escape hatch (is_other) and
-        forbidden otherwise. transaction_id must name the transaction
-        that recorded the payment for this license (see POST
-        /transactions) — required, and never changed afterward (PATCH
-        has no transaction_id of its own). That transaction must also
+        forbidden otherwise. transaction_id is optional: when given it
+        must name the transaction that recorded the payment for this
+        license (see POST /transactions), and that transaction must also
         have an entry on an account marked allows_licenses (see PATCH
-        /accounts/{id}).
+        /accounts/{id}); leave it out for a license the club didn't
+        collect (someone federated elsewhere). It's never changed
+        afterward (PATCH has no transaction_id of its own).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -758,13 +760,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [license_type_id, issued_date, year, transaction_id]
+              required: [license_type_id, issued_date, year]
               properties:
                 license_type_id: { type: integer }
                 other_detail: { type: string, nullable: true }
                 issued_date: { type: string, format: date }
                 year: { type: integer, description: The calendar year this license covers. }
-                transaction_id: { type: integer, description: The transaction that recorded the payment for this license. }
+                transaction_id: { type: integer, description: The transaction that recorded the payment for this license. Optional — omit it for a license not paid through the club. }
       responses:
         "201":
           description: License created
@@ -773,16 +775,15 @@ paths:
               schema: { $ref: "#/components/schemas/License" }
         "400":
           description: >
-            missing_fields (license_type_id, year, or transaction_id
-            left out), invalid_license_type (unknown license_type_id),
+            missing_fields (license_type_id or year left out), invalid_license_type (unknown license_type_id),
             invalid_other_detail (other_detail missing for "Otra", or
             given for a type that isn't "Otra"), or unknown_transaction
             (transaction_id doesn't name an existing transaction).
         "403": { description: Only admin can assign a license. }
         "409":
           description: >
-            not_active_member (this person didn't have an open membership
-            period on issued_date) or transaction_not_for_licenses (none
+            not_active_member (this person was never a socio during the
+            license's year) or transaction_not_for_licenses (none
             of the transaction's entries is on an account marked
             allows_licenses).
 
@@ -2731,7 +2732,7 @@ components:
           description: Computed as December 31 of year — never set directly.
         transaction_id:
           type: integer
-          description: The transaction that recorded the payment for this license. Required at creation, never changed afterward.
+          description: The transaction that recorded the payment for this license. Absent for a license not paid through the club. Never changed after creation.
         created_at: { type: string, format: date-time }
 
     BoardPosition:

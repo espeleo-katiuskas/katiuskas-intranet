@@ -9,12 +9,11 @@ import (
 )
 
 var (
-	// ErrNotActiveMember means the target person didn't have an open
-	// membership period on the license's own issued_date — someone can
-	// still be assigned a license from while they were a socio even
-	// after having since caused baja, as long as they actually were one
-	// on that date.
-	ErrNotActiveMember = errors.New("the person must have had an active membership on the license's issued date")
+	// ErrNotActiveMember means the target person was never a socio at any
+	// point of the license's year — someone can still be assigned a
+	// license for a year they were a socio even after having since caused
+	// baja, as long as they belonged to the club for at least a day of it.
+	ErrNotActiveMember = errors.New("the person must have been a member at some point of the license's year")
 	// ErrOtherDetailRequired means the chosen license type is the
 	// catalog's "Otra" escape hatch, which must say which license it is.
 	ErrOtherDetailRequired = errors.New(`other_detail is required when the license type is "Otra"`)
@@ -55,7 +54,7 @@ func normalizeOtherDetail(licenseType LicenseType, otherDetail *string) (*string
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
-	wasMember, err := s.memberships.WasMemberOn(ctx, in.UserID, in.IssuedDate)
+	wasMember, err := s.memberships.WasMemberDuringYear(ctx, in.UserID, in.Year)
 	if err != nil {
 		return License{}, err
 	}
@@ -73,18 +72,21 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (License, error) {
 	}
 	in.OtherDetail = otherDetail
 
-	// Last, after every check that only needs the request itself: the
-	// transaction has to exist and have an entry on an account flagged
-	// allows_licenses.
-	exists, allowed, err := s.repo.TransactionAllowsLicenses(ctx, in.TransactionID)
-	if err != nil {
-		return License{}, err
-	}
-	if !exists {
-		return License{}, ErrUnknownTransaction
-	}
-	if !allowed {
-		return License{}, ErrTransactionNotForLicenses
+	// Last, after every check that only needs the request itself: a
+	// transaction, if one is given, has to exist and have an entry on an
+	// account flagged allows_licenses. Without one there's nothing to
+	// check — the license wasn't paid through the club.
+	if in.TransactionID != nil {
+		exists, allowed, err := s.repo.TransactionAllowsLicenses(ctx, *in.TransactionID)
+		if err != nil {
+			return License{}, err
+		}
+		if !exists {
+			return License{}, ErrUnknownTransaction
+		}
+		if !allowed {
+			return License{}, ErrTransactionNotForLicenses
+		}
 	}
 
 	return s.repo.Create(ctx, in)

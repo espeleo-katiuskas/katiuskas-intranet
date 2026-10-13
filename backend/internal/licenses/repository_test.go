@@ -25,7 +25,7 @@ func TestCreateComputesValidUntilAsDecember31(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A PLUS")
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, LicenseTypeID: typeID, IssuedDate: date("2026-03-15"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: user.ID, LicenseTypeID: typeID, IssuedDate: date("2026-03-15"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestCreateWithTheOtraTypeStoresOtherDetailAndComposesTheDisplayType(t *test
 	detail := "FME"
 
 	l, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: user.ID, LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestUpdate(t *testing.T) {
 	typeB1 := testutil.LicenseTypeID(t, tx, "B1 PLUS")
 
 	created, err := repo.Create(context.Background(), licenses.CreateInput{
-		UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestDelete(t *testing.T) {
 	user := testutil.InsertUser(t, tx, "")
 	typeA := testutil.LicenseTypeID(t, tx, "A BASICA")
 
-	created, err := repo.Create(context.Background(), licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	created, err := repo.Create(context.Background(), licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -142,14 +142,14 @@ func TestListByUserOrdersNewestFirstAndScopesToTheUser(t *testing.T) {
 	typeB1 := testutil.LicenseTypeID(t, tx, "B1 PLUS")
 	ctx := context.Background()
 
-	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+	if _, err := repo.Create(ctx, licenses.CreateInput{UserID: other.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))}); err != nil {
 		t.Fatalf("create for other: %v", err)
 	}
-	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-02-01"), Year: 2025, TransactionID: testutil.InsertTransaction(t, tx)})
+	older, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeA, IssuedDate: date("2025-02-01"), Year: 2025, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create older: %v", err)
 	}
-	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeB1, IssuedDate: date("2026-02-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	newer, err := repo.Create(ctx, licenses.CreateInput{UserID: user.ID, LicenseTypeID: typeB1, IssuedDate: date("2026-02-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create newer: %v", err)
 	}
@@ -218,13 +218,13 @@ func TestListByTransactionReturnsOnlyThatTransactionsLicenses(t *testing.T) {
 	shared := testutil.InsertTransaction(t, tx)
 	for _, person := range []testutil.TestUser{first, second} {
 		if _, err := repo.Create(ctx, licenses.CreateInput{
-			UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: shared,
+			UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: &shared,
 		}); err != nil {
 			t.Fatalf("create license for %s: %v", person.Login, err)
 		}
 	}
 	if _, err := repo.Create(ctx, licenses.CreateInput{
-		UserID: first.ID, LicenseTypeID: typeID, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: testutil.InsertTransaction(t, tx),
+		UserID: first.ID, LicenseTypeID: typeID, IssuedDate: date("2025-01-01"), Year: 2025, TransactionID: new(testutil.InsertTransaction(t, tx)),
 	}); err != nil {
 		t.Fatalf("create the other transaction's license: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestListByTransactionReturnsOnlyThatTransactionsLicenses(t *testing.T) {
 	logins := map[string]bool{}
 	for _, l := range list {
 		logins[l.UserLogin] = true
-		if l.Year != 2026 || l.TransactionID != shared || l.Type != "A BASICA" {
+		if l.Year != 2026 || l.TransactionID == nil || *l.TransactionID != shared || l.Type != "A BASICA" {
 			t.Errorf("unexpected license in the listing: %+v", l)
 		}
 	}

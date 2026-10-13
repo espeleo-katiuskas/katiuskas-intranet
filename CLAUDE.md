@@ -379,21 +379,25 @@ actually is; every other entry forbids one (shared validation:
 `PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license without
 re-checking membership status the way `POST` does — that gate is for assigning a
 *new* license, not fixing a typo on one someone already has. `POST`'s own gate
-(`memberships.Repository.WasMemberOn`) checks membership as of the license's own
-`issued_date`, not "right now" — assigning, after the fact, a license from a period when
-someone genuinely was a socio must still work even if they've since caused baja; only a
-date that never fell inside any of their membership periods is rejected
-(`ErrNotActiveMember`, HTTP 409 `not_active_member`). A license also has its own `Year`
+(`memberships.Repository.WasMemberDuringYear`) checks that the person was a socio at some
+point of the license's own `Year` — not "right now", and not on `issued_date` either:
+assigning, after the fact, a license for a year someone genuinely belonged to the club must
+still work even if they've since caused baja, or if it's dated before they joined (or after
+they left) that same year; only a year that never overlapped any of their membership periods
+is rejected (`ErrNotActiveMember`, HTTP 409 `not_active_member`). A license also has its own `Year`
 (migration `00014_membership_dues_and_license_payments.sql`) — the calendar year it
 actually covers, *not* always the same as `issued_date`'s own year, since a license
-requested in December often covers the *following* year — and a required
-`TransactionID` naming the transaction that recorded its payment (see Accounting below):
-required at creation (`ErrUnknownTransaction`, 400 `unknown_transaction`, if it doesn't
-name a real transaction), and never itself editable afterward — `UpdateInput` deliberately
+requested in December often covers the *following* year — and an *optional*
+`TransactionID` (a `*int64`, null since migration `00020_licenses_transaction_optional.sql`)
+naming the transaction that recorded its payment (see Accounting below): omitting it is the
+only way to record a license the club didn't collect — someone federated elsewhere — and
+then there's no transaction to check; one that is given must exist
+(`ErrUnknownTransaction`, 400 `unknown_transaction`, if it doesn't name a real transaction),
+and it's never itself editable afterward — `UpdateInput` deliberately
 has no `TransactionID` field, since correcting a license's type, date, or year is a
 different action from re-litigating which payment it belongs to (the same distinction
 `accounting.UpdateAccountInput`'s missing `Position` field draws). That transaction must
-also have at least one entry on an account marked `allows_licenses` (migration
+also (when given) have at least one entry on an account marked `allows_licenses` (migration
 `00017_accounts_dues_licenses_flags.sql`; see Accounting below): `Service.Create` asks
 `Repository.TransactionAllowsLicenses` — a SQL check against accounting's own tables, the
 same way a license already references its transaction by foreign key, without importing
@@ -437,9 +441,10 @@ endpoint to correct or remove a due, and no validation that a due's `year` actua
 within an active membership period — both deliberately out of scope for now.
 `membership_dues.transaction_id` cascades on delete (`ON DELETE CASCADE`) — a due is pure
 bookkeeping metadata with no meaning apart from its transaction — while
-`licenses.transaction_id` uses the default `ON DELETE RESTRICT` instead: a license is a
-real, independently meaningful record (proof of federation) even apart from its payment,
-so the transaction that paid for one can't be deleted out from under it at all.
+`licenses.transaction_id` (nullable, see above) uses the default `ON DELETE RESTRICT`
+instead: a license is a real, independently meaningful record (proof of federation) even
+apart from its payment, so the transaction that paid for one can't be deleted out from under
+it at all.
 
 **Temporary leaves** (`membership_leaves`): a "baja temporal" belongs to the person
 directly (`user_id`), not to one specific `memberships` period — the same `user_id`-keyed

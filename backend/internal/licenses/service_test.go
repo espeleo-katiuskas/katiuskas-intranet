@@ -19,7 +19,7 @@ func TestServiceCreateRejectsSomeoneWhoWasNeverAMember(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 
 	_, err := svc.Create(context.Background(), licenses.CreateInput{
-		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if !errors.Is(err, licenses.ErrNotActiveMember) {
 		t.Errorf("expected ErrNotActiveMember, got %v", err)
 	}
@@ -43,16 +43,16 @@ func TestServiceCreateRejectsSomeoneWhoHasLeft(t *testing.T) {
 	}
 
 	_, err = svc.Create(ctx, licenses.CreateInput{
-		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if !errors.Is(err, licenses.ErrNotActiveMember) {
 		t.Errorf("expected ErrNotActiveMember, got %v", err)
 	}
 }
 
 // TestServiceCreateAllowsALicenseDatedDuringAPastMembershipPeriod covers
-// the case Create must not reject: someone who was a socio when the
-// license was actually issued, even though they've since caused baja
-// and aren't a member right now.
+// the case Create must not reject: someone who was a socio during the
+// license's year, even though they've since caused baja and aren't a
+// member right now.
 func TestServiceCreateAllowsALicenseDatedDuringAPastMembershipPeriod(t *testing.T) {
 	tx := testutil.NewTx(t)
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
@@ -71,7 +71,7 @@ func TestServiceCreateAllowsALicenseDatedDuringAPastMembershipPeriod(t *testing.
 	}
 
 	l, err := svc.Create(ctx, licenses.CreateInput{
-		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2023-06-01"), Year: 2023, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2023-06-01"), Year: 2023, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("expected the license to be created despite the person no longer being a member, got %v", err)
 	}
@@ -93,7 +93,7 @@ func TestServiceCreateAllowsACurrentlyActiveMember(t *testing.T) {
 	}
 
 	l, err := svc.Create(ctx, licenses.CreateInput{
-		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("expected the license to be created, got %v", err)
 	}
@@ -116,7 +116,7 @@ func TestServiceCreateRejectsUnknownLicenseType(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 
-	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: 999999, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: 999999, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if !errors.Is(err, licenses.ErrTypeNotFound) {
 		t.Errorf("expected ErrTypeNotFound, got %v", err)
 	}
@@ -134,13 +134,13 @@ func TestServiceCreateRequiresOtherDetailForTheOtraType(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 
-	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: otraID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: otraID, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if !errors.Is(err, licenses.ErrOtherDetailRequired) {
 		t.Errorf("expected ErrOtherDetailRequired, got %v", err)
 	}
 
 	detail := "FME"
-	l, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	l, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: otraID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("expected the license to be created with other_detail, got %v", err)
 	}
@@ -162,7 +162,7 @@ func TestServiceCreateRejectsOtherDetailForANonOtraType(t *testing.T) {
 	}
 
 	detail := "unwanted"
-	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	_, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, OtherDetail: &detail, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if !errors.Is(err, licenses.ErrOtherDetailNotAllowed) {
 		t.Errorf("expected ErrOtherDetailNotAllowed, got %v", err)
 	}
@@ -180,7 +180,7 @@ func TestServiceUpdateEnforcesTheSameOtherDetailRuleAsCreate(t *testing.T) {
 	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestServiceUpdateSucceedsEvenAfterMembershipEnded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2020-06-01"), Year: 2020, TransactionID: testutil.InsertTransaction(t, tx)})
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2020-06-01"), Year: 2020, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create license: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestServiceDelete(t *testing.T) {
 	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
-	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: testutil.InsertTransaction(t, tx)})
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: date("2026-01-01"), Year: 2026, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -316,10 +316,10 @@ func TestServiceCurrentByUserReturnsThisYearsLicense(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	year := time.Now().Year()
-	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: time.Date(year-1, 1, 1, 0, 0, 0, 0, time.UTC), Year: year - 1, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeA, IssuedDate: time.Date(year-1, 1, 1, 0, 0, 0, 0, time.UTC), Year: year - 1, TransactionID: new(testutil.InsertTransaction(t, tx))}); err != nil {
 		t.Fatalf("create last year's license: %v", err)
 	}
-	thisYears, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeB, IssuedDate: time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC), Year: year, TransactionID: testutil.InsertTransaction(t, tx)})
+	thisYears, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeB, IssuedDate: time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC), Year: year, TransactionID: new(testutil.InsertTransaction(t, tx))})
 	if err != nil {
 		t.Fatalf("create this year's license: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestIsCurrentlyFederatedTrueForALicenseIssuedThisYear(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	thisYear := time.Date(time.Now().Year(), 1, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: thisYear, Year: thisYear.Year(), TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: thisYear, Year: thisYear.Year(), TransactionID: new(testutil.InsertTransaction(t, tx))}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 
@@ -392,7 +392,7 @@ func TestIsCurrentlyFederatedFalseForAnExpiredLicense(t *testing.T) {
 		t.Fatalf("create membership: %v", err)
 	}
 	lastYear := time.Date(time.Now().Year()-1, 1, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: lastYear, Year: lastYear.Year(), TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: lastYear, Year: lastYear.Year(), TransactionID: new(testutil.InsertTransaction(t, tx))}); err != nil {
 		t.Fatalf("create license: %v", err)
 	}
 
@@ -429,7 +429,7 @@ func TestServiceCreateRejectsATransactionWithoutALicensesAccount(t *testing.T) {
 
 			_, err := svc.Create(ctx, licenses.CreateInput{
 				UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026,
-				TransactionID: testutil.InsertTransactionOn(t, tx, c.allowsDues, c.allowsLicens)})
+				TransactionID: new(testutil.InsertTransactionOn(t, tx, c.allowsDues, c.allowsLicens))})
 			if !errors.Is(err, licenses.ErrTransactionNotForLicenses) {
 				t.Errorf("expected ErrTransactionNotForLicenses, got %v", err)
 			}
@@ -450,7 +450,7 @@ func TestServiceCreateAcceptsATransactionOnALicensesAccountThatIsNotAlsoForDues(
 
 	if _, err := svc.Create(ctx, licenses.CreateInput{
 		UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026,
-		TransactionID: testutil.InsertTransactionOn(t, tx, false, true)}); err != nil {
+		TransactionID: new(testutil.InsertTransactionOn(t, tx, false, true))}); err != nil {
 		t.Errorf("expected a licenses-only account to be enough, got %v", err)
 	}
 }
@@ -473,7 +473,7 @@ func TestCurrentByUserIgnoresALaterLicenseForNextYear(t *testing.T) {
 		issued time.Time
 		year   int
 	}{{time.Date(year, 1, 10, 0, 0, 0, 0, time.UTC), year}, {time.Date(year, 1, 11, 0, 0, 0, 0, time.UTC), year + 1}} {
-		if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: l.issued, Year: l.year, TransactionID: testutil.InsertTransaction(t, tx)}); err != nil {
+		if _, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: l.issued, Year: l.year, TransactionID: new(testutil.InsertTransaction(t, tx))}); err != nil {
 			t.Fatalf("create license: %v", err)
 		}
 	}
@@ -487,5 +487,95 @@ func TestCurrentByUserIgnoresALaterLicenseForNextYear(t *testing.T) {
 	}
 	if federated, _ := svc.IsCurrentlyFederated(ctx, person.ID); !federated {
 		t.Error("expected to be federated through this year's license")
+	}
+}
+
+// What counts is the license's year, not the day it was issued: a socio
+// from June can be given a license issued in January of that same year,
+// and one who left in March 2024 can still have 2024's license issued
+// afterwards.
+func TestServiceCreateOnlyNeedsMembershipAtSomePointOfTheYear(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+
+	joinedLater := testutil.InsertUser(t, tx, "")
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: joinedLater.ID, StartDate: date("2026-06-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: joinedLater.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-10"), Year: 2026}); err != nil {
+		t.Errorf("expected a license issued before joining, in the year they joined, to be accepted, got %v", err)
+	}
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: joinedLater.ID, LicenseTypeID: typeID, IssuedDate: date("2026-07-01"), Year: 2025}); !errors.Is(err, licenses.ErrNotActiveMember) {
+		t.Errorf("expected a license for the year before they joined to be rejected, got %v", err)
+	}
+
+	leftEarly := testutil.InsertUser(t, tx, "")
+	m, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: leftEarly.ID, StartDate: date("2020-01-01")})
+	if err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	end := date("2024-03-10")
+	if _, err := membershipsService.Update(ctx, m.ID, memberships.UpdateInput{StartDate: m.StartDate, EndDate: &end}); err != nil {
+		t.Fatalf("end membership: %v", err)
+	}
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: leftEarly.ID, LicenseTypeID: typeID, IssuedDate: date("2025-01-05"), Year: 2024}); err != nil {
+		t.Errorf("expected 2024's license, issued after they left in 2024, to be accepted, got %v", err)
+	}
+	if _, err := svc.Create(ctx, licenses.CreateInput{UserID: leftEarly.ID, LicenseTypeID: typeID, IssuedDate: date("2024-02-01"), Year: 2025}); !errors.Is(err, licenses.ErrNotActiveMember) {
+		t.Errorf("expected a license for a year after they left to be rejected, got %v", err)
+	}
+}
+
+// A license needn't have been paid through the club — someone federated
+// elsewhere — so no transaction is needed, and none is invented.
+func TestServiceCreateWithoutATransaction(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	created, err := svc.Create(ctx, licenses.CreateInput{UserID: person.ID, LicenseTypeID: testutil.LicenseTypeID(t, tx, "A BASICA"), IssuedDate: date("2026-01-01"), Year: 2026})
+	if err != nil {
+		t.Fatalf("create without a transaction: %v", err)
+	}
+	if created.TransactionID != nil {
+		t.Errorf("expected no transaction, got %v", *created.TransactionID)
+	}
+	list, err := svc.ListByUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].TransactionID != nil {
+		t.Errorf("expected the license listed with no transaction, got %+v", list)
+	}
+}
+
+// A transaction that is given is still checked.
+func TestServiceCreateStillChecksAGivenTransaction(t *testing.T) {
+	tx := testutil.NewTx(t)
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	svc := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	person := testutil.InsertUser(t, tx, "")
+	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
+	ctx := context.Background()
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: person.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+
+	in := licenses.CreateInput{UserID: person.ID, LicenseTypeID: typeID, IssuedDate: date("2026-01-01"), Year: 2026}
+	in.TransactionID = new(int64(999999))
+	if _, err := svc.Create(ctx, in); !errors.Is(err, licenses.ErrUnknownTransaction) {
+		t.Errorf("expected ErrUnknownTransaction, got %v", err)
+	}
+	in.TransactionID = new(testutil.InsertTransactionOn(t, tx, true, false))
+	if _, err := svc.Create(ctx, in); !errors.Is(err, licenses.ErrTransactionNotForLicenses) {
+		t.Errorf("expected ErrTransactionNotForLicenses, got %v", err)
 	}
 }
