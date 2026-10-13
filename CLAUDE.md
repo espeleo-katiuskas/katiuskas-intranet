@@ -1146,7 +1146,7 @@ another row — listing the transaction's *other* accounts — each name (just t
 ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
 `GET /transactions/{id}` the first time (the listing only ever carries this account's own
 side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
-has; it works for transactions of any number of entries. Clicking
+has; it works for transactions of any number of entries. Under them it also lists the cuotas anuales and licencias the transaction paid for — each as the person's name (from `GET /users/directory`, which the page now loads for everyone, not just for the admin pickers) linking to `/member`, plus year (and license type) — from the `dues`/`licenses` that same response carries for admin/board only, so they simply don't appear for anyone else. Clicking
 the row again collapses it, a click on Editar/Borrar or on a link never toggles it, and any
 reload of the list starts every row collapsed. Pressing "n" anywhere on the page opens the new-transaction dialog (ignored while typing in
 a field, with a modifier held, or with a dialog already open), which puts focus on the date;

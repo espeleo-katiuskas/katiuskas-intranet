@@ -38,29 +38,39 @@ if (!accountId) {
 let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and edit alike
 let editingTransactionId = null; // which transaction #edit-transaction-dialog's fields currently belong to — set right before it opens, read back on save
 
-// userEntries/allLicenseTypes back the socio and license-type pickers in
-// both dialogs' own "cuotas anuales"/"licencias nuevas" sections — see
-// setupDuesAndLicensesSection. Loaded once, only for a real admin
-// (POST dues/licenses is admin-only, so there's nothing for anyone else
-// to pick here).
+// userEntries is the people directory, loaded for everyone: it turns the
+// logins in a transaction's detail (the cuotas and licencias it paid
+// for) into names, and, for a real admin only, feeds the socio pickers
+// of both dialogs' "cuotas anuales"/"licencias nuevas" sections — see
+// setupDuesAndLicensesSection. allLicenseTypes backs the license-type
+// picker, so it too is only loaded for a real admin (POST dues/licenses
+// is admin-only, so there's nothing for anyone else to pick).
 let userEntries = [];
+
+// A person's display name from their login — the picker's own label
+// without its "#id" suffix — falling back to the login itself.
+function personName(login) {
+  return userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+}
 let allLicenseTypes = [];
 let licenseTypesById = {};
 
-async function loadAdminPickerCatalogs() {
-  if (!isRealAdmin) return;
+async function loadCatalogs() {
   try {
     const directory = await apiFetch('/users/directory');
     userEntries = directory
       .slice()
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
       .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
-    for (const id of ['nt-due-user-options', 'et-due-user-options', 'nt-license-user-options', 'et-license-user-options']) {
-      document.getElementById(id).innerHTML = renderPickerOptions(userEntries);
+    if (isRealAdmin) {
+      for (const id of ['nt-due-user-options', 'et-due-user-options', 'nt-license-user-options', 'et-license-user-options']) {
+        document.getElementById(id).innerHTML = renderPickerOptions(userEntries);
+      }
     }
   } catch {
     showError('No se pudo cargar la lista de socios.');
   }
+  if (!isRealAdmin) return;
   try {
     allLicenseTypes = await apiFetch('/license-types');
     licenseTypesById = Object.fromEntries(allLicenseTypes.map((t) => [t.id, t]));
@@ -283,10 +293,6 @@ function setupDuesAndLicensesSection(prefix) {
   // removing a license isn't something this dialog offers) — only the
   // edit dialog has the containers for them; the create dialog never
   // has anything to show.
-  function personName(login) {
-    return userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
-  }
-
   function setExisting({ dues, licenses }) {
     existing = { dues, licenses };
     if (duesExisting) {
@@ -645,15 +651,37 @@ document.getElementById('entries-filter-clear').addEventListener('click', () => 
 // which this page already has.
 function renderEntryDetail(transaction) {
   const others = transaction.entries.filter((e) => e.account_id !== accountId);
-  if (!others.length) return '<p class="entry-detail-title">Esta transacción no afecta a ninguna otra cuenta.</p>';
-  const items = others
-    .map((e) => {
-      const account = allAccounts.find((a) => a.id === e.account_id);
-      const name = account ? account.name : `Cuenta #${e.account_id}`;
-      return `<li><a href="/account?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
-    })
-    .join('');
-  return `<div class="entry-detail-title">Otras cuentas de esta transacción (+ entra, − sale)</div><ul class="entry-detail-list">${items}</ul>`;
+  let html = '';
+  if (others.length) {
+    const items = others
+      .map((e) => {
+        const account = allAccounts.find((a) => a.id === e.account_id);
+        const name = account ? account.name : `Cuenta #${e.account_id}`;
+        return `<li><a href="/account?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
+      })
+      .join('');
+    html += `<div class="entry-detail-title">Otras cuentas de esta transacción (+ entra, − sale)</div><ul class="entry-detail-list">${items}</ul>`;
+  } else {
+    html += '<p class="entry-detail-title">Esta transacción no afecta a ninguna otra cuenta.</p>';
+  }
+
+  // The cuotas and licencias this transaction paid for. The API only
+  // sends them to admin/board (see GET /transactions/{id}), so for anyone
+  // else both are simply absent and nothing is listed.
+  const personLink = (login, text) => `<a href="/member?login=${encodeURIComponent(login)}">${escapeHtml(personName(login))}</a> · ${escapeHtml(text)}`;
+  const dues = transaction.dues ?? [];
+  if (dues.length) {
+    html += `<div class="entry-detail-title">Cuotas anuales</div><ul class="entry-detail-list">${dues
+      .map((due) => `<li>${personLink(due.user_login, String(due.year))}</li>`)
+      .join('')}</ul>`;
+  }
+  const licenses = transaction.licenses ?? [];
+  if (licenses.length) {
+    html += `<div class="entry-detail-title">Licencias</div><ul class="entry-detail-list">${licenses
+      .map((license) => `<li>${personLink(license.user_login, `${license.type} · ${license.year}`)}</li>`)
+      .join('')}</ul>`;
+  }
+  return html;
 }
 
 // Expands (or collapses) the row right below the clicked one. The detail
@@ -877,4 +905,4 @@ newTransactionForm.addEventListener('submit', async (event) => {
 
 await loadAccount();
 await loadEntries();
-await loadAdminPickerCatalogs();
+await loadCatalogs();

@@ -445,6 +445,11 @@ th.sortable:hover {
   max-width: 26rem;
 }
 
+.entry-detail-list + .entry-detail-title,
+.entry-detail-list + p.entry-detail-title {
+  margin-top: 10px;
+}
+
 .entry-detail-list li {
   display: flex;
   justify-content: space-between;
