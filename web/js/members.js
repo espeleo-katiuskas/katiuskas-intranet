@@ -280,7 +280,7 @@ const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p
 // also on MemberListing — the date it was paid is not public). Hidden
 // by default: it is for checking who is up to date, which the
 // "a corriente de pago" filter below does without a column.
-const lastDueYearColumn = { ...numberColumn('last_due_year', 'Última cuota pagada', (p) => p.last_due_year ?? null), default: false };
+const lastDueYearColumn = { ...numberColumn('last_due_year', 'Última cuota', (p) => p.last_due_year ?? null), default: false };
 
 // "A corriente de pago" means the cuota of the current year is paid.
 const duesStatusLabels = { upToDate: 'A corriente de pago', behind: 'No a corriente de pago' };
@@ -418,7 +418,7 @@ function filteredPeople() {
 }
 
 const FULL_COLUMNS = [
-  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
+  { ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null), default: true },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
@@ -457,7 +457,7 @@ const FULL_COLUMNS = [
 // themselves (see users.MemberListing) — the rest of FULL_COLUMNS would
 // just render as "—" for every row, so they're not offered at all.
 const MEMBER_COLUMNS = [
-  { ...numberColumn('membership_number', 'N.º de socio', (p) => p.membership_number ?? null), default: true },
+  { ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null), default: true },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },

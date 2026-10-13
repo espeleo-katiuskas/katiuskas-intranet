@@ -291,7 +291,7 @@ federated; there's no end date because a license always runs to December 31st), 
 date, `last_due_paid_at`, stays admin/board-only, both computed in `users.Service.enrich`
 via `memberships.Service.LatestDue`); no DNI or contact info). `/members` filters on those
 two for everyone — "A corriente de pago" is `last_due_year` ≥ the current year,
-"Federado" is having a `license_type` — and offers `last_due_year` as an optional "Última cuota pagada"
+"Federado" is having a `license_type` — and offers `last_due_year` as an optional "Última cuota"
 column, and a line between the filters and the table reading "N personas en esta vista" — `setPeopleCount`: the rows the current filters leave, not everyone on file) and may
 only edit their own contact fields (`email`, `phone`, `address`,
 `postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
