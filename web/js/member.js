@@ -393,6 +393,67 @@ document.getElementById('el-license-type').addEventListener('change', (event) =>
   document.getElementById('el-other-detail-field').hidden = !chosen?.is_other;
 });
 
+// "+ Licencia sin pago": a license not tied to any transaction, the only
+// way to record one the club didn't collect (someone federated
+// elsewhere) — POST /users/{login}/licenses without a transaction_id.
+// The ones the club does collect are registered from their transaction,
+// in Contabilidad. The button lives in the admin-only panel below, so
+// it doesn't exist for anyone else.
+const addLicenseDialog = document.getElementById('add-license-dialog');
+initModal(addLicenseDialog);
+if (isRealAdmin) {
+  document.getElementById('add-license-button').addEventListener('click', () => {
+    document.getElementById('al-license-type').innerHTML = licenseTypeOptions(allLicenseTypes[0]?.id);
+    document.getElementById('al-other-detail-field').hidden = !licenseTypesById[allLicenseTypes[0]?.id]?.is_other;
+    document.getElementById('al-other-detail').value = '';
+    document.getElementById('al-issued-date').value = today();
+    document.getElementById('al-year').value = new Date().getFullYear();
+    openModal(addLicenseDialog);
+    document.getElementById('al-license-type').focus();
+  });
+
+  document.getElementById('al-license-type').addEventListener('change', (event) => {
+    document.getElementById('al-other-detail-field').hidden = !licenseTypesById[Number(event.target.value)]?.is_other;
+  });
+
+  document.getElementById('save-add-license').addEventListener('click', async () => {
+    const licenseTypeId = Number(document.getElementById('al-license-type').value);
+    const chosen = licenseTypesById[licenseTypeId];
+    const otherDetail = document.getElementById('al-other-detail').value.trim() || null;
+    if (chosen?.is_other && !otherDetail) {
+      showError('Indica de qué licencia se trata.');
+      return;
+    }
+    const issuedDate = document.getElementById('al-issued-date').value;
+    const year = Number(document.getElementById('al-year').value);
+    if (!issuedDate || !year) {
+      showError('Indica la fecha de obtención y el año que cubre.');
+      return;
+    }
+    const button = document.getElementById('save-add-license');
+    button.disabled = true;
+    try {
+      await apiFetch(`/users/${memberLogin}/licenses`, {
+        method: 'POST',
+        body: JSON.stringify({
+          license_type_id: licenseTypeId,
+          other_detail: chosen?.is_other ? otherDetail : null,
+          issued_date: issuedDate,
+          year,
+        }),
+      });
+      showFeedback('Licencia añadida.');
+      addLicenseDialog.close();
+      await loadTimeline();
+      await loadMember();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
 // board_start/board_end aren't here — their own text always folds the
 // position in a fixed shape ("Nuevo cargo: X"/"Deja el cargo de X"),
 // never the generic "label · reason" every other event type uses (see

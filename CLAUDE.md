@@ -445,6 +445,11 @@ bookkeeping metadata with no meaning apart from its transaction — while
 instead: a license is a real, independently meaningful record (proof of federation) even
 apart from its payment, so the transaction that paid for one can't be deleted out from under
 it at all.
+`/member` has a "+ Licencia sin pago" button (admin-only, in the same panel as the alta/baja
+actions) opening a dialog that `POST`s a license with no `transaction_id` — the way to record one
+the club didn't collect; the ones it does collect are registered from their transaction, in
+Contabilidad (`/account`). The license then shows in the "Historial como socio" like any other,
+with Editar/Borrar.
 
 **Temporary leaves** (`membership_leaves`): a "baja temporal" belongs to the person
 directly (`user_id`), not to one specific `memberships` period — the same `user_id`-keyed

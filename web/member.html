@@ -203,11 +203,40 @@
     </div>
   </dialog>
 
+  <dialog id="add-license-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Añadir licencia sin pago</h3>
+    <p class="hint">Para una licencia que no se ha pagado en el club, por ejemplo porque la persona se ha federado en otro sitio. Las licencias que sí se pagan en el club se registran desde su transacción, en Contabilidad.</p>
+    <div class="field-grid">
+      <div class="field">
+        <label for="al-license-type">Tipo de licencia</label>
+        <select id="al-license-type"></select>
+      </div>
+      <div class="field" id="al-other-detail-field" hidden>
+        <label for="al-other-detail">¿Cuál?</label>
+        <input id="al-other-detail" type="text">
+      </div>
+      <div class="field">
+        <label for="al-issued-date">Fecha de obtención</label>
+        <input id="al-issued-date" type="date">
+      </div>
+      <div class="field">
+        <label for="al-year">Año que cubre</label>
+        <input id="al-year" type="number" step="1">
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
+      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+    </div>
+  </dialog>
+
   <div class="detail-list" id="timeline-list"></div>
 
   <div class="panel-actions" data-roles="admin">
     <span id="membership-status-actions"></span>
     <span id="board-status-actions"></span>
+    <button type="button" class="btn btn-secondary btn-small" id="add-license-button">+ Licencia sin pago</button>
   </div>
 
   <h2>Actividades</h2>
