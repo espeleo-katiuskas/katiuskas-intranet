@@ -583,6 +583,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		return false
 	case errors.Is(err, ErrTransactionNotFound):
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
+	case errors.Is(err, ErrTransactionHasLicenses):
+		httpapi.WriteError(w, http.StatusConflict, "transaction_has_licenses", err.Error())
 	case errors.Is(err, ErrTooFewEntries):
 		httpapi.WriteError(w, http.StatusBadRequest, "too_few_entries", err.Error())
 	case errors.Is(err, ErrInvalidAmount):

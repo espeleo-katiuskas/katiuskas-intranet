@@ -2410,8 +2410,8 @@ paths:
       description: >
         Requires admin or the money role. Also removes the membership
         dues it recorded (they cascade). A transaction that a license
-        references can't be deleted; that case currently surfaces as a
-        generic 500 internal_error, not a dedicated code.
+        references can't be deleted (409 transaction_has_licenses): a
+        license outlives the record of how it was paid.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2420,6 +2420,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: transaction_has_licenses — a license still names this transaction as its payment. }
 
 components:
   securitySchemes:

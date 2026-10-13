@@ -26,6 +26,12 @@ var (
 	// transaction entry, and deleting it would either orphan that
 	// subtree or silently erase financial history.
 	ErrAccountInUse = errors.New("account is still referenced by a child account or a transaction entry")
+	// ErrTransactionHasLicenses means the transaction can't be deleted:
+	// a federative license still names it as its payment
+	// (licenses.transaction_id is ON DELETE RESTRICT, since a license
+	// outlives the record of how it was paid). Its dues, by contrast,
+	// are removed with it.
+	ErrTransactionHasLicenses = errors.New("transaction is still the payment of one or more licenses")
 	// ErrCircularParent means the given parent_id is this account
 	// itself, or one of its own descendants — setting it would make
 	// this account a descendant of one of its own descendants, a cycle
@@ -582,14 +588,26 @@ func (r *Repository) UpdateTransaction(ctx context.Context, id int64, in UpdateT
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
+	// Inside its own (sub)transaction so a rejected delete is rolled back
+	// on its own: under test, where every call shares one outer
+	// transaction, the foreign-key error would otherwise leave that whole
+	// transaction aborted.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
+	if pgErrCode(err) == foreignKeyViolationCode {
+		return ErrTransactionHasLicenses
+	}
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrTransactionNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) entriesForTransaction(ctx context.Context, transactionID int64) ([]Entry, error) {

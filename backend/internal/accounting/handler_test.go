@@ -886,3 +886,72 @@ func TestHandlerAccountHiddenFlag(t *testing.T) {
 		t.Errorf("expected the hidden account in the listing, got %s", list.Body.String())
 	}
 }
+
+// A license outlives the record of how it was paid (licenses.transaction_id
+// is ON DELETE RESTRICT), so deleting its transaction is a 409 — not the
+// 500 the foreign-key error used to become — and the transaction stays. A
+// transaction that only paid dues is deleted, dues included.
+func TestDeleteTransactionHandlesLicensesAndDues(t *testing.T) {
+	mux, resolver, _, p := newHandlerTestServerWithPayments(t)
+	ctx := context.Background()
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	cuotas := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
+		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+	var cuotasAccount accounting.Account
+	if err := json.Unmarshal(cuotas.Body.Bytes(), &cuotasAccount); err != nil {
+		t.Fatalf("decode account: %v", err)
+	}
+	caja := createAccount(t, mux, adminToken, "Caja", "570")
+	newTransaction := func(description string) accounting.Transaction {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", adminToken,
+			transactionBody(time.Now(), description, entry(caja.ID, 50), entry(cuotasAccount.ID, -50)))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create transaction: %d: %s", rec.Code, rec.Body.String())
+		}
+		var created accounting.Transaction
+		if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+			t.Fatalf("decode transaction: %v", err)
+		}
+		return created
+	}
+	person := testutil.InsertUser(t, p.tx, "")
+	paidOn := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	withLicense := newTransaction("Cuota y licencia")
+	if _, err := p.memberships.RecordDue(ctx, person.ID, 2026, withLicense.ID, paidOn); err != nil {
+		t.Fatalf("record due: %v", err)
+	}
+	if _, err := p.licenses.Create(ctx, licenses.CreateInput{
+		UserID: person.ID, LicenseTypeID: testutil.LicenseTypeID(t, p.tx, "A BASICA"),
+		IssuedDate: paidOn, Year: 2026, TransactionID: &withLicense.ID,
+	}); err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+	rec := doRequest(mux, http.MethodDelete, "/api/v1/transactions/"+itoa(withLicense.ID), adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 transaction_has_licenses, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "transaction_has_licenses") {
+		t.Errorf("expected error code transaction_has_licenses, got %s", rec.Body.String())
+	}
+	if got := doRequest(mux, http.MethodGet, "/api/v1/transactions/"+itoa(withLicense.ID), adminToken, nil); got.Code != http.StatusOK {
+		t.Errorf("expected the transaction to still exist, got %d", got.Code)
+	}
+
+	onlyDue := newTransaction("Solo cuota")
+	if _, err := p.memberships.RecordDue(ctx, person.ID, 2027, onlyDue.ID, paidOn.AddDate(1, 0, 0)); err != nil {
+		t.Fatalf("record due: %v", err)
+	}
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/transactions/"+itoa(onlyDue.ID), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("expected 204 for a transaction that only paid a due, got %d: %s", rec.Code, rec.Body.String())
+	}
+	dues, err := p.memberships.ListDuesForUser(ctx, person.ID)
+	if err != nil {
+		t.Fatalf("list dues: %v", err)
+	}
+	if len(dues) != 1 || dues[0].Year != 2026 {
+		t.Errorf("expected only the 2026 due to remain, got %+v", dues)
+	}
+}

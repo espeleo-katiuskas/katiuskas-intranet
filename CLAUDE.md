@@ -817,7 +817,10 @@ entries can't be deleted — they're history — so it's flagged instead, and *o
 frontend acts on it*: the API lists, reads, edits and posts to a hidden account like any
 other. `DELETE /accounts/{id}` (admin/money) exists only for an account nothing references
 yet — one with a child account or a posted entry answers 409 `account_in_use`
-(`ErrAccountInUse`, from the foreign-key violation). Against that chart sit
+(`ErrAccountInUse`, from the foreign-key violation). Likewise `DELETE /transactions/{id}`
+answers 409 `transaction_has_licenses` (`ErrTransactionHasLicenses`) while a license still
+names the transaction as its payment (`licenses.transaction_id` is `ON DELETE RESTRICT`);
+its dues, by contrast, cascade. Against that chart sit
 `transactions`: every real movement of money the club records, each
 made of two or more `entries` (an `account_id` and an `amount`, positive into that account
 or negative out of it) whose amounts always sum to exactly zero — standard double-entry

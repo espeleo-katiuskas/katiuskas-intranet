@@ -963,7 +963,9 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
 - Corregir una transacción (`PATCH`) sustituye su descripción, su fecha y el conjunto
   entero de apuntes a la vez; no hay edición de un apunte suelto.
 - `DELETE /transactions/{id}` la borra con todos sus apuntes y, por cascada, las cuotas que
-  pagó.
+  pagó. Si alguna licencia la señala como su pago no se puede borrar: 409
+  `transaction_has_licenses` (`ErrTransactionHasLicenses`), porque `licenses.transaction_id`
+  es `ON DELETE RESTRICT` — una licencia vale aunque se pierda el rastro de cómo se pagó.
 
 #### Saldos y listados
 
