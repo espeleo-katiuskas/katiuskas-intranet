@@ -14,6 +14,18 @@ const (
 	TypeOther     Type = "other"
 )
 
+// Valid reports whether t is one of the activity_type enum's values.
+// Checked in Go (Service.Create/Update) so a misspelled one is a 400 rather
+// than the 500 Postgres' own enum error would become; Status.Valid and
+// Visibility.Valid below do the same for theirs.
+func (t Type) Valid() bool {
+	switch t {
+	case TypeCaving, TypeCanyoning, TypeTraining, TypeSocial, TypeOther:
+		return true
+	}
+	return false
+}
+
 // RequiresFederation reports whether joining an activity of this type
 // requires a currently valid federative license — see
 // Service.checkFederationRequired. Caving and canyoning both go through
@@ -30,12 +42,20 @@ const (
 	StatusCancelled Status = "cancelled"
 )
 
+func (s Status) Valid() bool {
+	return s == StatusPlanned || s == StatusCompleted || s == StatusCancelled
+}
+
 type Visibility string
 
 const (
 	VisibilityPublic  Visibility = "public"
 	VisibilityPrivate Visibility = "private"
 )
+
+func (v Visibility) Valid() bool {
+	return v == VisibilityPublic || v == VisibilityPrivate
+}
 
 type Activity struct {
 	ID          int64     `json:"id"`

@@ -504,8 +504,8 @@ func TestHandlerUpdateCanChangeDates(t *testing.T) {
 	}
 
 	rec = doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"end_date": "2026-01-01"})
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected the DB CHECK constraint to reject end_date before start_date, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_date_range for an end_date before start_date, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -1238,5 +1238,74 @@ func TestHandlerDeleteHolidayNotifiesTelegram(t *testing.T) {
 	msg := notifier.waitForMessage(t)
 	if !strings.Contains(msg, "Lunes de Pascua") {
 		t.Errorf("expected the notification to name the deleted holiday, got %q", msg)
+	}
+}
+
+// A bad type, visibility, status or date range is the caller's mistake: a
+// 400 with its own code, not the 500 the database's enum/CHECK errors used
+// to become.
+func TestHandlerRejectsInvalidActivityFields(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	person := testutil.InsertUser(t, tx, "")
+	token := tokenFor(t, authn, person.ID, "member")
+	valid := func() map[string]any {
+		return map[string]any{"title": "A", "type": "social", "start_date": "2026-03-10", "end_date": "2026-03-12"}
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+	}{
+		{"unknown type", func(b map[string]any) { b["type"] = "escalada" }, "invalid_type"},
+		{"unknown visibility", func(b map[string]any) { b["visibility"] = "secret" }, "invalid_visibility"},
+		{"end before start", func(b map[string]any) { b["end_date"] = "2026-03-09" }, "invalid_date_range"},
+	}
+	for _, c := range cases {
+		body := valid()
+		c.mutate(body)
+		rec := doRequest(mux, http.MethodPost, "/api/v1/activities", token, body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("create, %s: expected 400, got %d: %s", c.name, rec.Code, rec.Body.String())
+			continue
+		}
+		if got := errorCode(t, rec); got != c.code {
+			t.Errorf("create, %s: expected error code %s, got %s", c.name, c.code, got)
+		}
+	}
+
+	created := doRequest(mux, http.MethodPost, "/api/v1/activities", token, valid())
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected the valid activity to be created, got %d: %s", created.Code, created.Body.String())
+	}
+	var a activities.Activity
+	if err := json.Unmarshal(created.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d", a.ID)
+	updates := []struct {
+		name string
+		body map[string]any
+		code string
+	}{
+		{"unknown type", map[string]any{"type": "escalada"}, "invalid_type"},
+		{"unknown visibility", map[string]any{"visibility": "secret"}, "invalid_visibility"},
+		{"unknown status", map[string]any{"status": "done"}, "invalid_status"},
+		// Either date can be sent alone: it's compared with the stored other one.
+		{"end before the stored start", map[string]any{"end_date": "2026-03-09"}, "invalid_date_range"},
+		{"start after the stored end", map[string]any{"start_date": "2026-03-13"}, "invalid_date_range"},
+	}
+	for _, u := range updates {
+		rec := doRequest(mux, http.MethodPatch, path, token, u.body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("update, %s: expected 400, got %d: %s", u.name, rec.Code, rec.Body.String())
+			continue
+		}
+		if got := errorCode(t, rec); got != u.code {
+			t.Errorf("update, %s: expected error code %s, got %s", u.name, u.code, got)
+		}
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, token, map[string]any{"start_date": "2026-03-11"}); rec.Code != http.StatusOK {
+		t.Errorf("expected a start date still before the end date to be accepted, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -182,6 +182,22 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Description: body.Description, LeaderID: leaderID, Visibility: body.Visibility,
 		ParticipantUserIDs: participantIDs,
 	})
+	if errors.Is(err, ErrInvalidType) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidStatus) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidVisibility) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_visibility", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidDateRange) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", err.Error())
+		return
+	}
 	if errors.Is(err, ErrParticipantNotFound) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
 		return
@@ -303,6 +319,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	before, beforeErr := h.service.Get(r.Context(), id)
 
 	a, err := h.service.Update(r.Context(), id, in)
+	if errors.Is(err, ErrInvalidType) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidStatus) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidVisibility) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_visibility", err.Error())
+		return
+	}
+	if errors.Is(err, ErrInvalidDateRange) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", err.Error())
+		return
+	}
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
 		return

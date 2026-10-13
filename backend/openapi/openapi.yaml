@@ -1275,8 +1275,11 @@ paths:
         "400":
           description: >
             invalid_body (malformed JSON), invalid_date (start_date or
-            end_date missing or not YYYY-MM-DD) or unknown_participant
-            (one of the given participant_logins doesn't exist).
+            end_date missing or not YYYY-MM-DD), invalid_date_range
+            (end_date earlier than start_date), invalid_type or
+            invalid_visibility (not one of the enum's values), or
+            unknown_participant (one of the given participant_logins
+            doesn't exist).
         "403":
           description: forbidden — leader_login was given by someone who isn't admin/board.
         "404":
@@ -1320,7 +1323,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
-        "400": { description: invalid_id, invalid_body, or invalid_date (start_date/end_date given but not YYYY-MM-DD). }
+        "400": { description: "invalid_id, invalid_body, invalid_date (start_date/end_date given but not YYYY-MM-DD), invalid_date_range (the resulting end_date would be earlier than start_date, whichever of the two was sent), or invalid_type, invalid_status or invalid_visibility (not one of the enum values)." }
         "403":
           description: >
             forbidden — not the organizer, board, or admin; or

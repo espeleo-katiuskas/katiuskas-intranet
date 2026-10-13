@@ -22,6 +22,14 @@ var (
 	// ErrDuplicateHoliday means a holiday already exists on that date —
 	// see the holidays.date UNIQUE constraint.
 	ErrDuplicateHoliday = errors.New("a holiday already exists on that date")
+	// ErrInvalidType, ErrInvalidStatus and ErrInvalidVisibility mean the
+	// given value isn't one of that enum's values (see Type.Valid).
+	ErrInvalidType       = errors.New("type must be caving, canyoning, training, social or other")
+	ErrInvalidStatus     = errors.New("status must be planned, completed or cancelled")
+	ErrInvalidVisibility = errors.New("visibility must be public or private")
+	// ErrInvalidDateRange means end_date is earlier than start_date — the
+	// end_not_before_start CHECK would reject it too, but as a 500.
+	ErrInvalidDateRange = errors.New("end_date must not be earlier than start_date")
 )
 
 const foreignKeyViolationCode = "23503"
@@ -66,6 +74,9 @@ func NewRepository(pool db.PGX) *Repository {
 // any) in a single transaction, so an unknown participant id rolls back
 // the whole thing instead of leaving a half-populated activity behind.
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, error) {
+	if in.EndDate.Before(in.StartDate) {
+		return Activity{}, ErrInvalidDateRange
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Activity{}, err
@@ -223,6 +234,10 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	}
 	if in.LeaderID != nil {
 		a.LeaderID = *in.LeaderID
+	}
+	// Checked on the merged values: either date can be sent alone.
+	if a.EndDate.Before(a.StartDate) {
+		return a, ErrInvalidDateRange
 	}
 	_, err = r.pool.Exec(ctx, `
 		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, status=$6, visibility=$7, leader_id=$8 WHERE id=$9

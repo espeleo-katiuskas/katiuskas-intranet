@@ -43,6 +43,12 @@ func (s *Service) checkFederationRequired(ctx context.Context, t Type, userIDs [
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) {
+	if !in.Type.Valid() {
+		return Activity{}, ErrInvalidType
+	}
+	if !in.Visibility.Valid() {
+		return Activity{}, ErrInvalidVisibility
+	}
 	if err := s.checkFederationRequired(ctx, in.Type, in.ParticipantUserIDs); err != nil {
 		return Activity{}, err
 	}
@@ -80,6 +86,15 @@ func (s *Service) Get(ctx context.Context, id int64) (Activity, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activity, error) {
+	if in.Type != nil && !in.Type.Valid() {
+		return Activity{}, ErrInvalidType
+	}
+	if in.Status != nil && !in.Status.Valid() {
+		return Activity{}, ErrInvalidStatus
+	}
+	if in.Visibility != nil && !in.Visibility.Valid() {
+		return Activity{}, ErrInvalidVisibility
+	}
 	return s.repo.Update(ctx, id, in)
 }
 

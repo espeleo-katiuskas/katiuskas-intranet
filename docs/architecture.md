@@ -696,6 +696,15 @@ iniciales.
 - El tipo (`caving`, `canyoning`, `training`, `social`, `other`) también se puede cambiar
   al editar.
 
+**Validación**
+
+- `type`, `status` y `visibility` se comprueban en Go contra los valores de sus enums
+  (`Type.Valid`, `Status.Valid`, `Visibility.Valid`): uno desconocido da 400 `invalid_type`,
+  `invalid_status` o `invalid_visibility`.
+- `end_date` no puede ser anterior a `start_date` (400 `invalid_date_range`). Al editar se
+  compara con los valores ya fusionados, así que vale enviar solo una de las dos fechas.
+  La restricción `end_not_before_start` de la base de datos queda como última barrera.
+
 **Federación**
 
 - Apuntar a un participante en una actividad `caving` o `canyoning` exige que esa persona
