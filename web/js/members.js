@@ -602,6 +602,15 @@ function renderUserRow(person) {
   return `<tr data-person-login="${person.login}">${cells}</tr>`;
 }
 
+// "N personas en esta vista": how many rows the current filters leave,
+// not how many people are on file. Hidden while there's nothing to count
+// (the list hasn't loaded, or failed to).
+function setPeopleCount(count) {
+  const element = document.getElementById('people-count');
+  element.hidden = count == null;
+  if (count != null) element.textContent = `${count} ${count === 1 ? 'persona' : 'personas'} en esta vista`;
+}
+
 function renderUsersTable() {
   renderFilters();
   renderColumnToggle();
@@ -609,11 +618,13 @@ function renderUsersTable() {
 
   const tableBody = document.getElementById('users-table-body');
   if (people.length === 0) {
+    setPeopleCount(null);
     tableBody.innerHTML = `<tr><td colspan="${Math.max(visibleColumns.size, 1)}">Todavía no hay personas registradas.</td></tr>`;
     return;
   }
 
   const visible = filteredPeople();
+  setPeopleCount(visible.length);
   if (visible.length === 0) {
     tableBody.innerHTML = `<tr><td colspan="${Math.max(visibleColumns.size, 1)}">Ninguna persona coincide con los filtros.</td></tr>`;
     return;
@@ -644,6 +655,7 @@ async function loadUsers() {
     renderUsersTable();
   } catch {
     people = [];
+    setPeopleCount(null);
     tableBody.innerHTML = '<tr><td>No se pudo cargar la lista de personas.</td></tr>';
   }
 }
