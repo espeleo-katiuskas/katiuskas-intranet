@@ -645,6 +645,9 @@ forma que `memberships`: `start_date`/`end_date` (vacío = sigue en el cargo).
   cargos abiertos a la vez, sean o no el mismo.
 - No hay restricción sobre que dos personas tengan el mismo cargo a la vez (varios vocales
   simultáneos es normal).
+- El cargo se valida en Go antes de tocar la base de datos (`Position.Valid`,
+  `ErrInvalidPosition`, 400 `invalid_position`), tanto al crear como al corregir: el enum
+  de PostgreSQL lo rechazaría igualmente, pero como un 500.
 
 **Relación con otros paquetes**
 

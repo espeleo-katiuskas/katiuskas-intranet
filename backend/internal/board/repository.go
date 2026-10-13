@@ -12,6 +12,9 @@ import (
 
 var (
 	ErrNotFound = errors.New("board term not found")
+	// ErrInvalidPosition means the given position isn't one of the board
+	// positions (see Position).
+	ErrInvalidPosition = errors.New("position must be president, vice_president, secretary, treasurer or member_at_large")
 	// ErrOverlap means this person already has an open (or overlapping)
 	// board term — someone can't hold two positions, or the same
 	// position twice, at once.

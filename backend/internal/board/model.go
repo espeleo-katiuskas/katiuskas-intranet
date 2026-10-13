@@ -20,6 +20,18 @@ const (
 	PositionMemberAtLarge Position = "member_at_large"
 )
 
+// Valid reports whether p is one of the positions the database's
+// board_position enum accepts. Checked in Go (Service.Create/Update) so a
+// misspelled one is a 400 rather than the 500 Postgres' own "invalid input
+// value for enum" error would otherwise become.
+func (p Position) Valid() bool {
+	switch p {
+	case PositionPresident, PositionVicePresident, PositionSecretary, PositionTreasurer, PositionMemberAtLarge:
+		return true
+	}
+	return false
+}
+
 type Member struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"-"`

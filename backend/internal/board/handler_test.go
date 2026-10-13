@@ -456,3 +456,35 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 		t.Errorf("expected no notification for a no-op update, got %v", notifier.sent)
 	}
 }
+
+// A position that isn't one of the board_position enum values is a 400,
+// not the 500 Postgres' enum error used to become — on create and update.
+func TestHandlerRejectsAnUnknownPosition(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/board-members", target.Login)
+
+	rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]string{"position": "presidente", "start_date": "2020-01-01"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_position on create, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"invalid_position"`) {
+		t.Errorf("expected error code invalid_position, got %s", rec.Body.String())
+	}
+
+	created := doRequest(mux, http.MethodPost, path, adminToken, map[string]string{"position": "secretary", "start_date": "2020-01-01"})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected the term to be created, got %d: %s", created.Code, created.Body.String())
+	}
+	var m struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/board-members/%d", m.ID), adminToken, map[string]string{"position": "", "start_date": "2020-01-01"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 invalid_position on update, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

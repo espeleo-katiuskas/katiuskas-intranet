@@ -131,6 +131,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	m, err := h.service.Create(r.Context(), CreateInput{
 		UserID: userID, Position: body.Position, StartDate: startDate,
 	})
+	if errors.Is(err, ErrInvalidPosition) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_position", err.Error())
+		return
+	}
 	if errors.Is(err, ErrOverlap) {
 		httpapi.WriteError(w, http.StatusConflict, "overlapping_period", err.Error())
 		return
@@ -190,6 +194,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	})
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "board term not found")
+		return
+	}
+	if errors.Is(err, ErrInvalidPosition) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_position", err.Error())
 		return
 	}
 	if errors.Is(err, ErrOverlap) {

@@ -1041,7 +1041,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
-        "400": { description: invalid_body (malformed JSON) or invalid_date (start_date missing or not YYYY-MM-DD). }
+        "400": { description: invalid_body (malformed JSON), invalid_date (start_date missing or not YYYY-MM-DD) or invalid_position (position isn't one of the BoardPosition values). }
         "403": { description: Only admin can start a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1094,7 +1094,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
-        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
+        "400": { description: invalid_id, invalid_body, invalid_position (position isn't one of the BoardPosition values), or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
         "403": { description: Only admin can correct a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
