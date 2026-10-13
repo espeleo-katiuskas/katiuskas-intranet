@@ -223,7 +223,7 @@ intranet.tudominio.org {
 	}
 	handle {
 		root * /opt/katiuskas-intranet/web
-		header Cache-Control "no-cache"
+		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
 	}
@@ -234,14 +234,19 @@ intranet.tudominio.org {
 sudo systemctl reload caddy
 ```
 
-La línea `header Cache-Control "no-cache"` no es opcional. Sin ninguna cabecera de caché, los
-navegadores calculan por su cuenta cuánto tiempo vale un fichero (una décima parte de su
-antigüedad), así que tras un despliegue uno que ya tenía copia de un fichero sin cambios
-desde hacía semanas puede seguir usándola durante días, y mezclarla con una página HTML
-nueva: secciones que nunca aparecen, formularios que no envían campos nuevos... `no-cache`
-no desactiva la caché, solo obliga a preguntar al servidor cada vez, que contesta con un
-`304` sin cuerpo mientras el fichero no haya cambiado. Quien ya tenga una copia antigua
-guardada necesita una recarga forzada (Ctrl+F5) la primera vez.
+La línea `header Cache-Control "max-age=3600"` no es opcional. Sin ninguna cabecera de
+caché, los navegadores calculan por su cuenta cuánto tiempo vale un fichero (una décima
+parte de su antigüedad), así que uno sin cambios desde hacía semanas puede servirse
+desactualizado durante días tras un despliegue. Una hora fija es un compromiso: la
+alternativa, `no-cache` (preguntar al servidor por cada fichero, que contesta con un `304`
+mientras no haya cambiado), hacía que cambiar de página tardara casi un segundo a través de
+una conexión real, porque cada página arrastra una cadena de scripts (cada uno importa al
+siguiente, así que se cargan uno tras otro) y cada uno costaba una ida y vuelta. A cambio,
+tras un despliegue un navegador puede conservar una página o un script antiguos hasta una
+hora, y mezclarlos con ficheros nuevos (secciones que nunca aparecen, formularios que no
+envían campos nuevos...): quien necesite ver el cambio al momento fuerza el refresco
+(el modo depende del navegador y del dispositivo, y en un móvil o una tablet no hay una
+forma sencilla: de ahí una hora y no un día). Si hace falta otro plazo, es ese número.
 
 Si ese Caddy corre como un usuario que no puede leer `/opt/katiuskas-intranet/web`
 (propiedad de `katiuskas`), dale acceso de lectura, por ejemplo añadiendo a ese usuario al
@@ -278,7 +283,7 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 	}
 	handle {
 		root * /opt/katiuskas-intranet/web
-		header Cache-Control "no-cache"
+		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
 	}

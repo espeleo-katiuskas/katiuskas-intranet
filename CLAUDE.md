@@ -96,12 +96,18 @@ Rebuilding/redeploying just the API after a backend change:
 docker compose build api && docker compose up -d api
 ```
 The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Caddyfile`),
-and sends `Cache-Control: no-cache` for everything it serves from there: without any
-cache header, browsers guess a freshness lifetime of a tenth of the file's age, so one
-holding an old copy of a file unchanged for weeks keeps using it for days after a deploy and
-mixes it with newer HTML (a new page whose sections are `hidden` by default, an old script
-that never shows them). The club's own Caddy, outside this repo, needs the same line in its
-site block (`docs/deployment-no-docker.md`).
+and sends `Cache-Control: max-age=3600` for everything it serves from there: without any
+cache header, browsers guess a freshness lifetime of a tenth of the file's age, so a file
+unchanged for weeks can be served stale for days after a deploy. A fixed hour is the
+trade-off: `no-cache` (revalidate each file, a cheap 304) made every navigation take about a
+second over a real connection — a page loads a chain of scripts that import one another, so
+each costs a revalidation round trip in sequence. The price is that after a deploy a browser
+may keep an old page or script for up to an hour, mixed with new ones; the people who use the
+intranet daily are the developers, who know to reload the page bypassing the cache (how depends
+on the browser and device, and on a phone or tablet there is no easy way — hence an hour and not
+a day). Only `web/` goes through this rule: documents and files come from `/api/*`, which Caddy leaves to the API.
+The club's own Caddy, outside this repo,
+needs the same line in its site block (`docs/deployment-no-docker.md`).
 
 Club documents (estatutos, actas...) shown at `/library`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no

@@ -5,11 +5,17 @@
 	handle {
 		root * /srv
 		# No Cache-Control at all leaves browsers to guess how long a file
-		# stays fresh (a tenth of its age), so after a deploy one that already
-		# holds a copy of a file unchanged for weeks can keep serving the old
-		# one for days — and mix it with a newer HTML page. "no-cache" means
-		# revalidate every time: a cheap 304 via the ETag when nothing changed.
-		header Cache-Control "no-cache"
+		# stays fresh (a tenth of its age) — so one unchanged for weeks can
+		# be served stale for days after a deploy. A fixed hour is the
+		# trade-off: revalidating every file ("no-cache") made each
+		# navigation take about a second over a real connection, since a page
+		# loads a chain of scripts that import one another and each one cost
+		# a round trip in sequence. The price is that after a deploy a
+		# browser may keep an old page or script for up to an hour; whoever
+		# needs the change straight away reloads the page bypassing the cache
+		# (how depends on the browser and device — on a phone or tablet
+		# there is no easy way, hence an hour and not a day).
+		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
 	}
