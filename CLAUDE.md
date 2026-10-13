@@ -431,7 +431,8 @@ socio" timeline gets one "Cuota anual · <year>" event per due, dated by `paid_a
 no Editar/Borrar (there's no endpoint for either) — its date has to keep the same
 midnight-UTC string shape every other event's has, since the timeline sorts them as plain
 strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
-with it — and `/profile` lists them in a "Cuotas anuales" table under the membership table. There's no
+with it; on a tie the order is alta, then the cuota, then a license paid the same day
+(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` lists them in a "Cuotas anuales" table under the membership table. There's no
 endpoint to correct or remove a due, and no validation that a due's `year` actually falls
 within an active membership period — both deliberately out of scope for now.
 `membership_dues.transaction_id` cascades on delete (`ON DELETE CASCADE`) — a due is pure

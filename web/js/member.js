@@ -464,8 +464,12 @@ const STATUS_EVENT_TYPES = new Set(['alta', 'baja', 'leave_start', 'leave_end'])
 // read as if they'd left before rejoining, or started a leave before
 // ending the previous one, on the very same day. Every other event
 // type (license, board terms) sits at the neutral middle priority and
-// keeps its original relative order among ties, same as before.
-const TIMELINE_TIE_BREAK_PRIORITY = { alta: 0, leave_end: 0, baja: 2, leave_start: 2 };
+// keeps its original relative order among ties, same as before. A cuota
+// anual goes between the two: after the alta that starts the membership
+// it's paid for, but before a license paid the same day — the cuota is
+// what makes someone a socio able to be federated, and it's what an
+// admin records first.
+const TIMELINE_TIE_BREAK_PRIORITY = { alta: 0, leave_end: 0, due: 0.5, baja: 2, leave_start: 2 };
 
 // Builds one flat, chronological list of events out of every membership
 // period, every temporary leave this person has ever taken (belongs to
