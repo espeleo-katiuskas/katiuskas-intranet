@@ -430,7 +430,7 @@ const FULL_COLUMNS = [
   { ...textColumn('postal_code', 'Código postal', (p) => p.postal_code ?? ''), default: false },
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },
   { ...textColumn('province', 'Provincia', (p) => p.province ?? ''), default: false },
-  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
+  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: false },
   { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
   {
     key: 'category',
@@ -461,7 +461,7 @@ const MEMBER_COLUMNS = [
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
   { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
-  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: true },
+  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: false },
   { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
   {
     key: 'category',

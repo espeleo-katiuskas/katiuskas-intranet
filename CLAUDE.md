@@ -1270,7 +1270,9 @@ people on whether `last_due_year` is the current year ("A corriente de pago"), a
 for the current year, so having one *is* being federated. Filters, visible columns and
 sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so "Volver a
 socios" from a person's page lands on the same view, and a counter shows how many people
-the current filters leave.
+the current filters leave. With nothing saved, the columns shown are "N.º socio",
+"Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag);
+the rest are optional in the "Filtros…" panel.
 
 On `/member`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without
