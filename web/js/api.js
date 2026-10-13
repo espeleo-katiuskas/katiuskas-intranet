@@ -355,7 +355,10 @@ function formatDate(isoDate) {
 // accounting.js's chart-of-accounts balances and, later, its own
 // transactions page.
 function formatCurrency(amount) {
-  return `${Number(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  // useGrouping "always": the es-ES locale by default only groups
+  // thousands from five digits up (10.000,00 but 1000,00), so a 4-digit
+  // amount would sit next to a grouped balance without its separator.
+  return `${Number(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })} €`;
 }
 
 // A plain <select> stops being usable once there are hundreds of
