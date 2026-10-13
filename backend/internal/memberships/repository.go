@@ -37,6 +37,10 @@ var (
 	// 00017_accounts_dues_licenses_flags.sql) — only a transaction that
 	// touches such an account can be the payment behind a due.
 	ErrTransactionNotForDues = errors.New("transaction has no entry on an account that accepts membership dues")
+	// ErrStartDateRequired means a due was recorded without a start date
+	// for someone who has no membership period yet: that date is what
+	// their first period (opened alongside the due) starts on.
+	ErrStartDateRequired = errors.New("start_date is required when the person has no membership period yet")
 )
 
 // exclusionViolationCode is the PostgreSQL error code raised when the

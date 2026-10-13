@@ -980,3 +980,34 @@ func TestHandlerDuesCarryPaidAtOnlyWhenListed(t *testing.T) {
 		t.Errorf("expected the listing to carry paid_at, got %v", list)
 	}
 }
+
+// POST /users/{login}/dues takes no start_date for someone who is already
+// a socio, and answers 400 start_date_required for a first due without one.
+func TestHandlerCreateDueStartDateIsOptionalForAnExistingMember(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+
+	existing := testutil.InsertUser(t, tx, "")
+	if rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/memberships", existing.Login), adminToken,
+		map[string]any{"start_date": "2020-01-01"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create membership: %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", existing.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected 201 without a start_date for an existing member, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	newcomer := testutil.InsertUser(t, tx, "")
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", newcomer.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": testutil.InsertTransaction(t, tx)})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "start_date_required") {
+		t.Errorf("expected 400 start_date_required for a first due, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", existing.Login), adminToken,
+		map[string]any{"year": 2027, "transaction_id": testutil.InsertTransaction(t, tx), "start_date": "ayer"})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_date") {
+		t.Errorf("expected a malformed start_date to still be a 400 invalid_date, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

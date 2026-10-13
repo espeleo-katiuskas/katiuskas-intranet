@@ -745,14 +745,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [year, transaction_id, start_date]
+              required: [year, transaction_id]
               properties:
                 year: { type: integer }
                 transaction_id: { type: integer, description: The transaction that recorded this payment. }
                 start_date:
                   type: string
                   format: date
-                  description: Only actually used if this person has no membership period yet — becomes its start_date.
+                  description: >
+                    Optional. Only used if this person has no membership period
+                    yet — it becomes that first period's start_date, and is
+                    required then (400 start_date_required).
       responses:
         "201":
           description: Due recorded
@@ -762,8 +765,9 @@ paths:
         "400":
           description: >
             invalid_body (malformed JSON), missing_fields (year or
-            transaction_id left out), invalid_date (start_date missing or
-            not YYYY-MM-DD — required even when it ends up unused) or
+            transaction_id left out), invalid_date (start_date given but
+            not YYYY-MM-DD), start_date_required (this would be the
+            person's first due and no start_date was given) or
             unknown_transaction (transaction_id doesn't name an existing
             transaction).
         "403": { description: Only admin can record a due. }

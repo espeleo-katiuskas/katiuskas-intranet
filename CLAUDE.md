@@ -441,6 +441,9 @@ started for them (the request's own `start_date` becomes its `StartDate`) — th
 a person otherwise gets through `POST /users/{login}/memberships`; someone with a prior,
 since-closed membership who's rejoining is left entirely to that existing, separate alta
 flow instead (`HasAnyMembership` is already true for them, so nothing extra happens).
+The request's `start_date` is therefore optional: it's only required — 400
+`start_date_required`, `ErrStartDateRequired` — when there is no membership on file to open,
+and ignored otherwise (a malformed one is still a 400 `invalid_date`).
 Before any of that, `RecordDue` checks the transaction itself — it has to exist
 (`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
 (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`;

@@ -505,10 +505,16 @@ func (h *Handler) createDue(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "year and transaction_id are both required")
 		return
 	}
-	startDate, err := time.Parse("2006-01-02", body.StartDate)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
-		return
+	// start_date is optional: it only matters when this is the person's
+	// first due, and Service.RecordDue asks for it then (ErrStartDateRequired).
+	var startDate time.Time
+	if body.StartDate != "" {
+		parsed, err := time.Parse("2006-01-02", body.StartDate)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
+			return
+		}
+		startDate = parsed
 	}
 
 	d, err := h.service.RecordDue(r.Context(), userID, body.Year, body.TransactionID, startDate)
@@ -518,6 +524,10 @@ func (h *Handler) createDue(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrUnknownTransaction) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_transaction", err.Error())
+		return
+	}
+	if errors.Is(err, ErrStartDateRequired) {
+		httpapi.WriteError(w, http.StatusBadRequest, "start_date_required", err.Error())
 		return
 	}
 	if errors.Is(err, ErrTransactionNotForDues) {

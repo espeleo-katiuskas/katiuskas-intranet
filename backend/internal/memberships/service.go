@@ -113,6 +113,8 @@ func (s *Service) ListLeavesByUser(ctx context.Context, userID int64) ([]Leave, 
 // membership who's rejoining isn't touched by this at all (HasAnyMembership
 // is true for them already), leaving that case to the existing, separate
 // alta flow instead of guessing whether a new period should open here too.
+// occurredOn is therefore optional (the zero time) for anyone who already
+// has a membership on file; without one on file, ErrStartDateRequired.
 //
 // The transaction is checked first — it has to exist (ErrUnknownTransaction)
 // and have an entry on an account flagged allows_dues
@@ -134,6 +136,11 @@ func (s *Service) RecordDue(ctx context.Context, userID int64, year int, transac
 		return Due{}, err
 	}
 	if !hasAny {
+		// occurredOn is only needed here, to start their first period; a
+		// zero value means the caller didn't give one.
+		if occurredOn.IsZero() {
+			return Due{}, ErrStartDateRequired
+		}
 		if _, err := s.Create(ctx, CreateInput{UserID: userID, StartDate: occurredOn}); err != nil {
 			return Due{}, err
 		}

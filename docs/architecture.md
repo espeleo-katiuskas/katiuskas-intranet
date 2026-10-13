@@ -518,6 +518,9 @@ una más cada año siguiente.
 - Si la persona todavía no tiene ningún periodo de alta, se trata como su primera cuota y
   también se le abre un periodo nuevo (con la `start_date` de la petición). A quien ya
   tuvo un alta y se reincorpora se le deja enteramente al flujo de alta normal, aparte.
+- Por eso `start_date` es opcional: solo hace falta (400 `start_date_required`,
+  `ErrStartDateRequired`) cuando no hay ningún alta que abrir, y se ignora si la persona ya
+  tiene alguna; una `start_date` mal formada sigue siendo 400 `invalid_date`.
 
 **Lectura (`GET /users/{login}/dues`)**
 

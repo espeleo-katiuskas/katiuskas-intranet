@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -189,5 +190,30 @@ func TestRecordDueRejectedForItsTransactionStartsNoMembership(t *testing.T) {
 	}
 	if len(list) != 0 {
 		t.Errorf("expected no membership to have been started by a rejected due, got %+v", list)
+	}
+}
+
+// start_date is only needed to open a first membership period: someone
+// who already has one can have a due recorded without it, and someone who
+// doesn't is asked for it — with nothing started as a side effect.
+func TestRecordDueOnlyNeedsAStartDateForSomeoneWithNoMembership(t *testing.T) {
+	tx := testutil.NewTx(t)
+	svc := memberships.NewService(memberships.NewRepository(tx))
+	ctx := context.Background()
+
+	member := testutil.InsertUser(t, tx, "")
+	if _, err := svc.Create(ctx, memberships.CreateInput{UserID: member.ID, StartDate: date("2020-01-01")}); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	if _, err := svc.RecordDue(ctx, member.ID, 2026, testutil.InsertTransaction(t, tx), time.Time{}); err != nil {
+		t.Errorf("expected a due for an existing member to need no start date, got %v", err)
+	}
+
+	newcomer := testutil.InsertUser(t, tx, "")
+	if _, err := svc.RecordDue(ctx, newcomer.ID, 2026, testutil.InsertTransaction(t, tx), time.Time{}); !errors.Is(err, memberships.ErrStartDateRequired) {
+		t.Errorf("expected ErrStartDateRequired for a first due with no start date, got %v", err)
+	}
+	if list, err := svc.ListByUser(ctx, newcomer.ID); err != nil || len(list) != 0 {
+		t.Errorf("expected the rejected due to start no membership, got %+v (%v)", list, err)
 	}
 }
