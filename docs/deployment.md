@@ -14,10 +14,11 @@ nativos gestionados por `systemd`.
 
 > **Nota.** El host del propio club no usa esta guía: ejecuta sus entornos de testing y
 > producción como unidades de systemd, sin Docker (ver
-> [`deployment-no-docker.md`](deployment-no-docker.md) y [`environments.md`](environments.md)),
-> y allí las actualizaciones son automáticas. Esta guía es la alternativa con Docker, y todo
-> lo que sigue se ejecuta a mano. Los contenedores sí se reinician solos si se caen o si la
-> máquina arranca de nuevo (`restart: unless-stopped` en `docker-compose.production.yml`).
+> [`deployment-no-docker.md`](deployment-no-docker.md) y
+> [`environments.md`](environments.md)), y allí las actualizaciones son automáticas. Esta
+> guía es la alternativa con Docker, y todo lo que sigue se ejecuta a mano. Los
+> contenedores sí se reinician solos si se caen o si la máquina arranca de nuevo
+> (`restart: unless-stopped` en `docker-compose.production.yml`).
 
 ## Requisitos previos
 

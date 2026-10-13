@@ -36,41 +36,39 @@ más, cuando hace falta, una comprobación adicional dentro del propio handler (
   `/board-members`, `/users/{login}/roles`).
 - **`member`** (socio) — puede ver `GET /users`, pero no la ficha completa de cada
   persona: solo `users.MemberListing` (nombre, apellidos, género, categoría de edad,
-  número de socio, fecha de alta y de baja, `on_leave`, `license_type` y
-  `license_year` — la licencia federativa **del año actual**, si la hay (una de otro año
-  no se muestra; tener `license_type` es estar federado), nunca su fecha de obtención, que
-  sigue reservada a admin/board, ni fecha de fin, porque siempre es el 31 de diciembre —
-  y `last_due_year`, el último año cuya cuota ha pagado; la fecha en que la
-  pagó, `last_due_paid_at`, también queda reservada a admin/board) — y solo de quien es o ha sido socio
-  (`membership_start_date` no nulo); a quien nunca ha tenido un alta
-  (una cuenta solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este
-  listado para member, aunque admin/board lo sigan viendo. `age_category` (youth/child/
+  número de socio, fecha de alta y de baja, `on_leave`, `license_type` y `license_year` —
+  la licencia federativa **del año actual**, si la hay (una de otro año no se muestra;
+  tener `license_type` es estar federado), nunca su fecha de obtención, que sigue
+  reservada a admin/board, ni fecha de fin, porque siempre es el 31 de diciembre — y
+  `last_due_year`, el último año cuya cuota ha pagado; la fecha en que la pagó,
+  `last_due_paid_at`, también queda reservada a admin/board) — y solo de quien es o ha
+  sido socio (`membership_start_date` no nulo); a quien nunca ha tenido un alta (una
+  cuenta solo-admin, por ejemplo) `Handler.list` lo excluye directamente de este listado
+  para member, aunque admin/board lo sigan viendo. `age_category` (youth/child/
   junior/senior/veteran_a/veteran_b — alevín/infantil/juvenil/mayor/veterano A/veterano B
   en la normativa del club, calculado con `ageCategoryFor` a partir de `birth_date`)
   sustituye a la fecha de nacimiento exacta, que no se expone aquí — el tramo basta para
   lo que hace falta ver de un vistazo sin revelar la fecha de nacimiento de nadie.
-  `users.Handler.list`
-  decide qué forma devolver según el rol de quien pregunta — no hay una ruta aparte.
-  `MemberListing` no lleva un campo `roles` en absoluto: a un socio cualquiera no le hace
-  falta saber qué roles internos (`admin`, `money`, `material`, o cualquier etiqueta que
-  haya creado un admin) tiene otra persona — es exactamente el tipo de información no
-  pública que esta vista reducida existe para no enseñar, igual que el DNI o el contacto.
-  La única excepción es el cargo en la Junta, que sí es público dentro del club: viene de
-  `GET /board-members` (abierto también a member), de donde `web/js/members.js` saca su
-  columna "Cargo" (`cargoFor`, compartida por `FULL_COLUMNS` y `MEMBER_COLUMNS`) — quien no
-  tiene cargo actual no muestra nada ahí, nunca un rol. `GET /roles` (el catálogo de
-  nombres/descripciones, de solo lectura para cualquiera, aunque asignar o quitar uno sigue
-  siendo cosa exclusiva de admin) no dice quién tiene cada rol, solo qué roles existen. Con
-  `on_leave` se calcula igual para todos "Tipo de socio" (Activo/Baja temporal/Ex-socio) —
-  el filtro correspondiente para member ya no ofrece "Nunca ha sido socio", porque
-  `GET /users` nunca le manda a un member alguien que nunca haya sido socio.
-  Sobre su propio registro, puede seguir editando datos de contacto — email, phone,
-  address, postal_code, city, province, emergency_contact — pero no nombre, apellidos,
-  DNI, fecha de nacimiento ni
-  género: `users.Handler.update` rechaza con 403 `restricted_fields` cualquier intento
-  de tocar esos campos si quien llama no es admin, en vez de ignorarlos en silencio.
-  `GET /users/{login}` (la ficha completa) sigue reservado a admin/board o a la propia
-  persona, sin cambios.
+  `users.Handler.list` decide qué forma devolver según el rol de quien pregunta — no hay
+  una ruta aparte. `MemberListing` no lleva un campo `roles` en absoluto: a un socio
+  cualquiera no le hace falta saber qué roles internos (`admin`, `money`, `material`, o
+  cualquier etiqueta que haya creado un admin) tiene otra persona — es exactamente el tipo
+  de información no pública que esta vista reducida existe para no enseñar, igual que el
+  DNI o el contacto. La única excepción es el cargo en la Junta, que sí es público dentro
+  del club: viene de `GET /board-members` (abierto también a member), de donde
+  `web/js/members.js` saca su columna "Cargo" (`cargoFor`, compartida por `FULL_COLUMNS` y
+  `MEMBER_COLUMNS`) — quien no tiene cargo actual no muestra nada ahí, nunca un rol.
+  `GET /roles` (el catálogo de nombres/descripciones, de solo lectura para cualquiera,
+  aunque asignar o quitar uno sigue siendo cosa exclusiva de admin) no dice quién tiene
+  cada rol, solo qué roles existen. Con `on_leave` se calcula igual para todos "Tipo de
+  socio" (Activo/Baja temporal/Ex-socio) — el filtro correspondiente para member ya no
+  ofrece "Nunca ha sido socio", porque `GET /users` nunca le manda a un member alguien que
+  nunca haya sido socio. Sobre su propio registro, puede seguir editando datos de contacto
+  — email, phone, address, postal_code, city, province, emergency_contact — pero no
+  nombre, apellidos, DNI, fecha de nacimiento ni género: `users.Handler.update` rechaza
+  con 403 `restricted_fields` cualquier intento de tocar esos campos si quien llama no es
+  admin, en vez de ignorarlos en silencio. `GET /users/{login}` (la ficha completa) sigue
+  reservado a admin/board o a la propia persona, sin cambios.
 
 En el frontend, `/members` ahora es visible para member además de admin/board: la
 lista de columnas y los filtros se reducen a lo que `MemberListing` realmente trae
@@ -318,15 +316,15 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   `allows_dues` (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`), de modo que
   una cuota rechazada nunca deja un periodo de alta abierto como efecto secundario.
   `GET /users/{login}/dues` sigue el mismo reparto propia-persona-o-admin/board que las
-  licencias, y une la transacción de cada cuota para añadir `paid_at` (el `occurred_at` del
-  pago, no `created_at`: la cuota de un año pasado puede registrarse mucho después de
+  licencias, y une la transacción de cada cuota para añadir `paid_at` (el `occurred_at`
+  del pago, no `created_at`: la cuota de un año pasado puede registrarse mucho después de
   haberse pagado), solo en este listado y nunca en la respuesta del `POST`. En `/member`,
   cada cuota aparece como un evento más ("Cuota anual · año") del timeline de "Historial
   como socio", con la fecha del pago y sin botones de editar ni borrar (no hay endpoint
   para ninguna de las dos cosas); en `/profile`, en una tabla "Cuotas anuales" bajo la de
-  altas y bajas. No hay endpoint para corregir o borrar una cuota, ni validación de que el año
-  caiga dentro de un periodo de alta activo — ambas cosas fuera de alcance a propósito por
-  ahora. `membership_dues.transaction_id` usa `ON DELETE CASCADE` (una cuota es pura
+  altas y bajas. No hay endpoint para corregir o borrar una cuota, ni validación de que el
+  año caiga dentro de un periodo de alta activo — ambas cosas fuera de alcance a propósito
+  por ahora. `membership_dues.transaction_id` usa `ON DELETE CASCADE` (una cuota es pura
   anotación contable sin sentido aparte de su transacción), mientras que
   `licenses.transaction_id` usa el `ON DELETE RESTRICT` por defecto — una licencia es un
   registro real con sentido propio (prueba de estar federado) incluso aparte de su pago,
@@ -350,10 +348,10 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   "activo" de "baja temporal" en la lista de personas; se calcula solo para quien ya
   tiene un alta activa, con `memberships.Service.IsOnLeave`.
 - **`licenses`** / **`license_types`** — licencias federativas. El tipo ya no es texto
-  libre: se elige de un catálogo (`license_types`, migración 00007) guardado en la base
-  de datos en vez de un enum de Go, precisamente porque el club espera que la lista
-  cambie con el tiempo (una zona nueva, una federación nueva) y eso no debería necesitar
-  un despliegue de código — solo un `INSERT`. El catálogo trae sembradas todas las
+  libre: se elige de un catálogo (`license_types`, migración 00007) guardado en la base de
+  datos en vez de un enum de Go, precisamente porque el club espera que la lista cambie
+  con el tiempo (una zona nueva, una federación nueva) y eso no debería necesitar un
+  despliegue de código — solo un `INSERT`. El catálogo trae sembradas todas las
   combinaciones de zona (A/B/B1) × modalidad (BASICA/PLUS) × franja de edad (adulto,
   Infantil, Juvenil), más ZERO/ASEDEB/FAE/FERM/FMM, más "Otra" como válvula de escape
   (`is_other`) para cualquier licencia que no encaje: una licencia de tipo "Otra" exige
@@ -362,37 +360,35 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
   otra tabla). `GET /license-types` expone el catálogo, solo admin, igual que la propia
   asignación. Tiene también su propio `year` (migración 00014) — el año natural que de
   verdad cubre, no siempre el mismo que el de `issued_date`, ya que una licencia pedida en
-  diciembre suele cubrir el año siguiente — y un `transaction_id` opcional (nulo desde
-  la migración 00020) que señala la transacción que la pagó (ver Contabilidad más abajo):
+  diciembre suele cubrir el año siguiente — y un `transaction_id` opcional (nulo desde la
+  migración 00020) que señala la transacción que la pagó (ver Contabilidad más abajo):
   omitirlo es la única forma de registrar una licencia que el club no ha cobrado — por
   ejemplo, alguien federado en otro sitio — y entonces no hay nada que comprobar; si se
   da, tiene que existir (400 `unknown_transaction` si no señala una transacción real), y
-  no es editable después —
-  corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece. Esa
-  transacción, si la hay, tiene además que tener al menos una entrada en una cuenta marcada
-  `allows_licenses` (migración 00017; ver Contabilidad más abajo): si no, 409
-  `transaction_not_for_licenses`. La comprobación es una consulta SQL contra las tablas de
-  contabilidad, igual que la clave foránea de la propia licencia, sin importar
-  `internal/accounting`, y va la última, tras todo lo que solo depende de la petición.
-  De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de
-  ese mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca
-  almacenado — igual que la "categoría" de `web/js/members.js`, no vale la pena guardar
-  algo que se deriva trivialmente de otro campo). Solo se le puede asignar una licencia a
-  quien fuera socio en algún momento del año de esa licencia (su `year`) — no
-  necesariamente ahora mismo, ni justo el día de `issued_date`
-  (`memberships.Service.WasMemberDuringYear`), así que una licencia de un año en que
-  alguien sí era socio se puede dar de alta después de que haya causado baja, o con una
-  fecha anterior a su alta de ese mismo año. Intentarlo con un año que no toca ningún
-  periodo de socio devuelve 409 `not_active_member`. `users.Service` incorpora a `User` la
-  licencia del año actual de cada persona (`licenses.Service.CurrentByUser`; una de otro
-  año no cuenta), mientras que del periodo de socio toma el más reciente. Rutas bajo `/users/{login}/licenses`:
-  `GET` abierto a la propia persona o admin/board, `POST` solo admin;
-  `PATCH`/`DELETE /licenses/{id}` (por id de licencia, no anidadas bajo el usuario, igual
-  que `/leaves/{id}`) también solo admin — `PATCH` no vuelve a exigir alta activa, porque
-  corrige una licencia ya existente en vez de asignar una nueva, así que sigue
-  funcionando aunque la persona ya haya causado baja. En `/member`, cada
-  licencia aparece como un evento más dentro del mismo timeline de altas y bajas, no en
-  una sección aparte.
+  no es editable después — corregir tipo, fecha o año es una acción distinta de decidir a
+  qué pago pertenece. Esa transacción, si la hay, tiene además que tener al menos una
+  entrada en una cuenta marcada `allows_licenses` (migración 00017; ver Contabilidad más
+  abajo): si no, 409 `transaction_not_for_licenses`. La comprobación es una consulta SQL
+  contra las tablas de contabilidad, igual que la clave foránea de la propia licencia, sin
+  importar `internal/accounting`, y va la última, tras todo lo que solo depende de la
+  petición. De carácter anual: válida desde `issued_date` hasta el 31 de diciembre de ese
+  mismo año (`valid_until`, calculado en Go a partir de `issued_date`, nunca almacenado —
+  igual que la "categoría" de `web/js/members.js`, no vale la pena guardar algo que se
+  deriva trivialmente de otro campo). Solo se le puede asignar una licencia a quien fuera
+  socio en algún momento del año de esa licencia (su `year`) — no necesariamente ahora
+  mismo, ni justo el día de `issued_date` (`memberships.Service.WasMemberDuringYear`), así
+  que una licencia de un año en que alguien sí era socio se puede dar de alta después de
+  que haya causado baja, o con una fecha anterior a su alta de ese mismo año. Intentarlo
+  con un año que no toca ningún periodo de socio devuelve 409 `not_active_member`.
+  `users.Service` incorpora a `User` la licencia del año actual de cada persona
+  (`licenses.Service.CurrentByUser`; una de otro año no cuenta), mientras que del periodo
+  de socio toma el más reciente. Rutas bajo `/users/{login}/licenses`: `GET` abierto a la
+  propia persona o admin/board, `POST` solo admin; `PATCH`/`DELETE /licenses/{id}` (por id
+  de licencia, no anidadas bajo el usuario, igual que `/leaves/{id}`) también solo admin —
+  `PATCH` no vuelve a exigir alta activa, porque corrige una licencia ya existente en vez
+  de asignar una nueva, así que sigue funcionando aunque la persona ya haya causado baja.
+  En `/member`, cada licencia aparece como un evento más dentro del mismo timeline de
+  altas y bajas, no en una sección aparte.
 - **`board_members`** — quién ha estado en la Junta Directiva y con qué cargo
   (`president`/`vice_president`/`secretary`/`treasurer`/`member_at_large` — vocal, tipo
   `board_position`), con la misma forma que `memberships`: `start_date`/`end_date`
@@ -535,36 +531,38 @@ las acciones que se generan dinámicamente por evento del timeline (los botones
 
 - **`accounts`** / **`transactions`** / **`transaction_entries`** — el dinero del club.
   `accounts` es un plan contable en árbol (`name`, `code` único, `parent_id` opcional
-  hacia otra cuenta) con dos booleanos, `allows_dues` y `allows_licenses` (migración 00017,
-  ambos `false` hasta que un admin o el rol `money` los marca): qué cuentas tiene que usar
-  una transacción para poder registrar cuotas anuales o licencias federativas, que exigen
-  `POST /users/{login}/dues` y `POST /users/{login}/licenses`. Aparecen siempre en el JSON
-  de una cuenta (también como `false`) y, como el resto de campos, un `PATCH` los
-  sustituye: omitir uno lo desactiva. Tiene además una `position` propia entre hermanos (mismo `parent_id`, `NULL`
-  contado como un grupo más) que solo sirve para ordenar, nunca para identificar una fila
-  — `POST /accounts/{id}/move` (`{"direction": "up"|"down"}`) intercambia la posición con
-  el hermano inmediatamente antes o después, sin error si ya es el primero/último de su
-  grupo. `GET /accounts` recorre el árbol en profundidad (cada cuenta seguida de todos
-  sus descendientes antes del siguiente hermano) y añade a cada una su `balance` propio
-  (suma de sus movimientos directos, nunca de los de sus hijas) y `last_transaction_at` —
-  ninguna otra ruta de `accounts` calcula estos dos campos. Cada `transaction` se compone
-  de dos o más `entries` (una cuenta y un importe, positivo o negativo) que deben sumar
-  exactamente cero — contabilidad de partida doble estándar — comprobado no con un
-  `CHECK` (no puede ver más que su propia fila) sino con un trigger de restricción
-  `DEFERRABLE INITIALLY DEFERRED` que se ejecuta al hacer commit, una vez insertadas
-  todas las entradas de esa transacción. Corregir una transacción (`PATCH`) sustituye su
+  hacia otra cuenta) con dos booleanos, `allows_dues` y `allows_licenses` (migración
+  00017, ambos `false` hasta que un admin o el rol `money` los marca): qué cuentas tiene
+  que usar una transacción para poder registrar cuotas anuales o licencias federativas,
+  que exigen `POST /users/{login}/dues` y `POST /users/{login}/licenses`. Aparecen siempre
+  en el JSON de una cuenta (también como `false`) y, como el resto de campos, un `PATCH`
+  los sustituye: omitir uno lo desactiva. Tiene además una `position` propia entre
+  hermanos (mismo `parent_id`, `NULL` contado como un grupo más) que solo sirve para
+  ordenar, nunca para identificar una fila — `POST /accounts/{id}/move`
+  (`{"direction": "up"|"down"}`) intercambia la posición con el hermano inmediatamente
+  antes o después, sin error si ya es el primero/último de su grupo. `GET /accounts`
+  recorre el árbol en profundidad (cada cuenta seguida de todos sus descendientes antes
+  del siguiente hermano) y añade a cada una su `balance` propio (suma de sus movimientos
+  directos, nunca de los de sus hijas) y `last_transaction_at` — ninguna otra ruta de
+  `accounts` calcula estos dos campos. Cada `transaction` se compone de dos o más
+  `entries` (una cuenta y un importe, positivo o negativo) que deben sumar exactamente
+  cero — contabilidad de partida doble estándar — comprobado no con un `CHECK` (no puede
+  ver más que su propia fila) sino con un trigger de restricción
+  `DEFERRABLE INITIALLY DEFERRED` que se ejecuta al hacer commit, una vez insertadas todas
+  las entradas de esa transacción. Corregir una transacción (`PATCH`) sustituye su
   descripción, fecha y el conjunto entero de entradas a la vez; no hay edición de una
-  entrada suelta. Lectura abierta a cualquier rol baseline — las cuentas del club son
-  algo que cualquier socio puede ver, no solo admin/board —, con una salvedad: solo para
+  entrada suelta. Lectura abierta a cualquier rol baseline — las cuentas del club son algo
+  que cualquier socio puede ver, no solo admin/board —, con una salvedad: solo para
   admin/board, `GET /transactions/{id}` incluye además `dues` y `licenses`, las cuotas y
-  licencias que esa transacción pagó (siempre presentes para ellos, `[]` si no pagó ninguna;
-  ausentes para cualquier otro rol, porque quién ha pagado qué es privado de esa persona,
-  admin y board). Las rellena `Handler.getTransaction` a través de dos interfaces mínimas
-  (`DuesLookup`, `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`;
-  el diálogo de editar transacción de `/account` las muestra de solo lectura; escritura reservada a admin
-  o al rol opcional `money` (sembrado por la migración, no de sistema, la misma forma que
-  `material` en `inventory`) — board no tiene aquí ningún acceso de escritura especial,
-  igual que no lo tiene sobre licencias ni sobre los datos de una persona.
+  licencias que esa transacción pagó (siempre presentes para ellos, `[]` si no pagó
+  ninguna; ausentes para cualquier otro rol, porque quién ha pagado qué es privado de esa
+  persona, admin y board). Las rellena `Handler.getTransaction` a través de dos interfaces
+  mínimas (`DuesLookup`, `LicensesLookup`) que satisfacen `memberships.Service` y
+  `licenses.Service`; el diálogo de editar transacción de `/account` las muestra de solo
+  lectura; escritura reservada a admin o al rol opcional `money` (sembrado por la
+  migración, no de sistema, la misma forma que `material` en `inventory`) — board no tiene
+  aquí ningún acceso de escritura especial, igual que no lo tiene sobre licencias ni sobre
+  los datos de una persona.
 
 ## Backend (`backend/`)
 
@@ -572,135 +570,128 @@ Capas separadas por paquete: `internal/httpapi` (router y helpers HTTP — inclu
 `GET /health`, sin autenticar y con un timeout propio de 2s, que responde si el proceso
 está vivo y, por separado, si puede alcanzar PostgreSQL en ese momento, pensado para un
 reverse proxy o systemd que necesite comprobarlo sin tener ningún token de sesión que
-mandar), `internal/auth`
-(middleware de autenticación/autorización — ya no hay contraseñas que gestionar; no sabe
-nada de JWT ni de base de datos, solo delega en un `SessionResolver`), `internal/tokens`
-(el `SessionResolver` real: valida un token opaco contra la base de datos, calcula los
-roles al vuelo, y expone la gestión de tokens para admin), `internal/mail` (envío de
-correo: registra el mensaje en el log si no hay `SMTP_HOST` configurado, lo manda de
-verdad si lo hay), `internal/telegram` (cliente mínimo de la API de bots de Telegram, sin
-dependencias — solo `net/http`/`encoding/json` —, usado hoy para seis avisos
-independientes. Cinco son "fire-and-forget" y nunca añaden latencia a lo que los
-dispara: los
-logs de nivel error, un aviso de cada login (`authapi.Handler.notifyLogin`), el mismo
-enlace del magic-link (y, según el caso, el código — ver más arriba) también por DM de
-Telegram a quien tenga la cuenta
-vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso
-específico por cada acción que crea, edita o borra algo (una persona, un rol, una
-membresía, una licencia, una actividad, material, un cargo de la junta, un recurso de la
-memoria de una actividad, un token) — no un aviso genérico de "hubo una llamada
-POST/PUT/PATCH/DELETE" como en la primera versión de esto, sino un mensaje propio por
-paquete que dice quién lo hizo y, en una edición, exactamente qué cambió campo a campo
+mandar), `internal/auth` (middleware de autenticación/autorización — ya no hay contraseñas
+que gestionar; no sabe nada de JWT ni de base de datos, solo delega en un
+`SessionResolver`), `internal/tokens` (el `SessionResolver` real: valida un token opaco
+contra la base de datos, calcula los roles al vuelo, y expone la gestión de tokens para
+admin), `internal/mail` (envío de correo: registra el mensaje en el log si no hay
+`SMTP_HOST` configurado, lo manda de verdad si lo hay), `internal/telegram` (cliente
+mínimo de la API de bots de Telegram, sin dependencias — solo `net/http`/`encoding/json`
+—, usado hoy para seis avisos independientes. Cinco son "fire-and-forget" y nunca añaden
+latencia a lo que los dispara: los logs de nivel error, un aviso de cada login
+(`authapi.Handler.notifyLogin`), el mismo enlace del magic-link (y, según el caso, el
+código — ver más arriba) también por DM de Telegram a quien tenga la cuenta vinculada
+(`authapi.Handler.notifyMagicLinkViaTelegram`, ver más arriba), un aviso específico por
+cada acción que crea, edita o borra algo (una persona, un rol, una membresía, una
+licencia, una actividad, material, un cargo de la junta, un recurso de la memoria de una
+actividad, un token) — no un aviso genérico de "hubo una llamada POST/PUT/PATCH/DELETE"
+como en la primera versión de esto, sino un mensaje propio por paquete que dice quién lo
+hizo y, en una edición, exactamente qué cambió campo a campo
 (`httpapi.NotifyAsync`/`DiffFields`, en `internal/httpapi/audit.go`: `DiffFields` compara
 solo los campos que ese endpoint puede tocar de verdad —nunca todos los del struct, para
 que un campo calculado aparte, como la lista de roles, no aparezca como un cambio que en
 realidad nunca ocurrió— y devuelve una línea "campo: antes → después" por cada uno que de
 verdad difiera). Cada paquete con rutas de escritura recibe su propio
-`httpapi.MutationNotifier` desde `cmd/api/main.go`, sin la comprobación de "no molestar
-en cada petición" que sí necesitaba la versión anterior de esto (avisaba de *cada*
-petición POST/PUT/PATCH/DELETE, incluido un simple toque de `last_used_at` en un token,
-que es en sí un UPDATE — de ahí que la primera versión de todo esto, un wrapper a nivel
-de base de datos en vez del router, avisara de cada petición autenticada aunque no
-cambiara nada de verdad). Y —el único
-que además *recibe* mensajes, por long polling, no webhook— `internal/telegrambot.Bot`:
-si alguien desconocido escribe al bot, le pide que comparta su contacto (con
-`is_persistent: true` en el teclado personalizado que ofrece el botón, para que el
-cliente lo muestre ya abierto en vez de escondido tras su propio icono de teclado, y con
-el propio texto del saludo explicando dónde está ese botón y cómo revelarlo si el cliente
-no respeta ese flag — nada en un teclado personalizado de Telegram es evidente por sí
-solo para quien no ha visto uno antes); antes de mirar
-el teléfono, `isOwnContact` comprueba que el contacto compartido es el suyo propio —
-Telegram permite adjuntar el contacto de cualquiera, no solo el propio (una vCard escrita
-a mano, o el contacto guardado de otra persona), y solo el botón "compartir contacto" que
-envía el propio bot garantiza que coincidan. Esto era un fallo de seguridad real,
-encontrado y corregido después de publicarlo: compartir el teléfono de un socio de
-verdad, en nombre de otra persona, vinculaba la cuenta de *ese socio* al chat de *quien
-lo envió* — un camino de suplantación, no solo un problema de calidad de datos, del
-mismo tipo que el del prefijo de país de más abajo. Un contacto ajeno se rechaza con una
-respuesta y un aviso propio al canal (más grave que un simple "no coincide", por ser un
-posible intento de suplantación), sin llegar a mirar el teléfono siquiera — el teclado de
-"compartir contacto" se queda ahí para que pueda reintentarlo con el suyo propio. Si el
-contacto sí es el suyo y el teléfono coincide con el de un socio
-(`users.Repository.FindByPhoneNumber`, exigiendo que el prefijo de país que Telegram
-siempre añade sea el de España — nunca un simple sufijo, que dejaría a un
-"+33666777888" francés hacerse pasar por un "666777888" español, ya que comparten todos
-los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo confirma vía
-`Bot.replyToLinkedContact`, que ya comprueba ahí mismo el mismo `canUseTelegramLogin` en
-vez de esperar a un mensaje posterior para descubrirlo: a quien sí puede entrar le llega
-`emailPrompt` como segundo mensaje aparte; a quien no, en cambio, le llega una única
-respuesta combinada (`unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te hemos identificado
-como Nombre Apellidos. Sin embargo, este bot está disponible únicamente para usuarios
-autorizados. ...") en vez de partir la noticia en dos mensajes — "ya estás vinculado" y
-luego "pero no puedes usar esto" — sin nada útil en medio; si no coincide, se lo dice y
-añade `contactClubHint` ("si crees que deberías tener acceso, ponte en contacto con el
-club para comprobar tu situación" — el mismo consejo con el que termina
+`httpapi.MutationNotifier` desde `cmd/api/main.go`, sin la comprobación de "no molestar en
+cada petición" que sí necesitaba la versión anterior de esto (avisaba de *cada* petición
+POST/PUT/PATCH/DELETE, incluido un simple toque de `last_used_at` en un token, que es en
+sí un UPDATE — de ahí que la primera versión de todo esto, un wrapper a nivel de base de
+datos en vez del router, avisara de cada petición autenticada aunque no cambiara nada de
+verdad). Y —el único que además *recibe* mensajes, por long polling, no webhook—
+`internal/telegrambot.Bot`: si alguien desconocido escribe al bot, le pide que comparta su
+contacto (con `is_persistent: true` en el teclado personalizado que ofrece el botón, para
+que el cliente lo muestre ya abierto en vez de escondido tras su propio icono de teclado,
+y con el propio texto del saludo explicando dónde está ese botón y cómo revelarlo si el
+cliente no respeta ese flag — nada en un teclado personalizado de Telegram es evidente por
+sí solo para quien no ha visto uno antes); antes de mirar el teléfono, `isOwnContact`
+comprueba que el contacto compartido es el suyo propio — Telegram permite adjuntar el
+contacto de cualquiera, no solo el propio (una vCard escrita a mano, o el contacto
+guardado de otra persona), y solo el botón "compartir contacto" que envía el propio bot
+garantiza que coincidan. Esto era un fallo de seguridad real, encontrado y corregido
+después de publicarlo: compartir el teléfono de un socio de verdad, en nombre de otra
+persona, vinculaba la cuenta de *ese socio* al chat de *quien lo envió* — un camino de
+suplantación, no solo un problema de calidad de datos, del mismo tipo que el del prefijo
+de país de más abajo. Un contacto ajeno se rechaza con una respuesta y un aviso propio al
+canal (más grave que un simple "no coincide", por ser un posible intento de suplantación),
+sin llegar a mirar el teléfono siquiera — el teclado de "compartir contacto" se queda ahí
+para que pueda reintentarlo con el suyo propio. Si el contacto sí es el suyo y el teléfono
+coincide con el de un socio (`users.Repository.FindByPhoneNumber`, exigiendo que el
+prefijo de país que Telegram siempre añade sea el de España — nunca un simple sufijo, que
+dejaría a un "+33666777888" francés hacerse pasar por un "666777888" español, ya que
+comparten todos los dígitos salvo el prefijo) vincula su `telegram_chat_id` y se lo
+confirma vía `Bot.replyToLinkedContact`, que ya comprueba ahí mismo el mismo
+`canUseTelegramLogin` en vez de esperar a un mensaje posterior para descubrirlo: a quien
+sí puede entrar le llega `emailPrompt` como segundo mensaje aparte; a quien no, en cambio,
+le llega una única respuesta combinada (`unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te
+hemos identificado como Nombre Apellidos. Sin embargo, este bot está disponible únicamente
+para usuarios autorizados. ...") en vez de partir la noticia en dos mensajes — "ya estás
+vinculado" y luego "pero no puedes usar esto" — sin nada útil en medio; si no coincide, se
+lo dice y añade `contactClubHint` ("si crees que deberías tener acceso, ponte en contacto
+con el club para comprobar tu situación" — el mismo consejo con el que termina
 `unauthorizedMessage`), ya que un teléfono que de verdad no está en la base de datos es
 justo el caso que merece que alguien del club lo compruebe a mano. En ambos casos usa
-`Client.SendMessageRemovingKeyboard` en vez de
-un `SendMessage` normal, porque de todas formas era su propio contacto y volver a pulsar
-el botón solo podría reenviar ese mismo teléfono para la misma respuesta — a diferencia
-del caso de contacto ajeno de arriba, donde dejar el teclado es precisamente lo que
-interesa. En ambos casos avisa también al canal de quién lo ha intentado, con qué
-teléfono, y si coincidía o no. Ese vínculo solo vale lo que valga el número de
-teléfono con el que se hizo, así que `users.Repository.Update` lo borra
-(`telegram_chat_id = NULL`) en cuanto un `PATCH` cambia de verdad el teléfono de la
-persona (o lo deja vacío) — si no, un chat vinculado a un número antiguo seguiría
-resolviendo a quien ya no lo tiene. Reenviar el mismo teléfono, o un `PATCH` que ni
-siquiera lo toca, deja el vínculo tal cual. Un mensaje normal (no un contacto) de un chat que
-`users.Repository.UserIDForTelegramChatID` ya reconoce ya no repite el menú de
-"comparta su contacto", pero tampoco dispara un enlace de acceso al instante con
-cualquier mensaje — eso se probó y se revirtió por ser un retroceso de seguridad: bastaba
-con tener el móvil (o la sesión de Telegram ya abierta) de un socio para entrar, sin la
-exigencia de conocer *a la vez* teléfono y correo que sí tiene el flujo web. Estar
-vinculado tampoco implica poder entrar: `canUseTelegramLogin` exige el mismo rol base que
-cualquier ruta del API (`auth.HasBaselineRole` — en la práctica, un socio activo vía el
-rol automático "member", o admin/board) y además que la persona tenga correo y teléfono
-registrados — la petición de magic-link desde la web ya exige ambos como entrada
-(`FindActiveByEmailAndPhone`), pero un chat vinculado se resuelve directamente por su
-`telegram_chat_id`, así que nada garantiza que los tenga. A quien no cumple esto nunca se
-le llega a pedir el correo: cualquier mensaje suyo recibe `unauthorizedMessage` ("este bot
-está disponible únicamente para usuarios autorizados. Si crees que deberías tener acceso,
-ponte en contacto con el club para comprobar tu situación"). Si lo cumple,
+`Client.SendMessageRemovingKeyboard` en vez de un `SendMessage` normal, porque de todas
+formas era su propio contacto y volver a pulsar el botón solo podría reenviar ese mismo
+teléfono para la misma respuesta — a diferencia del caso de contacto ajeno de arriba,
+donde dejar el teclado es precisamente lo que interesa. En ambos casos avisa también al
+canal de quién lo ha intentado, con qué teléfono, y si coincidía o no. Ese vínculo solo
+vale lo que valga el número de teléfono con el que se hizo, así que
+`users.Repository.Update` lo borra (`telegram_chat_id = NULL`) en cuanto un `PATCH` cambia
+de verdad el teléfono de la persona (o lo deja vacío) — si no, un chat vinculado a un
+número antiguo seguiría resolviendo a quien ya no lo tiene. Reenviar el mismo teléfono, o
+un `PATCH` que ni siquiera lo toca, deja el vínculo tal cual. Un mensaje normal (no un
+contacto) de un chat que `users.Repository.UserIDForTelegramChatID` ya reconoce ya no
+repite el menú de "comparta su contacto", pero tampoco dispara un enlace de acceso al
+instante con cualquier mensaje — eso se probó y se revirtió por ser un retroceso de
+seguridad: bastaba con tener el móvil (o la sesión de Telegram ya abierta) de un socio
+para entrar, sin la exigencia de conocer *a la vez* teléfono y correo que sí tiene el
+flujo web. Estar vinculado tampoco implica poder entrar: `canUseTelegramLogin` exige el
+mismo rol base que cualquier ruta del API (`auth.HasBaselineRole` — en la práctica, un
+socio activo vía el rol automático "member", o admin/board) y además que la persona tenga
+correo y teléfono registrados — la petición de magic-link desde la web ya exige ambos como
+entrada (`FindActiveByEmailAndPhone`), pero un chat vinculado se resuelve directamente por
+su `telegram_chat_id`, así que nada garantiza que los tenga. A quien no cumple esto nunca
+se le llega a pedir el correo: cualquier mensaje suyo recibe `unauthorizedMessage` ("este
+bot está disponible únicamente para usuarios autorizados. Si crees que deberías tener
+acceso, ponte en contacto con el club para comprobar tu situación"). Si lo cumple,
 `Bot.handleRecognizedChat` pide un segundo factor: contesta con `emailPrompt` ("si quieres
 entrar en la intranet, envíame tu dirección de correo electrónico") a cualquier mensaje
 que no sea el correo registrado de esa cuenta (`emailMatchesUser`, comparado sin
 distinguir mayúsculas/minúsculas contra el mismo formato de varios correos separados por
 espacios que usa `FindActiveByEmailAndPhone`) — pero `emailAttemptReply` da una respuesta
 concreta según *por qué* no coincidió, en vez de repetir siempre ese mismo aviso genérico:
-`nonTextEmailReply` si lo que llega no es texto (un `Text` vacío siempre significa eso,
-ya que Telegram nunca manda un mensaje de texto de verdad con el cuerpo vacío),
+`nonTextEmailReply` si lo que llega no es texto (un `Text` vacío siempre significa eso, ya
+que Telegram nunca manda un mensaje de texto de verdad con el cuerpo vacío),
 `onlyEmailReply` si trae más de una palabra, `notAnEmailReplyFormat` si es una sola
-palabra sin "@" (repitiéndola en la respuesta), y `unknownEmailReplyFormat` si tiene
-forma de correo pero no es ninguno de los registrados en esa cuenta (repitiendo también
-la dirección, y sugiriendo contactar con el club si cree que es un error) — solo una
+palabra sin "@" (repitiéndola en la respuesta), y `unknownEmailReplyFormat` si tiene forma
+de correo pero no es ninguno de los registrados en esa cuenta (repitiendo también la
+dirección, y sugiriendo contactar con el club si cree que es un error) — solo una
 coincidencia exacta de una sola palabra se salta todo esto. Solo cuando coincide, borra
-ese mensaje del
-chat con `Client.DeleteMessage` —la API de bots de Telegram permite borrar un mensaje que
-el propio bot ha recibido en un chat privado— para que no quede el correo a la vista de
-quien pueda acceder después al móvil o la sesión (best-effort: si el borrado falla, por
-ejemplo por ser un mensaje demasiado antiguo, pasadas las 48h que permite Telegram, el
-enlace se envía igualmente), y entonces sí contesta con un enlace de acceso nuevo,
-exactamente igual que si lo hubiera pedido desde la web
-(`authapi.Handler.IssueMagicLinkForTelegramUser`, ver más arriba). El sexto es la excepción a
-"fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el
-servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única al arrancar
-el proceso no compite con ninguna petición, así que bloquear en ella no cuesta nada
-perceptible. Los tres primeros (logs de
-error, login, magic-link por Telegram) y el de arranque son incondicionales — sin
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados, caen a registrar el mensaje en
-el log (igual que `mail` sin `SMTP_HOST`) o, en el caso del magic-link por Telegram,
-simplemente no se intenta (nadie puede tener `telegram_chat_id` sin el bot corriendo) —
-pero ni el aviso de mutaciones ni el bot se activan siquiera sin esas variables, para no
-generar una línea de log por cada escritura ni un bot que no podría avisar al canal de
-nada), `internal/authapi` (magic-link/logout/me) y un paquete por recurso de
-dominio (`users`, `roles`, `tokens`, `memberships`, `licenses`, `board`, `activities`,
-`activityresources`, `inventory`, `accounting`), cada uno con
-`model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. El dominio no depende
-de `net/http`; el handler es la única capa que sabe que existe HTTP. `internal/library` e
-`internal/userfiles` son la excepción a ese patrón de capas: como no hay nada en
-PostgreSQL detrás de ninguno de los dos, ninguno tiene `repository.go` —
-`service.go` trabaja directamente contra el sistema de archivos en ambos (ver más
-arriba).
+ese mensaje del chat con `Client.DeleteMessage` —la API de bots de Telegram permite borrar
+un mensaje que el propio bot ha recibido en un chat privado— para que no quede el correo a
+la vista de quien pueda acceder después al móvil o la sesión (best-effort: si el borrado
+falla, por ejemplo por ser un mensaje demasiado antiguo, pasadas las 48h que permite
+Telegram, el enlace se envía igualmente), y entonces sí contesta con un enlace de acceso
+nuevo, exactamente igual que si lo hubiera pedido desde la web
+(`authapi.Handler.IssueMagicLinkForTelegramUser`, ver más arriba). El sexto es la
+excepción a "fire-and-forget": `cmd/api/main.go` envía "🚀 API started" justo antes de
+arrancar el servidor, de forma síncrona (con el mismo límite de 10s) — una llamada única
+al arrancar el proceso no compite con ninguna petición, así que bloquear en ella no cuesta
+nada perceptible. Los tres primeros (logs de error, login, magic-link por Telegram) y el
+de arranque son incondicionales — sin `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`
+configurados, caen a registrar el mensaje en el log (igual que `mail` sin `SMTP_HOST`) o,
+en el caso del magic-link por Telegram, simplemente no se intenta (nadie puede tener
+`telegram_chat_id` sin el bot corriendo) — pero ni el aviso de mutaciones ni el bot se
+activan siquiera sin esas variables, para no generar una línea de log por cada escritura
+ni un bot que no podría avisar al canal de nada), `internal/authapi`
+(magic-link/logout/me) y un paquete por recurso de dominio (`users`, `roles`, `tokens`,
+`memberships`, `licenses`, `board`, `activities`, `activityresources`, `inventory`,
+`accounting`), cada uno con `model.go` / `repository.go` (pgx) / `service.go` /
+`handler.go`. El dominio no depende de `net/http`; el handler es la única capa que sabe
+que existe HTTP. `internal/library` e `internal/userfiles` son la excepción a ese patrón
+de capas: como no hay nada en PostgreSQL detrás de ninguno de los dos, ninguno tiene
+`repository.go` — `service.go` trabaja directamente contra el sistema de archivos en ambos
+(ver más arriba).
 
 `auth.Authenticator.Protect`, el punto único por el que cada ruta se registra, exige
 siempre tener al menos uno de los roles `admin`, `board` o `member` — un suelo que se

@@ -169,7 +169,8 @@ escribir donde haga falta.
    - la copia tiene que hacerla el usuario dueño de los ficheros (`katiuskas`) o root: con
      `fs.protected_hardlinks=1`, que es lo habitual, Linux no deja crear un hard-link a un
      fichero ajeno;
-   - testing tiene que tener su propio `ACTIVITY_RESOURCES_ROOT`, distinto del de producción;
+   - testing tiene que tener su propio `ACTIVITY_RESOURCES_ROOT`, distinto del de
+     producción;
    - el servicio de testing tiene que ejecutarse con el mismo usuario que el de producción:
      los directorios de actividad se crean con el mismo dueño y modo que los de producción
      (`cp -a`), así que otro usuario podría leer los ficheros pero no subir ni borrar en

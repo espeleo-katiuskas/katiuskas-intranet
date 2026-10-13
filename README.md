@@ -4,14 +4,18 @@ Base de datos en PostgreSQL, API REST en Go y frontend web en JavaScript, pensad
 que la misma API sirva también a una futura app móvil o a un cliente de terminal. Más
 información sobre el club en [katiuskas.es](https://katiuskas.es/).
 
-- `db/migrations/` — esquema de PostgreSQL (migraciones con [goose](https://github.com/pressly/goose)).
-- `backend/` — API REST en Go (`/api/v1`), ver `backend/openapi/openapi.yaml` para el contrato completo.
+- `db/migrations/` — esquema de PostgreSQL (migraciones con
+  [goose](https://github.com/pressly/goose)).
+- `backend/` — API REST en Go (`/api/v1`), ver `backend/openapi/openapi.yaml` para el
+  contrato completo.
 - `web/` — páginas web (HTML + JS) para socios y directiva.
 - `docs/architecture.md` — arquitectura y decisiones de diseño.
-- `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo junto.
+- `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo
+  junto.
 - `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con Docker.
 - `docs/deployment-no-docker.md` — lo mismo sin Docker, para un servidor con poco disco.
-- `docs/environments.md` — los tres entornos (local con Docker, y testing y producción con systemd en el host del club) y cómo se actualiza cada uno.
+- `docs/environments.md` — los tres entornos (local con Docker, y testing y producción con
+  systemd en el host del club) y cómo se actualiza cada uno.
 
 ## Idioma
 

@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository.
 
 ## Language
 
@@ -16,7 +17,8 @@ Local stack (Postgres + API + Caddy-served frontend):
 ```sh
 docker compose up --build
 ```
-API on `:64711` (direct) / behind Caddy on `:64710` with `/api/*` proxied; frontend on `:64710`.
+API on `:64711` (direct) / behind Caddy on `:64710` with `/api/*` proxied; frontend on
+`:64710`.
 
 Migrations and first admin account (run once against a fresh database):
 ```sh
@@ -99,15 +101,15 @@ The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Cad
 and sends `Cache-Control: max-age=3600` for everything it serves from there: without any
 cache header, browsers guess a freshness lifetime of a tenth of the file's age, so a file
 unchanged for weeks can be served stale for days after a deploy. A fixed hour is the
-trade-off: `no-cache` (revalidate each file, a cheap 304) made every navigation take about a
-second over a real connection — a page loads a chain of scripts that import one another, so
-each costs a revalidation round trip in sequence. The price is that after a deploy a browser
-may keep an old page or script for up to an hour, mixed with new ones; the people who use the
-intranet daily are the developers, who know to reload the page bypassing the cache (how depends
-on the browser and device, and on a phone or tablet there is no easy way — hence an hour and not
-a day). Only `web/` goes through this rule: documents and files come from `/api/*`, which Caddy leaves to the API.
-The club's own Caddy, outside this repo,
-needs the same line in its site block (`docs/deployment-no-docker.md`).
+trade-off: `no-cache` (revalidate each file, a cheap 304) made every navigation take about
+a second over a real connection — a page loads a chain of scripts that import one another,
+so each costs a revalidation round trip in sequence. The price is that after a deploy a
+browser may keep an old page or script for up to an hour, mixed with new ones; the people
+who use the intranet daily are the developers, who know to reload the page bypassing the
+cache (how depends on the browser and device, and on a phone or tablet there is no easy
+way — hence an hour and not a day). Only `web/` goes through this rule: documents and
+files come from `/api/*`, which Caddy leaves to the API. The club's own Caddy, outside
+this repo, needs the same line in its site block (`docs/deployment-no-docker.md`).
 
 Club documents (estatutos, actas...) shown at `/library`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no
@@ -290,16 +292,17 @@ role-assignment, license, and Junta Directiva write endpoint rejects board even 
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
 `GET /users` (name, gender, computed `age_category` — never the exact `birth_date` it's
 bucketed from — membership number, alta/baja dates, `license_type` and `license_year` —
-the license for the *current year* only (`licenses.Service.CurrentByUser`; an older one, or
-one bought in December for next year, isn't reported, so having a `license_type` is being
-federated; there's no end date because a license always runs to December 31st), never
-`license_issued_date` — and `last_due_year` (the latest year whose cuota they paid; the
-date, `last_due_paid_at`, stays admin/board-only, both computed in `users.Service.enrich`
-via `memberships.Service.LatestDue`); no DNI or contact info). `/members` filters on those
-two for everyone — "A corriente de pago" is `last_due_year` ≥ the current year,
-"Federado" is having a `license_type` — and offers `last_due_year` as an optional "Última cuota"
-column, and a line between the filters and the table reading "N personas en esta vista" — `setPeopleCount`: the rows the current filters leave, not everyone on file) and may
-only edit their own contact fields (`email`, `phone`, `address`,
+the license for the *current year* only (`licenses.Service.CurrentByUser`; an older one,
+or one bought in December for next year, isn't reported, so having a `license_type` is
+being federated; there's no end date because a license always runs to December 31st),
+never `license_issued_date` — and `last_due_year` (the latest year whose cuota they paid;
+the date, `last_due_paid_at`, stays admin/board-only, both computed in
+`users.Service.enrich` via `memberships.Service.LatestDue`); no DNI or contact info).
+`/members` filters on those two for everyone — "A corriente de pago" is `last_due_year` ≥
+the current year, "Federado" is having a `license_type` — and offers `last_due_year` as an
+optional "Última cuota" column, and a line between the filters and the table reading "N
+personas en esta vista" — `setPeopleCount`: the rows the current filters leave, not
+everyone on file) and may only edit their own contact fields (`email`, `phone`, `address`,
 `postal_code`, `city`, `province`, `emergency_contact`) via `PATCH /users/{login}` —
 anything else in that body gets 403 `restricted_fields` instead of being silently ignored.
 `MemberListing` deliberately has no `roles` field at all: a plain member has no business
@@ -383,39 +386,40 @@ escape-hatch entry ("Otra") requires an `other_detail` string saying which licen
 actually is; every other entry forbids one (shared validation:
 `licenses.normalizeOtherDetail`, used by both `Create` and `Update`).
 `PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license without
-re-checking membership status the way `POST` does — that gate is for assigning a
-*new* license, not fixing a typo on one someone already has. `POST`'s own gate
+re-checking membership status the way `POST` does — that gate is for assigning a *new*
+license, not fixing a typo on one someone already has. `POST`'s own gate
 (`memberships.Repository.WasMemberDuringYear`) checks that the person was a socio at some
 point of the license's own `Year` — not "right now", and not on `issued_date` either:
-assigning, after the fact, a license for a year someone genuinely belonged to the club must
-still work even if they've since caused baja, or if it's dated before they joined (or after
-they left) that same year; only a year that never overlapped any of their membership periods
-is rejected (`ErrNotActiveMember`, HTTP 409 `not_active_member`). A license also has its own `Year`
-(migration `00014_membership_dues_and_license_payments.sql`) — the calendar year it
-actually covers, *not* always the same as `issued_date`'s own year, since a license
-requested in December often covers the *following* year — and an *optional*
-`TransactionID` (a `*int64`, null since migration `00020_licenses_transaction_optional.sql`)
-naming the transaction that recorded its payment (see Accounting below): omitting it is the
-only way to record a license the club didn't collect — someone federated elsewhere — and
-then there's no transaction to check; one that is given must exist
-(`ErrUnknownTransaction`, 400 `unknown_transaction`, if it doesn't name a real transaction),
-and it's never itself editable afterward — `UpdateInput` deliberately
-has no `TransactionID` field, since correcting a license's type, date, or year is a
-different action from re-litigating which payment it belongs to (the same distinction
-`accounting.UpdateAccountInput`'s missing `Position` field draws). That transaction must
-also (when given) have at least one entry on an account marked `allows_licenses` (migration
-`00017_accounts_dues_licenses_flags.sql`; see Accounting below): `Service.Create` asks
-`Repository.TransactionAllowsLicenses` — a SQL check against accounting's own tables, the
-same way a license already references its transaction by foreign key, without importing
-`internal/accounting` — and answers `ErrTransactionNotForLicenses`, 409
-`transaction_not_for_licenses`, otherwise. It runs last, after every check that only needs
-the request itself, so an existing request keeps the error it always got first.
+assigning, after the fact, a license for a year someone genuinely belonged to the club
+must still work even if they've since caused baja, or if it's dated before they joined (or
+after they left) that same year; only a year that never overlapped any of their membership
+periods is rejected (`ErrNotActiveMember`, HTTP 409 `not_active_member`). A license also
+has its own `Year` (migration `00014_membership_dues_and_license_payments.sql`) — the
+calendar year it actually covers, *not* always the same as `issued_date`'s own year, since
+a license requested in December often covers the *following* year — and an *optional*
+`TransactionID` (a `*int64`, null since migration
+`00020_licenses_transaction_optional.sql`) naming the transaction that recorded its
+payment (see Accounting below): omitting it is the only way to record a license the club
+didn't collect — someone federated elsewhere — and then there's no transaction to check;
+one that is given must exist (`ErrUnknownTransaction`, 400 `unknown_transaction`, if it
+doesn't name a real transaction), and it's never itself editable afterward — `UpdateInput`
+deliberately has no `TransactionID` field, since correcting a license's type, date, or
+year is a different action from re-litigating which payment it belongs to (the same
+distinction `accounting.UpdateAccountInput`'s missing `Position` field draws). That
+transaction must also (when given) have at least one entry on an account marked
+`allows_licenses` (migration `00017_accounts_dues_licenses_flags.sql`; see Accounting
+below): `Service.Create` asks `Repository.TransactionAllowsLicenses` — a SQL check against
+accounting's own tables, the same way a license already references its transaction by
+foreign key, without importing `internal/accounting` — and answers
+`ErrTransactionNotForLicenses`, 409 `transaction_not_for_licenses`, otherwise. It runs
+last, after every check that only needs the request itself, so an existing request keeps
+the error it always got first.
 
 **Membership dues** (`membership_dues`, alongside `memberships`): every year a socio
 remains a member, they owe a cuota to cover it — the first one (alongside the one-time
 matrícula) the same day they join, then once more each following year for as long as they
-stay a socio. `memberships.Due` is one row per `(user_id, year)` covered
-(`UNIQUE`, `ErrDueAlreadyRecorded` on a second one for the same year), always tied to the
+stay a socio. `memberships.Due` is one row per `(user_id, year)` covered (`UNIQUE`,
+`ErrDueAlreadyRecorded` on a second one for the same year), always tied to the
 `transaction_id` that actually recorded the payment — a due with no transaction behind it
 doesn't mean anything yet, so unlike a membership period itself there's no "unpaid" row to
 represent. Deliberately keyed by `user_id`, not `membership_id`: a rejoining member's due
@@ -429,9 +433,9 @@ since-closed membership who's rejoining is left entirely to that existing, separ
 flow instead (`HasAnyMembership` is already true for them, so nothing extra happens).
 Before any of that, `RecordDue` checks the transaction itself — it has to exist
 (`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
-(`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`; `Repository.
-TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a rejected due
-can never leave a membership period started as a side effect.
+(`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`;
+`Repository. TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a
+rejected due can never leave a membership period started as a side effect.
 `GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split, and joins
 each due's transaction to add `paid_at` (the payment's own `occurred_at` — not
 `created_at`, since a past year's due can be registered long after it was paid), only from
@@ -442,20 +446,19 @@ no Editar/Borrar (there's no endpoint for either) — its date has to keep the s
 midnight-UTC string shape every other event's has, since the timeline sorts them as plain
 strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
 with it; on a tie the order is alta, then the cuota, then a license paid the same day
-(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` lists them in a "Cuotas anuales" table under the membership table. There's no
-endpoint to correct or remove a due, and no validation that a due's `year` actually falls
-within an active membership period — both deliberately out of scope for now.
-`membership_dues.transaction_id` cascades on delete (`ON DELETE CASCADE`) — a due is pure
-bookkeeping metadata with no meaning apart from its transaction — while
-`licenses.transaction_id` (nullable, see above) uses the default `ON DELETE RESTRICT`
-instead: a license is a real, independently meaningful record (proof of federation) even
-apart from its payment, so the transaction that paid for one can't be deleted out from under
-it at all.
-`/member` has a "+ Licencia sin pago" button (admin-only, in the same panel as the alta/baja
-actions) opening a dialog that `POST`s a license with no `transaction_id` — the way to record one
-the club didn't collect; the ones it does collect are registered from their transaction, in
-Contabilidad (`/account`). The license then shows in the "Historial como socio" like any other,
-with Editar/Borrar.
+(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` lists them in a "Cuotas anuales" table
+under the membership table. There's no endpoint to correct or remove a due, and no
+validation that a due's `year` actually falls within an active membership period — both
+deliberately out of scope for now. `membership_dues.transaction_id` cascades on delete
+(`ON DELETE CASCADE`) — a due is pure bookkeeping metadata with no meaning apart from its
+transaction — while `licenses.transaction_id` (nullable, see above) uses the default
+`ON DELETE RESTRICT` instead: a license is a real, independently meaningful record (proof
+of federation) even apart from its payment, so the transaction that paid for one can't be
+deleted out from under it at all. `/member` has a "+ Licencia sin pago" button
+(admin-only, in the same panel as the alta/baja actions) opening a dialog that `POST`s a
+license with no `transaction_id` — the way to record one the club didn't collect; the ones
+it does collect are registered from their transaction, in Contabilidad (`/account`). The
+license then shows in the "Historial como socio" like any other, with Editar/Borrar.
 
 **Temporary leaves** (`membership_leaves`): a "baja temporal" belongs to the person
 directly (`user_id`), not to one specific `memberships` period — the same `user_id`-keyed
@@ -540,123 +543,120 @@ Telegram API never adds latency anywhere); startup is the one exception, describ
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
-- `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has
-  linked their Telegram account (`users.Repository.TelegramChatIDForUser`). Whether the
-  email `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web
-  endpoint, and the exported `IssueMagicLinkForTelegramUser`, for
-  `internal/telegrambot.Bot` above, resolve their target person into before calling)
-  also sends depends on which of those two callers triggered it (`issueMagicLink`'s own
-  `viaTelegramBot` bool, threaded through): riding along a web request that merely
-  happens to also have Telegram linked, the DM is sent alongside the email, not instead
-  of it, so someone with no Telegram linked (or a failed lookup/send) still has the email
-  to fall back on — but when it's the bot's own `IssueMagicLinkForTelegramUser` replying
-  to someone who just typed their email into the chat (see `handleRecognizedChat`
-  below), `issueMagicLink` returns right after the DM and skips the email outright: that
-  DM already *is* the answer to what they just typed, so a follow-up email would only be
-  redundant, not a fallback worth having. Wording matches this split: the email, and a
-  web-triggered DM, both include the login code, a "recibes este mensaje porque..." line
-  naming the login page as this request's origin (the `requestOrigin` constant, since
-  neither of those two is ever built for a bot-triggered request), and a "if you didn't
-  request this, ignore it" line — since either might be read on a device other than the
-  one signing in, or simply wasn't expected — while the bot-flow DM drops all three: no
-  code-entry page is open anywhere for that code to be useful for, and asking "was this
-  you?" makes no sense for a message that *is* the direct reply to what they themselves
-  just typed, not something that could show up unprompted. `IssueMagicLinkForTelegramUser`
-  is also the one caller where email genuinely can be absent on file at all —
-  `FindActiveByEmailAndPhone` guarantees one for the web path, but resolving straight
-  from a linked chat id doesn't — though that's beside the point for the skip above,
-  which applies to every bot-triggered request the same way regardless of whether one's
-  on file. Unlike
-  `notifier`/`notifyLogin` above, which always target the fixed log channel, this needs
-  `authapi.TelegramMessenger` (`*telegram.Client` satisfies it structurally) to DM
-  whichever `chat_id` that specific person has — a second dependency alongside
-  `notifier`, wired from the same `botClient` `cmd/api/main.go` also gives
-  `internal/telegrambot`, and `nil` (not gated behind a separate config check) whenever
-  Telegram isn't configured at all, disabling this DM outright rather than falling
-  through to some no-op default. The chat id lookup runs synchronously on the
-  request's own context, same reasoning as `notifyLogin`. For a web-triggered DM, only
-  the network call itself is deferred to a goroutine, fire-and-forget — any failure (the
-  lookup, or the send) is logged and otherwise swallowed, since the email is this path's
-  own real fallback regardless of whether the DM goes through. A bot-flow DM
-  (`viaTelegramBot`) has no such fallback — `issueMagicLink` skips the email entirely for
-  it — so every step, send included, runs synchronously instead and reports a failure
-  anywhere along the way as `errMagicLinkTelegramDMFailed`, all the way back through
-  `IssueMagicLinkForTelegramUser` to `Bot.handleRecognizedChat`, which replies with
-  `magicLinkDeliveryFailedMessage` instead of leaving the person with silence (previously
-  this was only ever logged, a genuinely silent dead end for whoever just proved their
-  email to the bot). Running synchronously here is no different from every other call
-  `Bot.handle`'s own call chain already makes straight to the Telegram API
-  (`SendMessage`/`SendMessageRequestingContact`/`DeleteMessage`, all synchronous) — `Run`
-  processes one update at a time with no per-update goroutine of its own, so blocking
-  briefly on this one call is already this bot's normal way of working, not a departure
-  from it. The delete itself is still deferred to its own goroutine, and only ever
-  scheduled at all for a bot-flow DM once its (now synchronous) send has actually
+- `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has linked
+  their Telegram account (`users.Repository.TelegramChatIDForUser`). Whether the email
+  `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web endpoint,
+  and the exported `IssueMagicLinkForTelegramUser`, for `internal/telegrambot.Bot` above,
+  resolve their target person into before calling) also sends depends on which of those
+  two callers triggered it (`issueMagicLink`'s own `viaTelegramBot` bool, threaded
+  through): riding along a web request that merely happens to also have Telegram linked,
+  the DM is sent alongside the email, not instead of it, so someone with no Telegram
+  linked (or a failed lookup/send) still has the email to fall back on — but when it's the
+  bot's own `IssueMagicLinkForTelegramUser` replying to someone who just typed their email
+  into the chat (see `handleRecognizedChat` below), `issueMagicLink` returns right after
+  the DM and skips the email outright: that DM already *is* the answer to what they just
+  typed, so a follow-up email would only be redundant, not a fallback worth having.
+  Wording matches this split: the email, and a web-triggered DM, both include the login
+  code, a "recibes este mensaje porque..." line naming the login page as this request's
+  origin (the `requestOrigin` constant, since neither of those two is ever built for a
+  bot-triggered request), and a "if you didn't request this, ignore it" line — since
+  either might be read on a device other than the one signing in, or simply wasn't
+  expected — while the bot-flow DM drops all three: no code-entry page is open anywhere
+  for that code to be useful for, and asking "was this you?" makes no sense for a message
+  that *is* the direct reply to what they themselves just typed, not something that could
+  show up unprompted. `IssueMagicLinkForTelegramUser` is also the one caller where email
+  genuinely can be absent on file at all — `FindActiveByEmailAndPhone` guarantees one for
+  the web path, but resolving straight from a linked chat id doesn't — though that's
+  beside the point for the skip above, which applies to every bot-triggered request the
+  same way regardless of whether one's on file. Unlike `notifier`/`notifyLogin` above,
+  which always target the fixed log channel, this needs `authapi.TelegramMessenger`
+  (`*telegram.Client` satisfies it structurally) to DM whichever `chat_id` that specific
+  person has — a second dependency alongside `notifier`, wired from the same `botClient`
+  `cmd/api/main.go` also gives `internal/telegrambot`, and `nil` (not gated behind a
+  separate config check) whenever Telegram isn't configured at all, disabling this DM
+  outright rather than falling through to some no-op default. The chat id lookup runs
+  synchronously on the request's own context, same reasoning as `notifyLogin`. For a
+  web-triggered DM, only the network call itself is deferred to a goroutine,
+  fire-and-forget — any failure (the lookup, or the send) is logged and otherwise
+  swallowed, since the email is this path's own real fallback regardless of whether the DM
+  goes through. A bot-flow DM (`viaTelegramBot`) has no such fallback — `issueMagicLink`
+  skips the email entirely for it — so every step, send included, runs synchronously
+  instead and reports a failure anywhere along the way as `errMagicLinkTelegramDMFailed`,
+  all the way back through `IssueMagicLinkForTelegramUser` to `Bot.handleRecognizedChat`,
+  which replies with `magicLinkDeliveryFailedMessage` instead of leaving the person with
+  silence (previously this was only ever logged, a genuinely silent dead end for whoever
+  just proved their email to the bot). Running synchronously here is no different from
+  every other call `Bot.handle`'s own call chain already makes straight to the Telegram
+  API (`SendMessage`/`SendMessageRequestingContact`/`DeleteMessage`, all synchronous) —
+  `Run` processes one update at a time with no per-update goroutine of its own, so
+  blocking briefly on this one call is already this bot's normal way of working, not a
+  departure from it. The delete itself is still deferred to its own goroutine, and only
+  ever scheduled at all for a bot-flow DM once its (now synchronous) send has actually
   succeeded: sends via `Client.SendMessageForID` (unlike plain `SendMessage`, this hands
-  back the sent message's own id), sleeps for
-  `Options.TelegramBotDMLinkTTL` (5 minutes by default, `config.Config`'s own
-  hardcoded default — deliberately much shorter than `MagicLinkTTL`, the link's real,
-  unaffected expiry: typing an email straight into the bot happens live in the chat, so a
-  tight window reads as more trustworthy than the same span an email — read who knows
-  when — gets, and this message's own wording states that same shorter number, not
-  `MagicLinkTTL`), then calls `Client.DeleteMessage` on it — unless the person actually
-  signs in first: `Handler.issueSessionAndRespond` (reached from `ConsumeMagicLink` or
-  `ConsumeMagicLinkCode`, whichever channel the link/code that succeeded actually came
-  through) calls `Handler.deletePendingTelegramDM(userID)` on every successful sign-in,
-  which — only when this same user has a bot-flow DM still tracked, a no-op otherwise —
-  cancels that scheduled sleep and deletes the message right away instead of waiting out
-  the rest of `TelegramBotDMLinkTTL`: once someone has actually used the link, there's no
-  reason left to leave it sitting in the chat. `Handler.pendingTelegramDMs` (a
-  `map[int64]pendingTelegramDM`, `userID` keyed, `pendingTelegramDMsMu`-guarded) is what
-  makes this possible — `scheduleCleanup` registers the chat/message id and a
-  `context.CancelFunc` for its own sleep right after sending, and either side (the timer
-  itself, or `deletePendingTelegramDM`) removes the entry once it's actually deleted, so
-  the other one can't also try to delete an already-gone message. Purely a hygiene
-  nicety either way, not a security gate — the link inside keeps working for the rest of
-  the real `MagicLinkTTL` regardless of whether either delete path succeeds, or even runs
-  at all (a process restart in between just loses it, the same as any other best-effort
-  cleanup in this app) — but a dead link lingering in the chat is misleading, and one more
-  thing exposed for no reason if the phone/session is compromised later. A web-triggered
-  DM (`!viaTelegramBot`) skips this scheduling entirely and is never auto-deleted, on sign-in
-  or otherwise: unlike the bot-flow DM, it has no equivalent moment where it's definitely
-  done being useful — the code in it, especially, might still be typed into the login page
-  from a different device well after it arrives.
+  back the sent message's own id), sleeps for `Options.TelegramBotDMLinkTTL` (5 minutes by
+  default, `config.Config`'s own hardcoded default — deliberately much shorter than
+  `MagicLinkTTL`, the link's real, unaffected expiry: typing an email straight into the
+  bot happens live in the chat, so a tight window reads as more trustworthy than the same
+  span an email — read who knows when — gets, and this message's own wording states that
+  same shorter number, not `MagicLinkTTL`), then calls `Client.DeleteMessage` on it —
+  unless the person actually signs in first: `Handler.issueSessionAndRespond` (reached
+  from `ConsumeMagicLink` or `ConsumeMagicLinkCode`, whichever channel the link/code that
+  succeeded actually came through) calls `Handler.deletePendingTelegramDM(userID)` on
+  every successful sign-in, which — only when this same user has a bot-flow DM still
+  tracked, a no-op otherwise — cancels that scheduled sleep and deletes the message right
+  away instead of waiting out the rest of `TelegramBotDMLinkTTL`: once someone has
+  actually used the link, there's no reason left to leave it sitting in the chat.
+  `Handler.pendingTelegramDMs` (a `map[int64]pendingTelegramDM`, `userID` keyed,
+  `pendingTelegramDMsMu`-guarded) is what makes this possible — `scheduleCleanup`
+  registers the chat/message id and a `context.CancelFunc` for its own sleep right after
+  sending, and either side (the timer itself, or `deletePendingTelegramDM`) removes the
+  entry once it's actually deleted, so the other one can't also try to delete an
+  already-gone message. Purely a hygiene nicety either way, not a security gate — the link
+  inside keeps working for the rest of the real `MagicLinkTTL` regardless of whether
+  either delete path succeeds, or even runs at all (a process restart in between just
+  loses it, the same as any other best-effort cleanup in this app) — but a dead link
+  lingering in the chat is misleading, and one more thing exposed for no reason if the
+  phone/session is compromised later. A web-triggered DM (`!viaTelegramBot`) skips this
+  scheduling entirely and is never auto-deleted, on sign-in or otherwise: unlike the
+  bot-flow DM, it has no equivalent moment where it's definitely done being useful — the
+  code in it, especially, might still be typed into the login page from a different device
+  well after it arrives.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
-  every resource package's own mutation notifications are built from. `NotifyAsync` is
-  the fire-and-forget goroutine/timeout dance every Telegram send in this app already
-  used, pulled out once so nobody duplicates it. `DiffFields(before, after, fields...)`
-  reflects over a *named* subset of a struct's fields — never every field on it, since a
+  every resource package's own mutation notifications are built from. `NotifyAsync` is the
+  fire-and-forget goroutine/timeout dance every Telegram send in this app already used,
+  pulled out once so nobody duplicates it. `DiffFields(before, after, fields...)` reflects
+  over a *named* subset of a struct's fields — never every field on it, since a
   derived/computed one (a computed role list, a membership date recalculated elsewhere)
   must never show up as a spurious "change" just because it was recomputed at a slightly
-  different moment than "before" — comparing the pair and returning one "field: old →
-  new" line per field that actually differs (a nil pointer formats as `(vacío)`, a date
-  as a plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and
-  one pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely
+  different moment than "before" — comparing the pair and returning one "field: old → new"
+  line per field that actually differs (a nil pointer formats as `(vacío)`, a date as a
+  plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and one
+  pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely
   different values, but both display as `(vacío)`, so a field that merely swapped between
   those two produces no line: the point of the message is what a human reading it would
-  actually notice changed, not every byte that did.
-  Every resource package with a mutating route (`users`,
-  `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
-  `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its own `NewHandler` —
-  wired to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't
-  spam every single request" check the way the predecessor of this whole thing needed,
-  since one message per meaningful action isn't noisy the way one per every mutating
-  request (a routine token touch included) was — and sends its own specific message once
-  a create/update/delete actually succeeds: who did it (`actorLogin`, resolved from the
-  session's own id through that package's existing `UserLookup`, falling back to
-  `user#<id>` rather than failing the whole request if the lookup itself errors) and what
-  changed. An `update` handler fetches the record via `Service.Get` *before* applying the
-  patch and diffs it against the result using `auditableFields` — a package-level var
-  whose names exactly match that endpoint's own `UpdateInput` — so nothing that endpoint
-  can't actually touch can appear as a spurious change; an edit whose diff comes back
-  empty (every field resent unchanged) sends nothing, rather than an "edited" message
-  with nothing in it. A `delete` handler fetches the target the same way, purely so it
-  can still be named once it's gone. This whole mechanism replaced an earlier
+  actually notice changed, not every byte that did. Every resource package with a mutating
+  route (`users`, `roles`, `tokens`, `memberships`, `licenses`, `activities`, `inventory`,
+  `board`, `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its
+  own `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not gated
+  behind a "don't spam every single request" check the way the predecessor of this whole
+  thing needed, since one message per meaningful action isn't noisy the way one per every
+  mutating request (a routine token touch included) was — and sends its own specific
+  message once a create/update/delete actually succeeds: who did it (`actorLogin`,
+  resolved from the session's own id through that package's existing `UserLookup`, falling
+  back to `user#<id>` rather than failing the whole request if the lookup itself errors)
+  and what changed. An `update` handler fetches the record via `Service.Get` *before*
+  applying the patch and diffs it against the result using `auditableFields` — a
+  package-level var whose names exactly match that endpoint's own `UpdateInput` — so
+  nothing that endpoint can't actually touch can appear as a spurious change; an edit
+  whose diff comes back empty (every field resent unchanged) sends nothing, rather than an
+  "edited" message with nothing in it. A `delete` handler fetches the target the same way,
+  purely so it can still be named once it's gone. This whole mechanism replaced an earlier
   `httpapi.NotifyMutatingCalls` middleware that sent a blanket "[API] `<method>` `<path>`
   -> `<status>`" for literally every write regardless of what it actually changed — every
-  route it covered now has a strictly more informative replacement, except `authapi`'s
-  own session-lifecycle routes (magic-link request/consume, logout, impersonate/exit),
-  which were never business-data mutations and already have their own dedicated
-  notifications elsewhere in this list.
+  route it covered now has a strictly more informative replacement, except `authapi`'s own
+  session-lifecycle routes (magic-link request/consume, logout, impersonate/exit), which
+  were never business-data mutations and already have their own dedicated notifications
+  elsewhere in this list.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather
   than only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook —
   no public HTTPS endpoint to expose or coordinate with a reverse proxy, works the same
@@ -785,129 +785,131 @@ for "Caja", but a purely organizational grouping node might never get one — `"
 normalized to no code at all, `Handler.normalizeCode`, the same "not itself a storable
 value" treatment `licenses.normalizeOtherDetail` gives an empty `other_detail`, so two
 codeless accounts never collide under the column's own `UNIQUE` constraint the way two
-literal `""`s would), an optional `parent_id` nesting it under a
-broader one — the frontend builds any tree view it wants client-side from that — and
-two plain booleans, `allows_dues` and `allows_licenses` (migration
-`00017_accounts_dues_licenses_flags.sql`, both `false` until an admin or the "money" role
-marks them): which accounts a transaction has to have an entry on to be allowed to record
-membership dues or federative licenses, enforced by `memberships.Service.RecordDue` and
-`licenses.Service.Create` (see **Membership dues**/**Licenses** above) and always present
-in every `Account` JSON, `false` included, unlike the omitted-when-absent `code`/`parent_id`;
-like every other field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that
-leaves one out turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
-always-present/replaced-wholesale shape): an account that's no longer used. It can't be deleted — its
-entries are history — so it's flagged instead, and *only the frontend acts on it*: the API
-lists, reads, edits and posts to a hidden account like any other and,
+literal `""`s would), an optional `parent_id` nesting it under a broader one — the
+frontend builds any tree view it wants client-side from that — and two plain booleans,
+`allows_dues` and `allows_licenses` (migration `00017_accounts_dues_licenses_flags.sql`,
+both `false` until an admin or the "money" role marks them): which accounts a transaction
+has to have an entry on to be allowed to record membership dues or federative licenses,
+enforced by `memberships.Service.RecordDue` and `licenses.Service.Create` (see
+**Membership dues**/**Licenses** above) and always present in every `Account` JSON,
+`false` included, unlike the omitted-when-absent `code`/`parent_id`; like every other
+field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that leaves one out
+turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
+always-present/replaced-wholesale shape): an account that's no longer used. It can't be
+deleted — its entries are history — so it's flagged instead, and *only the frontend acts
+on it*: the API lists, reads, edits and posts to a hidden account like any other and,
 against that chart, `transactions`: every real movement of money the club records, each
-made of two or more `entries` (an `account_id` and an `amount`, positive into that
-account or negative out of it) whose amounts always sum to exactly zero — standard
-double-entry bookkeeping, so a transaction always says both where money came from and
-where it went, never just one side of it. Each account also appears at
-most once per transaction (`transaction_entries_account_once`, a `UNIQUE (transaction_id,
-account_id)` from migration `00018`; `validateEntries` checks it first, `ErrDuplicateAccount`,
-400 `duplicate_account`) — its one entry's amount already says everything that moved
-through it, and the ledger's per-account running balance and "other accounts" detail
-both assume it. `GET /accounts` also joins in each account's
-own direct `balance` (summed from every entry ever posted straight to it) and
-`last_transaction_at` (the most recent one's `occurred_at`) — never rolled up from a
-child account, and never present on any other `accounts` route (`GET`/`POST`/`PATCH
-/accounts/{id}` are all just the row itself, no extra join); a `LEFT JOIN` against
-`transaction_entries`/`transactions` means an account with no entries at all still gets
-one row back rather than being silently missing, `COALESCE`d to a zero `balance` (a
-real, computed zero — never absent the way it is everywhere else `Account` shows up)
-while `last_transaction_at` is simply `NULL`. "At least two entries" and "sums to zero" both
-depend on every sibling row, not just one, so neither can be a plain `CHECK` — both are
-enforced instead by `transaction_entries_balance`, a `DEFERRABLE INITIALLY DEFERRED`
-constraint trigger (migration `00012_accounting.sql`) that only actually runs at commit,
-after every entry a write touched is in place, rather than rejecting a transaction's
-entries one at a time as `accounting.Repository.CreateTransaction`/`UpdateTransaction`
-insert them individually inside their own DB transaction (the same `pool.Begin` pattern
-`activities.Repository.Create` already uses for an activity's initial participants).
-The trigger explicitly skips its own check once the `transactions` row itself is also
-gone (checked first, before counting/summing entries) — deleting a whole transaction
-cascades to every one of its entries, each of which fires this same trigger, and without
-that guard the last entry to go would look like "a transaction with zero (too few)
-entries" instead of a transaction that's correctly, completely gone.
+made of two or more `entries` (an `account_id` and an `amount`, positive into that account
+or negative out of it) whose amounts always sum to exactly zero — standard double-entry
+bookkeeping, so a transaction always says both where money came from and where it went,
+never just one side of it. Each account also appears at most once per transaction
+(`transaction_entries_account_once`, a `UNIQUE (transaction_id, account_id)` from
+migration `00018`; `validateEntries` checks it first, `ErrDuplicateAccount`, 400
+`duplicate_account`) — its one entry's amount already says everything that moved through
+it, and the ledger's per-account running balance and "other accounts" detail both assume
+it. `GET /accounts` also joins in each account's own direct `balance` (summed from every
+entry ever posted straight to it) and `last_transaction_at` (the most recent one's
+`occurred_at`) — never rolled up from a child account, and never present on any other
+`accounts` route (`GET`/`POST`/`PATCH /accounts/{id}` are all just the row itself, no
+extra join); a `LEFT JOIN` against `transaction_entries`/`transactions` means an account
+with no entries at all still gets one row back rather than being silently missing,
+`COALESCE`d to a zero `balance` (a real, computed zero — never absent the way it is
+everywhere else `Account` shows up) while `last_transaction_at` is simply `NULL`. "At
+least two entries" and "sums to zero" both depend on every sibling row, not just one, so
+neither can be a plain `CHECK` — both are enforced instead by
+`transaction_entries_balance`, a `DEFERRABLE INITIALLY DEFERRED` constraint trigger
+(migration `00012_accounting.sql`) that only actually runs at commit, after every entry a
+write touched is in place, rather than rejecting a transaction's entries one at a time as
+`accounting.Repository.CreateTransaction`/`UpdateTransaction` insert them individually
+inside their own DB transaction (the same `pool.Begin` pattern
+`activities.Repository.Create` already uses for an activity's initial participants). The
+trigger explicitly skips its own check once the `transactions` row itself is also gone
+(checked first, before counting/summing entries) — deleting a whole transaction cascades
+to every one of its entries, each of which fires this same trigger, and without that guard
+the last entry to go would look like "a transaction with zero (too few) entries" instead
+of a transaction that's correctly, completely gone.
 `Repository.CreateTransaction`/`UpdateTransaction` don't just rely on the deferred
-default, though: right after inserting entries they run `SET CONSTRAINTS
-transaction_entries_balance IMMEDIATE` on their own DB transaction to force the check
-right then (mapping a violation to `ErrUnbalanced` from that call instead of a later
-`Commit`), then set it back to `DEFERRED` before returning — necessary because
+default, though: right after inserting entries they run
+`SET CONSTRAINTS transaction_entries_balance IMMEDIATE` on their own DB transaction to
+force the check right then (mapping a violation to `ErrUnbalanced` from that call instead
+of a later `Commit`), then set it back to `DEFERRED` before returning — necessary because
 `pool.Begin` on top of an already-open `pgx.Tx` (exactly what every test does, via
 `testutil.NewTx`) opens a *savepoint*, not a real nested transaction, and Postgres only
 ever fires a deferred trigger at a real `COMMIT`, never at a savepoint's own `RELEASE` —
-so without forcing it immediate, the check would silently never run at all under test,
-and resetting back to `DEFERRED` afterward matters too, since `SET CONSTRAINTS`'s effect
-otherwise outlives the savepoint that set it (unlike a `ROLLBACK`, a successful `RELEASE
-SAVEPOINT` doesn't undo it), which would make the *next* multi-row entry insert
+so without forcing it immediate, the check would silently never run at all under test, and
+resetting back to `DEFERRED` afterward matters too, since `SET CONSTRAINTS`'s effect
+otherwise outlives the savepoint that set it (unlike a `ROLLBACK`, a successful
+`RELEASE SAVEPOINT` doesn't undo it), which would make the *next* multi-row entry insert
 anywhere else in the same enclosing transaction fail spuriously, checked one row too
 early. `UpdateTransaction` corrects a transaction by replacing its description,
 `occurred_at`, and its *entire* set of entries at once (delete every existing one, insert
-the given set) rather than editing a single entry in place — there's no single-entry
-edit endpoint. `occurred_at` is a real timestamp, not just a date the way
+the given set) rather than editing a single entry in place — there's no single-entry edit
+endpoint. `occurred_at` is a real timestamp, not just a date the way
 `activities.start_date`/`licenses.issued_date` are, so it decodes straight into a Go
 `time.Time` (RFC 3339, `encoding/json`'s own default) rather than needing the manual
-`time.Parse` every plain-date field elsewhere needs.
-Reading (`GET /accounts`, `GET /transactions`, and their `/{id}` forms) is open to any
-baseline role — the club's own finances are something every socio can see, not just
-admin/board — with one addition: for admin/board only, `GET /transactions/{id}` also carries
-`dues` and `licenses`, the cuotas and licenses that transaction paid for (always present for
-them, `[]` when none; absent for anyone else, since who paid which is private to that person,
-admin and board — see `GET /users/{login}/dues`). `Handler.getTransaction` fills them from
+`time.Parse` every plain-date field elsewhere needs. Reading (`GET /accounts`,
+`GET /transactions`, and their `/{id}` forms) is open to any baseline role — the club's
+own finances are something every socio can see, not just admin/board — with one addition:
+for admin/board only, `GET /transactions/{id}` also carries `dues` and `licenses`, the
+cuotas and licenses that transaction paid for (always present for them, `[]` when none;
+absent for anyone else, since who paid which is private to that person, admin and board —
+see `GET /users/{login}/dues`). `Handler.getTransaction` fills them from
 `DuesLookup`/`LicensesLookup`, two narrow interfaces `*memberships.Service`
-(`ListDuesForTransaction`) and `*licenses.Service` (`ListByTransaction`) satisfy structurally —
-the same pattern as `UserLookup` — rather than this package joining their tables itself; the
-wrapper type `transactionWithPayments` exists only for that one response, never for
-create/update/list. Writing needs admin or the optional, non-system "money" role (seeded by
-migration `00012_accounting.sql`, deletable by a club that doesn't want the distinction),
-the same "admin plus one optional custom role" shape `material` already has for
-inventory movements — board itself gets no special write access here, same as it has
-none for licenses or a person's own data. Every write still goes through the same
-baseline-role floor as every other route: holding only `money` with none of
-admin/board/member is rejected everywhere, this included.
-Every account also has a `position` (migration `00012_accounting.sql`) — its
-manual display order among its own siblings (same `parent_id`, `NULL` counted together
-as one top-level group), not unique or gap-free on purpose, since it's only ever used to
-`ORDER BY`, never to identify a row. `CreateAccount` appends a new account after its own
-sibling group's current highest position, the same "`MAX(position) + 1` in the same
-`INSERT`'s own subquery" pattern `activityresources.Repository.Create` uses for a
-resource's position within its activity. The only way to actually change one afterward
-is `POST /accounts/{id}/move`, admin/money-gated same as every other accounting write:
-`{"direction": "up"}` swaps it with the sibling immediately before it, `"down"` the one
-immediately after — a harmless no-op, not an error, if there's no such sibling (already
-first/last within its own group) — and answers with the whole, freshly reordered `GET
-/accounts` list (same "return the full list after reordering" shape the memoria's own
-reorder endpoint uses) rather than just the moved account, so a caller can re-render
-straight from the response. `GET /accounts` itself walks the tree in pre-order,
-depth-first: every top-level account in its own `position` order, each immediately
-followed by all of its own descendants (recursively, each in their own `position` order,
-however deep) before the next top-level sibling — `Repository.ListAccounts`'s own
-`tree` CTE computes this via the standard "materialized path" trick (an array of every
-`position` from a real root down to each account; Postgres compares arrays
-element-by-element, so ordering by it reads out exactly that walk) rather than assembling
-the tree in Go. Anchored only at genuine roots (`parent_id IS NULL`), that walk can never
-loop forever even against a cycle somehow already among non-root accounts — nothing in
-such a cycle has `parent_id IS NULL`, so nothing in it could ever seed the walk to begin
-with; it would instead just silently vanish from the listing, which is exactly why
-`UpdateAccount` rejects (`ErrCircularParent`, 409 `circular_parent`) setting a
-`parent_id` that is, or descends from, the account being edited — checked by walking
-*up* from the proposed parent (a query genuinely capable of looping forever against
-pre-existing bad data, unlike the listing's own downward walk), so that one's own
-recursion is capped at a depth no real chart of accounts would ever approach, purely so
-it can't hang even then.
+(`ListDuesForTransaction`) and `*licenses.Service` (`ListByTransaction`) satisfy
+structurally — the same pattern as `UserLookup` — rather than this package joining their
+tables itself; the wrapper type `transactionWithPayments` exists only for that one
+response, never for create/update/list. Writing needs admin or the optional, non-system
+"money" role (seeded by migration `00012_accounting.sql`, deletable by a club that doesn't
+want the distinction), the same "admin plus one optional custom role" shape `material`
+already has for inventory movements — board itself gets no special write access here, same
+as it has none for licenses or a person's own data. Every write still goes through the
+same baseline-role floor as every other route: holding only `money` with none of
+admin/board/member is rejected everywhere, this included. Every account also has a
+`position` (migration `00012_accounting.sql`) — its manual display order among its own
+siblings (same `parent_id`, `NULL` counted together as one top-level group), not unique or
+gap-free on purpose, since it's only ever used to `ORDER BY`, never to identify a row.
+`CreateAccount` appends a new account after its own sibling group's current highest
+position, the same "`MAX(position) + 1` in the same `INSERT`'s own subquery" pattern
+`activityresources.Repository.Create` uses for a resource's position within its activity.
+The only way to actually change one afterward is `POST /accounts/{id}/move`,
+admin/money-gated same as every other accounting write: `{"direction": "up"}` swaps it
+with the sibling immediately before it, `"down"` the one immediately after — a harmless
+no-op, not an error, if there's no such sibling (already first/last within its own group)
+— and answers with the whole, freshly reordered `GET /accounts` list (same "return the
+full list after reordering" shape the memoria's own reorder endpoint uses) rather than
+just the moved account, so a caller can re-render straight from the response.
+`GET /accounts` itself walks the tree in pre-order, depth-first: every top-level account
+in its own `position` order, each immediately followed by all of its own descendants
+(recursively, each in their own `position` order, however deep) before the next top-level
+sibling — `Repository.ListAccounts`'s own `tree` CTE computes this via the standard
+"materialized path" trick (an array of every `position` from a real root down to each
+account; Postgres compares arrays element-by-element, so ordering by it reads out exactly
+that walk) rather than assembling the tree in Go. Anchored only at genuine roots
+(`parent_id IS NULL`), that walk can never loop forever even against a cycle somehow
+already among non-root accounts — nothing in such a cycle has `parent_id IS NULL`, so
+nothing in it could ever seed the walk to begin with; it would instead just silently
+vanish from the listing, which is exactly why `UpdateAccount` rejects
+(`ErrCircularParent`, 409 `circular_parent`) setting a `parent_id` that is, or descends
+from, the account being edited — checked by walking *up* from the proposed parent (a query
+genuinely capable of looping forever against pre-existing bad data, unlike the listing's
+own downward walk), so that one's own recursion is capped at a depth no real chart of
+accounts would ever approach, purely so it can't hang even then.
 `GET /accounts/{id}/transactions` is one account's own ledger — the `AccountEntry` rows it
-was posted against, a page at a time (not the same shape as a bare `Entry`: each one inlines its own
-transaction's `description`/`occurred_at`, and a `balance_after` instead of just an
-`amount`), newest first same as `GET /transactions` itself.
-`Repository.ListAccountEntries` computes that running balance oldest-first (a running balance only ever makes sense walked forward through time) and serves the page newest-first, the opposite order from how it accumulates. Both this and `GET /transactions` take the same `limit`/`offset` (default 50,
-at most 100) and optional `from`/`to` (inclusive `YYYY-MM-DD` days; `parseListFilter`, a bad
-one is 400 `invalid_date`/`invalid_date_range`) — `ListFilter` — since a few years of ledger
-is thousands of rows. The ledger's `balance_after` is a window `SUM` over the account's
+was posted against, a page at a time (not the same shape as a bare `Entry`: each one
+inlines its own transaction's `description`/`occurred_at`, and a `balance_after` instead
+of just an `amount`), newest first same as `GET /transactions` itself.
+`Repository.ListAccountEntries` computes that running balance oldest-first (a running
+balance only ever makes sense walked forward through time) and serves the page
+newest-first, the opposite order from how it accumulates. Both this and
+`GET /transactions` take the same `limit`/`offset` (default 50, at most 100) and optional
+`from`/`to` (inclusive `YYYY-MM-DD` days; `parseListFilter`, a bad one is 400
+`invalid_date`/`invalid_date_range`) — `ListFilter` — since a few years of ledger is
+thousands of rows. The ledger's `balance_after` is a window `SUM` over the account's
 *whole* history, computed in a subquery before the range and page are applied, so it never
-restarts from zero at the edge of a window. Open to any baseline role, same as every other read in this package;
-`Handler.listAccountEntries` checks the account actually exists first (404, not just an
-empty list) since `ListAccountEntries` alone can't tell "no such account" apart from "a
-real account nobody's ever posted against."
+restarts from zero at the edge of a window. Open to any baseline role, same as every other
+read in this package; `Handler.listAccountEntries` checks the account actually exists
+first (404, not just an empty list) since `ListAccountEntries` alone can't tell "no such
+account" apart from "a real account nobody's ever posted against."
 
 **Testing helpers**: `internal/testutil` provides `NewTx` (migrated, isolated
 transaction), `InsertUser`/`InsertActivity`/`RoleID`/`LicenseTypeID` fixtures (the
@@ -948,15 +950,15 @@ was reached from, `/activities`/`/members`) rather than a per-page `class="activ
 written by hand — one less thing a new page could forget. `login.html` is the one page
 with no shell and no session yet, and never calls `initPage()`.
 
-Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already
-gives it the right background/border/padding/spacing — `dialog.modal`'s own
-`css/style.css` rules only add what a plain `.panel` never needed: the dimmed
-`::backdrop`, a max-width, and the "×" `.modal-close` button's own positioning) — never a
-`<div>` toggled to `hidden="false"` in place on the same page the way every one of these
-used to work. `js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call
-each page makes per dialog: it wires every `[data-modal-close]` element inside (the "×",
-a form's own "Cancelar") and a click that lands on the dialog element's own box rather
-than bubbling from its content (the standard way to detect a backdrop click on a native
+Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
+it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
+rules only add what a plain `.panel` never needed: the dimmed `::backdrop`, a max-width,
+and the "×" `.modal-close` button's own positioning) — never a `<div>` toggled to
+`hidden="false"` in place on the same page the way every one of these used to work.
+`js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call each page
+makes per dialog: it wires every `[data-modal-close]` element inside (the "×", a form's
+own "Cancelar") and a click that lands on the dialog element's own box rather than
+bubbling from its content (the standard way to detect a backdrop click on a native
 `<dialog>`) to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
 own `close` event, which fires no matter *how* it closed (×, Cancelar, backdrop, Escape,
 or a successful save that calls `close()` itself once done), so a caller's own submit
@@ -965,34 +967,34 @@ caller: a static "+ Nueva X" button calling `showModal()` directly, or — for a
 shared by every row of a list rather than one pre-rendered per row (`accounting.js`'s own
 account edit, `account.js`'s transaction edit, three of `member.js`'s timeline dialogs) —
 an `open*Dialog(record)` function that fills the shared dialog's fields from that one
-record first. The platform itself is what actually makes the rest of the page
-unreachable while one is open (real modality, not a hand-rolled overlay to keep in sync)
-and closes it on Escape — nothing in `modal.js` or any page's own script needs to
-implement either. The same goes for errors: `showError` (`api.js`) writes into the open
-`dialog[open]` — a `[data-dialog-error]` box created on demand just above its
-`.panel-actions` — instead of the page's own `#error`, which a modal's backdrop would leave
-underneath it, out of sight of whoever's looking at the form that caused it. That box clears
-when the person types, changes a field or clicks a button in the dialog (capture phase, so an
-action that fails again just shows it again), and when it closes. So a call that reports
-something after saving and then closes the dialog has to close it first — an error shown
-while it's still open goes into it and vanishes with it (`account.js`'s "creada, pero no se
-pudo registrar" messages do exactly that); `showFeedback`, which isn't redirected, doesn't
-care. With no dialog open, `showError` behaves as it always did. `profile.html`'s own "Mis datos" and `member.js`'s own "Datos" are both
-left as a plain inline form instead, not a dialog: a person's own core data is prominent
-enough on both pages (the entire reason `/profile` exists at all; the very first thing an
-admin or board looks at on `/member`) that hiding it behind an "Editar" button added
-friction for no real gain in clarity — plain `<input>`s directly on the page double as
-the read-only view too, so there's no separate view-only rendering to keep in sync with
-whatever the form itself holds. Populated once by `loadProfile()`/`loadMember()` and
-never reset to blank the way a "create new X" dialog's own form is on close, both add a
-"Cancelar" button next to "Guardar cambios" that puts back exactly what was last loaded
-(a plain local re-populate, not a re-fetch) — the one bit of a modal's own behavior
-(`initModal`'s reset-on-close) an inline form doesn't get for free, since there's no
-`close` event here to hang it from. `member.js`'s own version disables every field
-instead (not just the identity ones `profile.js` restricts) for anyone who isn't a real
-admin — board can still see a person's full data this way, just not submit any change to
-it, the same read-only-but-visible treatment `profile.js` already gives a plain member's
-own name/DNI/birth date/gender.
+record first. The platform itself is what actually makes the rest of the page unreachable
+while one is open (real modality, not a hand-rolled overlay to keep in sync) and closes it
+on Escape — nothing in `modal.js` or any page's own script needs to implement either. The
+same goes for errors: `showError` (`api.js`) writes into the open `dialog[open]` — a
+`[data-dialog-error]` box created on demand just above its `.panel-actions` — instead of
+the page's own `#error`, which a modal's backdrop would leave underneath it, out of sight
+of whoever's looking at the form that caused it. That box clears when the person types,
+changes a field or clicks a button in the dialog (capture phase, so an action that fails
+again just shows it again), and when it closes. So a call that reports something after
+saving and then closes the dialog has to close it first — an error shown while it's still
+open goes into it and vanishes with it (`account.js`'s "creada, pero no se pudo registrar"
+messages do exactly that); `showFeedback`, which isn't redirected, doesn't care. With no
+dialog open, `showError` behaves as it always did. `profile.html`'s own "Mis datos" and
+`member.js`'s own "Datos" are both left as a plain inline form instead, not a dialog: a
+person's own core data is prominent enough on both pages (the entire reason `/profile`
+exists at all; the very first thing an admin or board looks at on `/member`) that hiding
+it behind an "Editar" button added friction for no real gain in clarity — plain `<input>`s
+directly on the page double as the read-only view too, so there's no separate view-only
+rendering to keep in sync with whatever the form itself holds. Populated once by
+`loadProfile()`/`loadMember()` and never reset to blank the way a "create new X" dialog's
+own form is on close, both add a "Cancelar" button next to "Guardar cambios" that puts
+back exactly what was last loaded (a plain local re-populate, not a re-fetch) — the one
+bit of a modal's own behavior (`initModal`'s reset-on-close) an inline form doesn't get
+for free, since there's no `close` event here to hang it from. `member.js`'s own version
+disables every field instead (not just the identity ones `profile.js` restricts) for
+anyone who isn't a real admin — board can still see a person's full data this way, just
+not submit any change to it, the same read-only-but-visible treatment `profile.js` already
+gives a plain member's own name/DNI/birth date/gender.
 
 `js/api.js` is the
 underlying shared client `layout.js` itself is built on: it keeps the session token in
@@ -1090,126 +1092,133 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/accounting` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH
-/accounts` and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's
-name, direct balance, and last movement date — deliberately no code column, nor in the parent
-pickers: a code only shows on that account's own `/account` page, though the create/edit dialogs
-still have the field to set it (each name a plain `<a href="/account?
-id=…">` into that one account's own detail page, below), with its own controls to create
-an account, correct one's name/code/parent (an inline edit panel per row, the same
-toggled-`<div class="edit-fields">` pattern `member.js` uses for a membership/board/leave
-period), and swap it up or down among its own siblings. Both the create and edit dialogs
-carry two checkboxes, "Para cuotas anuales" and "Para licencias" (`allows_dues`/
-`allows_licenses`, styled by `.checkbox-label` in `style.css` so the box sits next to its
-text instead of being stretched by `.field input`'s `width: 100%`), always sent explicitly
-— unchecked is `false`, not omitted, since `PATCH` replaces every field — and each row
-shows a small "Cuotas"/"Licencias" badge next to the account's name for whichever are on,
-so which accounts a transaction can record those against is visible without opening each
-one. `js/accountTree.js` holds the
+`/accounting` (`accounting.js`) manages the chart of accounts from
+`GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,
+of every account's name, direct balance, and last movement date — deliberately no code
+column, nor in the parent pickers: a code only shows on that account's own `/account`
+page, though the create/edit dialogs still have the field to set it (each name a plain
+`<a href="/account? id=…">` into that one account's own detail page, below), with its own
+controls to create an account, correct one's name/code/parent (an inline edit panel per
+row, the same toggled-`<div class="edit-fields">` pattern `member.js` uses for a
+membership/board/leave period), and swap it up or down among its own siblings. Both the
+create and edit dialogs carry two checkboxes, "Para cuotas anuales" and "Para licencias"
+(`allows_dues`/ `allows_licenses`, styled by `.checkbox-label` in `style.css` so the box
+sits next to its text instead of being stretched by `.field input`'s `width: 100%`),
+always sent explicitly — unchecked is `false`, not omitted, since `PATCH` replaces every
+field — and each row shows a small "Cuotas"/"Licencias" badge next to the account's name
+for whichever are on, so which accounts a transaction can record those against is visible
+without opening each one. `js/accountTree.js` holds the
 `childrenByParent`/`flattenAccountTree` pair both this page and `account.js` need:
 `GET /accounts` already comes back as a pre-order, depth-first walk (see the `accounts`
 bullet under **Accounting** above), so filtering that flat list down to a single
 `parent_id`, in the order it already arrives in, *is* that group's own sibling order — one
 pass groups every `parent_id` at once, no separate tree-building pass. Hidden accounts
-(`hidden`) are left out of the table unless a "Mostrar cuentas ocultas (N)" checkbox — shown
-only when there are any — is on, and each is tagged "Oculta" and dimmed when shown;
-`shownAccounts` (`accountTree.js`) drops them while re-parenting their shown children onto the
-nearest shown ancestor, since filtering the flat list alone would lose those children from the
-tree walk. The ↑/↓ arrows follow the real sibling groups but count only shown siblings, and a
-move repeats once per hidden sibling it has to pass (the endpoint swaps with the very next one,
-which would otherwise look like nothing happened). A hidden account stays offered as the parent
-picker's choice when it is the current parent — dropping it would move the account to the top
-level on save. A `move`'s own
-response (the whole reordered list) re-renders directly from `applyAccountsList` rather
-than triggering a follow-up `GET`. Only admin and the optional "money" role ever see
-`/accounting` in the sidebar at all, or can even land on the page
-(`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than the API
-itself, which opens *reading* the chart to every baseline role the same as
-`GET /transactions`; admin/money can already write here too, so nothing on the page needs
-a narrower check than that one gate.
+(`hidden`) are left out of the table unless a "Mostrar cuentas ocultas (N)" checkbox —
+shown only when there are any — is on, and each is tagged "Oculta" and dimmed when shown;
+`shownAccounts` (`accountTree.js`) drops them while re-parenting their shown children onto
+the nearest shown ancestor, since filtering the flat list alone would lose those children
+from the tree walk. The ↑/↓ arrows follow the real sibling groups but count only shown
+siblings, and a move repeats once per hidden sibling it has to pass (the endpoint swaps
+with the very next one, which would otherwise look like nothing happened). A hidden
+account stays offered as the parent picker's choice when it is the current parent —
+dropping it would move the account to the top level on save. A `move`'s own response (the
+whole reordered list) re-renders directly from `applyAccountsList` rather than triggering
+a follow-up `GET`. Only admin and the optional "money" role ever see `/accounting` in the
+sidebar at all, or can even land on the page (`hasAnyRole(user, ['admin', 'money'])`, else
+redirected to `/`) — tighter than the API itself, which opens *reading* the chart to every
+baseline role the same as `GET /transactions`; admin/money can already write here too, so
+nothing on the page needs a narrower check than that one gate.
 
 `/account?id=…` (`account.js`) is one account's own ledger — reached only by clicking an
 account's name on `/accounting`, never linked from the sidebar itself, so it shares that
-same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
-`/accounting` for the sidebar's own highlighting, the same `/activity`→`/activities`/
+same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/accounting`
+for the sidebar's own highlighting, the same `/activity`→`/activities`/
 `/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
-`GET /accounts/{id}/transactions` (see **Accounting** above) as a table (the newest 50, "Ver más" for the next ones, and a Desde/Hasta filter above it —
-`loadEntries`; it asks for one entry more than a page just to know whether to show "Ver más")
-— date, description,
-this account's own entry amount, its running balance after, and per-row Editar/Borrar (a row
-also opens on a click anywhere but those buttons, or Enter/Space when focused — see below) — and
-a "+ Nueva transacción" dialog deliberately narrower than the full `POST /transactions`
-shape: a date, a description, and a growing list of *lines* (`setupEntryLines`), each an
-amount "en esta cuenta" plus the "otra cuenta" it comes from or goes to. As soon as the
-last line has both fields a new empty one appears below it; a line with neither is ignored,
-one with only one is an error, and the account picker starts on a "— Elige una cuenta —"
-placeholder precisely so "filled" means something. On save (`entriesBody`, shared by
-creating a new transaction and correcting an existing one) this account gets one entry for
-the *sum* of every line's amount, added up in whole cents so floating point never shows up
-in the result, and each other account gets the exact negative of its own line — so
-the entries sum to zero without whoever is typing having to think about the balancing side.
-Amounts that cancel out (this account would get a zero entry) are refused. A read-only "Total en esta cuenta"
-next to the date (`updateTotal`) shows that sum live, on every keystroke, so it counts a line whose
-account isn't picked yet and ignores an empty or non-numeric amount. A row's own
-"Editar" fetches that one transaction fresh (`GET /transactions/{id}`, never kept in memory
-alongside the ledger listing, which only ever carries this account's own side of each one)
-and turns each of its *other* entries into a line (amount negated back); if it has anything
-other than exactly one entry on this account (only possible by calling the API directly),
-editing is refused with an explanation instead of silently merging them. The dues/licenses
-sections follow every account picked on any line (`sectionsFor`), not just one. "Borrar"
+`GET /accounts/{id}/transactions` (see **Accounting** above) as a table (the newest 50,
+"Ver más" for the next ones, and a Desde/Hasta filter above it — `loadEntries`; it asks
+for one entry more than a page just to know whether to show "Ver más") — date,
+description, this account's own entry amount, its running balance after, and per-row
+Editar/Borrar (a row also opens on a click anywhere but those buttons, or Enter/Space when
+focused — see below) — and a "+ Nueva transacción" dialog deliberately narrower than the
+full `POST /transactions` shape: a date, a description, and a growing list of *lines*
+(`setupEntryLines`), each an amount "en esta cuenta" plus the "otra cuenta" it comes from
+or goes to. As soon as the last line has both fields a new empty one appears below it; a
+line with neither is ignored, one with only one is an error, and the account picker starts
+on a "— Elige una cuenta —" placeholder precisely so "filled" means something. On save
+(`entriesBody`, shared by creating a new transaction and correcting an existing one) this
+account gets one entry for the *sum* of every line's amount, added up in whole cents so
+floating point never shows up in the result, and each other account gets the exact
+negative of its own line — so the entries sum to zero without whoever is typing having to
+think about the balancing side. Amounts that cancel out (this account would get a zero
+entry) are refused. A read-only "Total en esta cuenta" next to the date (`updateTotal`)
+shows that sum live, on every keystroke, so it counts a line whose account isn't picked
+yet and ignores an empty or non-numeric amount. A row's own "Editar" fetches that one
+transaction fresh (`GET /transactions/{id}`, never kept in memory alongside the ledger
+listing, which only ever carries this account's own side of each one) and turns each of
+its *other* entries into a line (amount negated back); if it has anything other than
+exactly one entry on this account (only possible by calling the API directly), editing is
+refused with an explanation instead of silently merging them. The dues/licenses sections
+follow every account picked on any line (`sectionsFor`), not just one. "Borrar"
 (`confirm`-gated, the same pattern `member.js`'s own delete buttons use) removes the whole
-transaction, every entry included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`) expands a detail row right
-below it — starting under "Descripción" (an empty first cell), with no line between the two
-and the same background, so it reads as the continuation of the row above rather than as
-another row — listing the transaction's *other* accounts — each name (just the name, no code — the code only appears in the page's own header) linking to that account's own
-ledger, with the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with
-`GET /transactions/{id}` the first time (the listing only ever carries this account's own
-side, see `AccountEntry`) and resolved to names from `allAccounts`, which the page already
-has; it works for transactions of any number of entries. Under them it also lists the cuotas anuales and licencias the transaction paid for — each as the person's name (from `GET /users/directory`, which the page now loads for everyone, not just for the admin pickers) linking to `/member`, plus year (and license type) — from the `dues`/`licenses` that same response carries for admin/board only, so they simply don't appear for anyone else. Clicking
-the row again collapses it, a click on Editar/Borrar or on a link never toggles it, and any
-reload of the list starts every row collapsed. Pressing "n" anywhere on the page opens the new-transaction dialog (ignored while typing in
-a field, with a modifier held, or with a dialog already open), which puts focus on the date;
-the edit dialog puts it on the description. The date input only
-ever collects a plain date, but `occurred_at` is a real timestamp — sent as that date at
-noon UTC (not midnight) specifically so `formatDate`'s own local-timezone getters can never
-roll it back to the previous day for anyone viewing from behind UTC; editing an existing
-transaction collapses whatever time of day it actually had down to this same convention.
-Both dialogs also carry, for a real admin only (`data-roles="admin"`; POST dues/licenses
-is admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registrar"
-section (`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips
-sent as `POST /users/{login}/dues`/`licenses` once the transaction itself is saved. Each
-section is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues if
-this account or any account picked on a line has `allows_dues`, licenses if any has
-`allows_licenses`, re-evaluated whenever a line's picker changes and whenever a dialog opens,
-and a section that gets hidden also drops its pending chips — otherwise one added while a
-qualifying account was selected would still be sent, and only rejected by the API after the
-transaction was already saved. Separately from that, the edit dialog lists what earlier saves
-already registered against the transaction, read-only (no ×: nothing removes a due) from the
-`dues`/`licenses` its own `GET /transactions/{id}` already returns (`setExisting`): a section
-stays visible for as long as it has something to list even when no account qualifies any more
-(the flag was since turned off, or the accounts changed) — a record of what was paid, not
-something about to be sent — while its add controls follow the qualifying rule above. When neither section applies, a hint explains that an
-account has to be marked for it, in Contabilidad, instead of showing nothing. The "+ Nueva
-transacción" dialog opens with today's date (`todayAsInputValue`, built from local getters:
-`toISOString()` would be UTC's date, already tomorrow's for part of the evening east of it),
-and each section's "Año" input starts from the transaction's date — that date's own year,
-or the next one in December, since a payment that late is almost always for the following
-year (`suggestedYear`). The inputs keep following the date until the person types in one,
-which is then left alone until the dialog is next opened (`editedYearInputs`, cleared by
-`reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
-dialog does the same from its own date.
-Each line's "otra cuenta" picker (the same list in the create and edit dialogs) leaves hidden
-accounts out — except those the transaction being edited already uses, which stay choosable
-(`otherAccountOptions`'s `keepHidden`) — and lists
-every other account by name only, no code (indented the same way `accounting.js`'s own pickers are, via
-`flattenAccountTree`) — excluding only this account itself, not its ordinary
-parent/children the way `accounting.js`'s own "cuenta superior" picker excludes
-descendants: there's no circular relationship to guard against here, any two distinct
-accounts can be on the two sides of a transaction. The page's own header (name, code, current
-balance) and that picker both come from one `GET /accounts` call — that listing already
-carries every account's own balance, so there's no need for a second, single-account fetch
-just for the header (`GET /accounts/{id}` alone never populates it — see **Accounting**
-above).
+transaction, every entry included. Clicking a ledger row (`tr.entry-row`,
+`toggleEntryDetail`) expands a detail row right below it — starting under "Descripción"
+(an empty first cell), with no line between the two and the same background, so it reads
+as the continuation of the row above rather than as another row — listing the
+transaction's *other* accounts — each name (just the name, no code — the code only appears
+in the page's own header) linking to that account's own ledger, with the amount it gained
+(`+`) or lost (`−`; `signedCurrency`) — fetched with `GET /transactions/{id}` the first
+time (the listing only ever carries this account's own side, see `AccountEntry`) and
+resolved to names from `allAccounts`, which the page already has; it works for
+transactions of any number of entries. Under them it also lists the cuotas anuales and
+licencias the transaction paid for — each as the person's name (from
+`GET /users/directory`, which the page now loads for everyone, not just for the admin
+pickers) linking to `/member`, plus year (and license type) — from the `dues`/`licenses`
+that same response carries for admin/board only, so they simply don't appear for anyone
+else. Clicking the row again collapses it, a click on Editar/Borrar or on a link never
+toggles it, and any reload of the list starts every row collapsed. Pressing "n" anywhere
+on the page opens the new-transaction dialog (ignored while typing in a field, with a
+modifier held, or with a dialog already open), which puts focus on the date; the edit
+dialog puts it on the description. The date input only ever collects a plain date, but
+`occurred_at` is a real timestamp — sent as that date at noon UTC (not midnight)
+specifically so `formatDate`'s own local-timezone getters can never roll it back to the
+previous day for anyone viewing from behind UTC; editing an existing transaction collapses
+whatever time of day it actually had down to this same convention. Both dialogs also
+carry, for a real admin only (`data-roles="admin"`; POST dues/licenses is admin-only), a
+"Cuotas anuales a registrar" and a "Licencias nuevas a registrar" section
+(`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips sent as
+`POST /users/{login}/dues`/`licenses` once the transaction itself is saved. Each section
+is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues if this
+account or any account picked on a line has `allows_dues`, licenses if any has
+`allows_licenses`, re-evaluated whenever a line's picker changes and whenever a dialog
+opens, and a section that gets hidden also drops its pending chips — otherwise one added
+while a qualifying account was selected would still be sent, and only rejected by the API
+after the transaction was already saved. Separately from that, the edit dialog lists what
+earlier saves already registered against the transaction, read-only (no ×: nothing removes
+a due) from the `dues`/`licenses` its own `GET /transactions/{id}` already returns
+(`setExisting`): a section stays visible for as long as it has something to list even when
+no account qualifies any more (the flag was since turned off, or the accounts changed) — a
+record of what was paid, not something about to be sent — while its add controls follow
+the qualifying rule above. When neither section applies, a hint explains that an account
+has to be marked for it, in Contabilidad, instead of showing nothing. The "+ Nueva
+transacción" dialog opens with today's date (`todayAsInputValue`, built from local
+getters: `toISOString()` would be UTC's date, already tomorrow's for part of the evening
+east of it), and each section's "Año" input starts from the transaction's date — that
+date's own year, or the next one in December, since a payment that late is almost always
+for the following year (`suggestedYear`). The inputs keep following the date until the
+person types in one, which is then left alone until the dialog is next opened
+(`editedYearInputs`, cleared by `reset`/`syncYears`); adding a chip puts that input back
+on the suggestion, and the edit dialog does the same from its own date. Each line's "otra
+cuenta" picker (the same list in the create and edit dialogs) leaves hidden accounts out —
+except those the transaction being edited already uses, which stay choosable
+(`otherAccountOptions`'s `keepHidden`) — and lists every other account by name only, no
+code (indented the same way `accounting.js`'s own pickers are, via `flattenAccountTree`) —
+excluding only this account itself, not its ordinary parent/children the way
+`accounting.js`'s own "cuenta superior" picker excludes descendants: there's no circular
+relationship to guard against here, any two distinct accounts can be on the two sides of a
+transaction. The page's own header (name, code, current balance) and that picker both come
+from one `GET /accounts` call — that listing already carries every account's own balance,
+so there's no need for a second, single-account fetch just for the header
+(`GET /accounts/{id}` alone never populates it — see **Accounting** above).
 
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role
