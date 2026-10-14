@@ -93,11 +93,11 @@ Quedan reservados a admin/board:
 - Su fecha de fin, que no se muestra porque siempre es el 31 de diciembre.
 - `last_due_paid_at`, la fecha en que se pagó la última cuota.
 
-**Categoría de edad.** `age_category` (youth/child/junior/senior/veteran_a/veteran_b:
-alevín, infantil, juvenil, mayor, veterano A y veterano B en la normativa del club) se
-calcula con `ageCategoryFor` a partir de `birth_date`, según la edad que la persona
-cumple en el año natural en curso. Sustituye a la fecha de nacimiento exacta, que no se
-expone aquí: el tramo basta para lo que hace falta ver de un vistazo sin revelar la
+**Categoría de edad.** `age_category` (`youth`, `child`, `junior`, `senior`, `veteran_a`,
+`veteran_b`: alevín, infantil, juvenil, mayor, veterano A y veterano B en la normativa del
+club) se calcula con `ageCategoryFor` a partir de `birth_date`, según la edad que la
+persona cumple en el año natural en curso. Sustituye a la fecha de nacimiento exacta, que
+no se expone aquí: el tramo basta para lo que hace falta ver de un vistazo sin revelar la
 fecha de nacimiento de nadie.
 
 **Roles y Junta Directiva.** `MemberListing` no lleva un campo `roles`: a un socio
