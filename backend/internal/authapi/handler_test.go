@@ -576,44 +576,57 @@ func TestSigningInDeletesTheWebTriggeredDM(t *testing.T) {
 	}
 }
 
-// Every link requested before signing in is deleted, not only the last
-// one: asking twice leaves two messages in the chat.
-func TestSigningInDeletesEveryPendingWebTriggeredDM(t *testing.T) {
+// Only the latest link DM is worth keeping: sending a new one deletes the
+// previous one right away (not at sign-in or expiry), and signing in then
+// deletes the latest.
+func TestANewLinkDMDeletesThePreviousOne(t *testing.T) {
 	s := newTestServerWithOptions(t, time.Minute, 0)
 	user := s.insertUserWithRole(t, "611222333", "admin")
 	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
 		t.Fatalf("SetTelegramChatID: %v", err)
 	}
-	s.requestAndExtractToken(t, user.Email, user.Phone)
-	token := s.requestAndExtractToken(t, user.Email, user.Phone)
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		s.telegramClient.mu.Lock()
-		n := len(s.telegramClient.sent)
-		s.telegramClient.mu.Unlock()
-		if n >= 2 {
-			break
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			s.telegramClient.mu.Lock()
+			ok := cond()
+			s.telegramClient.mu.Unlock()
+			if ok {
+				return
+			}
+			time.Sleep(time.Millisecond)
 		}
-		time.Sleep(time.Millisecond)
+		t.Fatalf("timed out waiting for %s", what)
 	}
-	time.Sleep(50 * time.Millisecond)
 
+	s.requestAndExtractToken(t, user.Email, user.Phone)
+	waitFor("the first DM", func() bool { return len(s.telegramClient.sent) >= 1 })
+	time.Sleep(50 * time.Millisecond) // the background send records the id it later deletes
+	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+	waitFor("the first DM to be deleted", func() bool { return len(s.telegramClient.deleted) >= 1 })
+
+	s.telegramClient.mu.Lock()
+	first, second := s.telegramClient.sent[0].messageID, s.telegramClient.sent[1].messageID
+	deleted := append([]struct {
+		chatID    int64
+		messageID int64
+	}(nil), s.telegramClient.deleted...)
+	s.telegramClient.mu.Unlock()
+	if len(deleted) != 1 || deleted[0].messageID != first {
+		t.Fatalf("expected only the first DM (message %d) deleted by the second, got %v", first, deleted)
+	}
+
+	time.Sleep(50 * time.Millisecond)
 	if rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}); rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	deadline = time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		s.telegramClient.mu.Lock()
-		n := len(s.telegramClient.deleted)
-		s.telegramClient.mu.Unlock()
-		if n >= 2 {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
+	waitFor("the second DM to be deleted at sign-in", func() bool { return len(s.telegramClient.deleted) >= 2 })
 	s.telegramClient.mu.Lock()
 	defer s.telegramClient.mu.Unlock()
-	t.Errorf("expected both pending DMs to be deleted, got %v", s.telegramClient.deleted)
+	if got := s.telegramClient.deleted[1].messageID; got != second {
+		t.Errorf("expected the sign-in to delete the second DM (message %d), got %d", second, got)
+	}
 }
 
 // TestConsumeMagicLinkDeletesTheBotFlowDMImmediately: signing in with

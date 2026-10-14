@@ -620,14 +620,18 @@ the send of a bot-flow magic-link DM.
   from `ConsumeMagicLink` or `ConsumeMagicLinkCode`, whichever channel the link/code that
   succeeded actually came through) calls `Handler.deletePendingTelegramDM(userID)` on
   every successful sign-in, which — only when this same user has a DM still tracked, a
-  no-op otherwise — deletes every tracked message right away, cancelling a bot-flow DM's
-  scheduled sleep instead of waiting out the rest of `TelegramBotDMLinkTTL`: once someone
-  has actually signed in, there's no reason left to leave the link sitting in the chat.
-  `Handler.pendingTelegramDMs` (a `map[int64][]pendingTelegramDM`, `userID` keyed, at most
-  `maxPendingTelegramDMsPerUser` kept, `pendingTelegramDMsMu`-guarded) is what makes this
-  possible — `scheduleCleanup` registers the chat/message id and a `context.CancelFunc`
-  for its own sleep right after sending, and either side (the timer itself, or
-  `deletePendingTelegramDM`) removes the entry once it's actually deleted, so the other
+  no-op otherwise — deletes that message right away, cancelling its scheduled sleep
+  instead of waiting out the rest of the delay: once someone has actually signed in,
+  there's no reason left to leave the link sitting in the chat.
+  `Handler.pendingTelegramDMs` (a `map[int64]pendingTelegramDM`, `userID` keyed,
+  `pendingTelegramDMsMu`-guarded) is what makes this possible, and it holds one message
+  per person, the latest: `scheduleCleanup` registers the chat/message id and a
+  `context.CancelFunc` for its own sleep right after sending (`setPendingTelegramDM`),
+  which hands back the DM it replaces for `deleteTelegramDMs` to delete at once — only the
+  latest link is worth having in the chat. (Two requests in quick succession can have
+  their background sends finish out of order; Telegram message ids grow within a chat, so
+  the lower id is the one deleted.) Either side — the timer itself, or
+  `deletePendingTelegramDM` — removes the entry once it's actually deleted, so the other
   one can't also try to delete an already-gone message. Purely a hygiene nicety either
   way, not a security gate — the link inside keeps working for the rest of the real
   `MagicLinkTTL` regardless of whether either delete path succeeds, or even runs at all (a
@@ -636,11 +640,10 @@ the send of a bot-flow magic-link DM.
   exposed for no reason if the phone/session is compromised later. A web-triggered DM
   (`!viaTelegramBot`) is tracked and cleaned up the same way, once its background send has
   the message id — the only difference is the delay: it states, and waits out, the real
-  `MagicLinkTTL` (15 minutes), since its code might still be typed into the login page from
-  another device until then. So every link DM is deleted when its link and code stop
-  working, or earlier at the person's sign-in (link or code, from whichever device) —
-  which also deletes every earlier link's DM, when someone asked for several before
-  signing in.
+  `MagicLinkTTL` (15 minutes), since its code might still be typed into the login page
+  from another device until then. So every link DM is deleted when its link and code stop
+  working, or earlier at the person's sign-in (link or code, from whichever device), and a
+  newer link DM — from either flow — deletes the previous one.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
   every resource package's own mutation notifications are built from. `NotifyAsync` (a
   no-op for a `nil` notifier, i.e. Telegram not configured) is the fire-and-forget

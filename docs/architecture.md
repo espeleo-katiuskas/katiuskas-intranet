@@ -350,7 +350,8 @@ Detalles del bot en «Telegram».
 
 Un DM con un enlace y un código que ya no funcionan solo confunde, así que se borra cuando
 caducan, se haya iniciado sesión o no; y antes, en cuanto la persona inicia sesión con
-cualquiera de los dos. Vale para los DM del bot y para los que acompañan a una petición web;
+cualquiera de los dos, o en cuanto se le manda otro enlace más reciente: solo tiene sentido
+conservar el último. Vale para los DM del bot y para los que acompañan a una petición web;
 solo cambia el plazo, el que cada mensaje dice de sí mismo.
 
 - **Temporizador**: se envía con `Client.SendMessageForID` en vez del `SendMessage` normal,
@@ -363,14 +364,18 @@ solo cambia el plazo, el que cada mensaje dice de sí mismo.
   otro dispositivo hasta entonces.
 - **Inicio de sesión**: cuando la persona inicia sesión (`Handler.issueSessionAndRespond`,
   tanto si se consumió el enlace como el código, y desde el dispositivo que sea),
-  `Handler.deletePendingTelegramDM` borra al instante todos los DM pendientes de esa persona
-  y cancela la espera de los del bot: una vez iniciada la sesión no tiene sentido dejarlos.
-  Si alguien pidió varios enlaces antes de entrar, se borran todos.
-- **Coordinación**: un mapa interno del handler (`pendingTelegramDMs`, con su propio mutex,
-  una lista por persona de hasta `maxPendingTelegramDMsPerUser` mensajes) permite que el
-  temporizador y el inicio de sesión borren cada mensaje sin que el otro intente borrarlo
-  también después. El envío de un DM de petición web va en segundo plano y apunta el id
-  del mensaje, y programa su borrado, en cuanto lo recibe.
+  `Handler.deletePendingTelegramDM` borra al instante el DM pendiente de esa persona y
+  cancela su espera: una vez iniciada la sesión no tiene sentido dejarlo.
+- **Un enlace nuevo**: al enviar un DM de enlace se borra el anterior de esa persona
+  (`setPendingTelegramDM` devuelve el que sustituye y `deleteTelegramDMs` lo borra), sea
+  cual sea el flujo de uno y otro. Si dos peticiones seguidas terminan de enviarse en
+  desorden, se borra el de id menor, que es el más antiguo (los ids de Telegram crecen
+  dentro de un chat).
+- **Coordinación**: un mapa interno del handler (`pendingTelegramDMs`, con su propio
+  mutex, un mensaje por persona: el último) permite que el temporizador, el inicio de
+  sesión y un enlace nuevo borren cada mensaje sin que otro intente borrarlo también
+  después. El envío de un DM de petición web va en segundo plano y apunta el id del
+  mensaje, y programa su borrado, en cuanto lo recibe.
 - **Alcance**: es solo higiene, no algo de lo que dependa la seguridad. Si el borrado
   falla, o el proceso se reinicia mientras tanto, el enlace deja de funcionar igual al
   caducar; pero uno caducado que se queda ahí es confuso, y es una cosa más expuesta si
