@@ -88,7 +88,7 @@ intranet_test` then the `CREATE DATABASE` above), or tests fail with errors like
 Other:
 ```sh
 make run                          # go run ./cmd/api, no Docker
-make build                        # backend binary to bin/api
+make build                        # backend binary to bin/api, stamped with `git describe` (shown by /admin)
 go vet ./...                      # from backend/
 go build ./...                    # from backend/ — cheapest full compile check
 python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"  # validate the spec after editing it
@@ -155,15 +155,16 @@ to get the whole page, not just the current viewport).
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
 panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
 `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`inventory`, `tokens`, `accounting`), each split into `model.go` / `repository.go` (pgx) /
-`service.go` / `handler.go`. The domain layer never imports `net/http`; only `handler.go`
-knows HTTP exists. Each resource package owns and registers its own routes via
-`RegisterRoutes(mux)`, wired together in `cmd/api/main.go`. **`internal/library`** (and
-**`internal/userfiles`**, see below) is the one exception to this shape: it serves a
-read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
-`repository.go` — `service.go` works directly against the filesystem, resolving and
-validating every caller-given path against root before touching disk (`Service.resolve`),
-since there's no database constraint to lean on for that instead.
+`inventory`, `tokens`, `accounting`; `adminstatus` is the odd one out, see below), each
+split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain
+layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
+owns and registers its own routes via `RegisterRoutes(mux)`, wired together in
+`cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**, see below) is the
+one exception to this shape: it serves a read-only document tree from disk
+(`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go` works
+directly against the filesystem, resolving and validating every caller-given path against
+root before touching disk (`Service.resolve`), since there's no database constraint to
+lean on for that instead.
 
 **`db.PGX` interface** (`internal/platform/db`): the subset of `*pgxpool.Pool` a
 repository actually calls. Both a pool and a `pgx.Tx` satisfy it, so production code
@@ -536,6 +537,20 @@ self-or-privileged pattern
 may see a specific person's files isn't a fixed role list the way `/library`'s is. A login
 with no subdirectory of its own yet — most people, until someone drops a file in for them
 — gets an empty listing at their own root rather than a 404.
+
+**Admin status** (`internal/adminstatus`): `GET /admin/status` (admin-only, read-only)
+says how the running process is doing and how it is set up, so nobody has to log into the
+server to find out. `cmd/api` hands it an `Info` (the version stamped at build time with
+`-ldflags "-X main.version=…"` — `make build` takes it from `git describe`, the Dockerfile
+from an optional `VERSION` build arg —, the start time, the timeouts, whether SMTP and
+Telegram are configured and the bot running, the three storage roots), and on each request
+it adds what can change: the commit Go recorded in the binary (`debug.ReadBuildInfo`), the
+Go version, whether the database answers and how fast (`SELECT 1`) with the latest
+migration goose applied (`goose_db_version`, read in its own subtransaction so a missing
+table can't abort a caller's transaction; absent when unreadable, as under the tests' own
+migrator), and whether each storage directory exists. A database that doesn't answer is
+reported in the body, not as an error status. It never includes a secret: no tokens,
+passwords or connection strings.
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API
 (https://core.telegram.org/bots/api) — plain `net/http`/`encoding/json`, no SDK
@@ -1323,26 +1338,28 @@ role catalog (for that dialog's role checkboxes) only for an admin. The list of 
 itself, to create or delete one, is no longer here: it lives on `/admin`, the page behind
 the "Admin" sidebar entry (admin only, `NAV_ITEMS`' `roles: ['admin']`), meant for
 whatever else only administrators care about — `admin.html`/`admin.js`, which for now
-holds a "Roles" section (`GET`/`POST`/`DELETE /roles`) and a "Sesiones" one: every session
-from `GET /tokens` (a person's name from the directory, last use and address, creation and
-expiry, "Activa"/"Caducada"/"Revocada", a badge on an impersonation's and on the admin's
-own "Esta sesión"), 50 at a time with "Ver más" and a checkbox for the expired and revoked
-ones, where an active one can be revoked (a different warning for one's own, which signs
-out) or have its expiry changed, through `/users/{login}/tokens/{id}`. Admin/board get
-`FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`,
-limited to what `users.MemberListing` carries (see **Permission tiers**). Row filters
-("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the column
-toggles sit behind a "Filtros…" button. Every filter starts with every option checked
-except "Tipo de socio", which starts with only "Activo" and "Baja temporal", so the
-default view is the current membership. "Cuota anual" splits people on whether
-`last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
-`license_type` is present — `GET /users` only reports a license for the current year, so
-having one *is* being federated. Filters, visible columns and sort order persist in
-`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a
-person's page lands on the same view, and a counter shows how many people the current
-filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre",
-"Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag); the rest
-are optional in the "Filtros…" panel.
+holds an "Estado del sistema" section (`GET /admin/status`, see **Admin status**: version
+and commit, database and migration, email, Telegram, timeouts, directories, with an
+"Actualizar" button), a "Roles" section (`GET`/`POST`/`DELETE /roles`) and a "Sesiones"
+one: every session from `GET /tokens` (a person's name from the directory, last use and
+address, creation and expiry, "Activa"/"Caducada"/"Revocada", a badge on an
+impersonation's and on the admin's own "Esta sesión"), 50 at a time with "Ver más" and a
+checkbox for the expired and revoked ones, where an active one can be revoked (a different
+warning for one's own, which signs out) or have its expiry changed, through
+`/users/{login}/tokens/{id}`. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain
+member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing`
+carries (see **Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría",
+"Cuota anual", "Federación") and the column toggles sit behind a "Filtros…" button. Every
+filter starts with every option checked except "Tipo de socio", which starts with only
+"Activo" and "Baja temporal", so the default view is the current membership. "Cuota anual"
+splits people on whether `last_due_year` is the current year ("A corriente de pago"), and
+"Federación" on whether `license_type` is present — `GET /users` only reports a license
+for the current year, so having one *is* being federated. Filters, visible columns and
+sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so "Volver a
+socios" from a person's page lands on the same view, and a counter shows how many people
+the current filters leave. With nothing saved, the columns shown are "N.º socio",
+"Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag);
+the rest are optional in the "Filtros…" panel.
 
 On `/member`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without

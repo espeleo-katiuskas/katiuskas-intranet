@@ -24,6 +24,15 @@
   <p id="error" class="error-message" hidden></p>
 
   <div class="section-header">
+    <div>
+      <h2>Estado del sistema</h2>
+      <p class="subtitle">Qué versión hay desplegada, si la base de datos responde y cómo está configurado, sin entrar en el servidor.</p>
+    </div>
+    <button id="refresh-status" type="button" class="btn btn-secondary btn-small">Actualizar</button>
+  </div>
+  <div id="status-container" class="status-groups">Cargando…</div>
+
+  <div class="section-header">
     <h2>Roles</h2>
     <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
   </div>

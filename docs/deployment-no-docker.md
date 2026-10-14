@@ -84,7 +84,10 @@ cd backend
 #   aarch64 → GOARCH=arm64
 export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 
-go build -o katiuskas-api ./cmd/api
+# La versión que aparecerá en Admin → Estado del sistema (opcional; `make build`
+# la saca de git, aquí hay que pasarla a mano).
+VERSION="$(git describe --tags --always --dirty)"
+go build -ldflags "-X main.version=$VERSION" -o katiuskas-api ./cmd/api
 go build -o seed-admin ./cmd/seed-admin
 
 # goose no es una dependencia del módulo (ver go.mod) — se compila aparte,
@@ -313,7 +316,7 @@ En la máquina de compilación:
 git pull
 cd backend
 export GOOS=linux GOARCH=amd64 CGO_ENABLED=0   # ajusta GOARCH si hace falta
-go build -o katiuskas-api ./cmd/api
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o katiuskas-api ./cmd/api
 ```
 
 En el servidor:

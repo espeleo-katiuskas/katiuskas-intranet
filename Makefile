@@ -13,4 +13,4 @@ run:
 	cd backend && go run ./cmd/api
 
 build:
-	cd backend && go build -o ../bin/api ./cmd/api
+	cd backend && go build -ldflags "-X main.version=$$(git describe --tags --always --dirty)" -o ../bin/api ./cmd/api

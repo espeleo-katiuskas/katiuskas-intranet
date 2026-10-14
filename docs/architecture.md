@@ -1041,6 +1041,8 @@ El backend se separa en capas por paquete. El dominio no depende de `net/http`: 
 - Un paquete por recurso de dominio: `users`, `roles`, `tokens`, `memberships`,
   `licenses`, `board`, `activities`, `activityresources`, `inventory` y `accounting`.
   Cada uno se divide en `model.go`, `repository.go` (pgx), `service.go` y `handler.go`.
+- `adminstatus` (`GET /admin/status`) no es un recurso de dominio: solo lee, y tiene un
+  único `handler.go` (ver «Estado del sistema» en la página `/admin`).
 
 `internal/library` e `internal/userfiles` son la excepción a ese patrón: como no hay nada
 en PostgreSQL detrás de ninguno de los dos, no tienen `repository.go`; su `service.go`
@@ -1094,6 +1096,29 @@ sin este comando no habría forma de entrar en una base de datos recién migrada
 - Como no hay contraseña, para entrar hay que pedir un enlace desde la página de acceso con
   `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PHONE`, y mirar los logs de la API (o el buzón, si hay
   SMTP configurado).
+
+### Estado del sistema (`internal/adminstatus`)
+
+`GET /admin/status` (solo admin, solo lectura) cuenta cómo va el proceso y cómo está
+configurado, para no tener que entrar en el servidor a averiguarlo:
+
+- **Aplicación**: la versión con la que se compiló el binario (`-ldflags "-X
+  main.version=…"`: `make build` la saca de `git describe`; en Docker se pasa con
+  `--build-arg VERSION`; sin ella queda vacía), el commit que Go anotó en el binario cuando
+  se compiló desde un checkout de git, la versión de Go y cuándo arrancó.
+- **Base de datos**: si responde y en cuánto tiempo (`SELECT 1`), y la última migración que
+  goose tiene aplicada (`goose_db_version`; no aparece si no se puede leer). Una base que no
+  responde se cuenta en el cuerpo (`database.ok` falso), no con un código de error.
+- **Correo y Telegram**: si hay SMTP configurado, si hay canal de logs, y si el bot está en
+  marcha (con su nombre público).
+- **Ajustes**: la dirección pública y los plazos en vigor (sesión, enlace de acceso, espera
+  entre enlaces, enlace por el bot, impersonación).
+- **Ficheros**: si existen los tres directorios (biblioteca, ficheros de las personas,
+  memorias de actividades).
+
+`cmd/api` le pasa lo que se sabe al arrancar (`adminstatus.Info`) y el handler añade lo que
+puede cambiar en cada petición. Nunca incluye nada secreto: ni tokens, ni contraseñas, ni
+cadenas de conexión.
 
 ### Telegram
 
@@ -1289,7 +1314,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
 | `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
-| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`) y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
+| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`) y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
 | `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
 | `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
 

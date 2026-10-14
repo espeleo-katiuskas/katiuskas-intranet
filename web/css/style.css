@@ -904,6 +904,8 @@ button.link-button {
 .filter-bar .field { margin-bottom: 0; }
 .people-count { color: var(--ink-muted); font-size: 0.9rem; margin: 12px 0 6px; }
 input[readonly] { background: var(--surface-muted); }
+.status-groups h3 { margin: 18px 0 6px; font-size: 1rem; }
+.status-groups h3:first-child { margin-top: 0; }
 .account-hidden td { opacity: 0.6; }
 .load-more { text-align: center; margin: 12px 0; }
 

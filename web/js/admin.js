@@ -234,4 +234,93 @@ try {
 } catch {
   // Without names the logins show instead.
 }
+
+// "Estado del sistema": a read-only picture from GET /admin/status — what is
+// deployed, whether the database answers and how far its migrations are,
+// whether email and Telegram are set up, the timeouts in force, whether the
+// file directories exist. Nothing here can be changed from the page.
+const statusContainer = document.getElementById('status-container');
+
+// 90 → "1 minuto y medio" would be cute; plain and exact is enough here.
+function formatDuration(seconds) {
+  const units = [[86400, 'día', 'días'], [3600, 'hora', 'horas'], [60, 'minuto', 'minutos']];
+  for (const [size, one, many] of units) {
+    if (seconds >= size && seconds % size === 0) {
+      const n = seconds / size;
+      return `${n} ${n === 1 ? one : many}`;
+    }
+  }
+  return `${seconds} segundos`;
+}
+
+function ago(iso) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 2 * 24 * 60) return `hace ${Math.round(minutes / 60)} h`;
+  return `hace ${Math.round(minutes / (24 * 60))} días`;
+}
+
+function statusGroup(title, rows) {
+  const lines = rows
+    .map(([label, value]) => `<div class="detail-row"><span>${escapeHtml(label)}</span><span>${value}</span></div>`)
+    .join('');
+  return `<h3>${escapeHtml(title)}</h3><div class="detail-list">${lines}</div>`;
+}
+
+const yesNo = (value) => (value ? 'Sí' : 'No');
+
+function renderStatus(status) {
+  const app = status.app;
+  const revision = app.vcs_revision
+    ? `${escapeHtml(app.vcs_revision.slice(0, 8))}${app.vcs_modified ? ' (con cambios sin commitear)' : ''}${app.vcs_time ? `, del ${formatDate(app.vcs_time)}` : ''}`
+    : '—';
+  const db = status.database;
+  const settings = status.settings;
+  const storageLabels = { library: 'Biblioteca', user_files: 'Ficheros de las personas', activity_resources: 'Memorias de actividades' };
+
+  statusContainer.innerHTML = [
+    statusGroup('Aplicación', [
+      ['Versión', app.version ? escapeHtml(app.version) : 'Sin versión (se indica al compilar: <code>make build</code>, o <code>--build-arg VERSION</code> en Docker)'],
+      ['Commit', revision],
+      ['Go', escapeHtml(app.go_version)],
+      ['Arrancó', `${formatDateTime(app.started_at)} (${ago(app.started_at)})`],
+    ]),
+    statusGroup('Base de datos', [
+      ['Estado', db.ok ? `Responde (${db.latency_ms} ms)` : `<strong>No responde</strong>: ${escapeHtml(db.error ?? '')}`],
+      ['Última migración aplicada', db.migration_version != null ? String(db.migration_version) : '—'],
+    ]),
+    statusGroup('Correo', [
+      ['SMTP configurado', status.mail.smtp_configured ? 'Sí' : 'No: los enlaces de acceso solo se escriben en el log del servidor'],
+    ]),
+    statusGroup('Telegram', [
+      ['Canal de logs configurado', yesNo(status.telegram.log_channel_configured)],
+      ['Bot en marcha', status.telegram.bot_running ? `Sí${status.telegram.bot_username ? ` (@${escapeHtml(status.telegram.bot_username)})` : ''}` : 'No'],
+    ]),
+    statusGroup('Ajustes', [
+      ['Dirección pública', escapeHtml(settings.public_base_url)],
+      ['Duración de una sesión', formatDuration(settings.session_ttl_seconds)],
+      ['Validez del enlace de acceso', formatDuration(settings.magic_link_ttl_seconds)],
+      ['Espera entre dos enlaces', formatDuration(settings.magic_link_cooldown_seconds)],
+      ['Validez del enlace enviado por el bot', formatDuration(settings.bot_dm_link_ttl_seconds)],
+      ['Duración de una impersonación', formatDuration(settings.impersonation_ttl_seconds)],
+    ]),
+    statusGroup('Ficheros', status.storage.map((dir) => [
+      storageLabels[dir.name] ?? dir.name,
+      `<code>${escapeHtml(dir.path)}</code> — ${dir.exists ? 'existe' : '<strong>no existe</strong>'}`,
+    ])),
+  ].join('');
+}
+
+async function loadStatus() {
+  try {
+    renderStatus(await apiFetch('/admin/status'));
+  } catch (err) {
+    statusContainer.textContent = 'No se pudo cargar el estado del sistema.';
+    showError(err.message);
+  }
+}
+
+document.getElementById('refresh-status').addEventListener('click', loadStatus);
+
+await loadStatus();
 await loadSessions();

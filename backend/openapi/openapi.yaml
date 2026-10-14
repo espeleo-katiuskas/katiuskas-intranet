@@ -570,6 +570,28 @@ paths:
             or automatic_role (member/former_member/board can't be
             revoked this way at all).
 
+  /admin/status:
+    get:
+      summary: How this running API is doing and how it is set up
+      description: >
+        Admin-only, read-only. Which version is deployed (the one the binary
+        was built with — `make build` takes it from git — and the commit Go
+        recorded in it, when known), when the process started, whether the
+        database answers (and how fast) and the latest goose migration
+        applied, whether email (SMTP) and Telegram (the log channel, and the
+        bot) are configured and running, the timeouts in force, and whether
+        each storage directory exists. A database that doesn't answer is
+        reported in the body (database.ok false), not as an error status.
+        Never includes a secret: no tokens, passwords or connection strings.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminStatus" }
+        "403": { description: Requires admin. }
+
   /tokens:
     get:
       summary: List everyone's session tokens
@@ -2502,6 +2524,53 @@ components:
       enum: [male, female]
       nullable: true
       description: Not recorded at all unless set explicitly — nullable, no default.
+
+    AdminStatus:
+      type: object
+      properties:
+        app:
+          type: object
+          properties:
+            version: { type: string, description: What the binary was built as (-ldflags); absent for a plain go build. }
+            vcs_revision: { type: string, description: The commit Go recorded in the binary, when it was built from a git checkout. }
+            vcs_time: { type: string }
+            vcs_modified: { type: boolean, description: The checkout had uncommitted changes. Absent when false. }
+            go_version: { type: string }
+            started_at: { type: string, format: date-time }
+        database:
+          type: object
+          properties:
+            ok: { type: boolean }
+            latency_ms: { type: integer }
+            error: { type: string, description: Why it doesn't answer, when ok is false. }
+            migration_version: { type: integer, description: Latest goose migration applied; absent when it can't be read. }
+        mail:
+          type: object
+          properties:
+            smtp_configured: { type: boolean, description: When false, sign-in emails are only written to the server log. }
+        telegram:
+          type: object
+          properties:
+            log_channel_configured: { type: boolean }
+            bot_running: { type: boolean }
+            bot_username: { type: string }
+        settings:
+          type: object
+          properties:
+            public_base_url: { type: string }
+            session_ttl_seconds: { type: integer }
+            magic_link_ttl_seconds: { type: integer }
+            magic_link_cooldown_seconds: { type: integer }
+            impersonation_ttl_seconds: { type: integer }
+            bot_dm_link_ttl_seconds: { type: integer }
+        storage:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, enum: [library, user_files, activity_resources] }
+              path: { type: string }
+              exists: { type: boolean }
 
     Token:
       type: object

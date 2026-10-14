@@ -12,6 +12,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounting"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/adminstatus"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
@@ -30,6 +31,11 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
+
+// version is what this binary was built as, set at build time with
+// -ldflags "-X main.version=…" (`make build` does it from git); empty for a
+// plain `go build`/`go run`. GET /admin/status shows it.
+var version string
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -206,6 +212,25 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
 		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
+		AdminStatus: adminstatus.NewHandler(repoPool, authenticator, adminstatus.Info{
+			Version:               version,
+			StartedAt:             time.Now(),
+			PublicBaseURL:         cfg.PublicBaseURL,
+			SessionTTL:            cfg.TokenTTL,
+			MagicLinkTTL:          cfg.MagicLinkTTL,
+			MagicLinkCooldown:     cfg.MagicLinkCooldown,
+			ImpersonationTTL:      cfg.ImpersonationTokenTTL,
+			TelegramBotDMLinkTTL:  cfg.TelegramBotDMLinkTTL,
+			SMTPConfigured:        cfg.SMTPHost != "",
+			TelegramLogConfigured: cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "",
+			// The bot runs exactly when Telegram is fully configured, which is
+			// also when main() hands buildRouter a telegramClient at all.
+			TelegramBotRunning:    telegramClient != nil,
+			TelegramBotUsername:   cfg.TelegramBotUsername,
+			LibraryRoot:           cfg.LibraryRoot,
+			UserFilesRoot:         cfg.UserFilesRoot,
+			ActivityResourcesRoot: cfg.ActivityResourcesRoot,
+		}),
 	})
 
 	return router, authHandler, usersService, nil
