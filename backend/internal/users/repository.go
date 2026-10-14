@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -295,6 +296,7 @@ func (r *Repository) List(ctx context.Context, onlySocios bool) ([]User, error) 
 // down to roles.
 func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone string) (User, error) {
 	var u User
+	typed, withoutPrefix := phoneDigitsForLogin(phone)
 	err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT `+userSelect+`
 		FROM users u
@@ -303,17 +305,36 @@ func (r *Repository) FindActiveByEmailAndPhone(ctx context.Context, email, phone
 				WHERE lower(candidate) = lower($1)
 			)
 			AND u.phone IS NOT NULL
-			AND regexp_replace($2, '\D', '', 'g') <> ''
+			AND $2 <> '' AND $3 <> ''
 			AND EXISTS (
 				SELECT 1 FROM unnest(string_to_array(u.phone, ' ')) AS candidate
-				WHERE regexp_replace(candidate, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
+				WHERE regexp_replace(candidate, '\D', '', 'g') IN ($2, $3)
 			)
-	`, email, phone), &u)
+	`, email, typed, withoutPrefix), &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
 	return u, err
 }
+
+// phoneDigitsForLogin turns a phone typed on the login page into the digits
+// to compare it by: the digits as typed, and the digits without a leading
+// "+34" (the Spanish country code, which people tend to put in front of a
+// number the club keeps without it) — a number matches if either equals one
+// on file, so a phone stored with its own "+34" still matches the same way
+// it always did. Only a literal "+34" is dropped, never a bare "34", which
+// might just be the start of a number.
+func phoneDigitsForLogin(phone string) (typed, withoutPrefix string) {
+	trimmed := strings.TrimSpace(phone)
+	typed = nonDigits.ReplaceAllString(trimmed, "")
+	withoutPrefix = typed
+	if rest, ok := strings.CutPrefix(trimmed, "+"+spainCountryCode); ok {
+		withoutPrefix = nonDigits.ReplaceAllString(rest, "")
+	}
+	return typed, withoutPrefix
+}
+
+var nonDigits = regexp.MustCompile(`\D`)
 
 // spainCountryCode is the +34 calling code every phone Telegram's
 // "share contact" hands back is expected to carry (this is a Spanish

@@ -242,7 +242,9 @@ aparte: encajar "alguno de estos" es una comprobación de solape de arrays
 - **Comparación del correo**: sin distinguir mayúsculas/minúsculas ("foo@x.com" y
   "FOO@X.COM" cuentan como la misma dirección), igual que en `FindActiveByEmailAndPhone`.
 - **Comparación del teléfono**: solo por dígitos, igual que `FindActiveByEmailAndPhone`;
-  "611-222-333" y "611222333" cuentan como el mismo número.
+  "611-222-333" y "611222333" cuentan como el mismo número. Al iniciar sesión, además, ese
+  teléfono tecleado puede llevar delante un "+34", que se ignora (`phoneDigitsForLogin`:
+  solo un "+34" literal, nunca un "34" suelto).
 - **Por qué**: si dos personas compartieran un correo o un teléfono, una búsqueda pensada
   para resolver a una sola persona (`FindActiveByEmailAndPhone` para el correo,
   `FindByPhoneNumber` de `internal/telegrambot` para el teléfono) acabaría resolviendo a la
@@ -1089,7 +1091,7 @@ sin este comando no habría forma de entrar en una base de datos recién migrada
 ### Telegram
 
 `internal/telegram` es un cliente mínimo de la API de bots de Telegram, sin dependencias
-(solo `net/http` y `encoding/json`). Se usa hoy para seis funciones independientes, cinco
+(solo `net/http` y `encoding/json`). Se usa hoy para siete funciones independientes, seis
 de ellas "fire-and-forget" (nunca añaden latencia a lo que las dispara) y una síncrona.
 
 #### Avisos salientes
@@ -1098,6 +1100,7 @@ de ellas "fire-and-forget" (nunca añaden latencia a lo que las dispara) y una s
 | --- | --- |
 | Logs de nivel error | Cada registro de nivel error o superior, además de registrarse normalmente. |
 | Login | Un aviso por cada login (`authapi.Handler.notifyLogin`). |
+| Acceso fallido | Cuando alguien escribe en `/login` unos datos que no sirven, para que un admin lo vea (`authapi.Handler.notifyAccessProblem`): «⚠️ Acceso fallido» si ninguna persona tiene ese correo y ese teléfono (se muestra lo escrito, recortado y en una línea) o si la persona no tiene ningún rol que dé acceso (su login), y «⚠️ Código de acceso rechazado» si el código es incorrecto o ha caducado (el login) o se escribe con datos que nadie tiene. A quien lo escribe no se le dice nada distinto, y una petición que funciona no avisa. |
 | Magic-link por DM | El mismo enlace (y, según el caso, el código; ver la sección Permisos) por DM a quien tenga la cuenta vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`). |
 | Mutaciones | Un mensaje propio por cada acción que crea, edita o borra algo: persona, rol, membresía, licencia, actividad, material, cargo de la junta, recurso de la memoria de una actividad, token, cuenta o transacción. |
 | Arranque | `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el servidor. Es la excepción síncrona (mismo límite de 10 s): una llamada única al arrancar no compite con ninguna petición, así que bloquear en ella no cuesta nada perceptible. |
@@ -1280,7 +1283,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
 | `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
-| `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. |
+| `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
 
 ### Ficha de una persona (`/member`)
 

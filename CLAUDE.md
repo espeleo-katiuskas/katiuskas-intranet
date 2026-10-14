@@ -283,12 +283,14 @@ constraint, since Postgres can't express "no two rows share an element" that way
 `EXISTS`, case-insensitive — "foo@x.com" and "FOO@X.COM" count as the same address, the
 same as `FindActiveByEmailAndPhone`'s own login lookup) and `phoneTakenByAnotherUser` (the
 same shape, but comparing digits only, so "611-222-333" and "611222333" count as the same
-number), both called from `Create` and `Update` and both returning `ErrDuplicate` on a
-hit. Neither an individual email nor an individual phone may belong to two different
-people at once, even though either field can hold several — sharing either would make a
-lookup meant to resolve to exactly one person land on whichever one happens to come back
-first instead: `FindActiveByEmailAndPhone` for email, `internal/telegrambot.Bot`'s own
-phone-based account resolution (`users.Repository.FindByPhoneNumber`) for phone.
+number; `FindActiveByEmailAndPhone` also ignores a leading "+34" in the phone typed on the
+login page, see `phoneDigitsForLogin`), both called from `Create` and `Update` and both
+returning `ErrDuplicate` on a hit. Neither an individual email nor an individual phone may
+belong to two different people at once, even though either field can hold several —
+sharing either would make a lookup meant to resolve to exactly one person land on
+whichever one happens to come back first instead: `FindActiveByEmailAndPhone` for email,
+`internal/telegrambot.Bot`'s own phone-based account resolution
+(`users.Repository.FindByPhoneNumber`) for phone.
 
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,
@@ -548,7 +550,7 @@ with, `BotSender`'s own already-shipped, already-tested HTTP-call logic. Deliver
 existing magic-link/login code by Telegram DM too (see `authapi.Handler.
 notifyMagicLinkViaTelegram` below) is as far as this goes — a dedicated Telegram-native
 login flow that skips email entirely is still a separate, larger piece of future work,
-not built here. Six things currently talk to Telegram, all independent of each other.
+not built here. Seven things currently talk to Telegram, all independent of each other.
 One of them (the bot) also receives; the rest only send. Their sends are fire-and-forget
 (their own goroutine, a bounded timeout, a background context detached from the
 request/statement that triggered them — so a slow or unreachable Telegram API never adds
@@ -568,6 +570,16 @@ the send of a bot-flow magic-link DM.
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
+- `authapi.Handler.notifyAccessProblem` reports to that same channel when someone types
+  details on `/login` that don't work, so an admin can see it — a typo, or a person who
+  should have access: "⚠️ Acceso fallido" for an email and phone nobody has (the typed
+  values, trimmed and on one line by `logSafe`, plus the caller's address) or a person with
+  no role that gives access (their login), and "⚠️ Código de acceso rechazado" for a code
+  that is wrong or expired (the person's login) or typed with details nobody has. The
+  caller is told nothing different — the answers stay the same so as not to reveal who has
+  access — and a successful request, or one held back by the cooldown, reports nothing.
+  `RequestMagicLink` learns which case it was from `sendMagicLinkIfEligible`'s
+  `magicLinkOutcome`; the send is fire-and-forget like `notifyLogin`'s.
 - `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has linked
   their Telegram account (`users.Repository.TelegramChatIDForUser`). Whether the email
   `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web endpoint,
@@ -691,7 +703,8 @@ the send of a bot-flow magic-link DM.
   business-data route it covered now has a strictly more informative replacement.
   `authapi`'s session-lifecycle routes (magic-link request, logout, impersonate/exit) were
   never business-data mutations and send nothing now; only a successful sign-in
-  (`notifyLogin` above) and the start of an impersonation (`tokens`: "🎭 ... ha impersonado
+  (`notifyLogin` above), a failed attempt (`notifyAccessProblem` above) and the start of an
+  impersonation (`tokens`: "🎭 ... ha impersonado
   a ...") are reported.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather than
   only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook — no public
@@ -1078,9 +1091,18 @@ toggles `.hidden` directly instead (see `activity.js`'s
 `login.html` uses for the magic-link token from an emailed URL. Its login code has no URL
 of its own to arrive in — `login.html`'s second panel gets it typed in by hand — so the
 email/phone from the first step are instead remembered in a plain JS variable across that
-two-step flow. `login.html` also offers Telegram as a second way in, alongside (never
-instead of) the email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the
-unauthenticated `GET /auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
+two-step flow. That second panel appears whatever was typed, since the API answers the
+same way for details it doesn't know (so as not to reveal who has access), and so it never
+claims anything was sent: it says an email with a link and a code *will* arrive if the
+details are right. The link from that email is usually opened in another window or tab,
+which signs in there while this one keeps asking: `auth.js`'s `watchForSignInElsewhere`
+therefore listens for the `storage` event on the `token` key (and for the tab becoming
+visible again, for a browser that doesn't deliver it) and, when a stored token really is
+valid (`GET /auth/me`, as at load), sends this window to `/` already signed in — a stale
+or invalid one changes nothing. `login.html` also offers Telegram as a second way in,
+alongside (never instead of) the email/phone form: on load, `auth.js`'s
+`loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
+(`authapi.Handler.TelegramBotInfo`, backed by
 `config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since
 it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes

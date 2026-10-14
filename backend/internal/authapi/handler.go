@@ -173,8 +173,20 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.sendMagicLinkIfEligible(r.Context(), body.Email, body.Phone); err != nil {
+	outcome, user, err := h.sendMagicLinkIfEligible(r.Context(), body.Email, body.Phone)
+	if err != nil {
 		slog.Error("magic link request failed", "error", err)
+	}
+	// The caller is told nothing different (see the answer below), but an
+	// admin should be able to see that someone is typing details that don't
+	// work — a typo, or a person who really should have access.
+	switch outcome {
+	case outcomeUnknownDetails:
+		h.notifyAccessProblem(fmt.Sprintf("⚠️ Acceso fallido: ningún usuario coincide con el correo «%s» y el teléfono «%s» (%s).",
+			logSafe(body.Email), logSafe(body.Phone), httpapi.ClientIP(r)))
+	case outcomeNoAccess:
+		h.notifyAccessProblem(fmt.Sprintf("⚠️ Acceso fallido: %s (%s) ha pedido un enlace, pero no tiene ningún rol que dé acceso (admin, board o member).",
+			user.Login, httpapi.ClientIP(r)))
 	}
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{
@@ -195,15 +207,60 @@ func (h *Handler) TelegramBotInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone string) error {
-	user, err := h.users.FindActiveByEmailAndPhone(ctx, email, phone)
+func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone string) (outcome magicLinkOutcome, user users.User, err error) {
+	user, err = h.users.FindActiveByEmailAndPhone(ctx, email, phone)
 	if errors.Is(err, users.ErrNotFound) {
-		return nil
+		return outcomeUnknownDetails, user, nil
 	}
 	if err != nil {
-		return err
+		return outcomeIssued, user, err
 	}
-	return h.issueMagicLink(ctx, user, false)
+	roleNames, err := h.roles.ListNamesForUser(ctx, user.ID)
+	if err != nil {
+		return outcomeIssued, user, err
+	}
+	if !auth.HasBaselineRole(roleNames) {
+		return outcomeNoAccess, user, nil
+	}
+	return outcomeIssued, user, h.issueMagicLink(ctx, user, false)
+}
+
+// magicLinkOutcome says how a web request for a link went, for what is
+// logged about it — never for the answer, which is the same in every case.
+type magicLinkOutcome int
+
+const (
+	// outcomeIssued: the details matched someone with access (a link goes
+	// out, unless the cooldown holds it back).
+	outcomeIssued magicLinkOutcome = iota
+	// outcomeUnknownDetails: no one has that email and phone together.
+	outcomeUnknownDetails
+	// outcomeNoAccess: the details match someone with no role that gives
+	// access to anything, so no link is sent.
+	outcomeNoAccess
+)
+
+// logSafe makes something a stranger typed fit on one line of a log
+// message, and short.
+func logSafe(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > 100 {
+		return string(r[:100]) + "…"
+	}
+	return s
+}
+
+// notifyAccessProblem sends a line to the log channel, like notifyLogin
+// does for a successful sign-in, in the background so the request never
+// waits on Telegram.
+func (h *Handler) notifyAccessProblem(text string) {
+	go func() {
+		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.notifier.Send(sendCtx, text); err != nil {
+			slog.Error("notify access problem to telegram", "error", err)
+		}
+	}()
 }
 
 // IssueMagicLinkForTelegramUser replies to a message from someone whose
@@ -606,7 +663,10 @@ func (h *Handler) ConsumeMagicLinkCode(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.users.FindActiveByEmailAndPhone(r.Context(), body.Email, body.Phone)
 	if err != nil {
-		if !errors.Is(err, users.ErrNotFound) {
+		if errors.Is(err, users.ErrNotFound) {
+			h.notifyAccessProblem(fmt.Sprintf("⚠️ Código de acceso rechazado: ningún usuario coincide con el correo «%s» y el teléfono «%s» (%s).",
+				logSafe(body.Email), logSafe(body.Phone), httpapi.ClientIP(r)))
+		} else {
 			slog.Error("consume magic link code: lookup failed", "error", err)
 		}
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_code", "invalid or expired code")
@@ -614,6 +674,8 @@ func (h *Handler) ConsumeMagicLinkCode(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, err := h.users.ConsumeMagicLinkCode(r.Context(), user.ID, auth.HashToken(body.Code))
 	if errors.Is(err, users.ErrInvalidToken) {
+		h.notifyAccessProblem(fmt.Sprintf("⚠️ Código de acceso rechazado: el código de %s es incorrecto o ha caducado (%s).",
+			user.Login, httpapi.ClientIP(r)))
 		httpapi.WriteError(w, http.StatusUnauthorized, "invalid_code", "invalid or expired code")
 		return
 	}

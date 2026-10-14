@@ -1687,3 +1687,83 @@ func TestAnUnreachableTelegramChatIsForgotten(t *testing.T) {
 		}
 	})
 }
+
+// Someone typing details that don't work must be visible to an admin, in
+// the log channel — while the caller is told exactly what anyone else is
+// (the answer doesn't reveal whether the details were right). A request
+// that works, or one held back only by the cooldown, logs nothing.
+func TestFailedAccessAttemptsAreReportedToTheLogChannel(t *testing.T) {
+	t.Run("details nobody has", func(t *testing.T) {
+		s := newTestServer(t)
+		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": "nadie@example.org\nfalsa linea", "phone": "600999888"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected the usual 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		msg := s.notifier.waitForMessage(t)
+		for _, want := range []string{"Acceso fallido", "nadie@example.org falsa linea", "600999888"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("expected the message to contain %q, got %q", want, msg)
+			}
+		}
+		if strings.Contains(msg, "\n") {
+			t.Errorf("expected what was typed to stay on one line, got %q", msg)
+		}
+		if s.mailer.sent != 0 {
+			t.Errorf("expected no email, got %d", s.mailer.sent)
+		}
+	})
+
+	t.Run("someone with no role that gives access", func(t *testing.T) {
+		s := newTestServer(t)
+		user := testutil.InsertUser(t, s.tx, "611222333")
+		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected the usual 200, got %d", rec.Code)
+		}
+		msg := s.notifier.waitForMessage(t)
+		if !strings.Contains(msg, "Acceso fallido") || !strings.Contains(msg, user.Login) {
+			t.Errorf("expected the message to name the person (%s), got %q", user.Login, msg)
+		}
+		if s.mailer.sent != 0 {
+			t.Errorf("expected no email, got %d", s.mailer.sent)
+		}
+	})
+
+	t.Run("a request that works", func(t *testing.T) {
+		s := newTestServer(t)
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		s.requestAndExtractToken(t, user.Email, user.Phone)
+		time.Sleep(50 * time.Millisecond)
+		s.notifier.mu.Lock()
+		defer s.notifier.mu.Unlock()
+		if len(s.notifier.sent) != 0 {
+			t.Errorf("expected nothing logged for a good request, got %v", s.notifier.sent)
+		}
+	})
+
+	t.Run("a wrong code", func(t *testing.T) {
+		s := newTestServer(t)
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		s.requestAndExtractToken(t, user.Email, user.Phone)
+		rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{"email": user.Email, "phone": user.Phone, "code": "000000"})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+		msg := s.notifier.waitForMessage(t)
+		if !strings.Contains(msg, "Código de acceso rechazado") || !strings.Contains(msg, user.Login) {
+			t.Errorf("expected the message to name the person, got %q", msg)
+		}
+	})
+
+	t.Run("a code with details nobody has", func(t *testing.T) {
+		s := newTestServer(t)
+		rec := s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{"email": "nadie@example.org", "phone": "600999888", "code": "123456"})
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+		msg := s.notifier.waitForMessage(t)
+		if !strings.Contains(msg, "Código de acceso rechazado") || !strings.Contains(msg, "nadie@example.org") {
+			t.Errorf("expected the typed email in the message, got %q", msg)
+		}
+	})
+}

@@ -36,6 +36,40 @@ if (magicLinkToken) {
   consumeMagicLink(magicLinkToken);
 } else {
   await redirectIfAlreadySignedIn();
+  watchForSignInElsewhere();
+}
+
+// The link in the email is usually opened in another window or tab, which
+// signs in there while this one keeps asking for the code (or the email and
+// phone). Writing the token to localStorage is what that sign-in does, and
+// the browser tells every other window of the same site about it (the
+// "storage" event); coming back to this tab (visibilitychange) is checked as
+// well, for a browser that doesn't deliver the event. Either way, a token
+// that really is valid (GET /auth/me, same as at load time) sends this
+// window home, already signed in.
+function watchForSignInElsewhere() {
+  let redirecting = false;
+  async function check() {
+    const stored = localStorage.getItem('token');
+    if (!stored || redirecting) return;
+    try {
+      const response = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${stored}` },
+      });
+      if (response.ok) {
+        redirecting = true;
+        window.location.href = '/';
+      }
+    } catch {
+      // Network hiccup: stay on the form; the next event checks again.
+    }
+  }
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'token' && event.newValue) check();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) check();
+  });
 }
 
 // Someone already signed in on this browser has no reason to see the

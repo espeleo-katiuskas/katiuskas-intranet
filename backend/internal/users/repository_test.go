@@ -1262,3 +1262,42 @@ func TestListDirectoryIncludesEveryone(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// A leading "+34" typed on the login page is ignored — the club keeps its
+// numbers without it — whatever the spacing after it. Only a literal "+34"
+// is: a bare "34" may be the start of a number, and a number that merely
+// ends with the right digits isn't a match. A phone stored with its own
+// "+34" still matches when typed with it, as it always did.
+func TestFindActiveByEmailAndPhoneIgnoresALeadingPlus34(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+	email := testutil.UniqueEmail(t)
+	if _, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "A", LastName: "B", Email: strPtr(email), Phone: strPtr("611222333"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	withPrefix := testutil.UniqueEmail(t)
+	if _, err := repo.Create(ctx, users.CreateInput{
+		FirstName: "C", LastName: "D", Email: strPtr(withPrefix), Phone: strPtr("+34655444333"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	for _, typed := range []string{"611222333", "+34611222333", "+34 611 222 333", " +34 611-222-333 "} {
+		if _, err := repo.FindActiveByEmailAndPhone(ctx, email, typed); err != nil {
+			t.Errorf("expected %q to match 611222333, got %v", typed, err)
+		}
+	}
+	for _, typed := range []string{"34611222333", "+34", "+34 000 000 000", "+33611222333", "+34 +34 611222333"} {
+		if _, err := repo.FindActiveByEmailAndPhone(ctx, email, typed); !errors.Is(err, users.ErrNotFound) {
+			t.Errorf("expected %q not to match 611222333, got %v", typed, err)
+		}
+	}
+	for _, typed := range []string{"+34655444333", "+34 655 444 333"} {
+		if _, err := repo.FindActiveByEmailAndPhone(ctx, withPrefix, typed); err != nil {
+			t.Errorf("expected %q to match the phone stored as +34655444333, got %v", typed, err)
+		}
+	}
+}
