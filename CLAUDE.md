@@ -1020,7 +1020,8 @@ top of every `<page>.js`): it validates the session, applies role-based visibili
 wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
 same as `currentUser()` would. Its own `requireAnyRole` option additionally redirects home
 if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
-(admin/board) and of `accounting.js`/`account.js` (admin/money), tighter than the ordinary
+(admin/board), of `accounting.js`/`account.js` (admin/money) and of `admin.js` (admin),
+tighter than the ordinary
 baseline check every API route already enforces. Which sidebar link reads as "active" is
 computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/activity`
 or `/member` to the listing it was reached from, `/activities`/`/members`) rather than a
@@ -1315,20 +1316,26 @@ so there's no need for a second, single-account fetch just for the header
 
 `/members` (`members.js`) is a read-only, sortable table of people; every action about a
 person lives on their own `/member?login=<login>` page, which a row opens for admin/board
-only. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
-`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see
-**Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual",
-"Federación") and the column toggles sit behind a "Filtros…" button. Every filter starts
-with every option checked except "Tipo de socio", which starts with only "Activo" and
-"Baja temporal", so the default view is the current membership. "Cuota anual" splits
-people on whether `last_due_year` is the current year ("A corriente de pago"), and
-"Federación" on whether `license_type` is present — `GET /users` only reports a license
-for the current year, so having one *is* being federated. Filters, visible columns and
-sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so "Volver a
-socios" from a person's page lands on the same view, and a counter shows how many people
-the current filters leave. With nothing saved, the columns shown are "N.º socio",
-"Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag);
-the rest are optional in the "Filtros…" panel.
+only. "+ Nueva persona" is admin-only, in the markup and in `members.js`, which loads the
+role catalog (for that dialog's role checkboxes) only for an admin. The list of roles
+itself, to create or delete one, is no longer here: it lives on `/admin`, the page behind
+the "Admin" sidebar entry (admin only, `NAV_ITEMS`' `roles: ['admin']`), meant for
+whatever else only administrators care about — `admin.html`/`admin.js`, which for now
+holds just the "Roles" section (`GET`/`POST`/`DELETE /roles`). Admin/board get
+`FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`,
+limited to what `users.MemberListing` carries (see **Permission tiers**). Row filters
+("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the column
+toggles sit behind a "Filtros…" button. Every filter starts with every option checked
+except "Tipo de socio", which starts with only "Activo" and "Baja temporal", so the
+default view is the current membership. "Cuota anual" splits people on whether
+`last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
+`license_type` is present — `GET /users` only reports a license for the current year, so
+having one *is* being federated. Filters, visible columns and sort order persist in
+`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a
+person's page lands on the same view, and a counter shows how many people the current
+filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre",
+"Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag); the rest
+are optional in the "Filtros…" panel.
 
 On `/member`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without

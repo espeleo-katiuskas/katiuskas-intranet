@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <div class="section-header">
+    <div>
+      <h1>Admin</h1>
+      <p class="subtitle">Lo que solo les interesa a los administradores.</p>
+    </div>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="section-header">
+    <h2>Roles</h2>
+    <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>Descripción</th><th></th><th></th></tr>
+      </thead>
+      <tbody id="roles-table-body"></tbody>
+    </table>
+  </div>
+  <dialog id="new-role-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nuevo rol</h3>
+    <p class="hint">
+      Los roles del sistema (admin, junta, socio) son los únicos que dan permisos
+      en la aplicación. Un rol nuevo sirve como etiqueta organizativa para el club
+      (por ejemplo, "material" o "instructor").
+    </p>
+    <form id="new-role-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="nr-name">Nombre</label>
+          <input id="nr-name" name="name" type="text" required>
+        </div>
+        <div class="field span-2">
+          <label for="nr-description">Descripción <span class="optional">(opcional)</span></label>
+          <input id="nr-description" name="description" type="text">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear rol</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>

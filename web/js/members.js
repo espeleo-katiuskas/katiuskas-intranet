@@ -29,7 +29,6 @@ document.getElementById('toggle-filters').addEventListener('click', () => {
   filtersPanel.hidden = !filtersPanel.hidden;
 });
 
-let allRoles = [];
 // Filled by loadBoardPositions() — login → their current board
 // position, for whoever is on the board right now.
 let boardPositionByLogin = {};
@@ -47,44 +46,24 @@ function cargoFor(person) {
   return position ? (positionLabels[position] ?? position) : '';
 }
 
-// Just the catalog fetch, no DOM — used by loadRoles() below, the
-// admin/board-only roles table + "nueva persona" checkboxes.
-async function loadRolesCatalog() {
-  allRoles = await apiFetch('/roles');
-}
-
-async function loadRoles() {
-  const tableBody = document.getElementById('roles-table-body');
+// The roles an admin can give someone when creating them ("Nueva persona"
+// dialog, admin-only like the button that opens it). The list of roles
+// itself, to create or delete one, lives on /admin.
+async function loadRolesForNewPerson() {
   try {
-    await loadRolesCatalog();
-    tableBody.innerHTML = allRoles
+    const allRoles = await apiFetch('/roles');
+    const group = document.getElementById('np-roles-group');
+    group.innerHTML = allRoles
+      .filter((role) => !role.is_automatic)
       .map((role) => `
-        <tr>
-          <td>${escapeHtml(roleLabel(role.name))}</td>
-          <td>${escapeHtml(role.description) || '—'}</td>
-          <td>
-            ${role.is_system ? '<span class="badge">Del sistema</span>' : ''}
-            ${role.is_automatic ? '<span class="badge" title="Se asigna solo, según el historial de socio">Automático</span>' : ''}
-          </td>
-          <td>${!role.is_system && isRealAdmin ? `<button type="button" class="btn btn-danger btn-small" data-delete-role="${role.id}">Borrar</button>` : ''}</td>
-        </tr>
+        <label>
+          <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}">
+          ${escapeHtml(roleLabel(role.name))}
+        </label>
       `)
       .join('');
-
-    const group = document.getElementById('np-roles-group');
-    if (group) {
-      group.innerHTML = allRoles
-        .filter((role) => !role.is_automatic && (role.name !== 'admin' || isRealAdmin))
-        .map((role) => `
-          <label>
-            <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}">
-            ${escapeHtml(roleLabel(role.name))}
-          </label>
-        `)
-        .join('');
-    }
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los roles.</td></tr>';
+    showError('No se pudieron cargar los roles.');
   }
 }
 
@@ -98,59 +77,6 @@ async function loadBoardPositions() {
   } catch {
     boardPositionByLogin = {};
   }
-}
-
-// The whole "Roles" section has data-roles="admin"/"admin,board" in the
-// markup, so applyRoleVisibility() removes it from the DOM entirely for
-// a plain member — nothing here to wire up in that case.
-if (isAdmin) {
-  document.getElementById('roles-table-body').addEventListener('click', async (event) => {
-    const button = event.target.closest('button[data-delete-role]');
-    if (!button) return;
-    if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
-
-    button.disabled = true;
-    try {
-      await apiFetch(`/roles/${button.dataset.deleteRole}`, { method: 'DELETE' });
-      showFeedback('Rol borrado.');
-      await loadRoles();
-    } catch (err) {
-      button.disabled = false;
-      showError(err.message);
-    }
-  });
-}
-
-if (isRealAdmin) {
-  const newRoleDialog = document.getElementById('new-role-dialog');
-  const newRoleForm = document.getElementById('new-role-form');
-  initModal(newRoleDialog, newRoleForm);
-
-  document.getElementById('toggle-new-role').addEventListener('click', () => {
-    openModal(newRoleDialog);
-  });
-
-  newRoleForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const formData = new FormData(newRoleForm);
-    const body = {
-      name: formData.get('name'),
-      description: formData.get('description')?.toString().trim() || null,
-    };
-
-    const submitButton = newRoleForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    try {
-      await apiFetch('/roles', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Rol creado.');
-      newRoleDialog.close();
-      await loadRoles();
-    } catch (err) {
-      showError(err.message);
-    } finally {
-      submitButton.disabled = false;
-    }
-  });
 }
 
 // The people list is purely informational and sortable: every action
@@ -722,11 +648,10 @@ if (isRealAdmin) {
   });
 }
 
-// The "Cargo" column only ever needs board positions now (see
-// cargoFor) — the role catalog itself is only for admin/board's own
-// roles table and "nueva persona" checkboxes.
-if (isAdmin) {
-  await loadRoles();
+// The "Cargo" column only ever needs board positions (see cargoFor); the
+// role catalog is only for the admin's "nueva persona" checkboxes.
+if (isRealAdmin) {
+  await loadRolesForNewPerson();
 }
 await loadBoardPositions();
 loadUsers();

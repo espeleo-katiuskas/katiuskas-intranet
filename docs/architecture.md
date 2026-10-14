@@ -135,8 +135,10 @@ persona.
   (`MEMBER_COLUMNS`/`MEMBER_FILTERS` en `web/js/members.js`, en vez de las versiones
   `FULL_*`).
 - Las filas no son clicables: `/member?login=…` es solo para admin/board.
-- Las secciones de gestión (roles, nueva persona) llevan `data-roles="admin"` o
-  `"admin,board"` para que `applyRoleVisibility()` las quite del todo.
+- «Nueva persona» lleva `data-roles="admin"` para que `applyRoleVisibility()` la quite del
+  todo, y `members.js` solo carga el catálogo de roles (para los checkboxes de ese diálogo)
+  si es admin. La lista de roles, para crear o borrar uno, ya no está aquí: vive en
+  `/admin`.
 
 **`/member`.** Los botones de escritura (dar de alta, licencias, Junta Directiva, gestión
 de roles, borrar persona) llevan `data-roles="admin"` en el HTML estático.
@@ -1282,6 +1284,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
 | `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
+| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
 | `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
 | `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
 

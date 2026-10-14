@@ -58,6 +58,12 @@ const NAV_ITEMS = [
     icon: '<rect x="3.5" y="4" width="17" height="5" rx="1"/><path d="M4.5 9v9a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/>',
   },
   {
+    href: '/admin',
+    label: 'Admin',
+    roles: ['admin'],
+    icon: '<path d="M12 3.5 5 6v5.5c0 4.2 2.9 7.3 7 9 4.1-1.7 7-4.8 7-9V6z"/><path d="M9 12l2.2 2.2L15.2 10"/>',
+  },
+  {
     href: '/profile',
     label: 'Mi perfil',
     icon: '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c0-4.1 3.4-7 7.5-7s7.5 2.9 7.5 7"/>',
@@ -106,7 +112,7 @@ function renderShell() {
 // The one call every authenticated page's own <page>.js makes before
 // anything else. requireAnyRole additionally redirects home if the
 // signed-in user holds none of the listed roles — for the couple of
-// pages (member.html, accounting.html) restricted beyond the ordinary
+// pages (member.html, accounting.html, admin.html) restricted beyond the ordinary
 // baseline check every API route already enforces on its own. Returns
 // the signed-in user, same as currentUser(), since almost every caller
 // wants it right away anyway.
