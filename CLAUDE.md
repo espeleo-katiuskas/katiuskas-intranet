@@ -634,13 +634,13 @@ the send of a bot-flow magic-link DM.
   process restart in between just loses it, the same as any other best-effort cleanup in
   this app) — but a dead link lingering in the chat is misleading, and one more thing
   exposed for no reason if the phone/session is compromised later. A web-triggered DM
-  (`!viaTelegramBot`) skips the timer: unlike the bot-flow DM, it has no moment where it's
-  definitely done being useful short of signing in — the code in it might still be typed
-  into the login page from a different device well after it arrives. It is tracked
-  (without a `cancel`, once its background send has the message id) and deleted at sign-in
-  like the others, whichever way that happens (link or code, from whichever device); if
-  nobody signs in it stays, and so does every earlier link's DM when someone asks for
-  several before signing in — all of them are deleted at that sign-in.
+  (`!viaTelegramBot`) is tracked and cleaned up the same way, once its background send has
+  the message id — the only difference is the delay: it states, and waits out, the real
+  `MagicLinkTTL` (15 minutes), since its code might still be typed into the login page from
+  another device until then. So every link DM is deleted when its link and code stop
+  working, or earlier at the person's sign-in (link or code, from whichever device) —
+  which also deletes every earlier link's DM, when someone asked for several before
+  signing in.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
   every resource package's own mutation notifications are built from. `NotifyAsync` (a
   no-op for a `nil` notifier, i.e. Telegram not configured) is the fire-and-forget

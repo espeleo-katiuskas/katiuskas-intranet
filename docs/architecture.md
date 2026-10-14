@@ -348,17 +348,19 @@ Detalles del bot en «Telegram».
 
 #### Borrado de los DM de enlace
 
-Al iniciar sesión se borran todos los DM de enlace pendientes de esa persona, sean del bot
-o de peticiones web. Solo el del bot lleva además un temporizador: el de una petición web
-no puede caducar solo, porque su código aún puede teclearse desde otro dispositivo mucho
-después; si nadie inicia sesión, se queda.
+Un DM con un enlace y un código que ya no funcionan solo confunde, así que se borra cuando
+caducan, se haya iniciado sesión o no; y antes, en cuanto la persona inicia sesión con
+cualquiera de los dos. Vale para los DM del bot y para los que acompañan a una petición web;
+solo cambia el plazo, el que cada mensaje dice de sí mismo.
 
-- **Temporizador**: pasado `TelegramBotDMLinkTTL` (5 minutos por defecto, más corto que el
+- **Temporizador**: se envía con `Client.SendMessageForID` en vez del `SendMessage` normal,
+  precisamente para quedarse con el id del mensaje, y una goroutine, lanzada solo tras un
+  envío correcto, espera el plazo y llama a `Client.DeleteMessage` con ese id. El plazo del
+  DM del bot es `TelegramBotDMLinkTTL` (5 minutos por defecto, más corto que el
   `MagicLinkTTL` real de 15 minutos, que sigue siendo el tiempo durante el que el enlace
-  funciona; el texto del mensaje menciona esos 5). Se envía con `Client.SendMessageForID`
-  en vez del `SendMessage` normal, precisamente para quedarse con el id del mensaje, y una
-  goroutine, lanzada solo tras un envío correcto, espera ese tiempo y llama a
-  `Client.DeleteMessage` con ese id.
+  funciona; el texto del mensaje menciona esos 5). El del DM de una petición web es el
+  `MagicLinkTTL`, que es lo que su texto dice, porque su código aún puede teclearse desde
+  otro dispositivo hasta entonces.
 - **Inicio de sesión**: cuando la persona inicia sesión (`Handler.issueSessionAndRespond`,
   tanto si se consumió el enlace como el código, y desde el dispositivo que sea),
   `Handler.deletePendingTelegramDM` borra al instante todos los DM pendientes de esa persona
@@ -367,8 +369,8 @@ después; si nadie inicia sesión, se queda.
 - **Coordinación**: un mapa interno del handler (`pendingTelegramDMs`, con su propio mutex,
   una lista por persona de hasta `maxPendingTelegramDMsPerUser` mensajes) permite que el
   temporizador y el inicio de sesión borren cada mensaje sin que el otro intente borrarlo
-  también después. El envío de un DM de petición web, en segundo plano, apunta el id del
-  mensaje en cuanto lo recibe.
+  también después. El envío de un DM de petición web va en segundo plano y apunta el id
+  del mensaje, y programa su borrado, en cuanto lo recibe.
 - **Alcance**: es solo higiene, no algo de lo que dependa la seguridad. Si el borrado
   falla, o el proceso se reinicia mientras tanto, el enlace deja de funcionar igual al
   caducar; pero uno caducado que se queda ahí es confuso, y es una cosa más expuesta si

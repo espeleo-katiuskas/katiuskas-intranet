@@ -487,13 +487,13 @@ func TestNotifyMagicLinkViaTelegramDeletesTheDMOnceItExpires(t *testing.T) {
 	}
 }
 
-// TestNotifyMagicLinkViaTelegramDoesNotExpireAWebTriggeredDMByTimer: only
-// a bot-flow DM (viaTelegramBot true, see the test above) is deleted by
-// a timer. One merely riding along a web request has no equivalent
-// "already answered its purpose" moment (the code in it might still be
-// typed into the login page from a different device well after this), so
-// it stays until the person signs in — see the tests below.
-func TestNotifyMagicLinkViaTelegramDoesNotExpireAWebTriggeredDMByTimer(t *testing.T) {
+// TestNotifyMagicLinkViaTelegramDeletesAWebTriggeredDMWhenTheLinkExpires:
+// the DM that rides along a web request holds a link and a code that stop
+// working after MagicLinkTTL — which is what it states — so it's deleted
+// then, signed in or not. (The bot-flow DM has its own, shorter,
+// TelegramBotDMLinkTTL; here both are equal, see
+// newTestServerWithMagicLinkTTL.)
+func TestNotifyMagicLinkViaTelegramDeletesAWebTriggeredDMWhenTheLinkExpires(t *testing.T) {
 	s := newTestServerWithMagicLinkTTL(t, 30*time.Millisecond)
 	user := s.insertUserWithRole(t, "611222333", "admin")
 	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
@@ -501,11 +501,28 @@ func TestNotifyMagicLinkViaTelegramDoesNotExpireAWebTriggeredDMByTimer(t *testin
 	}
 
 	s.requestAndExtractToken(t, user.Email, user.Phone)
-	s.telegramClient.waitForMessage(t)
+	sentChatID, _ := s.telegramClient.waitForMessage(t)
 
-	// Comfortably past the short TTL newTestServerWithMagicLinkTTL used
-	// above, which would have already triggered a delete by now if this
-	// DM were treated as a bot-flow one.
+	deletedChatID, deletedMessageID := s.telegramClient.waitForDelete(t)
+	s.telegramClient.mu.Lock()
+	wantMessageID := s.telegramClient.sent[0].messageID
+	s.telegramClient.mu.Unlock()
+	if deletedChatID != sentChatID || deletedMessageID != wantMessageID {
+		t.Errorf("expected the DM (chat %d, message %d) to be deleted, got chat %d, message %d",
+			sentChatID, wantMessageID, deletedChatID, deletedMessageID)
+	}
+}
+
+// Before the link expires the DM is still there — it's the only copy of
+// the code for someone typing it into the login page from another device.
+func TestNotifyMagicLinkViaTelegramKeepsAWebTriggeredDMWhileTheLinkIsValid(t *testing.T) {
+	s := newTestServerWithMagicLinkTTL(t, time.Minute)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	s.requestAndExtractToken(t, user.Email, user.Phone)
+	s.telegramClient.waitForMessage(t)
 	time.Sleep(100 * time.Millisecond)
 	s.telegramClient.assertNothingDeleted(t)
 }

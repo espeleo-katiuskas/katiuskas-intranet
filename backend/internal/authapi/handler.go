@@ -94,11 +94,9 @@ const maxPendingTelegramDMsPerUser = 10
 // pendingTelegramDM is a magic-link DM (see notifyMagicLinkViaTelegram)
 // sent to one particular user and not deleted yet, tracked so
 // issueSessionAndRespond can delete it once that person actually signs
-// in. For a bot-flow DM it is also waiting out a scheduled expiry
-// cleanup, and cancel stops that cleanup's own goroutine from trying to
-// delete the same message afterward; for a DM that merely rode along a
-// web request there is no such timer and cancel is nil — it is deleted on
-// sign-in, or never.
+// in. Each also waits out a scheduled expiry cleanup, and cancel stops
+// that cleanup's own goroutine from trying to delete the same message
+// afterward.
 type pendingTelegramDM struct {
 	chatID    int64
 	messageID int64
@@ -348,12 +346,12 @@ var errMagicLinkTelegramDMFailed = errors.New("could not deliver the magic link 
 // h.opts.MagicLinkTTL every other message states. Otherwise (a web request that merely
 // happens to also have Telegram linked) the DM matches the email in
 // full, code and real TTL included, since either could be what's read
-// first. Either kind is deleted once the person actually signs in (see
-// deletePendingTelegramDM) — whichever way, link or code, and from
-// whichever device. Only the bot-flow DM is also deleted by a timer
-// when nobody signs in: the web one can't be, since its code might still
-// be typed into the login page from another device well after it
-// arrives.
+// first. Neither is worth keeping once the link and code in it stop
+// working, so each is deleted when that moment comes — the bot-flow DM
+// after TelegramBotDMLinkTTL, the one that rode along a web request after
+// MagicLinkTTL — or earlier, as soon as the person actually signs in (see
+// deletePendingTelegramDM): whichever way, link or code, and from
+// whichever device.
 func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) error {
 	fail := func(logMsg string, err error) error {
 		slog.Error(logMsg, "error", err)
@@ -410,33 +408,24 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 		defer cancel()
 		return h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
 	}
-	// The link itself keeps working for the rest of the real
-	// h.opts.MagicLinkTTL regardless of whether this delete succeeds or
-	// even runs at all (a process restart in between loses it, same as
-	// any other best-effort cleanup in this app) — this is purely a
-	// hygiene nicety, not something the link's own security depends on:
-	// a dead link lingering in the chat is misleading, and one more
-	// thing exposed for no reason if the phone/session is compromised
-	// later. The delay before deleting matches h.opts.TelegramBotDMLinkTTL,
-	// this message's own (shorter, cosmetic) stated validity — not the
-	// real, longer h.opts.MagicLinkTTL, unless issueSessionAndRespond
-	// (see deletePendingTelegramDM) fires this early instead, once the
-	// person this DM was sent to has actually signed in. The timer only
-	// applies to a bot-flow DM — this message's own reason for existing
-	// was answering what was just typed into this same chat, so once
-	// that's served its purpose there's nothing left worth keeping around;
-	// a DM merely riding along a web request has no equivalent moment where
-	// it's definitely done being useful (the code in it, especially, might
-	// still be typed into the login page from a different device well
-	// after this), so it's only tracked, for deletion at sign-in —
-	// scheduleCleanup is therefore only ever called from the viaTelegramBot
-	// branch below.
-	scheduleCleanup := func(messageID int64) {
+	// The link itself stops working on its own once it expires, so a
+	// message still holding it is only misleading — and one more thing
+	// exposed for no reason if the phone/session is compromised later.
+	// This deletion is purely a hygiene nicety, not something the link's
+	// own security depends on: it's best-effort (a process restart in
+	// between loses it, like any other cleanup here), and a failure is
+	// only logged. The delay is the validity the message itself states:
+	// h.opts.TelegramBotDMLinkTTL for a bot-flow DM (shorter than the real
+	// expiry, see Options), h.opts.MagicLinkTTL for one that rode along a
+	// web request — unless issueSessionAndRespond (see
+	// deletePendingTelegramDM) fires this early, once the person this DM
+	// was sent to has actually signed in.
+	scheduleCleanup := func(messageID int64, delay time.Duration) {
 		cleanupCtx, cancel := context.WithCancel(context.Background())
 		h.setPendingTelegramDM(userID, *chatID, messageID, cancel)
 		go func() {
 			select {
-			case <-time.After(h.opts.TelegramBotDMLinkTTL):
+			case <-time.After(delay):
 			case <-cleanupCtx.Done():
 				// Canceled by deletePendingTelegramDM, which already
 				// deletes the message itself once canceling it.
@@ -456,7 +445,7 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 		if err != nil {
 			return fail("send magic link via telegram", err)
 		}
-		scheduleCleanup(messageID)
+		scheduleCleanup(messageID, h.opts.TelegramBotDMLinkTTL)
 		return nil
 	}
 
@@ -466,7 +455,7 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 			slog.Error("send magic link via telegram", "error", err)
 			return
 		}
-		h.setPendingTelegramDM(userID, *chatID, messageID, nil)
+		scheduleCleanup(messageID, h.opts.MagicLinkTTL)
 	}()
 	return nil
 }
