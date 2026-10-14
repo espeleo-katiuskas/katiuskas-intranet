@@ -10,6 +10,7 @@ información sobre el club en [katiuskas.es](https://katiuskas.es/).
   contrato completo.
 - `web/` — páginas web (HTML + JS) para socios y directiva.
 - `docs/architecture.md` — arquitectura y decisiones de diseño.
+- `scripts/` — herramientas de línea de comandos; ver [`scripts/README.md`](scripts/README.md).
 - `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo
   junto.
 - `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con Docker.
