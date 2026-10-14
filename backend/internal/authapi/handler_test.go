@@ -207,6 +207,13 @@ func newTestServer(t *testing.T) *testServer {
 // expiry cleanup, which sleeps for TelegramBotDMLinkTTL before deleting
 // the DM it sent; a real 5 minutes would make that test take 5 minutes.
 func newTestServerWithMagicLinkTTL(t *testing.T, magicLinkTTL time.Duration) *testServer {
+	return newTestServerWithOptions(t, magicLinkTTL, time.Minute)
+}
+
+// newTestServerWithOptions also lets a test pick the per-person cooldown
+// between two link requests — zero, for a test that asks for several links
+// in a row.
+func newTestServerWithOptions(t *testing.T, magicLinkTTL, cooldown time.Duration) *testServer {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
@@ -221,7 +228,7 @@ func newTestServerWithMagicLinkTTL(t *testing.T, magicLinkTTL time.Duration) *te
 	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, telegramClient, authapi.Options{
 		TokenTTL:             time.Hour,
 		MagicLinkTTL:         magicLinkTTL,
-		MagicLinkCooldown:    time.Minute,
+		MagicLinkCooldown:    cooldown,
 		TelegramBotDMLinkTTL: magicLinkTTL,
 		PublicBaseURL:        "http://localhost:64710",
 	})
@@ -480,13 +487,13 @@ func TestNotifyMagicLinkViaTelegramDeletesTheDMOnceItExpires(t *testing.T) {
 	}
 }
 
-// TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM: only a
-// bot-flow DM (viaTelegramBot true, see the test above) is ever
-// auto-deleted — one merely riding along a web request has no
-// equivalent "already answered its purpose" moment (the code in it
-// might still be typed into the login page from a different device
-// well after this), so it's left alone indefinitely.
-func TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM(t *testing.T) {
+// TestNotifyMagicLinkViaTelegramDoesNotExpireAWebTriggeredDMByTimer: only
+// a bot-flow DM (viaTelegramBot true, see the test above) is deleted by
+// a timer. One merely riding along a web request has no equivalent
+// "already answered its purpose" moment (the code in it might still be
+// typed into the login page from a different device well after this), so
+// it stays until the person signs in — see the tests below.
+func TestNotifyMagicLinkViaTelegramDoesNotExpireAWebTriggeredDMByTimer(t *testing.T) {
 	s := newTestServerWithMagicLinkTTL(t, 30*time.Millisecond)
 	user := s.insertUserWithRole(t, "611222333", "admin")
 	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
@@ -500,12 +507,96 @@ func TestNotifyMagicLinkViaTelegramDoesNotDeleteAWebTriggeredDM(t *testing.T) {
 	// above, which would have already triggered a delete by now if this
 	// DM were treated as a bot-flow one.
 	time.Sleep(100 * time.Millisecond)
-	s.telegramClient.mu.Lock()
-	deleted := len(s.telegramClient.deleted)
-	s.telegramClient.mu.Unlock()
-	if deleted != 0 {
-		t.Errorf("expected no delete for a web-triggered DM, got %d deletes", deleted)
+	s.telegramClient.assertNothingDeleted(t)
+}
+
+// Signing in — by the link or by the code, the two ways a web-requested
+// message offers — deletes the DM that came with the request. The pause
+// lets the handler's background send record the message id it will later
+// delete; in practice a person needs far longer than that to read it.
+func TestSigningInDeletesTheWebTriggeredDM(t *testing.T) {
+	cases := []struct {
+		name    string
+		consume func(t *testing.T, s *testServer, email, phone, token, code string) *httptest.ResponseRecorder
+	}{
+		{"link", func(t *testing.T, s *testServer, _, _, token, _ string) *httptest.ResponseRecorder {
+			return s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+		}},
+		{"code", func(t *testing.T, s *testServer, email, phone, _, code string) *httptest.ResponseRecorder {
+			return s.post(t, "/api/v1/auth/magic-link/consume-code", map[string]string{"email": email, "phone": phone, "code": code})
+		}},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := newTestServerWithMagicLinkTTL(t, time.Minute)
+			user := s.insertUserWithRole(t, "611222333", "admin")
+			if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+				t.Fatalf("SetTelegramChatID: %v", err)
+			}
+			token := s.requestAndExtractToken(t, user.Email, user.Phone)
+			sentChatID, text := s.telegramClient.waitForMessage(t)
+			code := codeInBody.FindStringSubmatch(text)
+			if code == nil {
+				t.Fatalf("no code found in the Telegram message: %q", text)
+			}
+			time.Sleep(50 * time.Millisecond)
+			s.telegramClient.assertNothingDeleted(t)
+
+			rec := c.consume(t, s, user.Email, user.Phone, token, code[1])
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			deletedChatID, deletedMessageID := s.telegramClient.waitForDelete(t)
+			s.telegramClient.mu.Lock()
+			wantMessageID := s.telegramClient.sent[0].messageID
+			s.telegramClient.mu.Unlock()
+			if deletedChatID != sentChatID || deletedMessageID != wantMessageID {
+				t.Errorf("expected the DM (chat %d, message %d) to be deleted, got chat %d, message %d",
+					sentChatID, wantMessageID, deletedChatID, deletedMessageID)
+			}
+		})
+	}
+}
+
+// Every link requested before signing in is deleted, not only the last
+// one: asking twice leaves two messages in the chat.
+func TestSigningInDeletesEveryPendingWebTriggeredDM(t *testing.T) {
+	s := newTestServerWithOptions(t, time.Minute, 0)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+		t.Fatalf("SetTelegramChatID: %v", err)
+	}
+	s.requestAndExtractToken(t, user.Email, user.Phone)
+	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		s.telegramClient.mu.Lock()
+		n := len(s.telegramClient.sent)
+		s.telegramClient.mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	if rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		s.telegramClient.mu.Lock()
+		n := len(s.telegramClient.deleted)
+		s.telegramClient.mu.Unlock()
+		if n >= 2 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	s.telegramClient.mu.Lock()
+	defer s.telegramClient.mu.Unlock()
+	t.Errorf("expected both pending DMs to be deleted, got %v", s.telegramClient.deleted)
 }
 
 // TestConsumeMagicLinkDeletesTheBotFlowDMImmediately: signing in with

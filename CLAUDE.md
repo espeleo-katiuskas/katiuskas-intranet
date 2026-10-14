@@ -619,25 +619,28 @@ the send of a bot-flow magic-link DM.
   unless the person actually signs in first: `Handler.issueSessionAndRespond` (reached
   from `ConsumeMagicLink` or `ConsumeMagicLinkCode`, whichever channel the link/code that
   succeeded actually came through) calls `Handler.deletePendingTelegramDM(userID)` on
-  every successful sign-in, which — only when this same user has a bot-flow DM still
-  tracked, a no-op otherwise — cancels that scheduled sleep and deletes the message right
-  away instead of waiting out the rest of `TelegramBotDMLinkTTL`: once someone has
-  actually used the link, there's no reason left to leave it sitting in the chat.
-  `Handler.pendingTelegramDMs` (a `map[int64]pendingTelegramDM`, `userID` keyed,
-  `pendingTelegramDMsMu`-guarded) is what makes this possible — `scheduleCleanup`
-  registers the chat/message id and a `context.CancelFunc` for its own sleep right after
-  sending, and either side (the timer itself, or `deletePendingTelegramDM`) removes the
-  entry once it's actually deleted, so the other one can't also try to delete an
-  already-gone message. Purely a hygiene nicety either way, not a security gate — the link
-  inside keeps working for the rest of the real `MagicLinkTTL` regardless of whether
-  either delete path succeeds, or even runs at all (a process restart in between just
-  loses it, the same as any other best-effort cleanup in this app) — but a dead link
-  lingering in the chat is misleading, and one more thing exposed for no reason if the
-  phone/session is compromised later. A web-triggered DM (`!viaTelegramBot`) skips this
-  scheduling entirely and is never auto-deleted, on sign-in or otherwise: unlike the
-  bot-flow DM, it has no equivalent moment where it's definitely done being useful — the
-  code in it, especially, might still be typed into the login page from a different device
-  well after it arrives.
+  every successful sign-in, which — only when this same user has a DM still tracked, a
+  no-op otherwise — deletes every tracked message right away, cancelling a bot-flow DM's
+  scheduled sleep instead of waiting out the rest of `TelegramBotDMLinkTTL`: once someone
+  has actually signed in, there's no reason left to leave the link sitting in the chat.
+  `Handler.pendingTelegramDMs` (a `map[int64][]pendingTelegramDM`, `userID` keyed, at most
+  `maxPendingTelegramDMsPerUser` kept, `pendingTelegramDMsMu`-guarded) is what makes this
+  possible — `scheduleCleanup` registers the chat/message id and a `context.CancelFunc`
+  for its own sleep right after sending, and either side (the timer itself, or
+  `deletePendingTelegramDM`) removes the entry once it's actually deleted, so the other
+  one can't also try to delete an already-gone message. Purely a hygiene nicety either
+  way, not a security gate — the link inside keeps working for the rest of the real
+  `MagicLinkTTL` regardless of whether either delete path succeeds, or even runs at all (a
+  process restart in between just loses it, the same as any other best-effort cleanup in
+  this app) — but a dead link lingering in the chat is misleading, and one more thing
+  exposed for no reason if the phone/session is compromised later. A web-triggered DM
+  (`!viaTelegramBot`) skips the timer: unlike the bot-flow DM, it has no moment where it's
+  definitely done being useful short of signing in — the code in it might still be typed
+  into the login page from a different device well after it arrives. It is tracked
+  (without a `cancel`, once its background send has the message id) and deleted at sign-in
+  like the others, whichever way that happens (link or code, from whichever device); if
+  nobody signs in it stays, and so does every earlier link's DM when someone asks for
+  several before signing in — all of them are deleted at that sign-in.
 - `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
   every resource package's own mutation notifications are built from. `NotifyAsync` (a
   no-op for a `nil` notifier, i.e. Telegram not configured) is the fire-and-forget

@@ -82,17 +82,23 @@ type Handler struct {
 	ipLimiter      *httpapi.IPRateLimiter
 
 	pendingTelegramDMsMu sync.Mutex
-	pendingTelegramDMs   map[int64]pendingTelegramDM
+	pendingTelegramDMs   map[int64][]pendingTelegramDM
 }
 
-// pendingTelegramDM is the bot-flow magic-link DM (see
-// notifyMagicLinkViaTelegram's own viaTelegramBot branch) still waiting
-// out its scheduled expiry cleanup for one particular user, tracked so
-// issueSessionAndRespond can delete it immediately once that person
-// actually signs in rather than leaving it for the full
-// Options.TelegramBotDMLinkTTL to elapse. cancel stops that scheduled
-// cleanup's own goroutine from also trying to delete the same message
-// afterward.
+// maxPendingTelegramDMsPerUser bounds how many sent-but-not-yet-deleted
+// link DMs are remembered for one person (someone who keeps asking for
+// links without ever signing in): past it the oldest is simply forgotten,
+// left in the chat.
+const maxPendingTelegramDMsPerUser = 10
+
+// pendingTelegramDM is a magic-link DM (see notifyMagicLinkViaTelegram)
+// sent to one particular user and not deleted yet, tracked so
+// issueSessionAndRespond can delete it once that person actually signs
+// in. For a bot-flow DM it is also waiting out a scheduled expiry
+// cleanup, and cancel stops that cleanup's own goroutine from trying to
+// delete the same message afterward; for a DM that merely rode along a
+// web request there is no such timer and cancel is nil — it is deleted on
+// sign-in, or never.
 type pendingTelegramDM struct {
 	chatID    int64
 	messageID int64
@@ -110,7 +116,7 @@ func NewHandler(usersService *users.Service, rolesService *roles.Service, tokens
 		telegramClient:     telegramClient,
 		opts:               opts,
 		ipLimiter:          httpapi.NewIPRateLimiter(opts.MagicLinkIPRateLimit, opts.MagicLinkIPRateWindow),
-		pendingTelegramDMs: make(map[int64]pendingTelegramDM),
+		pendingTelegramDMs: make(map[int64][]pendingTelegramDM),
 	}
 }
 
@@ -342,9 +348,12 @@ var errMagicLinkTelegramDMFailed = errors.New("could not deliver the magic link 
 // h.opts.MagicLinkTTL every other message states. Otherwise (a web request that merely
 // happens to also have Telegram linked) the DM matches the email in
 // full, code and real TTL included, since either could be what's read
-// first — and, unlike the bot-flow DM, is never auto-deleted at all:
-// only a bot-flow DM's own delivery is tied to something this handler
-// itself schedules a cleanup for.
+// first. Either kind is deleted once the person actually signs in (see
+// deletePendingTelegramDM) — whichever way, link or code, and from
+// whichever device. Only the bot-flow DM is also deleted by a timer
+// when nobody signs in: the web one can't be, since its code might still
+// be typed into the login page from another device well after it
+// arrives.
 func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, firstName, link, code string, viaTelegramBot bool) error {
 	fail := func(logMsg string, err error) error {
 		slog.Error(logMsg, "error", err)
@@ -412,16 +421,16 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 	// this message's own (shorter, cosmetic) stated validity — not the
 	// real, longer h.opts.MagicLinkTTL, unless issueSessionAndRespond
 	// (see deletePendingTelegramDM) fires this early instead, once the
-	// person this DM was sent to has actually signed in. Auto-deleting
-	// only ever applies to a bot-flow DM — this message's own reason for
-	// existing was answering what was just typed into this same chat, so
-	// once that's served its purpose there's nothing left worth keeping
-	// around; a DM merely riding along a web request has no equivalent
-	// moment where it's definitely done being useful (the code in it,
-	// especially, might still be typed into the login page from a
-	// different device well after this), so it's left alone
-	// indefinitely — scheduleCleanup is therefore only ever called from
-	// the viaTelegramBot branch below.
+	// person this DM was sent to has actually signed in. The timer only
+	// applies to a bot-flow DM — this message's own reason for existing
+	// was answering what was just typed into this same chat, so once
+	// that's served its purpose there's nothing left worth keeping around;
+	// a DM merely riding along a web request has no equivalent moment where
+	// it's definitely done being useful (the code in it, especially, might
+	// still be typed into the login page from a different device well
+	// after this), so it's only tracked, for deletion at sign-in —
+	// scheduleCleanup is therefore only ever called from the viaTelegramBot
+	// branch below.
 	scheduleCleanup := func(messageID int64) {
 		cleanupCtx, cancel := context.WithCancel(context.Background())
 		h.setPendingTelegramDM(userID, *chatID, messageID, cancel)
@@ -452,9 +461,12 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 	}
 
 	go func() {
-		if _, err := send(); err != nil {
+		messageID, err := send()
+		if err != nil {
 			slog.Error("send magic link via telegram", "error", err)
+			return
 		}
+		h.setPendingTelegramDM(userID, *chatID, messageID, nil)
 	}()
 	return nil
 }
@@ -462,46 +474,62 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 func (h *Handler) setPendingTelegramDM(userID, chatID, messageID int64, cancel context.CancelFunc) {
 	h.pendingTelegramDMsMu.Lock()
 	defer h.pendingTelegramDMsMu.Unlock()
-	h.pendingTelegramDMs[userID] = pendingTelegramDM{chatID: chatID, messageID: messageID, cancel: cancel}
+	list := append(h.pendingTelegramDMs[userID], pendingTelegramDM{chatID: chatID, messageID: messageID, cancel: cancel})
+	if len(list) > maxPendingTelegramDMsPerUser {
+		list = list[len(list)-maxPendingTelegramDMsPerUser:]
+	}
+	h.pendingTelegramDMs[userID] = list
 }
 
 // clearPendingTelegramDM drops the tracked entry once its own scheduled
-// cleanup has actually run — guarded by messageID so it can't clear out
-// a newer entry that's since replaced it (e.g. a second bot-flow link
+// cleanup has actually run — by messageID, so it only drops its own
+// message and not a newer one for the same person (e.g. a second link
 // requested before the first one's own timer fired).
 func (h *Handler) clearPendingTelegramDM(userID, messageID int64) {
 	h.pendingTelegramDMsMu.Lock()
 	defer h.pendingTelegramDMsMu.Unlock()
-	if pending, ok := h.pendingTelegramDMs[userID]; ok && pending.messageID == messageID {
+	list := h.pendingTelegramDMs[userID]
+	for i, pending := range list {
+		if pending.messageID == messageID {
+			list = append(list[:i], list[i+1:]...)
+			break
+		}
+	}
+	if len(list) == 0 {
 		delete(h.pendingTelegramDMs, userID)
+	} else {
+		h.pendingTelegramDMs[userID] = list
 	}
 }
 
-// deletePendingTelegramDM immediately deletes whatever bot-flow
-// magic-link DM (see notifyMagicLinkViaTelegram) is still pending for
-// userID, and cancels its scheduled expiry cleanup so that goroutine
-// doesn't also try to delete the same, already-gone message once
-// Options.TelegramBotDMLinkTTL elapses. Called once a sign-in actually
-// succeeds (see issueSessionAndRespond), so the message disappears from
-// the chat right away instead of sitting there for the rest of that
-// TTL. A no-op for every sign-in that isn't the direct result of a
-// bot-flow DM — most of them — since there's nothing tracked to delete.
+// deletePendingTelegramDM immediately deletes every magic-link DM (see
+// notifyMagicLinkViaTelegram) still pending for userID — a bot-flow one
+// and any that rode along web requests — and cancels each bot-flow DM's
+// scheduled expiry cleanup so that goroutine doesn't also try to delete
+// the same, already-gone message. Called once a sign-in actually
+// succeeds (see issueSessionAndRespond), whichever way it happened, so
+// the messages disappear from the chat right away. A no-op for anyone
+// with no linked Telegram, or no DM sent, since there's nothing tracked.
 func (h *Handler) deletePendingTelegramDM(userID int64) {
 	h.pendingTelegramDMsMu.Lock()
-	pending, ok := h.pendingTelegramDMs[userID]
-	if ok {
-		delete(h.pendingTelegramDMs, userID)
-	}
+	list := h.pendingTelegramDMs[userID]
+	delete(h.pendingTelegramDMs, userID)
 	h.pendingTelegramDMsMu.Unlock()
-	if !ok {
+	if len(list) == 0 {
 		return
 	}
-	pending.cancel()
+	for _, pending := range list {
+		if pending.cancel != nil {
+			pending.cancel()
+		}
+	}
 	go func() {
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := h.telegramClient.DeleteMessage(deleteCtx, pending.chatID, pending.messageID); err != nil {
-			slog.Error("delete magic link telegram message after sign-in", "error", err)
+		for _, pending := range list {
+			if err := h.telegramClient.DeleteMessage(deleteCtx, pending.chatID, pending.messageID); err != nil {
+				slog.Error("delete magic link telegram message after sign-in", "error", err)
+			}
 		}
 	}()
 }
