@@ -544,8 +544,8 @@ una más cada año siguiente.
 **Frontend y límites**
 
 - En `/member`, cada cuota es un evento más («Cuota anual · año») del timeline «Historial
-  como socio», con la fecha del pago y sin botones de editar ni borrar. En `/profile`, va
-  en una tabla «Cuotas anuales» bajo la de altas y bajas.
+  como socio», con la fecha del pago y sin botones de editar ni borrar. `/profile` muestra
+  el mismo timeline, sin botones.
 - No hay endpoint para corregir o borrar una cuota, ni validación de que el año caiga
   dentro de un periodo de alta activo; ambas cosas están fuera de alcance a propósito por
   ahora.
@@ -579,7 +579,7 @@ baja que sigue en curso, igual que el `end_date` de un periodo de socio).
 
 | Ruta | Operación | Quién |
 |---|---|---|
-| `/users/{login}/leaves` | listar | admin/board |
+| `/users/{login}/leaves` | listar | la propia persona, admin o board |
 | `/users/{login}/leaves` | crear | admin |
 | `/leaves/{id}` | corregir/borrar | admin |
 
@@ -1274,7 +1274,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/` (`index.html`/`dashboard.js`) | Junta Directiva (`GET /board-members`) y enlaces a Documentos, Actas y Memorias. | Cualquier rol baseline. | Los enlaces son enlaces normales gracias a la cookie de sesión. |
 | `/members` | Listado de personas. | Barra lateral: admin, board y member. | A member le reduce columnas y filtros a `MemberListing` y sus filas no son clicables; para admin y board, cada fila lleva a `/member?login=<login>`. |
 | `/member?login=…` (`member.html`/`member.js`) | Ficha de una persona (ver abajo). | Solo admin y board. | Solo admin puede guardar los datos; board los ve deshabilitados. |
-| `/profile` | Ficha propia: datos de contacto editables, historial, cuotas anuales, licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/member`. |
+| `/profile` | Ficha propia: datos de contacto editables, el mismo «Historial como socio» que `/member` (sin botones), licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/member`. |
 | `/activities`, `/activity?id=…` | Lista y detalle de una actividad: participantes, material prestado y memoria. | Cualquier rol baseline. | La lista incluye una vista de calendario anual que marca fines de semana y festivos (no hay página de calendario aparte). |
 | `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
 | `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |

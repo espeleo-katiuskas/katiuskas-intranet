@@ -59,7 +59,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/memberships", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/memberships", h.authenticator.Protect(h.create, "admin"))
 
-	mux.Handle("GET /api/v1/users/{login}/leaves", h.authenticator.Protect(h.listLeavesByUser, "admin", "board"))
+	mux.Handle("GET /api/v1/users/{login}/leaves", h.authenticator.Protect(h.listLeavesByUser))
 	mux.Handle("POST /api/v1/users/{login}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
 	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
 	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
@@ -255,10 +255,18 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
+// listLeavesByUser is readable by the person themselves, admin or board —
+// the same split as their memberships, licenses and dues — so the history
+// on /profile can show the temporary leaves like /member does.
 func (h *Handler) listLeavesByUser(w http.ResponseWriter, r *http.Request) {
 	login := r.PathValue("login")
 	userID, ok := h.resolveUserLogin(w, r)
 	if !ok {
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	if !current.HasAnyRole("admin", "board") && current.ID != userID {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only view their own temporary leaves")
 		return
 	}
 	list, err := h.service.ListLeavesByUser(r.Context(), userID)

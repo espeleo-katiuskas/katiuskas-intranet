@@ -371,10 +371,10 @@ func TestHandlerListByUserUnknownLoginIsNotFound(t *testing.T) {
 	}
 }
 
-// TestHandlerListLeavesRequiresAdminOrBoard: leaves are readable by
-// admin/board (same as the membership they belong to) but not by a
-// plain member, even one on the RegisterRoutes baseline.
-func TestHandlerListLeavesRequiresAdminOrBoard(t *testing.T) {
+// TestHandlerListLeavesIsSelfOrAdminBoard: leaves are readable by
+// admin/board and by the person themselves (same as the membership they
+// belong to), but not by another plain member.
+func TestHandlerListLeavesIsSelfOrAdminBoard(t *testing.T) {
 	mux, resolver, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
 	createMembership(t, mux, resolver, target.Login, "2020-01-01")
@@ -388,6 +388,11 @@ func TestHandlerListLeavesRequiresAdminOrBoard(t *testing.T) {
 	boardToken := testutil.TokenFor(resolver, 2, "board")
 	if rec := doRequest(mux, http.MethodGet, path, boardToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected board to list leaves, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	selfToken := testutil.TokenFor(resolver, target.ID, "member")
+	if rec := doRequest(mux, http.MethodGet, path, selfToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("expected the person themselves to list their own leaves, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

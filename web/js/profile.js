@@ -1,7 +1,6 @@
 import {
   hasAnyRole,
   apiFetch,
-  formatDate,
   showFeedback,
   showError,
 } from './api.js';
@@ -9,6 +8,7 @@ import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
+import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin']);
@@ -106,28 +106,12 @@ async function loadProfile() {
     document.getElementById('profile-email').textContent = profile.email ?? '';
     populateEditForm(profile);
 
+    // The same history as /member, without its action buttons. Each part
+    // of it that fails to load just shows nothing (see loadTimelineData).
     const memberships = await apiFetch(`/users/${user.login}/memberships`);
-    // A failed cuotas request shouldn't take the rest of the history
-    // down with it — it just shows none.
-    const dues = await apiFetch(`/users/${user.login}/dues`).catch(() => []);
-    document.getElementById('memberships-section').hidden = memberships.length === 0 && dues.length === 0;
-    document.getElementById('memberships-table-body').innerHTML = memberships
-      .map((membership) => `
-        <tr>
-          <td>${formatDate(membership.start_date)}</td>
-          <td>${membership.end_date ? formatDate(membership.end_date) : 'Activa'}</td>
-        </tr>
-      `)
-      .join('');
-    document.getElementById('dues-block').hidden = dues.length === 0;
-    document.getElementById('dues-table-body').innerHTML = dues
-      .map((due) => `
-        <tr>
-          <td>${due.year}</td>
-          <td>${formatDate(due.paid_at ?? due.created_at)}</td>
-        </tr>
-      `)
-      .join('');
+    const { events } = await loadTimelineData(user.login, memberships);
+    document.getElementById('memberships-section').hidden = events.length === 0;
+    document.getElementById('timeline-list').innerHTML = events.map((event) => renderTimelineRow(event)).join('');
   } catch {
     document.getElementById('profile-email').textContent = 'No se ha podido cargar tu perfil.';
   }

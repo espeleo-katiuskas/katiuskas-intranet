@@ -459,8 +459,11 @@ no Editar/Borrar (there's no endpoint for either) — its date has to keep the s
 midnight-UTC string shape every other event's has, since the timeline sorts them as plain
 strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
 with it; on a tie the order is alta, then the cuota, then a license paid the same day
-(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` lists them in a "Cuotas anuales" table
-under the membership table. There's no endpoint to correct or remove a due, and no
+(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` shows the very same timeline, only
+without the buttons: `js/timeline.js` (`loadTimelineData`, `renderTimelineRow`) builds and
+renders it for both pages, `member.js` adding its action buttons to each row. That
+needed `GET /users/{login}/leaves` to open to the person themselves, like their
+memberships, licenses and dues. There's no endpoint to correct or remove a due, and no
 validation that a due's `year` actually falls within an active membership period — both
 deliberately out of scope for now. `membership_dues.transaction_id` cascades on delete
 (`ON DELETE CASCADE`) — a due is pure bookkeeping metadata with no meaning apart from its
@@ -481,26 +484,27 @@ That means `GET /users/{login}/leaves` and `memberships.Repository.IsOnLeave` ar
 single lookup, covering every leave this person has ever taken across however many
 separate alta/baja spans they've had, with no join through `memberships` needed. A leave
 still has to fall entirely within one of that person's own membership periods, though —
-that invariant can't be a foreign key anymore, so `memberships.Repository.
-findContainingMembership` checks it in Go on every `CreateLeave`/`UpdateLeave`, by finding
-which single period (if any) covers the given dates; there's at most one, since a
-person's own periods never overlap. Shrinking a membership period
-(`PATCH /memberships/{id}`) re-validates every one of that person's leaves that
-currently falls within the period *as it stood before* the edit — not every leave they've
-ever had — so narrowing one period can't be blocked by a leave that actually belongs to a
-different one of their own periods. `POST /users/{login}/leaves`/`GET .../leaves` are
-admin-only-to-write, admin/board-to-read (not open to the person themselves, unlike most
-`/users/{login}/...` history routes) — `PATCH`/`DELETE /leaves/{id}` stay addressed by the
-leave's own id. `DELETE /memberships/{id}` (admin-only) removes a membership period
-outright — nothing references one by foreign key, so it never cascades — meant for the
-frontend's own "undo my last action" story on `/member` (see Frontend below), which only
-ever offers it for a person's single most recent alta/baja/baja-temporal entry; that's a
-UI-level rule, not something the endpoint itself enforces. `DELETE /board-members/{id}`
-(admin-only) is the same idea for a board term — also never cascades, nothing references
-one by foreign key either — but with no "closing half" distinction to make: unlike a
-membership period or a leave, a board term is a single row covering both its own start and
-end (see `board.Member`), so deleting it always removes the whole term, not just clears a
-field back to open.
+that invariant can't be a foreign key anymore, so
+`memberships.Repository. findContainingMembership` checks it in Go on every
+`CreateLeave`/`UpdateLeave`, by finding which single period (if any) covers the given
+dates; there's at most one, since a person's own periods never overlap. Shrinking a
+membership period (`PATCH /memberships/{id}`) re-validates every one of that person's
+leaves that currently falls within the period *as it stood before* the edit — not every
+leave they've ever had — so narrowing one period can't be blocked by a leave that actually
+belongs to a different one of their own periods.
+`POST /users/{login}/leaves`/`GET .../leaves` are admin-only-to-write,
+self-or-admin/board-to-read (like the person's memberships, licenses and dues, so
+`/profile` can show the same history as `/member`) — `PATCH`/`DELETE /leaves/{id}` stay
+addressed by the leave's own id. `DELETE /memberships/{id}` (admin-only) removes a
+membership period outright — nothing references one by foreign key, so it never cascades —
+meant for the frontend's own "undo my last action" story on `/member` (see Frontend
+below), which only ever offers it for a person's single most recent
+alta/baja/baja-temporal entry; that's a UI-level rule, not something the endpoint itself
+enforces. `DELETE /board-members/{id}` (admin-only) is the same idea for a board term —
+also never cascades, nothing references one by foreign key either — but with no "closing
+half" distinction to make: unlike a membership period or a leave, a board term is a single
+row covering both its own start and end (see `board.Member`), so deleting it always
+removes the whole term, not just clears a field back to open.
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos,
 actas...) read-only from a plain directory tree bind-mounted from `./library` on the host

@@ -1123,8 +1123,8 @@ paths:
     get:
       summary: List every temporary leave this person has ever taken
       description: >
-        admin/board only (unlike most /users/{login}/... history routes,
-        this one isn't also open to the person themselves). A leave
+        Open to that person themselves, or to admin/board — the same split
+        as GET /users/{login}/memberships. A leave
         belongs to the person directly, not to one specific membership
         period, so this covers every alta/baja span they've ever had in
         one call.
@@ -1139,6 +1139,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Leave" }
+        "403": { description: Someone other than that person, admin, or board tried to view it. }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Record a temporary leave ("baja temporal")
