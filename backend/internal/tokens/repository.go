@@ -127,6 +127,42 @@ func (r *Repository) ListForUser(ctx context.Context, userID int64) ([]Token, er
 	return list, rows.Err()
 }
 
+// IDByHash is the id of the token with that hash, or ErrNotFound.
+func (r *Repository) IDByHash(ctx context.Context, tokenHash string) (int64, error) {
+	var id int64
+	err := r.pool.QueryRow(ctx, `SELECT id FROM tokens WHERE token_hash = $1`, tokenHash).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return id, err
+}
+
+// ListAll lists the tokens of everyone, most recently used first (never
+// used ones last), a page at a time — the admin's view of who is signed in
+// (activeOnly: not revoked and not expired yet) or of the whole history.
+func (r *Repository) ListAll(ctx context.Context, activeOnly bool, limit, offset int) ([]Token, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+tokenSelectJoined+`
+		WHERE (NOT $1 OR (t.revoked_at IS NULL AND t.expires_at > now()))
+		ORDER BY t.last_used_at DESC NULLS LAST, t.id DESC
+		LIMIT $2 OFFSET $3
+	`, activeOnly, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Token{}
+	for rows.Next() {
+		var t Token
+		if err := scanTokenJoined(rows, &t); err != nil {
+			return nil, err
+		}
+		list = append(list, t)
+	}
+	return list, rows.Err()
+}
+
 func (r *Repository) UpdateExpiry(ctx context.Context, id int64, expiresAt time.Time) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE tokens SET expires_at = $2 WHERE id = $1`, id, expiresAt)
 	if err != nil {

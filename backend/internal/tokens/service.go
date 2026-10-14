@@ -120,6 +120,18 @@ func (s *Service) RevokeByHash(ctx context.Context, rawToken string) error {
 	return s.repo.RevokeByHash(ctx, auth.HashToken(rawToken))
 }
 
+// IDForRawToken is the id of the session a raw bearer token belongs to, or
+// ErrNotFound — to tell an admin which session in a listing is their own.
+func (s *Service) IDForRawToken(ctx context.Context, rawToken string) (int64, error) {
+	return s.repo.IDByHash(ctx, auth.HashToken(rawToken))
+}
+
+// List is ListAll's service face: the tokens of everyone, see
+// Repository.ListAll.
+func (s *Service) List(ctx context.Context, activeOnly bool, limit, offset int) ([]Token, error) {
+	return s.repo.ListAll(ctx, activeOnly, limit, offset)
+}
+
 func (s *Service) ListForUser(ctx context.Context, userID int64) ([]Token, error) {
 	return s.repo.ListForUser(ctx, userID)
 }

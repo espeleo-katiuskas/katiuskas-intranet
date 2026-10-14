@@ -23,6 +23,10 @@ type Token struct {
 	// ImpersonatedBy/ImpersonatedByLogin are set only for a token minted
 	// by POST /users/{login}/impersonate: the admin who started it, not
 	// UserID/UserLogin (whose session this actually is).
+	// Current marks, only in GET /tokens, the one session that is making the
+	// request — so the admin looking at the list can tell which one is theirs
+	// (revoking it signs them out).
+	Current             bool    `json:"current,omitempty"`
 	ImpersonatedBy      *int64  `json:"-"`
 	ImpersonatedByLogin *string `json:"impersonated_by_login,omitempty"`
 }

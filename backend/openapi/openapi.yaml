@@ -570,6 +570,32 @@ paths:
             or automatic_role (member/former_member/board can't be
             revoked this way at all).
 
+  /tokens:
+    get:
+      summary: List everyone's session tokens
+      description: >
+        Admin-only overview of who is signed in. By default only the
+        active tokens (not revoked, not expired yet); status=all adds the
+        history. Most recently used first, never-used ones last. Each one
+        carries its owner's login, like GET /users/{login}/tokens, which
+        is also where one is re-expired (PATCH) or revoked (DELETE). Never
+        exposes the token value.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, all], default: active } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 200 }, description: Page size; a value outside 1-200 falls back to 100. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: A negative value falls back to 0. }
+      responses:
+        "200":
+          description: Tokens of everyone
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Token" }
+        "400": { description: invalid_status (not active or all). }
+        "403": { description: Requires admin. }
+
   /users/{login}/tokens:
     get:
       summary: List a person's session tokens
@@ -2496,6 +2522,12 @@ components:
             X-Forwarded-For if present (the production deploy sits behind
             a reverse proxy), otherwise the raw connection address.
             Purely informational.
+        current:
+          type: boolean
+          description: >
+            Present (true) only in GET /tokens, on the session that is
+            making that very request — so an admin can tell which one is
+            theirs, since revoking it signs them out.
         impersonated_by_login:
           type: string
           nullable: true

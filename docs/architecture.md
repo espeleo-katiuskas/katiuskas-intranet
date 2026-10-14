@@ -444,6 +444,11 @@ claro), revocable y con `expires_at` (30 días por defecto).
 - Un admin puede ver, re-caducar o revocar el token de cualquier persona:
   `GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`. Nunca ve el valor del token,
   solo sus metadatos.
+- `GET /tokens` (solo admin) lista los de todo el mundo: por defecto solo los activos (ni
+  revocados ni caducados), y con `?status=all` también el historial; primero los usados más
+  recientemente y los nunca usados al final, paginados con `limit` (100 por defecto, máximo
+  200) y `offset`. Marca como `current` la sesión que hace la petición (la encuentra por el
+  hash de su token), para que el admin sepa cuál es la suya: revocarla lo desconecta.
 
 #### Impersonación
 
@@ -1284,7 +1289,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
 | `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
-| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
+| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`) y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
 | `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
 | `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
 

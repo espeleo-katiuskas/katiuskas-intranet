@@ -60,6 +60,40 @@
       </div>
     </form>
   </dialog>
+
+  <div class="section-header">
+    <div>
+      <h2>Sesiones</h2>
+      <p class="subtitle">Quién tiene la sesión abierta, desde cuándo y desde dónde. Revocar una sesión la cierra en el acto.</p>
+    </div>
+  </div>
+  <p class="filter-bar">
+    <label class="checkbox-label" for="sessions-show-all"><input id="sessions-show-all" type="checkbox"> Incluir las caducadas y las revocadas</label>
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Persona</th><th>Último uso</th><th>Desde</th><th>Creada</th><th>Caduca</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="sessions-table-body"></tbody>
+    </table>
+  </div>
+  <p class="load-more"><button type="button" id="sessions-load-more" class="btn btn-secondary" hidden>Ver más</button></p>
+  <dialog id="session-expiry-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Cambiar la caducidad</h3>
+    <p class="hint" id="session-expiry-hint"></p>
+    <form id="session-expiry-form">
+      <div class="field">
+        <label for="session-expiry-input">Caduca el</label>
+        <input id="session-expiry-input" type="datetime-local" required>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
     </main>
   </div>
 </div>

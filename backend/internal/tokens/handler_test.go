@@ -468,3 +468,128 @@ func TestHandlerRevokeNotifiesTelegram(t *testing.T) {
 		t.Errorf("expected the notification to name both actor %q and target %q, got %q", admin.Login, target.Login, msg)
 	}
 }
+
+// GET /tokens is the admin's overview of everyone's sessions: only the
+// active ones by default (not revoked, not expired), most recently used
+// first, each with its owner's login; ?status=all adds the history.
+func TestHandlerListAllShowsActiveSessionsOfEveryone(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	ana := testutil.InsertUser(t, tx, "")
+	beto := testutil.InsertUser(t, tx, "")
+
+	if _, err := service.Issue(ctx, ana.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	if _, err := service.Issue(ctx, beto.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	if _, err := service.Issue(ctx, ana.ID, time.Hour); err != nil { // to be revoked
+		t.Fatalf("issue: %v", err)
+	}
+	if _, err := service.Issue(ctx, beto.ID, -time.Hour); err != nil { // already expired
+		t.Fatalf("issue: %v", err)
+	}
+	anaTokens, err := service.ListForUser(ctx, ana.ID)
+	if err != nil || len(anaTokens) != 2 {
+		t.Fatalf("expected 2 tokens for ana, got %d (%v)", len(anaTokens), err)
+	}
+	if err := service.Revoke(ctx, ana.ID, anaTokens[0].ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	list := func(query string) []tokens.Token {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/tokens"+query, adminToken, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /tokens%s: expected 200, got %d: %s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "hash") {
+			t.Errorf("expected no token hash in the response, got %s", rec.Body.String())
+		}
+		var got []tokens.Token
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return got
+	}
+
+	active := list("")
+	logins := map[string]int{}
+	for _, tok := range active {
+		logins[tok.UserLogin]++
+		if tok.RevokedAt != nil || !tok.ExpiresAt.After(time.Now()) {
+			t.Errorf("expected only active tokens by default, got %+v", tok)
+		}
+	}
+	if logins[ana.Login] != 1 || logins[beto.Login] != 1 {
+		t.Errorf("expected one active session each for ana and beto, got %v", logins)
+	}
+	if all := list("?status=all"); len(all) != len(active)+2 {
+		t.Errorf("expected ?status=all to add the revoked and the expired one (%d + 2), got %d", len(active), len(all))
+	}
+	if page := list("?limit=1"); len(page) != 1 {
+		t.Errorf("expected limit=1 to give one token, got %d", len(page))
+	}
+	if rest := list("?limit=1&offset=1"); len(rest) != 1 || rest[0].ID == list("?limit=1")[0].ID {
+		t.Errorf("expected offset=1 to give a different token, got %+v", rest)
+	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/tokens?status=bogus", adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for an unknown status, got %d", rec.Code)
+	}
+}
+
+func TestHandlerListAllRequiresAdmin(t *testing.T) {
+	mux, resolver, _, _ := newHandlerTestServer(t)
+	for _, role := range []string{"board", "member"} {
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/tokens", testutil.TokenFor(resolver, 1, role), nil); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden, got %d", role, rec.Code)
+		}
+	}
+}
+
+// The session making the request is marked "current" in GET /tokens, so an
+// admin can tell which one is theirs (revoking it signs them out).
+func TestHandlerListAllMarksTheCallersOwnSession(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	other := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(ctx, other.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	// The test authenticator hands out its own tokens; give the admin one
+	// real row in the tokens table whose hash is that very token's.
+	admin := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')
+	`, admin.ID, auth.HashToken(adminToken)); err != nil {
+		t.Fatalf("insert the caller's token: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/tokens", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []tokens.Token
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	current := 0
+	for _, tok := range list {
+		if tok.Current {
+			current++
+			if tok.UserLogin != admin.Login {
+				t.Errorf("the marked session should be the caller's own, got %+v", tok)
+			}
+		}
+	}
+	if len(list) < 2 || current != 1 {
+		t.Errorf("expected exactly one of %d sessions to be marked current, got %d", len(list), current)
+	}
+	if strings.Contains(rec.Body.String(), `"current":false`) {
+		t.Errorf("expected current to be left out unless true, got %s", rec.Body.String())
+	}
+}

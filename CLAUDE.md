@@ -172,16 +172,19 @@ that gets rolled back — the repository code never knows the difference.
 
 **Auth is a single opaque, revocable, database-backed session token** — no JWT, no
 separate access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,
-`Authenticator.Protect`/`RequireAuth`/`RequireRole`, and a `SessionResolver` interface;
-it has no database dependency. `internal/tokens` is the real resolver: it hashes the raw
+`Authenticator.Protect`/`RequireAuth`/`RequireRole`, and a `SessionResolver` interface; it
+has no database dependency. `internal/tokens` is the real resolver: it hashes the raw
 token, validates and touches `last_used_at`/`last_used_ip` in one query, then resolves
 roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes
-admin-only endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`) to audit,
-re-expire, or revoke any token, plus `POST /users/{login}/impersonate` (admin-only,
-issues a short-lived token — `config.ImpersonationTokenTTL` — that resolves as the target
-person in every way except `AuthenticatedUser.ImpersonatedBy`, which names the admin) and
-`POST /auth/impersonate/exit` to end one and get a fresh normal token back.
-The same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
+admin-only endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`, and
+`GET /tokens` listing everyone's — the active ones by default, `?status=all` for the
+history, paged by `limit`/`offset` — which marks the caller's own session `current`, found
+by the hash of its bearer token) to audit, re-expire, or revoke any token, plus
+`POST /users/{login}/impersonate` (admin-only, issues a short-lived token —
+`config.ImpersonationTokenTTL` — that resolves as the target person in every way except
+`AuthenticatedUser.ImpersonatedBy`, which names the admin) and
+`POST /auth/impersonate/exit` to end one and get a fresh normal token back. The same
+session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
 (`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is
 issued or refreshed (sign-in, impersonation start/exit) — every ordinary route still only
 ever looks at the bearer header (`auth.Protect`/`RequireAuth`), so this cookie existing
@@ -203,10 +206,10 @@ opaque token in this app that ends up in a URL rather than only ever sent as a h
 its length actually matters, and it only needs to resist guessing within `MagicLinkTTL`'s
 own short window rather than staying a valid bearer credential for weeks; 128 bits is
 still the OWASP-recommended *minimum* for a session identifier, astronomically out of
-reach for brute-forcing in that window given `POST /auth/magic-link/consume` has no
-rate limit of its own (unlike the login code below, capped by a per-row attempt
-counter) — token entropy alone is what carries this endpoint's security. A magic-link
-email also carries a 6-digit login code — hashed alongside the link's token in the same
+reach for brute-forcing in that window given `POST /auth/magic-link/consume` has no rate
+limit of its own (unlike the login code below, capped by a per-row attempt counter) —
+token entropy alone is what carries this endpoint's security. A magic-link email also
+carries a 6-digit login code — hashed alongside the link's token in the same
 `magic_link_tokens` row, so consuming either one consumes both — for signing in on a
 device other than the one the email was read on; `POST /auth/magic-link/consume-code`
 identifies the caller by email+phone (the code alone is too short to look someone up by)
@@ -214,16 +217,15 @@ and a per-row attempt counter bounds brute-forcing it without affecting the link
 That lookup runs before the attempt counter is ever reached, though, so — unlike
 `/auth/magic-link/consume` above, which needs none — this route shares the same
 per-calling-address `httpapi.IPRateLimiter` as the initial `POST /auth/magic-link` request
-(`authapi.Handler`'s own `ipLimiter`, one limiter/budget covering both routes): without it,
-an address could scan through many different email/phone guesses here with nothing to slow
-it down, the same gap the initial request's own throttle exists to close.
-Both this and the initial `POST /auth/magic-link` request resolve email+phone through the
-same `users.Repository.FindActiveByEmailAndPhone`, whose email side matches
-case-insensitively — the same as `internal/telegrambot`'s own `emailMatchesUser` check, so
-the same address behaves the same way whether someone signs in from the web or from
-Telegram.
-Whoever's linked their Telegram account (see **Telegram** below) gets the same link and
-code by DM too, alongside — never instead of — the email.
+(`authapi.Handler`'s own `ipLimiter`, one limiter/budget covering both routes): without
+it, an address could scan through many different email/phone guesses here with nothing to
+slow it down, the same gap the initial request's own throttle exists to close. Both this
+and the initial `POST /auth/magic-link` request resolve email+phone through the same
+`users.Repository.FindActiveByEmailAndPhone`, whose email side matches case-insensitively
+— the same as `internal/telegrambot`'s own `emailMatchesUser` check, so the same address
+behaves the same way whether someone signs in from the web or from Telegram. Whoever's
+linked their Telegram account (see **Telegram** below) gets the same link and code by DM
+too, alongside — never instead of — the email.
 
 `httpapi.RequestLogger`'s per-request log line includes `user_id` once `auth.RequireAuth`
 resolves one. That takes a small mutable box placed in the request context before
@@ -1321,7 +1323,12 @@ role catalog (for that dialog's role checkboxes) only for an admin. The list of 
 itself, to create or delete one, is no longer here: it lives on `/admin`, the page behind
 the "Admin" sidebar entry (admin only, `NAV_ITEMS`' `roles: ['admin']`), meant for
 whatever else only administrators care about — `admin.html`/`admin.js`, which for now
-holds just the "Roles" section (`GET`/`POST`/`DELETE /roles`). Admin/board get
+holds a "Roles" section (`GET`/`POST`/`DELETE /roles`) and a "Sesiones" one: every session
+from `GET /tokens` (a person's name from the directory, last use and address, creation and
+expiry, "Activa"/"Caducada"/"Revocada", a badge on an impersonation's and on the admin's
+own "Esta sesión"), 50 at a time with "Ver más" and a checkbox for the expired and revoked
+ones, where an active one can be revoked (a different warning for one's own, which signs
+out) or have its expiry changed, through `/users/{login}/tokens/{id}`. Admin/board get
 `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`,
 limited to what `users.MemberListing` carries (see **Permission tiers**). Row filters
 ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the column

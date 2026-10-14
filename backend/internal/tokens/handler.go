@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -57,6 +58,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/v1/tokens", h.authenticator.Protect(h.listAll, "admin"))
 	mux.Handle("GET /api/v1/users/{login}/tokens", h.authenticator.Protect(h.list, "admin"))
 	mux.Handle("PATCH /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.updateExpiry, "admin"))
 	mux.Handle("DELETE /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.revoke, "admin"))
@@ -107,6 +109,48 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 	// like every other request the frontend makes with this same token.
 	auth.SetSessionCookie(w, raw, h.publicBaseURL, h.impersonationTokenTTL)
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]string{"token": raw})
+}
+
+// listAll is the admin's overview of everyone's sessions: by default only
+// the active ones (not revoked, not expired), most recently used first;
+// ?status=all adds the history. limit (default 100, at most 200) and
+// offset page through it; an out-of-range limit or negative offset falls
+// back to its default, like the other listings. Revoking or re-expiring one
+// still goes through /users/{login}/tokens/{tokenID}.
+func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	activeOnly := true
+	switch q.Get("status") {
+	case "", "active":
+	case "all":
+		activeOnly = false
+	default:
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", "status must be active or all")
+		return
+	}
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	list, err := h.service.List(r.Context(), activeOnly, limit, offset)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list tokens")
+		return
+	}
+	// Mark the caller's own session, if it's on this page. Not finding it
+	// (a miss, or a lookup that fails) only means nothing is marked.
+	if raw, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); raw != "" {
+		if currentID, err := h.service.IDForRawToken(r.Context(), raw); err == nil {
+			for i := range list {
+				list[i].Current = list[i].ID == currentID
+			}
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
