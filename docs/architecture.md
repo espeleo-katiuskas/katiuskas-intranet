@@ -1293,7 +1293,8 @@ La página reúne, para la persona consultada:
 - su historial de actividades y de material (`GET /users/{login}/activities` y
   `GET /users/{login}/movements`);
 - sus licencias federativas (`js/licenseFiles.js`: miniaturas de las copias de
-  `licencias/` en los ficheros de la persona);
+  `licencias/` en los ficheros de la persona; las miniaturas las genera, a demanda,
+  `scripts/generate-license-thumbnails.sh`);
 - sus ficheros propios (`GET /users/{login}/files`, `web/js/userFiles.js`): el mismo
   visor embebido, con las mismas migas de pan y previsualización, aparece también en
   `/profile` para que cada socio vea los suyos.

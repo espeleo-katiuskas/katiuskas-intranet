@@ -343,6 +343,22 @@ tar czf activity-resources-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/dat
 `/opt/katiuskas-intranet/data/library` y `/opt/katiuskas-intranet/data/user-files` son
 directorios normales — cópialos como cualquier otro fichero del sistema.
 
+### Miniaturas de las licencias
+
+Las copias de las licencias de cada persona (`user-files/<login>/licencias/`) se muestran en
+`/profile` y `/member` con una miniatura, que la aplicación no genera sola. Para crear las
+que falten (y renovar las que sean más antiguas que su fichero) ejecuta el script del
+repositorio, con el usuario dueño de los ficheros y apuntando al directorio de producción:
+
+```sh
+sudo -u katiuskas scripts/generate-license-thumbnails.sh --root /opt/katiuskas-intranet/data/user-files
+```
+
+Necesita `pdftoppm` (paquete `poppler-utils`) para los PDF e ImageMagick (`imagemagick`)
+para las imágenes; `--help` lista las demás opciones (`--dry-run`, `--force`, o solo
+algunos logins). Es seguro ejecutarlo cuantas veces haga falta: lo que ya está al día se
+salta.
+
 ## Notas de seguridad
 
 - Cambia `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` antes del primer despliegue, igual que en

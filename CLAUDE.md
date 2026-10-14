@@ -123,6 +123,10 @@ subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optiona
 thumbnail for one goes in `licencias/.thumbnails/`, named after that same original
 filename plus `.jpg` (e.g. `licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see
 **Frontend** below for how `/profile` and `/member` read both conventions back out.
+`scripts/generate-license-thumbnails.sh` makes every missing (or out-of-date) thumbnail
+from the license copies — first page of a PDF, or a smaller version of an image, 280px on
+the longest side — and only needs `pdftoppm`/ImageMagick on the machine running it
+(`--help` for the options: `--root`, `--force`, `--dry-run`, or just some logins).
 
 Checking how a page actually looks, in an environment with no GUI: Claude Code's own
 browser-automation tool ("Claude in Chrome") needs a real, windowed Google Chrome plus a
@@ -1123,23 +1127,24 @@ reasoning `loadActas`' own `renderSelectedYear` sorts by `(month, day, suffix)`.
 whose name doesn't match that convention has no year to file it under, so — the same as
 an acta named anything else — it's simply left out.
 
-The thumbnail itself is a manually-dropped-in companion file at
-`licencias/.thumbnails/<full original filename>.jpg` (any original extension — not just
-a PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing
-this module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
+The thumbnail itself is a companion file at
+`licencias/.thumbnails/<full original filename>.jpg` (any original extension — not just a
+PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing this
+module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
 starting with "."), the same "invisible companion file, fetched by exact path" trick
-`dashboard.js`'s own `.order.json` already relies on. Nothing in this app generates one;
-whoever drops a license's own file in is expected to drop its thumbnail in alongside it,
-at 280px on its longest side — twice `.license-thumbnail`'s own 140px display size in
-`style.css`, so it still looks sharp on a high-DPI screen. `licenseCard`'s `<img
-data-fallback-src>` tries that thumbnail first; `wireThumbnailFallbacks` catches a load
-failure (the common case, since generating one is manual) and falls back to the
-license's own file directly only if that file is itself an image (`fileKind`,
-`fileBrowser.js`) — nothing to generate a thumbnail for when the real file already is a
-small, displayable image — and, failing that too (a PDF or anything else with no
-thumbnail dropped in for it yet), swaps in a plain 📄 placeholder of the same size rather
-than the browser's own broken-image icon, so the grid stays visually consistent whether
-or not every license has a real thumbnail yet.
+`dashboard.js`'s own `.order.json` already relies on. Nothing in the running app generates
+one; `scripts/generate-license-thumbnails.sh` does, on demand, for every license copy that
+lacks one (see **Commands**); one dropped in by hand next to the license's own file works
+the same. It is meant to be 280px on its longest side — twice `.license-thumbnail`'s own
+140px display size in `style.css`, so it still looks sharp on a high-DPI screen.
+`licenseCard`'s `<img data-fallback-src>` tries that thumbnail first;
+`wireThumbnailFallbacks` catches a load failure (the common case until the script has been
+run) and falls back to the license's own file directly only if that file is itself an
+image (`fileKind`, `fileBrowser.js`) — nothing to generate a thumbnail for when the real
+file already is a small, displayable image — and, failing that too (a PDF or anything else
+with no thumbnail dropped in for it yet), swaps in a plain 📄 placeholder of the same size
+rather than the browser's own broken-image icon, so the grid stays visually consistent
+whether or not every license has a real thumbnail yet.
 
 A missing `licencias/` subdirectory 404s the same as any other unknown one
 (`userfiles.Service.ListDirectory`), caught and shown as "no hay copias" rather than an
