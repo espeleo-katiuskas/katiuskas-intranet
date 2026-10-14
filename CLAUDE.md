@@ -728,31 +728,38 @@ the send of a bot-flow magic-link DM.
   (`emailMatchesUser`, checked case-insensitively against the same space-separated
   multi-email convention `FindActiveByEmailAndPhone` uses). Any other message gets a
   specific, actionable reply from `emailAttemptReply` saying *why* it didn't match
-  (`emailPrompt`, "Si quieres entrar en la intranet, envíame tu dirección de correo
-  electrónico", is no longer the reply to a failed attempt; it only follows the link
-  confirmation, see below): `nonTextEmailReply` for an attachment instead of text (an
-  empty `Text` always means something that isn't text — Telegram never sends a real text
-  message with an empty body), `onlyEmailReply` for more than one word,
+  (`emailPrompt`, "Si quieres entrar en la Intranet de Katiuskas, envíame tu dirección de
+  correo electrónico", follows the link confirmation, see below, and is the reply to a
+  failed attempt only from an idle chat, see below): `nonTextEmailReply` for an attachment
+  instead of text (an empty `Text` always means something that isn't text — Telegram never
+  sends a real text message with an empty body), `onlyEmailReply` for more than one word,
   `notAnEmailReplyFormat` for a single word with no "@" at all (repeating the word back),
   and `unknownEmailReplyFormat` for something shaped like an email that just isn't one of
   this account's own (repeating the address back, plus a "contact the club if you think
   this is wrong" suggestion) — only a genuine single-word match skips all of these and
-  proceeds. Once it matches, it calls `Client.DeleteMessage` — Telegram lets a bot delete
-  a message it received in a private chat — to scrub that email out of the chat history
-  for whoever might get hold of the phone/session afterward (best-effort: a failed delete,
-  e.g. an old message past Telegram's 48h window, still lets
-  `magicLinkIssuer.IssueMagicLinkForTelegramUser` go through), then finally issues the
-  fresh sign-in link exactly as if they'd requested one from the web (see
-  `authapi.Handler` above). `magicLinkIssuer` is a local interface (`*authapi.Handler`
-  satisfies it structurally, the same pattern as `botClient`) wired in from
-  `cmd/api/main.go`, which is also where `authHandler` is hoisted into its own variable
-  instead of being built inline in `httpapi.Routes`, purely so both the router and the bot
-  can share the one instance. A shared contact's phone number is matched against
-  `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the exact-digits
-  match `FindActiveByEmailAndPhone` uses for magic-link requests, because Telegram always
-  includes the country code (`"34611222333"`) while a phone on file here never does (see
-  `CreateInput`/every `SEED_ADMIN_PHONE` default), so digits must equal a candidate
-  exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
+  proceeds. Those replies read as a reproach to someone who hasn't written for a long time
+  and most likely doesn't remember that their email is what the bot expects, so a chat
+  whose previous message was more than `idleBeforeEmailPrompt` (30 minutes) ago gets plain
+  `emailPrompt` instead of any of them. `Bot.noteMessage` records when each chat last
+  wrote (`lastMessageAt`, in memory, guarded by `mu`, with `now` as an injectable clock; a
+  chat the bot hasn't heard from since it started counts as idle, which is the friendlier
+  side) and `handle` passes the answer down to `handleRecognizedChat`; every message
+  counts as activity, so the reply after the prompt is back to specific. Once it matches,
+  it calls `Client.DeleteMessage` — Telegram lets a bot delete a message it received in a
+  private chat — to scrub that email out of the chat history for whoever might get hold of
+  the phone/session afterward (best-effort: a failed delete, e.g. an old message past
+  Telegram's 48h window, still lets `magicLinkIssuer.IssueMagicLinkForTelegramUser` go
+  through), then finally issues the fresh sign-in link exactly as if they'd requested one
+  from the web (see `authapi.Handler` above). `magicLinkIssuer` is a local interface
+  (`*authapi.Handler` satisfies it structurally, the same pattern as `botClient`) wired in
+  from `cmd/api/main.go`, which is also where `authHandler` is hoisted into its own
+  variable instead of being built inline in `httpapi.Routes`, purely so both the router
+  and the bot can share the one instance. A shared contact's phone number is matched
+  against `users.phone` via `users.Repository.FindByPhoneNumber` — not quite the
+  exact-digits match `FindActiveByEmailAndPhone` uses for magic-link requests, because
+  Telegram always includes the country code (`"34611222333"`) while a phone on file here
+  never does (see `CreateInput`/every `SEED_ADMIN_PHONE` default), so digits must equal a
+  candidate exactly *or* equal Spain's `"34"` prepended to one. Deliberately not a
   same-length-agnostic suffix match: that also matched a French `"+33666777888"` against a
   Spanish `"666777888"` on file (every digit but the country code is shared), letting
   anyone claim to be whoever's number happened to end the same way. Before any of that,

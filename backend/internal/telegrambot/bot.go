@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -52,7 +53,16 @@ const contactButtonText = "Compartir mi contacto"
 
 // emailPrompt is what an already-recognized chat gets in reply to any
 // message that isn't its own registered email — see handleRecognizedChat.
-const emailPrompt = "Si quieres entrar en la intranet, envíame tu dirección de correo electrónico."
+const emailPrompt = "Si quieres entrar en la Intranet de Katiuskas, envíame tu dirección de correo electrónico."
+
+// idleBeforeEmailPrompt is how long a chat has to have been silent for
+// the bot to assume the person has forgotten what it is waiting for: a
+// message from someone who hasn't written for longer than this, and that
+// isn't their email, is answered with emailPrompt (the plain "send me
+// your email") instead of one of the specific error replies below — which
+// read as a reproach to someone who, most likely, didn't know or
+// remember that their email is what the bot expects.
+const idleBeforeEmailPrompt = 30 * time.Minute
 
 // nonTextEmailReply is emailAttemptReply's answer to a message that
 // isn't text at all — a photo, sticker, voice note... Telegram never
@@ -191,6 +201,14 @@ type Bot struct {
 	users       *users.Service
 	logNotifier telegram.Sender
 	magicLinks  magicLinkIssuer
+
+	// now is the clock (time.Now when nil; tests set their own), and
+	// lastMessageAt, guarded by mu, remembers when each chat last wrote —
+	// in memory only, so after a restart every chat counts as idle until
+	// it writes again, which is the safe side (see noteMessage).
+	now           func() time.Time
+	mu            sync.Mutex
+	lastMessageAt map[int64]time.Time
 }
 
 func New(client *telegram.Client, usersService *users.Service, logNotifier telegram.Sender, magicLinks magicLinkIssuer) *Bot {
@@ -287,6 +305,7 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 	if msg == nil {
 		return
 	}
+	idle := b.noteMessage(msg.Chat.ID)
 	if msg.Contact != nil {
 		b.handleContact(ctx, msg)
 		return
@@ -304,7 +323,36 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 		slog.Error("telegram bot: look up linked chat", "error", err)
 		return
 	}
-	b.handleRecognizedChat(ctx, msg, userID)
+	b.handleRecognizedChat(ctx, msg, userID, idle)
+}
+
+// noteMessage records that chatID just wrote and reports whether it had
+// been idle before this message: no earlier message within
+// idleBeforeEmailPrompt — or none the bot knows of, since it only remembers
+// them since it started.
+func (b *Bot) noteMessage(chatID int64) (idle bool) {
+	now := time.Now()
+	if b.now != nil {
+		now = b.now()
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	last, seen := b.lastMessageAt[chatID]
+	if b.lastMessageAt == nil {
+		b.lastMessageAt = make(map[int64]time.Time)
+	}
+	b.lastMessageAt[chatID] = now
+	// Chats idle for that long are equivalent to chats never seen: forget
+	// them now and then so the map doesn't grow with everyone who ever
+	// messaged the bot.
+	if len(b.lastMessageAt) > 1000 {
+		for id, at := range b.lastMessageAt {
+			if now.Sub(at) > idleBeforeEmailPrompt {
+				delete(b.lastMessageAt, id)
+			}
+		}
+	}
+	return !seen || now.Sub(last) > idleBeforeEmailPrompt
 }
 
 // handleRecognizedChat is the second factor an already-linked chat has
@@ -317,7 +365,11 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 // issues the link once it gets it — restoring "you also have to know
 // something, not just have the device" the same way the web flow
 // already does.
-func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, userID int64) {
+//
+// idle says the chat had been silent for longer than idleBeforeEmailPrompt
+// (see noteMessage): then whatever isn't the email gets the plain
+// emailPrompt, not a specific error.
+func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, userID int64, idle bool) {
 	user, err := b.users.Get(ctx, userID)
 	if err != nil {
 		slog.Error("telegram bot: look up linked user", "error", err)
@@ -331,6 +383,9 @@ func (b *Bot) handleRecognizedChat(ctx context.Context, msg *telegram.Message, u
 	}
 	reply, matched := emailAttemptReply(user, msg.Text)
 	if !matched {
+		if idle {
+			reply = emailPrompt
+		}
 		if err := b.client.SendMessage(ctx, msg.Chat.ID, reply); err != nil {
 			slog.Error("telegram bot: send email prompt", "error", err)
 		}

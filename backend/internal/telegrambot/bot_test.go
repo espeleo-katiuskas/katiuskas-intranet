@@ -116,6 +116,14 @@ func (f *fakeMagicLinkIssuer) IssueMagicLinkForTelegramUser(_ context.Context, u
 	return f.err
 }
 
+// seedRecentActivity makes the bot believe chatID wrote just now, so the
+// next message isn't treated as coming from an idle chat (see
+// idleBeforeEmailPrompt) — needed by the tests that look at the specific
+// replies to a wrong email, which an idle chat doesn't get.
+func seedRecentActivity(b *Bot, chatID int64) {
+	b.lastMessageAt = map[int64]time.Time{chatID: time.Now()}
+}
+
 func TestHandleGreetsAnUnrecognizedChat(t *testing.T) {
 	usersService := newUsersService(t)
 	client := &fakeClient{}
@@ -174,6 +182,7 @@ func TestHandleAsksAnAlreadyLinkedChatForItsEmailFirst(t *testing.T) {
 	notifier := &fakeNotifier{}
 	issuer := &fakeMagicLinkIssuer{}
 	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+	seedRecentActivity(bot, 555) // a chat that has written lately gets the specific replies
 
 	bot.handle(context.Background(), telegram.Update{
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: "hola de nuevo"},
@@ -206,6 +215,7 @@ func TestHandleRecognizedChatRejectsNonTextMessages(t *testing.T) {
 	notifier := &fakeNotifier{}
 	issuer := &fakeMagicLinkIssuer{}
 	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+	seedRecentActivity(bot, 555) // a chat that has written lately gets the specific replies
 
 	bot.handle(context.Background(), telegram.Update{
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: ""},
@@ -231,6 +241,7 @@ func TestHandleRecognizedChatRejectsANonEmailWord(t *testing.T) {
 	notifier := &fakeNotifier{}
 	issuer := &fakeMagicLinkIssuer{}
 	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+	seedRecentActivity(bot, 555) // a chat that has written lately gets the specific replies
 
 	bot.handle(context.Background(), telegram.Update{
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: "hola"},
@@ -357,6 +368,7 @@ func TestHandleRejectsSomeoneElsesEmail(t *testing.T) {
 	notifier := &fakeNotifier{}
 	issuer := &fakeMagicLinkIssuer{}
 	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer}
+	seedRecentActivity(bot, 555) // a chat that has written lately gets the specific replies
 
 	bot.handle(context.Background(), telegram.Update{
 		Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: someoneElseEmail},
@@ -708,5 +720,68 @@ func TestRunProcessesQueuedUpdatesAndStopsOnCancel(t *testing.T) {
 
 	if len(client.sentContacts) != 1 {
 		t.Errorf("expected the queued update to trigger exactly one greeting, got %v", client.sentContacts)
+	}
+}
+
+// A message that isn't the email, from a chat that has been silent for
+// more than idleBeforeEmailPrompt — or that the bot has never heard from
+// since it started — gets the plain emailPrompt, whatever specific error
+// it would otherwise have got: the person most likely doesn't remember
+// that their email is what the bot expects. A chat that wrote recently
+// still gets the specific reply.
+func TestHandleRepliesWithEmailPromptToAnIdleChat(t *testing.T) {
+	usersService, linkedUser := newLinkedEligibleUser(t, 555)
+	client := &fakeClient{}
+	notifier := &fakeNotifier{}
+	issuer := &fakeMagicLinkIssuer{}
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	bot := &Bot{client: client, users: usersService, logNotifier: notifier, magicLinks: issuer, now: func() time.Time { return now }}
+	say := func(text string) string {
+		t.Helper()
+		before := len(client.sent)
+		bot.handle(context.Background(), telegram.Update{
+			Message: &telegram.Message{MessageID: 1, Chat: telegram.Chat{ID: 555}, Text: text},
+		})
+		if len(client.sent) != before+1 {
+			t.Fatalf("expected exactly one reply to %q, got %v", text, client.sent[before:])
+		}
+		return client.sent[len(client.sent)-1]
+	}
+
+	if got := say("hola de nuevo"); got != emailPrompt {
+		t.Errorf("a chat the bot has never heard from should get emailPrompt, got %q", got)
+	}
+
+	now = now.Add(5 * time.Minute)
+	if got := say("hola de nuevo"); got != onlyEmailReply {
+		t.Errorf("a chat that wrote 5 minutes ago should get the specific reply, got %q", got)
+	}
+
+	now = now.Add(idleBeforeEmailPrompt) // exactly 30 minutes since the last message: not yet idle
+	if got := say("hola"); got != fmt.Sprintf(notAnEmailReplyFormat, "hola") {
+		t.Errorf("exactly at the limit still counts as recent, got %q", got)
+	}
+
+	now = now.Add(idleBeforeEmailPrompt + time.Second)
+	if got := say("otra cosa"); got != emailPrompt {
+		t.Errorf("after more than 30 silent minutes expected emailPrompt, got %q", got)
+	}
+
+	// Every message counts as activity, so right after the prompt the next
+	// wrong message is a recent one again.
+	now = now.Add(time.Minute)
+	if got := say("hola otra vez"); got != onlyEmailReply {
+		t.Errorf("expected the specific reply again once the chat is active, got %q", got)
+	}
+
+	// And an idle chat that does send its email is not held back by this.
+	now = now.Add(2 * idleBeforeEmailPrompt)
+	bot.handle(context.Background(), telegram.Update{
+		Message: &telegram.Message{MessageID: 2, Chat: telegram.Chat{ID: 555}, Text: *linkedUser.Email},
+	})
+	issuer.mu.Lock()
+	defer issuer.mu.Unlock()
+	if len(issuer.calledFor) != 1 {
+		t.Errorf("expected the right email from an idle chat to still issue the link, got %v", issuer.calledFor)
 	}
 }

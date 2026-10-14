@@ -1195,14 +1195,20 @@ vez* teléfono y correo que sí tiene el flujo web. El flujo es:
    `unauthorizedMessage` ("este bot está disponible únicamente para usuarios autorizados.
    Si crees que deberías tener acceso, ponte en contacto con el club para comprobar tu
    situación").
-3. A quien lo cumple, `Bot.handleRecognizedChat` le pide un segundo factor: contesta con
-   `emailPrompt` ("si quieres entrar en la intranet, envíame tu dirección de correo
-   electrónico") a cualquier mensaje que no sea el correo registrado de esa cuenta
-   (`emailMatchesUser`, sin distinguir mayúsculas/minúsculas, contra el mismo formato de
-   varios correos separados por espacios que usa `FindActiveByEmailAndPhone`).
-4. `emailAttemptReply` da una respuesta concreta según *por qué* no coincidió, en vez de
-   repetir siempre el aviso genérico (ver la lista siguiente). Solo una coincidencia exacta
-   de una sola palabra se salta todo esto.
+3. A quien lo cumple, `Bot.handleRecognizedChat` le pide un segundo factor: no pasa nada
+   hasta que un mensaje es el correo registrado de esa cuenta (`emailMatchesUser`, sin
+   distinguir mayúsculas/minúsculas, contra el mismo formato de varios correos separados
+   por espacios que usa `FindActiveByEmailAndPhone`).
+4. Cualquier otro mensaje recibe una respuesta concreta de `emailAttemptReply` según *por
+   qué* no coincidió (ver la lista siguiente), salvo si el chat llevaba callado más de
+   `idleBeforeEmailPrompt` (30 minutos): quien lleva mucho sin escribir seguramente no
+   recuerda que lo que espera el bot es su correo, y un error le suena a reproche, así que
+   recibe el `emailPrompt` de siempre ("si quieres entrar en la Intranet de Katiuskas,
+   envíame tu dirección de correo electrónico"). `Bot.noteMessage` apunta cuándo escribió
+   cada chat por última vez (en memoria, así que tras un reinicio un chat cuenta como
+   inactivo hasta que vuelve a escribir) y todo mensaje cuenta como actividad: la
+   respuesta siguiente al `emailPrompt` vuelve a ser la concreta. Solo una coincidencia
+   exacta de una sola palabra se salta todo esto.
 5. Cuando coincide, borra ese mensaje del chat con `Client.DeleteMessage` (la API de bots
    permite borrar un mensaje que el propio bot ha recibido en un chat privado), para que el
    correo no quede a la vista de quien acceda después al móvil o a la sesión. Es
