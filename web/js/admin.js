@@ -322,5 +322,142 @@ async function loadStatus() {
 
 document.getElementById('refresh-status').addEventListener('click', loadStatus);
 
+// "Festivos": the club holidays the activities calendar tints, one year at a
+// time (GET/POST /holidays, DELETE /holidays/{id}). There is no edit: a
+// mistake is corrected by deleting the holiday and adding it again.
+const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const holidaysBody = document.getElementById('holidays-table-body');
+let holidaysYear = new Date().getFullYear();
+let holidaysShown = [];
+
+// The API sends a date as midnight UTC; only its YYYY-MM-DD part matters.
+const holidayDay = (holiday) => holiday.date.slice(0, 10);
+
+function describeDay(day) {
+  const [year, month, date] = day.split('-').map(Number);
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, date)).getUTCDay()];
+  return `${String(date).padStart(2, '0')}-${String(month).padStart(2, '0')}-${year} (${weekday})`;
+}
+
+async function loadHolidays() {
+  document.getElementById('holidays-year').textContent = holidaysYear;
+  try {
+    holidaysShown = await apiFetch(`/holidays?year=${holidaysYear}`);
+    holidaysBody.innerHTML = holidaysShown.length
+      ? holidaysShown
+        .map((holiday) => `
+          <tr>
+            <td>${describeDay(holidayDay(holiday))}</td>
+            <td>${escapeHtml(holiday.name)}</td>
+            <td><button type="button" class="btn btn-danger btn-small" data-delete-holiday="${holiday.id}">Borrar</button></td>
+          </tr>`)
+        .join('')
+      : '<tr><td colspan="3">No hay festivos en este año.</td></tr>';
+  } catch (err) {
+    holidaysBody.innerHTML = '<tr><td colspan="3">No se pudieron cargar los festivos.</td></tr>';
+    showError(err.message);
+  }
+}
+
+document.getElementById('holidays-prev').addEventListener('click', () => {
+  holidaysYear -= 1;
+  loadHolidays();
+});
+document.getElementById('holidays-next').addEventListener('click', () => {
+  holidaysYear += 1;
+  loadHolidays();
+});
+
+holidaysBody.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-delete-holiday]');
+  if (!button) return;
+  const holiday = holidaysShown.find((h) => h.id === Number(button.dataset.deleteHoliday));
+  if (!holiday || !confirm(`¿Borrar el festivo «${holiday.name}» del ${describeDay(holidayDay(holiday))}?`)) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/holidays/${holiday.id}`, { method: 'DELETE' });
+    showFeedback('Festivo borrado.');
+    await loadHolidays();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
+const holidayDialog = document.getElementById('new-holiday-dialog');
+const holidayForm = document.getElementById('new-holiday-form');
+initModal(holidayDialog, holidayForm);
+
+document.getElementById('toggle-new-holiday').addEventListener('click', () => {
+  // Starts on the year being looked at, so the date is a click or two away.
+  document.getElementById('nh-date').value = `${holidaysYear}-01-01`;
+  openModal(holidayDialog);
+});
+
+holidayForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formData = new FormData(holidayForm);
+  const submitButton = holidayForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await apiFetch('/holidays', {
+      method: 'POST',
+      body: JSON.stringify({ date: formData.get('date'), name: formData.get('name').toString().trim() }),
+    });
+    const year = Number(formData.get('date').toString().slice(0, 4));
+    holidayDialog.close();
+    if (year) holidaysYear = year;
+    showFeedback('Festivo añadido.');
+    await loadHolidays();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+// Most holidays fall on the same day every year, so a new year starts from
+// the previous one's. A day that already has a holiday is left alone. The
+// ones that move (Semana Santa) need fixing by hand afterwards.
+document.getElementById('holidays-copy').addEventListener('click', async () => {
+  const button = document.getElementById('holidays-copy');
+  button.disabled = true;
+  try {
+    const previous = await apiFetch(`/holidays?year=${holidaysYear - 1}`);
+    const taken = new Set(holidaysShown.map((h) => holidayDay(h).slice(5)));
+    const toCopy = previous.filter((h) => !taken.has(holidayDay(h).slice(5)));
+    if (!previous.length) {
+      showError(`No hay festivos en ${holidaysYear - 1} que copiar.`);
+      return;
+    }
+    if (!toCopy.length) {
+      showFeedback(`Todos los festivos de ${holidaysYear - 1} ya están en ${holidaysYear}.`);
+      return;
+    }
+    if (!confirm(`Se copiarán ${toCopy.length} festivos de ${holidaysYear - 1} a ${holidaysYear}, el mismo día y mes. Los que cambian de fecha cada año (como Semana Santa) hay que corregirlos a mano. ¿Copiarlos?`)) return;
+    let copied = 0;
+    for (const holiday of toCopy) {
+      const day = `${holidaysYear}${holidayDay(holiday).slice(4)}`;
+      // 29 February has no equivalent in a year that isn't a leap one.
+      if (day.endsWith('-02-29') && new Date(Date.UTC(holidaysYear, 1, 29)).getUTCMonth() !== 1) continue;
+      try {
+        await apiFetch('/holidays', { method: 'POST', body: JSON.stringify({ date: day, name: holiday.name }) });
+        copied += 1;
+      } catch (err) {
+        showError(`Se copiaron ${copied} festivos; falló «${holiday.name}»: ${err.message}`);
+        await loadHolidays();
+        return;
+      }
+    }
+    showFeedback(`Copiados ${copied} festivos de ${holidaysYear - 1}.`);
+    await loadHolidays();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 await loadStatus();
 await loadSessions();
+await loadHolidays();

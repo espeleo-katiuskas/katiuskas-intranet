@@ -103,6 +103,48 @@
       </div>
     </form>
   </dialog>
+
+  <div class="section-header">
+    <div>
+      <h2>Festivos</h2>
+      <p class="subtitle">Los días que el calendario de actividades marca como festivos, año por año.</p>
+    </div>
+    <button id="toggle-new-holiday" type="button" class="btn btn-secondary btn-small">+ Nuevo festivo</button>
+  </div>
+  <p class="filter-bar">
+    <button id="holidays-prev" type="button" class="btn btn-secondary btn-small" aria-label="Año anterior">‹</button>
+    <strong id="holidays-year"></strong>
+    <button id="holidays-next" type="button" class="btn btn-secondary btn-small" aria-label="Año siguiente">›</button>
+    <button id="holidays-copy" type="button" class="btn btn-secondary btn-small">Copiar del año anterior</button>
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Nombre</th><th></th></tr>
+      </thead>
+      <tbody id="holidays-table-body"></tbody>
+    </table>
+  </div>
+  <dialog id="new-holiday-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nuevo festivo</h3>
+    <form id="new-holiday-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="nh-date">Fecha</label>
+          <input id="nh-date" name="date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="nh-name">Nombre</label>
+          <input id="nh-name" name="name" type="text" required>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Añadir festivo</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
     </main>
   </div>
 </div>
