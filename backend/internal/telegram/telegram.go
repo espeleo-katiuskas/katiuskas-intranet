@@ -53,6 +53,7 @@ type BotSender struct {
 
 type sendMessageResponse struct {
 	OK          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
 	Description string `json:"description"`
 	// Result's shape depends entirely on which Telegram method was
 	// called — a Message object for sendMessage, but a bare `true` for

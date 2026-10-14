@@ -4,10 +4,45 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
+
+// APIError is Telegram answering a call with ok=false: Description is its
+// own explanation ("Bad Request: chat not found"...) and ErrorCode the
+// HTTP-like status it sends with it (400, 403, 429...). A distinct type so a
+// caller can tell why a call failed (see IsUnreachable) instead of only that
+// it did; its text is the same as it always was.
+type APIError struct {
+	ErrorCode   int
+	Description string
+}
+
+func (e *APIError) Error() string {
+	return "telegram API error: " + e.Description
+}
+
+// IsUnreachable reports whether err says the bot can't talk to that chat
+// at all, as opposed to a failure worth retrying (a timeout, a rate
+// limit...): Telegram answers 403 Forbidden for every way of that —
+// the person blocked the bot, closed their account, deactivated... — or
+// "chat not found" / "user not found" (a 400 for a chat that no longer
+// exists). Whoever holds a stored chat id should forget it when this is
+// true.
+func IsUnreachable(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.ErrorCode == http.StatusForbidden {
+		return true
+	}
+	description := strings.ToLower(apiErr.Description)
+	return strings.Contains(description, "chat not found") || strings.Contains(description, "user not found")
+}
 
 // Client is a general Telegram Bot API client, not tied to any one chat
 // — unlike Sender/BotSender above, which exist only to plug into the
@@ -158,7 +193,7 @@ func (c *Client) postResult(ctx context.Context, method string, params map[strin
 		return parsed, fmt.Errorf("decode response: %w", err)
 	}
 	if !parsed.OK {
-		return parsed, fmt.Errorf("telegram API error: %s", parsed.Description)
+		return parsed, &APIError{ErrorCode: parsed.ErrorCode, Description: parsed.Description}
 	}
 	return parsed, nil
 }
@@ -204,6 +239,7 @@ type Update struct {
 
 type getUpdatesResponse struct {
 	OK          bool     `json:"ok"`
+	ErrorCode   int      `json:"error_code"`
 	Description string   `json:"description"`
 	Result      []Update `json:"result"`
 }
@@ -236,7 +272,7 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeoutSeconds in
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	if !parsed.OK {
-		return nil, fmt.Errorf("telegram API error: %s", parsed.Description)
+		return nil, &APIError{ErrorCode: parsed.ErrorCode, Description: parsed.Description}
 	}
 	return parsed.Result, nil
 }

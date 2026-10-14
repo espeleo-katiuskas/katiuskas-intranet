@@ -83,6 +83,21 @@ type Handler struct {
 
 	pendingTelegramDMsMu sync.Mutex
 	pendingTelegramDMs   map[int64]pendingTelegramDM
+
+	// background tracks the sends that run in their own goroutine (the
+	// Telegram DM riding along a web request), so WaitForBackgroundSends
+	// can wait for them.
+	background sync.WaitGroup
+}
+
+// WaitForBackgroundSends blocks until every Telegram DM sent in the
+// background by a web request has finished, together with what it does
+// after a failure (forgetting an unreachable chat, see
+// notifyMagicLinkViaTelegram). Nothing in a request needs it; it exists so
+// a test can look at the outcome without racing the goroutine, and so a
+// shutdown could let them finish.
+func (h *Handler) WaitForBackgroundSends() {
+	h.background.Wait()
 }
 
 // pendingTelegramDM is the latest magic-link DM (see
@@ -402,7 +417,20 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 	send := func() (int64, error) {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
+		messageID, err := h.telegramClient.SendMessageForID(sendCtx, *chatID, text)
+		if telegram.IsUnreachable(err) {
+			// The bot can't talk to this person any more (they closed their
+			// account, or the chat is gone for good): the stored chat id is
+			// useless, and keeping it would only fail again at every
+			// sign-in — and make them look like someone reachable by
+			// Telegram. They can link again by sharing their contact.
+			if clearErr := h.users.ClearTelegramChatID(sendCtx, userID); clearErr != nil {
+				slog.Error("forget unreachable telegram chat", "error", clearErr)
+			} else {
+				slog.Info("forgot an unreachable telegram chat", "user_id", userID, "reason", err)
+			}
+		}
+		return messageID, err
 	}
 	// The link itself stops working on its own once it expires, so a
 	// message still holding it is only misleading — and one more thing
@@ -445,7 +473,9 @@ func (h *Handler) notifyMagicLinkViaTelegram(ctx context.Context, userID int64, 
 		return nil
 	}
 
+	h.background.Add(1)
 	go func() {
+		defer h.background.Done()
 		messageID, err := send()
 		if err != nil {
 			slog.Error("send magic link via telegram", "error", err)

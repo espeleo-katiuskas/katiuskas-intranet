@@ -199,6 +199,10 @@ func (s *Service) SetTelegramChatID(ctx context.Context, userID, chatID int64) e
 	return s.repo.SetTelegramChatID(ctx, userID, chatID)
 }
 
+func (s *Service) ClearTelegramChatID(ctx context.Context, userID int64) error {
+	return s.repo.ClearTelegramChatID(ctx, userID)
+}
+
 func (s *Service) TelegramChatIDForUser(ctx context.Context, userID int64) (*int64, error) {
 	return s.repo.TelegramChatIDForUser(ctx, userID)
 }

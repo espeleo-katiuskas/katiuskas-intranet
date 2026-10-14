@@ -1226,6 +1226,21 @@ cuanto un `PATCH` cambia de verdad el teléfono de la persona, o lo deja vacío.
 chat vinculado a un número antiguo seguiría resolviendo a quien ya no lo tiene. Reenviar el
 mismo teléfono, o un `PATCH` que ni siquiera lo toca, deja el vínculo tal cual.
 
+Vínculo y chat inalcanzable: el vínculo también se olvida cuando el bot descubre que ya no
+puede hablar con esa persona. `telegram.Client` devuelve las respuestas `ok=false` de
+Telegram como un `*telegram.APIError` (con su `ErrorCode`, el `error_code` que manda
+Telegram, y su `Description`), y `telegram.IsUnreachable` es cierto para cualquier 403
+Forbidden —todas las formas de no poder hablar con alguien (ha bloqueado al bot, ha
+cerrado o desactivado la cuenta) vienen con uno— o si la descripción contiene "chat not
+found" o "user not found" (un 400 por un chat que ya no existe). Entonces el envío del DM
+de acceso (`notifyMagicLinkViaTelegram`, en cualquiera de los dos flujos) llama a
+`users.Service.ClearTelegramChatID`: conservar el id solo volvería a fallar en cada inicio
+de sesión. Cualquier otro fallo (un tiempo de espera, un límite de frecuencia) deja el
+vínculo como está, y la persona puede volver a vincularse compartiendo su contacto con el
+bot. Solo cubre los DM de acceso, no las demás respuestas del bot en un chat. El envío del
+DM de una petición web va en su propia goroutine, que `Handler.WaitForBackgroundSends`
+permite esperar (los tests lo usan).
+
 ## Frontend (`web/`)
 
 ### Mecánica compartida

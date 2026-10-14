@@ -3,6 +3,8 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -205,5 +207,58 @@ func TestClientGetUpdatesParsesMessagesAndContacts(t *testing.T) {
 	}
 	if updates[1].Message.Contact == nil || updates[1].Message.Contact.PhoneNumber != "34611222333" {
 		t.Errorf("unexpected second update: %+v", updates[1])
+	}
+}
+
+// A failed call is an *APIError carrying Telegram's own error_code and
+// description, and IsUnreachable tells "the bot can't talk to this chat at
+// all" apart from failures worth retrying: any 403 Forbidden (blocked the
+// bot, closed or deactivated their account...), or "chat not found" /
+// "user not found".
+func TestIsUnreachable(t *testing.T) {
+	for _, c := range []struct {
+		code        int
+		description string
+		want        bool
+	}{
+		{403, "Forbidden: bot was blocked by the user", true},
+		{403, "Forbidden: user is deactivated", true},
+		{403, "Forbidden: some wording nobody has seen yet", true},
+		{400, "Bad Request: chat not found", true},
+		{400, "Bad Request: user not found", true},
+		{400, "BAD REQUEST: CHAT NOT FOUND", true},
+		{0, "Bad Request: chat not found", true}, // no error_code sent at all
+		{429, "Too Many Requests: retry after 5", false},
+		{400, "Bad Request: message text is empty", false},
+		{500, "Internal Server Error", false},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			body := map[string]any{"ok": false, "description": c.description}
+			if c.code != 0 {
+				body["error_code"] = c.code
+			}
+			json.NewEncoder(w).Encode(body)
+		}))
+		client := &Client{Token: "123:abc", HTTPClient: server.Client(), apiBase: server.URL}
+		_, err := client.SendMessageForID(context.Background(), 42, "hola")
+		server.Close()
+
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.Description != c.description || apiErr.ErrorCode != c.code {
+			t.Errorf("%d %q: expected an *APIError with that code and description, got %v", c.code, c.description, err)
+		}
+		if got := IsUnreachable(err); got != c.want {
+			t.Errorf("%d %q: expected IsUnreachable %v, got %v", c.code, c.description, c.want, got)
+		}
+	}
+	if IsUnreachable(errors.New("chat not found")) {
+		t.Error("expected a plain error that merely mentions it not to count: only Telegram's own answer does")
+	}
+	if !IsUnreachable(fmt.Errorf("wrapped: %w", &APIError{Description: "chat not found"})) {
+		t.Error("expected a wrapped APIError to still count")
+	}
+	if IsUnreachable(nil) {
+		t.Error("expected nil not to count")
 	}
 }

@@ -794,7 +794,19 @@ the send of a bot-flow magic-link DM.
   an old number would keep resolving to the person who used to have it. Sending the same
   phone back, or a `PATCH` that doesn't touch `phone` at all, leaves an existing link
   alone (`stringPtrsEqual`, treating two `nil`s as equal); only an actual change to the
-  value clears it.
+  value clears it. The link is also forgotten when the bot turns out to be unable to talk
+  to the person: `telegram.Client` returns Telegram's `ok=false` answers as an
+  `*telegram.APIError` (its `ErrorCode`, the `error_code` Telegram sends, and its
+  `Description`), and `telegram.IsUnreachable` is true for any 403 Forbidden — every way
+  of not being able to talk to someone (blocked the bot, closed or deactivated their
+  account) comes with one — or when the description contains "chat not found" or "user not
+  found" (a 400 for a chat that no longer exists). Then `authapi`'s DM send
+  (`notifyMagicLinkViaTelegram`, either flow) calls `users.Service.ClearTelegramChatID`,
+  since keeping the id would only fail again at every sign-in. Any other failure (a
+  timeout, a rate limit) leaves the link alone. The send of a web request's DM runs in its
+  own goroutine, tracked so `Handler.WaitForBackgroundSends` can wait for it and for that
+  unlinking (tests use it: the shared transaction isn't for concurrent use). The bot's own
+  replies in a chat aren't covered — only the sign-in DMs.
 - `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it

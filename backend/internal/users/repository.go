@@ -372,6 +372,15 @@ func (r *Repository) SetTelegramChatID(ctx context.Context, userID, chatID int64
 	return err
 }
 
+// ClearTelegramChatID forgets the person's linked Telegram chat, once the
+// bot has found it can no longer talk to them (see
+// telegram.IsUnreachable). They can link again by sharing their contact
+// with the bot.
+func (r *Repository) ClearTelegramChatID(ctx context.Context, userID int64) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET telegram_chat_id = NULL WHERE id = $1`, userID)
+	return err
+}
+
 // TelegramChatIDForUser returns the Telegram chat this person has
 // linked, or nil if they never have (see SetTelegramChatID) — used to
 // also DM them a magic link/login code alongside the email, for

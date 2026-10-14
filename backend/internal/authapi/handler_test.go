@@ -21,6 +21,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
@@ -1617,4 +1618,72 @@ func TestTelegramBotInfoReturnsConfiguredUsername(t *testing.T) {
 	if body.Username != "KatiuskasBot" {
 		t.Errorf("expected the configured username, got %q", body.Username)
 	}
+}
+
+// When Telegram says the bot can't talk to the person any more ("chat not
+// found" / "user not found": they closed their account, say), the stored
+// chat id is forgotten so nothing keeps trying it — for a bot-triggered
+// DM, and for the one that rides along a web request (whose email still
+// goes out). Any other failure leaves the link alone: it may well work
+// next time.
+func TestAnUnreachableTelegramChatIsForgotten(t *testing.T) {
+	linked := func(t *testing.T, s *testServer, userID int64) bool {
+		t.Helper()
+		chatID, err := s.users.TelegramChatIDForUser(context.Background(), userID)
+		if err != nil {
+			t.Fatalf("TelegramChatIDForUser: %v", err)
+		}
+		return chatID != nil
+	}
+	unreachable := &telegram.APIError{ErrorCode: 400, Description: "Bad Request: chat not found"}
+
+	t.Run("bot-triggered DM", func(t *testing.T) {
+		s := newTestServer(t)
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+			t.Fatalf("SetTelegramChatID: %v", err)
+		}
+		s.telegramClient.sendErr = unreachable
+		if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err == nil {
+			t.Fatal("expected an error when the DM can't be delivered")
+		}
+		if linked(t, s, user.ID) {
+			t.Error("expected the unreachable chat to be forgotten")
+		}
+	})
+
+	t.Run("DM riding along a web request", func(t *testing.T) {
+		s := newTestServer(t)
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+			t.Fatalf("SetTelegramChatID: %v", err)
+		}
+		s.telegramClient.sendErr = &telegram.APIError{ErrorCode: 403, Description: "Forbidden: bot was blocked by the user"}
+		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
+		if rec.Code != http.StatusOK || s.mailer.sent != 1 {
+			t.Fatalf("expected the request to succeed and the email to go out, got %d, %d sent", rec.Code, s.mailer.sent)
+		}
+		// The send runs in the background: wait for it (and for the unlinking
+		// that follows) before looking — the test's single transaction isn't
+		// for concurrent use.
+		s.handler.WaitForBackgroundSends()
+		if linked(t, s, user.ID) {
+			t.Error("expected the unreachable chat to be forgotten")
+		}
+	})
+
+	t.Run("any other failure keeps the link", func(t *testing.T) {
+		s := newTestServer(t)
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		if err := s.users.SetTelegramChatID(context.Background(), user.ID, 555); err != nil {
+			t.Fatalf("SetTelegramChatID: %v", err)
+		}
+		s.telegramClient.sendErr = &telegram.APIError{ErrorCode: 429, Description: "Too Many Requests: retry after 5"}
+		if err := s.handler.IssueMagicLinkForTelegramUser(context.Background(), user.ID); err == nil {
+			t.Fatal("expected an error when the DM can't be delivered")
+		}
+		if !linked(t, s, user.ID) {
+			t.Error("expected a transient failure not to unlink the person")
+		}
+	})
 }
