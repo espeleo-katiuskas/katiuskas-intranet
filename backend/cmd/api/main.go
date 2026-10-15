@@ -32,11 +32,6 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
-// version is what this binary was built as, set at build time with
-// -ldflags "-X main.version=…" (`make build` does it from git); empty for a
-// plain `go build`/`go run`. GET /admin/status shows it.
-var version string
-
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
@@ -213,7 +208,6 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
 		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
 		AdminStatus: adminstatus.NewHandler(repoPool, authenticator, adminstatus.Info{
-			Version:               version,
 			StartedAt:             time.Now(),
 			PublicBaseURL:         cfg.PublicBaseURL,
 			SessionTTL:            cfg.TokenTTL,

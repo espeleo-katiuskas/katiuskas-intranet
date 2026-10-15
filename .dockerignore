@@ -1,0 +1,6 @@
+# The image only needs the Go module; everything else in the repository (the
+# frontend, documents, user files, the database, .git) stays out of the context.
+*
+!go.mod
+!go.sum
+!backend

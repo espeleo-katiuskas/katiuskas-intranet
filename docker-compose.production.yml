@@ -37,7 +37,9 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       HTTP_ADDR: ":64711"
       DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
@@ -107,7 +109,8 @@ services:
   # docs/deployment.md for when to run each one.
   migrate:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
       target: build
     environment:
       DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
@@ -124,14 +127,15 @@ services:
 
   seed-admin:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
       target: build
     environment:
       DATABASE_URL: "postgres://intranet:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/intranet?sslmode=disable"
       SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:?Set SEED_ADMIN_EMAIL in .env}"
       SEED_ADMIN_PHONE: "${SEED_ADMIN_PHONE:?Set SEED_ADMIN_PHONE in .env}"
     working_dir: /src
-    entrypoint: ["go", "run", "./cmd/seed-admin"]
+    entrypoint: ["go", "run", "./backend/cmd/seed-admin"]
     depends_on:
       postgres:
         condition: service_healthy

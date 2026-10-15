@@ -50,7 +50,6 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 	existing := t.TempDir()
 	started := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	mux, resolver, tx := newServer(t, adminstatus.Info{
-		Version:               "v1.2.3",
 		StartedAt:             started,
 		PublicBaseURL:         "https://intranet.example.test",
 		SessionTTL:            30 * 24 * time.Hour,
@@ -104,7 +103,7 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.App.Version != "v1.2.3" || got.App.GoVersion == "" || !got.App.StartedAt.Equal(started) {
+	if got.App.GoVersion == "" || !got.App.StartedAt.Equal(started) {
 		t.Errorf("unexpected app section: %+v", got.App)
 	}
 	if !got.Database.OK || got.Database.MigrationVersion == nil || *got.Database.MigrationVersion != 20 {

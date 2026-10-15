@@ -88,7 +88,7 @@ intranet_test` then the `CREATE DATABASE` above), or tests fail with errors like
 Other:
 ```sh
 make run                          # go run ./cmd/api, no Docker
-make build                        # backend binary to bin/api, stamped with `git describe` (shown by /admin)
+make build                        # backend binary to bin/api
 go vet ./...                      # from backend/
 go build ./...                    # from backend/ — cheapest full compile check
 python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"  # validate the spec after editing it
@@ -540,17 +540,23 @@ with no subdirectory of its own yet — most people, until someone drops a file 
 
 **Admin status** (`internal/adminstatus`): `GET /admin/status` (admin-only, read-only)
 says how the running process is doing and how it is set up, so nobody has to log into the
-server to find out. `cmd/api` hands it an `Info` (the version stamped at build time with
-`-ldflags "-X main.version=…"` — `make build` takes it from `git describe`, the Dockerfile
-from an optional `VERSION` build arg —, the start time, the timeouts, whether SMTP and
-Telegram are configured and the bot running, the three storage roots), and on each request
-it adds what can change: the commit Go recorded in the binary (`debug.ReadBuildInfo`), the
-Go version, whether the database answers and how fast (`SELECT 1`) with the latest
-migration goose applied (`goose_db_version`, read in its own subtransaction so a missing
-table can't abort a caller's transaction; absent when unreadable, as under the tests' own
-migrator), and whether each storage directory exists. A database that doesn't answer is
-reported in the body, not as an error status. It never includes a secret: no tokens,
-passwords or connection strings.
+server to find out. `cmd/api` hands it an `Info` (the start time, the timeouts, whether
+SMTP and Telegram are configured and the bot running, the three storage roots), and on
+each request it adds what can change: what Go recorded in the binary
+(`debug.ReadBuildInfo`) — the main module's version (`Main.Version`: a tag, or a
+pseudo-version with the commit and `+dirty`, when built from a git checkout;
+`moduleVersion` turns Go's "(devel)" placeholder into nothing, as for the Docker image,
+whose build context has no `.git`; nothing is passed at build time, which is why
+`go.mod`/`go.sum` live at the repository root rather than in `backend/`: Go only stamps a
+version when the module root is the git root, and the import paths already read
+`…/katiuskas-intranet/backend/…`; the Docker builds therefore use the repository root as
+their context, trimmed by `.dockerignore`) and the commit —, the Go version, whether the
+database answers and how fast (`SELECT 1`) with the latest migration goose applied
+(`goose_db_version`, read in its own subtransaction so a missing table can't abort a
+caller's transaction; absent when unreadable, as under the tests' own migrator), and
+whether each storage directory exists. A database that doesn't answer is reported in the
+body, not as an error status. It never includes a secret: no tokens, passwords or
+connection strings.
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API
 (https://core.telegram.org/bots/api) — plain `net/http`/`encoding/json`, no SDK

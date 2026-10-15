@@ -280,7 +280,7 @@ function renderStatus(status) {
 
   statusContainer.innerHTML = [
     statusGroup('Aplicación', [
-      ['Versión', app.version ? escapeHtml(app.version) : 'Sin versión (se indica al compilar: <code>make build</code>, o <code>--build-arg VERSION</code> en Docker)'],
+      ['Versión', app.version ? escapeHtml(app.version) : 'Sin versión (el binario no se compiló desde una copia de git)'],
       ['Commit', revision],
       ['Go', escapeHtml(app.go_version)],
       ['Arrancó', `${formatDateTime(app.started_at)} (${ago(app.started_at)})`],

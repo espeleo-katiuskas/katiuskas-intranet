@@ -1,9 +1,9 @@
 version: 2
 updates:
-  # backend/go.mod has 1 direct dependency (pgx) plus a handful of
+  # go.mod has 1 direct dependency (pgx) plus a handful of
   # indirect ones — low-noise on purpose, so a weekly check is enough.
   - package-ecosystem: gomod
-    directory: /backend
+    directory: /
     schedule:
       interval: weekly
     groups:

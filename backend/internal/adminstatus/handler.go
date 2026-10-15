@@ -25,10 +25,6 @@ import (
 // built. What can change while it runs (the database answering, a directory
 // existing) is looked at on each request instead.
 type Info struct {
-	// Version is what the binary was built with (-ldflags "-X main.version=…",
-	// which `make build` does from git); empty for a build that wasn't given
-	// one.
-	Version   string
 	StartedAt time.Time
 
 	PublicBaseURL         string
@@ -138,8 +134,9 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 // appStatus adds what the Go toolchain recorded in the binary (the commit it
 // was built from, when that is known) to what cmd/api passed in.
 func (h *Handler) appStatus() appStatus {
-	app := appStatus{Version: h.info.Version, GoVersion: runtime.Version(), StartedAt: h.info.StartedAt}
+	app := appStatus{GoVersion: runtime.Version(), StartedAt: h.info.StartedAt}
 	if build, ok := debug.ReadBuildInfo(); ok {
+		app.Version = moduleVersion(build)
 		for _, setting := range build.Settings {
 			switch setting.Key {
 			case "vcs.revision":
@@ -152,6 +149,18 @@ func (h *Handler) appStatus() appStatus {
 		}
 	}
 	return app
+}
+
+// moduleVersion is the version Go recorded for the main module
+// (debug.BuildInfo.Main.Version): a tag when built from a tagged commit, else
+// a pseudo-version with the commit and, when the tree had changes, "+dirty".
+// Go itself writes "(devel)" when it has nothing to record (a build outside a
+// repository, `go run`, tests), which is no version, so it comes out empty.
+func moduleVersion(build *debug.BuildInfo) string {
+	if build.Main.Version == "(devel)" {
+		return ""
+	}
+	return build.Main.Version
 }
 
 // databaseStatus times a trivial query, and asks goose's own table how far

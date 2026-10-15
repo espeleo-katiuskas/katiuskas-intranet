@@ -1102,10 +1102,15 @@ sin este comando no habría forma de entrar en una base de datos recién migrada
 `GET /admin/status` (solo admin, solo lectura) cuenta cómo va el proceso y cómo está
 configurado, para no tener que entrar en el servidor a averiguarlo:
 
-- **Aplicación**: la versión con la que se compiló el binario (`-ldflags "-X
-  main.version=…"`: `make build` la saca de `git describe`; en Docker se pasa con
-  `--build-arg VERSION`; sin ella queda vacía), el commit que Go anotó en el binario cuando
-  se compiló desde un checkout de git, la versión de Go y cuándo arrancó.
+- **Aplicación**: la versión que Go anotó para el módulo principal
+  (`debug.ReadBuildInfo().Main.Version`: una etiqueta si se compiló desde un commit
+  etiquetado, o una pseudoversión con el commit y `+dirty` si había cambios; no hace falta
+  pasarle nada al compilar, y queda vacía si el binario no se compiló desde una copia de
+  git, como en la imagen de Docker). Para que Go la anote, `go.mod` y `go.sum` están en la
+  raíz del repositorio y no en `backend/` (solo estampa versión cuando la raíz del módulo
+  es la del repositorio); por eso las imágenes de Docker se construyen con la raíz como
+  contexto, recortado por `.dockerignore`), el commit que Go anotó en el binario cuando se
+  compiló desde un checkout de git, la versión de Go y cuándo arrancó.
 - **Base de datos**: si responde y en cuánto tiempo (`SELECT 1`), y la última migración que
   goose tiene aplicada (`goose_db_version`; no aparece si no se puede leer). Una base que no
   responde se cuenta en el cuerpo (`database.ok` falso), no con un código de error.

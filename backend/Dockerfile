@@ -1,12 +1,11 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+# The build context is the repository root (go.mod lives there, so that Go can
+# stamp the module version from git), not ./backend.
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-# VERSION is optional (docker build --build-arg VERSION=v1.2.3): the .git
-# directory isn't in the build context, so the image can't work it out itself.
-ARG VERSION=""
-RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /out/api ./cmd/api
+COPY backend ./backend
+RUN CGO_ENABLED=0 go build -o /out/api ./backend/cmd/api
 
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates

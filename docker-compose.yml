@@ -20,7 +20,9 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       HTTP_ADDR: ":64711"
       DATABASE_URL: "postgres://intranet:intranet@postgres:5432/intranet?sslmode=disable"

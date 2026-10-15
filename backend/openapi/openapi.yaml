@@ -574,9 +574,10 @@ paths:
     get:
       summary: How this running API is doing and how it is set up
       description: >
-        Admin-only, read-only. Which version is deployed (the one the binary
-        was built with — `make build` takes it from git — and the commit Go
-        recorded in it, when known), when the process started, whether the
+        Admin-only, read-only. Which version is deployed (the main module
+        version Go recorded in the binary (a tag, or a pseudo-version with the
+        commit; absent for a build outside a git checkout) and the commit,
+        when known), when the process started, whether the
         database answers (and how fast) and the latest goose migration
         applied, whether email (SMTP) and Telegram (the log channel, and the
         bot) are configured and running, the timeouts in force, and whether
