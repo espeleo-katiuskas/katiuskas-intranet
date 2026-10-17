@@ -2,22 +2,23 @@ package distributions
 
 import "time"
 
-// Status is where a distribution is in its life: being prepared, open for
-// members to choose, closed (what to order is known), ordered, received at
-// the club and ready to be collected, and finally done. The values are the
-// distribution_status enum (migration 00021_distributions.sql), in order.
+// Status is where a distribution is in its life, each state being a different
+// thing people can do: draft (being prepared, editable, only admin/board see
+// it), open (members ask for units and choose their options), closed (nothing
+// changes any more, and nothing can be handed out yet), delivering (the units
+// are being handed out) and done. The values are the distribution_status enum
+// (migrations 00021 and 00023), in order.
 type Status string
 
 const (
-	StatusDraft    Status = "draft"
-	StatusOpen     Status = "open"
-	StatusClosed   Status = "closed"
-	StatusOrdered  Status = "ordered"
-	StatusReceived Status = "received"
-	StatusDone     Status = "done"
+	StatusDraft      Status = "draft"
+	StatusOpen       Status = "open"
+	StatusClosed     Status = "closed"
+	StatusDelivering Status = "delivering"
+	StatusDone       Status = "done"
 )
 
-var statusOrder = []Status{StatusDraft, StatusOpen, StatusClosed, StatusOrdered, StatusReceived, StatusDone}
+var statusOrder = []Status{StatusDraft, StatusOpen, StatusClosed, StatusDelivering, StatusDone}
 
 func (s Status) Valid() bool { return s.index() >= 0 }
 

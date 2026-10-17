@@ -317,7 +317,7 @@ func TestStatusMovesOneStepAtATime(t *testing.T) {
 	expect(t, e.do("PATCH", path, admin.token, body), http.StatusConflict, "invalid_status_transition")
 	body["status"] = "later"
 	expect(t, e.do("PATCH", path, admin.token, body), http.StatusBadRequest, "invalid_status")
-	for _, status := range []string{"open", "closed", "open", "closed", "ordered", "received", "done", "received"} {
+	for _, status := range []string{"open", "closed", "open", "closed", "delivering", "done", "delivering"} {
 		if got := setStatus(t, e, admin, d.ID, status); string(got.Status) != status {
 			t.Fatalf("expected %s, got %s", status, got.Status)
 		}
@@ -390,10 +390,14 @@ func TestRegisterChecksChoicesEligibilityAndState(t *testing.T) {
 
 	setStatus(t, e, admin, id, "closed")
 	expect(t, register(e, id, member, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
-	// Staff may still enter units while it is closed.
+	// Once it is closed nothing changes, not even for staff: a late addition
+	// means opening it again.
+	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
+	setStatus(t, e, admin, id, "open")
 	mustStatus(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
-	setStatus(t, e, admin, id, "ordered")
-	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": late.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
+	setStatus(t, e, admin, id, "closed")
+	setStatus(t, e, admin, id, "delivering")
+	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusConflict, "not_open")
 }
 
 func TestDeadlineStopsMembersButNotStaff(t *testing.T) {
@@ -560,7 +564,7 @@ func TestOrderSummary(t *testing.T) {
 	}
 }
 
-func TestCollectionNeedsTheOrderReceivedAndNamesBothPeople(t *testing.T) {
+func TestCollectionNeedsDeliveryToHaveBegunAndNamesBothPeople(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
 	material := e.newPerson(t, "2020-01-01", "material", "member")
@@ -572,8 +576,8 @@ func TestCollectionNeedsTheOrderReceivedAndNamesBothPeople(t *testing.T) {
 	pickups := fmt.Sprintf("/api/v1/distributions/%d/pickups", d.ID)
 	both := []int64{own.ID, forChild.ID}
 
-	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusConflict, "not_received")
-	for _, status := range []string{"closed", "ordered", "received"} {
+	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusConflict, "not_delivering")
+	for _, status := range []string{"closed", "delivering"} {
 		setStatus(t, e, admin, d.ID, status)
 	}
 	expect(t, e.do("POST", pickups, parent.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusForbidden, "forbidden")

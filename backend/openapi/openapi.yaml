@@ -1813,8 +1813,9 @@ paths:
         `status`, which are only touched when sent. `options` can only be
         replaced while nobody has asked for anything yet (409 has_units);
         sending back exactly what is there is not a replacement. `status`
-        moves one step at a time along draft, open, closed, ordered,
-        received, done — forward or back. Prices changed here don't change
+        moves one step at a time along draft, open (members ask for units),
+        closed (nothing changes, nothing can be handed out yet), delivering
+        (collections are recorded) and done — forward or back. Prices changed here don't change
         what units already asked for cost, except the automatic units of a
         distribution for all members that nobody has touched (not chosen, not
         paid, not collected), which take the new price.
@@ -1891,8 +1892,10 @@ paths:
         (409 extras_not_allowed, too_many_extras), at the extra price.
         `choices` must give exactly one listed value for each option (400
         invalid_choices). Members can only do it while the distribution is
-        `open` and before `closes_at`; admin/board also after the deadline
-        and while it is `closed` (409 not_open otherwise).
+        `open` and before `closes_at`; admin/board can go on after the
+        deadline, but also only while it is `open` (409 not_open otherwise): a
+        closed distribution changes for nobody, and is reopened for a late
+        addition.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1987,8 +1990,8 @@ paths:
     post:
       summary: Record that units were collected
       description: >
-        Requires admin, board or material, and the distribution `received`
-        (409 not_received). The units listed are all marked at once, handed
+        Requires admin, board or material, and the distribution `delivering`
+        (409 not_delivering). The units listed are all marked at once, handed
         to `picked_up_by_login` — any person, not necessarily their
         beneficiary, as when somebody collects for others — and the caller is
         kept as who wrote it down. All or nothing: an id that isn't a unit of
@@ -2011,7 +2014,7 @@ paths:
         "400": { description: no_units. }
         "403": { description: Not admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_received or already_picked_up. }
+        "409": { description: not_delivering or already_picked_up. }
 
   /distributions/{id}/units/{unitID}/pickup:
     delete:
@@ -3395,7 +3398,7 @@ components:
         name: { type: string }
         description: { type: string }
         audience: { type: string, enum: [all_members, signup] }
-        status: { type: string, enum: [draft, open, closed, ordered, received, done] }
+        status: { type: string, enum: [draft, open, closed, delivering, done] }
         closes_at: { type: string, format: date-time, description: Deadline for members to choose; absent = none. }
         cutoff_date: { type: string, format: date, description: Only people who were members this day can have it; required for all_members. }
         price: { type: number, description: A member's own unit; 0 when free. }
@@ -3438,7 +3441,7 @@ components:
               values: { type: array, items: { type: string } }
         status:
           type: string
-          enum: [draft, open, closed, ordered, received, done]
+          enum: [draft, open, closed, delivering, done]
           description: Only on PATCH.
 
     DistributionUnit:

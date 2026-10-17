@@ -26,7 +26,7 @@ const submit = document.getElementById('pf-submit');
 const hasOptions = () => (distribution?.options.length ?? 0) > 0;
 
 function canCollect() {
-  return distribution?.status === 'received';
+  return distribution?.status === 'delivering';
 }
 
 function pickedUpText(u) {
@@ -167,7 +167,7 @@ try {
   document.getElementById('pickup-title').textContent = `Recogida: ${distribution.name}`;
   document.getElementById('pickup-meta').innerHTML = canCollect()
     ? statusBadge(distribution.status)
-    : `${statusBadge(distribution.status)} · Hasta que el reparto no esté en «Recibido» no se puede apuntar ninguna recogida.`;
+    : `${statusBadge(distribution.status)} · Solo se puede apuntar una recogida con el reparto «En entrega».`;
 } catch (err) {
   fail(err);
 }

@@ -15,7 +15,7 @@ var (
 	ErrInvalidPrice    = errors.New("prices can't be negative")
 	ErrInvalidMaxExtra = errors.New("max_extra needs an extra_price and can't be negative")
 	ErrInvalidOptions  = errors.New("each option needs a name and at least one value, and names and values can't repeat")
-	ErrInvalidStatus   = errors.New("status must be draft, open, closed, ordered, received or done")
+	ErrInvalidStatus   = errors.New("status must be draft, open, closed, delivering or done")
 	// ErrInvalidTransition means a status change that isn't one step forward
 	// or back.
 	ErrInvalidTransition = errors.New("the status can only move one step at a time")
@@ -30,10 +30,10 @@ var (
 	// ErrUnitLocked means a unit can't be changed any more: it was collected,
 	// or paid (only admin/board change those).
 	ErrUnitLocked = errors.New("this unit was already collected or paid and can't be changed")
-	// ErrNotReceived means collections can only be recorded once the order
-	// has arrived.
-	ErrNotReceived = errors.New("the order has not been received yet")
-	ErrNoUnits     = errors.New("give at least one unit")
+	// ErrNotDelivering means collections can only be recorded while the
+	// distribution is being delivered.
+	ErrNotDelivering = errors.New("the distribution is not being delivered")
+	ErrNoUnits       = errors.New("give at least one unit")
 	// ErrAutomaticUnit means somebody tried to remove a member's own unit of a
 	// distribution for all members, which exists for everybody who is a member
 	// on the cutoff date and would simply be made again.
@@ -170,17 +170,16 @@ func (s *Service) IsEligible(ctx context.Context, d Distribution, userID int64) 
 	return s.repo.WasMemberOn(ctx, userID, *d.CutoffDate)
 }
 
-// checkOpen says whether choices can be entered or changed now. Members can
-// while it is open and before its deadline; staff (admin/board) can also
-// after the deadline and while it is closed, until it has been ordered.
+// checkOpen says whether choices can be entered or changed now: only while the
+// distribution is open — once it is closed nothing changes, for anybody, and
+// reopening it is how a late addition is made. Members can also only before the
+// deadline; staff (admin/board) can keep going after it for as long as it is
+// open.
 func (s *Service) checkOpen(d Distribution, staff bool) error {
-	if staff {
-		if d.Status == StatusOpen || d.Status == StatusClosed {
-			return nil
-		}
+	if d.Status != StatusOpen {
 		return ErrNotOpen
 	}
-	if d.Status != StatusOpen || (d.ClosesAt != nil && !s.now().Before(*d.ClosesAt)) {
+	if !staff && d.ClosesAt != nil && !s.now().Before(*d.ClosesAt) {
 		return ErrNotOpen
 	}
 	return nil
@@ -315,8 +314,8 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	if err != nil {
 		return err
 	}
-	if d.Status != StatusReceived {
-		return ErrNotReceived
+	if d.Status != StatusDelivering {
+		return ErrNotDelivering
 	}
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return err

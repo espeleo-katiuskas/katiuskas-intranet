@@ -94,7 +94,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrExtrasNotAllowed, http.StatusConflict, "extras_not_allowed"},
 		{ErrTooManyExtras, http.StatusConflict, "too_many_extras"},
 		{ErrUnitLocked, http.StatusConflict, "unit_locked"},
-		{ErrNotReceived, http.StatusConflict, "not_received"},
+		{ErrNotDelivering, http.StatusConflict, "not_delivering"},
 		{ErrAlreadyPickedUp, http.StatusConflict, "already_picked_up"},
 		{ErrAlreadyPaid, http.StatusConflict, "already_paid"},
 		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},

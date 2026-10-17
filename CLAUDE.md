@@ -400,8 +400,12 @@ come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 **Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things
 the club hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a
 single article — two things to handle separately are two distributions — with a `status`
-(`draft` → `open` → `closed` → `ordered` → `received` → `done`, one step at a time,
-forward or back; a draft exists only for admin/board), an `audience` (`all_members`,
+(`draft` → `open` → `closed` → `delivering` → `done`, one step at a time, forward or back;
+each is a different thing people can do: a draft is editable and exists only for
+admin/board, members ask for units only while `open`, `closed` freezes everything with
+nothing to hand out yet, and `delivering` is when collections are recorded; migration
+`00023` replaced the former `ordered`/`received`, which named what happens outside the app
+without changing what the app allows), an `audience` (`all_members`,
 everyone who was a member on `cutoff_date`, which is then required; or `signup`, where
 `cutoff_date` is optional and, when set, limits who can sign up to those members —
 `Repository.WasMemberOn`, a SQL check against `memberships.period`), a `price` (0 = free),
@@ -420,7 +424,8 @@ extras up to `max_extra` counted by beneficiary whoever entered them: `CreateUni
 the distribution row (`FOR UPDATE`) while counting so two concurrent requests can't both
 slip under the cap. Anyone can ask for a unit for themselves or, with `beneficiary_login`,
 for somebody else, while the distribution is `open` and before `closes_at`; admin/board
-also after the deadline and while `closed` (`Service.checkOpen`). Both the beneficiary
+also after the deadline, but only while `open` — a closed distribution changes for nobody,
+reopening it is how a late addition is made (`Service.checkOpen`). Both the beneficiary
 and, unless admin/board, whoever enters it have to be eligible (`ErrNotEligible`); an
 extra belongs to whoever it is entered for, with no notion of who ends up with the item.
 Changing/removing a unit is for its beneficiary, whoever entered it and admin/board, under
@@ -428,7 +433,7 @@ the same rules; a collected unit is final and a paid one only changes through ad
 (`ErrUnitLocked`). Paid is one mark per unit (`paid_at`, `paid_marked_by_id`), set and
 cleared by admin/board only (`POST .../payments`, batch, all-or-nothing via
 `Repository.markUnits`); there's no link to accounting. Collection (`POST .../pickups`,
-batch, admin/board/material, only while `received`) records three things per unit —
+batch, admin/board/material, only while `delivering`) records three things per unit —
 `picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
 handed to: any person, not necessarily the beneficiary, as when somebody collects for
 others), all set or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
@@ -1296,7 +1301,7 @@ anybody else, so each script reaches those through a null-safe lookup (a bare
 page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
 and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
 line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
-lists who is still to collect, with a checkbox per unit once the status is `received`, an
+lists who is still to collect, with a checkbox per unit once the status is `delivering`, an
 "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
 same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
 `api.js`'s `apiFetch` now puts the API's error `code` on the thrown `Error`, which

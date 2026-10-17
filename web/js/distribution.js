@@ -57,12 +57,11 @@ function describe(d) {
 }
 
 // Whether the signed-in person can ask for units now — the same rule the API
-// applies: open and before the deadline for a member; also closed, and past
-// the deadline, for admin/board.
+// applies: only while it is open, and for a member also before the deadline
+// (admin/board can go on after it).
 function canOrderNow() {
-  if (isStaff) return distribution.status === 'open' || distribution.status === 'closed';
   const beforeDeadline = !distribution.closes_at || new Date() < new Date(distribution.closes_at);
-  return distribution.status === 'open' && beforeDeadline;
+  return distribution.status === 'open' && (isStaff || beforeDeadline);
 }
 
 function renderHeader() {
@@ -108,7 +107,7 @@ onClick('step-back', () => {
 });
 onClick('step-forward', () => {
   const next = STATUS_ORDER[STATUS_ORDER.indexOf(distribution.status) + 1];
-  if (next === 'closed' && !confirm('Al cerrar el reparto, los socios ya no podrán pedir ni cambiar nada. ¿Cerrarlo?')) return;
+  if (next === 'closed' && !confirm('Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?')) return;
   setStatus(next);
 });
 

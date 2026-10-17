@@ -10,12 +10,20 @@ const distributionStatusLabels = {
   draft: 'Borrador',
   open: 'Abierto',
   closed: 'Cerrado',
-  ordered: 'Pedido hecho',
-  received: 'Recibido',
+  delivering: 'En entrega',
   done: 'Terminado',
 };
 
-const STATUS_ORDER = ['draft', 'open', 'closed', 'ordered', 'received', 'done'];
+// What each state means, for a tooltip on its badge.
+const distributionStatusHints = {
+  draft: 'Se puede editar. Los socios todavía no lo ven.',
+  open: 'Los socios pueden pedir unidades y elegir las opciones.',
+  closed: 'Ya no se puede cambiar nada. Todavía no se puede entregar.',
+  delivering: 'Se pueden ir entregando las unidades.',
+  done: 'El reparto ha terminado.',
+};
+
+const STATUS_ORDER = ['draft', 'open', 'closed', 'delivering', 'done'];
 
 const audienceLabels = {
   all_members: 'Todos los socios',
@@ -23,7 +31,7 @@ const audienceLabels = {
 };
 
 function statusBadge(status) {
-  return `<span class="badge">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
+  return `<span class="badge" title="${escapeHtml(distributionStatusHints[status] ?? '')}">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
 }
 
 function formatDateTime(iso) {
@@ -131,7 +139,7 @@ const errorMessages = {
   invalid_choices: 'Elige un valor en cada opción.',
   automatic_unit: 'En un reparto para todos los socios cada uno tiene su unidad y no se puede quitar. Si no la quiere, que no la recoja.',
   unit_locked: 'Esta unidad ya está pagada o recogida y no se puede cambiar.',
-  not_received: 'Todavía no se puede apuntar la recogida: el reparto tiene que estar en «Recibido».',
+  not_delivering: 'Solo se puede apuntar una recogida con el reparto «En entrega».',
   already_picked_up: 'Alguna de las unidades ya estaba recogida.',
   already_paid: 'Alguna de las unidades ya estaba pagada.',
   has_units: 'Ya hay gente que ha pedido: no se pueden cambiar las opciones ni borrar el reparto.',
@@ -167,6 +175,7 @@ export {
   apiErrorText,
   bodyFrom,
   distributionStatusLabels,
+  distributionStatusHints,
   STATUS_ORDER,
   audienceLabels,
   statusBadge,
