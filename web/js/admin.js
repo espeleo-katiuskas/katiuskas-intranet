@@ -95,7 +95,7 @@ function renderRoles() {
 async function loadRoles() {
   try {
     [roleCatalog, people] = await Promise.all([apiFetch('/roles'), apiFetch('/users')]);
-    people.sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'));
+    people.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'));
     renderRoles();
   } catch {
     roleBody.innerHTML = '<tr><td colspan="5">No se pudieron cargar los roles.</td></tr>';

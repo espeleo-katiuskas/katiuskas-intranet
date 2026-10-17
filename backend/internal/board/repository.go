@@ -130,7 +130,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Member, error) {
 		FROM board_members bm
 		JOIN users u ON u.id = bm.user_id
 		WHERE bm.period @> CURRENT_DATE
-		ORDER BY bm.position, u.last_name, u.first_name
+		ORDER BY bm.position, u.first_name, u.last_name
 	`)
 	if err != nil {
 		return nil, err

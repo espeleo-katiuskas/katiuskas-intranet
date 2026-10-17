@@ -323,7 +323,7 @@ func (r *Repository) ListMembers(ctx context.Context, today bool, day *time.Time
 			SELECT 1 FROM memberships m
 			WHERE m.user_id = u.id AND (($1 AND m.period @> CURRENT_DATE) OR ($2::date IS NOT NULL AND m.period @> $2::date))
 		)
-		ORDER BY u.last_name, u.first_name, u.id
+		ORDER BY u.first_name, u.last_name, u.id
 	`, today, day)
 	if err != nil {
 		return nil, err
@@ -486,7 +486,7 @@ func (r *Repository) GetUnit(ctx context.Context, distributionID, id int64) (Uni
 func (r *Repository) ListUnits(ctx context.Context, distributionID int64, involving *int64) ([]Unit, error) {
 	rows, err := r.pool.Query(ctx, unitSelect+`
 		WHERE n.distribution_id = $1 AND ($2::bigint IS NULL OR n.beneficiary_id = $2 OR n.registered_by_id = $2)
-		ORDER BY b.last_name, b.first_name, n.beneficiary_id, n.is_extra, n.id
+		ORDER BY b.first_name, b.last_name, n.beneficiary_id, n.is_extra, n.id
 	`, distributionID, involving)
 	if err != nil {
 		return nil, err

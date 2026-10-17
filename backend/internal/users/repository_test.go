@@ -1261,6 +1261,44 @@ func TestListDirectoryIncludesEveryone(t *testing.T) {
 	}
 }
 
+// People are listed by name, as they are read ("Nombre Apellidos"), not by
+// surname: the directory and the people list feed every picker and list.
+func TestPeopleAreListedByNameNotBySurname(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+	// First names go Ana, Bea, Carlos; the surnames go the other way round.
+	for _, p := range []struct{ first, last string }{{"Carlos", "Álvarez"}, {"Ana", "Zapata"}, {"Bea", "Martín"}} {
+		if _, err := repo.Create(ctx, users.CreateInput{FirstName: p.first, LastName: p.last, Email: strPtr(testutil.UniqueEmail(t))}); err != nil {
+			t.Fatalf("create %s: %v", p.first, err)
+		}
+	}
+
+	names := func(first []string) string { return strings.Join(first, ",") }
+	directory, err := repo.ListDirectory(ctx)
+	if err != nil {
+		t.Fatalf("list directory: %v", err)
+	}
+	var got []string
+	for _, e := range directory {
+		got = append(got, e.FirstName)
+	}
+	if names(got) != "Ana,Bea,Carlos" {
+		t.Errorf("the directory should be in order of first name, got %v", got)
+	}
+	list, err := repo.List(ctx, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	got = nil
+	for _, u := range list {
+		got = append(got, u.FirstName)
+	}
+	if names(got) != "Ana,Bea,Carlos" {
+		t.Errorf("the people list should be in order of first name, got %v", got)
+	}
+}
+
 func strPtr(s string) *string { return &s }
 
 // A leading "+34" typed on the login page is ignored — the club keeps its

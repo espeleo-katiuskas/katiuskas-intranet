@@ -131,7 +131,9 @@ async function loadPeople(distributionId, purpose = null) {
   if (purpose) {
     try {
       const members = await apiFetch(`/distributions/${distributionId}/people?for=${purpose}`);
-      entries = members.map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }));
+      entries = members
+        .map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es'));
     } catch {
       // No picker: the page says so when somebody tries to choose.
     }

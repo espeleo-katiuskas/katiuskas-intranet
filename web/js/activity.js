@@ -164,7 +164,7 @@ async function loadDirectory() {
     directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
     personEntries = directory
       .slice()
-      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+      .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
       .map((person) => ({ id: person.login, label: `${person.first_name} ${person.last_name} #${person.login}` }));
     const loanUserOptions = document.getElementById('loan-user-options');
     if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(personEntries);
@@ -196,7 +196,11 @@ async function loadParticipants() {
   try {
     const participants = await apiFetch(`/activities/${activityId}/participants`);
     container.innerHTML = participants.length
-      ? participants.map(renderParticipantRow).join('')
+      ? participants
+        .slice()
+        .sort((a, b) => personLabel(a.user_login).localeCompare(personLabel(b.user_login), 'es'))
+        .map(renderParticipantRow)
+        .join('')
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);

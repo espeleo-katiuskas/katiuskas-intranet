@@ -334,6 +334,10 @@ though admin/board still see them (`Handler.list`). That restriction is applied 
 in Go after the fact, so a non-socio row is never even fetched from Postgres. `GET /users`
 is deliberately unpaginated — the club's membership grows by roughly 15 people a year,
 nowhere near the scale where returning everyone on file in one response is a real cost.
+Everywhere people are listed or offered in a picker they are in order of name as it is read
+("Nombre Apellidos"), not of surname: the SQL of `GET /users`, the directory, the
+memberships, dues and licenses listings and the distributions' people orders by
+`first_name, last_name`, and the pages that build a picker sort again on the same key.
 `GET /users/directory` (any baseline role) is the name-only alternative: `login`,
 `first_name` and `last_name` of everyone on file, with no socio filter — what the
 activity, inventory and accounting pickers use to choose a person without seeing personal

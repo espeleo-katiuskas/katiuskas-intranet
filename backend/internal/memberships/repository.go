@@ -231,7 +231,7 @@ func (r *Repository) ListActive(ctx context.Context) ([]Membership, error) {
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.period @> CURRENT_DATE
-		ORDER BY u.last_name, u.first_name
+		ORDER BY u.first_name, u.last_name
 	`)
 	if err != nil {
 		return nil, err
@@ -444,7 +444,7 @@ func (r *Repository) ListDuesForTransaction(ctx context.Context, transactionID i
 		JOIN users u ON u.id = d.user_id
 		JOIN transactions t ON t.id = d.transaction_id
 		WHERE d.transaction_id = $1
-		ORDER BY u.last_name, u.first_name, d.year
+		ORDER BY u.first_name, u.last_name, d.year
 	`, transactionID)
 	if err != nil {
 		return nil, err

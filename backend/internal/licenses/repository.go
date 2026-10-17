@@ -196,7 +196,7 @@ func (r *Repository) ListByTransaction(ctx context.Context, transactionID int64)
 		JOIN users u ON u.id = l.user_id
 		JOIN license_types lt ON lt.id = l.license_type_id
 		WHERE l.transaction_id = $1
-		ORDER BY u.last_name, u.first_name, l.issued_date
+		ORDER BY u.first_name, u.last_name, l.issued_date
 	`, transactionID)
 	if err != nil {
 		return nil, err

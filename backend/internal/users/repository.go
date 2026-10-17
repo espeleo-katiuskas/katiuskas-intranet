@@ -266,7 +266,7 @@ func (r *Repository) List(ctx context.Context, onlySocios bool) ([]User, error) 
 		SELECT `+userSelect+`
 		FROM users u
 		WHERE $1 = false OR EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id)
-		ORDER BY u.last_name, u.first_name
+		ORDER BY u.first_name, u.last_name
 	`, onlySocios)
 	if err != nil {
 		return nil, err
@@ -571,7 +571,7 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.login, u.first_name, u.last_name
 		FROM users u
-		ORDER BY u.last_name, u.first_name
+		ORDER BY u.first_name, u.last_name
 	`)
 	if err != nil {
 		return nil, err

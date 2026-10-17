@@ -60,7 +60,7 @@ async function loadCatalogs() {
     const directory = await apiFetch('/users/directory');
     userEntries = directory
       .slice()
-      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+      .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
       .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
     if (isRealAdmin) {
       for (const id of ['nt-due-user-options', 'et-due-user-options', 'nt-license-user-options', 'et-license-user-options']) {
