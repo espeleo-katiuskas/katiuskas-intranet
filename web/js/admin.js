@@ -1,7 +1,10 @@
 import {
   apiFetch,
+  currentUser,
   escapeHtml,
   formatDate,
+  pickerLabel,
+  resolvePickerId,
   roleLabel,
   showFeedback,
   showError,
@@ -15,42 +18,141 @@ import { initModal, openModal } from './modal.js';
 await initPage({ requireAnyRole: ['admin'] });
 
 // "Roles": the catalog of roles — the system ones that give permissions and
-// the free-form labels an admin creates (see GET/POST/DELETE /roles).
-async function loadRoles() {
-  const tableBody = document.getElementById('roles-table-body');
-  try {
-    const roles = await apiFetch('/roles');
-    tableBody.innerHTML = roles
-      .map((role) => `
+// the free-form labels an admin creates (see GET/POST/DELETE /roles) — and who
+// has each one. The holders come from GET /users (admin sees everybody, with
+// their roles), and a role is given or taken with POST/DELETE
+// /users/{login}/roles. The automatic roles (member, board, former_member)
+// follow the person's history, so those only show who has them.
+let roleCatalog = [];
+let people = [];
+const expandedRoles = new Set();
+const roleBody = document.getElementById('roles-table-body');
+const viewerLogin = currentUser().login;
+
+const fullName = (person) => `${person.first_name} ${person.last_name}`;
+const holdersOf = (role) => people.filter((p) => p.roles.includes(role.name));
+
+function holderChip(role, person) {
+  const name = escapeHtml(fullName(person));
+  const link = `<a href="/socio?login=${encodeURIComponent(person.login)}">${name}</a>`;
+  if (role.is_automatic) return `<span class="badge">${link}</span>`;
+  // The API refuses taking your own admin away (409 self_admin_removal); the
+  // button just isn't offered, as on /socio.
+  if (role.name === 'admin' && person.login === viewerLogin) {
+    return `<span class="badge" title="No puedes quitarte a ti mismo el rol de admin">${link}</span>`;
+  }
+  return `<span class="badge-removable">${link}<button type="button" data-unassign-role="${role.id}" data-login="${escapeHtml(person.login)}" title="Quitar este rol">×</button></span>`;
+}
+
+function roleDetail(role) {
+  const holders = holdersOf(role);
+  const list = holders.length
+    ? holders.map((p) => holderChip(role, p)).join('')
+    : '<p class="hint">Nadie tiene este rol.</p>';
+  let add = '';
+  if (role.is_automatic) {
+    add = '<p class="hint">Se asigna solo, según el historial de socio: no se da ni se quita a mano.</p>';
+  } else {
+    const candidates = people.filter((p) => !p.roles.includes(role.name));
+    const options = candidates
+      .map((p) => `<option value="${escapeHtml(pickerLabel(fullName(p), p.login))}"></option>`)
+      .join('');
+    add = `
+      <div class="role-add-row">
+        <input type="text" list="role-people-${role.id}" data-role-search="${role.id}" autocomplete="off" placeholder="Escribe un nombre…">
+        <datalist id="role-people-${role.id}">${options}</datalist>
+        <button type="button" class="btn btn-secondary btn-small" data-assign-role="${role.id}">Dar este rol</button>
+      </div>`;
+  }
+  return `<div class="role-holders">${list}</div>${add}`;
+}
+
+function renderRoles() {
+  roleBody.innerHTML = roleCatalog
+    .map((role) => {
+      const open = expandedRoles.has(role.id);
+      const count = holdersOf(role).length;
+      const row = `
         <tr>
           <td>${escapeHtml(roleLabel(role.name))}</td>
           <td>${escapeHtml(role.description) || '—'}</td>
+          <td>
+            ${count}
+            <button type="button" class="link-button" data-toggle-role="${role.id}">${open ? 'Ocultar' : 'Ver'}</button>
+          </td>
           <td>
             ${role.is_system ? '<span class="badge">Del sistema</span>' : ''}
             ${role.is_automatic ? '<span class="badge" title="Se asigna solo, según el historial de socio">Automático</span>' : ''}
           </td>
           <td>${!role.is_system ? `<button type="button" class="btn btn-danger btn-small" data-delete-role="${role.id}">Borrar</button>` : ''}</td>
-        </tr>
-      `)
-      .join('');
+        </tr>`;
+      const detail = open ? `<tr class="role-detail"><td colspan="5">${roleDetail(role)}</td></tr>` : '';
+      return row + detail;
+    })
+    .join('');
+}
+
+async function loadRoles() {
+  try {
+    [roleCatalog, people] = await Promise.all([apiFetch('/roles'), apiFetch('/users')]);
+    people.sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'));
+    renderRoles();
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los roles.</td></tr>';
+    roleBody.innerHTML = '<tr><td colspan="5">No se pudieron cargar los roles.</td></tr>';
   }
 }
 
-document.getElementById('roles-table-body').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-delete-role]');
-  if (!button) return;
-  if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
+roleBody.addEventListener('click', async (event) => {
+  const toggle = event.target.closest('button[data-toggle-role]');
+  const remove = event.target.closest('button[data-delete-role]');
+  const unassign = event.target.closest('button[data-unassign-role]');
+  const assign = event.target.closest('button[data-assign-role]');
 
-  button.disabled = true;
-  try {
-    await apiFetch(`/roles/${button.dataset.deleteRole}`, { method: 'DELETE' });
-    showFeedback('Rol borrado.');
-    await loadRoles();
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
+  if (toggle) {
+    const id = Number(toggle.dataset.toggleRole);
+    if (expandedRoles.has(id)) expandedRoles.delete(id);
+    else expandedRoles.add(id);
+    renderRoles();
+  } else if (remove) {
+    if (!confirm('¿Borrar este rol? Se quitará de todas las personas que lo tengan.')) return;
+    remove.disabled = true;
+    try {
+      await apiFetch(`/roles/${remove.dataset.deleteRole}`, { method: 'DELETE' });
+      expandedRoles.delete(Number(remove.dataset.deleteRole));
+      showFeedback('Rol borrado.');
+      await loadRoles();
+    } catch (err) {
+      remove.disabled = false;
+      showError(err.message);
+    }
+  } else if (unassign) {
+    unassign.disabled = true;
+    try {
+      await apiFetch(`/users/${encodeURIComponent(unassign.dataset.login)}/roles/${unassign.dataset.unassignRole}`, { method: 'DELETE' });
+      showFeedback('Rol quitado.');
+      await loadRoles();
+    } catch (err) {
+      unassign.disabled = false;
+      showError(err.message);
+    }
+  } else if (assign) {
+    const roleId = Number(assign.dataset.assignRole);
+    const input = roleBody.querySelector(`input[data-role-search="${roleId}"]`);
+    const entries = people.map((p) => ({ id: p.login, label: pickerLabel(fullName(p), p.login) }));
+    const login = resolvePickerId(entries, input.value);
+    if (!login) {
+      showError('Elige a una persona de la lista.');
+      return;
+    }
+    assign.disabled = true;
+    try {
+      await apiFetch(`/users/${encodeURIComponent(login)}/roles`, { method: 'POST', body: JSON.stringify({ role_id: roleId }) });
+      showFeedback('Rol dado.');
+      await loadRoles();
+    } catch (err) {
+      assign.disabled = false;
+      showError(err.message);
+    }
   }
 });
 

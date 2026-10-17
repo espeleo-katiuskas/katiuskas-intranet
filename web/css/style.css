@@ -1301,3 +1301,15 @@ a.btn {
 .plain-list li {
   padding: 2px 0;
 }
+
+/* /admin's Roles: who has a role, under its row — a long list (every member has
+   the automatic one) scrolls instead of pushing the page down. */
+.role-holders {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.role-detail td {
+  background: var(--surface-muted);
+}
