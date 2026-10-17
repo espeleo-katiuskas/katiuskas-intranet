@@ -447,7 +447,11 @@ handed to: not necessarily the beneficiary, as when somebody collects for others
 member now or on the cutoff date, `ErrInvalidCollector`, 409 `invalid_collector`), all set
 or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
 units by combination of choices (`GROUP BY` the `choices` jsonb) with the totals, and for
-units nobody has chosen the options of yet add up under empty choices.
+units nobody has chosen the options of yet add up under empty choices. For an `all_members`
+distribution still in `draft` — which has no units yet, they are made on opening — the
+summary already counts one per member on the cutoff date, without making them
+(`Order.Provisional`, set by `Repository.Order`; the page says so), since what has to be
+ordered is known from the start.
 `GET /distributions` and `GET /distributions/{id}` add `eligible` for the caller;
 `GET .../units` shows admin, board and material every unit and anybody else only the ones
 for them or entered by them.

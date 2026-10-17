@@ -959,7 +959,11 @@ salvo pedir unidades y editar las propias).
   sido en `cutoff_date`, 409 `invalid_collector`). Es todo o nada.
 - **Resumen del pedido** (`GET /distributions/{id}/order`, admin, board y material): las
   unidades sumadas por combinación de opciones y los totales; las que nadie ha elegido
-  todavía suman en una línea con `choices` vacío.
+  todavía suman en una línea con `choices` vacío. Un reparto `all_members` todavía en
+  `draft` aún no tiene unidades (se crean al abrirlo), pero ya se sabe qué hay que pedir:
+  una por cada socio en `cutoff_date`. El resumen la cuenta aunque no exista
+  (`provisional: true`, sin crear nada: leerlo no cambia el reparto) y la página lo dice;
+  al abrirlo, las mismas cifras son ya reales.
 - **Lectura**. `GET /distributions` lo abre cualquier rol baseline y devuelve `eligible`
   para quien llama. `GET .../units` devuelve todas las unidades a admin, board y material,
   y a los demás solo las suyas o las que ellos apuntaron.

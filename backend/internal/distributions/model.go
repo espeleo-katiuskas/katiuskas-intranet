@@ -171,9 +171,13 @@ type OrderLine struct {
 
 // Order is the summary for placing the order: how many units of each
 // combination of choices (a line with empty choices, for an article with
-// options, is the units nobody has chosen yet) and the totals.
+// options, is the units nobody has chosen yet) and the totals. Provisional
+// means the distribution is still a draft and, being for all members, the
+// own unit of everybody who qualifies is counted although it isn't made yet
+// (it is when the distribution opens).
 type Order struct {
 	Lines       []OrderLine `json:"lines"`
 	TotalUnits  int         `json:"total_units"`
 	TotalAmount float64     `json:"total_amount"`
+	Provisional bool        `json:"provisional"`
 }

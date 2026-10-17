@@ -2020,7 +2020,10 @@ paths:
         Requires admin, board or material. The units added up by combination
         of choices (`lines`) and the totals. In a distribution for all
         members everybody who qualifies has a unit, so those nobody has chosen
-        the options of yet add up in a line with empty `choices`.
+        the options of yet add up in a line with empty `choices`. For one
+        still in `draft`, which has no units yet (they are made when it
+        opens), the summary already counts one per member on the cutoff
+        date, without making them, and says so with `provisional: true`.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3521,6 +3524,7 @@ components:
               count: { type: integer }
         total_units: { type: integer }
         total_amount: { type: number }
+        provisional: { type: boolean, description: "true for a distribution for all members still in draft: the own unit of everybody who qualifies is counted although it isn't made yet." }
 
     Holiday:
       type: object

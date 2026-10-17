@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatCurrency, formatDate, hasAnyRole, currentUser, showError, showFeedback } from './api.js';
 import { initPage } from './layout.js';
-import { apiErrorText, choicesText, isUnchosen, loadPeople, statusBadge } from './distributionCommon.js';
+import { apiErrorText, choicesText, loadPeople, statusBadge } from './distributionCommon.js';
 
 // What has to be bought, and what each member wants: for the people who put
 // the order together (admin, board) and hand it out (material).
@@ -18,19 +18,30 @@ const fail = (err) => showError(apiErrorText(err));
 
 const hasOptions = () => (distribution?.options.length ?? 0) > 0;
 
+let provisional = false;
+
 function renderOrder(order) {
+  provisional = order.provisional;
+  const noChoices = (l) => Object.keys(l.choices).length === 0;
   document.getElementById('order-lines').innerHTML = order.lines.length
     ? order.lines.map((l) => {
-      const unchosen = hasOptions() && Object.keys(l.choices).length === 0;
-      return `<tr><td>${unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(l.choices, hasOptions()))}</td><td>${l.count}</td></tr>`;
+      let label;
+      if (!noChoices(l)) label = escapeHtml(choicesText(l.choices, hasOptions()));
+      else label = hasOptions() ? '<strong>Sin elegir</strong>' : 'Sin nada que elegir';
+      return `<tr><td>${label}</td><td>${l.count}</td></tr>`;
     }).join('')
     : '<tr><td colspan="2">Todavía no hay nada que pedir.</td></tr>';
   // In a distribution for all members everybody has a unit from the start, so
   // the ones that nobody has chosen the options of are what is still missing.
-  const missing = units.filter((u) => isUnchosen(u, hasOptions())).length;
+  const missing = hasOptions() ? order.lines.filter(noChoices).reduce((sum, l) => sum + l.count, 0) : 0;
   const missingText = missing === 0 ? '' : missing === 1 ? ' Falta por elegir 1 pedido.' : ` Faltan por elegir ${missing} pedidos.`;
+  // While it is a draft nothing is made yet, but what has to be ordered is
+  // already known: one for each member on the cutoff date.
+  const draftText = provisional
+    ? ' Es un borrador: se cuenta un pedido por cada socio en la fecha de corte, y se crearán al abrir el reparto.'
+    : '';
   document.getElementById('order-totals').textContent =
-    `${order.total_units} pedidos en total, por ${formatCurrency(order.total_amount)}.${missingText}`;
+    `${order.total_units} pedidos en total, por ${formatCurrency(order.total_amount)}.${missingText}${draftText}`;
 }
 
 // Units grouped by the person they are for.
@@ -79,7 +90,7 @@ function renderPeople() {
           <td>${formatCurrency(g.units.reduce((sum, u) => sum + u.price, 0))}</td>
           <td>${paymentCell(login, g.units)}</td>
         </tr>`).join('')
-    : '<tr><td colspan="4">Todavía no ha pedido nadie.</td></tr>';
+    : `<tr><td colspan="4">${provisional ? 'Los pedidos de cada socio se crean al abrir el reparto.' : 'Todavía no ha pedido nadie.'}</td></tr>`;
 }
 
 document.getElementById('people-list').addEventListener('click', async (event) => {

@@ -662,6 +662,39 @@ func TestOrderSummary(t *testing.T) {
 	}
 }
 
+// While a distribution for all members is still a draft it has no units, but
+// what has to be ordered is already known: one for each member on the cutoff
+// date. The summary says so, and says it is provisional.
+func TestOrderOfADraftForAllMembersCountsEveryoneWhoQualifies(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "board")
+	e.newPerson(t, "2020-01-01", "member")
+	e.newPerson(t, "2021-05-01", "member")
+	e.newPerson(t, "2026-10-10", "member") // joined after the cutoff date
+	body := shirt()
+	body["price"] = 5
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	path := fmt.Sprintf("/api/v1/distributions/%d/order", d.ID)
+
+	order := decode[distributions.Order](t, mustStatus(t, e.do("GET", path, board.token, nil), http.StatusOK))
+	if !order.Provisional || order.TotalUnits != 3 || order.TotalAmount != 15 || len(order.Lines) != 1 || len(order.Lines[0].Choices) != 0 || order.Lines[0].Count != 3 {
+		t.Errorf("a draft should count one for each of the three members: %+v", order)
+	}
+	// Reading it made nothing: units appear when it opens.
+	if units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)); len(units) != 0 {
+		t.Errorf("a draft has no units, got %+v", units)
+	}
+
+	// Open, they are real, and the same numbers are no longer provisional.
+	body["status"] = "open"
+	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	order = decode[distributions.Order](t, mustStatus(t, e.do("GET", path, board.token, nil), http.StatusOK))
+	if order.Provisional || order.TotalUnits != 3 || order.TotalAmount != 15 {
+		t.Errorf("once open the numbers should be the same and real: %+v", order)
+	}
+}
+
 func TestCollectionNeedsDeliveryToHaveBegunAndNamesBothPeople(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")

@@ -661,5 +661,41 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 		order.TotalUnits += line.Count
 		order.TotalAmount += amount
 	}
-	return order, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Order{}, err
+	}
+
+	// A draft for all members has no units yet — they are made when it opens —
+	// but what has to be ordered is already known: one for each member on the
+	// cutoff date.
+	if d.Audience == AudienceAllMembers && d.CutoffDate != nil && d.Status == StatusDraft {
+		var missing int
+		if err := r.pool.QueryRow(ctx, `
+			SELECT count(*) FROM (SELECT DISTINCT user_id FROM memberships WHERE period @> $2::date) m
+			WHERE NOT EXISTS (
+				SELECT 1 FROM distribution_units n
+				WHERE n.distribution_id = $1 AND n.beneficiary_id = m.user_id AND NOT n.is_extra)
+		`, d.ID, d.CutoffDate).Scan(&missing); err != nil {
+			return Order{}, err
+		}
+		order.Provisional = true
+		if missing > 0 {
+			order.TotalUnits += missing
+			order.TotalAmount += float64(missing) * d.Price
+			// Like the real ones, they have chosen nothing: they add up with the
+			// other units with empty choices, if there are any (extras of an
+			// article with no options), or make that line.
+			merged := false
+			for i := range order.Lines {
+				if len(order.Lines[i].Choices) == 0 {
+					order.Lines[i].Count += missing
+					merged = true
+				}
+			}
+			if !merged {
+				order.Lines = append([]OrderLine{{Choices: map[string]string{}, Count: missing}}, order.Lines...)
+			}
+		}
+	}
+	return order, nil
 }
