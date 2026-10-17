@@ -183,6 +183,39 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// Going back to a draft undoes what opening it did: in a distribution for all
+	// members everybody's own unit was made automatically, and is made again
+	// when it opens, so they go — with whatever was chosen on them, which may not
+	// fit the options it is about to be given. Paid or collected ones are real
+	// things that happened, so those stop it until the marks are undone. Extras,
+	// which somebody asked for, stay.
+	if in.Status != nil && *in.Status == StatusDraft {
+		var previous Status
+		var audience Audience
+		err := tx.QueryRow(ctx, `SELECT status, audience FROM distributions WHERE id = $1 FOR UPDATE`, id).Scan(&previous, &audience)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Distribution{}, ErrNotFound
+		}
+		if err != nil {
+			return Distribution{}, err
+		}
+		if previous != StatusDraft && audience == AudienceAllMembers {
+			var settled int
+			if err := tx.QueryRow(ctx, `
+				SELECT count(*) FROM distribution_units
+				WHERE distribution_id = $1 AND NOT is_extra AND (paid_at IS NOT NULL OR picked_up_at IS NOT NULL)
+			`, id).Scan(&settled); err != nil {
+				return Distribution{}, err
+			}
+			if settled > 0 {
+				return Distribution{}, ErrHasSettledUnits
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE distribution_id = $1 AND NOT is_extra`, id); err != nil {
+				return Distribution{}, err
+			}
+		}
+	}
+
 	tag, err := tx.Exec(ctx, `
 		UPDATE distributions SET
 			name = $2, description = $3, audience = $4, closes_at = $5, cutoff_date = $6,
@@ -198,9 +231,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 	}
 	// A price change reaches the automatic units nobody has touched yet — not
 	// chosen (nobody entered them), not paid, not collected — which got the old
-	// price only because they were made at opening, so a distribution that went
-	// back to a draft and had its price corrected doesn't keep charging the old
-	// one. Everything somebody has already agreed to keeps what it cost.
+	// price only because they were made at opening, so correcting the price of a
+	// distribution that is already open doesn't leave them on the old one.
+	// Everything somebody has already agreed to keeps what it cost.
 	if _, err := tx.Exec(ctx, `
 		UPDATE distribution_units SET price = $2
 		WHERE distribution_id = $1 AND registered_by_id IS NULL AND NOT is_extra

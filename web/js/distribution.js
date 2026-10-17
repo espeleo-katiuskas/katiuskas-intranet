@@ -109,7 +109,14 @@ function onClick(elementId, handler) {
 
 onClick('step-back', () => {
   const steps = statusSteps(distribution);
-  setStatus(steps[steps.indexOf(distribution.status) - 1]);
+  const previous = steps[steps.indexOf(distribution.status) - 1];
+  // Back to a draft takes everybody's own order away in a distribution for all
+  // members (the API deletes them, with what was chosen on them).
+  if (previous === 'draft' && distribution.audience === 'all_members' && distribution.unit_count > 0
+    && !confirm('Al volver a borrador se borrarán los pedidos de los socios (uno por socio, con lo que hayan elegido) y se volverán a crear, vacíos, al abrirlo. Los extras se quedan. ¿Volver a borrador?')) {
+    return;
+  }
+  setStatus(previous);
 });
 onClick('step-forward', () => {
   const steps = statusSteps(distribution);

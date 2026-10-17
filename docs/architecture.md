@@ -925,9 +925,14 @@ salvo pedir unidades y editar las propias).
   que alguna esté pagada o recogida (409 `has_settled_units`), en cuyo caso hay que
   deshacer antes esas marcas. La interfaz avisa de cuántas unidades se pierden. Un cambio
   de precio llega a las unidades automáticas que nadie ha tocado (sin elegir —sin
-  `registered_by`—, sin pagar y sin recoger), así que un reparto que se abrió y volvió a
-  borrador no sigue cobrando el precio antiguo; lo que ya eligió, pagó o recogió alguien
-  conserva lo que costaba.
+  `registered_by`—, sin pagar y sin recoger), así que corregir el precio con el reparto ya
+  abierto no las deja con el antiguo; lo que ya eligió, pagó o recogió alguien conserva lo
+  que costaba. **Volver a `draft`** deshace lo que hizo abrirlo: en un reparto
+  `all_members` se borran las unidades propias de todos —también la elección que hubiera
+  hecho alguien, que quizá no encaje con las opciones que se le vayan a dar— y se vuelven a
+  crear, vacías, al abrirlo; si alguna está pagada o recogida lo impide (409
+  `has_settled_units`) hasta deshacer esas marcas, y los extras, que alguien pidió, se
+  quedan (por eso, con extras, las opciones siguen bloqueadas). La interfaz lo avisa antes.
 - **Quién sale en los selectores**. Ninguno ofrece a todo el mundo, solo socios
   (`GET /distributions/{id}/people`): para pedir, los que pueden tenerlo —los socios en
   `cutoff_date`, o los de hoy si no hay—; para entregar (`for=pickup`, admin, board y

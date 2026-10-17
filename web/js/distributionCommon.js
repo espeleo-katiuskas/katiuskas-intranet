@@ -172,7 +172,7 @@ const errorMessages = {
   already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
   already_paid: 'Alguno de los pedidos ya estaba pagado.',
   has_units: 'Ya hay pedidos (desde que se abre el reparto): no se pueden cambiar las opciones.',
-  has_settled_units: 'Hay pedidos ya pagados o recogidos: quita primero esas marcas para poder borrar el reparto.',
+  has_settled_units: 'Hay pedidos ya pagados o recogidos: quita primero esas marcas.',
   invalid_status_transition: 'El estado solo puede avanzar o retroceder un paso cada vez.',
   cutoff_required: 'Un reparto para todos los socios necesita la fecha de corte.',
   invalid_max_extra: 'El máximo de extras necesita un precio para los extras, y no puede ser negativo.',

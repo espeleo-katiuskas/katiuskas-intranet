@@ -858,9 +858,8 @@ func TestEveryMemberOnTheCutoffDateGetsTheirOwnUnit(t *testing.T) {
 	}
 }
 
-// A price correction reaches the automatic units nobody has touched, whether the
-// distribution is a draft again or still open, and nothing somebody already
-// agreed to or paid.
+// A price correction reaches the automatic units nobody has touched, and nothing
+// somebody already agreed to or paid.
 func TestPriceChangeReachesUntouchedAutomaticUnitsOnly(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
@@ -876,14 +875,73 @@ func TestPriceChangeReachesUntouchedAutomaticUnitsOnly(t *testing.T) {
 	price := func(login string) float64 { return unitFor(t, e, admin, d.ID, login).Price }
 	body := shirt()
 	body["price"] = 5
-	body["status"] = "draft"
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK) // back to a draft that has units
+	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK) // still open
 	if price(idle.Login) != 5 || price(chooser.Login) != 0 || price(payer.Login) != 0 {
 		t.Errorf("only the untouched unit should follow the price: idle %v, chosen %v, paid %v",
 			price(idle.Login), price(chooser.Login), price(payer.Login))
 	}
 	if unitByID(t, e, admin, d.ID, extra.ID).Price != 8 {
 		t.Error("an extra keeps its own price")
+	}
+}
+
+// Going back to a draft undoes what opening did: everybody's own unit, made
+// automatically, goes (with what was chosen on it), unless one is paid or
+// collected; extras stay; and opening again makes them anew.
+func TestBackToDraftDeletesTheAutomaticUnits(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	chooser := e.newPerson(t, "2020-01-01", "member")
+	idle := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenShirt(t, e, admin) // free, extras at 8, size to choose
+	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+	mustStatus(t, register(e, d.ID, chooser, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
+	extra := decode[distributions.Unit](t, mustStatus(t, register(e, d.ID, chooser, map[string]any{"is_extra": true, "choices": map[string]string{"Talla": "S"}}), http.StatusCreated))
+	back := func() *httptest.ResponseRecorder {
+		body := shirt()
+		body["status"] = "draft"
+		return e.do("PATCH", path, admin.token, body)
+	}
+	own := func() int {
+		n := 0
+		for _, u := range decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)) {
+			if !u.IsExtra {
+				n++
+			}
+		}
+		return n
+	}
+	if own() != 2 {
+		t.Fatalf("expected an own unit each, got %d", own())
+	}
+
+	// A paid one stops it, and nothing is lost.
+	idleUnit := unitFor(t, e, admin, d.ID, idle.Login)
+	mustStatus(t, e.do("POST", path+"/payments", admin.token, map[string]any{"unit_ids": []int64{idleUnit.ID}}), http.StatusNoContent)
+	expect(t, back(), http.StatusConflict, "has_settled_units")
+	if own() != 2 {
+		t.Errorf("a refused change must leave the units alone, got %d", own())
+	}
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, idleUnit.ID), admin.token, nil), http.StatusNoContent)
+
+	// Without marks, back to a draft deletes the own units — the chosen one too —
+	// and keeps the extra.
+	got := decode[distributions.Distribution](t, mustStatus(t, back(), http.StatusOK))
+	if got.Status != distributions.StatusDraft || got.UnitCount != 1 {
+		t.Errorf("expected a draft with just the extra left, got %+v", got)
+	}
+	units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK))
+	if len(units) != 1 || units[0].ID != extra.ID {
+		t.Errorf("only the extra should be left: %+v", units)
+	}
+
+	// Opening it again makes everybody's own unit anew, empty.
+	setStatus(t, e, admin, d.ID, "open")
+	if own() != 2 {
+		t.Errorf("opening again should make an own unit each, got %d", own())
+	}
+	if u := unitFor(t, e, admin, d.ID, chooser.Login); len(u.Choices) != 0 || u.RegisteredByLogin != nil {
+		t.Errorf("what was chosen went with the old unit: %+v", u)
 	}
 }
 
