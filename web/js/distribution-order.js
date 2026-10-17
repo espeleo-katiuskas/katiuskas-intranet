@@ -9,7 +9,7 @@ const canMarkPaid = hasAnyRole(currentUser(), ['admin', 'board']);
 
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 const base = `/distributions/${id}`;
-document.getElementById('back-link').href = `/distribution?id=${id}`;
+document.getElementById('back-link').href = `/reparto?id=${id}`;
 
 let units = [];
 let people = { entries: [], names: {} };

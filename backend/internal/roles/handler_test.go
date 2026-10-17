@@ -144,7 +144,7 @@ func TestHandlerListAllowsBoard(t *testing.T) {
 
 // The catalog itself (unlike assigning/revoking) is just organizational
 // labels — open to a plain member too, so their own "Cargo" column on
-// /members can tell an automatic role apart from a real one.
+// /socios can tell an automatic role apart from a real one.
 func TestHandlerListAllowsMember(t *testing.T) {
 	mux, authn, _, _ := newRolesTestServer(t)
 	memberToken := rolesToken(t, authn, 1, "member")

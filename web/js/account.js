@@ -14,7 +14,7 @@ import { initPage } from './layout.js';
 import { flattenAccountTree, shownAccounts, accountLabel } from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
-// Reached only from /accounting's own account tree — same admin/money
+// Reached only from /contabilidad's own account tree — same admin/money
 // gate as that page (see accounting.js's own doc comment for why this
 // is tighter than the API itself, which opens reading to every
 // baseline role).
@@ -25,14 +25,14 @@ const viewer = await initPage({ requireAnyRole: ['admin', 'money'] });
 // POST /users/{login}/licenses, both admin-only at the API itself —
 // tighter than this whole page's own admin/money gate, so those two
 // sections only ever show for a real admin, never for someone who only
-// holds "money" (data-roles="admin" in account.html already hides the
+// holds "money" (data-roles="admin" in cuenta.html already hides the
 // markup for them; this just keeps this file from wiring up listeners
 // on elements that, for them, were never rendered in the first place).
 const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
 const accountId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!accountId) {
-  window.location.href = '/accounting';
+  window.location.href = '/contabilidad';
 }
 
 let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and edit alike
@@ -84,7 +84,7 @@ async function loadCatalogs() {
 
 // Backs both dialogs' "cuotas anuales"/"licencias nuevas" sections
 // (prefix "nt" for the create dialog, "et" for the edit one — see
-// account.html). Nothing added here is sent anywhere until the
+// cuenta.html). Nothing added here is sent anywhere until the
 // transaction itself is actually saved: "+ Añadir cuota"/"+ Añadir
 // licencia" only appends to a pending, client-side-only list (rendered
 // as removable chips); submitPending walks that list afterward, one
@@ -357,7 +357,7 @@ const newTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('nt
 const editTransactionDuesLicenses = isRealAdmin ? setupDuesAndLicensesSection('et') : null;
 
 // Backs both dialogs' "cantidad + otra cuenta" lines (prefix "nt"/"et", the
-// #nt-lines/#et-lines containers in account.html). A transaction made here
+// #nt-lines/#et-lines containers in cuenta.html). A transaction made here
 // has as many lines as the person fills in: each one is an amount for
 // THIS account and the other account that amount comes from or goes to,
 // and as soon as the last line has both, a new empty one appears below it.
@@ -672,7 +672,7 @@ function renderEntryDetail(transaction) {
       .map((e) => {
         const account = allAccounts.find((a) => a.id === e.account_id);
         const name = account ? account.name : `Cuenta #${e.account_id}`;
-        return `<li><a href="/account?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
+        return `<li><a href="/cuenta?id=${e.account_id}">${escapeHtml(name)}</a><span class="balance-cell">${signedCurrency(e.amount)}</span></li>`;
       })
       .join('');
     html += `<div class="entry-detail-title">Otras cuentas de esta transacción (+ entra, − sale)</div><ul class="entry-detail-list">${items}</ul>`;
@@ -683,7 +683,7 @@ function renderEntryDetail(transaction) {
   // The cuotas and licencias this transaction paid for. The API only
   // sends them to admin/board (see GET /transactions/{id}), so for anyone
   // else both are simply absent and nothing is listed.
-  const personLink = (login, text) => `<a href="/member?login=${encodeURIComponent(login)}">${escapeHtml(personName(login))}</a> · ${escapeHtml(text)}`;
+  const personLink = (login, text) => `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(personName(login))}</a> · ${escapeHtml(text)}`;
   const dues = transaction.dues ?? [];
   if (dues.length) {
     html += `<div class="entry-detail-title">Cuotas anuales</div><ul class="entry-detail-list">${dues

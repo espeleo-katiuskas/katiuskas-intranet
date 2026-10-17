@@ -111,7 +111,7 @@ way — hence an hour and not a day). Only `web/` goes through this rule: docume
 files come from `/api/*`, which Caddy leaves to the API. The club's own Caddy, outside
 this repo, needs the same line in its site block (`docs/deployment-no-docker.md`).
 
-Club documents (estatutos, actas...) shown at `/library`: drop files into `./library/` next
+Club documents (estatutos, actas...) shown at `/archivo`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no
 rebuild, no restart, nothing through the API itself. That directory is gitignored.
 
@@ -122,7 +122,7 @@ per login. A copy of each federative license goes in that same person's `licenci
 subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optional
 thumbnail for one goes in `licencias/.thumbnails/`, named after that same original
 filename plus `.jpg` (e.g. `licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see
-**Frontend** below for how `/profile` and `/member` read both conventions back out.
+**Frontend** below for how `/perfil` and `/socio` read both conventions back out.
 `scripts/generate-license-thumbnails.sh` makes every missing (or out-of-date) thumbnail
 from the license copies — first page of a PDF, or a smaller version of an image, 280px on
 the longest side — and only needs `pdftoppm`/ImageMagick on the machine running it
@@ -254,7 +254,7 @@ it's the more specific rule and doesn't depend on how many other admins exist,
 (`ErrSelfAdminRemoval`, 409 `self_admin_removal`) an admin trying to remove their own
 admin role, full stop. Losing your own admin access has to be something another admin
 does to you, not a mistake you make removing it yourself — a stray click on your own row's
-"×" on `/member` (`web/js/member.js`'s own `renderRoleBadges`, which doesn't even render
+"×" on `/socio` (`web/js/member.js`'s own `renderRoleBadges`, which doesn't even render
 that button for your own admin badge, though the API enforces this regardless of what any
 particular client does) is exactly the failure mode this exists to rule out. Deleting a
 person (`DELETE /users/{login}`, admin-only) has the same last-admin guard:
@@ -310,7 +310,7 @@ being federated; there's no end date because a license always runs to December 3
 never `license_issued_date` — and `last_due_year` (the latest year whose cuota they paid;
 the date, `last_due_paid_at`, stays admin/board-only, both computed in
 `users.Service.enrich` via `memberships.Service.LatestDue`); no DNI or contact info).
-`/members` (`web/js/members.js`) filters on those two for everyone — "A corriente de pago"
+`/socios` (`web/js/members.js`) filters on those two for everyone — "A corriente de pago"
 is `last_due_year` ≥ the current year, "Federado" is having a `license_type` — offers
 `last_due_year` as an optional "Última cuota" column, and shows a line between the filters
 and the table reading "N personas en esta vista" (`setPeopleCount`: the rows the current
@@ -503,13 +503,13 @@ rejected due can never leave a membership period started as a side effect.
 each due's transaction to add `paid_at` (the payment's own `occurred_at` — not
 `created_at`, since a past year's due can be registered long after it was paid), only from
 this listing, never on `POST`'s response, the same "only from the listing" pattern as
-`Account.Balance`. That is what `/member` and `/profile` show: `/member`'s "Historial como
+`Account.Balance`. That is what `/socio` and `/perfil` show: `/socio`'s "Historial como
 socio" timeline gets one "Cuota anual · <year>" event per due, dated by `paid_at` and with
 no Editar/Borrar (there's no endpoint for either) — its date has to keep the same
 midnight-UTC string shape every other event's has, since the timeline sorts them as plain
 strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
 with it; on a tie the order is alta, then the cuota, then a license paid the same day
-(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/profile` shows the very same timeline, only
+(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/perfil` shows the very same timeline, only
 without the buttons: `js/timeline.js` (`loadTimelineData`, `renderTimelineRow`) builds and
 renders it for both pages, `member.js` adding its action buttons to each row. That
 needed `GET /users/{login}/leaves` to open to the person themselves, like their
@@ -520,10 +520,10 @@ deliberately out of scope for now. `membership_dues.transaction_id` cascades on 
 transaction — while `licenses.transaction_id` (nullable, see above) uses the default
 `ON DELETE RESTRICT` instead: a license is a real, independently meaningful record (proof
 of federation) even apart from its payment, so the transaction that paid for one can't be
-deleted out from under it at all. `/member` has a "+ Licencia sin pago" button
+deleted out from under it at all. `/socio` has a "+ Licencia sin pago" button
 (admin-only, in the same panel as the alta/baja actions) opening a dialog that `POST`s a
 license with no `transaction_id` — the way to record one the club didn't collect; the ones
-it does collect are registered from their transaction, in Contabilidad (`/account`). The
+it does collect are registered from their transaction, in Contabilidad (`/cuenta`). The
 license then shows in the "Historial como socio" like any other, with Editar/Borrar.
 
 **Temporary leaves** (`membership_leaves`): a "baja temporal" belongs to the person
@@ -544,10 +544,10 @@ leave they've ever had — so narrowing one period can't be blocked by a leave t
 belongs to a different one of their own periods.
 `POST /users/{login}/leaves`/`GET .../leaves` are admin-only-to-write,
 self-or-admin/board-to-read (like the person's memberships, licenses and dues, so
-`/profile` can show the same history as `/member`) — `PATCH`/`DELETE /leaves/{id}` stay
+`/perfil` can show the same history as `/socio`) — `PATCH`/`DELETE /leaves/{id}` stay
 addressed by the leave's own id. `DELETE /memberships/{id}` (admin-only) removes a
 membership period outright — nothing references one by foreign key, so it never cascades —
-meant for the frontend's own "undo my last action" story on `/member` (see Frontend
+meant for the frontend's own "undo my last action" story on `/socio` (see Frontend
 below), which only ever offers it for a person's single most recent
 alta/baja/baja-temporal entry; that's a UI-level rule, not something the endpoint itself
 enforces. `DELETE /board-members/{id}` (admin-only) is the same idea for a board term —
@@ -1073,8 +1073,8 @@ role/self checks their routes enforce.
 choice, not just an unexamined default: every page already revalidates its own session and
 re-fetches its own data on load, so there's no cross-page state an SPA would actually
 save, and this stays free of a bundler or any client-side router), one `<page>.html` +
-`js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/members` resolve
-to `members.html`. The sidebar and topbar, identical on every authenticated page, are
+`js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/socios` resolve
+to `socios.html`. The sidebar and topbar, identical on every authenticated page, are
 rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted into each
 `<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
 `<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own
@@ -1086,8 +1086,8 @@ if the signed-in user holds none of the listed roles — the whole-page gates of
 (admin/board), of `accounting.js`/`account.js` (admin/money) and of `admin.js` (admin),
 tighter than the ordinary
 baseline check every API route already enforces. Which sidebar link reads as "active" is
-computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/activity`
-or `/member` to the listing it was reached from, `/activities`/`/members`) rather than a
+computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad`
+or `/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a
 per-page `class="active"` written by hand — one less thing a new page could forget.
 `login.html` is the one page with no shell and no session yet, and never calls
 `initPage()`.
@@ -1124,10 +1124,10 @@ and when it closes. So a call that reports something after saving and then close
 dialog has to close it first — an error shown while it's still open goes into it and
 vanishes with it (`account.js`'s "creada, pero no se pudo registrar" messages do exactly
 that); `showFeedback`, which isn't redirected, doesn't care. With no dialog open,
-`showError` behaves as it always did. `profile.html`'s own "Mis datos" and `member.js`'s
+`showError` behaves as it always did. `perfil.html`'s own "Mis datos" and `member.js`'s
 own "Datos" are both left as a plain inline form instead, not a dialog: a person's own
-core data is prominent enough on both pages (the entire reason `/profile` exists at all;
-the very first thing an admin or board looks at on `/member`) that hiding it behind an
+core data is prominent enough on both pages (the entire reason `/perfil` exists at all;
+the very first thing an admin or board looks at on `/socio`) that hiding it behind an
 "Editar" button added friction for no real gain in clarity — plain `<input>`s directly on
 the page double as the read-only view too, so there's no separate view-only rendering to
 keep in sync with whatever the form itself holds. Populated once by
@@ -1151,7 +1151,7 @@ organizer?") can't be a static `data-roles` attribute, since `applyRoleVisibilit
 runs once at page load — that case computes a plain JS boolean after the data arrives and
 toggles `.hidden` directly instead (see `activity.js`'s
 `canManage`/`canJoinSelf`/`canAddOthers`). Detail pages read a login from the query string
-(`/member?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern
+(`/socio?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern
 `login.html` uses for the magic-link token from an emailed URL. Its login code has no URL
 of its own to arrive in — `login.html`'s second panel gets it typed in by hand — so the
 email/phone from the first step are instead remembered in a plain JS variable across that
@@ -1176,23 +1176,23 @@ or the request itself fails.
 
 `library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
 own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
-document from the `/library` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
+document from the `/archivo` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
 and works with the resulting `Blob` client-side — an object URL for inline preview, a
 synthetic `<a download>` click to save — since a `Blob` is what lets it render Markdown
 inline and drive the download from a click handler rather than a bare link, not because
 the route itself needs the bearer header specifically. Markdown
 documents render through a small dependency-free converter (`js/markdown.js`) that
 resolves each document-relative link against the document's own directory and rewrites it
-into an in-app `/library` navigation link; HTML documents render in a fully sandboxed
+into an in-app `/archivo` navigation link; HTML documents render in a fully sandboxed
 `<iframe>` instead, with no such link rewriting. `library.js` and `userFiles.js` (the
-embedded per-person file browser on `/profile`/`/member`) share this same
+embedded per-person file browser on `/perfil`/`/socio`) share this same
 listing/preview/download logic almost verbatim — `js/fileBrowser.js` pulls out the
 common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
 document-relative link resolver, `downloadBlob`) both import, rather than each carrying
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
-`profile.html`/`member.html` each also render a "Licencias federativas" section — a year
+`perfil.html`/`socio.html` each also render a "Licencias federativas" section — a year
 `<select>`, mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small
 clickable thumbnails rather than a plain list of text links — instead of pointing at
 that person's `licencias/` subdirectory (see Commands above) through `userFiles.js`'s
@@ -1246,8 +1246,8 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/distributions`, `/distribution?id=…`, `/distribution-order?id=…` and
-`/distribution-pickup?id=…` (`distributions.js`, `distribution.js`, `distribution-order.js`,
+`/repartos`, `/reparto?id=…`, `/reparto-pedido?id=…` and
+`/reparto-recogida?id=…` (`distributions.js`, `distribution.js`, `distribution-order.js`,
 `distribution-pickup.js`, sharing `js/distributionCommon.js`) are the interface for
 **Distributions** above, behind one "Repartos" sidebar entry (`layout.js` maps the three
 detail pages to it in `ACTIVE_ALIASES`). The list opens a new distribution from a dialog
@@ -1263,21 +1263,21 @@ a time (`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field), ed
 delete; every control restricted by `data-roles` is *removed* from the page for anybody
 else, so each script reaches those through a null-safe lookup (a bare
 `getElementById(...).addEventListener` on one of them would throw before the rest of the
-page ran). `/distribution-order` (`requireAnyRole` admin/board/material) shows
+page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows
 `GET .../order` and the units grouped by person, with "Marcar pagado" per person for
-admin/board; `/distribution-pickup` lists who is still to collect, with a checkbox per unit
+admin/board; `/reparto-recogida` lists who is still to collect, with a checkbox per unit
 once the status is `received`, an "Entregado a" picker (suggesting the beneficiary when all
 the marked units are for the same one) and "Deshacer" per collected unit, confirming before
 handing over unpaid units. `api.js`'s `apiFetch` now puts the API's error `code` on the
 thrown `Error`, which `distributionCommon.js`'s `apiErrorText` maps to Spanish messages
 (falling back to the API's own text).
 
-`/accounting` (`accounting.js`) manages the chart of accounts from
+`/contabilidad` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,
 of every account's name, direct balance, and last movement date (each name a plain
-`<a href="/account?id=…">` into that one account's own detail page, below). There is
+`<a href="/cuenta?id=…">` into that one account's own detail page, below). There is
 deliberately no code column, nor codes in the parent pickers: a code only shows on that
-account's own `/account` page, though the create/edit dialogs still have the field to set
+account's own `/cuenta` page, though the create/edit dialogs still have the field to set
 it. The page also has the controls to create an account ("+ Nueva cuenta" dialog), correct
 one's name/code/parent (one shared edit dialog, `openEditAccountDialog`), and swap it up
 or down among its own siblings. Both dialogs carry three checkboxes, "Para cuotas
@@ -1304,17 +1304,17 @@ with the very next one, which would otherwise look like nothing happened). A hid
 account stays offered as the parent picker's choice when it is the current parent —
 dropping it would move the account to the top level on save. A `move`'s own response (the
 whole reordered list) re-renders directly from `applyAccountsList` rather than triggering
-a follow-up `GET`. Only admin and the optional "money" role ever see `/accounting` in the
+a follow-up `GET`. Only admin and the optional "money" role ever see `/contabilidad` in the
 sidebar at all, or can even land on the page (`hasAnyRole(user, ['admin', 'money'])`, else
 redirected to `/`) — tighter than the API itself, which opens *reading* the chart to every
 baseline role the same as `GET /transactions`; admin/money can already write here too, so
 nothing on the page needs a narrower check than that one gate.
 
-`/account?id=…` (`account.js`) is one account's own ledger — reached only by clicking an
-account's name on `/accounting`, never linked from the sidebar itself, so it shares that
-same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/accounting`
-for the sidebar's own highlighting, the same `/activity`→`/activities`/
-`/member`→`/members` treatment every other detail-off-a-listing page gets). Renders
+`/cuenta?id=…` (`account.js`) is one account's own ledger — reached only by clicking an
+account's name on `/contabilidad`, never linked from the sidebar itself, so it shares that
+same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/contabilidad`
+for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
+`/socio`→`/socios` treatment every other detail-off-a-listing page gets). Renders
 `GET /accounts/{id}/transactions` (see **Accounting** above) as a table — date,
 description, this account's own entry amount, its running balance after, and per-row
 Editar/Borrar (a row also opens on a click anywhere but those buttons, or Enter/Space when
@@ -1355,7 +1355,7 @@ resolved to names from `allAccounts`, which the page already has; it works for
 transactions of any number of entries. Under them it also lists the cuotas anuales and
 licencias the transaction paid for — each as the person's name (from
 `GET /users/directory`, which the page loads for everyone who can reach it, not just for
-the admin pickers) linking to `/member`, plus year (and license type) — from the
+the admin pickers) linking to `/socio`, plus year (and license type) — from the
 `dues`/`licenses` that same response carries for admin/board only, so they simply don't
 appear for anyone else. Clicking the row again collapses it, a click on Editar/Borrar or
 on a link never toggles it, and any reload of the list starts every row collapsed.
@@ -1403,8 +1403,8 @@ from one `GET /accounts` call — that listing already carries every account's o
 so there's no need for a second, single-account fetch just for the header
 (`GET /accounts/{id}` alone never populates it — see **Accounting** above).
 
-`/members` (`members.js`) is a read-only, sortable table of people; every action about a
-person lives on their own `/member?login=<login>` page, which a row opens for admin/board
+`/socios` (`members.js`) is a read-only, sortable table of people; every action about a
+person lives on their own `/socio?login=<login>` page, which a row opens for admin/board
 only. "+ Nueva persona" is admin-only, in the markup and in `members.js`, which loads the
 role catalog (for that dialog's role checkboxes) only for an admin. The list of roles
 itself, to create or delete one, is no longer here: it lives on `/admin`, the page behind
@@ -1439,11 +1439,11 @@ filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre",
 "Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag); the rest
 are optional in the "Filtros…" panel.
 
-On `/member`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
+On `/socio`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without
 `transaction_id`) — the way to register one the club didn't collect, such as someone
 federated elsewhere. Licenses the club does collect are registered from their transaction
-on `/account`, as above.
+on `/cuenta`, as above.
 
 **API contract**: `backend/openapi/openapi.yaml` is the source of truth for the HTTP
 surface — keep it in sync with handler changes (routes, request/response schemas, role

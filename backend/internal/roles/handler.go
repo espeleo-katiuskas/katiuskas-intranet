@@ -51,7 +51,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // Assigning or revoking a role is data about a person, same as their
 // profile fields — only admin can touch who holds what. The catalog
 // itself is just organizational labels, open to any baseline role
-// (read-only) so a plain member's own "Cargo" column on /members can
+// (read-only) so a plain member's own "Cargo" column on /socios can
 // tell an automatic role (member/former_member/board) apart from one
 // that's actually a distinct label to show.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {

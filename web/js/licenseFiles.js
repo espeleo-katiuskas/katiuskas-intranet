@@ -103,7 +103,7 @@ function wireThumbnailFallbacks(list) {
 }
 
 // initLicenseFiles wires up a fixed set of element ids
-// (license-files-*, see profile.html/member.html) to browse the given
+// (license-files-*, see perfil.html/socio.html) to browse the given
 // login's own "licencias" folder one year at a time, exactly like
 // dashboard.js's own loadActas: a <select> built from whatever years
 // actually have a license on file (ascending, most recent selected by
@@ -113,9 +113,9 @@ function wireThumbnailFallbacks(list) {
 // convention has no year to file it under, so — the same as an acta
 // named anything else — it's simply left out. Safe to call on a page
 // missing that markup — it simply does nothing.
-// hideWhenEmpty mirrors initUserFilesBrowser's own option: profile.html
+// hideWhenEmpty mirrors initUserFilesBrowser's own option: perfil.html
 // hides the whole section when nobody's dropped a license copy in for
-// this person yet; member.html leaves it off, so admin/board still see
+// this person yet; socio.html leaves it off, so admin/board still see
 // the (empty) section and know there's nothing there.
 async function initLicenseFiles(login, { hideWhenEmpty = false } = {}) {
   const section = document.getElementById('license-files-section');

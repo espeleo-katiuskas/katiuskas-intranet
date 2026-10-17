@@ -349,7 +349,7 @@ directorios normales — cópialos como cualquier otro fichero del sistema.
 ### Miniaturas de las licencias
 
 Las copias de las licencias de cada persona (`user-files/<login>/licencias/`) se muestran en
-`/profile` y `/member` con una miniatura, que la aplicación no genera sola. Para crear las
+`/perfil` y `/socio` con una miniatura, que la aplicación no genera sola. Para crear las
 que falten (y renovar las que sean más antiguas que su fichero) ejecuta el script del
 repositorio, con el usuario dueño de los ficheros y apuntando al directorio de producción:
 

@@ -1,14 +1,14 @@
-// The "Historial como socio" timeline shared by /member (which adds its action
-// buttons to each row) and /profile (which shows it as is): one flat,
+// The "Historial como socio" timeline shared by /socio (which adds its action
+// buttons to each row) and /perfil (which shows it as is): one flat,
 // chronological list of everything that happened to a person as a socio, plus
-// the records it was built from, which /member's own actions need to look up.
+// the records it was built from, which /socio's own actions need to look up.
 
 import { apiFetch, escapeHtml, formatDate, positionLabels } from './api.js';
 
 // Which events are "cambios de estado" (alta, baja, inicio/fin de baja
 // temporal), not licenses or board terms, which have their own independent
 // delete affordance already. Only the most recent one overall ever gets a
-// "Borrar" button on /member: undoing history further back than the single
+// "Borrar" button on /socio: undoing history further back than the single
 // most recent action isn't offered, only correcting it (Editar).
 const STATUS_EVENT_TYPES = new Set(['alta', 'baja', 'leave_start', 'leave_end']);
 
@@ -125,8 +125,8 @@ async function loadTimelineData(login, memberships) {
 }
 
 
-// One row of the timeline: the date and what happened, and — on /member only —
-// the buttons for it (already-built HTML, empty on /profile).
+// One row of the timeline: the date and what happened, and — on /socio only —
+// the buttons for it (already-built HTML, empty on /perfil).
 function renderTimelineRow(event, actionsHtml = '') {
   return `
     <div class="detail-row">

@@ -3,13 +3,13 @@ import { renderMarkdown } from './markdown.js';
 import { joinPath, dirOf, nameOf, formatSize, fileKind, resolveRelativePath, downloadBlob } from './fileBrowser.js';
 
 // A per-person document browser, embedded (not a page of its own) in
-// both profile.html (a socio's own files) and member.html (admin/board
+// both perfil.html (a socio's own files) and socio.html (admin/board
 // viewing someone else's) — see GET /users/{login}/files[/file]. Mostly
 // mirrors js/library.js's own browsing/preview logic (see
 // js/fileBrowser.js for the pieces shared with it), but navigates by
 // updating this same page's DOM in place instead of real page loads:
 // there's no dedicated URL for "this folder" or "this file" the way
-// /library?path=/?view= has, since this widget only ever lives inside a
+// /archivo?path=/?view= has, since this widget only ever lives inside a
 // bigger page that already owns the URL (login query string, or the
 // signed-in viewer). Internal links use a synthetic #uf:dir:.../
 // #uf:file:... href instead, intercepted the same way breadcrumbs and
@@ -28,13 +28,13 @@ function parseUfHref(href) {
 }
 
 // initUserFilesBrowser wires up a fixed set of element ids (uf-*, see
-// profile.html/member.html) to browse and preview the given login's
+// perfil.html/socio.html) to browse and preview the given login's
 // files. Safe to call on a page that doesn't have that markup — it
 // simply does nothing. hideWhenEmpty hides the whole #uf-section
 // wrapper (if present) when this person's own root has no files at
-// all yet — profile.html uses this so "Mis ficheros" doesn't show up
+// all yet — perfil.html uses this so "Mis ficheros" doesn't show up
 // as an empty section for the common case of nobody having dropped
-// anything in; member.html leaves it off, since admin/board still want
+// anything in; socio.html leaves it off, since admin/board still want
 // to see the (empty) section to know there's nothing there.
 function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
   const breadcrumbsEl = document.getElementById('uf-breadcrumbs');

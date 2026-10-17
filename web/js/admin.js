@@ -112,7 +112,7 @@ function sessionStatus(session) {
 function renderSessionRow(session) {
   const status = sessionStatus(session);
   const name = namesByLogin[session.user_login];
-  const person = `<a href="/member?login=${encodeURIComponent(session.user_login)}">${escapeHtml(name ?? session.user_login)}</a>`;
+  const person = `<a href="/socio?login=${encodeURIComponent(session.user_login)}">${escapeHtml(name ?? session.user_login)}</a>`;
   const own = session.current
     ? ' <span class="badge" title="La sesión que estás usando ahora mismo">Esta sesión</span>'
     : '';

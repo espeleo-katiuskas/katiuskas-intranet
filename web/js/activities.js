@@ -16,7 +16,7 @@ import { initModal, openModal } from './modal.js';
 await initPage();
 
 // Loaded once, shared only by the "new activity" participant picker now —
-// per-activity participant management lives on /activity?id=… instead.
+// per-activity participant management lives on /actividad?id=… instead.
 let directoryByLogin = {};
 let personEntries = [];
 
@@ -98,7 +98,7 @@ loadMoreButton.addEventListener('click', async () => {
 activitiesList.addEventListener('click', (event) => {
   const row = event.target.closest('tr[data-activity-id]');
   if (!row) return;
-  window.location.href = `/activity?id=${row.dataset.activityId}`;
+  window.location.href = `/actividad?id=${row.dataset.activityId}`;
 });
 
 // Creating an activity is open to any signed-in member, not just admin/board.
@@ -259,7 +259,7 @@ function renderCalendarDay(date, info) {
   const shown = activities.slice(0, 2);
   const rest = activities.length - shown.length;
   const chips = shown
-    .map((a) => `<a class="calendar-day-activity" href="/activity?id=${a.id}" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</a>`)
+    .map((a) => `<a class="calendar-day-activity" href="/actividad?id=${a.id}" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</a>`)
     .join('');
   const more = rest > 0 ? `<span class="calendar-day-more">+${rest} más</span>` : '';
 

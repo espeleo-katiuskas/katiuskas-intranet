@@ -60,7 +60,7 @@ async function exitImpersonation() {
   try {
     const result = await apiFetch('/auth/impersonate/exit', { method: 'POST' });
     setToken(result.token);
-    window.location.href = '/members';
+    window.location.href = '/socios';
   } catch (err) {
     button.disabled = false;
     alert(err.message || 'No se ha podido salir de la impersonación.');
@@ -272,7 +272,7 @@ const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: '
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
 // Shared "success/error banner" pair every page provides via its own
-// #feedback/#error <p> elements (see e.g. members.html) — previously
+// #feedback/#error <p> elements (see e.g. socios.html) — previously
 // copy-pasted verbatim into every page script instead of living here.
 // Looked up by id on every call rather than cached at module load, so
 // these keep working regardless of when a page's own script runs

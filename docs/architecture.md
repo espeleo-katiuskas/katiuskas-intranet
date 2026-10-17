@@ -129,18 +129,18 @@ persona.
 
 ### Efecto en el frontend
 
-**`/members`.** Es visible para member además de admin/board:
+**`/socios`.** Es visible para member además de admin/board:
 
 - Las columnas y los filtros se reducen a lo que `MemberListing` realmente trae
   (`MEMBER_COLUMNS`/`MEMBER_FILTERS` en `web/js/members.js`, en vez de las versiones
   `FULL_*`).
-- Las filas no son clicables: `/member?login=…` es solo para admin/board.
+- Las filas no son clicables: `/socio?login=…` es solo para admin/board.
 - «Nueva persona» lleva `data-roles="admin"` para que `applyRoleVisibility()` la quite del
   todo, y `members.js` solo carga el catálogo de roles (para los checkboxes de ese diálogo)
   si es admin. La lista de roles, para crear o borrar uno, ya no está aquí: vive en
   `/admin`.
 
-**`/member`.** Los botones de escritura (dar de alta, licencias, Junta Directiva, gestión
+**`/socio`.** Los botones de escritura (dar de alta, licencias, Junta Directiva, gestión
 de roles, borrar persona) llevan `data-roles="admin"` en el HTML estático.
 
 Las acciones que se generan dinámicamente por evento del timeline (los botones "Editar"
@@ -421,7 +421,7 @@ salvaguardas propias, aparte de la comprobación de rol automático:
 
 - **`self_admin_removal`** (409): un admin no puede quitarse su propio rol, incluso habiendo
   otros admins de sobra. Ese click es fácil de dar por error (el botón "×" de su propia
-  fila en `/member`) y, a diferencia de perder cualquier otro rol, nadie más está mirando
+  fila en `/socio`) y, a diferencia de perder cualquier otro rol, nadie más está mirando
   en ese momento para devolvérselo: tiene que ser otro admin quien lo haga.
 - **`last_admin`** (409): no se puede dejar a la última persona con admin sin ese rol, para
   que siempre quede alguien que pueda gestionar personas y roles.
@@ -503,7 +503,7 @@ solapen.
   que pertenece a otro periodo suyo.
 - `DELETE /memberships/{id}` (solo admin) lo borra sin más; nada lo referencia por clave
   foránea, así que nunca produce cascada. Está pensado para el «deshacer mi última
-  acción» del frontend en `/member`, que solo lo ofrece para la entrada de
+  acción» del frontend en `/socio`, que solo lo ofrece para la entrada de
   alta/baja/baja-temporal más reciente de la persona; esa restricción vive en el
   frontend, no en el endpoint.
 
@@ -552,8 +552,8 @@ una más cada año siguiente.
 
 **Frontend y límites**
 
-- En `/member`, cada cuota es un evento más («Cuota anual · año») del timeline «Historial
-  como socio», con la fecha del pago y sin botones de editar ni borrar. `/profile` muestra
+- En `/socio`, cada cuota es un evento más («Cuota anual · año») del timeline «Historial
+  como socio», con la fecha del pago y sin botones de editar ni borrar. `/perfil` muestra
   el mismo timeline, sin botones.
 - No hay endpoint para corregir o borrar una cuota, ni validación de que el año caiga
   dentro de un periodo de alta activo; ambas cosas están fuera de alcance a propósito por
@@ -654,7 +654,7 @@ debería necesitar un `INSERT`, no un despliegue.
 - `users.Service` incorpora a `User` solo la licencia del año actual de cada persona
   (`licenses.Service.CurrentByUser`; una de otro año no cuenta), mientras que del periodo
   de socio toma el más reciente. Es lo que muestra `GET /users`.
-- En `/member`, cada licencia aparece como un evento más del timeline de altas y bajas, no
+- En `/socio`, cada licencia aparece como un evento más del timeline de altas y bajas, no
   en una sección aparte.
 
 ### `board_members`
@@ -698,7 +698,7 @@ forma que `memberships`: `start_date`/`end_date` (vacío = sigue en el cargo).
   produce cascada. Pero aquí no hay «mitad de cierre» a la que volver limpiando un campo:
   al ser una sola fila con inicio y fin juntos, borrar siempre quita el cargo completo, se
   pinche desde el evento que sea de los dos.
-- En `/member`, un cargo aparece como dos eventos más (inicio y fin) en el timeline de
+- En `/socio`, un cargo aparece como dos eventos más (inicio y fin) en el timeline de
   altas y bajas, cada uno con su botón «Editar»; solo el de inicio lleva además «Borrar».
 
 ### `activities` y `activity_participants`
@@ -1067,7 +1067,7 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
   qué es privado de esa persona, admin y board).
   - Las rellena `Handler.getTransaction` a través de dos interfaces mínimas (`DuesLookup`,
     `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`.
-  - El diálogo de editar transacción de `/account` las muestra de solo lectura.
+  - El diálogo de editar transacción de `/cuenta` las muestra de solo lectura.
 - **Escritura**: reservada a admin o al rol opcional `money` (sembrado por la migración,
   no de sistema, la misma forma que `material` en inventario). Board no tiene aquí ningún
   acceso de escritura especial, igual que no lo tiene sobre licencias ni sobre los datos de
@@ -1346,7 +1346,7 @@ permite esperar (los tests lo usan).
 
 Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 `<página>.html` más su `js/<página>.js` por vista, que Caddy resuelve sin extensión
-(`/members` → `members.html`).
+(`/socios` → `socios.html`).
 
 - **Cliente de API.** `web/js/api.js` es un cliente `fetch` compartido que añade el token
   (guardado en `localStorage`) a cada petición y, al cargar cada página, llama a
@@ -1365,22 +1365,22 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | Página | Qué muestra | Quién accede | Comportamientos clave |
 | --- | --- | --- | --- |
 | `/` (`index.html`/`dashboard.js`) | Junta Directiva (`GET /board-members`) y enlaces a Documentos, Actas y Memorias. | Cualquier rol baseline. | Los enlaces son enlaces normales gracias a la cookie de sesión. |
-| `/members` | Listado de personas. | Barra lateral: admin, board y member. | A member le reduce columnas y filtros a `MemberListing` y sus filas no son clicables; para admin y board, cada fila lleva a `/member?login=<login>`. |
-| `/member?login=…` (`member.html`/`member.js`) | Ficha de una persona (ver abajo). | Solo admin y board. | Solo admin puede guardar los datos; board los ve deshabilitados. |
-| `/profile` | Ficha propia: datos de contacto editables, el mismo «Historial como socio» que `/member` (sin botones), licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/member`. |
-| `/activities`, `/activity?id=…` | Lista y detalle de una actividad: participantes, material prestado y memoria. | Cualquier rol baseline. | La lista incluye una vista de calendario anual que marca fines de semana y festivos (no hay página de calendario aparte). |
-| `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
-| `/library` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
-| `/distributions` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
-| `/distribution?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de unidad extra si hay) y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó y si está pagado o recogido; «Cambiar» y «Quitar» mientras se pueda). Admin y board, además: pasar el estado un paso adelante o atrás, editar y borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
-| `/distribution-order?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, los socios a los que les corresponde y aún no han elegido, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
-| `/distribution-pickup?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». Solo se puede apuntar con el reparto en «Recibido». | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
-| `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
+| `/socios` | Listado de personas. | Barra lateral: admin, board y member. | A member le reduce columnas y filtros a `MemberListing` y sus filas no son clicables; para admin y board, cada fila lleva a `/socio?login=<login>`. |
+| `/socio?login=…` (`socio.html`/`member.js`) | Ficha de una persona (ver abajo). | Solo admin y board. | Solo admin puede guardar los datos; board los ve deshabilitados. |
+| `/perfil` | Ficha propia: datos de contacto editables, el mismo «Historial como socio» que `/socio` (sin botones), licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/socio`. |
+| `/actividades`, `/actividad?id=…` | Lista y detalle de una actividad: participantes, material prestado y memoria. | Cualquier rol baseline. | La lista incluye una vista de calendario anual que marca fines de semana y festivos (no hay página de calendario aparte). |
+| `/material` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
+| `/archivo` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
+| `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
+| `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de unidad extra si hay) y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó y si está pagado o recogido; «Cambiar» y «Quitar» mientras se pueda). Admin y board, además: pasar el estado un paso adelante o atrás, editar y borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
+| `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, los socios a los que les corresponde y aún no han elegido, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
+| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». Solo se puede apuntar con el reparto en «Recibido». | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
+| `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
 | `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`) y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. También los festivos del calendario de actividades, año a año (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): con «Nuevo festivo», «Borrar» y «Copiar del año anterior» (mismo día y mes, salvo donde ya haya uno; los que se mueven, como Semana Santa, se corrigen a mano). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
-| `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
+| `/cuenta?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
 | `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
 
-### Ficha de una persona (`/member`)
+### Ficha de una persona (`/socio`)
 
 La página reúne, para la persona consultada:
 
@@ -1395,7 +1395,7 @@ La página reúne, para la persona consultada:
   `scripts/generate-license-thumbnails.sh`);
 - sus ficheros propios (`GET /users/{login}/files`, `web/js/userFiles.js`): el mismo
   visor embebido, con las mismas migas de pan y previsualización, aparece también en
-  `/profile` para que cada socio vea los suyos.
+  `/perfil` para que cada socio vea los suyos.
 
 ### Acceso por Telegram en `login.html`
 

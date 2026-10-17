@@ -18,16 +18,16 @@ const entriesList = document.getElementById('entries-list');
 const breadcrumbsEl = document.getElementById('breadcrumbs');
 
 function linkHrefFor(path, isDir) {
-  return isDir ? `/library?path=${encodeURIComponent(path)}` : `/library?view=${encodeURIComponent(path)}`;
+  return isDir ? `/archivo?path=${encodeURIComponent(path)}` : `/archivo?view=${encodeURIComponent(path)}`;
 }
 
 function renderBreadcrumbs(dirPath) {
   const segments = dirPath ? dirPath.split('/') : [];
-  const links = ['<a href="/library">Archivo</a>'];
+  const links = ['<a href="/archivo">Archivo</a>'];
   let acc = '';
   for (const segment of segments) {
     acc = joinPath(acc, segment);
-    links.push(`<a href="/library?path=${encodeURIComponent(acc)}">${escapeHtml(segment)}</a>`);
+    links.push(`<a href="/archivo?path=${encodeURIComponent(acc)}">${escapeHtml(segment)}</a>`);
   }
   breadcrumbsEl.innerHTML = links.join(' / ');
 }
@@ -73,7 +73,7 @@ async function loadFile(path) {
   preview.innerHTML = '';
 
   document.getElementById('file-back').onclick = () => {
-    window.location.href = dir ? `/library?path=${encodeURIComponent(dir)}` : '/library';
+    window.location.href = dir ? `/archivo?path=${encodeURIComponent(dir)}` : '/archivo';
   };
   document.getElementById('file-download').onclick = async () => {
     try {

@@ -73,8 +73,8 @@ function renderHeader() {
   // else, hence the optional chaining on the ones that might not be there.
   const orderLink = document.getElementById('link-order');
   const pickupLink = document.getElementById('link-pickup');
-  if (orderLink) orderLink.href = `/distribution-order?id=${id}`;
-  if (pickupLink) pickupLink.href = `/distribution-pickup?id=${id}`;
+  if (orderLink) orderLink.href = `/reparto-pedido?id=${id}`;
+  if (pickupLink) pickupLink.href = `/reparto-recogida?id=${id}`;
   // The actions bar only holds things for admin/board/material.
   document.getElementById('distribution-actions').hidden = !hasAnyRole(me, ['admin', 'board', 'material']);
 
@@ -152,7 +152,7 @@ onClick('delete-distribution', async () => {
   if (!confirm(`¿Borrar el reparto «${distribution.name}»? Solo se puede mientras nadie haya pedido.`)) return;
   try {
     await apiFetch(base, { method: 'DELETE' });
-    window.location.href = '/distributions';
+    window.location.href = '/repartos';
   } catch (err) {
     fail(err);
   }

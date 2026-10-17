@@ -25,7 +25,7 @@ const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
 const memberLogin = new URLSearchParams(window.location.search).get('login');
 if (!memberLogin) {
-  window.location.href = '/members';
+  window.location.href = '/socios';
 }
 
 // "member"/"former_member"/"board" are computed from membership/board
@@ -153,7 +153,7 @@ const editForm = document.getElementById('edit-member-form');
 // directly on the page this way, so there's no separate read-only view to
 // keep in sync with it; a disabled field still shows its value, just not
 // editable. Only admin can submit at all here (the whole record, not just
-// the contact fields a plain member can self-edit on /profile), so every
+// the contact fields a plain member can self-edit on /perfil), so every
 // field is disabled for board, not just the identity-ish ones profile.js
 // itself restricts.
 if (!isRealAdmin) {
@@ -961,7 +961,7 @@ function renderActivityRow(activity) {
     <tr>
       <td>${formatDate(activity.start_date)}</td>
       <td>${formatDate(activity.end_date)}</td>
-      <td><a href="/activity?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
+      <td><a href="/actividad?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
       <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
       <td>${role}</td>

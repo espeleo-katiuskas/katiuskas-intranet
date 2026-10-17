@@ -40,7 +40,7 @@ async function loadDistributions() {
 
 list.addEventListener('click', (event) => {
   const row = event.target.closest('tr[data-distribution-id]');
-  if (row) window.location.href = `/distribution?id=${row.dataset.distributionId}`;
+  if (row) window.location.href = `/reparto?id=${row.dataset.distributionId}`;
 });
 
 const dialog = document.getElementById('new-distribution-dialog');
@@ -71,7 +71,7 @@ form.addEventListener('submit', async (event) => {
   submit.disabled = true;
   try {
     const created = await apiFetch('/distributions', { method: 'POST', body: JSON.stringify(readDistributionForm(form)) });
-    window.location.href = `/distribution?id=${created.id}`;
+    window.location.href = `/reparto?id=${created.id}`;
   } catch (err) {
     showError(err.message);
     submit.disabled = false;

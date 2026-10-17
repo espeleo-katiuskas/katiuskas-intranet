@@ -3,7 +3,7 @@
 # files: for every <root>/<login>/licencias/yyyy-mm-dd-tipo.ext (a PDF or an
 # image) that has no thumbnail yet, or a thumbnail older than the file, writes
 # <root>/<login>/licencias/.thumbnails/<same filename>.jpg, at most 280 pixels
-# on its longest side (twice the size /profile and /member display it at, so
+# on its longest side (twice the size /perfil and /socio display it at, so
 # it stays sharp on a high-DPI screen; an image already smaller than that is
 # not enlarged). Nothing in the app generates them: the
 # page falls back to the original file for an image, and to a 📄 placeholder

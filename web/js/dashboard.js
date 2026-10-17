@@ -7,7 +7,7 @@ const viewer = await initPage();
 // GET /board-members is open to anyone with a baseline role, rendered
 // here as cards instead of a table row.
 
-// /member?login=… is still admin/board-only (member.js's own
+// /socio?login=… is still admin/board-only (member.js's own
 // requireAnyRole) — the same gate members.js already applies to its own
 // row click (see its isAdmin) — so the whole card only becomes a link
 // for admin/board; a plain member clicking through would just land back
@@ -79,7 +79,7 @@ if (isAdmin) {
     if (event.target.closest('a')) return;
     const card = event.target.closest('.board-card[data-person-login]');
     if (!card) return;
-    window.location.href = `/member?login=${card.dataset.personLogin}`;
+    window.location.href = `/socio?login=${card.dataset.personLogin}`;
   });
 }
 
@@ -88,11 +88,11 @@ if (isAdmin) {
 // library/memorias — see index.html) rather than from any club-specific
 // endpoint, so admins can add or remove a PDF just by dropping it in,
 // no deploy needed. A folder's own optional .order.json — a plain JSON
-// array of file names, invisible in /library's own listing since it
+// array of file names, invisible in /archivo's own listing since it
 // starts with a dot but still fetchable by exact path (Service.OpenFile
 // applies no such filter) — decides which files show first and in what
 // order; anything present in the folder but not listed there follows
-// afterward, in the alphabetical order /library's own listing already
+// afterward, in the alphabetical order /archivo's own listing already
 // returns everything in. Reordering is then just editing that one file
 // inside ./library.
 async function loadOrderedFiles(dirPath) {

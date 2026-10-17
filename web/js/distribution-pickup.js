@@ -8,7 +8,7 @@ await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
 
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 const base = `/distributions/${id}`;
-document.getElementById('back-link').href = `/distribution?id=${id}`;
+document.getElementById('back-link').href = `/reparto?id=${id}`;
 
 let distribution = null;
 let units = [];

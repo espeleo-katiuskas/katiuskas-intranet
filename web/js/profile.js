@@ -41,7 +41,7 @@ trackDirtyFields(editForm);
 // autocomplete="off" — Chrome deliberately ignores that attribute for
 // address/payment fields specifically, precisely to stop this kind of
 // page-author workaround, so it alone didn't stop the "save this
-// address?" prompt in practice (reported against /member's own version
+// address?" prompt in practice (reported against /socio's own version
 // of this form). A field Chrome's autofill excludes outright —
 // readonly, unlike disabled, still submits its value normally — never
 // looks like a real address form to it, so these start readonly and
@@ -80,7 +80,7 @@ function populateEditForm(profile) {
 // a link click, browser back/forward — just from noticing a filled
 // address-shaped form in the DOM at that moment, even though it's never
 // actually submitted (autocomplete="off" on every field here, on its
-// own, didn't stop this in practice on /member's own version of this
+// own, didn't stop this in practice on /socio's own version of this
 // form). Clearing the form right before unload is the backstop: nothing
 // address-shaped left for Chrome to notice. A beforeunload listener
 // also opts this page out of the back/forward cache, so a real
@@ -106,7 +106,7 @@ async function loadProfile() {
     document.getElementById('profile-email').textContent = profile.email ?? '';
     populateEditForm(profile);
 
-    // The same history as /member, without its action buttons. Each part
+    // The same history as /socio, without its action buttons. Each part
     // of it that fails to load just shows nothing (see loadTimelineData).
     const memberships = await apiFetch(`/users/${user.login}/memberships`);
     const { events } = await loadTimelineData(user.login, memberships);

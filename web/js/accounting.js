@@ -81,7 +81,7 @@ function accountTags(account) {
 function renderAccountRow({ account, depth, isFirst, isLast }) {
   return `
     <tr${account.hidden ? ' class="account-hidden"' : ''}>
-      <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/account?id=${account.id}">${escapeHtml(account.name)}</a>${accountTags(account)}</td>
+      <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/cuenta?id=${account.id}">${escapeHtml(account.name)}</a>${accountTags(account)}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
       <td>

@@ -407,7 +407,7 @@ th.sortable:hover {
   background: var(--surface-muted);
 }
 
-/* /account's ledger: a row expands to show the transaction's other
+/* /cuenta's ledger: a row expands to show the transaction's other
    accounts (account.js's toggleEntryDetail). Not .clickable-rows, whose
    tr rules would also catch the expanded detail row itself. */
 .entry-row {
@@ -748,7 +748,7 @@ button.link-button {
 
 /* Bordered card used to wrap a "documents from this folder" section —
    Documentos/Actas/Memorias on index.html, Licencias federativas on
-   profile.html/member.html — same look regardless of whether what's
+   perfil.html/socio.html — same look regardless of whether what's
    inside is a plain .link-list or the thumbnail grid below, and
    nothing page-specific about the card itself, which is why it lives
    here rather than in dashboard.css. */
@@ -1040,7 +1040,7 @@ dialog.modal::backdrop {
   cursor: pointer;
 }
 
-/* A link dressed as a button (e.g. the shortcuts on /distribution). */
+/* A link dressed as a button (e.g. the shortcuts on /reparto). */
 a.btn {
   text-decoration: none;
 }

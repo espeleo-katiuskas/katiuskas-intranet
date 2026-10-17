@@ -51,7 +51,7 @@ const canManageMovements = hasAnyRole(viewer, ['admin', 'board', 'material']);
 
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
 if (!activityId) {
-  window.location.href = '/activities';
+  window.location.href = '/actividades';
 }
 
 const visibilityLabels = { public: 'Pública', private: 'Privada' };
@@ -152,7 +152,7 @@ editForm?.addEventListener('submit', async (event) => {
   }
 });
 
-// Loaded once so participant names can link to their own /member?login=…
+// Loaded once so participant names can link to their own /socio?login=…
 // page instead of showing a bare login, and (for admin/board) so the
 // "add participant" picker can search by name.
 let directoryByLogin = {};
@@ -185,7 +185,7 @@ function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
-      <span><a href="/member?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · organizador' : ''}</span>
+      <span><a href="/socio?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · organizador' : ''}</span>
       ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;

@@ -257,7 +257,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 // listLeavesByUser is readable by the person themselves, admin or board —
 // the same split as their memberships, licenses and dues — so the history
-// on /profile can show the temporary leaves like /member does.
+// on /perfil can show the temporary leaves like /socio does.
 func (h *Handler) listLeavesByUser(w http.ResponseWriter, r *http.Request) {
 	login := r.PathValue("login")
 	userID, ok := h.resolveUserLogin(w, r)

@@ -81,7 +81,7 @@ async function loadBoardPositions() {
 
 // The people list is purely informational and sortable: every action
 // about a specific person (edit their data, manage their roles, register
-// an alta/baja, delete them) lives on their own page (/member?login=…) now.
+// an alta/baja, delete them) lives on their own page (/socio?login=…) now.
 // Each column knows how to render a cell and how to compare two people
 // for sorting, so both concerns stay in one place.
 function textColumn(key, label, getValue) {
@@ -561,14 +561,14 @@ function renderUsersTable() {
   tableBody.innerHTML = sorted.map(renderUserRow).join('');
 }
 
-// /member?login=… is still admin/board-only — a plain member's row click
+// /socio?login=… is still admin/board-only — a plain member's row click
 // wouldn't go anywhere but back here, so it's not wired up at all, and
 // the row-hover affordance is removed to match.
 if (isAdmin) {
   document.getElementById('users-table-body').addEventListener('click', (event) => {
     const row = event.target.closest('tr[data-person-login]');
     if (!row) return;
-    window.location.href = `/member?login=${row.dataset.personLogin}`;
+    window.location.href = `/socio?login=${row.dataset.personLogin}`;
   });
 } else {
   document.getElementById('users-table-body').classList.remove('clickable-rows');
