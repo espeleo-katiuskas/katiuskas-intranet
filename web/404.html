@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Página no encontrada — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<!-- Absolute paths throughout: Caddy serves this page at whatever address was
+     asked for, however deep (/algo/que/no/existe), so a relative one would
+     look for its files under that address. -->
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<!-- With a session: the usual shell, so the menu is there to go somewhere else. -->
+<div class="shell" id="app-shell" hidden>
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+      <h1>Esta página no existe</h1>
+      <p class="subtitle">
+        La dirección que has escrito no corresponde a ninguna página de la intranet. Puede que
+        el enlace esté mal escrito o que la página se haya movido. Usa el menú para ir a otra
+        página, o <a href="/">vuelve al inicio</a>.
+      </p>
+    </main>
+  </div>
+</div>
+
+<!-- Without one: the same plain panel as the sign-in page, with a way back. -->
+<main id="public-shell" hidden>
+  <div class="notfound-panel">
+    <h1 class="login-brand"><img src="/images/logo-katiuskas.png" alt="" class="login-brand-mark"> Club de Espeleología Katiuskas</h1>
+    <h2>Esta página no existe</h2>
+    <p class="subtitle">
+      La dirección que has escrito no corresponde a ninguna página de la intranet. Puede que
+      el enlace esté mal escrito o que la página se haya movido.
+    </p>
+    <p><a href="/login">Ir a la página de acceso</a></p>
+  </div>
+</main>
+<script type="module" src="/js/notfound.js"></script>
+</body>
+</html>

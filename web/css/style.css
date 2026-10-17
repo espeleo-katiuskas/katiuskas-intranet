@@ -647,6 +647,17 @@ form.form-panel {
   padding: 28px;
 }
 
+/* 404.html's plain panel for somebody with no session: the same box as the
+   sign-in form, for a block that isn't a form. */
+.notfound-panel {
+  max-width: 480px;
+  margin: 60px auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 28px;
+}
+
 form.form-panel label {
   display: block;
   font-size: 0.85rem;

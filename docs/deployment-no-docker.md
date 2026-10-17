@@ -229,11 +229,20 @@ intranet.tudominio.org {
 	handle /api/* {
 		reverse_proxy 127.0.0.1:64711
 	}
+	root * /opt/katiuskas-intranet/web
 	handle {
-		root * /opt/katiuskas-intranet/web
 		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
+	}
+	handle_errors {
+		@notfound `{err.status_code} == 404`
+		handle @notfound {
+			rewrite * /404
+			try_files {path} {path}.html
+			header Cache-Control "no-cache"
+			file_server
+		}
 	}
 }
 ```
@@ -255,6 +264,12 @@ hora, y mezclarlos con ficheros nuevos (secciones que nunca aparecen, formulario
 envían campos nuevos...): quien necesite ver el cambio al momento fuerza el refresco
 (el modo depende del navegador y del dispositivo, y en un móvil o una tablet no hay una
 forma sencilla: de ahí una hora y no un día). Si hace falta otro plazo, es ese número.
+
+El bloque `handle_errors` hace que cualquier dirección que no sea una página muestre
+`404.html` con estado 404, sin redirigir: la barra de direcciones conserva lo que se
+escribió. Por eso `root` va fuera del `handle`, a nivel del sitio: `handle_errors` no
+vería el que está dentro. Las respuestas del API (`/api/*`) no pasan por aquí y siguen
+siendo las suyas.
 
 Si ese Caddy corre como un usuario que no puede leer `/opt/katiuskas-intranet/web`
 (propiedad de `katiuskas`), dale acceso de lectura, por ejemplo añadiendo a ese usuario al
@@ -289,11 +304,20 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 	handle /api/* {
 		reverse_proxy 127.0.0.1:64711
 	}
+	root * /opt/katiuskas-intranet/web
 	handle {
-		root * /opt/katiuskas-intranet/web
 		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
+	}
+	handle_errors {
+		@notfound `{err.status_code} == 404`
+		handle @notfound {
+			rewrite * /404
+			try_files {path} {path}.html
+			header Cache-Control "no-cache"
+			file_server
+		}
 	}
 }
 EOF

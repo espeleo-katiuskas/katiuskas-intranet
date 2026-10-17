@@ -2,8 +2,9 @@
 	handle /api/* {
 		reverse_proxy api:64711
 	}
+	# At the site level, not inside the handle below, so handle_errors can use it too.
+	root * /srv
 	handle {
-		root * /srv
 		# No Cache-Control at all leaves browsers to guess how long a file
 		# stays fresh (a tenth of its age) — so one unchanged for weeks can
 		# be served stale for days after a deploy. A fixed hour is the
@@ -18,5 +19,17 @@
 		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
 		file_server
+	}
+
+	handle_errors {
+		# Any address that is not a page gets the 404 page, keeping the 404 status
+		# and the address as typed (a redirect would turn it into a 200 somewhere else).
+		@notfound `{err.status_code} == 404`
+		handle @notfound {
+			rewrite * /404
+			try_files {path} {path}.html
+			header Cache-Control "no-cache"
+			file_server
+		}
 	}
 }

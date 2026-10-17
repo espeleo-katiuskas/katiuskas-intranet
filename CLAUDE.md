@@ -1090,7 +1090,15 @@ computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `
 or `/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a
 per-page `class="active"` written by hand — one less thing a new page could forget.
 `login.html` is the one page with no shell and no session yet, and never calls
-`initPage()`.
+`initPage()`. `404.html` (`js/notfound.js`) is what Caddy serves, with a 404 status and
+without changing the address, for anything that isn't a page (`handle_errors` in
+`deploy/Caddyfile`, which is why `root` is declared at the site level there — an error
+handler can't see one set inside the `handle`; API responses are untouched). It can't assume
+who is looking: with a session token it becomes an ordinary page (`initPage()`, menu
+included), imported only then because `api.js` reads the token as soon as it loads; without
+one it shows a plain panel linking to `/login`. Everything it loads is by absolute path,
+since it is served at whatever address was asked for, however deep — which is also why
+`layout.js`'s topbar logo is `/images/…` and not relative.
 
 Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
 it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
