@@ -37,7 +37,7 @@ let distribution = null;
 let units = [];
 let people = { entries: [], names: {} };
 
-const fail = (err) => showError(apiErrorText(err));
+const fail = (err) => showError(apiErrorText(err, distribution));
 const nameOf = (login) => people.names[login] ?? login;
 
 // What this distribution is, in a line.

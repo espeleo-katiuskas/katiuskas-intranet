@@ -162,7 +162,7 @@ const errorMessages = {
   not_open: 'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
   not_eligible: 'Solo pueden pedirlo socios: quienes lo eran en la fecha de corte (o, si no hay, los socios de hoy), tanto la persona para quien es como quien lo pide.',
   invalid_collector: 'Quien recoge tiene que ser socio ahora o haberlo sido en la fecha de corte.',
-  already_registered: 'Esa persona ya tiene su pedido. Si quieres más, pide un extra.',
+  already_registered: 'Esa persona ya tiene su pedido.',
   extras_not_allowed: 'Este reparto no tiene extras.',
   too_many_extras: 'Esa persona ya tiene el máximo de extras.',
   invalid_choices: 'Elige un valor en cada opción.',
@@ -180,7 +180,13 @@ const errorMessages = {
   invalid_price: 'Los precios no pueden ser negativos.',
 };
 
-function apiErrorText(err) {
+// With the distribution at hand, a message can say what is possible in it: that
+// somebody already has their order only suggests asking for an extra when this
+// distribution has extras.
+function apiErrorText(err, distribution = null) {
+  if (err.code === 'already_registered' && distribution?.extra_price != null) {
+    return `${errorMessages.already_registered} Si quieres más, pide un extra.`;
+  }
   return errorMessages[err.code] ?? err.message;
 }
 
