@@ -915,13 +915,14 @@ salvo pedir unidades y editar las propias).
   hay opciones que elegir, pedirla de nuevo da 409 `already_registered`. La unidad propia
   de un reparto `all_members` no se puede quitar (409 `automatic_unit`): volvería a
   crearse. Como desde que se abre hay unidades, las opciones quedan bloqueadas
-  (`has_units`) desde entonces. El reparto sí se puede borrar (admin y board): se lleva
-  sus unidades, con lo que hayan elegido los socios, salvo que alguna esté pagada o
-  recogida (409 `has_settled_units`), en cuyo caso hay que deshacer antes esas marcas. La
-  interfaz avisa de cuántas unidades se pierden. Un cambio de precio llega a las unidades
-  automáticas que nadie ha tocado (sin elegir —sin `registered_by`—, sin pagar y sin
-  recoger), así que un reparto que se abrió y volvió a borrador no sigue cobrando el
-  precio antiguo; lo que ya eligió, pagó o recogió alguien conserva lo que costaba.
+  (`has_units`) desde entonces. El reparto sí se puede borrar (solo admin; board crea y
+  edita pero no borra): se lleva sus unidades, con lo que hayan elegido los socios, salvo
+  que alguna esté pagada o recogida (409 `has_settled_units`), en cuyo caso hay que
+  deshacer antes esas marcas. La interfaz avisa de cuántas unidades se pierden. Un cambio
+  de precio llega a las unidades automáticas que nadie ha tocado (sin elegir —sin
+  `registered_by`—, sin pagar y sin recoger), así que un reparto que se abrió y volvió a
+  borrador no sigue cobrando el precio antiguo; lo que ya eligió, pagó o recogió alguien
+  conserva lo que costaba.
 - **Quién sale en los selectores**. Ninguno ofrece a todo el mundo, solo socios
   (`GET /distributions/{id}/people`): para pedir, los que pueden tenerlo —los socios en
   `cutoff_date`, o los de hoy si no hay—; para entregar (`for=pickup`, admin, board y
@@ -1407,7 +1408,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/material` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
 | `/archivo` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
-| `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de unidad extra si hay) y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó y si está pagado o recogido; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Admin y board, además: pasar el estado un paso adelante o atrás, editar y borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
+| `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de unidad extra si hay) y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó y si está pagado o recogido; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
 | `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, las unidades que nadie ha elegido todavía («Sin elegir») con su recuento, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
 | `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». Solo se puede apuntar con el reparto «En entrega». | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
 | `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |

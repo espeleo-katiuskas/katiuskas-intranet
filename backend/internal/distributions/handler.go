@@ -44,7 +44,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/distributions", h.authenticator.Protect(h.create, "admin", "board"))
 	mux.Handle("GET /api/v1/distributions/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/distributions/{id}", h.authenticator.Protect(h.update, "admin", "board"))
-	mux.Handle("DELETE /api/v1/distributions/{id}", h.authenticator.Protect(h.delete, "admin", "board"))
+	mux.Handle("DELETE /api/v1/distributions/{id}", h.authenticator.Protect(h.delete, "admin"))
 
 	mux.Handle("GET /api/v1/distributions/{id}/people", h.authenticator.Protect(h.people))
 	mux.Handle("GET /api/v1/distributions/{id}/units", h.authenticator.Protect(h.listUnits))

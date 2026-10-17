@@ -751,6 +751,9 @@ func TestOptionsAreLockedOnceUnitsExistButTheDistributionCanBeDeleted(t *testing
 
 	empty := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, shirt()), http.StatusCreated))
 	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/distributions/%d", empty.ID), member.token, nil), http.StatusForbidden, "forbidden")
+	// Board create and edit distributions, but only admin delete them.
+	board := e.newPerson(t, "2020-01-01", "board")
+	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/distributions/%d", empty.ID), board.token, nil), http.StatusForbidden, "forbidden")
 	mustStatus(t, e.do("DELETE", fmt.Sprintf("/api/v1/distributions/%d", empty.ID), admin.token, nil), http.StatusNoContent)
 	expect(t, e.do("GET", fmt.Sprintf("/api/v1/distributions/%d", empty.ID), admin.token, nil), http.StatusNotFound, "not_found")
 }

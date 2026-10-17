@@ -1839,7 +1839,8 @@ paths:
     delete:
       summary: Delete a distribution
       description: >
-        Requires admin or board. Deletes the distribution together with its
+        Requires admin (board can create and edit distributions, not delete
+        them). Deletes the distribution together with its
         units, so whatever members chose goes with it — in a distribution for
         all members that is everybody's own unit, which exists from opening
         on. It is refused (409 has_settled_units) while some unit is paid or
@@ -1849,7 +1850,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Deleted }
-        "403": { description: Neither admin nor board. }
+        "403": { description: Not admin. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: has_settled_units. }
 
