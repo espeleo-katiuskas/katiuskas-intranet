@@ -866,6 +866,58 @@ movimiento.
 - `GET /users/{login}/movements` exige ser la propia persona o tener `admin`, `board` o
   `material`, igual que `GET /movements`, porque un movimiento puede llevar precio.
 
+### Repartos (`distributions`, `distribution_options`, `distribution_units`)
+
+Un reparto es una cosa que el club entrega a sus socios: camisetas, buffs, un cabo, tazas,
+pegatinas. Cada reparto es un solo artículo; si hay que gestionar por separado dos cosas,
+son dos repartos. Se crea con admin o board (el resto del API lo ve, pero no lo escribe,
+salvo pedir unidades y editar las propias).
+
+- **Reparto** (`distributions`). Tiene `audience`: `all_members` (le corresponde a todo el
+  que fuera socio en `cutoff_date`) o `signup` (solo quien se apunte). `cutoff_date` es
+  obligatoria en `all_members`, y opcional en `signup`: si se pone, solo pueden apuntarse
+  quienes fueran socios ese día (la comprobación mira los periodos de `memberships`). El
+  precio de la unidad propia es `price` (0 si es gratis); `extra_price` hace posibles las
+  unidades extra y es lo que cuestan; `max_extra` limita los extras por persona y exige
+  `extra_price`. `closes_at` es la fecha límite para que los socios elijan.
+- **Estado** (`status`): `draft` (en preparación, solo lo ven admin y board), `open` (los
+  socios eligen), `closed` (ya se sabe qué pedir), `ordered`, `received` (está en el club,
+  se puede recoger) y `done`. Solo se mueve un paso cada vez, adelante o atrás.
+- **Opciones** (`distribution_options`): lo que hay que elegir, con sus valores posibles
+  («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
+  mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
+  como cambiarlas, pero uno distinto da 409 `has_units`.
+- **Unidades** (`distribution_units`): una fila por unidad pedida, para que dos camisetas
+  extra puedan tener tallas distintas. `beneficiary_id` es para quién es;
+  `registered_by_id` y `registered_at`, quién la apuntó de verdad y cuándo (otra persona
+  cuando un padre apunta a su hijo o un amigo añade extras a otro), y no cambian al editar
+  lo elegido. `price` es lo que costaba al apuntarla: cambiar el precio después no toca lo
+  ya pedido. Cada persona tiene como mucho una unidad propia (índice único) y los extras
+  que permita `max_extra`, contados por beneficiario, lo apunte quien lo apunte
+  (`CreateUnit` bloquea la fila del reparto mientras los cuenta).
+- **Quién puede pedir**. Cualquier socio, para sí o para otros (`beneficiary_login`),
+  mientras el reparto esté abierto y no haya pasado `closes_at`; admin y board también
+  pasada la fecha y con el reparto cerrado. Tanto el beneficiario como quien apunta
+  tienen que ser elegibles, es decir, socios en `cutoff_date` (409 `not_eligible`); admin y
+  board, que apuntan en nombre de cualquiera, no necesitan serlo ellos. Los extras son de
+  quien los pide (o del socio a cuyo nombre se apuntan): no se dice para quién son
+  finalmente. Cambiar o quitar una unidad lo puede hacer para quien es, quien la
+  apuntó y admin/board, con las mismas reglas de estado; una unidad recogida ya no se
+  toca, y una pagada solo la toca admin/board (409 `unit_locked`).
+- **Pagado**: una marca por unidad (`paid_at` y quién la puso), que solo ponen y quitan
+  admin y board (`POST /distributions/{id}/payments`, en lote). No hay enlace con
+  Contabilidad.
+- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto en
+  `received` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
+  (quien llama) y a quién se le entregó (`picked_up_by_login`, cualquier persona: puede ser
+  distinta del beneficiario si alguien recoge cosas de otros). Es todo o nada.
+- **Resumen del pedido** (`GET /distributions/{id}/order`, admin, board y material): las
+  unidades sumadas por combinación de opciones, los totales y, en un reparto para todos los
+  socios, quién tiene derecho y todavía no ha elegido (`pending_members`).
+- **Lectura**. `GET /distributions` lo abre cualquier rol baseline y devuelve `eligible`
+  para quien llama. `GET .../units` devuelve todas las unidades a admin, board y material,
+  y a los demás solo las suyas o las que ellos apuntaron.
+
 ### Archivo de documentos (`internal/library`)
 
 El archivo de documentos del club (estatutos, reglamentos, normativas, memorias de
@@ -1039,7 +1091,8 @@ El backend se separa en capas por paquete. El dominio no depende de `net/http`: 
 - `internal/telegram` e `internal/telegrambot`: cliente de la API de bots de Telegram y bot
   que recibe mensajes (ver la subsección Telegram).
 - Un paquete por recurso de dominio: `users`, `roles`, `tokens`, `memberships`,
-  `licenses`, `board`, `activities`, `activityresources`, `inventory` y `accounting`.
+  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory` y
+  `accounting`.
   Cada uno se divide en `model.go`, `repository.go` (pgx), `service.go` y `handler.go`.
 - `adminstatus` (`GET /admin/status`) no es un recurso de dominio: solo lee, y tiene un
   único `handler.go` (ver «Estado del sistema» en la página `/admin`).

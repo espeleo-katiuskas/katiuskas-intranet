@@ -1747,6 +1747,309 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /distributions:
+    get:
+      summary: List the distributions
+      description: >
+        A distribution ("reparto") is one article the club hands out to its
+        members — shirts, buffs, a rope, mugs — with what it costs and what
+        has to be chosen (a size...). Open to any baseline role, newest
+        first; a draft is only listed for admin/board. Each one carries
+        `eligible`: whether the caller may have it (they were a member on
+        its `cutoff_date`, or it has none).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Distributions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Distribution" }
+    post:
+      summary: Create a distribution
+      description: >
+        Requires admin or board. It starts as a `draft`, which nobody else
+        can see. `cutoff_date` is required for `all_members` (it defines who
+        it is for: whoever was a member that day) and optional for `signup`,
+        where, when set, only those members can sign up. `price` is a
+        member's own unit (0 = free); `extra_price` makes extra units
+        possible and is what each costs; `max_extra` caps them per person
+        and needs `extra_price`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DistributionInput" }
+      responses:
+        "201":
+          description: Distribution created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Distribution" }
+        "400": { description: invalid_name, invalid_audience, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra or invalid_options. }
+        "403": { description: Neither admin nor board. }
+
+  /distributions/{id}:
+    get:
+      summary: Get a distribution
+      description: Open to any baseline role; a draft is a 404 for anyone but admin/board.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The distribution
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Distribution" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Edit a distribution
+      description: >
+        Requires admin or board. Replaces every field of the creation body
+        wholesale, so one left out is turned off — except `options` and
+        `status`, which are only touched when sent. `options` can only be
+        replaced while nobody has asked for anything yet (409 has_units);
+        sending back exactly what is there is not a replacement. `status`
+        moves one step at a time along draft, open, closed, ordered,
+        received, done — forward or back. Prices changed here don't change
+        what units already asked for cost.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DistributionInput" }
+      responses:
+        "200":
+          description: The updated distribution
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Distribution" }
+        "400": { description: Same as creating, plus invalid_status. }
+        "403": { description: Neither admin nor board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: invalid_status_transition (not one step), or has_units (replacing the options after somebody asked). }
+    delete:
+      summary: Delete a distribution
+      description: Requires admin or board, and only while nobody has asked for anything (409 has_units).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Neither admin nor board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: has_units. }
+
+  /distributions/{id}/units:
+    get:
+      summary: List the units asked for
+      description: >
+        A unit is one thing somebody wants, so two extra shirts are two
+        units, each with its own choices. admin, board and material see all
+        of them; anybody else only those that are for them or that they
+        entered themselves.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Units
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DistributionUnit" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Ask for a unit
+      description: >
+        Any member can ask for one for themselves or, with
+        `beneficiary_login`, for somebody else (a parent for a child, a
+        friend for another): the unit is then for that person, and
+        `registered_by_login`/`registered_at` keep who really did it. Both the
+        beneficiary and, unless admin/board, the caller have to be eligible
+        (409 not_eligible): members on the distribution's cutoff date. An extra
+        belongs to whoever it is entered for; who finally gets the item isn't
+        recorded. A person can
+        have one unit of their own (409 already_registered) and, with
+        `is_extra`, extras up to `max_extra` counted by who they are for
+        (409 extras_not_allowed, too_many_extras), at the extra price.
+        `choices` must give exactly one listed value for each option (400
+        invalid_choices). Members can only do it while the distribution is
+        `open` and before `closes_at`; admin/board also after the deadline
+        and while it is `closed` (409 not_open otherwise).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                beneficiary_login: { type: string, description: Defaults to the caller. }
+                is_extra: { type: boolean, default: false }
+                choices:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: 'Option name to the value chosen, e.g. {"Talla": "M"}.'
+      responses:
+        "201":
+          description: Unit created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: invalid_choices. }
+        "404": { description: The distribution (or a draft, for a member) or the beneficiary doesn't exist. }
+        "409": { description: not_open, not_eligible, already_registered, extras_not_allowed or too_many_extras. }
+
+  /distributions/{id}/units/{unitID}:
+    patch:
+      summary: Change what was chosen for a unit
+      description: >
+        Only `choices` can change (who entered it and when stay). Allowed to
+        the person it is for, whoever entered it, and admin/board, under the
+        same open/deadline rules as asking for it. A collected unit is final
+        (409 unit_locked); a paid one only changes through admin/board.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                choices: { type: object, additionalProperties: { type: string } }
+      responses:
+        "200":
+          description: The updated unit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: invalid_choices. }
+        "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_open or unit_locked. }
+    delete:
+      summary: Remove a unit
+      description: Same permissions and rules as changing its choices.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Removed }
+        "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_open or unit_locked. }
+
+  /distributions/{id}/order:
+    get:
+      summary: What has to be ordered
+      description: >
+        Requires admin, board or material. The units added up by combination
+        of choices (`lines`), the totals, and — for a distribution for all
+        members — who it is for and hasn't chosen yet (`pending_members`,
+        empty for `signup`).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionOrder" }
+        "403": { description: Not admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /distributions/{id}/pickups:
+    post:
+      summary: Record that units were collected
+      description: >
+        Requires admin, board or material, and the distribution `received`
+        (409 not_received). The units listed are all marked at once, handed
+        to `picked_up_by_login` — any person, not necessarily their
+        beneficiary, as when somebody collects for others — and the caller is
+        kept as who wrote it down. All or nothing: an id that isn't a unit of
+        this distribution is a 404, one already collected a 409
+        already_picked_up.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unit_ids, picked_up_by_login]
+              properties:
+                unit_ids: { type: array, items: { type: integer } }
+                picked_up_by_login: { type: string }
+      responses:
+        "204": { description: Recorded }
+        "400": { description: no_units. }
+        "403": { description: Not admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_received or already_picked_up. }
+
+  /distributions/{id}/units/{unitID}/pickup:
+    delete:
+      summary: Undo a collection
+      description: Requires admin, board or material.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Undone }
+        "403": { description: Not admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /distributions/{id}/payments:
+    post:
+      summary: Mark units as paid
+      description: >
+        Requires admin or board. Marks all the listed units, keeping who did
+        it; all or nothing (404 for an id that isn't a unit of this
+        distribution, 409 already_paid).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unit_ids]
+              properties:
+                unit_ids: { type: array, items: { type: integer } }
+      responses:
+        "204": { description: Marked }
+        "400": { description: no_units. }
+        "403": { description: Neither admin nor board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: already_paid. }
+
+  /distributions/{id}/units/{unitID}/payment:
+    delete:
+      summary: Remove the paid mark from a unit
+      description: Requires admin or board.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Removed }
+        "403": { description: Neither admin nor board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /users/{login}/movements:
     get:
       summary: List a person's material movement history
@@ -3070,6 +3373,97 @@ components:
         user_login: { type: string }
         role: { type: string, enum: [leader, participant] }
         confirmed: { type: boolean }
+
+    Distribution:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        audience: { type: string, enum: [all_members, signup] }
+        status: { type: string, enum: [draft, open, closed, ordered, received, done] }
+        closes_at: { type: string, format: date-time, description: Deadline for members to choose; absent = none. }
+        cutoff_date: { type: string, format: date, description: Only people who were members this day can have it; required for all_members. }
+        price: { type: number, description: A member's own unit; 0 when free. }
+        extra_price: { type: number, description: Each extra unit; absent when there are no extras. }
+        max_extra: { type: integer, description: Extras per person; absent = no cap. }
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              values: { type: array, items: { type: string } }
+        created_by_login: { type: string }
+        created_at: { type: string, format: date-time }
+        unit_count: { type: integer }
+        picked_up_count: { type: integer }
+        eligible:
+          type: boolean
+          description: Whether the caller may have it. Only on GET /distributions and GET /distributions/{id}.
+
+    DistributionInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        audience: { type: string, enum: [all_members, signup], default: all_members }
+        closes_at: { type: string, format: date-time }
+        cutoff_date: { type: string, format: date }
+        price: { type: number, default: 0 }
+        extra_price: { type: number }
+        max_extra: { type: integer }
+        options:
+          type: array
+          items:
+            type: object
+            required: [name, values]
+            properties:
+              name: { type: string }
+              values: { type: array, items: { type: string } }
+        status:
+          type: string
+          enum: [draft, open, closed, ordered, received, done]
+          description: Only on PATCH.
+
+    DistributionUnit:
+      type: object
+      properties:
+        id: { type: integer }
+        distribution_id: { type: integer }
+        beneficiary_login: { type: string, description: Who it is for and who it belongs to. }
+        beneficiary_name: { type: string }
+        registered_by_login: { type: string, description: Who really entered it — not the beneficiary when somebody did it for them. }
+        registered_at: { type: string, format: date-time }
+        is_extra: { type: boolean }
+        choices: { type: object, additionalProperties: { type: string } }
+        price: { type: number, description: What it cost when it was entered. }
+        paid_at: { type: string, format: date-time }
+        paid_marked_by_login: { type: string }
+        picked_up_at: { type: string, format: date-time }
+        pickup_recorded_by_login: { type: string, description: Who wrote the collection down (admin, board or material). }
+        picked_up_by_login: { type: string, description: Who it was handed to; not necessarily the beneficiary. }
+
+    DistributionOrder:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              choices: { type: object, additionalProperties: { type: string } }
+              count: { type: integer }
+        total_units: { type: integer }
+        total_amount: { type: number }
+        pending_members:
+          type: array
+          items:
+            type: object
+            properties:
+              login: { type: string }
+              name: { type: string }
 
     Holiday:
       type: object

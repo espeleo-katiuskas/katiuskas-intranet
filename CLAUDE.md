@@ -155,16 +155,16 @@ to get the whole page, not just the current viewport).
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
 panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
 `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`inventory`, `tokens`, `accounting`; `adminstatus` is the odd one out, see below), each
-split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain
-layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
-owns and registers its own routes via `RegisterRoutes(mux)`, wired together in
-`cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**, see below) is the
-one exception to this shape: it serves a read-only document tree from disk
-(`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go` works
-directly against the filesystem, resolving and validating every caller-given path against
-root before touching disk (`Service.resolve`), since there's no database constraint to
-lean on for that instead.
+`distributions`, `inventory`, `tokens`, `accounting`; `adminstatus` is the odd one out,
+see below), each split into `model.go` / `repository.go` (pgx) / `service.go` /
+`handler.go`. The domain layer never imports `net/http`; only `handler.go` knows HTTP
+exists. Each resource package owns and registers its own routes via `RegisterRoutes(mux)`,
+wired together in `cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**,
+see below) is the one exception to this shape: it serves a read-only document tree from
+disk (`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go`
+works directly against the filesystem, resolving and validating every caller-given path
+against root before touching disk (`Service.resolve`), since there's no database
+constraint to lean on for that instead.
 
 **`db.PGX` interface** (`internal/platform/db`): the subset of `*pgxpool.Pool` a
 repository actually calls. Both a pool and a `pgx.Tx` satisfy it, so production code
@@ -396,6 +396,47 @@ specific resource (`PATCH`/`DELETE`) is narrower still — only that resource's 
 or admin/board, even for someone else who took part in the same activity. A file's bytes
 come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 `library`/`userfiles` file routes takes only the bearer header (no cookie).
+
+**Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things
+the club hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a
+single article — two things to handle separately are two distributions — with a `status`
+(`draft` → `open` → `closed` → `ordered` → `received` → `done`, one step at a time,
+forward or back; a draft exists only for admin/board), an `audience` (`all_members`,
+everyone who was a member on `cutoff_date`, which is then required; or `signup`, where
+`cutoff_date` is optional and, when set, limits who can sign up to those members —
+`Repository.WasMemberOn`, a SQL check against `memberships.period`), a `price` (0 = free),
+an optional `extra_price` (its presence is what makes extras possible) and `max_extra` per
+person (which needs `extra_price`), a `closes_at` deadline, and `distribution_options` (a
+name with its possible values, e.g. "Talla": S/M/L; replaceable only while no unit exists,
+`ErrHasUnits`, and `Repository.sameOptions` makes sending back the same set a no-op so a
+form can resend everything). What people ask for are `distribution_units`, one row per
+unit (two extra shirts can have two sizes): `beneficiary_id` is who it is for,
+`registered_by_id`/`registered_at` who actually entered it — somebody else when a parent
+signs a child up or a friend adds extras for another, and never overwritten by editing the
+choices (`UpdateChoices` touches `choices` only) — and `price` is frozen when entered, so
+changing the distribution's price later doesn't change what somebody agreed to. A person
+has at most one own (non-extra) unit (partial unique index, `ErrAlreadyRegistered`) and
+extras up to `max_extra` counted by beneficiary whoever entered them: `CreateUnit` locks
+the distribution row (`FOR UPDATE`) while counting so two concurrent requests can't both
+slip under the cap. Anyone can ask for a unit for themselves or, with `beneficiary_login`,
+for somebody else, while the distribution is `open` and before `closes_at`; admin/board
+also after the deadline and while `closed` (`Service.checkOpen`). Both the beneficiary
+and, unless admin/board, whoever enters it have to be eligible (`ErrNotEligible`); an
+extra belongs to whoever it is entered for, with no notion of who ends up with the item.
+Changing/removing a unit is for its beneficiary, whoever entered it and admin/board, under
+the same rules; a collected unit is final and a paid one only changes through admin/board
+(`ErrUnitLocked`). Paid is one mark per unit (`paid_at`, `paid_marked_by_id`), set and
+cleared by admin/board only (`POST .../payments`, batch, all-or-nothing via
+`Repository.markUnits`); there's no link to accounting. Collection (`POST .../pickups`,
+batch, admin/board/material, only while `received`) records three things per unit —
+`picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
+handed to: any person, not necessarily the beneficiary, as when somebody collects for
+others), all set or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
+units by combination of choices (`GROUP BY` the `choices` jsonb) with the totals, and for
+an `all_members` distribution lists the people it is for who have no own unit yet
+(`pending_members`). `GET /distributions` and `GET /distributions/{id}` add `eligible` for
+the caller; `GET .../units` shows admin, board and material every unit and anybody else
+only the ones for them or entered by them.
 
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
@@ -703,11 +744,11 @@ the send of a bot-flow magic-link DM.
   line: the point of the message is what a human reading it would actually notice changed,
   not every byte that did. Every resource package with a mutating route (`users`, `roles`,
   `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
-  `activityresources`, `accounting`) takes an `httpapi.MutationNotifier` in its own
-  `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not gated
-  behind a "don't spam every single request" check the way the predecessor of this whole
-  thing needed, since one message per meaningful action isn't noisy the way one per every
-  mutating request (a routine token touch included) was — and sends its own specific
+  `activityresources`, `distributions`, `accounting`) takes an `httpapi.MutationNotifier`
+  in its own `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not
+  gated behind a "don't spam every single request" check the way the predecessor of this
+  whole thing needed, since one message per meaningful action isn't noisy the way one per
+  every mutating request (a routine token touch included) was — and sends its own specific
   message once a create/update/delete actually succeeds: who did it (`actorLogin`,
   resolved from the session's own id through that package's existing `UserLookup`, falling
   back to `user#<id>` rather than failing the whole request if the lookup itself errors)
@@ -726,9 +767,8 @@ the send of a bot-flow magic-link DM.
   business-data route it covered now has a strictly more informative replacement.
   `authapi`'s session-lifecycle routes (magic-link request, logout, impersonate/exit) were
   never business-data mutations and send nothing now; only a successful sign-in
-  (`notifyLogin` above), a failed attempt (`notifyAccessProblem` above) and the start of an
-  impersonation (`tokens`: "🎭 ... ha impersonado
-  a ...") are reported.
+  (`notifyLogin` above), a failed attempt (`notifyAccessProblem` above) and the start of
+  an impersonation (`tokens`: "🎭 ... ha impersonado a ...") are reported.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather than
   only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook — no public
   HTTPS endpoint to expose or coordinate with a reverse proxy, works the same behind NAT

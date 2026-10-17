@@ -17,6 +17,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
@@ -153,6 +154,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	activitiesRepo := activities.NewRepository(repoPool)
 	activitiesService := activities.NewService(activitiesRepo, licensesService)
 
+	distributionsService := distributions.NewService(distributions.NewRepository(repoPool))
+
 	inventoryRepo := inventory.NewRepository(repoPool)
 	inventoryService := inventory.NewService(inventoryRepo)
 
@@ -202,6 +205,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService, telegramSender),
 		Activities:        activities.NewHandler(activitiesService, authenticator, usersService, telegramSender),
 		Inventory:         inventory.NewHandler(inventoryService, authenticator, usersService, telegramSender),
+		Distributions:     distributions.NewHandler(distributionsService, authenticator, usersService, telegramSender),
 		Board:             board.NewHandler(boardService, authenticator, usersService, telegramSender),
 		Library:           library.NewHandler(libraryService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),

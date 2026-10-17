@@ -23,6 +23,7 @@ type Routes struct {
 	UserFiles         ResourceHandler
 	ActivityResources ResourceHandler
 	Accounting        ResourceHandler
+	Distributions     ResourceHandler
 	AdminStatus       ResourceHandler
 }
 
@@ -38,6 +39,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Licenses.RegisterRoutes(mux)
 	routes.Activities.RegisterRoutes(mux)
 	routes.Inventory.RegisterRoutes(mux)
+	routes.Distributions.RegisterRoutes(mux)
 	routes.Board.RegisterRoutes(mux)
 	routes.Library.RegisterRoutes(mux)
 	routes.UserFiles.RegisterRoutes(mux)
