@@ -123,7 +123,7 @@ async function load() {
   }
 }
 
-people = await loadPeople();
+people = await loadPeople(id);
 try {
   distribution = await apiFetch(base);
   document.getElementById('order-title').textContent = `Pedido: ${distribution.name}`;

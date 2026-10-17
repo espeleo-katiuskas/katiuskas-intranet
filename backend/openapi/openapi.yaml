@@ -1853,6 +1853,40 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: has_settled_units. }
 
+  /distributions/{id}/people:
+    get:
+      summary: Who the pickers of the pages offer
+      description: >
+        So that nobody has to choose from everybody on file, the members a
+        distribution's pickers (the "in the name of" one when asking, the
+        "handed to" one when collecting) can offer, by name. `for=order`
+        (any baseline role) are those who may have the distribution: the
+        members on its `cutoff_date`, or today's members when it has none.
+        `for=pickup` (admin, board and material only) is also whoever is a
+        member now, since somebody who joined since can collect for others.
+        A draft is a 404 for anyone but admin/board.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - name: for
+          in: query
+          schema: { type: string, enum: [order, pickup], default: order }
+      responses:
+        "200":
+          description: Members, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    login: { type: string }
+                    first_name: { type: string }
+                    last_name: { type: string }
+        "403": { description: for=pickup without admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /distributions/{id}/units:
     get:
       summary: List the units asked for
@@ -1886,7 +1920,8 @@ paths:
         friend for another): the unit is then for that person, and
         `registered_by_login`/`registered_at` keep who really did it. Both the
         beneficiary and, unless admin/board, the caller have to be eligible
-        (409 not_eligible): members on the distribution's cutoff date. An extra
+        (409 not_eligible): members on the distribution's cutoff date, or
+        today's members when it has none. An extra
         belongs to whoever it is entered for; who finally gets the item isn't
         recorded. A person can
         have one unit of their own (409 already_registered); in a
@@ -1997,11 +2032,11 @@ paths:
       description: >
         Requires admin, board or material, and the distribution `delivering`
         (409 not_delivering). The units listed are all marked at once, handed
-        to `picked_up_by_login` — any person, not necessarily their
-        beneficiary, as when somebody collects for others — and the caller is
-        kept as who wrote it down. All or nothing: an id that isn't a unit of
-        this distribution is a 404, one already collected a 409
-        already_picked_up.
+        to `picked_up_by_login` — not necessarily their beneficiary, as when
+        somebody collects for others, but a member now or on the cutoff date
+        (409 invalid_collector) — and the caller is kept as who wrote it
+        down. All or nothing: an id that isn't a unit of this distribution is
+        a 404, one already collected a 409 already_picked_up.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2019,7 +2054,7 @@ paths:
         "400": { description: no_units. }
         "403": { description: Not admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_delivering or already_picked_up. }
+        "409": { description: not_delivering, invalid_collector or already_picked_up. }
 
   /distributions/{id}/units/{unitID}/pickup:
     delete:

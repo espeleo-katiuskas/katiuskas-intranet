@@ -112,27 +112,39 @@ function fillDistributionForm(form, d) {
   set('options', optionsText(d.options));
 }
 
-// The list of people (name + login) for the "a nombre de" and "entregado a"
-// pickers: a searchable text input over the directory, open to every member.
-async function loadPeople() {
+// The people of a distribution's pages. `names` (login to full name, for
+// everybody on file, to show who did what) comes from the directory. `entries`
+// are what the "a nombre de" and "entregado a" pickers offer — a searchable
+// text input — and they come from the distribution itself, so that only members
+// can be chosen: purpose "order" gives those who may have it (members on its
+// cutoff date, or today's when it has none) and "pickup" also whoever is a
+// member now. Without a purpose there are no entries, for a page with no picker.
+async function loadPeople(distributionId, purpose = null) {
+  let names = {};
   try {
     const directory = await apiFetch('/users/directory');
-    const entries = directory
-      .slice()
-      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
-      .map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }));
-    const names = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
-    return { entries, names };
+    names = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
   } catch {
-    return { entries: [], names: {} };
+    // Without names the logins show instead.
   }
+  let entries = [];
+  if (purpose) {
+    try {
+      const members = await apiFetch(`/distributions/${distributionId}/people?for=${purpose}`);
+      entries = members.map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }));
+    } catch {
+      // No picker: the page says so when somebody tries to choose.
+    }
+  }
+  return { entries, names };
 }
 
 // What the API's error codes say, in the club's own words. Anything not here
 // falls back to the API's message.
 const errorMessages = {
   not_open: 'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
-  not_eligible: 'Solo pueden pedirlo quienes eran socios en la fecha de corte, tanto la persona para quien es como quien lo pide.',
+  not_eligible: 'Solo pueden pedirlo socios: quienes lo eran en la fecha de corte (o, si no hay, los socios de hoy), tanto la persona para quien es como quien lo pide.',
+  invalid_collector: 'Quien recoge tiene que ser socio ahora o haberlo sido en la fecha de corte.',
   already_registered: 'Esa persona ya tiene su unidad. Si quieres más, pide una unidad extra.',
   extras_not_allowed: 'Este reparto no tiene unidades extra.',
   too_many_extras: 'Esa persona ya tiene el máximo de unidades extra.',

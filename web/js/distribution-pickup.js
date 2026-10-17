@@ -159,7 +159,7 @@ async function load() {
   }
 }
 
-people = await loadPeople();
+people = await loadPeople(id, 'pickup');
 document.getElementById('pf-person-options').innerHTML =
   people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
 try {

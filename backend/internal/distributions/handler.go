@@ -46,6 +46,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/distributions/{id}", h.authenticator.Protect(h.update, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}", h.authenticator.Protect(h.delete, "admin", "board"))
 
+	mux.Handle("GET /api/v1/distributions/{id}/people", h.authenticator.Protect(h.people))
 	mux.Handle("GET /api/v1/distributions/{id}/units", h.authenticator.Protect(h.listUnits))
 	mux.Handle("POST /api/v1/distributions/{id}/units", h.authenticator.Protect(h.registerUnit))
 	mux.Handle("PATCH /api/v1/distributions/{id}/units/{unitID}", h.authenticator.Protect(h.updateUnit))
@@ -85,6 +86,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrInvalidStatus, http.StatusBadRequest, "invalid_status"},
 		{ErrInvalidChoices, http.StatusBadRequest, "invalid_choices"},
 		{ErrNoUnits, http.StatusBadRequest, "no_units"},
+		{ErrInvalidCollector, http.StatusConflict, "invalid_collector"},
 		{ErrUnknownUser, http.StatusBadRequest, "unknown_user"},
 		{ErrInvalidTransition, http.StatusConflict, "invalid_status_transition"},
 		{ErrHasUnits, http.StatusConflict, "has_units"},
@@ -306,6 +308,32 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el reparto «%s»%s.", h.actorLogin(r.Context()), d.Name, lost))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// people lists who the pickers of the pages offer, so nobody has to choose from
+// everybody on file: for=order (any baseline role) are those who may have the
+// distribution; for=pickup (admin, board and material) also whoever is a member
+// now.
+func (h *Handler) people(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	d, ok := h.visible(w, r, id)
+	if !ok {
+		return
+	}
+	forPickup := r.URL.Query().Get("for") == "pickup"
+	if current, _ := auth.UserFromContext(r.Context()); forPickup && !canSeeEveryone(current) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+		return
+	}
+	list, err := h.service.People(r.Context(), d, forPickup)
+	if err != nil {
+		writeError(w, err, "could not list people")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 // listUnits shows everything to the people who manage or hand out the

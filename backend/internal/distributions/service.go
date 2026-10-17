@@ -23,7 +23,7 @@ var (
 	ErrNotOpen = errors.New("this distribution is not open for choosing")
 	// ErrNotEligible means somebody involved can't have this distribution
 	// (nor ask for it): they weren't a member on its cutoff date.
-	ErrNotEligible = errors.New("the person it is for, and whoever asks for it, must have been a member on the cutoff date")
+	ErrNotEligible = errors.New("the person it is for, and whoever asks for it, must have been a member on the cutoff date (a member today, when there is none)")
 	// ErrInvalidChoices means the choices don't match the distribution's
 	// options: one missing, an unknown one, or a value it doesn't have.
 	ErrInvalidChoices = errors.New("choices must give exactly one of the listed values for every option")
@@ -34,6 +34,9 @@ var (
 	// distribution is being delivered.
 	ErrNotDelivering = errors.New("the distribution is not being delivered")
 	ErrNoUnits       = errors.New("give at least one unit")
+	// ErrInvalidCollector means the person the units were handed to is neither a
+	// member now nor was one on the cutoff date.
+	ErrInvalidCollector = errors.New("whoever collects must be a member now or have been one on the cutoff date")
 	// ErrAutomaticUnit means somebody tried to remove a member's own unit of a
 	// distribution for all members, which exists for everybody who is a member
 	// on the cutoff date and would simply be made again.
@@ -162,12 +165,23 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 }
 
 // IsEligible reports whether userID may have d: whoever was a member on its
-// cutoff date, or anybody when it has none (a distribution people sign up for).
+// cutoff date, or a member today when it has none (a distribution people sign
+// up for, with no date to look back at).
 func (s *Service) IsEligible(ctx context.Context, d Distribution, userID int64) (bool, error) {
 	if d.CutoffDate == nil {
-		return true, nil
+		return s.repo.WasMemberNowOrOn(ctx, userID, nil)
 	}
 	return s.repo.WasMemberOn(ctx, userID, *d.CutoffDate)
+}
+
+// People lists who the pickers offer: for asking, those who may have the
+// distribution (see IsEligible); for collecting, also whoever is a member now,
+// since somebody who joined since can collect for others.
+func (s *Service) People(ctx context.Context, d Distribution, forPickup bool) ([]Person, error) {
+	if forPickup {
+		return s.repo.ListMembers(ctx, true, d.CutoffDate)
+	}
+	return s.repo.ListMembers(ctx, d.CutoffDate == nil, d.CutoffDate)
 }
 
 // checkOpen says whether choices can be entered or changed now: only while the
@@ -316,6 +330,13 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	}
 	if d.Status != StatusDelivering {
 		return ErrNotDelivering
+	}
+	ok, err := s.repo.WasMemberNowOrOn(ctx, pickedUpByID, d.CutoffDate)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidCollector
 	}
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return err

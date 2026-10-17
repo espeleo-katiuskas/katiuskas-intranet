@@ -921,6 +921,12 @@ salvo pedir unidades y editar las propias).
   automáticas que nadie ha tocado (sin elegir —sin `registered_by`—, sin pagar y sin
   recoger), así que un reparto que se abrió y volvió a borrador no sigue cobrando el
   precio antiguo; lo que ya eligió, pagó o recogió alguien conserva lo que costaba.
+- **Quién sale en los selectores**. Ninguno ofrece a todo el mundo, solo socios
+  (`GET /distributions/{id}/people`): para pedir, los que pueden tenerlo —los socios en
+  `cutoff_date`, o los de hoy si no hay—; para entregar (`for=pickup`, admin, board y
+  material), además los socios de ahora, porque quien se ha hecho socio después puede
+  recoger por otros. Sin `cutoff_date`, un reparto `signup` es para los socios de hoy
+  (`Service.IsEligible`).
 - **Quién puede pedir**. Cualquier socio, para sí o para otros (`beneficiary_login`),
   mientras el reparto esté abierto y no haya pasado `closes_at`; admin y board también
   pasada la fecha, pero solo con el reparto abierto: una vez cerrado no cambia nada, ni
@@ -936,8 +942,9 @@ salvo pedir unidades y editar las propias).
   Contabilidad.
 - **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto en
   `delivering` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
-  (quien llama) y a quién se le entregó (`picked_up_by_login`, cualquier persona: puede ser
-  distinta del beneficiario si alguien recoge cosas de otros). Es todo o nada.
+  (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del
+  beneficiario si alguien recoge cosas de otros, pero tiene que ser socia ahora o haberlo
+  sido en `cutoff_date`, 409 `invalid_collector`). Es todo o nada.
 - **Resumen del pedido** (`GET /distributions/{id}/order`, admin, board y material): las
   unidades sumadas por combinación de opciones y los totales; las que nadie ha elegido
   todavía suman en una línea con `choices` vacío.

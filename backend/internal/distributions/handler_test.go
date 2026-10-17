@@ -255,7 +255,8 @@ func TestCreateValidation(t *testing.T) {
 func TestSignupDistributionMayHaveACutoffDateOrNot(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
-	outsider := e.newPerson(t, "", "admin") // not a member on any day
+	joinedLater := e.newPerson(t, "2026-10-10", "member") // a member now, not on the cutoff date
+	outsider := e.newPerson(t, "", "admin")               // not a member on any day
 	for _, withDate := range []bool{false, true} {
 		body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1}
 		if withDate {
@@ -268,12 +269,60 @@ func TestSignupDistributionMayHaveACutoffDateOrNot(t *testing.T) {
 		setPath := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
 		body["status"] = "open"
 		mustStatus(t, e.do("PATCH", setPath, admin.token, body), http.StatusOK)
-		rec := register(e, d.ID, outsider, map[string]any{})
+		// Without a date it is for the members of today; with one, for those of
+		// that day. Somebody who was never a member can't have it either way.
+		expect(t, register(e, d.ID, outsider, map[string]any{}), http.StatusConflict, "not_eligible")
+		rec := register(e, d.ID, joinedLater, map[string]any{})
 		if withDate {
 			expect(t, rec, http.StatusConflict, "not_eligible")
 		} else {
 			mustStatus(t, rec, http.StatusCreated)
 		}
+	}
+}
+
+// The pickers offer only members: those who may have the distribution to ask
+// for it, and also whoever is a member now to hand it to.
+func TestPeoplePickersOfferOnlyMembers(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "material", "member")
+	both := e.newPerson(t, "2020-01-01", "member")        // a member on the cutoff date and now
+	joinedLater := e.newPerson(t, "2026-10-10", "member") // a member now only
+	left := e.newPerson(t, "2020-01-01", "member")        // a member on the cutoff date only
+	if _, err := e.tx.Exec(context.Background(), `UPDATE memberships SET end_date = '2026-10-05' WHERE user_id = $1`, left.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.newPerson(t, "", "member") // never a member
+	d := newOpenShirt(t, e, admin)
+	path := fmt.Sprintf("/api/v1/distributions/%d/people", d.ID)
+	logins := func(token, purpose string) map[string]bool {
+		got := map[string]bool{}
+		for _, p := range decode[[]distributions.Person](t, mustStatus(t, e.do("GET", path+"?for="+purpose, token, nil), http.StatusOK)) {
+			got[p.Login] = true
+		}
+		return got
+	}
+
+	order := logins(both.token, "order")
+	if len(order) != 3 || !order[both.Login] || !order[left.Login] || !order[material.Login] || order[joinedLater.Login] {
+		t.Errorf("to ask for it: the members of the cutoff date only, got %v", order)
+	}
+	pickup := logins(material.token, "pickup")
+	if len(pickup) != 4 || !pickup[joinedLater.Login] || !pickup[left.Login] || !pickup[both.Login] || !pickup[material.Login] {
+		t.Errorf("to hand it to: those of the cutoff date and of now, got %v", pickup)
+	}
+	expect(t, e.do("GET", path+"?for=pickup", both.token, nil), http.StatusForbidden, "forbidden")
+	// Without a cutoff date, the members of today.
+	body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1, "status": "open"}
+	s := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", s.ID), admin.token, body), http.StatusOK)
+	now := map[string]bool{}
+	for _, p := range decode[[]distributions.Person](t, mustStatus(t, e.do("GET", fmt.Sprintf("/api/v1/distributions/%d/people?for=order", s.ID), both.token, nil), http.StatusOK)) {
+		now[p.Login] = true
+	}
+	if len(now) != 3 || !now[joinedLater.Login] || now[left.Login] {
+		t.Errorf("with no cutoff date, the members of today: got %v", now)
 	}
 }
 
@@ -583,6 +632,9 @@ func TestCollectionNeedsDeliveryToHaveBegunAndNamesBothPeople(t *testing.T) {
 	expect(t, e.do("POST", pickups, parent.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusForbidden, "forbidden")
 	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": []int64{}, "picked_up_by_login": parent.Login}), http.StatusBadRequest, "no_units")
 	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": "nobody.here"}), http.StatusNotFound, "not_found")
+	// Only a member (now, or on the cutoff date) can be who the units are handed to.
+	stranger := e.newPerson(t, "", "member")
+	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": stranger.Login}), http.StatusConflict, "invalid_collector")
 	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": []int64{own.ID, 999999}, "picked_up_by_login": parent.Login}), http.StatusNotFound, "not_found")
 
 	// The parent collects both, the child's included: the units say who wrote it

@@ -380,7 +380,7 @@ function renderAll() {
   renderUnits();
 }
 
-people = await loadPeople();
+people = await loadPeople(id, 'order');
 document.getElementById('of-person-options').innerHTML =
   people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
 try {

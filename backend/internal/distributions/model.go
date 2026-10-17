@@ -103,6 +103,14 @@ type Unit struct {
 	PickedUpByLogin       *string           `json:"picked_up_by_login,omitempty"`
 }
 
+// Person is somebody a distribution can be asked for or collected by, as the
+// pickers offer them: a name to read and a login to send back.
+type Person struct {
+	Login     string `json:"login"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
 // OptionInput is an Option as given when creating or editing a distribution.
 type OptionInput struct {
 	Name   string

@@ -408,7 +408,8 @@ nothing to hand out yet, and `delivering` is when collections are recorded; migr
 without changing what the app allows), an `audience` (`all_members`,
 everyone who was a member on `cutoff_date`, which is then required; or `signup`, where
 `cutoff_date` is optional and, when set, limits who can sign up to those members —
-`Repository.WasMemberOn`, a SQL check against `memberships.period`), a `price` (0 = free),
+`Repository.WasMemberOn`, a SQL check against `memberships.period`; with no cutoff date it
+is for today's members, `WasMemberNowOrOn`), a `price` (0 = free),
 an optional `extra_price` (its presence is what makes extras possible) and `max_extra` per
 person (which needs `extra_price`), a `closes_at` deadline, and `distribution_options` (a
 name with its possible values, e.g. "Talla": S/M/L; replaceable only while no unit exists,
@@ -435,8 +436,9 @@ cleared by admin/board only (`POST .../payments`, batch, all-or-nothing via
 `Repository.markUnits`); there's no link to accounting. Collection (`POST .../pickups`,
 batch, admin/board/material, only while `delivering`) records three things per unit —
 `picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
-handed to: any person, not necessarily the beneficiary, as when somebody collects for
-others), all set or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
+handed to: not necessarily the beneficiary, as when somebody collects for others, but a
+member now or on the cutoff date, `ErrInvalidCollector`, 409 `invalid_collector`), all set
+or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
 units by combination of choices (`GROUP BY` the `choices` jsonb) with the totals, and for
 units nobody has chosen the options of yet add up under empty choices.
 `GET /distributions` and `GET /distributions/{id}` add `eligible` for the caller;
@@ -1303,12 +1305,17 @@ anybody else, so each script reaches those through a null-safe lookup (a bare
 page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
 and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
 line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
-lists who is still to collect, with a checkbox per unit once the status is `delivering`, an
-"Entregado a" picker (suggesting the beneficiary when all the marked units are for the
+lists who is still to collect, with a checkbox per unit once the status is `delivering`,
+an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
 same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
-`api.js`'s `apiFetch` now puts the API's error `code` on the thrown `Error`, which
-`distributionCommon.js`'s `apiErrorText` maps to Spanish messages (falling back to the
-API's own text).
+Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
+`loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
+`for=order`, the members on the cutoff date (today's when there is none); `for=pickup`,
+also today's members — and only the names shown for who did what come from
+`/users/directory`. The API enforces the same (`not_eligible`, `invalid_collector`), the
+pickers just don't offer what would be refused. `api.js`'s `apiFetch` now puts the API's
+error `code` on the thrown `Error`, which `distributionCommon.js`'s `apiErrorText` maps to
+Spanish messages (falling back to the API's own text).
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,

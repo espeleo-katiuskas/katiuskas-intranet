@@ -300,6 +300,46 @@ func (r *Repository) WasMemberOn(ctx context.Context, userID int64, day time.Tim
 	return exists, err
 }
 
+// WasMemberNowOrOn reports whether userID is a member today or, when day is
+// given, was one on that day.
+func (r *Repository) WasMemberNowOrOn(ctx context.Context, userID int64, day *time.Time) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM memberships
+			WHERE user_id = $1 AND (period @> CURRENT_DATE OR ($2::date IS NOT NULL AND period @> $2::date))
+		)
+	`, userID, day).Scan(&exists)
+	return exists, err
+}
+
+// ListMembers returns the people who are members today (when today is set)
+// and/or were members on the given day, by name.
+func (r *Repository) ListMembers(ctx context.Context, today bool, day *time.Time) ([]Person, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.login, u.first_name, u.last_name
+		FROM users u
+		WHERE EXISTS (
+			SELECT 1 FROM memberships m
+			WHERE m.user_id = u.id AND (($1 AND m.period @> CURRENT_DATE) OR ($2::date IS NOT NULL AND m.period @> $2::date))
+		)
+		ORDER BY u.last_name, u.first_name, u.id
+	`, today, day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []Person{}
+	for rows.Next() {
+		var p Person
+		if err := rows.Scan(&p.Login, &p.FirstName, &p.LastName); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
 const unitSelect = `
 	SELECT n.id, n.distribution_id, n.beneficiary_id, b.login, b.first_name || ' ' || b.last_name,
 	       n.registered_by_id, rb.login, n.registered_at, n.is_extra, n.choices, n.price::float8,
