@@ -97,6 +97,9 @@ async function setStatus(status) {
   try {
     distribution = await apiFetch(base, { method: 'PATCH', body: JSON.stringify(bodyFrom(distribution, { status })) });
     renderAll();
+    // Leaving a draft is when the orders (everybody's own, if it is for all
+    // members) appear; going back to one empties them.
+    if (distribution.status !== 'draft') await loadUnits();
   } catch (err) {
     fail(err);
   }
@@ -226,9 +229,7 @@ function renderOrderForm() {
   // somebody else, or extras to ask for.
   const nothingToAsk = distribution.audience === 'all_members' && distribution.options.length === 0 && distribution.extra_price == null;
   orderForm.hidden = !(open && eligible) || nothingToAsk;
-  if (distribution.status === 'draft') {
-    status.textContent = 'Es un borrador: los socios todavía no lo ven.';
-  } else if (!eligible) {
+  if (!eligible) {
     status.textContent = distribution.cutoff_date
       ? `No te corresponde este reparto: solo es para quienes eran socios el ${formatDate(distribution.cutoff_date)}.`
       : 'No te corresponde este reparto.';
@@ -395,6 +396,9 @@ unitForm.addEventListener('submit', async (event) => {
 });
 
 function renderAll() {
+  // While it is a draft nobody can ask for anything, so neither the form nor the
+  // list of what has been asked for has a reason to be there.
+  document.getElementById('ask-sections').hidden = distribution.status === 'draft';
   renderHeader();
   renderOrderForm();
   renderUnits();
@@ -411,4 +415,4 @@ try {
   throw err;
 }
 renderAll();
-await loadUnits();
+if (distribution.status !== 'draft') await loadUnits();

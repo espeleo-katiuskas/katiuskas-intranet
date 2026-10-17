@@ -92,44 +92,47 @@
     </form>
   </dialog>
 
-  <div class="section-header">
-    <div>
-      <h2>Pedir</h2>
-      <p class="subtitle" id="order-status"></p>
-    </div>
-  </div>
-  <form id="order-form" class="panel" hidden>
-    <div class="field-grid">
-      <div class="field span-2">
-        <label for="of-person">A nombre de <span class="optional">(opcional: tú por defecto; otro socio, si lo pides por él)</span></label>
-        <input id="of-person" type="text" list="of-person-options" autocomplete="off" placeholder="Escribe un nombre…">
-        <datalist id="of-person-options"></datalist>
-      </div>
-      <div id="of-options" class="span-2 field-grid"></div>
-      <div class="field span-2" id="of-extra-field" hidden>
-        <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es un extra</span></label>
+  <!-- Asking for things: nothing of it exists while the distribution is a draft. -->
+  <div id="ask-sections">
+    <div class="section-header">
+      <div>
+        <h2>Pedir</h2>
+        <p class="subtitle" id="order-status"></p>
       </div>
     </div>
-    <div class="panel-actions">
-      <button type="submit" class="btn btn-primary">Pedir</button>
-    </div>
-  </form>
+    <form id="order-form" class="panel" hidden>
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="of-person">A nombre de <span class="optional">(opcional: tú por defecto; otro socio, si lo pides por él)</span></label>
+          <input id="of-person" type="text" list="of-person-options" autocomplete="off" placeholder="Escribe un nombre…">
+          <datalist id="of-person-options"></datalist>
+        </div>
+        <div id="of-options" class="span-2 field-grid"></div>
+        <div class="field span-2" id="of-extra-field" hidden>
+          <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es un extra</span></label>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Pedir</button>
+      </div>
+    </form>
 
-  <div class="section-header">
-    <div>
-      <h2>Tus pedidos</h2>
-      <p class="subtitle">Lo que has pedido para ti y lo que has apuntado a nombre de otros.</p>
+    <div class="section-header">
+      <div>
+        <h2>Tus pedidos</h2>
+        <p class="subtitle">Lo que has pedido para ti y lo que has apuntado a nombre de otros.</p>
+      </div>
     </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Para</th><th>Elegido</th><th>Tipo</th><th>Precio</th><th>Apuntado</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+    <p id="units-total" class="subtitle"></p>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Para</th><th>Elegido</th><th>Tipo</th><th>Precio</th><th>Apuntado</th><th>Estado</th><th></th></tr>
-      </thead>
-      <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
-    </table>
-  </div>
-  <p id="units-total" class="subtitle"></p>
 
   <dialog id="edit-unit-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>

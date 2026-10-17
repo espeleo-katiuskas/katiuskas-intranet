@@ -1302,35 +1302,36 @@ an extra unit an "extra", since "unidad" meant nothing to them — behind one "R
 sidebar entry (`layout.js` maps the three detail pages to it in `ACTIVE_ALIASES`). The
 list opens a new distribution from a dialog (admin/board; the options go in a textarea,
 one per line, "Talla: S, M, L", `parseOptions`) and shows "Puedes pedirlo" on the open
-ones whose `eligible` is true. The detail page renders the conditions, a "Pedir" form (an
-"A nombre de" picker over `GET /users/directory`, one `<select>` per option, an extra
-checkbox when `extra_price` exists; `canOrderNow` repeats the API's own open/deadline rule
-only to decide whether to show it) and "Tus pedidos" — the units where the signed-in
-person is the beneficiary or entered them, since `GET .../units` returns everything to
-admin/board/material — with who entered each when that isn't the person it is for. In a
-distribution for all members the member's own unit is already in that table ("Automático",
-"Sin elegir" with a primary "Elegir" button until somebody chooses, no "Quitar" since the
-API refuses it), and the "Pedir" form is hidden when there is neither an option nor extras
-to ask for. Admin/board move the status one step at a time (`bodyFrom` rebuilds the whole
-body, as `PATCH` replaces every field) and edit, and only admin deletes (`DELETE` is
-admin-only in the API, and the button is `data-roles="admin"`); every control restricted
-by `data-roles` is *removed* from the page for anybody else, so each script reaches those
-through a null-safe lookup (a bare `getElementById(...).addEventListener` on one of them
-would throw before the rest of the page ran). `/reparto-pedido` (`requireAnyRole`
-admin/board/material) shows `GET .../order` and the units grouped by person (an unchosen
-one shows as "Sin elegir", and the totals line counts them), with "Marcar pagado" per
-person for admin/board; `/reparto-recogida` lists who is still to collect, with a checkbox
-per unit once the status is `delivering`, an "Entregado a" picker (suggesting the
-beneficiary when all the marked units are for the same one) and "Deshacer" per collected
-unit, confirming before handing over unpaid units. Both pickers ("A nombre de", "Entregado
-a") offer only members, never everybody on file: `loadPeople(id, purpose)` takes the
-entries from `GET /distributions/{id}/people` — `for=order`, the members on the cutoff
-date (today's when there is none); `for=pickup`, also today's members — and only the names
-shown for who did what come from `/users/directory`. The API enforces the same
-(`not_eligible`, `invalid_collector`), the pickers just don't offer what would be refused.
-`api.js`'s `apiFetch` now puts the API's error `code` on the thrown `Error`, which
-`distributionCommon.js`'s `apiErrorText` maps to Spanish messages (falling back to the
-API's own text).
+ones whose `eligible` is true. The detail page renders the conditions and, except while it
+is a draft (`#ask-sections` is hidden then, and the orders are loaded only once it leaves
+the draft), a "Pedir" form (an "A nombre de" picker over `GET /users/directory`, one
+`<select>` per option, an extra checkbox when `extra_price` exists; `canOrderNow` repeats
+the API's own open/deadline rule only to decide whether to show it) and "Tus pedidos" —
+the units where the signed-in person is the beneficiary or entered them, since
+`GET .../units` returns everything to admin/board/material — with who entered each when
+that isn't the person it is for. In a distribution for all members the member's own unit
+is already in that table ("Automático", "Sin elegir" with a primary "Elegir" button until
+somebody chooses, no "Quitar" since the API refuses it), and the "Pedir" form is hidden
+when there is neither an option nor extras to ask for. Admin/board move the status one
+step at a time (`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field) and
+edit, and only admin deletes (`DELETE` is admin-only in the API, and the button is
+`data-roles="admin"`); every control restricted by `data-roles` is *removed* from the page
+for anybody else, so each script reaches those through a null-safe lookup (a bare
+`getElementById(...).addEventListener` on one of them would throw before the rest of the
+page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
+and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
+line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
+lists who is still to collect, with a checkbox per unit once the status is `delivering`,
+an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
+same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
+Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
+`loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
+`for=order`, the members on the cutoff date (today's when there is none); `for=pickup`,
+also today's members — and only the names shown for who did what come from
+`/users/directory`. The API enforces the same (`not_eligible`, `invalid_collector`), the
+pickers just don't offer what would be refused. `api.js`'s `apiFetch` now puts the API's
+error `code` on the thrown `Error`, which `distributionCommon.js`'s `apiErrorText` maps to
+Spanish messages (falling back to the API's own text).
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,
