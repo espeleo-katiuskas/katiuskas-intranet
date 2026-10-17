@@ -866,9 +866,9 @@ movimiento.
 - `GET /users/{login}/movements` exige ser la propia persona o tener `admin`, `board` o
   `material`, igual que `GET /movements`, porque un movimiento puede llevar precio.
 
-### Biblioteca de documentos (`internal/library`)
+### Archivo de documentos (`internal/library`)
 
-Biblioteca de documentos del club (estatutos, reglamentos, normativas, memorias de
+El archivo de documentos del club (estatutos, reglamentos, normativas, memorias de
 actividades, actas de reuniones...): un árbol de directorios en disco, no PostgreSQL. Por
 eso, a diferencia de cualquier otro recurso, no hay `repository.go`/pgx: `Service` trabaja
 directamente contra el sistema de archivos.
@@ -916,7 +916,7 @@ una autorización firmada...).
 
 **Permisos**
 
-- A diferencia de la biblioteca, no están abiertas a cualquier rol baseline: solo la
+- A diferencia del archivo, no están abiertas a cualquier rol baseline: solo la
   propia persona o admin/board pueden verlas (403 en cualquier otro caso).
 - La comprobación está dentro del propio handler, igual que `memberships.listByUser` e
   `inventory.listMovementsByUser`.
@@ -1046,7 +1046,7 @@ El backend se separa en capas por paquete. El dominio no depende de `net/http`: 
 
 `internal/library` e `internal/userfiles` son la excepción a ese patrón: como no hay nada
 en PostgreSQL detrás de ninguno de los dos, no tienen `repository.go`; su `service.go`
-trabaja directamente contra el sistema de archivos (ver «Biblioteca de documentos» y
+trabaja directamente contra el sistema de archivos (ver «Archivo de documentos» y
 «Ficheros por persona»).
 
 `GET /api/v1/health` (que es lo que alcanza un reverse proxy o systemd bajo `/api/*`) no
@@ -1118,7 +1118,7 @@ configurado, para no tener que entrar en el servidor a averiguarlo:
   marcha (con su nombre público).
 - **Ajustes**: la dirección pública y los plazos en vigor (sesión, enlace de acceso, espera
   entre enlaces, enlace por el bot, impersonación).
-- **Ficheros**: si existen los tres directorios (biblioteca, ficheros de las personas,
+- **Ficheros**: si existen los tres directorios (archivo, ficheros de las personas,
   memorias de actividades).
 
 `cmd/api` le pasa lo que se sabe al arrancar (`adminstatus.Info`) y el handler añade lo que
@@ -1317,7 +1317,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/profile` | Ficha propia: datos de contacto editables, el mismo «Historial como socio» que `/member` (sin botones), licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/member`. |
 | `/activities`, `/activity?id=…` | Lista y detalle de una actividad: participantes, material prestado y memoria. | Cualquier rol baseline. | La lista incluye una vista de calendario anual que marca fines de semana y festivos (no hay página de calendario aparte). |
 | `/inventory` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
-| `/library` | Biblioteca de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
+| `/library` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/accounting` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
 | `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`) y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. También los festivos del calendario de actividades, año a año (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): con «Nuevo festivo», «Borrar» y «Copiar del año anterior» (mismo día y mes, salvo donde ya haya uno; los que se mueven, como Semana Santa, se corrigen a mano). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
 | `/account?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |

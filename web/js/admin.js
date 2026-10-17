@@ -276,7 +276,7 @@ function renderStatus(status) {
     : '—';
   const db = status.database;
   const settings = status.settings;
-  const storageLabels = { library: 'Biblioteca', user_files: 'Ficheros de las personas', activity_resources: 'Memorias de actividades' };
+  const storageLabels = { library: 'Archivo', user_files: 'Ficheros de las personas', activity_resources: 'Memorias de actividades' };
 
   statusContainer.innerHTML = [
     statusGroup('Aplicación', [
