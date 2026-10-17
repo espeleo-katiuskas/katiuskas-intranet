@@ -373,6 +373,55 @@ func TestStatusMovesOneStepAtATime(t *testing.T) {
 	}
 }
 
+// A distribution for all members with no options and no extras has nothing for
+// members to do, so it goes from draft straight to delivering (and back);
+// anything else still moves a step at a time.
+func TestNothingToAskSkipsOpenAndClosed(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	member := e.newPerson(t, "2020-01-01", "member")
+	material := e.newPerson(t, "2020-01-01", "material", "member")
+
+	plain := map[string]any{"name": "Taza", "audience": "all_members", "cutoff_date": "2026-10-01", "price": 3}
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, plain), http.StatusCreated))
+	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+	patch := func(body map[string]any, status string) *httptest.ResponseRecorder {
+		b := map[string]any{}
+		for k, v := range body {
+			b[k] = v
+		}
+		b["status"] = status
+		return e.do("PATCH", path, admin.token, b)
+	}
+
+	got := decode[distributions.Distribution](t, mustStatus(t, patch(plain, "delivering"), http.StatusOK))
+	if got.Status != distributions.StatusDelivering {
+		t.Fatalf("expected delivering, got %s", got.Status)
+	}
+	// Everybody's own unit is made on the way, so it can be handed out at once.
+	unit := unitFor(t, e, admin, d.ID, member.Login)
+	mustStatus(t, e.do("POST", path+"/pickups", material.token, map[string]any{"unit_ids": []int64{unit.ID}, "picked_up_by_login": member.Login}), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/pickup", path, unit.ID), material.token, nil), http.StatusNoContent)
+	mustStatus(t, patch(plain, "draft"), http.StatusOK)
+	mustStatus(t, patch(plain, "delivering"), http.StatusOK)
+	mustStatus(t, patch(plain, "done"), http.StatusOK)
+
+	// With something to ask for, the shortcut is not there.
+	for name, change := range map[string]func(map[string]any){
+		"options": func(b map[string]any) {
+			b["options"] = []map[string]any{{"name": "Talla", "values": []string{"S", "M"}}}
+		},
+		"extras": func(b map[string]any) { b["extra_price"] = 5 },
+		"signup": func(b map[string]any) { b["audience"] = "signup" },
+	} {
+		body := map[string]any{"name": name, "audience": "all_members", "cutoff_date": "2026-10-01", "price": 3}
+		change(body)
+		other := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+		body["status"] = "delivering"
+		expect(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", other.ID), admin.token, body), http.StatusConflict, "invalid_status_transition")
+	}
+}
+
 func TestRegisterOwnUnitAndForSomeoneElse(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")

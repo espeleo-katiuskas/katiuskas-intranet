@@ -11,7 +11,8 @@ import {
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import {
-  STATUS_ORDER,
+  nothingToAsk,
+  statusSteps,
   apiErrorText,
   audienceLabels,
   bodyFrom,
@@ -78,14 +79,18 @@ function renderHeader() {
   // The actions bar only holds things for admin/board/material.
   document.getElementById('distribution-actions').hidden = !hasAnyRole(me, ['admin', 'board', 'material']);
 
-  const index = STATUS_ORDER.indexOf(distribution.status);
+  const steps = statusSteps(distribution);
+  const index = steps.indexOf(distribution.status);
   const back = document.getElementById('step-back');
   const forward = document.getElementById('step-forward');
   if (!back || !forward) return;
   back.hidden = index <= 0;
-  forward.hidden = index >= STATUS_ORDER.length - 1;
-  if (index > 0) back.textContent = `Volver a «${distributionStatusLabels[STATUS_ORDER[index - 1]]}»`;
-  if (index < STATUS_ORDER.length - 1) forward.textContent = `Pasar a «${distributionStatusLabels[STATUS_ORDER[index + 1]]}»`;
+  forward.hidden = index >= steps.length - 1;
+  if (index > 0) back.textContent = `Volver a «${distributionStatusLabels[steps[index - 1]]}»`;
+  if (index < steps.length - 1) forward.textContent = `Pasar a «${distributionStatusLabels[steps[index + 1]]}»`;
+  // Say why "Abierto" and "Cerrado" are skipped, while it is still a draft.
+  const skipHint = document.getElementById('skip-hint');
+  if (skipHint) skipHint.hidden = !(nothingToAsk(distribution) && distribution.status === 'draft');
 }
 
 async function setStatus(status) {
@@ -103,10 +108,12 @@ function onClick(elementId, handler) {
 }
 
 onClick('step-back', () => {
-  setStatus(STATUS_ORDER[STATUS_ORDER.indexOf(distribution.status) - 1]);
+  const steps = statusSteps(distribution);
+  setStatus(steps[steps.indexOf(distribution.status) - 1]);
 });
 onClick('step-forward', () => {
-  const next = STATUS_ORDER[STATUS_ORDER.indexOf(distribution.status) + 1];
+  const steps = statusSteps(distribution);
+  const next = steps[steps.indexOf(distribution.status) + 1];
   if (next === 'closed' && !confirm('Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?')) return;
   setStatus(next);
 });

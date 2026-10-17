@@ -25,6 +25,21 @@ const distributionStatusHints = {
 
 const STATUS_ORDER = ['draft', 'open', 'closed', 'delivering', 'done'];
 
+// A distribution for all members with no options to choose and no extras has
+// nothing for members to do.
+function nothingToAsk(d) {
+  return d.audience === 'all_members' && d.options.length === 0 && d.extra_price == null;
+}
+
+// The states a distribution moves through, one step at a time. When there is
+// nothing to ask for, open and closed mean nothing: it goes from draft straight
+// to delivering (the API allows the same). One already left in open or closed
+// keeps the whole list, so it can still be walked out of.
+function statusSteps(d) {
+  const skipping = ['draft', 'delivering', 'done'];
+  return nothingToAsk(d) && skipping.includes(d.status) ? skipping : STATUS_ORDER;
+}
+
 const audienceLabels = {
   all_members: 'Todos los socios',
   signup: 'Quien se apunte',
@@ -192,6 +207,8 @@ export {
   distributionStatusLabels,
   distributionStatusHints,
   STATUS_ORDER,
+  nothingToAsk,
+  statusSteps,
   audienceLabels,
   statusBadge,
   formatDateTime,

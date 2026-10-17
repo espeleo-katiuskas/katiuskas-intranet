@@ -885,9 +885,14 @@ salvo pedir unidades y editar las propias).
   unidades y eligen las opciones), `closed` (ya no se puede cambiar nada, y todavía no se
   puede entregar), `delivering` (se van entregando las unidades) y `done` (terminado). En
   la interfaz: Borrador, Abierto, Cerrado, En entrega y Terminado. Solo se mueve un paso
-  cada vez, adelante o atrás. (Hubo `ordered` y `received`, que nombraban cosas que pasan
-  fuera de la aplicación y no cambiaban lo que ella permite; la migración `00023` las
-  sustituyó: `ordered` pasó a `closed` y `received` a `delivering`.)
+  cada vez, adelante o atrás, salvo que el reparto sea para todos los socios, sin opciones
+  y sin extras: los socios no tienen nada que hacer, así que abrir y cerrar no significan
+  nada y puede pasar directamente de `draft` a `delivering` (y volver), sin pasar por
+  `open` ni `closed` (`nothingToAsk` en `Service.Update`; las unidades propias se crean
+  por el camino, como siempre). La interfaz lo avisa y salta esos pasos. (Hubo `ordered` y
+  `received`, que nombraban cosas que pasan fuera de la aplicación y no cambiaban lo que
+  ella permite; la migración `00023` las sustituyó: `ordered` pasó a `closed` y `received`
+  a `delivering`.)
 - **Opciones** (`distribution_options`): lo que hay que elegir, con sus valores posibles
   («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
   mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta

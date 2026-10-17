@@ -404,7 +404,10 @@ come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 **Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things
 the club hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a
 single article — two things to handle separately are two distributions — with a `status`
-(`draft` → `open` → `closed` → `delivering` → `done`, one step at a time, forward or back;
+(`draft` → `open` → `closed` → `delivering` → `done`, one step at a time, forward or back —
+except that a distribution for all members with no options and no extras, with nothing for
+members to do, may go straight `draft` ↔ `delivering`, `nothingToAsk`, and the page skips
+the two steps (`statusSteps`) and says why;
 each is a different thing people can do: a draft is editable and exists only for
 admin/board, members ask for units only while `open`, `closed` freezes everything with
 nothing to hand out yet, and `delivering` is when collections are recorded; migration

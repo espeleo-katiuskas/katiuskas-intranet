@@ -1815,7 +1815,10 @@ paths:
         sending back exactly what is there is not a replacement. `status`
         moves one step at a time along draft, open (members ask for units),
         closed (nothing changes, nothing can be handed out yet), delivering
-        (collections are recorded) and done — forward or back. Prices changed here don't change
+        (collections are recorded) and done — forward or back. A
+        distribution for all members with no options and no extras has
+        nothing for members to do, so it may also go straight from draft to
+        delivering, and back. Prices changed here don't change
         what units already asked for cost, except the automatic units of a
         distribution for all members that nobody has touched (not chosen, not
         paid, not collected), which take the new price.

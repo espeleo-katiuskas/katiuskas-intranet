@@ -145,7 +145,17 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 		if err != nil {
 			return Distribution{}, err
 		}
-		if step := in.Status.index() - current.Status.index(); step < -1 || step > 1 {
+		step := in.Status.index() - current.Status.index()
+		allowed := step >= -1 && step <= 1
+		// A distribution for all members with nothing to choose and no extras has
+		// nothing to ask for, so there is nothing to open or close: it can go from
+		// draft straight to delivering, and back.
+		if !allowed && nothingToAsk(in, current) &&
+			((current.Status == StatusDraft && *in.Status == StatusDelivering) ||
+				(current.Status == StatusDelivering && *in.Status == StatusDraft)) {
+			allowed = true
+		}
+		if !allowed {
 			return Distribution{}, ErrInvalidTransition
 		}
 	}
@@ -158,6 +168,18 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 		return Distribution{}, err
 	}
 	return s.repo.Get(ctx, id)
+}
+
+// nothingToAsk says whether the distribution, as it will be once in is applied,
+// is for all members (nobody has to sign up) with no options to choose and no
+// extras to ask for: members have nothing to do, so the open and closed states
+// mean nothing for it.
+func nothingToAsk(in UpdateInput, current Distribution) bool {
+	options := len(current.Options)
+	if in.Options != nil {
+		options = len(*in.Options)
+	}
+	return in.Audience == AudienceAllMembers && in.ExtraPrice == nil && options == 0
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
