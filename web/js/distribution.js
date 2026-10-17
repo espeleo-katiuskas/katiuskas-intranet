@@ -213,10 +213,18 @@ function readChoices(container) {
 // For a distribution for all members nobody has to sign up: each member's own
 // unit is already there, and what is left is choosing its options and, if
 // there are any, asking for extras.
+// In a distribution for all members with nothing to choose, everybody's own
+// order is already there and nothing can be done to it, so what is left to ask
+// for is extras only: no "Es un extra" checkbox to tick, the button says what it
+// does.
+function extrasOnly() {
+  return distribution.audience === 'all_members' && distribution.options.length === 0 && distribution.extra_price != null;
+}
+
 function allMembersHint() {
   const parts = ['Es para todos los socios: tu pedido ya está apuntado.'];
   if (distribution.options.length) parts.push('Elige lo que corresponda en «Tus pedidos» o, para otro socio, aquí abajo.');
-  if (distribution.extra_price != null) parts.push('Puedes pedir también extras.');
+  if (distribution.extra_price != null) parts.push(`Puedes pedir también extras a ${formatCurrency(distribution.extra_price)}.`);
   return parts.join(' ');
 }
 
@@ -247,7 +255,8 @@ function renderOrderForm() {
   }
   if (orderForm.hidden) return;
   document.getElementById('of-options').innerHTML = optionSelects('of');
-  extraField.hidden = distribution.extra_price == null;
+  extraField.hidden = distribution.extra_price == null || extrasOnly();
+  orderForm.querySelector('button[type="submit"]').textContent = extrasOnly() ? 'Pedido extra' : 'Pedir';
   document.getElementById('of-extra-label').textContent =
     `Es un extra (${formatCurrency(distribution.extra_price ?? 0)}${distribution.max_extra != null ? `, máximo ${distribution.max_extra} por socio` : ''})`;
 }
@@ -269,7 +278,7 @@ orderForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify({
         beneficiary_login: beneficiary,
-        is_extra: extraBox.checked,
+        is_extra: extrasOnly() || extraBox.checked,
         choices: readChoices(document.getElementById('of-options')),
       }),
     });
