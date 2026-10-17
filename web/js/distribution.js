@@ -17,6 +17,7 @@ import {
   bodyFrom,
   choicesText,
   distributionStatusLabels,
+  isUnchosen,
   fillDistributionForm,
   formatDateTime,
   loadPeople,
@@ -183,11 +184,25 @@ function readChoices(container) {
   return choices;
 }
 
+// For a distribution for all members nobody has to sign up: each member's own
+// unit is already there, and what is left is choosing its options and, if
+// there are any, asking for extras.
+function allMembersHint() {
+  const parts = ['Es para todos los socios: tu unidad ya está apuntada.'];
+  if (distribution.options.length) parts.push('Elige lo que corresponda en «Tus pedidos» o, para otro socio, aquí abajo.');
+  if (distribution.extra_price != null) parts.push('Puedes pedir también unidades extra.');
+  return parts.join(' ');
+}
+
 function renderOrderForm() {
   const status = document.getElementById('order-status');
   const eligible = isStaff || distribution.eligible;
   const open = canOrderNow();
-  orderForm.hidden = !(open && eligible);
+  // In a distribution for all members everybody's own unit is already there,
+  // so the form only has something to do when there are options to choose for
+  // somebody else, or extras to ask for.
+  const nothingToAsk = distribution.audience === 'all_members' && distribution.options.length === 0 && distribution.extra_price == null;
+  orderForm.hidden = !(open && eligible) || nothingToAsk;
   if (distribution.status === 'draft') {
     status.textContent = 'Es un borrador: los socios todavía no lo ven.';
   } else if (!eligible) {
@@ -201,7 +216,7 @@ function renderOrderForm() {
   } else {
     status.textContent = distribution.audience === 'signup'
       ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
-      : 'Es para todos los socios: elige lo tuyo, o pídelo por otro socio.';
+      : allMembersHint();
   }
   if (orderForm.hidden) return;
   document.getElementById('of-options').innerHTML = optionSelects('of');
@@ -269,20 +284,27 @@ function renderUnits() {
     ? mine.map((u) => {
       const forMe = u.beneficiary_login === me.login;
       const byMe = u.registered_by_login === me.login;
-      // Who entered it matters when it wasn't the person it is for.
-      const entered = forMe && byMe
-        ? formatDate(u.registered_at)
-        : `${formatDate(u.registered_at)} por ${escapeHtml(byMe ? 'ti' : nameOf(u.registered_by_login))}`;
+      const hasOptions = distribution.options.length > 0;
+      const unchosen = isUnchosen(u, hasOptions);
+      // Who entered it matters when it wasn't the person it is for. Nobody did
+      // for an own unit of a distribution for all members until somebody chooses.
+      let entered;
+      if (!u.registered_by_login) entered = 'Automático';
+      else if (forMe && byMe) entered = formatDate(u.registered_at);
+      else entered = `${formatDate(u.registered_at)} por ${escapeHtml(byMe ? 'ti' : nameOf(u.registered_by_login))}`;
+      // An own unit of a distribution for all members is for everybody and
+      // can't be removed (the API refuses); everything else can.
+      const removable = u.is_extra || distribution.audience === 'signup';
       const actions = canChange(u)
         ? `<div class="table-actions">
-             ${distribution.options.length ? `<button type="button" class="btn btn-secondary btn-small" data-change-unit="${u.id}">Cambiar</button>` : ''}
-             <button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>
+             ${hasOptions ? `<button type="button" class="btn ${unchosen ? 'btn-primary' : 'btn-secondary'} btn-small" data-change-unit="${u.id}">${unchosen ? 'Elegir' : 'Cambiar'}</button>` : ''}
+             ${removable ? `<button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>` : ''}
            </div>`
         : '';
       return `
         <tr>
           <td>${escapeHtml(forMe ? 'Ti' : u.beneficiary_name)}</td>
-          <td>${escapeHtml(choicesText(u.choices))}</td>
+          <td>${unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(u.choices, hasOptions))}</td>
           <td>${u.is_extra ? 'Extra' : 'Propia'}</td>
           <td>${u.price > 0 ? formatCurrency(u.price) : 'Gratis'}</td>
           <td>${entered}</td>
@@ -290,7 +312,7 @@ function renderUnits() {
           <td>${actions}</td>
         </tr>`;
     }).join('')
-    : '<tr><td colspan="7">Todavía no has pedido nada.</td></tr>';
+    : '<tr><td colspan="7">Todavía no hay nada a tu nombre.</td></tr>';
   const owed = mine.filter((u) => !u.paid_at).reduce((sum, u) => sum + u.price, 0);
   document.getElementById('units-total').textContent = owed > 0 ? `Pendiente de pagar: ${formatCurrency(owed)}.` : '';
 }

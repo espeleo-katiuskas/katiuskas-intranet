@@ -32,11 +32,19 @@ function formatDateTime(iso) {
   return `${formatDate(iso)} ${time}`;
 }
 
-// "Talla: M" — what was chosen for a unit, or a dash when there was nothing
-// to choose.
-function choicesText(choices) {
+// "Talla: M" — what was chosen for a unit. With nothing chosen it is "Sin
+// elegir" when the article has options (the own unit of everybody in a
+// distribution for all members exists before anybody chooses), and a dash when
+// there was nothing to choose.
+function choicesText(choices, hasOptions = false) {
   const entries = Object.entries(choices ?? {});
-  return entries.length ? entries.map(([name, value]) => `${name}: ${value}`).join(', ') : '—';
+  if (entries.length) return entries.map(([name, value]) => `${name}: ${value}`).join(', ');
+  return hasOptions ? 'Sin elegir' : '—';
+}
+
+// A unit with options that nobody has chosen yet.
+function isUnchosen(unit, hasOptions) {
+  return hasOptions && Object.keys(unit.choices ?? {}).length === 0;
 }
 
 // The options textarea takes one option per line, "Talla: S, M, L".
@@ -121,6 +129,7 @@ const errorMessages = {
   extras_not_allowed: 'Este reparto no tiene unidades extra.',
   too_many_extras: 'Esa persona ya tiene el máximo de unidades extra.',
   invalid_choices: 'Elige un valor en cada opción.',
+  automatic_unit: 'En un reparto para todos los socios cada uno tiene su unidad y no se puede quitar. Si no la quiere, que no la recoja.',
   unit_locked: 'Esta unidad ya está pagada o recogida y no se puede cambiar.',
   not_received: 'Todavía no se puede apuntar la recogida: el reparto tiene que estar en «Recibido».',
   already_picked_up: 'Alguna de las unidades ya estaba recogida.',
@@ -163,6 +172,7 @@ export {
   statusBadge,
   formatDateTime,
   choicesText,
+  isUnchosen,
   readDistributionForm,
   fillDistributionForm,
   loadPeople,

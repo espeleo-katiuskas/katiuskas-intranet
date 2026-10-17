@@ -34,6 +34,10 @@ var (
 	// has arrived.
 	ErrNotReceived = errors.New("the order has not been received yet")
 	ErrNoUnits     = errors.New("give at least one unit")
+	// ErrAutomaticUnit means somebody tried to remove a member's own unit of a
+	// distribution for all members, which exists for everybody who is a member
+	// on the cutoff date and would simply be made again.
+	ErrAutomaticUnit = errors.New("in a distribution for all members everybody has their own unit, which can't be removed")
 )
 
 type Service struct {
@@ -142,7 +146,15 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 			return Distribution{}, ErrInvalidTransition
 		}
 	}
-	return s.repo.Update(ctx, id, in)
+	d, err := s.repo.Update(ctx, id, in)
+	if err != nil {
+		return Distribution{}, err
+	}
+	// Opening a distribution for all members is when everybody gets their unit.
+	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
+		return Distribution{}, err
+	}
+	return s.repo.Get(ctx, id)
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
@@ -202,6 +214,11 @@ func (s *Service) RegisterUnit(ctx context.Context, in RegisterInput) (Unit, err
 	if err := validateChoices(d.Options, in.Choices); err != nil {
 		return Unit{}, err
 	}
+	// Everybody's own unit has to exist before asking for one, so that asking
+	// for it can choose its options instead of making a second one.
+	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
+		return Unit{}, err
+	}
 	// Both the person it is for and, unless staff, the one entering it have
 	// to be eligible: asking for a distribution is for those it is for, and
 	// they can do it for themselves or for another of them.
@@ -222,6 +239,13 @@ func (s *Service) RegisterUnit(ctx context.Context, in RegisterInput) (Unit, err
 }
 
 func (s *Service) ListUnits(ctx context.Context, distributionID int64, involving *int64) ([]Unit, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
+		return nil, err
+	}
 	return s.repo.ListUnits(ctx, distributionID, involving)
 }
 
@@ -241,7 +265,7 @@ func (s *Service) checkEditable(d Distribution, u Unit, staff bool) error {
 	return nil
 }
 
-func (s *Service) UpdateChoices(ctx context.Context, distributionID, id int64, choices map[string]string, staff bool) (Unit, error) {
+func (s *Service) UpdateChoices(ctx context.Context, distributionID, id int64, choices map[string]string, actorID int64, staff bool) (Unit, error) {
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
 		return Unit{}, err
@@ -259,7 +283,7 @@ func (s *Service) UpdateChoices(ctx context.Context, distributionID, id int64, c
 	if err := validateChoices(d.Options, choices); err != nil {
 		return Unit{}, err
 	}
-	return s.repo.UpdateChoices(ctx, distributionID, id, choices)
+	return s.repo.UpdateChoices(ctx, distributionID, id, choices, actorID)
 }
 
 func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staff bool) error {
@@ -273,6 +297,9 @@ func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staf
 	}
 	if err := s.checkEditable(d, u, staff); err != nil {
 		return err
+	}
+	if d.Audience == AudienceAllMembers && !u.IsExtra {
+		return ErrAutomaticUnit
 	}
 	return s.repo.DeleteUnit(ctx, distributionID, id)
 }
@@ -290,6 +317,9 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	}
 	if d.Status != StatusReceived {
 		return ErrNotReceived
+	}
+	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
+		return err
 	}
 	return s.repo.MarkPickedUp(ctx, distributionID, ids, recordedByID, pickedUpByID)
 }
@@ -315,6 +345,9 @@ func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64) error
 func (s *Service) Order(ctx context.Context, distributionID int64) (Order, error) {
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
+		return Order{}, err
+	}
+	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return Order{}, err
 	}
 	return s.repo.Order(ctx, d)

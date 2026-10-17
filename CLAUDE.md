@@ -433,10 +433,29 @@ batch, admin/board/material, only while `received`) records three things per uni
 handed to: any person, not necessarily the beneficiary, as when somebody collects for
 others), all set or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
 units by combination of choices (`GROUP BY` the `choices` jsonb) with the totals, and for
-an `all_members` distribution lists the people it is for who have no own unit yet
-(`pending_members`). `GET /distributions` and `GET /distributions/{id}` add `eligible` for
-the caller; `GET .../units` shows admin, board and material every unit and anybody else
-only the ones for them or entered by them.
+units nobody has chosen the options of yet add up under empty choices.
+`GET /distributions` and `GET /distributions/{id}` add `eligible` for the caller;
+`GET .../units` shows admin, board and material every unit and anybody else only the ones
+for them or entered by them.
+
+In a distribution for `all_members` nobody signs up: each member on the cutoff date has
+their own unit from the moment the distribution leaves `draft`
+(`Repository.SyncAutomaticUnits`, `INSERT … ON CONFLICT DO NOTHING`, migration
+`00022_distribution_units_automatic.sql` making `registered_by_id` nullable). The unit
+starts with empty `choices`, nobody as `registered_by` and the distribution's price at that
+moment; `Service` runs the sync on opening and before listing units, asking for one,
+summarizing the order and recording a collection, so a member who qualifies later shows up
+as well. With options to choose, empty `choices` is "not chosen yet". Whoever chooses —
+the member through `PATCH`, anybody through `POST …/units` for them, which fills the
+existing unit in (`CreateUnit`) instead of making a second one — becomes who entered it,
+with the moment; a repeated ask is 409 `already_registered`, and such a unit can't be
+removed (`ErrAutomaticUnit`, 409 `automatic_unit`) since the sync would recreate it. Units
+exist from opening on, so the options and deleting the distribution are locked from then.
+A price change reaches the automatic units nobody has touched — not chosen
+(`registered_by_id IS NULL`), not paid, not collected — in the same transaction as the edit
+(`Repository.Update`), so a distribution that was opened and went back to a draft doesn't
+keep charging the old price; anything somebody has chosen, paid or collected keeps what it
+cost, and extras always do.
 
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
@@ -1254,31 +1273,35 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/repartos`, `/reparto?id=…`, `/reparto-pedido?id=…` and
-`/reparto-recogida?id=…` (`distributions.js`, `distribution.js`, `distribution-order.js`,
-`distribution-pickup.js`, sharing `js/distributionCommon.js`) are the interface for
-**Distributions** above, behind one "Repartos" sidebar entry (`layout.js` maps the three
-detail pages to it in `ACTIVE_ALIASES`). The list opens a new distribution from a dialog
-(admin/board; the options go in a textarea, one per line, "Talla: S, M, L",
-`parseOptions`) and shows "Puedes pedirlo" on the open ones whose `eligible` is true. The
-detail page renders the conditions, a "Pedir" form (an "A nombre de" picker over
-`GET /users/directory`, one `<select>` per option, an extra checkbox when `extra_price`
-exists; `canOrderNow` repeats the API's own open/deadline rule only to decide whether to
-show it) and "Tus pedidos" — the units where the signed-in person is the beneficiary or
-entered them, since `GET .../units` returns everything to admin/board/material — with who
-entered each when that isn't the person it is for. Admin/board move the status one step at
-a time (`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field), edit and
-delete; every control restricted by `data-roles` is *removed* from the page for anybody
-else, so each script reaches those through a null-safe lookup (a bare
+`/repartos`, `/reparto?id=…`, `/reparto-pedido?id=…` and `/reparto-recogida?id=…`
+(`distributions.js`, `distribution.js`, `distribution-order.js`, `distribution-pickup.js`,
+sharing `js/distributionCommon.js`) are the interface for **Distributions** above, behind
+one "Repartos" sidebar entry (`layout.js` maps the three detail pages to it in
+`ACTIVE_ALIASES`). The list opens a new distribution from a dialog (admin/board; the
+options go in a textarea, one per line, "Talla: S, M, L", `parseOptions`) and shows
+"Puedes pedirlo" on the open ones whose `eligible` is true. The detail page renders the
+conditions, a "Pedir" form (an "A nombre de" picker over `GET /users/directory`, one
+`<select>` per option, an extra checkbox when `extra_price` exists; `canOrderNow` repeats
+the API's own open/deadline rule only to decide whether to show it) and "Tus pedidos" —
+the units where the signed-in person is the beneficiary or entered them, since
+`GET .../units` returns everything to admin/board/material — with who entered each when
+that isn't the person it is for. In a distribution for all members the member's own unit
+is already in that table ("Automático", "Sin elegir" with a primary "Elegir" button until
+somebody chooses, no "Quitar" since the API refuses it), and the "Pedir" form is hidden
+when there is neither an option nor extras to ask for. Admin/board move the status one
+step at a time (`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field), edit
+and delete; every control restricted by `data-roles` is *removed* from the page for
+anybody else, so each script reaches those through a null-safe lookup (a bare
 `getElementById(...).addEventListener` on one of them would throw before the rest of the
-page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows
-`GET .../order` and the units grouped by person, with "Marcar pagado" per person for
-admin/board; `/reparto-recogida` lists who is still to collect, with a checkbox per unit
-once the status is `received`, an "Entregado a" picker (suggesting the beneficiary when all
-the marked units are for the same one) and "Deshacer" per collected unit, confirming before
-handing over unpaid units. `api.js`'s `apiFetch` now puts the API's error `code` on the
-thrown `Error`, which `distributionCommon.js`'s `apiErrorText` maps to Spanish messages
-(falling back to the API's own text).
+page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
+and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
+line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
+lists who is still to collect, with a checkbox per unit once the status is `received`, an
+"Entregado a" picker (suggesting the beneficiary when all the marked units are for the
+same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
+`api.js`'s `apiFetch` now puts the API's error `code` on the thrown `Error`, which
+`distributionCommon.js`'s `apiErrorText` maps to Spanish messages (falling back to the
+API's own text).
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,

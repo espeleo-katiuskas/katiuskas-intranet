@@ -193,6 +193,18 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 	if tag.RowsAffected() == 0 {
 		return Distribution{}, ErrNotFound
 	}
+	// A price change reaches the automatic units nobody has touched yet — not
+	// chosen (nobody entered them), not paid, not collected — which got the old
+	// price only because they were made at opening, so a distribution that went
+	// back to a draft and had its price corrected doesn't keep charging the old
+	// one. Everything somebody has already agreed to keeps what it cost.
+	if _, err := tx.Exec(ctx, `
+		UPDATE distribution_units SET price = $2
+		WHERE distribution_id = $1 AND registered_by_id IS NULL AND NOT is_extra
+		  AND paid_at IS NULL AND picked_up_at IS NULL AND price <> $2
+	`, id, in.Price); err != nil {
+		return Distribution{}, err
+	}
 	same, err := sameOptions(ctx, tx, id, in.Options)
 	if err != nil {
 		return Distribution{}, err
@@ -286,7 +298,7 @@ const unitSelect = `
 	       n.paid_at, pm.login, n.picked_up_at, pr.login, pu.login
 	FROM distribution_units n
 	JOIN users b ON b.id = n.beneficiary_id
-	JOIN users rb ON rb.id = n.registered_by_id
+	LEFT JOIN users rb ON rb.id = n.registered_by_id
 	LEFT JOIN users pm ON pm.id = n.paid_marked_by_id
 	LEFT JOIN users pr ON pr.id = n.pickup_recorded_by_id
 	LEFT JOIN users pu ON pu.id = n.picked_up_by_id`
@@ -339,6 +351,34 @@ func (r *Repository) CreateUnit(ctx context.Context, in RegisterInput) (Unit, er
 		}
 	}
 
+	// A member's own unit in a distribution for all members already exists. If
+	// nobody has chosen its options yet, asking for it is choosing them: it
+	// takes this person as who entered it, and the moment.
+	if !in.IsExtra {
+		var existingID int64
+		var existingChoices map[string]string
+		var enteredBy *int64
+		err := tx.QueryRow(ctx, `
+			SELECT id, choices, registered_by_id FROM distribution_units
+			WHERE distribution_id = $1 AND beneficiary_id = $2 AND NOT is_extra
+			FOR UPDATE
+		`, in.DistributionID, in.BeneficiaryID).Scan(&existingID, &existingChoices, &enteredBy)
+		if err == nil && enteredBy == nil && len(existingChoices) == 0 && len(in.Choices) > 0 {
+			if _, err := tx.Exec(ctx, `
+				UPDATE distribution_units SET choices = $2, registered_by_id = $3, registered_at = now() WHERE id = $1
+			`, existingID, in.Choices, in.RegisteredByID); err != nil {
+				return Unit{}, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return Unit{}, err
+			}
+			return r.GetUnit(ctx, in.DistributionID, existingID)
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return Unit{}, err
+		}
+	}
+
 	var id int64
 	err = tx.QueryRow(ctx, `
 		INSERT INTO distribution_units (distribution_id, beneficiary_id, registered_by_id, is_extra, choices, price)
@@ -361,6 +401,26 @@ func (r *Repository) CreateUnit(ctx context.Context, in RegisterInput) (Unit, er
 		return Unit{}, err
 	}
 	return r.GetUnit(ctx, in.DistributionID, id)
+}
+
+// SyncAutomaticUnits gives every member on the cutoff date of a distribution
+// for all members their own unit, if they have none yet — nobody has to sign
+// up. The unit starts with no choices and nobody as who entered it, at the
+// price the distribution has now. It does nothing for any other distribution,
+// for a draft (nobody sees it yet) or for a finished one, and it is safe to
+// run at any time and concurrently: a unit that exists is left alone. A member
+// whose unit was already made is not touched, whatever happened to it since.
+func (r *Repository) SyncAutomaticUnits(ctx context.Context, d Distribution) error {
+	if d.Audience != AudienceAllMembers || d.CutoffDate == nil || d.Status == StatusDraft || d.Status == StatusDone {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO distribution_units (distribution_id, beneficiary_id, is_extra, choices, price)
+		SELECT $1, m.user_id, false, '{}', $3::numeric
+		FROM (SELECT DISTINCT user_id FROM memberships WHERE period @> $2::date) m
+		ON CONFLICT (distribution_id, beneficiary_id) WHERE NOT is_extra DO NOTHING
+	`, d.ID, d.CutoffDate, d.Price)
+	return err
 }
 
 // GetUnit returns a unit of the given distribution.
@@ -395,12 +455,17 @@ func (r *Repository) ListUnits(ctx context.Context, distributionID int64, involv
 	return list, rows.Err()
 }
 
-// UpdateChoices changes what was chosen for a unit and nothing else: who
-// entered it and when stay as they were.
-func (r *Repository) UpdateChoices(ctx context.Context, distributionID, id int64, choices map[string]string) (Unit, error) {
+// UpdateChoices changes what was chosen for a unit. Who entered it and when
+// stay as they were, except for an automatic unit nobody had entered yet: the
+// first person to choose becomes who did, at that moment.
+func (r *Repository) UpdateChoices(ctx context.Context, distributionID, id int64, choices map[string]string, actorID int64) (Unit, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE distribution_units SET choices = $3 WHERE id = $1 AND distribution_id = $2
-	`, id, distributionID, choices)
+		UPDATE distribution_units SET
+			choices = $3,
+			registered_at = CASE WHEN registered_by_id IS NULL AND $3::jsonb <> '{}'::jsonb THEN now() ELSE registered_at END,
+			registered_by_id = CASE WHEN $3::jsonb <> '{}'::jsonb THEN COALESCE(registered_by_id, $4) ELSE registered_by_id END
+		WHERE id = $1 AND distribution_id = $2
+	`, id, distributionID, choices, actorID)
 	if err != nil {
 		return Unit{}, err
 	}
@@ -492,10 +557,10 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64) er
 	return nil
 }
 
-// Order sums up what has been asked for. pending (for a distribution for all
-// members) are the people it is for who have no unit of their own yet.
+// Order sums up what has been asked for, by combination of choices. Units
+// nobody has chosen the options of yet add up under empty choices.
 func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
-	order := Order{Lines: []OrderLine{}, PendingMembers: []PendingMember{}}
+	order := Order{Lines: []OrderLine{}}
 	rows, err := r.pool.Query(ctx, `
 		SELECT choices, count(*), COALESCE(sum(price), 0)::float8
 		FROM distribution_units WHERE distribution_id = $1
@@ -515,34 +580,5 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 		order.TotalUnits += line.Count
 		order.TotalAmount += amount
 	}
-	if err := rows.Err(); err != nil {
-		return Order{}, err
-	}
-
-	if d.Audience == AudienceAllMembers && d.CutoffDate != nil {
-		pending, err := r.pool.Query(ctx, `
-			SELECT u.login, u.first_name || ' ' || u.last_name
-			FROM users u
-			WHERE EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.period @> $1::date)
-			  AND NOT EXISTS (
-			      SELECT 1 FROM distribution_units n
-			      WHERE n.distribution_id = $2 AND n.beneficiary_id = u.id AND NOT n.is_extra)
-			ORDER BY u.last_name, u.first_name, u.id
-		`, d.CutoffDate, d.ID)
-		if err != nil {
-			return Order{}, err
-		}
-		defer pending.Close()
-		for pending.Next() {
-			var p PendingMember
-			if err := pending.Scan(&p.Login, &p.Name); err != nil {
-				return Order{}, err
-			}
-			order.PendingMembers = append(order.PendingMembers, p)
-		}
-		if err := pending.Err(); err != nil {
-			return Order{}, err
-		}
-	}
-	return order, nil
+	return order, rows.Err()
 }

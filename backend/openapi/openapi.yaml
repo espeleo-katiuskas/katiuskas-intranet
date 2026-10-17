@@ -1771,8 +1771,9 @@ paths:
       description: >
         Requires admin or board. It starts as a `draft`, which nobody else
         can see. `cutoff_date` is required for `all_members` (it defines who
-        it is for: whoever was a member that day) and optional for `signup`,
-        where, when set, only those members can sign up. `price` is a
+        it is for: whoever was a member that day; they all get their own unit
+        automatically once it is opened, nobody has to sign up) and optional
+        for `signup`, where, when set, only those members can sign up. `price` is a
         member's own unit (0 = free); `extra_price` makes extra units
         possible and is what each costs; `max_extra` caps them per person
         and needs `extra_price`.
@@ -1814,7 +1815,9 @@ paths:
         sending back exactly what is there is not a replacement. `status`
         moves one step at a time along draft, open, closed, ordered,
         received, done — forward or back. Prices changed here don't change
-        what units already asked for cost.
+        what units already asked for cost, except the automatic units of a
+        distribution for all members that nobody has touched (not chosen, not
+        paid, not collected), which take the new price.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1851,7 +1854,12 @@ paths:
         A unit is one thing somebody wants, so two extra shirts are two
         units, each with its own choices. admin, board and material see all
         of them; anybody else only those that are for them or that they
-        entered themselves.
+        entered themselves. In a distribution for all members nobody has to
+        sign up: every member on its `cutoff_date` has their own unit from the
+        moment it leaves `draft`, made (if missing) the first time units are
+        looked at, so a member who qualifies later appears too. It starts
+        with empty `choices` and no `registered_by_login`; with options to
+        choose, empty `choices` means nobody has chosen yet.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1875,8 +1883,11 @@ paths:
         (409 not_eligible): members on the distribution's cutoff date. An extra
         belongs to whoever it is entered for; who finally gets the item isn't
         recorded. A person can
-        have one unit of their own (409 already_registered) and, with
-        `is_extra`, extras up to `max_extra` counted by who they are for
+        have one unit of their own (409 already_registered); in a
+        distribution for all members it already exists, so asking for it means
+        choosing its options when nobody has yet — the caller becomes who
+        entered it — and is a 409 already_registered otherwise. With
+        `is_extra`, a person can also have extras up to `max_extra` counted by who they are for
         (409 extras_not_allowed, too_many_extras), at the extra price.
         `choices` must give exactly one listed value for each option (400
         invalid_choices). Members can only do it while the distribution is
@@ -1938,7 +1949,10 @@ paths:
         "409": { description: not_open or unit_locked. }
     delete:
       summary: Remove a unit
-      description: Same permissions and rules as changing its choices.
+      description: >
+        Same permissions and rules as changing its choices — except that a
+        member's own unit in a distribution for all members can't be removed
+        (409 automatic_unit): it exists for everybody who qualifies.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1947,16 +1961,16 @@ paths:
         "204": { description: Removed }
         "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open or unit_locked. }
+        "409": { description: not_open, unit_locked or automatic_unit. }
 
   /distributions/{id}/order:
     get:
       summary: What has to be ordered
       description: >
         Requires admin, board or material. The units added up by combination
-        of choices (`lines`), the totals, and — for a distribution for all
-        members — who it is for and hasn't chosen yet (`pending_members`,
-        empty for `signup`).
+        of choices (`lines`) and the totals. In a distribution for all
+        members everybody who qualifies has a unit, so those nobody has chosen
+        the options of yet add up in a line with empty `choices`.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3434,7 +3448,7 @@ components:
         distribution_id: { type: integer }
         beneficiary_login: { type: string, description: Who it is for and who it belongs to. }
         beneficiary_name: { type: string }
-        registered_by_login: { type: string, description: Who really entered it — not the beneficiary when somebody did it for them. }
+        registered_by_login: { type: string, description: Who really entered it — not the beneficiary when somebody did it for them. Absent for a member's own unit of a distribution for all members until somebody chooses its options; then it is who did. }
         registered_at: { type: string, format: date-time }
         is_extra: { type: boolean }
         choices: { type: object, additionalProperties: { type: string } }
@@ -3457,13 +3471,6 @@ components:
               count: { type: integer }
         total_units: { type: integer }
         total_amount: { type: number }
-        pending_members:
-          type: array
-          items:
-            type: object
-            properties:
-              login: { type: string }
-              name: { type: string }
 
     Holiday:
       type: object

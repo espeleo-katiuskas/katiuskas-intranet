@@ -77,7 +77,10 @@ type Distribution struct {
 // Unit is one unit somebody wants: for BeneficiaryLogin, entered by
 // RegisteredByLogin at RegisteredAt — a different person when a parent signs
 // a child up or a friend adds an extra for another, so it stays clear who
-// actually did it. Price is what it cost when it was entered. Collection
+// actually did it. In a distribution for all members each member's own unit
+// exists without anybody entering it: RegisteredByLogin is then absent until
+// somebody chooses its options, and with options to choose, empty Choices
+// means nobody has chosen yet. Price is what it cost when it was entered. Collection
 // carries three facts: when, who wrote it down (admin, board or material) and
 // who it was handed to, which may not be the beneficiary.
 type Unit struct {
@@ -86,8 +89,8 @@ type Unit struct {
 	BeneficiaryID         int64             `json:"-"`
 	BeneficiaryLogin      string            `json:"beneficiary_login"`
 	BeneficiaryName       string            `json:"beneficiary_name"`
-	RegisteredByID        int64             `json:"-"`
-	RegisteredByLogin     string            `json:"registered_by_login"`
+	RegisteredByID        *int64            `json:"-"`
+	RegisteredByLogin     *string           `json:"registered_by_login,omitempty"`
 	RegisteredAt          time.Time         `json:"registered_at"`
 	IsExtra               bool              `json:"is_extra"`
 	Choices               map[string]string `json:"choices"`
@@ -157,19 +160,11 @@ type OrderLine struct {
 	Count   int               `json:"count"`
 }
 
-// PendingMember is somebody a distribution for all members is for who hasn't
-// chosen yet.
-type PendingMember struct {
-	Login string `json:"login"`
-	Name  string `json:"name"`
-}
-
 // Order is the summary for placing the order: how many units of each
-// combination of choices, the totals, and — for a distribution for all
-// members — who still hasn't chosen.
+// combination of choices (a line with empty choices, for an article with
+// options, is the units nobody has chosen yet) and the totals.
 type Order struct {
-	Lines          []OrderLine     `json:"lines"`
-	TotalUnits     int             `json:"total_units"`
-	TotalAmount    float64         `json:"total_amount"`
-	PendingMembers []PendingMember `json:"pending_members"`
+	Lines       []OrderLine `json:"lines"`
+	TotalUnits  int         `json:"total_units"`
+	TotalAmount float64     `json:"total_amount"`
 }

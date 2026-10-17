@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatCurrency, formatDate, hasAnyRole, currentUser, showError, showFeedback } from './api.js';
 import { initPage } from './layout.js';
-import { apiErrorText, choicesText, loadPeople, statusBadge } from './distributionCommon.js';
+import { apiErrorText, choicesText, isUnchosen, loadPeople, statusBadge } from './distributionCommon.js';
 
 // What has to be bought, and what each member wants: for the people who put
 // the order together (admin, board) and hand it out (material).
@@ -12,23 +12,25 @@ const base = `/distributions/${id}`;
 document.getElementById('back-link').href = `/reparto?id=${id}`;
 
 let units = [];
+let distribution = null;
 let people = { entries: [], names: {} };
 const fail = (err) => showError(apiErrorText(err));
 
+const hasOptions = () => (distribution?.options.length ?? 0) > 0;
+
 function renderOrder(order) {
   document.getElementById('order-lines').innerHTML = order.lines.length
-    ? order.lines.map((l) => `<tr><td>${escapeHtml(choicesText(l.choices))}</td><td>${l.count}</td></tr>`).join('')
-    : '<tr><td colspan="2">Todavía no ha pedido nadie.</td></tr>';
+    ? order.lines.map((l) => {
+      const unchosen = hasOptions() && Object.keys(l.choices).length === 0;
+      return `<tr><td>${unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(l.choices, hasOptions()))}</td><td>${l.count}</td></tr>`;
+    }).join('')
+    : '<tr><td colspan="2">Todavía no hay nada que pedir.</td></tr>';
+  // In a distribution for all members everybody has a unit from the start, so
+  // the ones that nobody has chosen the options of are what is still missing.
+  const missing = units.filter((u) => isUnchosen(u, hasOptions())).length;
+  const missingText = missing === 0 ? '' : missing === 1 ? ' Falta por elegir 1 unidad.' : ` Faltan por elegir ${missing} unidades.`;
   document.getElementById('order-totals').textContent =
-    `${order.total_units} unidades en total, por ${formatCurrency(order.total_amount)}.`;
-
-  const pending = document.getElementById('pending-section');
-  pending.hidden = order.pending_members.length === 0;
-  const n = order.pending_members.length;
-  document.getElementById('pending-subtitle').textContent = n === 1
-    ? '1 socio al que le corresponde y todavía no ha elegido.'
-    : `${n} socios a los que les corresponde y todavía no han elegido.`;
-  document.getElementById('pending-list').textContent = order.pending_members.map((p) => p.name).join(', ');
+    `${order.total_units} unidades en total, por ${formatCurrency(order.total_amount)}.${missingText}`;
 }
 
 // Units grouped by the person they are for.
@@ -42,10 +44,11 @@ function groupByPerson(all) {
 }
 
 function unitLine(u) {
-  const parts = [choicesText(u.choices)];
+  const parts = [choicesText(u.choices, hasOptions())];
   if (u.is_extra) parts.push('extra');
-  // Who entered it, when that isn't the person it is for.
-  if (u.registered_by_login !== u.beneficiary_login) {
+  // Who entered it, when that isn't the person it is for (nobody did for an
+  // own unit nobody has chosen yet).
+  if (u.registered_by_login && u.registered_by_login !== u.beneficiary_login) {
     parts.push(`apuntado por ${people.names[u.registered_by_login] ?? u.registered_by_login} el ${formatDate(u.registered_at)}`);
   }
   return `<li>${escapeHtml(parts.join(' · '))}</li>`;
@@ -122,7 +125,7 @@ async function load() {
 
 people = await loadPeople();
 try {
-  const distribution = await apiFetch(base);
+  distribution = await apiFetch(base);
   document.getElementById('order-title').textContent = `Pedido: ${distribution.name}`;
   document.getElementById('order-meta').innerHTML = statusBadge(distribution.status);
 } catch (err) {

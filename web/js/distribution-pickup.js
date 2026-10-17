@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatCurrency, showError, showFeedback } from './api.js';
 import { initPage } from './layout.js';
-import { apiErrorText, choicesText, loadPeople, resolvePickerId, statusBadge, formatDateTime } from './distributionCommon.js';
+import { apiErrorText, choicesText, isUnchosen, loadPeople, resolvePickerId, statusBadge, formatDateTime } from './distributionCommon.js';
 
 // Who has collected and who is still to: for admin, board and material, once
 // the order has arrived.
@@ -23,6 +23,8 @@ const form = document.getElementById('pickup-form');
 const personInput = document.getElementById('pf-person');
 const submit = document.getElementById('pf-submit');
 
+const hasOptions = () => (distribution?.options.length ?? 0) > 0;
+
 function canCollect() {
   return distribution?.status === 'received';
 }
@@ -34,7 +36,7 @@ function pickedUpText(u) {
 }
 
 function unitRow(u) {
-  const label = [choicesText(u.choices), u.is_extra ? 'extra' : null].filter(Boolean).join(' · ');
+  const label = [choicesText(u.choices, hasOptions()), u.is_extra ? 'extra' : null].filter(Boolean).join(' · ');
   if (u.picked_up_at) {
     return `<li>${escapeHtml(label)} — ${escapeHtml(pickedUpText(u))}
       <button type="button" class="link-button" data-undo-unit="${u.id}">Deshacer</button></li>`;
@@ -125,6 +127,9 @@ form.addEventListener('submit', async (event) => {
   }
   const chosen = units.filter((u) => selected.has(u.id));
   if (chosen.some((u) => u.price > 0 && !u.paid_at) && !confirm('Hay unidades que todavía no están pagadas. ¿Apuntar la recogida igualmente?')) {
+    return;
+  }
+  if (chosen.some((u) => isUnchosen(u, hasOptions())) && !confirm('Hay unidades de las que nadie ha elegido todavía lo que son. ¿Apuntar la recogida igualmente?')) {
     return;
   }
   submit.disabled = true;

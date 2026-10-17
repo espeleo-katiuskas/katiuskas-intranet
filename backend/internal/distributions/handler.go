@@ -97,6 +97,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrNotReceived, http.StatusConflict, "not_received"},
 		{ErrAlreadyPickedUp, http.StatusConflict, "already_picked_up"},
 		{ErrAlreadyPaid, http.StatusConflict, "already_paid"},
+		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},
 	}
 	for _, k := range known {
 		if errors.Is(err, k.err) {
@@ -395,7 +396,7 @@ func (h *Handler) ownUnit(w http.ResponseWriter, r *http.Request) (Distribution,
 		return Distribution{}, Unit{}, false
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if !isStaff(current) && current.ID != unit.BeneficiaryID && current.ID != unit.RegisteredByID {
+	if !isStaff(current) && current.ID != unit.BeneficiaryID && (unit.RegisteredByID == nil || current.ID != *unit.RegisteredByID) {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the person it is for, whoever entered it, board or admin can change this")
 		return Distribution{}, Unit{}, false
 	}
@@ -415,7 +416,7 @@ func (h *Handler) updateUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, isStaff(current))
+	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, current.ID, isStaff(current))
 	if err != nil {
 		writeError(w, err, "could not update unit")
 		return
