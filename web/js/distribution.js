@@ -149,7 +149,11 @@ editForm.addEventListener('submit', async (event) => {
 });
 
 onClick('delete-distribution', async () => {
-  if (!confirm(`¿Borrar el reparto «${distribution.name}»? Solo se puede mientras nadie haya pedido.`)) return;
+  const units = distribution.unit_count;
+  const lost = units > 0
+    ? ` Se borrará también ${units === 1 ? 'su única unidad' : `sus ${units} unidades`}, con lo que hayan elegido los socios.`
+    : '';
+  if (!confirm(`¿Borrar el reparto «${distribution.name}»?${lost} No se puede deshacer.`)) return;
   try {
     await apiFetch(base, { method: 'DELETE' });
     window.location.href = '/repartos';

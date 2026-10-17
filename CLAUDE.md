@@ -455,7 +455,9 @@ the member through `PATCH`, anybody through `POST …/units` for them, which fil
 existing unit in (`CreateUnit`) instead of making a second one — becomes who entered it,
 with the moment; a repeated ask is 409 `already_registered`, and such a unit can't be
 removed (`ErrAutomaticUnit`, 409 `automatic_unit`) since the sync would recreate it. Units
-exist from opening on, so the options and deleting the distribution are locked from then.
+exist from opening on, so the options are locked from then (deleting the distribution is
+not: it takes its units with it, unless one is paid or collected, `ErrHasSettledUnits`,
+409 `has_settled_units`, until those marks are undone).
 A price change reaches the automatic units nobody has touched — not chosen
 (`registered_by_id IS NULL`), not paid, not collected — in the same transaction as the edit
 (`Repository.Update`), so a distribution that was opened and went back to a draft doesn't

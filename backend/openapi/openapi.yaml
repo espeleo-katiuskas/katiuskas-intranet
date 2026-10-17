@@ -1838,7 +1838,12 @@ paths:
         "409": { description: invalid_status_transition (not one step), or has_units (replacing the options after somebody asked). }
     delete:
       summary: Delete a distribution
-      description: Requires admin or board, and only while nobody has asked for anything (409 has_units).
+      description: >
+        Requires admin or board. Deletes the distribution together with its
+        units, so whatever members chose goes with it — in a distribution for
+        all members that is everybody's own unit, which exists from opening
+        on. It is refused (409 has_settled_units) while some unit is paid or
+        collected: those marks have to be undone first.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1846,7 +1851,7 @@ paths:
         "204": { description: Deleted }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: has_units. }
+        "409": { description: has_settled_units. }
 
   /distributions/{id}/units:
     get:

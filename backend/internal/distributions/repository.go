@@ -18,6 +18,9 @@ var (
 	// ErrHasUnits means somebody has already asked for something, so the
 	// distribution can't be deleted and its options can't be replaced.
 	ErrHasUnits = errors.New("somebody has already asked for this distribution")
+	// ErrHasSettledUnits means some unit was already paid or collected, which
+	// stops the distribution from being deleted until those marks are undone.
+	ErrHasSettledUnits = errors.New("some units are already paid or collected: undo those marks first")
 	// ErrAlreadyRegistered means the beneficiary already has their own
 	// (non-extra) unit.
 	ErrAlreadyRegistered = errors.New("this person already has their own unit")
@@ -258,7 +261,9 @@ func sameOptions(ctx context.Context, tx pgx.Tx, id int64, options *[]OptionInpu
 	}), nil
 }
 
-// Delete removes a distribution nobody has asked for yet.
+// Delete removes a distribution together with its units (what members chose
+// goes with it), unless some unit was already paid or collected — those marks
+// are real things that happened, and have to be undone first, deliberately.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -266,12 +271,15 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	var units int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM distribution_units WHERE distribution_id = $1`, id).Scan(&units); err != nil {
+	var settled int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM distribution_units
+		WHERE distribution_id = $1 AND (paid_at IS NOT NULL OR picked_up_at IS NOT NULL)
+	`, id).Scan(&settled); err != nil {
 		return err
 	}
-	if units > 0 {
-		return ErrHasUnits
+	if settled > 0 {
+		return ErrHasSettledUnits
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM distributions WHERE id = $1`, id)
 	if err != nil {

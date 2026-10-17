@@ -913,11 +913,14 @@ salvo pedir unidades y editar las propias).
   vez de crear una segunda rellena esta— pasa a ser quien la apuntó, con la fecha; si no
   hay opciones que elegir, pedirla de nuevo da 409 `already_registered`. La unidad propia
   de un reparto `all_members` no se puede quitar (409 `automatic_unit`): volvería a
-  crearse. Como desde que se abre hay unidades, las opciones y el borrado del reparto
-  quedan bloqueados (`has_units`) desde entonces. Un cambio de precio llega a las unidades
+  crearse. Como desde que se abre hay unidades, las opciones quedan bloqueadas
+  (`has_units`) desde entonces. El reparto sí se puede borrar (admin y board): se lleva
+  sus unidades, con lo que hayan elegido los socios, salvo que alguna esté pagada o
+  recogida (409 `has_settled_units`), en cuyo caso hay que deshacer antes esas marcas. La
+  interfaz avisa de cuántas unidades se pierden. Un cambio de precio llega a las unidades
   automáticas que nadie ha tocado (sin elegir —sin `registered_by`—, sin pagar y sin
-  recoger), así que un reparto que se abrió y volvió a borrador no sigue cobrando el precio
-  antiguo; lo que ya eligió, pagó o recogió alguien conserva lo que costaba.
+  recoger), así que un reparto que se abrió y volvió a borrador no sigue cobrando el
+  precio antiguo; lo que ya eligió, pagó o recogió alguien conserva lo que costaba.
 - **Quién puede pedir**. Cualquier socio, para sí o para otros (`beneficiary_login`),
   mientras el reparto esté abierto y no haya pasado `closes_at`; admin y board también
   pasada la fecha, pero solo con el reparto abierto: una vez cerrado no cambia nada, ni

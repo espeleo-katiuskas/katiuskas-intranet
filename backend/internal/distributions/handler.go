@@ -88,6 +88,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrUnknownUser, http.StatusBadRequest, "unknown_user"},
 		{ErrInvalidTransition, http.StatusConflict, "invalid_status_transition"},
 		{ErrHasUnits, http.StatusConflict, "has_units"},
+		{ErrHasSettledUnits, http.StatusConflict, "has_settled_units"},
 		{ErrNotOpen, http.StatusConflict, "not_open"},
 		{ErrNotEligible, http.StatusConflict, "not_eligible"},
 		{ErrAlreadyRegistered, http.StatusConflict, "already_registered"},
@@ -299,7 +300,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not delete distribution")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el reparto «%s».", h.actorLogin(r.Context()), d.Name))
+	lost := ""
+	if d.UnitCount > 0 {
+		lost = fmt.Sprintf(" (con sus %d unidades)", d.UnitCount)
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el reparto «%s»%s.", h.actorLogin(r.Context()), d.Name, lost))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 

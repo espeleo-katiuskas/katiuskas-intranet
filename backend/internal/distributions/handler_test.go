@@ -643,7 +643,7 @@ func TestPaymentsAreMarkedByAdminAndBoardOnly(t *testing.T) {
 	}
 }
 
-func TestOptionsAndDeletionAreLockedOnceUnitsExist(t *testing.T) {
+func TestOptionsAreLockedOnceUnitsExistButTheDistributionCanBeDeleted(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
 	member := e.newPerson(t, "2020-01-01", "member")
@@ -675,7 +675,27 @@ func TestOptionsAndDeletionAreLockedOnceUnitsExist(t *testing.T) {
 	if kept.Name != "Camiseta 2026" || len(kept.Options) != 2 {
 		t.Errorf("unexpected distribution: %+v", kept)
 	}
-	expect(t, e.do("DELETE", path, admin.token, nil), http.StatusConflict, "has_units")
+
+	// It has units (everybody's own, made on opening) and can still be deleted,
+	// units and all — unless one was paid or collected, which has to be undone
+	// first.
+	unit := unitFor(t, e, admin, d.ID, member.Login)
+	mustStatus(t, e.do("POST", path+"/payments", admin.token, map[string]any{"unit_ids": []int64{unit.ID}}), http.StatusNoContent)
+	expect(t, e.do("DELETE", path, admin.token, nil), http.StatusConflict, "has_settled_units")
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, unit.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", path, admin.token, nil), http.StatusNoContent)
+	var left int
+	if err := e.tx.QueryRow(context.Background(), `SELECT count(*) FROM distribution_units WHERE distribution_id = $1`, d.ID).Scan(&left); err != nil || left != 0 {
+		t.Errorf("the units should go with the distribution: %d left (%v)", left, err)
+	}
+	found := false
+	for i := 0; i < 20 && !found; i++ {
+		msg := e.notifier.waitForMessage(t)
+		found = strings.Contains(msg, "ha borrado el reparto") && strings.Contains(msg, "unidades")
+	}
+	if !found {
+		t.Error("the notification should say the units went too")
+	}
 
 	empty := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, shirt()), http.StatusCreated))
 	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/distributions/%d", empty.ID), member.token, nil), http.StatusForbidden, "forbidden")
