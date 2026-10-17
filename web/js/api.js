@@ -78,7 +78,11 @@ async function apiFetch(path, options = {}) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+    // The API's own code rides along on the error, for a page that wants to
+    // say it in its own words instead of showing the (English) message.
+    const error = new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+    error.code = body?.error?.code;
+    throw error;
   }
   if (response.status === 204) {
     return null;

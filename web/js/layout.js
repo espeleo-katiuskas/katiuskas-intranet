@@ -47,6 +47,11 @@ const NAV_ITEMS = [
     icon: '<path d="M6 2 L6 17 Q6 19 8 19 L17.5 19 Q19 19 19 17.5 L19 16.5 Q19 14.7 17.2 14.3 L12.5 13.3 L12 13.13 L12 2 Z"/>',
   },
   {
+    href: '/distributions',
+    label: 'Repartos',
+    icon: '<rect x="4" y="9" width="16" height="11" rx="1.5"/><path d="M3.5 6.5h17V9h-17z"/><line x1="12" y1="6.5" x2="12" y2="20"/><path d="M12 6.5C10.5 3.5 7.5 3.5 7.5 5.2c0 1.2 2 1.3 4.5 1.3zM12 6.5c1.5-3 4.5-3 4.5-1.3 0 1.2-2 1.3-4.5 1.3z"/>',
+  },
+  {
     href: '/accounting',
     label: 'Contabilidad',
     roles: ['admin', 'money'],
@@ -79,7 +84,14 @@ const NAV_ITEMS = [
 // also means no page has to say which link is "its own" by hand (the
 // previous, per-file class="active" was one more thing to remember
 // when adding a page).
-const ACTIVE_ALIASES = { '/activity': '/activities', '/member': '/members', '/account': '/accounting' };
+const ACTIVE_ALIASES = {
+  '/activity': '/activities',
+  '/member': '/members',
+  '/account': '/accounting',
+  '/distribution': '/distributions',
+  '/distribution-order': '/distributions',
+  '/distribution-pickup': '/distributions',
+};
 
 function renderNavLink(item, activePath) {
   const activeClass = item.href === activePath ? ' class="active"' : '';

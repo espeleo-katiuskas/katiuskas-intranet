@@ -1,0 +1,170 @@
+// What /distributions, /distribution, /distribution-order and
+// /distribution-pickup share: the labels of a distribution's states, how its
+// form is read and filled, how choices and people are shown, and the
+// searchable people picker. The server (internal/distributions) is the
+// authority on every rule; nothing here decides who may do what beyond hiding
+// controls.
+import { apiFetch, escapeHtml, formatDate, pickerLabel, resolvePickerId } from './api.js';
+
+const distributionStatusLabels = {
+  draft: 'Borrador',
+  open: 'Abierto',
+  closed: 'Cerrado',
+  ordered: 'Pedido hecho',
+  received: 'Recibido',
+  done: 'Terminado',
+};
+
+const STATUS_ORDER = ['draft', 'open', 'closed', 'ordered', 'received', 'done'];
+
+const audienceLabels = {
+  all_members: 'Todos los socios',
+  signup: 'Quien se apunte',
+};
+
+function statusBadge(status) {
+  return `<span class="badge">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
+}
+
+function formatDateTime(iso) {
+  const date = new Date(iso);
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return `${formatDate(iso)} ${time}`;
+}
+
+// "Talla: M" — what was chosen for a unit, or a dash when there was nothing
+// to choose.
+function choicesText(choices) {
+  const entries = Object.entries(choices ?? {});
+  return entries.length ? entries.map(([name, value]) => `${name}: ${value}`).join(', ') : '—';
+}
+
+// The options textarea takes one option per line, "Talla: S, M, L".
+function parseOptions(text) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const colon = line.indexOf(':');
+      const name = colon < 0 ? line : line.slice(0, colon);
+      const values = colon < 0 ? [] : line.slice(colon + 1).split(',');
+      return { name: name.trim(), values: values.map((v) => v.trim()).filter(Boolean) };
+    });
+}
+
+function optionsText(options) {
+  return (options ?? []).map((o) => `${o.name}: ${o.values.join(', ')}`).join('\n');
+}
+
+// datetime-local wants "YYYY-MM-DDTHH:MM" in the viewer's own time.
+function toLocalInputValue(iso) {
+  const date = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// The body of POST/PATCH /distributions from the shared form (fields named
+// as in the API). Empty optional fields go as null: a PATCH replaces them.
+function readDistributionForm(form) {
+  const data = new FormData(form);
+  const text = (name) => data.get(name)?.toString().trim() ?? '';
+  const number = (name) => (text(name) === '' ? null : Number(text(name).replace(',', '.')));
+  return {
+    name: text('name'),
+    description: text('description') || null,
+    audience: text('audience'),
+    cutoff_date: text('cutoff_date') || null,
+    closes_at: text('closes_at') ? new Date(text('closes_at')).toISOString() : null,
+    price: number('price') ?? 0,
+    extra_price: number('extra_price'),
+    max_extra: number('max_extra'),
+    options: parseOptions(text('options')),
+  };
+}
+
+function fillDistributionForm(form, d) {
+  const set = (name, value) => { form.elements[name].value = value ?? ''; };
+  set('name', d.name);
+  set('description', d.description);
+  set('audience', d.audience);
+  set('cutoff_date', d.cutoff_date ? d.cutoff_date.slice(0, 10) : '');
+  set('closes_at', d.closes_at ? toLocalInputValue(d.closes_at) : '');
+  set('price', d.price);
+  set('extra_price', d.extra_price);
+  set('max_extra', d.max_extra);
+  set('options', optionsText(d.options));
+}
+
+// The list of people (name + login) for the "a nombre de" and "entregado a"
+// pickers: a searchable text input over the directory, open to every member.
+async function loadPeople() {
+  try {
+    const directory = await apiFetch('/users/directory');
+    const entries = directory
+      .slice()
+      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'es'))
+      .map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }));
+    const names = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
+    return { entries, names };
+  } catch {
+    return { entries: [], names: {} };
+  }
+}
+
+// What the API's error codes say, in the club's own words. Anything not here
+// falls back to the API's message.
+const errorMessages = {
+  not_open: 'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
+  not_eligible: 'Solo pueden pedirlo quienes eran socios en la fecha de corte, tanto la persona para quien es como quien lo pide.',
+  already_registered: 'Esa persona ya tiene su unidad. Si quieres más, pide una unidad extra.',
+  extras_not_allowed: 'Este reparto no tiene unidades extra.',
+  too_many_extras: 'Esa persona ya tiene el máximo de unidades extra.',
+  invalid_choices: 'Elige un valor en cada opción.',
+  unit_locked: 'Esta unidad ya está pagada o recogida y no se puede cambiar.',
+  not_received: 'Todavía no se puede apuntar la recogida: el reparto tiene que estar en «Recibido».',
+  already_picked_up: 'Alguna de las unidades ya estaba recogida.',
+  already_paid: 'Alguna de las unidades ya estaba pagada.',
+  has_units: 'Ya hay gente que ha pedido: no se pueden cambiar las opciones ni borrar el reparto.',
+  invalid_status_transition: 'El estado solo puede avanzar o retroceder un paso cada vez.',
+  cutoff_required: 'Un reparto para todos los socios necesita la fecha de corte.',
+  invalid_max_extra: 'El máximo de extras necesita un precio de unidad extra, y no puede ser negativo.',
+  invalid_options: 'Cada cosa a elegir necesita un nombre y al menos un valor, sin repetirlos.',
+  invalid_price: 'Los precios no pueden ser negativos.',
+};
+
+function apiErrorText(err) {
+  return errorMessages[err.code] ?? err.message;
+}
+
+// The body PATCH wants to leave a distribution as it is (it replaces every
+// field), with whatever changes on top.
+function bodyFrom(d, changes = {}) {
+  return {
+    name: d.name,
+    description: d.description ?? null,
+    audience: d.audience,
+    cutoff_date: d.cutoff_date ? d.cutoff_date.slice(0, 10) : null,
+    closes_at: d.closes_at ?? null,
+    price: d.price,
+    extra_price: d.extra_price ?? null,
+    max_extra: d.max_extra ?? null,
+    ...changes,
+  };
+}
+
+export {
+  errorMessages,
+  apiErrorText,
+  bodyFrom,
+  distributionStatusLabels,
+  STATUS_ORDER,
+  audienceLabels,
+  statusBadge,
+  formatDateTime,
+  choicesText,
+  readDistributionForm,
+  fillDistributionForm,
+  loadPeople,
+  resolvePickerId,
+};

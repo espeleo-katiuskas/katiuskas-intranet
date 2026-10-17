@@ -1040,6 +1040,11 @@ dialog.modal::backdrop {
   cursor: pointer;
 }
 
+/* A link dressed as a button (e.g. the shortcuts on /distribution). */
+a.btn {
+  text-decoration: none;
+}
+
 .btn-primary {
   background: var(--accent);
   color: #fff;
@@ -1273,4 +1278,15 @@ dialog.modal::backdrop {
   font-size: 0.6rem;
   color: var(--ink-muted);
   padding: 0 3px;
+}
+
+/* A list inside a table cell with no bullets, e.g. the units somebody asked for. */
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plain-list li {
+  padding: 2px 0;
 }

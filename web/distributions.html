@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repartos — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <div class="section-header">
+    <div>
+      <h1>Repartos</h1>
+      <p class="subtitle">Equipación y material que el club entrega a los socios.</p>
+    </div>
+    <button id="toggle-new-distribution" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">+ Nuevo reparto</button>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <dialog id="new-distribution-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nuevo reparto</h3>
+    <p class="hint">
+      Un reparto es un solo artículo (camiseta, buff, cabo…). Empieza como borrador, que
+      solo ven la administración y la Junta Directiva, hasta que lo abras.
+    </p>
+    <form id="new-distribution-form">
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="nd-name">Nombre</label>
+          <input id="nd-name" name="name" type="text" required>
+        </div>
+        <div class="field span-2">
+          <label for="nd-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="nd-description" name="description"></textarea>
+        </div>
+        <div class="field">
+          <label for="nd-audience">Para quién</label>
+          <select id="nd-audience" name="audience">
+            <option value="all_members">Todos los socios</option>
+            <option value="signup">Quien se apunte</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="nd-cutoff">Socios a fecha de <span class="optional" id="nd-cutoff-hint"></span></label>
+          <input id="nd-cutoff" name="cutoff_date" type="date">
+        </div>
+        <div class="field">
+          <label for="nd-closes">Se puede elegir hasta <span class="optional">(opcional)</span></label>
+          <input id="nd-closes" name="closes_at" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="nd-price">Precio de cada socio (€)</label>
+          <input id="nd-price" name="price" type="number" min="0" step="0.01" value="0" required>
+        </div>
+        <div class="field">
+          <label for="nd-extra-price">Precio de cada unidad extra (€) <span class="optional">(vacío: no hay extras)</span></label>
+          <input id="nd-extra-price" name="extra_price" type="number" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label for="nd-max-extra">Máximo de extras por socio <span class="optional">(opcional)</span></label>
+          <input id="nd-max-extra" name="max_extra" type="number" min="0" step="1">
+        </div>
+        <div class="field span-2">
+          <label for="nd-options">Qué hay que elegir <span class="optional">(una cosa por línea, por ejemplo «Talla: S, M, L, XL»)</span></label>
+          <textarea id="nd-options" name="options"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear reparto</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Reparto</th><th>Estado</th><th>Precio</th><th>Se elige hasta</th><th></th></tr>
+      </thead>
+      <tbody id="distributions-list"><tr><td colspan="5">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/distributions.js"></script>
+</body>
+</html>

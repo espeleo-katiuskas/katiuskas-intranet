@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reparto — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <p><a href="/distributions">&larr; Volver a repartos</a></p>
+  <h1 id="distribution-title">Reparto</h1>
+  <p class="subtitle" id="distribution-meta"></p>
+  <p id="distribution-description"></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="panel-actions" id="distribution-actions" hidden>
+    <a id="link-order" class="btn btn-secondary btn-small" data-roles="admin,board,material">Resumen del pedido</a>
+    <a id="link-pickup" class="btn btn-secondary btn-small" data-roles="admin,board,material">Recogida</a>
+    <button id="step-back" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" hidden></button>
+    <button id="step-forward" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden></button>
+    <button id="open-edit" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">Editar</button>
+    <button id="delete-distribution" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar</button>
+  </div>
+
+  <dialog id="edit-distribution-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar reparto</h3>
+    <p class="hint">
+      Los precios que cambies no afectan a lo que ya se pidió. Las opciones solo se pueden
+      cambiar mientras nadie haya pedido.
+    </p>
+    <form id="edit-distribution-form">
+      <div class="field-grid">
+        <div class="field span-2">
+          <label for="ed-name">Nombre</label>
+          <input id="ed-name" name="name" type="text" required>
+        </div>
+        <div class="field span-2">
+          <label for="ed-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="ed-description" name="description"></textarea>
+        </div>
+        <div class="field">
+          <label for="ed-audience">Para quién</label>
+          <select id="ed-audience" name="audience">
+            <option value="all_members">Todos los socios</option>
+            <option value="signup">Quien se apunte</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ed-cutoff">Socios a fecha de <span class="optional" id="ed-cutoff-hint"></span></label>
+          <input id="ed-cutoff" name="cutoff_date" type="date">
+        </div>
+        <div class="field">
+          <label for="ed-closes">Se puede elegir hasta <span class="optional">(opcional)</span></label>
+          <input id="ed-closes" name="closes_at" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="ed-price">Precio de cada socio (€)</label>
+          <input id="ed-price" name="price" type="number" min="0" step="0.01" required>
+        </div>
+        <div class="field">
+          <label for="ed-extra-price">Precio de cada unidad extra (€) <span class="optional">(vacío: no hay extras)</span></label>
+          <input id="ed-extra-price" name="extra_price" type="number" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label for="ed-max-extra">Máximo de extras por socio <span class="optional">(opcional)</span></label>
+          <input id="ed-max-extra" name="max_extra" type="number" min="0" step="1">
+        </div>
+        <div class="field span-2">
+          <label for="ed-options">Qué hay que elegir <span class="optional">(una cosa por línea, por ejemplo «Talla: S, M, L, XL»)</span></label>
+          <textarea id="ed-options" name="options"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="section-header">
+    <div>
+      <h2>Pedir</h2>
+      <p class="subtitle" id="order-status"></p>
+    </div>
+  </div>
+  <form id="order-form" class="panel" hidden>
+    <div class="field-grid">
+      <div class="field span-2">
+        <label for="of-person">A nombre de <span class="optional">(opcional: tú por defecto; otro socio, si lo pides por él)</span></label>
+        <input id="of-person" type="text" list="of-person-options" autocomplete="off" placeholder="Escribe un nombre…">
+        <datalist id="of-person-options"></datalist>
+      </div>
+      <div id="of-options" class="span-2 field-grid"></div>
+      <div class="field span-2" id="of-extra-field" hidden>
+        <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es una unidad extra</span></label>
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button type="submit" class="btn btn-primary">Pedir</button>
+    </div>
+  </form>
+
+  <div class="section-header">
+    <div>
+      <h2>Tus pedidos</h2>
+      <p class="subtitle">Lo que has pedido para ti y lo que has apuntado a nombre de otros.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Para</th><th>Elegido</th><th>Tipo</th><th>Precio</th><th>Apuntado</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+  <p id="units-total" class="subtitle"></p>
+
+  <dialog id="edit-unit-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Cambiar lo elegido</h3>
+    <p class="hint" id="edit-unit-hint"></p>
+    <form id="edit-unit-form">
+      <div id="eu-options" class="field-grid"></div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/distribution.js"></script>
+</body>
+</html>

@@ -1246,6 +1246,32 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
+`/distributions`, `/distribution?id=…`, `/distribution-order?id=…` and
+`/distribution-pickup?id=…` (`distributions.js`, `distribution.js`, `distribution-order.js`,
+`distribution-pickup.js`, sharing `js/distributionCommon.js`) are the interface for
+**Distributions** above, behind one "Repartos" sidebar entry (`layout.js` maps the three
+detail pages to it in `ACTIVE_ALIASES`). The list opens a new distribution from a dialog
+(admin/board; the options go in a textarea, one per line, "Talla: S, M, L",
+`parseOptions`) and shows "Puedes pedirlo" on the open ones whose `eligible` is true. The
+detail page renders the conditions, a "Pedir" form (an "A nombre de" picker over
+`GET /users/directory`, one `<select>` per option, an extra checkbox when `extra_price`
+exists; `canOrderNow` repeats the API's own open/deadline rule only to decide whether to
+show it) and "Tus pedidos" — the units where the signed-in person is the beneficiary or
+entered them, since `GET .../units` returns everything to admin/board/material — with who
+entered each when that isn't the person it is for. Admin/board move the status one step at
+a time (`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field), edit and
+delete; every control restricted by `data-roles` is *removed* from the page for anybody
+else, so each script reaches those through a null-safe lookup (a bare
+`getElementById(...).addEventListener` on one of them would throw before the rest of the
+page ran). `/distribution-order` (`requireAnyRole` admin/board/material) shows
+`GET .../order` and the units grouped by person, with "Marcar pagado" per person for
+admin/board; `/distribution-pickup` lists who is still to collect, with a checkbox per unit
+once the status is `received`, an "Entregado a" picker (suggesting the beneficiary when all
+the marked units are for the same one) and "Deshacer" per collected unit, confirming before
+handing over unpaid units. `api.js`'s `apiFetch` now puts the API's error `code` on the
+thrown `Error`, which `distributionCommon.js`'s `apiErrorText` maps to Spanish messages
+(falling back to the API's own text).
+
 `/accounting` (`accounting.js`) manages the chart of accounts from
 `GET`/`POST`/`PATCH /accounts` and `POST /accounts/{id}/move` — a tree, indented by depth,
 of every account's name, direct balance, and last movement date (each name a plain
