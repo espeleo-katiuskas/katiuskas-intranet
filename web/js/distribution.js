@@ -224,11 +224,14 @@ function renderOrderForm() {
   const status = document.getElementById('order-status');
   const eligible = isStaff || distribution.eligible;
   const open = canOrderNow();
-  // In a distribution for all members everybody's own unit is already there,
-  // so the form only has something to do when there are options to choose for
-  // somebody else, or extras to ask for.
-  const nothingToAsk = distribution.audience === 'all_members' && distribution.options.length === 0 && distribution.extra_price == null;
-  orderForm.hidden = !(open && eligible) || nothingToAsk;
+  // A distribution for all members with nothing to choose and no extras has
+  // nothing to ask for, ever: its own unit is there for everybody, so the
+  // whole section is out — not even a "no longer admitting orders", since it
+  // never did.
+  const orderSection = document.getElementById('order-section');
+  orderSection.hidden = nothingToAsk(distribution);
+  if (orderSection.hidden) return;
+  orderForm.hidden = !(open && eligible);
   if (!eligible) {
     status.textContent = distribution.cutoff_date
       ? `No te corresponde este reparto: solo es para quienes eran socios el ${formatDate(distribution.cutoff_date)}.`
@@ -284,11 +287,8 @@ orderForm.addEventListener('submit', async (event) => {
 // ----- the units shown -----
 const unitsList = document.getElementById('units-list');
 
-function unitState(u) {
-  const paid = u.paid_at ? 'Pagado' : (u.price > 0 ? 'Sin pagar' : 'Gratis');
-  const picked = u.picked_up_at ? ' · Recogido' : '';
-  return paid + picked;
-}
+// Nothing about payment is shown yet: a unit is collected or it isn't.
+const unitState = (u) => (u.picked_up_at ? 'Recogido' : 'No recogido');
 
 function mineOnly(all) {
   // Admin, board and material get every unit from the API; this page is
@@ -302,43 +302,59 @@ function canChange(u) {
   return canOrderNow();
 }
 
-function renderUnits() {
-  const mine = mineOnly(units);
-  unitsList.innerHTML = mine.length
-    ? mine.map((u) => {
-      const forMe = u.beneficiary_login === me.login;
-      const byMe = u.registered_by_login === me.login;
-      const hasOptions = distribution.options.length > 0;
-      const unchosen = isUnchosen(u, hasOptions);
+// The columns "Tus pedidos" needs: no "Elegido" when there is nothing to choose,
+// and no "Tipo" (own or extra) when there can be no extras. The price is shown,
+// but nothing about paying: that isn't something the intranet keeps.
+function unitColumns() {
+  const columns = [{ key: 'for', label: 'Para' }];
+  if (distribution.options.length > 0) columns.push({ key: 'chosen', label: 'Elegido' });
+  if (distribution.extra_price != null) columns.push({ key: 'kind', label: 'Tipo' });
+  columns.push({ key: 'price', label: 'Precio' }, { key: 'entered', label: 'Apuntado' }, { key: 'state', label: 'Estado' }, { key: 'actions', label: '' });
+  return columns;
+}
+
+function unitCell(key, u, hasOptions) {
+  const forMe = u.beneficiary_login === me.login;
+  const byMe = u.registered_by_login === me.login;
+  const unchosen = isUnchosen(u, hasOptions);
+  switch (key) {
+    case 'for':
+      return escapeHtml(forMe ? 'Ti' : u.beneficiary_name);
+    case 'chosen':
+      return unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(u.choices, hasOptions));
+    case 'kind':
+      return u.is_extra ? 'Extra' : 'Propia';
+    case 'price':
+      return u.price > 0 ? formatCurrency(u.price) : 'Gratis';
+    case 'entered':
       // Who entered it matters when it wasn't the person it is for. Nobody did
       // for an own unit of a distribution for all members until somebody chooses.
-      let entered;
-      if (!u.registered_by_login) entered = 'Automático';
-      else if (forMe && byMe) entered = formatDate(u.registered_at);
-      else entered = `${formatDate(u.registered_at)} por ${escapeHtml(byMe ? 'ti' : nameOf(u.registered_by_login))}`;
+      if (!u.registered_by_login) return 'Automático';
+      if (forMe && byMe) return formatDate(u.registered_at);
+      return `${formatDate(u.registered_at)} por ${escapeHtml(byMe ? 'ti' : nameOf(u.registered_by_login))}`;
+    case 'state':
+      return unitState(u);
+    default: {
       // An own unit of a distribution for all members is for everybody and
       // can't be removed (the API refuses); everything else can.
       const removable = u.is_extra || distribution.audience === 'signup';
-      const actions = canChange(u)
-        ? `<div class="table-actions">
-             ${hasOptions ? `<button type="button" class="btn ${unchosen ? 'btn-primary' : 'btn-secondary'} btn-small" data-change-unit="${u.id}">${unchosen ? 'Elegir' : 'Cambiar'}</button>` : ''}
-             ${removable ? `<button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>` : ''}
-           </div>`
-        : '';
-      return `
-        <tr>
-          <td>${escapeHtml(forMe ? 'Ti' : u.beneficiary_name)}</td>
-          <td>${unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(u.choices, hasOptions))}</td>
-          <td>${u.is_extra ? 'Extra' : 'Propia'}</td>
-          <td>${u.price > 0 ? formatCurrency(u.price) : 'Gratis'}</td>
-          <td>${entered}</td>
-          <td>${unitState(u)}</td>
-          <td>${actions}</td>
-        </tr>`;
-    }).join('')
-    : '<tr><td colspan="7">Todavía no hay nada a tu nombre.</td></tr>';
-  const owed = mine.filter((u) => !u.paid_at).reduce((sum, u) => sum + u.price, 0);
-  document.getElementById('units-total').textContent = owed > 0 ? `Pendiente de pagar: ${formatCurrency(owed)}.` : '';
+      if (!canChange(u)) return '';
+      return `<div class="table-actions">
+        ${hasOptions ? `<button type="button" class="btn ${unchosen ? 'btn-primary' : 'btn-secondary'} btn-small" data-change-unit="${u.id}">${unchosen ? 'Elegir' : 'Cambiar'}</button>` : ''}
+        ${removable ? `<button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>` : ''}
+      </div>`;
+    }
+  }
+}
+
+function renderUnits() {
+  const mine = mineOnly(units);
+  const columns = unitColumns();
+  const hasOptions = distribution.options.length > 0;
+  document.getElementById('units-head').innerHTML = columns.map((c) => `<th>${c.label}</th>`).join('');
+  unitsList.innerHTML = mine.length
+    ? mine.map((u) => `<tr>${columns.map((c) => `<td>${unitCell(c.key, u, hasOptions)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${columns.length}">Todavía no hay nada a tu nombre.</td></tr>`;
 }
 
 async function loadUnits() {
@@ -346,7 +362,7 @@ async function loadUnits() {
     units = await apiFetch(`${base}/units`);
     renderUnits();
   } catch (err) {
-    unitsList.innerHTML = '<tr><td colspan="7">No se pudieron cargar los pedidos.</td></tr>';
+    unitsList.innerHTML = `<tr><td colspan="${distribution ? unitColumns().length : 4}">No se pudieron cargar los pedidos.</td></tr>`;
     fail(err);
   }
 }
