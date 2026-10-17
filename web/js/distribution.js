@@ -149,10 +149,16 @@ editForm.addEventListener('submit', async (event) => {
 });
 
 onClick('delete-distribution', async () => {
+  // Say what is lost in plain words: each "pedido" is what one member asked for
+  // or has coming — in a distribution for all members that includes everybody's
+  // own, which nobody asked for — and what they chose goes with it.
   const units = distribution.unit_count;
-  const lost = units > 0
-    ? ` Se borrará también ${units === 1 ? 'su única unidad' : `sus ${units} unidades`}, con lo que hayan elegido los socios.`
-    : '';
+  let lost = '';
+  if (units > 0) {
+    const count = units === 1 ? '1 pedido' : `${units} pedidos`;
+    const verb = units === 1 ? 'se perderá' : 'se perderán';
+    lost = ` Tiene ${count}, con lo que hayan elegido los socios, y ${verb} con él.`;
+  }
   if (!confirm(`¿Borrar el reparto «${distribution.name}»?${lost} No se puede deshacer.`)) return;
   try {
     await apiFetch(base, { method: 'DELETE' });
@@ -191,9 +197,9 @@ function readChoices(container) {
 // unit is already there, and what is left is choosing its options and, if
 // there are any, asking for extras.
 function allMembersHint() {
-  const parts = ['Es para todos los socios: tu unidad ya está apuntada.'];
+  const parts = ['Es para todos los socios: tu pedido ya está apuntado.'];
   if (distribution.options.length) parts.push('Elige lo que corresponda en «Tus pedidos» o, para otro socio, aquí abajo.');
-  if (distribution.extra_price != null) parts.push('Puedes pedir también unidades extra.');
+  if (distribution.extra_price != null) parts.push('Puedes pedir también extras.');
   return parts.join(' ');
 }
 
@@ -225,7 +231,7 @@ function renderOrderForm() {
   document.getElementById('of-options').innerHTML = optionSelects('of');
   extraField.hidden = distribution.extra_price == null;
   document.getElementById('of-extra-label').textContent =
-    `Es una unidad extra (${formatCurrency(distribution.extra_price ?? 0)}${distribution.max_extra != null ? `, máximo ${distribution.max_extra} por socio` : ''})`;
+    `Es un extra (${formatCurrency(distribution.extra_price ?? 0)}${distribution.max_extra != null ? `, máximo ${distribution.max_extra} por socio` : ''})`;
 }
 
 orderForm.addEventListener('submit', async (event) => {
@@ -345,7 +351,7 @@ unitsList.addEventListener('click', async (event) => {
     document.getElementById('eu-options').innerHTML = optionSelects('eu', changing.choices);
     openModal(unitDialog);
   } else if (remove) {
-    if (!confirm('¿Quitar esta unidad del pedido?')) return;
+    if (!confirm('¿Quitar este pedido?')) return;
     remove.disabled = true;
     try {
       await apiFetch(`${base}/units/${remove.dataset.deleteUnit}`, { method: 'DELETE' });

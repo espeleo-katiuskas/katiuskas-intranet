@@ -1284,7 +1284,9 @@ this section's own, `style.css` as well since `dashboard.css` stays index.html-s
 
 `/repartos`, `/reparto?id=…`, `/reparto-pedido?id=…` and `/reparto-recogida?id=…`
 (`distributions.js`, `distribution.js`, `distribution-order.js`, `distribution-pickup.js`,
-sharing `js/distributionCommon.js`) are the interface for **Distributions** above, behind
+sharing `js/distributionCommon.js`) are the interface for **Distributions** above — where
+what the code and the API call a unit is a "pedido" to the people reading these pages, and
+an extra unit an "extra", since "unidad" meant nothing to them — behind
 one "Repartos" sidebar entry (`layout.js` maps the three detail pages to it in
 `ACTIVE_ALIASES`). The list opens a new distribution from a dialog (admin/board; the
 options go in a textarea, one per line, "Talla: S, M, L", `parseOptions`) and shows

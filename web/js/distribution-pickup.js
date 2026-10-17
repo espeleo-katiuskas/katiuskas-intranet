@@ -73,10 +73,10 @@ function render() {
   const done = units.filter((u) => u.picked_up_at).length;
   const waiting = new Set(units.filter((u) => !u.picked_up_at).map((u) => u.beneficiary_login)).size;
   document.getElementById('pickup-progress').textContent = canCollect() || done > 0
-    ? `Recogidas ${done} de ${units.length} unidades. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
+    ? `Recogidas ${done} de ${units.length} pedidos. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
     : '';
   form.hidden = !canCollect();
-  document.getElementById('pf-selected').textContent = selected.size ? `${selected.size} unidades marcadas.` : '';
+  document.getElementById('pf-selected').textContent = selected.size ? (selected.size === 1 ? '1 pedido marcado.' : `${selected.size} pedidos marcados.`) : '';
   submit.disabled = selected.size === 0;
 }
 
@@ -126,16 +126,16 @@ form.addEventListener('submit', async (event) => {
     return;
   }
   const chosen = units.filter((u) => selected.has(u.id));
-  if (chosen.some((u) => u.price > 0 && !u.paid_at) && !confirm('Hay unidades que todavía no están pagadas. ¿Apuntar la recogida igualmente?')) {
+  if (chosen.some((u) => u.price > 0 && !u.paid_at) && !confirm('Hay pedidos que todavía no están pagados. ¿Apuntar la recogida igualmente?')) {
     return;
   }
-  if (chosen.some((u) => isUnchosen(u, hasOptions())) && !confirm('Hay unidades de las que nadie ha elegido todavía lo que son. ¿Apuntar la recogida igualmente?')) {
+  if (chosen.some((u) => isUnchosen(u, hasOptions())) && !confirm('Hay pedidos de los que nadie ha elegido todavía lo que son. ¿Apuntar la recogida igualmente?')) {
     return;
   }
   submit.disabled = true;
   try {
     await apiFetch(`${base}/pickups`, { method: 'POST', body: JSON.stringify({ unit_ids: [...selected], picked_up_by_login: login }) });
-    showFeedback(`Recogida apuntada: ${chosen.length} unidades entregadas a ${nameOf(login)}.`);
+    showFeedback(`Recogida apuntada: ${chosen.length === 1 ? '1 pedido entregado' : `${chosen.length} pedidos entregados`} a ${nameOf(login)}.`);
     selected.clear();
     personInput.value = '';
     autoFilled = '';

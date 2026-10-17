@@ -28,9 +28,9 @@ function renderOrder(order) {
   // In a distribution for all members everybody has a unit from the start, so
   // the ones that nobody has chosen the options of are what is still missing.
   const missing = units.filter((u) => isUnchosen(u, hasOptions())).length;
-  const missingText = missing === 0 ? '' : missing === 1 ? ' Falta por elegir 1 unidad.' : ` Faltan por elegir ${missing} unidades.`;
+  const missingText = missing === 0 ? '' : missing === 1 ? ' Falta por elegir 1 pedido.' : ` Faltan por elegir ${missing} pedidos.`;
   document.getElementById('order-totals').textContent =
-    `${order.total_units} unidades en total, por ${formatCurrency(order.total_amount)}.${missingText}`;
+    `${order.total_units} pedidos en total, por ${formatCurrency(order.total_amount)}.${missingText}`;
 }
 
 // Units grouped by the person they are for.
@@ -96,7 +96,7 @@ document.getElementById('people-list').addEventListener('click', async (event) =
       await apiFetch(`${base}/payments`, { method: 'POST', body: JSON.stringify({ unit_ids: ids }) });
       showFeedback('Marcado como pagado.');
     } else {
-      if (!confirm('¿Quitar la marca de pagado de las unidades de esta persona?')) {
+      if (!confirm('¿Quitar la marca de pagado de los pedidos de esta persona?')) {
         button.disabled = false;
         return;
       }

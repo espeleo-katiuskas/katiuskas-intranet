@@ -34,9 +34,9 @@
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Editar reparto</h3>
     <p class="hint">
-      Los precios que cambies no afectan a lo que ya se eligió o se pagó; sí a las unidades de
+      Los precios que cambies no afectan a lo que ya se eligió o se pagó; sí a los pedidos de
       «todos los socios» que nadie ha tocado todavía. Las opciones solo se pueden cambiar
-      mientras no haya unidades, es decir, hasta que se abra el reparto.
+      mientras no haya pedidos, es decir, hasta que se abra el reparto.
     </p>
     <form id="edit-distribution-form">
       <div class="field-grid">
@@ -68,7 +68,7 @@
           <input id="ed-price" name="price" type="number" min="0" step="0.01" required>
         </div>
         <div class="field">
-          <label for="ed-extra-price">Precio de cada unidad extra (€) <span class="optional">(vacío: no hay extras)</span></label>
+          <label for="ed-extra-price">Precio de cada extra (€) <span class="optional">(vacío: no hay extras)</span></label>
           <input id="ed-extra-price" name="extra_price" type="number" min="0" step="0.01">
         </div>
         <div class="field">
@@ -102,7 +102,7 @@
       </div>
       <div id="of-options" class="span-2 field-grid"></div>
       <div class="field span-2" id="of-extra-field" hidden>
-        <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es una unidad extra</span></label>
+        <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es un extra</span></label>
       </div>
     </div>
     <div class="panel-actions">

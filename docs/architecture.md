@@ -892,7 +892,8 @@ salvo pedir unidades y editar las propias).
   («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
   mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
   como cambiarlas, pero uno distinto da 409 `has_units`.
-- **Unidades** (`distribution_units`): una fila por unidad pedida, para que dos camisetas
+- **Unidades** (`distribution_units`; en la interfaz se llaman «pedidos», y las unidades
+  extra, «extras»): una fila por unidad pedida, para que dos camisetas
   extra puedan tener tallas distintas. `beneficiary_id` es para quién es;
   `registered_by_id` y `registered_at`, quién la apuntó de verdad y cuándo (otra persona
   cuando un padre apunta a su hijo o un amigo añade extras a otro), y no cambian al editar
