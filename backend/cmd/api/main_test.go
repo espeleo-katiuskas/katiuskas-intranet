@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/adminstatus"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -72,5 +73,25 @@ func TestBuildRouterAssemblesAndAnswers(t *testing.T) {
 	}
 	if rec := get("/api/v1/does-not-exist"); rec.Code != http.StatusNotFound {
 		t.Errorf("GET an unknown route: expected 404, got %d", rec.Code)
+	}
+}
+
+func TestStartupMessageSaysWhatIsKnownAboutTheBuild(t *testing.T) {
+	// Mid-morning UTC, so the date is the same wherever the test runs.
+	commit := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		build adminstatus.Build
+		want  string
+	}{
+		{"both", adminstatus.Build{Version: "v0.3.6", CommitTime: commit}, "🚀 API started (version v0.3.6, commit del 17-10-2026)"},
+		{"version only", adminstatus.Build{Version: "v0.3.6"}, "🚀 API started (version v0.3.6)"},
+		{"date only", adminstatus.Build{CommitTime: commit}, "🚀 API started (commit del 17-10-2026)"},
+		{"nothing known", adminstatus.Build{}, "🚀 API started"},
+	}
+	for _, c := range cases {
+		if got := startupMessage(c.build); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
 	}
 }

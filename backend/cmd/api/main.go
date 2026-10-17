@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounting"
@@ -32,6 +33,23 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
+
+// startupMessage is what the startup notification says: "🚀 API started", and
+// when known which version it is and from when the last commit is, e.g. "🚀 API
+// started (version v0.3.6, commit del 17-10-2026)".
+func startupMessage(build adminstatus.Build) string {
+	var details []string
+	if build.Version != "" {
+		details = append(details, "version "+build.Version)
+	}
+	if !build.CommitTime.IsZero() {
+		details = append(details, "commit del "+build.CommitTime.Local().Format("02-01-2006"))
+	}
+	if len(details) == 0 {
+		return "🚀 API started"
+	}
+	return "🚀 API started (" + strings.Join(details, ", ") + ")"
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -93,7 +111,7 @@ func main() {
 	// NoopSender's own info log when Telegram isn't configured is no
 	// noisier than logging it directly would have been anyway.
 	startupCtx, cancelStartup := context.WithTimeout(ctx, 10*time.Second)
-	if err := telegramSender.Send(startupCtx, "🚀 API started"); err != nil {
+	if err := telegramSender.Send(startupCtx, startupMessage(adminstatus.ReadBuild())); err != nil {
 		slog.Error("notify api startup to telegram", "error", err)
 	}
 	cancelStartup()

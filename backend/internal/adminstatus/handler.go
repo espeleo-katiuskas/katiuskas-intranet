@@ -151,6 +151,35 @@ func (h *Handler) appStatus() appStatus {
 	return app
 }
 
+// Build is what Go recorded about the binary: the main module's version and
+// when the commit it was built from was made. Either is the zero value when
+// unknown (a build outside a git checkout, `go run`, a test).
+type Build struct {
+	Version    string
+	CommitTime time.Time
+}
+
+// ReadBuild reads Build from the running binary.
+func ReadBuild() Build {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return Build{}
+	}
+	return buildFrom(info)
+}
+
+func buildFrom(info *debug.BuildInfo) Build {
+	build := Build{Version: moduleVersion(info)}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.time" {
+			if t, err := time.Parse(time.RFC3339, setting.Value); err == nil {
+				build.CommitTime = t
+			}
+		}
+	}
+	return build
+}
+
 // moduleVersion is the version Go recorded for the main module
 // (debug.BuildInfo.Main.Version): a tag when built from a tagged commit, else
 // a pseudo-version with the commit and, when the tree had changes, "+dirty".

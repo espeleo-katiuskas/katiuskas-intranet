@@ -938,7 +938,10 @@ the send of a bot-flow magic-link DM.
   own goroutine, tracked so `Handler.WaitForBackgroundSends` can wait for it and for that
   unlinking (tests use it: the shared transaction isn't for concurrent use). The bot's own
   replies in a chat aren't covered — only the sign-in DMs.
-- `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` —
+- `cmd/api/main.go` sends "🚀 API started" once, right before `http.ListenAndServe` — with
+  the version and the date of the last commit when known ("🚀 API started (version v0.3.6,
+  commit del 17-10-2026)", or just one of the two, or neither: `startupMessage`, from
+  `adminstatus.ReadBuild`, the same build info `/admin` shows) —
   the one notification that isn't fire-and-forget: it's a single call at process
   startup, not something on any request or statement's critical path, so blocking on it
   (bounded to 10s, same timeout every other notification uses for its own goroutine)
