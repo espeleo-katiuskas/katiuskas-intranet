@@ -183,36 +183,46 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Going back to a draft undoes what opening it did: in a distribution for all
-	// members everybody's own unit was made automatically, and is made again
-	// when it opens, so they go — with whatever was chosen on them, which may not
-	// fit the options it is about to be given. Paid or collected ones are real
-	// things that happened, so those stop it until the marks are undone. Extras,
-	// which somebody asked for, stay.
-	if in.Status != nil && *in.Status == StatusDraft {
-		var previous Status
-		var audience Audience
-		err := tx.QueryRow(ctx, `SELECT status, audience FROM distributions WHERE id = $1 FOR UPDATE`, id).Scan(&previous, &audience)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Distribution{}, ErrNotFound
+	var previous Status
+	var previousAudience Audience
+	err = tx.QueryRow(ctx, `SELECT status, audience FROM distributions WHERE id = $1 FOR UPDATE`, id).Scan(&previous, &previousAudience)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Distribution{}, ErrNotFound
+	}
+	if err != nil {
+		return Distribution{}, err
+	}
+
+	// Going back to a draft starts it over: every unit goes — everybody's own
+	// (made automatically, and made again when it opens), the extras and, in one
+	// people sign up for, the sign-ups — with whatever was chosen on them, which
+	// may not fit the options it is about to be given. Paid or collected ones are
+	// real things that happened, so those stop it until the marks are undone.
+	backToDraft := in.Status != nil && *in.Status == StatusDraft && previous != StatusDraft
+	// Turning a distribution for all members into one people sign up for takes
+	// the automatic units with it — the ones nobody has touched, which exist only
+	// because everybody was in. What somebody did choose stays: that is somebody
+	// who asked for it, which is what signing up is. Same refusal for a paid or
+	// collected one.
+	becomesSignup := previousAudience == AudienceAllMembers && in.Audience == AudienceSignup
+	if backToDraft || becomesSignup {
+		// Everything on a draft that goes away, or only what nobody touched.
+		scope := `TRUE`
+		if !backToDraft {
+			scope = `NOT is_extra AND registered_by_id IS NULL`
 		}
-		if err != nil {
+		var settled int
+		if err := tx.QueryRow(ctx, `
+			SELECT count(*) FROM distribution_units
+			WHERE distribution_id = $1 AND `+scope+` AND (paid_at IS NOT NULL OR picked_up_at IS NOT NULL)
+		`, id).Scan(&settled); err != nil {
 			return Distribution{}, err
 		}
-		if previous != StatusDraft && audience == AudienceAllMembers {
-			var settled int
-			if err := tx.QueryRow(ctx, `
-				SELECT count(*) FROM distribution_units
-				WHERE distribution_id = $1 AND NOT is_extra AND (paid_at IS NOT NULL OR picked_up_at IS NOT NULL)
-			`, id).Scan(&settled); err != nil {
-				return Distribution{}, err
-			}
-			if settled > 0 {
-				return Distribution{}, ErrHasSettledUnits
-			}
-			if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE distribution_id = $1 AND NOT is_extra`, id); err != nil {
-				return Distribution{}, err
-			}
+		if settled > 0 {
+			return Distribution{}, ErrHasSettledUnits
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE distribution_id = $1 AND `+scope, id); err != nil {
+			return Distribution{}, err
 		}
 	}
 

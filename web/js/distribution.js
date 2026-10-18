@@ -113,11 +113,14 @@ function onClick(elementId, handler) {
 onClick('step-back', () => {
   const steps = statusSteps(distribution);
   const previous = steps[steps.indexOf(distribution.status) - 1];
-  // Back to a draft takes everybody's own order away in a distribution for all
-  // members (the API deletes them, with what was chosen on them).
-  if (previous === 'draft' && distribution.audience === 'all_members' && distribution.unit_count > 0
-    && !confirm('Al volver a borrador se borrarán los pedidos de los socios (uno por socio, con lo que hayan elegido) y se volverán a crear, vacíos, al abrirlo. Los extras se quedan. ¿Volver a borrador?')) {
-    return;
+  // Back to a draft starts it over: the API deletes every order, with what was
+  // chosen on it, so say so when there is any.
+  if (previous === 'draft' && distribution.unit_count > 0) {
+    const count = distribution.unit_count === 1 ? '1 pedido' : `${distribution.unit_count} pedidos`;
+    const again = distribution.audience === 'all_members'
+      ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
+      : '';
+    if (!confirm(`Al volver a borrador se borrarán todos los pedidos (${count}), con lo que hayan elegido los socios, y no se podrán recuperar.${again} ¿Volver a borrador?`)) return;
   }
   setStatus(previous);
 });
@@ -151,6 +154,12 @@ onClick('open-edit', () => {
 
 editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  // Turning "todos los socios" into "quien se apunte" takes the orders nobody
+  // touched with it (the API deletes them).
+  if (distribution.audience === 'all_members' && editAudience.value === 'signup' && distribution.unit_count > 0
+    && !confirm('Al pasarlo a «Quien se apunte» se borrarán los pedidos automáticos de los socios que no han elegido nada. Se quedan los que ya eligieron algo y los extras. ¿Seguir?')) {
+    return;
+  }
   const submit = editForm.querySelector('button[type="submit"]');
   submit.disabled = true;
   try {

@@ -1818,10 +1818,16 @@ paths:
         (collections are recorded) and done — forward or back. A
         distribution for all members with no options and no extras has
         nothing for members to do, so it may also go straight from draft to
-        delivering, and back. Going back to draft in a distribution for all
-        members deletes everybody's own unit (what was chosen on it too; opening
-        again makes them anew, empty), but is refused (409 has_settled_units)
-        while one is paid or collected; extras stay. Prices changed here don't change
+        delivering, and back. Changing `audience` from `all_members` to
+        `signup` deletes the automatic units nobody has touched (not chosen,
+        not paid, not collected): whoever did choose has asked for it, which is
+        signing up, so those and the extras stay; it is refused (409
+        has_settled_units) while an untouched one is paid or collected. Going
+        back to draft starts it over: every unit is deleted — everybody's own,
+        the extras, the sign-ups, with what was chosen on them; opening again
+        makes the automatic ones of a distribution for all members anew, empty
+        — but it is refused (409 has_settled_units) while any is paid or
+        collected. Prices changed here don't change
         what units already asked for cost, except the automatic units of a
         distribution for all members that nobody has touched (not chosen, not
         paid, not collected), which take the new price.

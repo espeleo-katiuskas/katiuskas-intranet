@@ -918,10 +918,11 @@ func TestPriceChangeReachesUntouchedAutomaticUnitsOnly(t *testing.T) {
 	}
 }
 
-// Going back to a draft undoes what opening did: everybody's own unit, made
-// automatically, goes (with what was chosen on it), unless one is paid or
-// collected; extras stay; and opening again makes them anew.
-func TestBackToDraftDeletesTheAutomaticUnits(t *testing.T) {
+// Going back to a draft starts it over: every unit goes, everybody's own (made
+// automatically), the extras and the sign-ups, with what was chosen on them —
+// unless one is paid or collected — and opening again makes the automatic ones
+// anew.
+func TestBackToDraftDeletesEveryUnit(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
 	chooser := e.newPerson(t, "2020-01-01", "member")
@@ -929,52 +930,118 @@ func TestBackToDraftDeletesTheAutomaticUnits(t *testing.T) {
 	d := newOpenShirt(t, e, admin) // free, extras at 8, size to choose
 	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
 	mustStatus(t, register(e, d.ID, chooser, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
-	extra := decode[distributions.Unit](t, mustStatus(t, register(e, d.ID, chooser, map[string]any{"is_extra": true, "choices": map[string]string{"Talla": "S"}}), http.StatusCreated))
+	mustStatus(t, register(e, d.ID, chooser, map[string]any{"is_extra": true, "choices": map[string]string{"Talla": "S"}}), http.StatusCreated)
 	back := func() *httptest.ResponseRecorder {
 		body := shirt()
 		body["status"] = "draft"
 		return e.do("PATCH", path, admin.token, body)
 	}
-	own := func() int {
-		n := 0
-		for _, u := range decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)) {
-			if !u.IsExtra {
-				n++
-			}
-		}
-		return n
+	count := func() int {
+		return len(decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)))
 	}
-	if own() != 2 {
-		t.Fatalf("expected an own unit each, got %d", own())
+	if count() != 3 {
+		t.Fatalf("expected an own unit each and an extra, got %d", count())
 	}
 
 	// A paid one stops it, and nothing is lost.
 	idleUnit := unitFor(t, e, admin, d.ID, idle.Login)
 	mustStatus(t, e.do("POST", path+"/payments", admin.token, map[string]any{"unit_ids": []int64{idleUnit.ID}}), http.StatusNoContent)
 	expect(t, back(), http.StatusConflict, "has_settled_units")
-	if own() != 2 {
-		t.Errorf("a refused change must leave the units alone, got %d", own())
+	if count() != 3 {
+		t.Errorf("a refused change must leave the units alone, got %d", count())
 	}
 	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, idleUnit.ID), admin.token, nil), http.StatusNoContent)
 
-	// Without marks, back to a draft deletes the own units — the chosen one too —
-	// and keeps the extra.
+	// Without marks, back to a draft deletes all of them, the extra included.
 	got := decode[distributions.Distribution](t, mustStatus(t, back(), http.StatusOK))
-	if got.Status != distributions.StatusDraft || got.UnitCount != 1 {
-		t.Errorf("expected a draft with just the extra left, got %+v", got)
-	}
-	units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK))
-	if len(units) != 1 || units[0].ID != extra.ID {
-		t.Errorf("only the extra should be left: %+v", units)
+	if got.Status != distributions.StatusDraft || got.UnitCount != 0 || count() != 0 {
+		t.Errorf("expected a draft with no units at all, got %+v (%d units)", got, count())
 	}
 
-	// Opening it again makes everybody's own unit anew, empty.
-	setStatus(t, e, admin, d.ID, "open")
-	if own() != 2 {
-		t.Errorf("opening again should make an own unit each, got %d", own())
+	// With nothing left, the options can be replaced, and opening again makes
+	// everybody's own unit anew, empty.
+	body := shirt()
+	body["options"] = []map[string]any{{"name": "Talla", "values": []string{"M", "L"}}}
+	body["status"] = "open"
+	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	if count() != 2 {
+		t.Errorf("opening again should make an own unit each, got %d", count())
 	}
 	if u := unitFor(t, e, admin, d.ID, chooser.Login); len(u.Choices) != 0 || u.RegisteredByLogin != nil {
 		t.Errorf("what was chosen went with the old unit: %+v", u)
+	}
+}
+
+// The same for a distribution people sign up for: back to a draft takes every
+// sign-up with it.
+func TestBackToDraftDeletesTheSignUpsToo(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	member := e.newPerson(t, "2020-01-01", "member")
+	body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1, "extra_price": 2, "status": "open"}
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	mustStatus(t, register(e, d.ID, member, map[string]any{}), http.StatusCreated)
+	mustStatus(t, register(e, d.ID, member, map[string]any{"is_extra": true}), http.StatusCreated)
+	body["status"] = "draft"
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK))
+	if got.UnitCount != 0 {
+		t.Errorf("a draft keeps no sign-ups, got %d units", got.UnitCount)
+	}
+}
+
+// Turning a distribution for all members into one people sign up for takes the
+// automatic units nobody touched with it; whoever did choose has asked for it, so
+// that stays — and a paid or collected one stops the change.
+func TestSwitchingToSignupDeletesTheUntouchedAutomaticUnits(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	chooser := e.newPerson(t, "2020-01-01", "member")
+	idle := e.newPerson(t, "2020-01-01", "member")
+	paid := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenShirt(t, e, admin)
+	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+	mustStatus(t, register(e, d.ID, chooser, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
+	extra := decode[distributions.Unit](t, mustStatus(t, register(e, d.ID, chooser, map[string]any{"is_extra": true, "choices": map[string]string{"Talla": "S"}}), http.StatusCreated))
+	toSignup := func() *httptest.ResponseRecorder {
+		body := shirt()
+		body["audience"] = "signup"
+		body["status"] = "open"
+		return e.do("PATCH", path, admin.token, body)
+	}
+	logins := func() map[string]bool {
+		got := map[string]bool{}
+		for _, u := range decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)) {
+			got[fmt.Sprintf("%s/%v", u.BeneficiaryLogin, u.IsExtra)] = true
+		}
+		return got
+	}
+
+	// One untouched unit is paid: the change is refused and nothing is lost.
+	paidUnit := unitFor(t, e, admin, d.ID, paid.Login)
+	mustStatus(t, e.do("POST", path+"/payments", admin.token, map[string]any{"unit_ids": []int64{paidUnit.ID}}), http.StatusNoContent)
+	expect(t, toSignup(), http.StatusConflict, "has_settled_units")
+	if len(logins()) != 4 {
+		t.Errorf("a refused change must leave the units alone, got %v", logins())
+	}
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, paidUnit.ID), admin.token, nil), http.StatusNoContent)
+
+	// Without marks: the untouched ones go; the chosen one and the extra stay.
+	got := decode[distributions.Distribution](t, mustStatus(t, toSignup(), http.StatusOK))
+	if got.Audience != distributions.AudienceSignup {
+		t.Fatalf("expected signup, got %s", got.Audience)
+	}
+	left := logins()
+	if len(left) != 2 || !left[chooser.Login+"/false"] || !left[chooser.Login+"/true"] || left[idle.Login+"/false"] || left[paid.Login+"/false"] {
+		t.Errorf("only what the chooser asked for should be left, got %v", left)
+	}
+	if unitByID(t, e, admin, d.ID, extra.ID).ID != extra.ID {
+		t.Error("the extra should have stayed")
+	}
+	// It is a distribution people sign up for now: nothing is made on its own.
+	if len(logins()) != 2 {
+		t.Errorf("a signup distribution makes no automatic units, got %v", logins())
 	}
 }
 

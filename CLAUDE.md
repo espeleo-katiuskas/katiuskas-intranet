@@ -475,12 +475,17 @@ change reaches the automatic units nobody has touched — not chosen
 (`registered_by_id IS NULL`), not paid, not collected — in the same transaction as the
 edit (`Repository.Update`), so correcting the price of a distribution already open leaves
 none of them on the old one; anything somebody has chosen, paid or collected keeps what it
-cost, and extras always do. Going back to `draft` undoes opening: in an `all_members`
-distribution every own (non-extra) unit is deleted in that same transaction — what was
-chosen on it too, which may not fit the options about to be given — and made again, empty,
-on opening; a paid or collected one stops it (`ErrHasSettledUnits`) until the marks are
-undone, and extras, which somebody asked for, stay (so with extras the options stay
-locked). The page confirms before stepping back.
+cost, and extras always do. Going back to `draft` starts it over: every unit is deleted in
+that same transaction — everybody's own, the extras and, in one people sign up for, the
+sign-ups, with what was chosen on them, which may not fit the options about to be given —
+and the automatic ones of an `all_members` distribution are made again, empty, on opening;
+a paid or collected one stops it (`ErrHasSettledUnits`) until the marks are undone.
+Changing the audience from `all_members` to `signup` (same transaction in
+`Repository.Update`) deletes the automatic units nobody has touched — not chosen, not
+paid, not collected — since they exist only because everybody was in; what somebody did
+choose stays, as that is somebody who asked for it, which is signing up, and so do extras;
+a paid or collected untouched one refuses it (`ErrHasSettledUnits`). The edit dialog asks
+first. The page confirms before stepping back.
 
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
