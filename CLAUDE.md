@@ -1535,6 +1535,16 @@ counter shows how many people the current filters leave. With nothing saved, the
 shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each
 column's `default` flag); the rest are optional in the "Filtros…" panel.
 
+A page's requests that don't depend on each other go out together, not one after another
+(each wait in a row costs a full round trip, which is most of what a page load takes once
+the API itself is fast): `/socios` asks for `/users`, `/board-members` and, for an admin,
+`/roles` at once and draws the table when the board positions are in too
+(`loadUsers(ready)` — only the drawing waits, not the slow `/users` request), and `/admin`
+loads its five sections with one `Promise.all` (the sessions are drawn again with the names
+if the directory arrives after them). That is the convention for a page's first load; the
+other pages still wait on some of theirs in turn (`/actividad`, `/socio`, `/cuenta`,
+`/material`, the distribution pages).
+
 On `/socio`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without
 `transaction_id`) — the way to register one the club didn't collect, such as someone

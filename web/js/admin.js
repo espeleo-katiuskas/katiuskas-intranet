@@ -186,8 +186,6 @@ newRoleForm.addEventListener('submit', async (event) => {
   }
 });
 
-await loadRoles();
-
 // "Sesiones": every session token, to see who is signed in and cut one off.
 // GET /tokens lists them (the active ones, or all with the checkbox) and
 // PATCH/DELETE /users/{login}/tokens/{id} change or revoke one. A page at a
@@ -330,11 +328,13 @@ expiryForm.addEventListener('submit', async (event) => {
 });
 
 // People's names come from the directory, open to every signed-in user.
-try {
-  const directory = await apiFetch('/users/directory');
-  namesByLogin = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
-} catch {
-  // Without names the logins show instead.
+async function loadDirectory() {
+  try {
+    const directory = await apiFetch('/users/directory');
+    namesByLogin = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
+  } catch {
+    // Without names the logins show instead.
+  }
 }
 
 // "Estado del sistema": a read-only picture from GET /admin/status — what is
@@ -560,6 +560,16 @@ document.getElementById('holidays-copy').addEventListener('click', async () => {
   }
 });
 
-await loadStatus();
-await loadSessions();
-await loadHolidays();
+// Every section asks for its own data and none needs another's, so all of it
+// goes out at once — seven requests one after another were most of this page's
+// wait. The sessions show names from the directory, so if the directory
+// arrives after them they are drawn again with the names.
+await Promise.all([
+  loadRoles(),
+  loadDirectory().then(() => {
+    if (sessionsShown.length) renderSessions();
+  }),
+  loadStatus(),
+  loadSessions(),
+  loadHolidays(),
+]);

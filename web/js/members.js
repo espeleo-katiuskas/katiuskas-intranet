@@ -574,10 +574,14 @@ if (isAdmin) {
   document.getElementById('users-table-body').classList.remove('clickable-rows');
 }
 
-async function loadUsers() {
+// `ready` is whatever the table also needs before it can be drawn (the board
+// positions, for its "Cargo" column): /users is the slow request, so it is
+// asked for right away alongside the others and only the drawing waits.
+async function loadUsers(ready = Promise.resolve()) {
   const tableBody = document.getElementById('users-table-body');
   try {
     people = await apiFetch('/users');
+    await ready;
     renderUsersTable();
   } catch {
     people = [];
@@ -650,8 +654,8 @@ if (isRealAdmin) {
 
 // The "Cargo" column only ever needs board positions (see cargoFor); the
 // role catalog is only for the admin's "nueva persona" checkboxes.
-if (isRealAdmin) {
-  await loadRolesForNewPerson();
-}
-await loadBoardPositions();
-loadUsers();
+// The three requests don't depend on each other, so they go out together: one
+// wait instead of three in a row.
+const boardLoaded = loadBoardPositions();
+const rolesLoaded = isRealAdmin ? loadRolesForNewPerson() : Promise.resolve();
+await Promise.all([loadUsers(boardLoaded), boardLoaded, rolesLoaded]);
