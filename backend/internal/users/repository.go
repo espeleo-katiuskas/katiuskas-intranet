@@ -227,6 +227,17 @@ func (r *Repository) FindLoginForID(ctx context.Context, id int64) (string, erro
 	return login, err
 }
 
+// FindIdentityForID is FindLoginForID plus the name, for what says who someone
+// is without loading everything about them: one light query.
+func (r *Repository) FindIdentityForID(ctx context.Context, id int64) (Identity, error) {
+	var who Identity
+	err := r.pool.QueryRow(ctx, `SELECT login, first_name, last_name FROM users WHERE id = $1`, id).Scan(&who.Login, &who.FirstName, &who.LastName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Identity{}, ErrNotFound
+	}
+	return who, err
+}
+
 func (r *Repository) GetByID(ctx context.Context, id int64) (User, error) {
 	var u User
 	err := scanUser(r.pool.QueryRow(ctx, `

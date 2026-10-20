@@ -167,6 +167,13 @@ func (s *Service) enrichMany(ctx context.Context, users []User) ([]User, error) 
 	return users, nil
 }
 
+// IdentityForUserID says who somebody is — login and name — with a single light
+// query, for GET /auth/me, which every page calls on load and which must not
+// cost more than it has to.
+func (s *Service) IdentityForUserID(ctx context.Context, id int64) (Identity, error) {
+	return s.repo.FindIdentityForID(ctx, id)
+}
+
 func (s *Service) Directory(ctx context.Context) ([]DirectoryEntry, error) {
 	return s.repo.ListDirectory(ctx)
 }

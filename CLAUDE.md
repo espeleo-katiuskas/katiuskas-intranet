@@ -199,8 +199,10 @@ uses for everything else; `web/js/dashboard.js`'s own Documentos/Actas/Memorias 
 on exactly this to stay plain links. `ClearSessionCookie` removes it on logout, so a
 signed-out browser can't open a file link straight from history or a bookmark anymore.
 `internal/authapi` glues magic-link request/consume/logout and `GET /auth/me`
-(identity+roles resolved from context, no extra DB round trip — the frontend calls this
-once per page load since an opaque token has nothing to decode). The magic-link token
+(identity+roles resolved from context, one light query for the login and name — the
+frontend calls this once per page load since an opaque token has nothing to decode; the
+name is there so the topbar's greeting and the impersonation banner don't need a second
+request for the person's record, which every page used to wait behind). The magic-link token
 itself (`auth.NewMagicLinkToken`, 128 bits/16 bytes) is deliberately smaller than a
 session or impersonation token (`auth.NewOpaqueToken`, 256 bits/32 bytes) — it's the one
 opaque token in this app that ends up in a URL rather than only ever sent as a header, so

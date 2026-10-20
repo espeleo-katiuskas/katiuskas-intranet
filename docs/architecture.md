@@ -1410,8 +1410,9 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 
 - **Cliente de API.** `web/js/api.js` es un cliente `fetch` compartido que añade el token
   (guardado en `localStorage`) a cada petición y, al cargar cada página, llama a
-  `GET /auth/me` para confirmar que el token sigue siendo válido y saber qué roles tiene
-  quien lo usa.
+  `GET /auth/me` para confirmar que el token sigue siendo válido y saber quién es (login y
+  nombre, con lo que pinta el saludo de la barra superior y el aviso de impersonación sin
+  pedir nada más) y qué roles tiene.
 - **Estructura de página.** `js/layout.js` (`initPage()`) pinta una sola vez la barra
   lateral y la superior, valida la sesión y aplica la visibilidad por rol. Admite además
   `requireAnyRole`, que redirige al inicio a quien no tenga ninguno de los roles dados.

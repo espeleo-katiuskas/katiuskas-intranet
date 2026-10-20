@@ -369,6 +369,24 @@ func (s *testServer) me(t *testing.T, token string) (login string, roleNames []s
 	return body.Login, body.Roles, rec.Code
 }
 
+// /auth/me carries the person's name, so a page can greet them without a second
+// request for their record on every load.
+func (s *testServer) meName(t *testing.T, token string) (first, last string) {
+	t.Helper()
+	rec := s.getWithToken(t, "/api/v1/auth/me", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected /auth/me to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode /auth/me response %q: %v", rec.Body.String(), err)
+	}
+	return body.FirstName, body.LastName
+}
+
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body httpapi.ErrorResponse
@@ -1194,6 +1212,9 @@ func TestConsumeMagicLinkIssuesASessionMatchingTheUsersRoles(t *testing.T) {
 	}
 	if login != user.Login {
 		t.Errorf("expected user login %q, got %q", user.Login, login)
+	}
+	if first, last := s.meName(t, sessionToken); first != "Test" || last != "User" {
+		t.Errorf("expected /auth/me to carry the name (Test User), got %q %q", first, last)
 	}
 	if len(roleNames) != 1 || roleNames[0] != "admin" {
 		t.Errorf("expected roles [admin], got %v", roleNames)

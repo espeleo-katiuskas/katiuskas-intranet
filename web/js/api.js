@@ -15,9 +15,15 @@ async function initSession() {
   }
   try {
     const me = await apiFetch('/auth/me');
-    cachedUser = { login: me.login, roles: me.roles ?? [], impersonatedBy: me.impersonated_by ?? null };
+    cachedUser = {
+      login: me.login,
+      firstName: me.first_name ?? '',
+      lastName: me.last_name ?? '',
+      roles: me.roles ?? [],
+      impersonatedBy: me.impersonated_by ?? null,
+    };
     if (cachedUser.impersonatedBy) {
-      await renderImpersonationBanner(cachedUser.impersonatedBy);
+      renderImpersonationBanner(cachedUser.impersonatedBy);
     }
     return true;
   } catch {
@@ -29,17 +35,11 @@ async function initSession() {
 }
 
 // Shown on every page while impersonating, so it's never something only
-// the page that started it would know about. Best-effort: if the extra
-// lookup for the impersonated person's own name fails, the banner still
-// shows with what it already knows rather than not showing at all.
-async function renderImpersonationBanner(impersonator) {
-  let selfName = cachedUser.login;
-  try {
-    const self = await apiFetch(`/users/${cachedUser.login}`);
-    selfName = `${self.first_name} ${self.last_name}`;
-  } catch {
-    // Keep the login-only fallback above.
-  }
+// the page that started it would know about. The impersonated person's own name
+// comes with GET /auth/me, so there is nothing more to ask; the login stands in
+// if a name is missing.
+function renderImpersonationBanner(impersonator) {
+  const selfName = `${cachedUser.firstName} ${cachedUser.lastName}`.trim() || cachedUser.login;
 
   const banner = document.createElement('div');
   banner.className = 'impersonation-banner';
@@ -214,20 +214,15 @@ function initSidebarToggle() {
 
 // Fills the shared shell's "Hola, <nombre>" greeting (#topbar-user-name
 // — every logged-in page's .topbar has one, see style.css) with the
-// signed-in person's first name. A no-op on a page with no such element
-// (there is none, but this keeps a stray/renamed id from throwing
-// instead of just skipping the greeting). Falls back to the login if
-// the profile fetch fails — still identifies who's signed in, just less
-// friendly than a first name.
-async function loadTopbarGreeting() {
+// signed-in person's first name, which GET /auth/me already gave
+// (initSession) — it used to ask for the whole record just for that, a request
+// that every page waited behind. A no-op on a page with no such element (there
+// is none, but this keeps a stray/renamed id from throwing instead of just
+// skipping the greeting). Falls back to the login if there is no name.
+function loadTopbarGreeting() {
   const el = document.getElementById('topbar-user-name');
   if (!el) return;
-  try {
-    const profile = await apiFetch(`/users/${currentUser().login}`);
-    el.textContent = profile.first_name;
-  } catch {
-    el.textContent = currentUser().login;
-  }
+  el.textContent = currentUser().firstName || currentUser().login;
 }
 
 // Called right after consuming a magic link, when the frontend receives

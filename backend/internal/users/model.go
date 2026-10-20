@@ -248,6 +248,10 @@ type DirectoryEntry struct {
 	LastName  string `json:"last_name"`
 }
 
+// Identity is who somebody is — login and name — as GET /auth/me says it: the
+// same three fields as a directory entry.
+type Identity = DirectoryEntry
+
 // MemberListing is what GET /users returns to a caller who's a plain
 // member (not admin or board): no DNI, address, contact info, or
 // anything else that isn't already effectively public knowledge inside

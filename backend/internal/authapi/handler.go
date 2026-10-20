@@ -744,12 +744,14 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // itself (there's nothing to decode: it's opaque).
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
-	login, err := h.users.LoginForUserID(r.Context(), user.ID)
+	who, err := h.users.IdentityForUserID(r.Context(), user.ID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not resolve identity")
 		return
 	}
-	response := map[string]any{"login": login, "roles": user.Roles}
+	// The name rides along so a page can greet the person (and, when
+	// impersonating, say who they are acting as) without another request.
+	response := map[string]any{"login": who.Login, "first_name": who.FirstName, "last_name": who.LastName, "roles": user.Roles}
 	if user.ImpersonatedBy != nil {
 		response["impersonated_by"] = h.impersonatorSummary(r.Context(), *user.ImpersonatedBy)
 	}

@@ -266,6 +266,8 @@ paths:
                 type: object
                 properties:
                   login: { type: string }
+                  first_name: { type: string, description: So a page can greet the person without asking for their record. }
+                  last_name: { type: string }
                   roles: { type: array, items: { type: string } }
                   impersonated_by:
                     type: object
