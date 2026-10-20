@@ -235,9 +235,12 @@ if (isRealAdmin) {
   });
 }
 
-async function loadMember() {
+// `ready` is what drawing needs besides the person (the role catalog): the
+// requests all go out at once and only the drawing waits for it.
+async function loadMember(ready = Promise.resolve()) {
   try {
     const person = await apiFetch(`/users/${memberLogin}`);
+    await ready;
     lastLoadedPerson = person;
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email ?? '';
@@ -1129,9 +1132,9 @@ if (isRealAdmin) {
   });
 }
 
-await loadRolesCatalog();
-await loadLicenseTypesCatalog();
-loadMember();
+const rolesLoaded = loadRolesCatalog();
+loadLicenseTypesCatalog();
+loadMember(rolesLoaded);
 loadTimeline();
 loadActivities();
 loadMovements();

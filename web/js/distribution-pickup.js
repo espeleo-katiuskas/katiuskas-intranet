@@ -146,9 +146,12 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-async function load() {
+// `ready` is what drawing needs besides the units (the people and the
+// distribution): the requests all go out at once and only the drawing waits.
+async function load(ready = Promise.resolve()) {
   try {
     units = await apiFetch(`${base}/units`);
+    await ready;
     // Whatever was marked may have been collected since.
     for (const unitId of [...selected]) {
       if (!units.some((u) => u.id === unitId && !u.picked_up_at)) selected.delete(unitId);
@@ -159,11 +162,15 @@ async function load() {
   }
 }
 
-people = await loadPeople(id, 'pickup');
+const peopleRequest = loadPeople(id, 'pickup');
+// Assigned as soon as it arrives, so the drawing of the first load sees it.
+const distributionRequest = apiFetch(base).then((d) => (distribution = d));
+const firstLoad = load(Promise.all([peopleRequest, distributionRequest.catch(() => {})]));
+people = await peopleRequest;
 document.getElementById('pf-person-options').innerHTML =
   people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
 try {
-  distribution = await apiFetch(base);
+  distribution = await distributionRequest;
   document.getElementById('pickup-title').textContent = `Recogida: ${distribution.name}`;
   document.getElementById('pickup-meta').innerHTML = canCollect()
     ? statusBadge(distribution.status)
@@ -171,4 +178,4 @@ try {
 } catch (err) {
   fail(err);
 }
-await load();
+await firstLoad;

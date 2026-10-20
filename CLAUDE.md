@@ -1544,9 +1544,13 @@ the API itself is fast): `/socios` asks for `/users`, `/board-members` and, for 
 `/roles` at once and draws the table when the board positions are in too
 (`loadUsers(ready)` — only the drawing waits, not the slow `/users` request), and `/admin`
 loads its five sections with one `Promise.all` (the sessions are drawn again with the names
-if the directory arrives after them). That is the convention for a page's first load; the
-other pages still wait on some of theirs in turn (`/actividad`, `/socio`, `/cuenta`,
-`/material`, the distribution pages).
+if the directory arrives after them). That is the convention for a page's first load, and
+the rest follow it: `/actividades`, `/actividad`, `/material`, `/socio`, `/cuenta` and the
+distribution pages start every independent request together, and whatever drawing needs
+something else (the directory of names, the role catalog, the people) takes it as a `ready`
+promise to wait for after its own data arrives, so only the drawing waits. The one
+dependency that remains is `/reparto`, which asks for the orders only once it knows the
+status isn't draft.
 
 On `/socio`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
 that records a license with no transaction (`POST /users/{login}/licenses` without

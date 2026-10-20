@@ -542,9 +542,9 @@ if (isAdmin) {
   });
 }
 
-// Awaited before the socio/activity directories below (harmless either
-// order, but keeps the item table the first thing on screen).
-await loadItems();
+// Started together with the socio/activity directories below, not before
+// them: none depends on another, so they travel in the same round trip.
+const itemsLoaded = loadItems();
 
 if (canManageMovements) {
   // Both socios and activities pile up over time, so a plain <select>
@@ -577,3 +577,5 @@ if (canManageMovements) {
   await directoryLoaded;
   loadActiveMovements();
 }
+
+await itemsLoaded;

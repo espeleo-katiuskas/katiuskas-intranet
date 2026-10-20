@@ -78,7 +78,10 @@ function dateRangeLabel(activity) {
     : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
 }
 
-async function loadActivity() {
+// The loaders below take what they have to wait for before drawing as `ready`:
+// the requests all go out together on first load (a wait in a row costs a full
+// round trip) and only the drawing, never the asking, waits for the others.
+async function loadActivity(ready = Promise.resolve()) {
   try {
     const activity = await apiFetch(`/activities/${activityId}`);
     document.getElementById('activity-title').textContent = activity.title;
@@ -93,6 +96,8 @@ async function loadActivity() {
     canAddOthers = isPrivate ? canManage : isAdmin;
     applyManagementVisibility();
 
+    // The organizer's label needs the directory.
+    await ready;
     if (editForm) {
       editForm.title.value = activity.title;
       editForm.type.value = activity.type;
@@ -191,10 +196,12 @@ function renderParticipantRow(p) {
   `;
 }
 
-async function loadParticipants() {
+async function loadParticipants(ready = Promise.resolve()) {
   const container = document.getElementById('participants-list');
   try {
     const participants = await apiFetch(`/activities/${activityId}/participants`);
+    // Names come from the directory, and who can manage them from the activity.
+    await ready;
     container.innerHTML = participants.length
       ? participants
         .slice()
@@ -356,12 +363,13 @@ function renderActivityLoanRow(itemId, totals) {
 // activity — chiefly loan and return, which is what this list is built
 // from; anything else that happens to share this activity_id (a
 // rental, say) is simply ignored here.
-async function loadActivityLoans() {
+async function loadActivityLoans(ready = Promise.resolve()) {
   if (!canManageMovements) return;
   const tableBody = document.getElementById('activity-loans-table-body');
   if (!tableBody) return;
   try {
     const movements = await apiFetch(`/movements?activity_id=${activityId}`);
+    await ready; // the rows name the items, which loadItems fetches
     const byItem = [...aggregateActivityLoans(movements)].filter(([, totals]) => totals.loaned > 0);
     tableBody.innerHTML = byItem.length
       ? byItem.map(([itemId, totals]) => renderActivityLoanRow(itemId, totals)).join('')
@@ -556,11 +564,13 @@ function renderMemoriaRow(res, index) {
   `;
 }
 
-async function loadMemoria() {
+async function loadMemoria(ready = Promise.resolve()) {
   const container = document.getElementById('memoria-list');
   if (!container) return;
   try {
     memoriaResources = await apiFetch(`/activities/${activityId}/resources`);
+    // Authors' names need the directory, and the add button who is taking part.
+    await ready;
     container.innerHTML = memoriaResources.length
       ? memoriaResources.map((res, i) => renderMemoriaRow(res, i)).join('')
       : '<p>Todavía no hay nada en la memoria de esta actividad.</p>';
@@ -733,9 +743,15 @@ memoriaAddForm?.addEventListener('submit', async (event) => {
   }
 });
 
-await loadDirectory();
-await loadActivity();
-await loadParticipants();
-await loadItems();
-loadActivityLoans();
-loadMemoria();
+const directoryLoaded = loadDirectory();
+const activityLoaded = loadActivity(directoryLoaded);
+const participantsLoaded = loadParticipants(Promise.all([directoryLoaded, activityLoaded]));
+const itemsLoaded = loadItems();
+await Promise.all([
+  directoryLoaded,
+  activityLoaded,
+  participantsLoaded,
+  itemsLoaded,
+  loadActivityLoans(itemsLoaded),
+  loadMemoria(Promise.all([directoryLoaded, participantsLoaded])),
+]);

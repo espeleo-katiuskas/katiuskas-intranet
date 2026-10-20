@@ -69,9 +69,10 @@ function activityQuery() {
   return `/activities?${params.toString()}`;
 }
 
-async function loadActivities({ append = false } = {}) {
+async function loadActivities({ append = false, ready = Promise.resolve() } = {}) {
   try {
     const page = await apiFetch(activityQuery());
+    await ready;
     loadedActivities = append ? loadedActivities.concat(page) : page;
     activitiesList.innerHTML = loadedActivities.length
       ? loadedActivities.map(renderActivity).join('')
@@ -141,13 +142,16 @@ participantChips.addEventListener('click', (event) => {
   renderParticipantChips();
 });
 
-// Awaited before the first loadActivities() call at the bottom of this
-// file, so the organizer column has names to show on first paint
-// instead of falling back to "Socio n.º …" until a re-render happens.
-await loadDirectory();
-participantOptions.innerHTML = renderPickerOptions(personEntries);
-const leaderOptions = document.getElementById('na-leader-options');
-if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
+// Asked for right away, alongside the activities themselves (they don't depend
+// on each other, and a wait in a row costs a full round trip); the first
+// loadActivities() call at the bottom of this file only waits for it before
+// drawing, so the organizer column has names to show on first paint instead of
+// falling back to "Socio n.º …" until a re-render happens.
+const directoryLoaded = loadDirectory().then(() => {
+  participantOptions.innerHTML = renderPickerOptions(personEntries);
+  const leaderOptions = document.getElementById('na-leader-options');
+  if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
+});
 
 initModal(newActivityDialog, newActivityForm);
 // Participant chips are separate state (a Map), outside the form's own
@@ -360,4 +364,4 @@ calendarTodayYearButton.addEventListener('click', async () => {
   await loadCalendar();
 });
 
-loadActivities();
+await Promise.all([directoryLoaded, loadActivities({ ready: directoryLoaded })]);

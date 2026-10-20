@@ -918,6 +918,5 @@ newTransactionForm.addEventListener('submit', async (event) => {
   }
 });
 
-await loadAccount();
-await loadEntries();
-await loadCatalogs();
+// Independent requests: all go out at once.
+await Promise.all([loadAccount(), loadEntries(), loadCatalogs()]);

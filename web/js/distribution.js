@@ -438,11 +438,14 @@ function renderAll() {
   renderUnits();
 }
 
-people = await loadPeople(id, 'order');
+// Both requests go out at once; the page needs the two to draw.
+const peopleRequest = loadPeople(id, 'order');
+const distributionRequest = apiFetch(base);
+people = await peopleRequest;
 document.getElementById('of-person-options').innerHTML =
   people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
 try {
-  distribution = await apiFetch(base);
+  distribution = await distributionRequest;
 } catch (err) {
   document.getElementById('distribution-title').textContent = 'Reparto no encontrado';
   fail(err);

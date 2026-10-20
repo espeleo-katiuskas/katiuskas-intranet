@@ -123,9 +123,11 @@ document.getElementById('people-list').addEventListener('click', async (event) =
   }
 });
 
-async function load() {
+// `ready` is what drawing needs besides this data (the people): the requests
+// all go out at once and only the drawing waits.
+async function load(ready = Promise.resolve()) {
   try {
-    const [order, all] = await Promise.all([apiFetch(`${base}/order`), apiFetch(`${base}/units`)]);
+    const [order, all] = await Promise.all([apiFetch(`${base}/order`), apiFetch(`${base}/units`), ready]);
     units = all;
     renderOrder(order);
     renderPeople();
@@ -134,12 +136,16 @@ async function load() {
   }
 }
 
-people = await loadPeople(id);
+const peopleRequest = loadPeople(id);
+// Assigned as soon as it arrives, so the drawing of the first load sees it.
+const distributionRequest = apiFetch(base).then((d) => (distribution = d));
+const firstLoad = load(Promise.all([peopleRequest, distributionRequest.catch(() => {})]));
+people = await peopleRequest;
 try {
-  distribution = await apiFetch(base);
+  distribution = await distributionRequest;
   document.getElementById('order-title').textContent = `Pedido: ${distribution.name}`;
   document.getElementById('order-meta').innerHTML = statusBadge(distribution.status);
 } catch (err) {
   fail(err);
 }
-await load();
+await firstLoad;
