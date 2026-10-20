@@ -190,6 +190,50 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Membership
 	return list, rows.Err()
 }
 
+// ListByUsers is ListByUser (newest first) for many people in one query.
+func (r *Repository) ListByUsers(ctx context.Context, userIDs []int64) (map[int64][]Membership, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_id, start_date, end_date, end_reason
+		FROM memberships WHERE user_id = ANY($1) ORDER BY user_id, start_date DESC
+	`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byUser := make(map[int64][]Membership, len(userIDs))
+	for rows.Next() {
+		var m Membership
+		if err := rows.Scan(&m.ID, &m.UserID, &m.StartDate, &m.EndDate, &m.EndReason); err != nil {
+			return nil, err
+		}
+		byUser[m.UserID] = append(byUser[m.UserID], m)
+	}
+	return byUser, rows.Err()
+}
+
+// OnLeaveAmong says which of the given people are on a temporary leave today
+// (IsOnLeave for many in one query): only those on leave are in the result.
+func (r *Repository) OnLeaveAmong(ctx context.Context, userIDs []int64) (map[int64]bool, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT user_id FROM membership_leaves WHERE user_id = ANY($1) AND period @> CURRENT_DATE
+	`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	onLeave := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		onLeave[id] = true
+	}
+	return onLeave, rows.Err()
+}
+
 // WasMemberDuringYear reports whether userID had a membership period
 // covering at least one day of the given calendar year — used to gate
 // assigning a federative license: not "is this person a member right
@@ -481,6 +525,31 @@ func (r *Repository) LatestDueForUser(ctx context.Context, userID int64) (*Due, 
 		return nil, err
 	}
 	return &d, nil
+}
+
+// LatestDuesForUsers is LatestDueForUser for many people in one query; a person
+// with no due has no entry.
+func (r *Repository) LatestDuesForUsers(ctx context.Context, userIDs []int64) (map[int64]*Due, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT ON (d.user_id) d.id, d.user_id, d.year, d.transaction_id, d.created_at, t.occurred_at
+		FROM membership_dues d
+		JOIN transactions t ON t.id = d.transaction_id
+		WHERE d.user_id = ANY($1) ORDER BY d.user_id, d.year DESC
+	`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	dues := make(map[int64]*Due, len(userIDs))
+	for rows.Next() {
+		var d Due
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt, &d.PaidAt); err != nil {
+			return nil, err
+		}
+		dues[d.UserID] = &d
+	}
+	return dues, rows.Err()
 }
 
 func (r *Repository) ListDuesForUser(ctx context.Context, userID int64) ([]Due, error) {

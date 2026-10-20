@@ -217,6 +217,36 @@ func (r *Repository) ListByTransaction(ctx context.Context, transactionID int64)
 	return list, rows.Err()
 }
 
+// ListForYear returns, for each of the given people, their license covering
+// the given year — the newest issued if a correction left several — in one
+// query. A person with none has no entry.
+func (r *Repository) ListForYear(ctx context.Context, userIDs []int64, year int) (map[int64]License, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at
+		FROM licenses l JOIN license_types lt ON lt.id = l.license_type_id
+		WHERE l.user_id = ANY($1) AND l.year = $2 ORDER BY l.user_id, l.issued_date DESC
+	`, userIDs, year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byUser := make(map[int64]License, len(userIDs))
+	for rows.Next() {
+		var l License
+		var name string
+		if err := rows.Scan(&l.ID, &l.UserID, &l.LicenseTypeID, &name, &l.OtherDetail, &l.IssuedDate, &l.Year, &l.TransactionID, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		l.Type = displayType(name, l.OtherDetail)
+		l.ValidUntil = validUntil(l.Year)
+		if _, seen := byUser[l.UserID]; !seen { // newest issued first: keep that one
+			byUser[l.UserID] = l
+		}
+	}
+	return byUser, rows.Err()
+}
+
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]License, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT l.id, l.user_id, l.license_type_id, lt.name, l.other_detail, l.issued_date, l.year, l.transaction_id, l.created_at

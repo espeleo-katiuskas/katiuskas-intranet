@@ -43,6 +43,11 @@ func (s *Service) ListNamesForUser(ctx context.Context, userID int64) ([]string,
 	return s.repo.ListNamesForUser(ctx, userID)
 }
 
+// ListNamesForUsers is ListNamesForUser for a whole list at once.
+func (s *Service) ListNamesForUsers(ctx context.Context, userIDs []int64) (map[int64][]string, error) {
+	return s.repo.ListNamesForUsers(ctx, userIDs)
+}
+
 // AssignByName resolves every name to a role first, so an unknown role
 // name — or an automatic one, which can't be granted by hand — fails
 // the whole call before any assignment happens.

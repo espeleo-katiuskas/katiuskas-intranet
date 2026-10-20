@@ -69,13 +69,7 @@ func (s *Service) List(ctx context.Context, onlySocios bool) ([]User, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range list {
-		list[i], err = s.enrich(ctx, list[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return list, nil
+	return s.enrichMany(ctx, list)
 }
 
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, error) {
@@ -97,56 +91,80 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (User, e
 // reflects the latest period — the two dates can come from different
 // rows.
 func (s *Service) enrich(ctx context.Context, user User) (User, error) {
-	names, err := s.roles.ListNamesForUser(ctx, user.ID)
+	enriched, err := s.enrichMany(ctx, []User{user})
 	if err != nil {
 		return user, err
 	}
-	user.Roles = names
+	return enriched[0], nil
+}
 
-	// Newest first (see memberships.Repository.ListByUser), so periods[0]
-	// is the current or most recent period and periods[len-1] the first.
-	periods, err := s.memberships.ListByUser(ctx, user.ID)
-	if err != nil {
-		return user, err
+// enrichMany is enrich for a whole list: the same overlay, but asking each
+// package once for everybody instead of once per person — a listing of the
+// whole club (GET /users) used to cost five queries a head, a thousand and a
+// half for three hundred people, which was most of what a visit to /socios
+// waited for. A single person goes through the same code, so what a listing
+// says about somebody can't differ from what their own page says.
+func (s *Service) enrichMany(ctx context.Context, users []User) ([]User, error) {
+	if len(users) == 0 {
+		return users, nil
 	}
-	if len(periods) > 0 {
-		latest := periods[0]
-		first := periods[len(periods)-1]
-		user.MembershipStartDate = &first.StartDate
-		user.MembershipEndDate = latest.EndDate
+	ids := make([]int64, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
 
-		// A leave doesn't touch the membership period it belongs to, so
-		// telling "activo" apart from "baja temporal" needs its own
-		// check — only worth doing for someone currently active, since a
-		// closed period can't have a leave covering today.
-		if latest.EndDate == nil {
-			onLeave, err := s.memberships.IsOnLeave(ctx, user.ID)
-			if err != nil {
-				return user, err
+	names, err := s.roles.ListNamesForUsers(ctx, ids)
+	if err != nil {
+		return users, err
+	}
+	// Newest first (see memberships.Repository.ListByUsers), so periods[0] is
+	// the current or most recent period and periods[len-1] the first.
+	periods, err := s.memberships.ListByUsers(ctx, ids)
+	if err != nil {
+		return users, err
+	}
+	onLeave, err := s.memberships.OnLeaveAmong(ctx, ids)
+	if err != nil {
+		return users, err
+	}
+	licenses, err := s.licenses.CurrentByUsers(ctx, ids)
+	if err != nil {
+		return users, err
+	}
+	dues, err := s.memberships.LatestDues(ctx, ids)
+	if err != nil {
+		return users, err
+	}
+
+	for i := range users {
+		user := &users[i]
+		user.Roles = names[user.ID]
+		if list := periods[user.ID]; len(list) > 0 {
+			latest := list[0]
+			first := list[len(list)-1]
+			user.MembershipStartDate = &first.StartDate
+			user.MembershipEndDate = latest.EndDate
+			// A leave doesn't touch the membership period it belongs to, so
+			// telling "activo" apart from "baja temporal" needs its own check —
+			// only for someone currently active, since a closed period can't
+			// have a leave covering today.
+			if latest.EndDate == nil {
+				user.OnLeave = onLeave[user.ID]
 			}
-			user.OnLeave = onLeave
+		}
+		if license, ok := licenses[user.ID]; ok {
+			licenseType, licenseYear, licenseIssued := license.Type, license.Year, license.IssuedDate
+			user.LicenseType = &licenseType
+			user.LicenseYear = &licenseYear
+			user.LicenseIssuedDate = &licenseIssued
+		}
+		if due := dues[user.ID]; due != nil {
+			year := due.Year
+			user.LastDueYear = &year
+			user.LastDuePaidAt = due.PaidAt
 		}
 	}
-
-	currentLicense, err := s.licenses.CurrentByUser(ctx, user.ID)
-	if err != nil {
-		return user, err
-	}
-	if currentLicense != nil {
-		user.LicenseType = &currentLicense.Type
-		user.LicenseYear = &currentLicense.Year
-		user.LicenseIssuedDate = &currentLicense.IssuedDate
-	}
-
-	latestDue, err := s.memberships.LatestDue(ctx, user.ID)
-	if err != nil {
-		return user, err
-	}
-	if latestDue != nil {
-		user.LastDueYear = &latestDue.Year
-		user.LastDuePaidAt = latestDue.PaidAt
-	}
-	return user, nil
+	return users, nil
 }
 
 func (s *Service) Directory(ctx context.Context) ([]DirectoryEntry, error) {

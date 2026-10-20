@@ -69,6 +69,21 @@ func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Membership, e
 	return s.repo.ListByUser(ctx, userID)
 }
 
+// ListByUsers, OnLeaveAmong and LatestDues are ListByUser, IsOnLeave and
+// LatestDue for a whole list of people in one query each, for listings that
+// would otherwise ask once per person.
+func (s *Service) ListByUsers(ctx context.Context, userIDs []int64) (map[int64][]Membership, error) {
+	return s.repo.ListByUsers(ctx, userIDs)
+}
+
+func (s *Service) OnLeaveAmong(ctx context.Context, userIDs []int64) (map[int64]bool, error) {
+	return s.repo.OnLeaveAmong(ctx, userIDs)
+}
+
+func (s *Service) LatestDues(ctx context.Context, userIDs []int64) (map[int64]*Due, error) {
+	return s.repo.LatestDuesForUsers(ctx, userIDs)
+}
+
 func (s *Service) ListActive(ctx context.Context) ([]Membership, error) {
 	return s.repo.ListActive(ctx)
 }

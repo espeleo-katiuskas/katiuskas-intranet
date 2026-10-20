@@ -3,13 +3,16 @@ package users_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
@@ -485,4 +488,141 @@ func mustID(t *testing.T, svc *users.Service, email string) int64 {
 	}
 	t.Fatalf("no user found with email %q", email)
 	return 0
+}
+
+// countingPGX counts what reaches the database, to check how many queries a
+// listing needs.
+type countingPGX struct {
+	db.PGX
+	queries *int
+}
+
+func (c countingPGX) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	*c.queries++
+	return c.PGX.Exec(ctx, sql, args...)
+}
+
+func (c countingPGX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	*c.queries++
+	return c.PGX.Query(ctx, sql, args...)
+}
+
+func (c countingPGX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	*c.queries++
+	return c.PGX.QueryRow(ctx, sql, args...)
+}
+
+// The whole listing is enriched with a handful of queries however many people
+// there are (it used to be five per person), and says about everybody exactly
+// what asking about them one by one says.
+func TestListEnrichesEverybodyAsOneByOneWithAFewQueries(t *testing.T) {
+	tx := testutil.NewTx(t)
+	var queries int
+	pool := countingPGX{PGX: tx, queries: &queries}
+	rolesService := roles.NewService(roles.NewRepository(pool))
+	membershipsService := memberships.NewService(memberships.NewRepository(pool))
+	licensesService := licenses.NewService(licenses.NewRepository(pool), membershipsService)
+	svc := users.NewService(users.NewRepository(pool), rolesService, membershipsService, licensesService)
+	ctx := context.Background()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	now := time.Now()
+	year := now.Year()
+	day := func(offset int) time.Time { return now.AddDate(0, 0, offset) }
+	person := func(string) int64 {
+		return testutil.InsertUser(t, tx, "").ID
+	}
+
+	// A mix of situations, each twice so the batch handles several at once.
+	for i := 0; i < 2; i++ {
+		current := person("current")
+		exec(`INSERT INTO memberships (user_id, start_date) VALUES ($1, $2)`, current, day(-900))
+		exec(`INSERT INTO membership_leaves (user_id, start_date, end_date) VALUES ($1, $2, $3)`, current, day(-5), day(5))
+		exec(`INSERT INTO licenses (user_id, license_type_id, issued_date, year) VALUES ($1, $2, $3, $4)`, current, testutil.LicenseTypeID(t, tx, "A BASICA"), day(-100), year)
+		exec(`INSERT INTO licenses (user_id, license_type_id, issued_date, year) VALUES ($1, $2, $3, $4)`, current, testutil.LicenseTypeID(t, tx, "A BASICA"), day(-10), year) // newest wins
+		txn := testutil.InsertTransaction(t, tx)
+		exec(`INSERT INTO membership_dues (user_id, year, transaction_id) VALUES ($1, $2, $3), ($1, $4, $3)`, current, year, txn, year-1)
+
+		returned := person("rejoined")
+		exec(`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, $2, $3)`, returned, day(-2000), day(-1500))
+		exec(`INSERT INTO memberships (user_id, start_date) VALUES ($1, $2)`, returned, day(-100))
+
+		former := person("former")
+		exec(`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, $2, $3)`, former, day(-900), day(-30))
+		exec(`INSERT INTO licenses (user_id, license_type_id, issued_date, year) VALUES ($1, $2, $3, $4)`, former, testutil.LicenseTypeID(t, tx, "A BASICA"), day(-400), year-1) // not this year's
+
+		board := person("board")
+		exec(`INSERT INTO board_members (user_id, position, start_date) VALUES ($1, 'secretary', $2)`, board, day(-60))
+
+		admin := person("admin")
+		exec(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, admin, testutil.RoleID(t, tx, "admin"))
+
+		person("nothing")
+	}
+
+	queries = 0
+	list, err := svc.List(ctx, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 12 {
+		t.Fatalf("expected the twelve people, got %d", len(list))
+	}
+	t.Logf("listing %d people took %d queries", len(list), queries)
+	if queries > 8 {
+		t.Errorf("listing %d people took %d queries; it should take a handful whoever many there are", len(list), queries)
+	}
+
+	for _, u := range list {
+		wantRoles, err := rolesService.ListNamesForUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(u.Roles, ",") != strings.Join(wantRoles, ",") {
+			t.Errorf("%s: roles %v, one by one %v", u.Login, u.Roles, wantRoles)
+		}
+		periods, err := membershipsService.ListByUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (len(periods) > 0) != (u.MembershipStartDate != nil) {
+			t.Errorf("%s: membership start %v with %d periods", u.Login, u.MembershipStartDate, len(periods))
+		}
+		wantLeave := false
+		if len(periods) > 0 {
+			if !u.MembershipStartDate.Equal(periods[len(periods)-1].StartDate) {
+				t.Errorf("%s: start %v, expected %v", u.Login, u.MembershipStartDate, periods[len(periods)-1].StartDate)
+			}
+			if (periods[0].EndDate == nil) != (u.MembershipEndDate == nil) {
+				t.Errorf("%s: end date %v, latest period's %v", u.Login, u.MembershipEndDate, periods[0].EndDate)
+			}
+			if periods[0].EndDate == nil {
+				wantLeave, err = membershipsService.IsOnLeave(ctx, u.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if u.OnLeave != wantLeave {
+			t.Errorf("%s: on leave %v, one by one %v", u.Login, u.OnLeave, wantLeave)
+		}
+		license, err := licensesService.CurrentByUser(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (license != nil) != (u.LicenseType != nil) || (license != nil && (*u.LicenseType != license.Type || *u.LicenseYear != license.Year || !u.LicenseIssuedDate.Equal(license.IssuedDate))) {
+			t.Errorf("%s: license %v/%v/%v, one by one %+v", u.Login, u.LicenseType, u.LicenseYear, u.LicenseIssuedDate, license)
+		}
+		due, err := membershipsService.LatestDue(ctx, u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (due != nil) != (u.LastDueYear != nil) || (due != nil && (*u.LastDueYear != due.Year || u.LastDuePaidAt == nil || !u.LastDuePaidAt.Equal(*due.PaidAt))) {
+			t.Errorf("%s: last due %v, one by one %+v", u.Login, u.LastDueYear, due)
+		}
+	}
 }

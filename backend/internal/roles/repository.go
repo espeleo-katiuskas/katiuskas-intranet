@@ -112,6 +112,58 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 // on a profile, so the two can never disagree and losing membership or
 // a board term revokes access on the very next request rather than
 // waiting for a stale token to expire.
+// ListNamesForUsers is ListNamesForUser for many people at once, in one query:
+// the same stored roles plus the automatic ones, by name, per person. Everybody
+// asked for has an entry, empty when they hold nothing. A listing of hundreds of
+// people can't afford a query each.
+func (r *Repository) ListNamesForUsers(ctx context.Context, userIDs []int64) (map[int64][]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id, r.name FROM unnest($1::bigint[]) AS u(id)
+		JOIN user_roles ur ON ur.user_id = u.id
+		JOIN roles r ON r.id = ur.role_id
+
+		UNION
+
+		SELECT u.id, 'member' FROM unnest($1::bigint[]) AS u(id) WHERE EXISTS (
+			SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.period @> CURRENT_DATE
+		)
+
+		UNION
+
+		SELECT u.id, 'former_member' FROM unnest($1::bigint[]) AS u(id) WHERE EXISTS (
+			SELECT 1 FROM memberships m WHERE m.user_id = u.id
+		) AND NOT EXISTS (
+			SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.period @> CURRENT_DATE
+		)
+
+		UNION
+
+		SELECT u.id, 'board' FROM unnest($1::bigint[]) AS u(id) WHERE EXISTS (
+			SELECT 1 FROM board_members bm WHERE bm.user_id = u.id AND bm.period @> CURRENT_DATE
+		)
+
+		ORDER BY 1, 2
+	`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	names := make(map[int64][]string, len(userIDs))
+	for _, id := range userIDs {
+		names[id] = []string{}
+	}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		names[id] = append(names[id], name)
+	}
+	return names, rows.Err()
+}
+
 func (r *Repository) ListNamesForUser(ctx context.Context, userID int64) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT r.name FROM roles r

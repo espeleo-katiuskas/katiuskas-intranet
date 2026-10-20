@@ -485,9 +485,12 @@ solapen.
 
 - La ausencia de solapes la garantiza una restricción `EXCLUDE USING gist` de PostgreSQL
   sobre `(user_id, period)`, no una comprobación manual.
-- `users.Service.enrich` pide todos los periodos de una persona
-  (`memberships.Service.ListByUser`, más reciente primero) y separa las dos fechas que
-  incorpora a cada `User`:
+- `users.Service.enrichMany` (lo que usan `GET /users` y la ficha de una sola persona) pide
+  a cada paquete, una vez y para toda la lista, lo que añade a cada `User` (`ListByUsers`,
+  `OnLeaveAmong`, `LatestDues`, `CurrentByUsers` y `ListNamesForUsers`, una consulta con
+  `ANY($1)` cada una): antes eran cinco consultas por persona, y con 300 socios
+  `GET /users` tardaba unos 215 ms en vez de unos 10. Con los periodos de cada persona
+  (más reciente primero) separa las dos fechas que incorpora a cada `User`:
   - `membership_start_date` es la del *primer* periodo (cuándo entró por primera vez, no
     la última vez que ha vuelto a entrar tras una baja).
   - `membership_end_date` es la del periodo *más reciente* (vacía si sigue de alta).

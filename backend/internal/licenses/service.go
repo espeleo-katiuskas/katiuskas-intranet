@@ -151,6 +151,12 @@ func (s *Service) CurrentByUser(ctx context.Context, userID int64) (*License, er
 	return nil, nil
 }
 
+// CurrentByUsers is CurrentByUser for a whole list of people in one query: each
+// person's license for the current year, none for who has none.
+func (s *Service) CurrentByUsers(ctx context.Context, userIDs []int64) (map[int64]License, error) {
+	return s.repo.ListForYear(ctx, userIDs, time.Now().Year())
+}
+
 // IsCurrentlyFederated reports whether the person has a license for the
 // current year — compared by Year (not ValidUntil's exact instant), so
 // someone doesn't read as expired for the rest of December 31st itself.

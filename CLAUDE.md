@@ -309,7 +309,15 @@ or one bought in December for next year, isn't reported, so having a `license_ty
 being federated; there's no end date because a license always runs to December 31st),
 never `license_issued_date` — and `last_due_year` (the latest year whose cuota they paid;
 the date, `last_due_paid_at`, stays admin/board-only, both computed in
-`users.Service.enrich` via `memberships.Service.LatestDue`); no DNI or contact info).
+`users.Service.enrichMany` via `memberships.Service.LatestDues`); no DNI or contact info).
+That overlay (roles, membership dates, leave, license, last due) is asked of each package
+once for the whole list — `roles.ListNamesForUsers`, `memberships.ListByUsers`/
+`OnLeaveAmong`/`LatestDues`, `licenses.CurrentByUsers`, each one query with `ANY($1)` —
+instead of once per person: `GET /users` used to cost five queries a head, and for three
+hundred people that was about 215 ms of the 3 ms every other endpoint takes (now about
+10 ms). One person goes through the same `enrichMany`, so a listing can't say something
+different from the person's own page; the per-person methods stay for who needs just one
+(`tokens`' own role lookup on every request, say).
 `/socios` (`web/js/members.js`) filters on those two for everyone — "A corriente de pago"
 is `last_due_year` ≥ the current year, "Federado" is having a `license_type` — offers
 `last_due_year` as an optional "Última cuota" column, and shows a line between the filters
