@@ -226,6 +226,7 @@ igual que ya hace con tus otros sitios:
 
 ```
 intranet.tudominio.org {
+	encode zstd gzip
 	handle /api/* {
 		reverse_proxy 127.0.0.1:64711
 	}
@@ -265,6 +266,11 @@ envían campos nuevos...): quien necesite ver el cambio al momento fuerza el ref
 (el modo depende del navegador y del dispositivo, y en un móvil o una tablet no hay una
 forma sencilla: de ahí una hora y no un día). Si hace falta otro plazo, es ese número.
 
+La línea `encode zstd gzip` comprime lo que viaja como texto (los scripts, los estilos y
+el JSON del API: solo `GET /users` pasa de 100 KB) y deja como están las imágenes y los
+PDF, que ya van comprimidos. Sin ella, cada página baja varias veces más bytes de los
+necesarios, algo que se nota sobre todo en el móvil.
+
 El bloque `handle_errors` hace que cualquier dirección que no sea una página muestre
 `404.html` con estado 404, sin redirigir: la barra de direcciones conserva lo que se
 escribió. Por eso `root` va fuera del `handle`, a nivel del sitio: `handle_errors` no
@@ -301,6 +307,7 @@ repositorio, pero apuntando a `127.0.0.1:64711` en vez del nombre de servicio Do
 ```sh
 sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 127.0.0.1:64710 {
+	encode zstd gzip
 	handle /api/* {
 		reverse_proxy 127.0.0.1:64711
 	}

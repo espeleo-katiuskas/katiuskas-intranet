@@ -108,8 +108,11 @@ browser may keep an old page or script for up to an hour, mixed with new ones; t
 who use the intranet daily are the developers, who know to reload the page bypassing the
 cache (how depends on the browser and device, and on a phone or tablet there is no easy
 way — hence an hour and not a day). Only `web/` goes through this rule: documents and
-files come from `/api/*`, which Caddy leaves to the API. The club's own Caddy, outside
-this repo, needs the same line in its site block (`docs/deployment-no-docker.md`).
+files come from `/api/*`, which Caddy leaves to the API. The same Caddyfile compresses
+whatever travels as text (`encode zstd gzip`: the scripts and styles are about a third of
+their size, and the API's JSON — `GET /users` is over 100 KB — much less than that), and
+leaves images and PDFs alone. The club's own Caddy, outside this repo, needs both lines in
+its site block (`docs/deployment-no-docker.md`).
 
 Club documents (estatutos, actas...) shown at `/archivo`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no

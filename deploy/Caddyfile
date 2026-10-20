@@ -1,4 +1,8 @@
 :64710 {
+	# Text on the wire (scripts, styles, the API's JSON — GET /users alone is over
+	# 100 KB) is compressed; what is already compressed (images, PDFs) is left alone.
+	encode zstd gzip
+
 	handle /api/* {
 		reverse_proxy api:64711
 	}
