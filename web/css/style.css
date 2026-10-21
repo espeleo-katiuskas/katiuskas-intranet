@@ -340,19 +340,14 @@ body {
   }
 
   /* The club logo on the left and a close "X" on the right, above the
-     links; on a white band like the topbar, where the logo is meant to
-     be seen. Only exists in this narrow layout. */
+     links, on the menu's own background. Only exists in this narrow
+     layout. */
   .sidebar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 8px 10px;
     margin-bottom: 12px;
-    background: #fff;
-    /* Same colour as the menu itself, so the white band doesn't merge
-       with the topbar's white behind it and its edge is clear. */
-    border-right: 4px solid var(--accent);
-    border-bottom: 4px solid var(--accent);
   }
 
   .sidebar-logo {
@@ -364,7 +359,7 @@ body {
     padding: 0 6px;
     border: none;
     background: none;
-    color: var(--accent);
+    color: #fff;
     font-size: 1.8rem;
     line-height: 1;
     cursor: pointer;
