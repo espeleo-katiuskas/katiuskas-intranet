@@ -4,7 +4,6 @@ import {
   escapeHtml,
   formatDate,
   setToken,
-  knownRoleLabels,
   roleLabel,
   positionLabels,
   typeLabels,
@@ -20,7 +19,6 @@ import { trackDirtyFields, markFieldsClean } from './formDirty.js';
 import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
-const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
 const memberLogin = new URLSearchParams(window.location.search).get('login');

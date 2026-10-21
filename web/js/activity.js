@@ -134,7 +134,7 @@ editForm?.addEventListener('submit', async (event) => {
   // reassigning the organizer is narrower than canManage, which the
   // current leader also satisfies.
   const leaderInput = document.getElementById('ea-leader');
-  if (leaderInput && leaderInput.value.trim()) {
+  if (leaderInput?.value.trim()) {
     const leaderLogin = resolvePickerId(personEntries, leaderInput.value);
     if (!leaderLogin) {
       showError('Elige un organizador de la lista.');

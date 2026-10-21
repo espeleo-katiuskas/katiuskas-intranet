@@ -3,7 +3,6 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
-  knownRoleLabels,
   roleLabel,
   positionLabels,
   showFeedback,

@@ -185,7 +185,7 @@ newActivityForm.addEventListener('submit', async (event) => {
   // Only present at all for admin/board (see data-roles on the field);
   // left blank, the organizer defaults to the caller as always.
   const leaderInput = document.getElementById('na-leader');
-  if (leaderInput && leaderInput.value.trim()) {
+  if (leaderInput?.value.trim()) {
     const leaderLogin = resolvePickerId(personEntries, leaderInput.value);
     if (!leaderLogin) {
       showError('Elige un organizador de la lista, o déjalo vacío.');

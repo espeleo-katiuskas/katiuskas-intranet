@@ -93,6 +93,16 @@ go vet ./...                      # from backend/
 go build ./...                    # from backend/ — cheapest full compile check
 python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"  # validate the spec after editing it
 ```
+Checks for the frontend, before a commit that touches `web/` (the files are plain ES
+modules, with no build step to catch a mistake): `node --check` parses a file without
+running it, and `biome lint web/js` (configuration in `biome.json`, lint only) reports
+unused imports and variables and the like:
+```sh
+for f in web/js/*.js; do node --check "$f"; done
+biome lint web/js
+```
+Neither runs a page; for that, the headless Chromium below.
+
 Rebuilding/redeploying just the API after a backend change:
 ```sh
 docker compose build api && docker compose up -d api
