@@ -349,6 +349,10 @@ body {
     padding: 8px 10px;
     margin-bottom: 12px;
     background: #fff;
+    /* Same colour as the menu itself, so the white band doesn't merge
+       with the topbar's white behind it and its edge is clear. */
+    border-right: 4px solid var(--accent);
+    border-bottom: 4px solid var(--accent);
   }
 
   .sidebar-logo {
