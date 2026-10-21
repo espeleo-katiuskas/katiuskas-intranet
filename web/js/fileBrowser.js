@@ -49,7 +49,11 @@ export function fileKind(name) {
 // anchor), which is left untouched. A trailing "/" is how a document's
 // author marks a link as pointing to a folder rather than a file.
 export function resolveRelativePath(baseDir, href) {
-  if (/^([a-z][a-z0-9+.-]*:)?\/\//i.test(href) || href.startsWith('mailto:') || href.startsWith('#')) {
+  if (
+    /^([a-z][a-z0-9+.-]*:)?\/\//i.test(href) ||
+    href.startsWith('mailto:') ||
+    href.startsWith('#')
+  ) {
     return null;
   }
   const isDir = href.endsWith('/');

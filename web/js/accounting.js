@@ -54,7 +54,10 @@ function parentSelectOptions(selectedParentId, excludeId) {
   // A hidden account is only offered while hidden ones are shown, or when
   // it is this account's current parent — dropping that one would make
   // saving silently move the account to the top level.
-  const offered = shownAccounts(allAccounts, (account) => showHidden || !account.hidden || account.id === selectedParentId);
+  const offered = shownAccounts(
+    allAccounts,
+    (account) => showHidden || !account.hidden || account.id === selectedParentId,
+  );
   const options = flattenAccountTree(offered)
     .filter(({ account }) => !excluded.has(account.id))
     .map(({ account, depth }) => {
@@ -123,14 +126,19 @@ function renderView() {
   const groups = childrenByParent(allAccounts.filter(isShown));
   flattened = flattenAccountTree(shownAccounts(allAccounts, isShown)).map((entry) => {
     const siblings = groups.get(accountsById[entry.account.id].parent_id ?? 'root');
-    return { ...entry, isFirst: siblings[0].id === entry.account.id, isLast: siblings.at(-1).id === entry.account.id };
+    return {
+      ...entry,
+      isFirst: siblings[0].id === entry.account.id,
+      isLast: siblings.at(-1).id === entry.account.id,
+    };
   });
   renderAccountsTable();
   document.getElementById('na-parent').innerHTML = parentSelectOptions(null, null);
 
   const hiddenCount = allAccounts.filter((account) => account.hidden).length;
   document.getElementById('show-hidden-wrap').hidden = hiddenCount === 0;
-  document.getElementById('show-hidden-label').textContent = `Mostrar cuentas ocultas (${hiddenCount})`;
+  document.getElementById('show-hidden-label').textContent =
+    `Mostrar cuentas ocultas (${hiddenCount})`;
 }
 
 document.getElementById('show-hidden-accounts').addEventListener('change', (event) => {
@@ -163,7 +171,10 @@ async function moveAccount(id, direction) {
     }
     let list;
     for (let i = 0; i < moves; i += 1) {
-      list = await apiFetch(`/accounts/${id}/move`, { method: 'POST', body: JSON.stringify({ direction }) });
+      list = await apiFetch(`/accounts/${id}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ direction }),
+      });
     }
     applyAccountsList(list);
   } catch (err) {
@@ -183,7 +194,10 @@ function openEditAccountDialog(account) {
   editingAccountId = account.id;
   document.getElementById('ea-name').value = account.name;
   document.getElementById('ea-code').value = account.code ?? '';
-  document.getElementById('ea-parent').innerHTML = parentSelectOptions(account.parent_id ?? null, account.id);
+  document.getElementById('ea-parent').innerHTML = parentSelectOptions(
+    account.parent_id ?? null,
+    account.id,
+  );
   document.getElementById('ea-allows-dues').checked = Boolean(account.allows_dues);
   document.getElementById('ea-allows-licenses').checked = Boolean(account.allows_licenses);
   document.getElementById('ea-hidden').checked = Boolean(account.hidden);
@@ -210,7 +224,10 @@ editAccountForm.addEventListener('submit', async (event) => {
   const submitButton = editAccountForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch(`/accounts/${editingAccountId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/accounts/${editingAccountId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
     showFeedback('Cuenta actualizada.');
     editAccountDialog.close();
     await loadAccounts();

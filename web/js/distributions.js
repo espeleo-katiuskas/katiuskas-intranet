@@ -15,7 +15,10 @@ function priceText(d) {
 function renderRow(d) {
   // Drafts are only listed for the people who manage them; for anyone else
   // "eligible" says whether it is for them.
-  const mine = d.status === 'open' && d.eligible ? '<span class="badge status-planned">Puedes pedirlo</span>' : '';
+  const mine =
+    d.status === 'open' && d.eligible
+      ? '<span class="badge status-planned">Puedes pedirlo</span>'
+      : '';
   return `
     <tr data-distribution-id="${d.id}">
       <td>${escapeHtml(d.name)}</td>
@@ -63,14 +66,19 @@ dialog.addEventListener('close', syncCutoff);
 syncCutoff();
 
 // Only admin and board have the button; for anybody else it isn't on the page.
-document.getElementById('toggle-new-distribution')?.addEventListener('click', () => openModal(dialog));
+document
+  .getElementById('toggle-new-distribution')
+  ?.addEventListener('click', () => openModal(dialog));
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const submit = form.querySelector('button[type="submit"]');
   submit.disabled = true;
   try {
-    const created = await apiFetch('/distributions', { method: 'POST', body: JSON.stringify(readDistributionForm(form)) });
+    const created = await apiFetch('/distributions', {
+      method: 'POST',
+      body: JSON.stringify(readDistributionForm(form)),
+    });
     window.location.href = `/reparto?id=${created.id}`;
   } catch (err) {
     showError(err.message);

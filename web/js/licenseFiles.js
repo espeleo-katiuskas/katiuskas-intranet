@@ -130,7 +130,9 @@ async function initLicenseFiles(login, { hideWhenEmpty = false } = {}) {
 
   try {
     const listing = await apiFetch(`/users/${login}/files?path=${encodeURIComponent('licencias')}`);
-    const files = listing.entries.filter((entry) => entry.type === 'file' && licenseYear(entry.name) !== null);
+    const files = listing.entries.filter(
+      (entry) => entry.type === 'file' && licenseYear(entry.name) !== null,
+    );
     if (hideWhenEmpty && section) section.hidden = files.length === 0;
 
     const years = [...new Set(files.map((f) => licenseYear(f.name)))].sort();

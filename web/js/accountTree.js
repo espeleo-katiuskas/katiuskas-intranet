@@ -44,7 +44,8 @@ function shownAccounts(accounts, isShown) {
   const byId = new Map(accounts.map((account) => [account.id, account]));
   return accounts.filter(isShown).map((account) => {
     let parentId = account.parent_id ?? null;
-    while (parentId != null && !isShown(byId.get(parentId))) parentId = byId.get(parentId).parent_id ?? null;
+    while (parentId != null && !isShown(byId.get(parentId)))
+      parentId = byId.get(parentId).parent_id ?? null;
     return { ...account, parent_id: parentId ?? undefined };
   });
 }

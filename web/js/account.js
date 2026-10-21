@@ -60,10 +60,20 @@ async function loadCatalogs() {
     const directory = await apiFetch('/users/directory');
     userEntries = directory
       .slice()
-      .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
-      .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
+      .sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
+      )
+      .map((person) => ({
+        id: person.login,
+        label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+      }));
     if (isRealAdmin) {
-      for (const id of ['nt-due-user-options', 'et-due-user-options', 'nt-license-user-options', 'et-license-user-options']) {
+      for (const id of [
+        'nt-due-user-options',
+        'et-due-user-options',
+        'nt-license-user-options',
+        'et-license-user-options',
+      ]) {
         document.getElementById(id).innerHTML = renderPickerOptions(userEntries);
       }
     }
@@ -74,7 +84,9 @@ async function loadCatalogs() {
   try {
     allLicenseTypes = await apiFetch('/license-types');
     licenseTypesById = Object.fromEntries(allLicenseTypes.map((t) => [t.id, t]));
-    const options = allLicenseTypes.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    const options = allLicenseTypes
+      .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+      .join('');
     document.getElementById('nt-license-type').innerHTML = options;
     document.getElementById('et-license-type').innerHTML = options;
   } catch {
@@ -100,13 +112,19 @@ function setupDuesAndLicensesSection(prefix) {
 
   function renderDueChips() {
     document.getElementById(`${prefix}-dues-chips`).innerHTML = pendingDues
-      .map((due, index) => `<span class="badge-removable">${escapeHtml(due.label)}<button type="button" data-remove-due="${index}" title="Quitar">×</button></span>`)
+      .map(
+        (due, index) =>
+          `<span class="badge-removable">${escapeHtml(due.label)}<button type="button" data-remove-due="${index}" title="Quitar">×</button></span>`,
+      )
       .join('');
   }
 
   function renderLicenseChips() {
     document.getElementById(`${prefix}-licenses-chips`).innerHTML = pendingLicenses
-      .map((license, index) => `<span class="badge-removable">${escapeHtml(license.label)}<button type="button" data-remove-license="${index}" title="Quitar">×</button></span>`)
+      .map(
+        (license, index) =>
+          `<span class="badge-removable">${escapeHtml(license.label)}<button type="button" data-remove-license="${index}" title="Quitar">×</button></span>`,
+      )
       .join('');
   }
 
@@ -133,7 +151,10 @@ function setupDuesAndLicensesSection(prefix) {
   // hasn't typed in them; one they've edited themselves is left alone
   // from then on, until the dialog is next opened.
   const dateInput = document.getElementById(`${prefix}-date`);
-  const yearInputs = [document.getElementById(`${prefix}-due-year`), document.getElementById(`${prefix}-license-year`)];
+  const yearInputs = [
+    document.getElementById(`${prefix}-due-year`),
+    document.getElementById(`${prefix}-license-year`),
+  ];
   const editedYearInputs = new Set();
 
   function suggestedYear() {
@@ -166,11 +187,14 @@ function setupDuesAndLicensesSection(prefix) {
   // plain text input's default behavior inside any <form>. Enter here
   // triggers the row's own "+ Añadir" button instead.
   for (const rowPrefix of [`${prefix}-add-due`, `${prefix}-add-license`]) {
-    document.getElementById(rowPrefix).closest('.role-add-row').addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      document.getElementById(rowPrefix).click();
-    });
+    document
+      .getElementById(rowPrefix)
+      .closest('.role-add-row')
+      .addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        document.getElementById(rowPrefix).click();
+      });
   }
 
   document.getElementById(`${prefix}-add-due`).addEventListener('click', () => {
@@ -182,7 +206,8 @@ function setupDuesAndLicensesSection(prefix) {
       showError('Elige un socio de la lista e indica el año, antes de añadir la cuota.');
       return;
     }
-    const personLabel = userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+    const personLabel =
+      userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
     pendingDues.push({ login, year, label: `${personLabel} · ${year}` });
     userInput.value = '';
     editedYearInputs.delete(yearInput);
@@ -200,7 +225,9 @@ function setupDuesAndLicensesSection(prefix) {
     const chosen = licenseTypesById[licenseTypeId];
     const year = Number(yearInput.value);
     if (!login || !licenseTypeId || !year) {
-      showError('Elige un socio y un tipo de licencia de la lista, e indica el año, antes de añadir la licencia.');
+      showError(
+        'Elige un socio y un tipo de licencia de la lista, e indica el año, antes de añadir la licencia.',
+      );
       return;
     }
     const otherDetail = otherDetailInput.value.trim() || null;
@@ -208,9 +235,16 @@ function setupDuesAndLicensesSection(prefix) {
       showError('Indica de qué licencia se trata.');
       return;
     }
-    const personLabel = userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
+    const personLabel =
+      userEntries.find((e) => e.id === login)?.label.replace(/ #.*$/, '') ?? login;
     const typeLabel = chosen?.is_other ? `${chosen.name}: ${otherDetail}` : (chosen?.name ?? '?');
-    pendingLicenses.push({ login, licenseTypeId, otherDetail: chosen?.is_other ? otherDetail : null, year, label: `${personLabel} · ${typeLabel} · ${year}` });
+    pendingLicenses.push({
+      login,
+      licenseTypeId,
+      otherDetail: chosen?.is_other ? otherDetail : null,
+      year,
+      label: `${personLabel} · ${typeLabel} · ${year}`,
+    });
     userInput.value = '';
     typeSelect.selectedIndex = 0;
     otherDetailInput.value = '';
@@ -297,12 +331,18 @@ function setupDuesAndLicensesSection(prefix) {
     existing = { dues, licenses };
     if (duesExisting) {
       duesExisting.innerHTML = dues
-        .map((due) => `<span class="badge">${escapeHtml(`${personName(due.user_login)} · ${due.year}`)}</span>`)
+        .map(
+          (due) =>
+            `<span class="badge">${escapeHtml(`${personName(due.user_login)} · ${due.year}`)}</span>`,
+        )
         .join(' ');
     }
     if (licensesExisting) {
       licensesExisting.innerHTML = licenses
-        .map((license) => `<span class="badge">${escapeHtml(`${personName(license.user_login)} · ${license.type} · ${license.year}`)}</span>`)
+        .map(
+          (license) =>
+            `<span class="badge">${escapeHtml(`${personName(license.user_login)} · ${license.type} · ${license.year}`)}</span>`,
+        )
         .join(' ');
     }
     applyVisibility();
@@ -321,7 +361,11 @@ function setupDuesAndLicensesSection(prefix) {
       try {
         await apiFetch(`/users/${due.login}/dues`, {
           method: 'POST',
-          body: JSON.stringify({ year: due.year, transaction_id: transactionId, start_date: occurredOnDate }),
+          body: JSON.stringify({
+            year: due.year,
+            transaction_id: transactionId,
+            start_date: occurredOnDate,
+          }),
         });
       } catch (err) {
         errors.push(`cuota de ${due.label}: ${err.message}`);
@@ -409,7 +453,9 @@ function setupEntryLines(prefix, onChange) {
   function updateTotal() {
     const cents = rows().reduce((sum, row) => {
       const amount = Number(row.amountText);
-      return row.amountText !== '' && Number.isFinite(amount) ? sum + Math.round(amount * 100) : sum;
+      return row.amountText !== '' && Number.isFinite(amount)
+        ? sum + Math.round(amount * 100)
+        : sum;
     }, 0);
     document.getElementById(`${prefix}-total`).value = formatCurrency(cents / 100);
   }
@@ -422,7 +468,9 @@ function setupEntryLines(prefix, onChange) {
   }
 
   function selectedAccountIds() {
-    return rows().filter((row) => row.accountValue !== '').map((row) => Number(row.accountValue));
+    return rows()
+      .filter((row) => row.accountValue !== '')
+      .map((row) => Number(row.accountValue));
   }
 
   // The lines the person filled in, validated — throws with a message for
@@ -443,11 +491,16 @@ function setupEntryLines(prefix, onChange) {
       lines.push({ amount, accountId: Number(row.accountValue) });
     }
     if (new Set(lines.map((line) => line.accountId)).size !== lines.length) {
-      throw new Error('Una misma cuenta no puede aparecer en dos líneas: suma sus cantidades en una sola.');
+      throw new Error(
+        'Una misma cuenta no puede aparecer en dos líneas: suma sus cantidades en una sola.',
+      );
     }
-    if (!lines.length) throw new Error('Añade al menos una línea, con su cantidad y su otra cuenta.');
+    if (!lines.length)
+      throw new Error('Añade al menos una línea, con su cantidad y su otra cuenta.');
     if (lines.reduce((sum, line) => sum + Math.round(line.amount * 100), 0) === 0) {
-      throw new Error('La suma de las cantidades no puede ser cero: esta cuenta se quedaría sin apunte.');
+      throw new Error(
+        'La suma de las cantidades no puede ser cero: esta cuenta se quedaría sin apunte.',
+      );
     }
     return lines;
   }
@@ -477,7 +530,9 @@ const transactionLines = {
 // memberships.Service.RecordDue/licenses.Service.Create — so these
 // sections only ever appear when they could actually succeed).
 function sectionsFor(otherAccountIds) {
-  const involved = [accountId, ...otherAccountIds].map((id) => allAccounts.find((a) => a.id === id));
+  const involved = [accountId, ...otherAccountIds].map((id) =>
+    allAccounts.find((a) => a.id === id),
+  );
   return {
     dues: involved.some((account) => account?.allows_dues),
     licenses: involved.some((account) => account?.allows_licenses),
@@ -495,7 +550,8 @@ function refreshDuesLicensesSections(prefix) {
 
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
-  document.getElementById('account-balance-line').textContent = `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
+  document.getElementById('account-balance-line').textContent =
+    `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
 }
 
 // The "otra cuenta" pickers exclude only this account itself — unlike
@@ -509,7 +565,9 @@ function renderHeader(account) {
 // transaction being edited already uses, which have to stay choosable
 // or the dialog couldn't even show what it currently says.
 function otherAccountOptions(selectedId, keepHidden = new Set()) {
-  return flattenAccountTree(shownAccounts(allAccounts, (a) => !a.hidden || keepHidden.has(a.id) || a.id === accountId))
+  return flattenAccountTree(
+    shownAccounts(allAccounts, (a) => !a.hidden || keepHidden.has(a.id) || a.id === accountId),
+  )
     .filter(({ account }) => account.id !== accountId)
     .map(({ account, depth }) => {
       const selected = account.id === selectedId ? 'selected' : '';
@@ -631,7 +689,9 @@ async function loadEntries({ append = false } = {}) {
     entriesLoaded += page.length;
     entriesLoadMore.hidden = !hasMore;
   } catch (err) {
-    if (!append) entriesTableBody.innerHTML = '<tr><td colspan="5">No se pudieron cargar las transacciones.</td></tr>';
+    if (!append)
+      entriesTableBody.innerHTML =
+        '<tr><td colspan="5">No se pudieron cargar las transacciones.</td></tr>';
     entriesLoadMore.hidden = true;
     showError(err.message);
   } finally {
@@ -643,7 +703,11 @@ entriesLoadMore.addEventListener('click', () => loadEntries({ append: true }));
 
 document.getElementById('entries-filter').addEventListener('submit', (event) => {
   event.preventDefault();
-  if (entriesFromInput.value && entriesToInput.value && entriesToInput.value < entriesFromInput.value) {
+  if (
+    entriesFromInput.value &&
+    entriesToInput.value &&
+    entriesToInput.value < entriesFromInput.value
+  ) {
     showError('La fecha «Hasta» no puede ser anterior a «Desde».');
     return;
   }
@@ -683,7 +747,8 @@ function renderEntryDetail(transaction) {
   // The cuotas and licencias this transaction paid for. The API only
   // sends them to admin/board (see GET /transactions/{id}), so for anyone
   // else both are simply absent and nothing is listed.
-  const personLink = (login, text) => `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(personName(login))}</a> · ${escapeHtml(text)}`;
+  const personLink = (login, text) =>
+    `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(personName(login))}</a> · ${escapeHtml(text)}`;
   const dues = transaction.dues ?? [];
   if (dues.length) {
     html += `<div class="entry-detail-title">Cuotas anuales</div><ul class="entry-detail-list">${dues
@@ -693,7 +758,10 @@ function renderEntryDetail(transaction) {
   const licenses = transaction.licenses ?? [];
   if (licenses.length) {
     html += `<div class="entry-detail-title">Licencias</div><ul class="entry-detail-list">${licenses
-      .map((license) => `<li>${personLink(license.user_login, `${license.type} · ${license.year}`)}</li>`)
+      .map(
+        (license) =>
+          `<li>${personLink(license.user_login, `${license.type} · ${license.year}`)}</li>`,
+      )
       .join('')}</ul>`;
   }
   return html;
@@ -749,20 +817,27 @@ async function openEditTransactionDialog(transactionId) {
     const ownEntries = transaction.entries.filter((e) => e.account_id === accountId);
     const otherEntries = transaction.entries.filter((e) => e.account_id !== accountId);
     if (ownEntries.length !== 1 || !otherEntries.length) {
-      showError('Esta transacción tiene más de un apunte en esta cuenta, o ninguno: corrígela por la API — aquí cada línea es una otra cuenta.');
+      showError(
+        'Esta transacción tiene más de un apunte en esta cuenta, o ninguno: corrígela por la API — aquí cada línea es una otra cuenta.',
+      );
       return;
     }
     editingTransactionId = transactionId;
     document.getElementById('et-date').value = transaction.occurred_at.slice(0, 10);
     editTransactionDuesLicenses?.syncYears();
     document.getElementById('et-description').value = transaction.description;
-    transactionLines.et.setLines(otherEntries.map((e) => ({ amount: -e.amount, accountId: e.account_id })));
+    transactionLines.et.setLines(
+      otherEntries.map((e) => ({ amount: -e.amount, accountId: e.account_id })),
+    );
     refreshDuesLicensesSections('et');
     // GET /transactions/{id} also says which cuotas and licencias this
     // transaction already paid for, but only to admin/board — read-only
     // here (see setupDuesAndLicensesSection's setExisting). Absent for
     // anyone else, who never has these sections at all.
-    editTransactionDuesLicenses?.setExisting({ dues: transaction.dues ?? [], licenses: transaction.licenses ?? [] });
+    editTransactionDuesLicenses?.setExisting({
+      dues: transaction.dues ?? [],
+      licenses: transaction.licenses ?? [],
+    });
     openModal(editTransactionDialog);
     document.getElementById('et-description').focus();
   } catch (err) {
@@ -809,7 +884,10 @@ editTransactionForm.addEventListener('submit', async (event) => {
 });
 
 async function deleteTransaction(transactionId) {
-  if (!confirm('¿Borrar esta transacción? También se elimina el apunte que crea en la otra cuenta.')) return;
+  if (
+    !confirm('¿Borrar esta transacción? También se elimina el apunte que crea en la otra cuenta.')
+  )
+    return;
   try {
     await apiFetch(`/transactions/${transactionId}`, { method: 'DELETE' });
     showFeedback('Transacción borrada.');
@@ -898,7 +976,10 @@ newTransactionForm.addEventListener('submit', async (event) => {
   submitButton.disabled = true;
   try {
     const lines = transactionLines.nt.read();
-    const transaction = await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(entriesBody(dateValue, description, lines)) });
+    const transaction = await apiFetch('/transactions', {
+      method: 'POST',
+      body: JSON.stringify(entriesBody(dateValue, description, lines)),
+    });
     const pendingErrors = newTransactionDuesLicenses
       ? await newTransactionDuesLicenses.submitPending(transaction.id, dateValue)
       : [];

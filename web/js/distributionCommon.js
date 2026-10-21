@@ -115,7 +115,9 @@ function readDistributionForm(form) {
 }
 
 function fillDistributionForm(form, d) {
-  const set = (name, value) => { form.elements[name].value = value ?? ''; };
+  const set = (name, value) => {
+    form.elements[name].value = value ?? '';
+  };
   set('name', d.name);
   set('description', d.description);
   set('audience', d.audience);
@@ -147,7 +149,10 @@ async function loadPeople(distributionId, purpose = null) {
     try {
       const members = await apiFetch(`/distributions/${distributionId}/people?for=${purpose}`);
       entries = members
-        .map((p) => ({ id: p.login, label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login) }))
+        .map((p) => ({
+          id: p.login,
+          label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login),
+        }))
         .sort((a, b) => a.label.localeCompare(b.label, 'es'));
     } catch {
       // No picker: the page says so when somebody tries to choose.
@@ -159,14 +164,17 @@ async function loadPeople(distributionId, purpose = null) {
 // What the API's error codes say, in the club's own words. Anything not here
 // falls back to the API's message.
 const errorMessages = {
-  not_open: 'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
-  not_eligible: 'Solo pueden pedirlo socios: quienes lo eran en la fecha de corte (o, si no hay, los socios de hoy), tanto la persona para quien es como quien lo pide.',
+  not_open:
+    'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
+  not_eligible:
+    'Solo pueden pedirlo socios: quienes lo eran en la fecha de corte (o, si no hay, los socios de hoy), tanto la persona para quien es como quien lo pide.',
   invalid_collector: 'Quien recoge tiene que ser socio ahora o haberlo sido en la fecha de corte.',
   already_registered: 'Esa persona ya tiene su pedido.',
   extras_not_allowed: 'Este reparto no tiene extras.',
   too_many_extras: 'Esa persona ya tiene el máximo de extras.',
   invalid_choices: 'Elige un valor en cada opción.',
-  automatic_unit: 'En un reparto para todos los socios cada uno tiene su pedido y no se puede quitar. Si no lo quiere, que no lo recoja.',
+  automatic_unit:
+    'En un reparto para todos los socios cada uno tiene su pedido y no se puede quitar. Si no lo quiere, que no lo recoja.',
   unit_locked: 'Este pedido ya está pagado o recogido y no se puede cambiar.',
   not_delivering: 'Solo se puede apuntar una recogida con el reparto «En entrega».',
   already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
@@ -175,7 +183,8 @@ const errorMessages = {
   has_settled_units: 'Hay pedidos ya pagados o recogidos: quita primero esas marcas.',
   invalid_status_transition: 'El estado solo puede avanzar o retroceder un paso cada vez.',
   cutoff_required: 'Un reparto para todos los socios necesita la fecha de corte.',
-  invalid_max_extra: 'El máximo de extras necesita un precio para los extras, y no puede ser negativo.',
+  invalid_max_extra:
+    'El máximo de extras necesita un precio para los extras, y no puede ser negativo.',
   invalid_options: 'Cada cosa a elegir necesita un nombre y al menos un valor, sin repetirlos.',
   invalid_price: 'Los precios no pueden ser negativos.',
 };

@@ -26,8 +26,13 @@ async function loadDirectory() {
     directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
     personEntries = directory
       .slice()
-      .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
-      .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
+      .sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
+      )
+      .map((person) => ({
+        id: person.login,
+        label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+      }));
   } catch {
     directoryByLogin = {};
     personEntries = [];
@@ -62,7 +67,11 @@ let offset = 0;
 let loadedActivities = [];
 
 function activityQuery() {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), order: 'asc' });
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(offset),
+    order: 'asc',
+  });
   if (showingActive) {
     params.set('status', 'active');
   }
@@ -79,7 +88,8 @@ async function loadActivities({ append = false, ready = Promise.resolve() } = {}
       : `<tr><td colspan="6">${showingActive ? 'No hay actividades activas.' : 'Todavía no hay actividades.'}</td></tr>`;
     loadMoreButton.hidden = page.length < PAGE_SIZE;
   } catch {
-    activitiesList.innerHTML = '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
+    activitiesList.innerHTML =
+      '<tr><td colspan="6">No se pudieron cargar las actividades.</td></tr>';
     loadMoreButton.hidden = true;
   }
 }
@@ -112,7 +122,10 @@ const chosenParticipants = new Map();
 
 function renderParticipantChips() {
   participantChips.innerHTML = Array.from(chosenParticipants.entries())
-    .map(([id, name]) => `<span class="badge-removable">${escapeHtml(name)}<button type="button" data-remove-chip="${id}" title="Quitar">×</button></span>`)
+    .map(
+      ([id, name]) =>
+        `<span class="badge-removable">${escapeHtml(name)}<button type="button" data-remove-chip="${id}" title="Quitar">×</button></span>`,
+    )
     .join('');
 }
 
@@ -215,8 +228,18 @@ newActivityForm.addEventListener('submit', async (event) => {
 // an activity showing its title(s), so it's clear at a glance which
 // activity days land on a holiday/weekend and which don't.
 const MONTH_NAMES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
 ];
 const WEEKDAY_NAMES = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const THIS_YEAR = new Date().getFullYear();
@@ -259,11 +282,16 @@ function renderCalendarDay(date, info) {
   if (isWeekend || info?.holidayName) classes.push('calendar-day-non-working');
   if (isToday) classes.push('calendar-day-today');
 
-  const titleParts = [info?.holidayName ? `Festivo: ${info.holidayName}` : isWeekend ? 'Fin de semana' : null];
+  const titleParts = [
+    info?.holidayName ? `Festivo: ${info.holidayName}` : isWeekend ? 'Fin de semana' : null,
+  ];
   const shown = activities.slice(0, 2);
   const rest = activities.length - shown.length;
   const chips = shown
-    .map((a) => `<a class="calendar-day-activity" href="/actividad?id=${a.id}" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</a>`)
+    .map(
+      (a) =>
+        `<a class="calendar-day-activity" href="/actividad?id=${a.id}" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</a>`,
+    )
     .join('');
   const more = rest > 0 ? `<span class="calendar-day-more">+${rest} más</span>` : '';
 
@@ -281,7 +309,10 @@ function renderCalendarMonth(month, dayInfo) {
   const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(calendarYear, month + 1, 0).getDate();
 
-  const blanks = Array.from({ length: leadingBlanks }, () => '<div class="calendar-day calendar-day-empty"></div>').join('');
+  const blanks = Array.from(
+    { length: leadingBlanks },
+    () => '<div class="calendar-day calendar-day-empty"></div>',
+  ).join('');
   const days = Array.from({ length: daysInMonth }, (_, i) => {
     const date = new Date(calendarYear, month, i + 1);
     return renderCalendarDay(date, dayInfo[isoDate(date)]);
@@ -327,7 +358,9 @@ async function loadCalendar() {
       return start <= String(calendarYear) && end >= String(calendarYear);
     });
     const dayInfo = buildCalendarDayInfo(yearActivities, holidays);
-    calendarView.innerHTML = Array.from({ length: 12 }, (_, month) => renderCalendarMonth(month, dayInfo)).join('');
+    calendarView.innerHTML = Array.from({ length: 12 }, (_, month) =>
+      renderCalendarMonth(month, dayInfo),
+    ).join('');
   } catch (err) {
     calendarView.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }

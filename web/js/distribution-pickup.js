@@ -1,6 +1,14 @@
 import { apiFetch, escapeHtml, formatCurrency, showError, showFeedback } from './api.js';
 import { initPage } from './layout.js';
-import { apiErrorText, choicesText, isUnchosen, loadPeople, resolvePickerId, statusBadge, formatDateTime } from './distributionCommon.js';
+import {
+  apiErrorText,
+  choicesText,
+  isUnchosen,
+  loadPeople,
+  resolvePickerId,
+  statusBadge,
+  formatDateTime,
+} from './distributionCommon.js';
 
 // Who has collected and who is still to: for admin, board and material, once
 // the order has arrived.
@@ -31,12 +39,17 @@ function canCollect() {
 
 function pickedUpText(u) {
   const when = formatDateTime(u.picked_up_at);
-  const to = u.picked_up_by_login === u.beneficiary_login ? '' : `, entregado a ${nameOf(u.picked_up_by_login)}`;
+  const to =
+    u.picked_up_by_login === u.beneficiary_login
+      ? ''
+      : `, entregado a ${nameOf(u.picked_up_by_login)}`;
   return `Recogido el ${when}${to} (apuntado por ${nameOf(u.pickup_recorded_by_login)})`;
 }
 
 function unitRow(u) {
-  const label = [choicesText(u.choices, hasOptions()), u.is_extra ? 'extra' : null].filter(Boolean).join(' · ');
+  const label = [choicesText(u.choices, hasOptions()), u.is_extra ? 'extra' : null]
+    .filter(Boolean)
+    .join(' · ');
   if (u.picked_up_at) {
     return `<li>${escapeHtml(label)} — ${escapeHtml(pickedUpText(u))}
       <button type="button" class="link-button" data-undo-unit="${u.id}">Deshacer</button></li>`;
@@ -57,26 +70,42 @@ function paymentText(group) {
 function render() {
   const groups = new Map();
   for (const u of units) {
-    if (!groups.has(u.beneficiary_login)) groups.set(u.beneficiary_login, { name: u.beneficiary_name, units: [] });
+    if (!groups.has(u.beneficiary_login))
+      groups.set(u.beneficiary_login, { name: u.beneficiary_name, units: [] });
     groups.get(u.beneficiary_login).units.push(u);
   }
-  const shown = [...groups.values()].filter((g) => showPicked.checked || g.units.some((u) => !u.picked_up_at));
+  const shown = [...groups.values()].filter(
+    (g) => showPicked.checked || g.units.some((u) => !u.picked_up_at),
+  );
   list.innerHTML = shown.length
-    ? shown.map((g) => `
+    ? shown
+        .map(
+          (g) => `
         <tr>
           <td>${escapeHtml(g.name)}</td>
-          <td><ul class="plain-list">${g.units.filter((u) => showPicked.checked || !u.picked_up_at).map(unitRow).join('')}</ul></td>
+          <td><ul class="plain-list">${g.units
+            .filter((u) => showPicked.checked || !u.picked_up_at)
+            .map(unitRow)
+            .join('')}</ul></td>
           <td>${paymentText(g.units)}</td>
-        </tr>`).join('')
+        </tr>`,
+        )
+        .join('')
     : `<tr><td colspan="3">${units.length ? 'No queda nadie por recoger.' : 'Todavía no ha pedido nadie.'}</td></tr>`;
 
   const done = units.filter((u) => u.picked_up_at).length;
-  const waiting = new Set(units.filter((u) => !u.picked_up_at).map((u) => u.beneficiary_login)).size;
-  document.getElementById('pickup-progress').textContent = canCollect() || done > 0
-    ? `Recogidas ${done} de ${units.length} pedidos. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
-    : '';
+  const waiting = new Set(units.filter((u) => !u.picked_up_at).map((u) => u.beneficiary_login))
+    .size;
+  document.getElementById('pickup-progress').textContent =
+    canCollect() || done > 0
+      ? `Recogidas ${done} de ${units.length} pedidos. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
+      : '';
   form.hidden = !canCollect();
-  document.getElementById('pf-selected').textContent = selected.size ? (selected.size === 1 ? '1 pedido marcado.' : `${selected.size} pedidos marcados.`) : '';
+  document.getElementById('pf-selected').textContent = selected.size
+    ? selected.size === 1
+      ? '1 pedido marcado.'
+      : `${selected.size} pedidos marcados.`
+    : '';
   submit.disabled = selected.size === 0;
 }
 
@@ -126,16 +155,29 @@ form.addEventListener('submit', async (event) => {
     return;
   }
   const chosen = units.filter((u) => selected.has(u.id));
-  if (chosen.some((u) => u.price > 0 && !u.paid_at) && !confirm('Hay pedidos que todavía no están pagados. ¿Apuntar la recogida igualmente?')) {
+  if (
+    chosen.some((u) => u.price > 0 && !u.paid_at) &&
+    !confirm('Hay pedidos que todavía no están pagados. ¿Apuntar la recogida igualmente?')
+  ) {
     return;
   }
-  if (chosen.some((u) => isUnchosen(u, hasOptions())) && !confirm('Hay pedidos de los que nadie ha elegido todavía lo que son. ¿Apuntar la recogida igualmente?')) {
+  if (
+    chosen.some((u) => isUnchosen(u, hasOptions())) &&
+    !confirm(
+      'Hay pedidos de los que nadie ha elegido todavía lo que son. ¿Apuntar la recogida igualmente?',
+    )
+  ) {
     return;
   }
   submit.disabled = true;
   try {
-    await apiFetch(`${base}/pickups`, { method: 'POST', body: JSON.stringify({ unit_ids: [...selected], picked_up_by_login: login }) });
-    showFeedback(`Recogida apuntada: ${chosen.length === 1 ? '1 pedido entregado' : `${chosen.length} pedidos entregados`} a ${nameOf(login)}.`);
+    await apiFetch(`${base}/pickups`, {
+      method: 'POST',
+      body: JSON.stringify({ unit_ids: [...selected], picked_up_by_login: login }),
+    });
+    showFeedback(
+      `Recogida apuntada: ${chosen.length === 1 ? '1 pedido entregado' : `${chosen.length} pedidos entregados`} a ${nameOf(login)}.`,
+    );
     selected.clear();
     personInput.value = '';
     autoFilled = '';
@@ -167,8 +209,9 @@ const peopleRequest = loadPeople(id, 'pickup');
 const distributionRequest = apiFetch(base).then((d) => (distribution = d));
 const firstLoad = load(Promise.all([peopleRequest, distributionRequest.catch(() => {})]));
 people = await peopleRequest;
-document.getElementById('pf-person-options').innerHTML =
-  people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
+document.getElementById('pf-person-options').innerHTML = people.entries
+  .map((e) => `<option value="${escapeHtml(e.label)}"></option>`)
+  .join('');
 try {
   distribution = await distributionRequest;
   document.getElementById('pickup-title').textContent = `Recogida: ${distribution.name}`;

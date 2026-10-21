@@ -54,12 +54,14 @@ async function loadRolesForNewPerson() {
     const group = document.getElementById('np-roles-group');
     group.innerHTML = allRoles
       .filter((role) => !role.is_automatic)
-      .map((role) => `
+      .map(
+        (role) => `
         <label>
           <input type="checkbox" name="role_names" value="${escapeHtml(role.name)}">
           ${escapeHtml(roleLabel(role.name))}
         </label>
-      `)
+      `,
+      )
       .join('');
   } catch {
     showError('No se pudieron cargar los roles.');
@@ -193,24 +195,34 @@ const membershipStatusColumn = {
   default: false,
   value: (p) => membershipStatusLabels[membershipStatusFor(p)],
   render: (person) => membershipStatusLabels[membershipStatusFor(person)],
-  compare: (a, b) => MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) - MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
+  compare: (a, b) =>
+    MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(a)) -
+    MEMBERSHIP_STATUS_ORDER.indexOf(membershipStatusFor(b)),
 };
 
 // Same reasoning — a plain member's own MemberListing carries
 // license_type too now (just the type, not the issued/valid-until
 // dates admin/board still get).
-const licenseTypeColumn = { ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''), default: true };
+const licenseTypeColumn = {
+  ...textColumn('license_type', 'Tipo de licencia', (p) => p.license_type ?? ''),
+  default: true,
+};
 
 // Latest year the person has paid their cuota (users.User.LastDueYear,
 // also on MemberListing — the date it was paid is not public). Hidden
 // by default: it is for checking who is up to date, which the
 // "a corriente de pago" filter below does without a column.
-const lastDueYearColumn = { ...numberColumn('last_due_year', 'Última cuota', (p) => p.last_due_year ?? null), default: false };
+const lastDueYearColumn = {
+  ...numberColumn('last_due_year', 'Última cuota', (p) => p.last_due_year ?? null),
+  default: false,
+};
 
 // "A corriente de pago" means the cuota of the current year is paid.
 const duesStatusLabels = { upToDate: 'A corriente de pago', behind: 'No a corriente de pago' };
 function duesStatusFor(person) {
-  return (person.last_due_year ?? 0) >= new Date().getFullYear() ? duesStatusLabels.upToDate : duesStatusLabels.behind;
+  return (person.last_due_year ?? 0) >= new Date().getFullYear()
+    ? duesStatusLabels.upToDate
+    : duesStatusLabels.behind;
 }
 // "Federado" means having a license_type: GET /users only reports the
 // license for the current year, so there is one exactly when they are.
@@ -239,7 +251,7 @@ const FULL_FILTERS = [
     key: 'gender',
     label: 'Género',
     options: ['Masculino', 'Femenino', 'Sin especificar'],
-    value: (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : 'Sin especificar'),
+    value: (p) => (p.gender ? (genderLabels[p.gender] ?? p.gender) : 'Sin especificar'),
   },
   {
     key: 'membership_status',
@@ -271,12 +283,16 @@ const MEMBER_FILTERS = [
     key: 'gender',
     label: 'Género',
     options: ['Masculino', 'Femenino', 'Sin especificar'],
-    value: (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : 'Sin especificar'),
+    value: (p) => (p.gender ? (genderLabels[p.gender] ?? p.gender) : 'Sin especificar'),
   },
   {
     key: 'membership_status',
     label: 'Tipo de socio',
-    options: [membershipStatusLabels.active, membershipStatusLabels.on_leave, membershipStatusLabels.former],
+    options: [
+      membershipStatusLabels.active,
+      membershipStatusLabels.on_leave,
+      membershipStatusLabels.former,
+    ],
     value: (p) => membershipStatusLabels[membershipStatusFor(p)],
   },
   {
@@ -299,30 +315,38 @@ const FILTERS = isAdmin ? FULL_FILTERS : MEMBER_FILTERS;
 // shows up until someone deliberately asks for them.
 // restoreViewState() below still overrides this from localStorage when
 // a saved preference exists.
-const activeFilterValues = Object.fromEntries(FILTERS.map((f) => {
-  const options = f.key === 'membership_status'
-    ? f.options.filter((opt) => opt === membershipStatusLabels.active || opt === membershipStatusLabels.on_leave)
-    : f.options;
-  return [f.key, new Set(options)];
-}));
+const activeFilterValues = Object.fromEntries(
+  FILTERS.map((f) => {
+    const options =
+      f.key === 'membership_status'
+        ? f.options.filter(
+            (opt) =>
+              opt === membershipStatusLabels.active || opt === membershipStatusLabels.on_leave,
+          )
+        : f.options;
+    return [f.key, new Set(options)];
+  }),
+);
 
 function renderFilters() {
   const container = document.getElementById('row-filters');
-  container.innerHTML = FILTERS
-    .map((f) => `
+  container.innerHTML = FILTERS.map(
+    (f) => `
       <div class="filter-group">
         <span class="filter-group-label">${escapeHtml(f.label)}</span>
         ${f.options
-          .map((opt) => `
+          .map(
+            (opt) => `
             <label>
               <input type="checkbox" data-filter="${f.key}" value="${escapeHtml(opt)}" ${activeFilterValues[f.key].has(opt) ? 'checked' : ''}>
               ${escapeHtml(opt)}
             </label>
-          `)
+          `,
+          )
           .join('')}
       </div>
-    `)
-    .join('');
+    `,
+  ).join('');
 }
 
 document.getElementById('row-filters').addEventListener('change', (event) => {
@@ -343,10 +367,18 @@ function filteredPeople() {
 }
 
 const FULL_COLUMNS = [
-  { ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null), default: true },
+  {
+    ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null),
+    default: true,
+  },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
-  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
+  {
+    ...textColumn('gender', 'Género', (p) =>
+      p.gender ? (genderLabels[p.gender] ?? p.gender) : '',
+    ),
+    default: false,
+  },
   { ...textColumn('national_id', 'DNI', (p) => p.national_id ?? ''), default: false },
   { ...dateColumn('birth_date', 'Fecha de nacimiento', (p) => p.birth_date), default: false },
   { ...textColumn('phone', 'Teléfono', (p) => p.phone ?? ''), default: false },
@@ -355,15 +387,22 @@ const FULL_COLUMNS = [
   { ...textColumn('postal_code', 'Código postal', (p) => p.postal_code ?? ''), default: false },
   { ...textColumn('city', 'Ciudad', (p) => p.city ?? ''), default: false },
   { ...textColumn('province', 'Provincia', (p) => p.province ?? ''), default: false },
-  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: false },
-  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
+  {
+    ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date),
+    default: false,
+  },
+  {
+    ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date),
+    default: false,
+  },
   {
     key: 'category',
     label: 'Categoría',
     default: true,
     value: categoryFor,
     render: categoryFor,
-    compare: (a, b) => CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
+    compare: (a, b) =>
+      CATEGORY_ORDER.indexOf(categoryFor(a)) - CATEGORY_ORDER.indexOf(categoryFor(b)),
   },
   { ...membershipStatusColumn },
   {
@@ -382,19 +421,34 @@ const FULL_COLUMNS = [
 // themselves (see users.MemberListing) — the rest of FULL_COLUMNS would
 // just render as "—" for every row, so they're not offered at all.
 const MEMBER_COLUMNS = [
-  { ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null), default: true },
+  {
+    ...numberColumn('membership_number', 'N.º socio', (p) => p.membership_number ?? null),
+    default: true,
+  },
   { ...textColumn('first_name', 'Nombre', (p) => p.first_name), default: true },
   { ...textColumn('last_name', 'Apellidos', (p) => p.last_name), default: true },
-  { ...textColumn('gender', 'Género', (p) => (p.gender ? genderLabels[p.gender] ?? p.gender : '')), default: false },
-  { ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date), default: false },
-  { ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date), default: false },
+  {
+    ...textColumn('gender', 'Género', (p) =>
+      p.gender ? (genderLabels[p.gender] ?? p.gender) : '',
+    ),
+    default: false,
+  },
+  {
+    ...dateColumn('membership_start_date', 'Fecha de alta', (p) => p.membership_start_date),
+    default: false,
+  },
+  {
+    ...dateColumn('membership_end_date', 'Fecha de baja', (p) => p.membership_end_date),
+    default: false,
+  },
   {
     key: 'category',
     label: 'Categoría',
     default: true,
     value: memberCategoryFor,
     render: memberCategoryFor,
-    compare: (a, b) => AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
+    compare: (a, b) =>
+      AGE_CATEGORY_ORDER.indexOf(a.age_category) - AGE_CATEGORY_ORDER.indexOf(b.age_category),
   },
   { ...membershipStatusColumn },
   {
@@ -426,12 +480,15 @@ const VIEW_STATE_KEY = 'katiuskas:members-view';
 
 function saveViewState() {
   try {
-    localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
-      visibleColumns: [...visibleColumns],
-      sortKey,
-      sortDir,
-      filters: Object.fromEntries(FILTERS.map((f) => [f.key, [...activeFilterValues[f.key]]])),
-    }));
+    localStorage.setItem(
+      VIEW_STATE_KEY,
+      JSON.stringify({
+        visibleColumns: [...visibleColumns],
+        sortKey,
+        sortDir,
+        filters: Object.fromEntries(FILTERS.map((f) => [f.key, [...activeFilterValues[f.key]]])),
+      }),
+    );
   } catch {
     // Not persisting the view isn't worth surfacing to the user.
   }
@@ -472,14 +529,14 @@ restoreViewState();
 
 function renderColumnToggle() {
   const container = document.getElementById('column-toggle');
-  container.innerHTML = COLUMNS
-    .map((c) => `
+  container.innerHTML = COLUMNS.map(
+    (c) => `
       <label>
         <input type="checkbox" data-toggle-column="${c.key}" ${visibleColumns.has(c.key) ? 'checked' : ''}>
         ${escapeHtml(c.label)}
       </label>
-    `)
-    .join('');
+    `,
+  ).join('');
 }
 
 document.getElementById('column-toggle').addEventListener('change', (event) => {
@@ -496,8 +553,7 @@ document.getElementById('column-toggle').addEventListener('change', (event) => {
 
 function renderUsersTableHead() {
   const headRow = document.getElementById('users-table-head');
-  headRow.innerHTML = COLUMNS
-    .filter((c) => visibleColumns.has(c.key))
+  headRow.innerHTML = COLUMNS.filter((c) => visibleColumns.has(c.key))
     .map((c) => {
       const indicator = c.key === sortKey ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
       return `<th class="sortable" data-sort-column="${c.key}">${escapeHtml(c.label)}${indicator}</th>`;
@@ -520,8 +576,7 @@ document.getElementById('users-table-head').addEventListener('click', (event) =>
 });
 
 function renderUserRow(person) {
-  const cells = COLUMNS
-    .filter((c) => visibleColumns.has(c.key))
+  const cells = COLUMNS.filter((c) => visibleColumns.has(c.key))
     .map((c) => `<td>${c.render(person)}</td>`)
     .join('');
   return `<tr data-person-login="${person.login}">${cells}</tr>`;
@@ -533,7 +588,8 @@ function renderUserRow(person) {
 function setPeopleCount(count) {
   const element = document.getElementById('people-count');
   element.hidden = count == null;
-  if (count != null) element.textContent = `${count} ${count === 1 ? 'persona' : 'personas'} en esta vista`;
+  if (count != null)
+    element.textContent = `${count} ${count === 1 ? 'persona' : 'personas'} en esta vista`;
 }
 
 function renderUsersTable() {
@@ -556,7 +612,9 @@ function renderUsersTable() {
   }
 
   const column = columnsByKey[sortKey];
-  const sorted = visible.slice().sort((a, b) => (sortDir === 'asc' ? column.compare(a, b) : column.compare(b, a)));
+  const sorted = visible
+    .slice()
+    .sort((a, b) => (sortDir === 'asc' ? column.compare(a, b) : column.compare(b, a)));
   tableBody.innerHTML = sorted.map(renderUserRow).join('');
 }
 

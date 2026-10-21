@@ -44,9 +44,11 @@ const nameOf = (login) => people.names[login] ?? login;
 function describe(d) {
   const parts = [statusBadge(d.status), escapeHtml(audienceLabels[d.audience])];
   if (d.cutoff_date) {
-    parts.push(d.audience === 'signup'
-      ? `solo socios a ${formatDate(d.cutoff_date)}`
-      : `socios a ${formatDate(d.cutoff_date)}`);
+    parts.push(
+      d.audience === 'signup'
+        ? `solo socios a ${formatDate(d.cutoff_date)}`
+        : `socios a ${formatDate(d.cutoff_date)}`,
+    );
   }
   parts.push(d.price > 0 ? `${formatCurrency(d.price)} cada uno` : 'gratis');
   if (d.extra_price != null) {
@@ -77,7 +79,11 @@ function renderHeader() {
   if (orderLink) orderLink.href = `/reparto-pedido?id=${id}`;
   if (pickupLink) pickupLink.href = `/reparto-recogida?id=${id}`;
   // The actions bar only holds things for admin/board/material.
-  document.getElementById('distribution-actions').hidden = !hasAnyRole(me, ['admin', 'board', 'material']);
+  document.getElementById('distribution-actions').hidden = !hasAnyRole(me, [
+    'admin',
+    'board',
+    'material',
+  ]);
 
   const steps = statusSteps(distribution);
   const index = steps.indexOf(distribution.status);
@@ -87,7 +93,8 @@ function renderHeader() {
   back.hidden = index <= 0;
   forward.hidden = index >= steps.length - 1;
   if (index > 0) back.textContent = `Volver a «${distributionStatusLabels[steps[index - 1]]}»`;
-  if (index < steps.length - 1) forward.textContent = `Pasar a «${distributionStatusLabels[steps[index + 1]]}»`;
+  if (index < steps.length - 1)
+    forward.textContent = `Pasar a «${distributionStatusLabels[steps[index + 1]]}»`;
   // Say why "Abierto" and "Cerrado" are skipped, while it is still a draft.
   const skipHint = document.getElementById('skip-hint');
   if (skipHint) skipHint.hidden = !(nothingToAsk(distribution) && distribution.status === 'draft');
@@ -95,7 +102,10 @@ function renderHeader() {
 
 async function setStatus(status) {
   try {
-    distribution = await apiFetch(base, { method: 'PATCH', body: JSON.stringify(bodyFrom(distribution, { status })) });
+    distribution = await apiFetch(base, {
+      method: 'PATCH',
+      body: JSON.stringify(bodyFrom(distribution, { status })),
+    });
     renderAll();
     // Leaving a draft is when the orders (everybody's own, if it is for all
     // members) appear; going back to one empties them.
@@ -117,17 +127,29 @@ onClick('step-back', () => {
   // chosen on it, so say so when there is any.
   if (previous === 'draft' && distribution.unit_count > 0) {
     const count = distribution.unit_count === 1 ? '1 pedido' : `${distribution.unit_count} pedidos`;
-    const again = distribution.audience === 'all_members'
-      ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
-      : '';
-    if (!confirm(`Al volver a borrador se borrarán todos los pedidos (${count}), con lo que hayan elegido los socios, y no se podrán recuperar.${again} ¿Volver a borrador?`)) return;
+    const again =
+      distribution.audience === 'all_members'
+        ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
+        : '';
+    if (
+      !confirm(
+        `Al volver a borrador se borrarán todos los pedidos (${count}), con lo que hayan elegido los socios, y no se podrán recuperar.${again} ¿Volver a borrador?`,
+      )
+    )
+      return;
   }
   setStatus(previous);
 });
 onClick('step-forward', () => {
   const steps = statusSteps(distribution);
   const next = steps[steps.indexOf(distribution.status) + 1];
-  if (next === 'closed' && !confirm('Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?')) return;
+  if (
+    next === 'closed' &&
+    !confirm(
+      'Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?',
+    )
+  )
+    return;
   setStatus(next);
 });
 
@@ -156,14 +178,23 @@ editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   // Turning "todos los socios" into "quien se apunte" takes the orders nobody
   // touched with it (the API deletes them).
-  if (distribution.audience === 'all_members' && editAudience.value === 'signup' && distribution.unit_count > 0
-    && !confirm('Al pasarlo a «Quien se apunte» se borrarán los pedidos automáticos de los socios que no han elegido nada. Se quedan los que ya eligieron algo y los extras. ¿Seguir?')) {
+  if (
+    distribution.audience === 'all_members' &&
+    editAudience.value === 'signup' &&
+    distribution.unit_count > 0 &&
+    !confirm(
+      'Al pasarlo a «Quien se apunte» se borrarán los pedidos automáticos de los socios que no han elegido nada. Se quedan los que ya eligieron algo y los extras. ¿Seguir?',
+    )
+  ) {
     return;
   }
   const submit = editForm.querySelector('button[type="submit"]');
   submit.disabled = true;
   try {
-    distribution = await apiFetch(base, { method: 'PATCH', body: JSON.stringify(readDistributionForm(editForm)) });
+    distribution = await apiFetch(base, {
+      method: 'PATCH',
+      body: JSON.stringify(readDistributionForm(editForm)),
+    });
     editDialog.close();
     showFeedback('Reparto guardado.');
     renderAll();
@@ -202,20 +233,24 @@ const extraBox = document.getElementById('of-extra');
 
 function optionSelects(prefix, selected = {}) {
   return distribution.options
-    .map((option, i) => `
+    .map(
+      (option, i) => `
       <div class="field">
         <label for="${prefix}-${i}">${escapeHtml(option.name)}</label>
         <select id="${prefix}-${i}" data-option="${escapeHtml(option.name)}" required>
           <option value="">— Elige —</option>
           ${option.values.map((v) => `<option${selected[option.name] === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}
         </select>
-      </div>`)
+      </div>`,
+    )
     .join('');
 }
 
 function readChoices(container) {
   const choices = {};
-  container.querySelectorAll('select[data-option]').forEach((s) => { choices[s.dataset.option] = s.value; });
+  container.querySelectorAll('select[data-option]').forEach((s) => {
+    choices[s.dataset.option] = s.value;
+  });
   return choices;
 }
 
@@ -227,13 +262,19 @@ function readChoices(container) {
 // for is extras only: no "Es un extra" checkbox to tick, the button says what it
 // does.
 function extrasOnly() {
-  return distribution.audience === 'all_members' && distribution.options.length === 0 && distribution.extra_price != null;
+  return (
+    distribution.audience === 'all_members' &&
+    distribution.options.length === 0 &&
+    distribution.extra_price != null
+  );
 }
 
 function allMembersHint() {
   const parts = ['Es para todos los socios: tu pedido ya está apuntado.'];
-  if (distribution.options.length) parts.push('Elige lo que corresponda en «Tus pedidos» o, para otro socio, aquí abajo.');
-  if (distribution.extra_price != null) parts.push(`Puedes pedir también extras a ${formatCurrency(distribution.extra_price)}.`);
+  if (distribution.options.length)
+    parts.push('Elige lo que corresponda en «Tus pedidos» o, para otro socio, aquí abajo.');
+  if (distribution.extra_price != null)
+    parts.push(`Puedes pedir también extras a ${formatCurrency(distribution.extra_price)}.`);
   return parts.join(' ');
 }
 
@@ -254,18 +295,22 @@ function renderOrderForm() {
       ? `No te corresponde este reparto: solo es para quienes eran socios el ${formatDate(distribution.cutoff_date)}.`
       : 'No te corresponde este reparto.';
   } else if (!open) {
-    status.textContent = distribution.status === 'open'
-      ? 'Ya ha pasado la fecha límite para pedir.'
-      : 'Ya no se admiten pedidos.';
+    status.textContent =
+      distribution.status === 'open'
+        ? 'Ya ha pasado la fecha límite para pedir.'
+        : 'Ya no se admiten pedidos.';
   } else {
-    status.textContent = distribution.audience === 'signup'
-      ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
-      : allMembersHint();
+    status.textContent =
+      distribution.audience === 'signup'
+        ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
+        : allMembersHint();
   }
   if (orderForm.hidden) return;
   document.getElementById('of-options').innerHTML = optionSelects('of');
   extraField.hidden = distribution.extra_price == null || extrasOnly();
-  orderForm.querySelector('button[type="submit"]').textContent = extrasOnly() ? 'Pedido extra' : 'Pedir';
+  orderForm.querySelector('button[type="submit"]').textContent = extrasOnly()
+    ? 'Pedido extra'
+    : 'Pedir';
   document.getElementById('of-extra-label').textContent =
     `Es un extra (${formatCurrency(distribution.extra_price ?? 0)}${distribution.max_extra != null ? `, máximo ${distribution.max_extra} por socio` : ''})`;
 }
@@ -327,7 +372,12 @@ function unitColumns() {
   const columns = [{ key: 'for', label: 'Para' }];
   if (distribution.options.length > 0) columns.push({ key: 'chosen', label: 'Elegido' });
   if (distribution.extra_price != null) columns.push({ key: 'kind', label: 'Tipo' });
-  columns.push({ key: 'price', label: 'Precio' }, { key: 'entered', label: 'Apuntado' }, { key: 'state', label: 'Estado' }, { key: 'actions', label: '' });
+  columns.push(
+    { key: 'price', label: 'Precio' },
+    { key: 'entered', label: 'Apuntado' },
+    { key: 'state', label: 'Estado' },
+    { key: 'actions', label: '' },
+  );
   return columns;
 }
 
@@ -339,7 +389,9 @@ function unitCell(key, u, hasOptions) {
     case 'for':
       return escapeHtml(forMe ? 'Ti' : u.beneficiary_name);
     case 'chosen':
-      return unchosen ? '<strong>Sin elegir</strong>' : escapeHtml(choicesText(u.choices, hasOptions));
+      return unchosen
+        ? '<strong>Sin elegir</strong>'
+        : escapeHtml(choicesText(u.choices, hasOptions));
     case 'kind':
       return u.is_extra ? 'Extra' : 'Propia';
     case 'price':
@@ -369,9 +421,16 @@ function renderUnits() {
   const mine = mineOnly(units);
   const columns = unitColumns();
   const hasOptions = distribution.options.length > 0;
-  document.getElementById('units-head').innerHTML = columns.map((c) => `<th>${c.label}</th>`).join('');
+  document.getElementById('units-head').innerHTML = columns
+    .map((c) => `<th>${c.label}</th>`)
+    .join('');
   unitsList.innerHTML = mine.length
-    ? mine.map((u) => `<tr>${columns.map((c) => `<td>${unitCell(c.key, u, hasOptions)}</td>`).join('')}</tr>`).join('')
+    ? mine
+        .map(
+          (u) =>
+            `<tr>${columns.map((c) => `<td>${unitCell(c.key, u, hasOptions)}</td>`).join('')}</tr>`,
+        )
+        .join('')
     : `<tr><td colspan="${columns.length}">Todavía no hay nada a tu nombre.</td></tr>`;
 }
 
@@ -442,8 +501,9 @@ function renderAll() {
 const peopleRequest = loadPeople(id, 'order');
 const distributionRequest = apiFetch(base);
 people = await peopleRequest;
-document.getElementById('of-person-options').innerHTML =
-  people.entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
+document.getElementById('of-person-options').innerHTML = people.entries
+  .map((e) => `<option value="${escapeHtml(e.label)}"></option>`)
+  .join('');
 try {
   distribution = await distributionRequest;
 } catch (err) {

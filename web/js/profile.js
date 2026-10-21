@@ -1,9 +1,4 @@
-import {
-  hasAnyRole,
-  apiFetch,
-  showFeedback,
-  showError,
-} from './api.js';
+import { hasAnyRole, apiFetch, showFeedback, showError } from './api.js';
 import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
@@ -53,8 +48,12 @@ trackDirtyFields(editForm);
 const ADDRESS_CLUSTER_FIELDS = ['address', 'postal_code', 'city', 'province'];
 for (const name of ADDRESS_CLUSTER_FIELDS) {
   const field = editForm.elements[name];
-  field.addEventListener('focus', () => { field.readOnly = false; });
-  field.addEventListener('blur', () => { field.readOnly = true; });
+  field.addEventListener('focus', () => {
+    field.readOnly = false;
+  });
+  field.addEventListener('blur', () => {
+    field.readOnly = true;
+  });
 }
 
 function populateEditForm(profile) {
@@ -102,7 +101,8 @@ async function loadProfile() {
   try {
     const profile = await apiFetch(`/users/${user.login}`);
     lastLoadedProfile = profile;
-    document.getElementById('profile-name').textContent = `${profile.first_name} ${profile.last_name}`;
+    document.getElementById('profile-name').textContent =
+      `${profile.first_name} ${profile.last_name}`;
     document.getElementById('profile-email').textContent = profile.email ?? '';
     populateEditForm(profile);
 
@@ -111,7 +111,9 @@ async function loadProfile() {
     const memberships = await apiFetch(`/users/${user.login}/memberships`);
     const { events } = await loadTimelineData(user.login, memberships);
     document.getElementById('memberships-section').hidden = events.length === 0;
-    document.getElementById('timeline-list').innerHTML = events.map((event) => renderTimelineRow(event)).join('');
+    document.getElementById('timeline-list').innerHTML = events
+      .map((event) => renderTimelineRow(event))
+      .join('');
   } catch {
     document.getElementById('profile-email').textContent = 'No se ha podido cargar tu perfil.';
   }

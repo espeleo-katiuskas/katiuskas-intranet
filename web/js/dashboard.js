@@ -1,4 +1,11 @@
-import { API_BASE, apiFetch, escapeHtml, encodeFilePath, positionLabels, hasAnyRole } from './api.js';
+import {
+  API_BASE,
+  apiFetch,
+  escapeHtml,
+  encodeFilePath,
+  positionLabels,
+  hasAnyRole,
+} from './api.js';
 import { initPage } from './layout.js';
 
 const viewer = await initPage();
@@ -56,7 +63,7 @@ async function loadBoardMembers() {
                   </div>
                 </div>
               </div>
-            `
+            `,
           )
           .join('')
       : '<p class="subtitle">Ahora mismo no hay nadie en la Junta Directiva.</p>';
@@ -173,7 +180,9 @@ async function loadDocumentos() {
   try {
     const files = await loadOrderedFiles('documentos');
     list.innerHTML = files.length
-      ? files.map((f) => `<li>${fileLink('documentos', f.name, stripExtension(f.name))}</li>`).join('')
+      ? files
+          .map((f) => `<li>${fileLink('documentos', f.name, stripExtension(f.name))}</li>`)
+          .join('')
       : '<li>No hay documentos disponibles.</li>';
   } catch {
     list.innerHTML = '<li>No se pudieron cargar los documentos.</li>';

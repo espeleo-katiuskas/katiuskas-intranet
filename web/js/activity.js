@@ -59,7 +59,9 @@ const visibilityLabels = { public: 'Pública', private: 'Privada' };
 const editActivityDialog = document.getElementById('edit-activity-dialog');
 const editForm = document.getElementById('edit-activity-form');
 initModal(editActivityDialog, editForm);
-document.getElementById('open-edit-activity').addEventListener('click', () => openModal(editActivityDialog));
+document
+  .getElementById('open-edit-activity')
+  .addEventListener('click', () => openModal(editActivityDialog));
 
 // Toggles every management-only control ("Editar actividad", "+
 // Participante" row) according to canManage — mirrors what
@@ -108,11 +110,13 @@ async function loadActivity(ready = Promise.resolve()) {
       editForm.description.value = activity.description ?? '';
       const leaderInput = document.getElementById('ea-leader');
       if (leaderInput) {
-        leaderInput.value = personEntries.find((e) => e.id === activity.leader_login)?.label ?? activity.leader_login;
+        leaderInput.value =
+          personEntries.find((e) => e.id === activity.leader_login)?.label ?? activity.leader_login;
       }
     }
   } catch (err) {
-    document.getElementById('activity-title').textContent = 'No se ha podido cargar esta actividad.';
+    document.getElementById('activity-title').textContent =
+      'No se ha podido cargar esta actividad.';
     showError(err.message);
   }
 }
@@ -169,8 +173,13 @@ async function loadDirectory() {
     directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
     personEntries = directory
       .slice()
-      .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
-      .map((person) => ({ id: person.login, label: `${person.first_name} ${person.last_name} #${person.login}` }));
+      .sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
+      )
+      .map((person) => ({
+        id: person.login,
+        label: `${person.first_name} ${person.last_name} #${person.login}`,
+      }));
     const loanUserOptions = document.getElementById('loan-user-options');
     if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(personEntries);
     const leaderOptions = document.getElementById('ea-leader-options');
@@ -204,10 +213,10 @@ async function loadParticipants(ready = Promise.resolve()) {
     await ready;
     container.innerHTML = participants.length
       ? participants
-        .slice()
-        .sort((a, b) => personLabel(a.user_login).localeCompare(personLabel(b.user_login), 'es'))
-        .map(renderParticipantRow)
-        .join('')
+          .slice()
+          .sort((a, b) => personLabel(a.user_login).localeCompare(personLabel(b.user_login), 'es'))
+          .map(renderParticipantRow)
+          .join('')
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
@@ -270,7 +279,9 @@ document.getElementById('participants-list').addEventListener('click', async (ev
   if (!button) return;
   button.disabled = true;
   try {
-    await apiFetch(`/activities/${activityId}/participants/${button.dataset.removeParticipant}`, { method: 'DELETE' });
+    await apiFetch(`/activities/${activityId}/participants/${button.dataset.removeParticipant}`, {
+      method: 'DELETE',
+    });
     await loadParticipants();
   } catch (err) {
     button.disabled = false;
@@ -286,16 +297,31 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // same way those two already duplicate them from each other.
 const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
+const bagTypeLabels = {
+  caving: 'Espeleología',
+  canyoning: 'Cañones',
+  quick: 'Rápida',
+  special: 'Especial',
+};
 
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
-    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
+    const parts = [
+      brandModel || null,
+      `${item.diameter_mm} mm`,
+      ropeTypeLabels[item.rope_type] ?? item.rope_type,
+      item.manufacture_year,
+      item.length_m ? `${item.length_m} m` : null,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
-    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
+    const parts = [
+      brandModel || null,
+      `${item.capacity_liters} L`,
+      bagTypeLabels[item.bag_type] ?? item.bag_type,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   const parts = [item.category_name, brandModel || null, item.description || null];
@@ -307,9 +333,10 @@ function itemLabel(item) {
 function itemPickerText(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   const typeLabel = itemTypeLabels[item.item_type] ?? item.item_type;
-  const parts = item.item_type === 'gear'
-    ? [typeLabel, item.category_name, brandModel || null, item.description || null]
-    : [typeLabel, brandModel || null, item.code];
+  const parts =
+    item.item_type === 'gear'
+      ? [typeLabel, item.category_name, brandModel || null, item.description || null]
+      : [typeLabel, brandModel || null, item.code];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -322,7 +349,10 @@ async function loadItems() {
   try {
     const items = await apiFetch('/items');
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
-    itemEntries = items.map((item) => ({ id: item.id, label: pickerLabel(itemPickerText(item), item.id) }));
+    itemEntries = items.map((item) => ({
+      id: item.id,
+      label: pickerLabel(itemPickerText(item), item.id),
+    }));
     if (optionsEl) optionsEl.innerHTML = renderPickerOptions(itemEntries);
   } catch {
     showError('No se pudo cargar la lista de material.');
@@ -401,7 +431,8 @@ loanItemInput?.addEventListener('input', updateLoanQuantityVisibility);
 
 function updateLoanSubmitLabel() {
   if (!loanTypeSelect || !loanSubmitButton) return;
-  loanSubmitButton.textContent = loanTypeSelect.value === 'return' ? 'Registrar devolución' : 'Registrar préstamo';
+  loanSubmitButton.textContent =
+    loanTypeSelect.value === 'return' ? 'Registrar devolución' : 'Registrar préstamo';
 }
 loanTypeSelect?.addEventListener('change', updateLoanSubmitLabel);
 
@@ -415,7 +446,9 @@ if (newLoanDialog) {
     updateLoanQuantityVisibility();
     updateLoanSubmitLabel();
   });
-  document.getElementById('toggle-new-loan').addEventListener('click', () => openModal(newLoanDialog));
+  document
+    .getElementById('toggle-new-loan')
+    .addEventListener('click', () => openModal(newLoanDialog));
 }
 
 // Clicking "Devolver" on a row above opens the same shared dialog with
@@ -540,7 +573,7 @@ async function loadMemoriaImagePreviews() {
           // Left empty — the file-name/size line rendered alongside it
           // still lets the file itself be downloaded.
         }
-      })
+      }),
   );
 }
 
@@ -606,7 +639,10 @@ async function moveMemoriaResource(id, direction) {
   const ids = memoriaResources.map((r) => r.id);
   [ids[index], ids[swapWith]] = [ids[swapWith], ids[index]];
   try {
-    await apiFetch(`/activities/${activityId}/resources/order`, { method: 'PUT', body: JSON.stringify({ resource_ids: ids }) });
+    await apiFetch(`/activities/${activityId}/resources/order`, {
+      method: 'PUT',
+      body: JSON.stringify({ resource_ids: ids }),
+    });
     await loadMemoria();
   } catch (err) {
     showError(err.message);
@@ -649,7 +685,9 @@ document.getElementById('memoria-list')?.addEventListener('click', async (event)
   if (deleteButton) {
     if (!confirm('¿Borrar este elemento de la memoria?')) return;
     try {
-      await apiFetch(`/activities/${activityId}/resources/${deleteButton.dataset.memoriaDelete}`, { method: 'DELETE' });
+      await apiFetch(`/activities/${activityId}/resources/${deleteButton.dataset.memoriaDelete}`, {
+        method: 'DELETE',
+      });
       await loadMemoria();
     } catch (err) {
       showError(err.message);
@@ -670,7 +708,10 @@ editMemoriaForm.addEventListener('submit', async (event) => {
   const submitButton = editMemoriaForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch(`/activities/${activityId}/resources/${editingMemoriaId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/activities/${activityId}/resources/${editingMemoriaId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
     showFeedback('Elemento de la memoria actualizado.');
     editMemoriaDialog.close();
     await loadMemoria();
@@ -699,7 +740,9 @@ updateMemoriaFormVisibility();
 if (memoriaAddDialog) {
   initModal(memoriaAddDialog, memoriaAddForm);
   memoriaAddDialog.addEventListener('close', updateMemoriaFormVisibility);
-  document.getElementById('toggle-memoria-add').addEventListener('click', () => openModal(memoriaAddDialog));
+  document
+    .getElementById('toggle-memoria-add')
+    .addEventListener('click', () => openModal(memoriaAddDialog));
 }
 
 memoriaAddForm?.addEventListener('submit', async (event) => {

@@ -51,7 +51,8 @@ function roleDetail(role) {
     : '<p class="hint">Nadie tiene este rol.</p>';
   let add = '';
   if (role.is_automatic) {
-    add = '<p class="hint">Se asigna solo, según el historial de socio: no se da ni se quita a mano.</p>';
+    add =
+      '<p class="hint">Se asigna solo, según el historial de socio: no se da ni se quita a mano.</p>';
   } else {
     const candidates = people.filter((p) => !p.roles.includes(role.name));
     const options = candidates
@@ -86,7 +87,9 @@ function renderRoles() {
           </td>
           <td>${!role.is_system ? `<button type="button" class="btn btn-danger btn-small" data-delete-role="${role.id}">Borrar</button>` : ''}</td>
         </tr>`;
-      const detail = open ? `<tr class="role-detail"><td colspan="5">${roleDetail(role)}</td></tr>` : '';
+      const detail = open
+        ? `<tr class="role-detail"><td colspan="5">${roleDetail(role)}</td></tr>`
+        : '';
       return row + detail;
     })
     .join('');
@@ -95,7 +98,9 @@ function renderRoles() {
 async function loadRoles() {
   try {
     [roleCatalog, people] = await Promise.all([apiFetch('/roles'), apiFetch('/users')]);
-    people.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'));
+    people.sort((a, b) =>
+      `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
+    );
     renderRoles();
   } catch {
     roleBody.innerHTML = '<tr><td colspan="5">No se pudieron cargar los roles.</td></tr>';
@@ -128,7 +133,10 @@ roleBody.addEventListener('click', async (event) => {
   } else if (unassign) {
     unassign.disabled = true;
     try {
-      await apiFetch(`/users/${encodeURIComponent(unassign.dataset.login)}/roles/${unassign.dataset.unassignRole}`, { method: 'DELETE' });
+      await apiFetch(
+        `/users/${encodeURIComponent(unassign.dataset.login)}/roles/${unassign.dataset.unassignRole}`,
+        { method: 'DELETE' },
+      );
       showFeedback('Rol quitado.');
       await loadRoles();
     } catch (err) {
@@ -146,7 +154,10 @@ roleBody.addEventListener('click', async (event) => {
     }
     assign.disabled = true;
     try {
-      await apiFetch(`/users/${encodeURIComponent(login)}/roles`, { method: 'POST', body: JSON.stringify({ role_id: roleId }) });
+      await apiFetch(`/users/${encodeURIComponent(login)}/roles`, {
+        method: 'POST',
+        body: JSON.stringify({ role_id: roleId }),
+      });
       showFeedback('Rol dado.');
       await loadRoles();
     } catch (err) {
@@ -219,12 +230,13 @@ function renderSessionRow(session) {
   const impersonation = session.impersonated_by_login
     ? ` <span class="badge" title="Sesión abierta al impersonar a esta persona">Impersonada por ${escapeHtml(session.impersonated_by_login)}</span>`
     : '';
-  const actions = status === 'Activa'
-    ? `<div class="table-actions">
+  const actions =
+    status === 'Activa'
+      ? `<div class="table-actions">
          <button type="button" class="btn btn-secondary btn-small" data-session-expiry="${session.id}">Caducidad</button>
          <button type="button" class="btn btn-danger btn-small" data-session-revoke="${session.id}">Revocar</button>
        </div>`
-    : '';
+      : '';
   return `
     <tr>
       <td>${person}${own}${impersonation}</td>
@@ -249,7 +261,9 @@ async function loadSessions({ append = false } = {}) {
   sessionsLoadMore.disabled = true;
   try {
     const status = sessionsShowAll.checked ? 'all' : 'active';
-    const fetched = await apiFetch(`/tokens?status=${status}&limit=${SESSIONS_PAGE_SIZE + 1}&offset=${sessionsShown.length}`);
+    const fetched = await apiFetch(
+      `/tokens?status=${status}&limit=${SESSIONS_PAGE_SIZE + 1}&offset=${sessionsShown.length}`,
+    );
     sessionsShown = sessionsShown.concat(fetched.slice(0, SESSIONS_PAGE_SIZE));
     renderSessions();
     sessionsLoadMore.hidden = fetched.length <= SESSIONS_PAGE_SIZE;
@@ -290,7 +304,9 @@ sessionsBody.addEventListener('click', async (event) => {
     if (!confirm(question)) return;
     revoke.disabled = true;
     try {
-      await apiFetch(`/users/${encodeURIComponent(session.user_login)}/tokens/${session.id}`, { method: 'DELETE' });
+      await apiFetch(`/users/${encodeURIComponent(session.user_login)}/tokens/${session.id}`, {
+        method: 'DELETE',
+      });
       showFeedback('Sesión revocada.');
       await loadSessions();
     } catch (err) {
@@ -313,10 +329,13 @@ expiryForm.addEventListener('submit', async (event) => {
   const submitButton = expiryForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch(`/users/${encodeURIComponent(expiringSession.user_login)}/tokens/${expiringSession.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ expires_at: new Date(expiryInput.value).toISOString() }),
-    });
+    await apiFetch(
+      `/users/${encodeURIComponent(expiringSession.user_login)}/tokens/${expiringSession.id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ expires_at: new Date(expiryInput.value).toISOString() }),
+      },
+    );
     showFeedback('Caducidad cambiada.');
     expiryDialog.close();
     await loadSessions();
@@ -331,7 +350,9 @@ expiryForm.addEventListener('submit', async (event) => {
 async function loadDirectory() {
   try {
     const directory = await apiFetch('/users/directory');
-    namesByLogin = Object.fromEntries(directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]));
+    namesByLogin = Object.fromEntries(
+      directory.map((p) => [p.login, `${p.first_name} ${p.last_name}`]),
+    );
   } catch {
     // Without names the logins show instead.
   }
@@ -345,7 +366,11 @@ const statusContainer = document.getElementById('status-container');
 
 // 90 → "1 minuto y medio" would be cute; plain and exact is enough here.
 function formatDuration(seconds) {
-  const units = [[86400, 'día', 'días'], [3600, 'hora', 'horas'], [60, 'minuto', 'minutos']];
+  const units = [
+    [86400, 'día', 'días'],
+    [3600, 'hora', 'horas'],
+    [60, 'minuto', 'minutos'],
+  ];
   for (const [size, one, many] of units) {
     if (seconds >= size && seconds % size === 0) {
       const n = seconds / size;
@@ -364,7 +389,10 @@ function ago(iso) {
 
 function statusGroup(title, rows) {
   const lines = rows
-    .map(([label, value]) => `<div class="detail-row"><span>${escapeHtml(label)}</span><span>${value}</span></div>`)
+    .map(
+      ([label, value]) =>
+        `<div class="detail-row"><span>${escapeHtml(label)}</span><span>${value}</span></div>`,
+    )
     .join('');
   return `<h3>${escapeHtml(title)}</h3><div class="detail-list">${lines}</div>`;
 }
@@ -378,25 +406,52 @@ function renderStatus(status) {
     : '—';
   const db = status.database;
   const settings = status.settings;
-  const storageLabels = { library: 'Archivo', user_files: 'Ficheros de las personas', activity_resources: 'Memorias de actividades' };
+  const storageLabels = {
+    library: 'Archivo',
+    user_files: 'Ficheros de las personas',
+    activity_resources: 'Memorias de actividades',
+  };
 
   statusContainer.innerHTML = [
     statusGroup('Aplicación', [
-      ['Versión', app.version ? escapeHtml(app.version) : 'Sin versión (el binario no se compiló desde una copia de git)'],
+      [
+        'Versión',
+        app.version
+          ? escapeHtml(app.version)
+          : 'Sin versión (el binario no se compiló desde una copia de git)',
+      ],
       ['Commit', revision],
       ['Go', escapeHtml(app.go_version)],
       ['Arrancó', `${formatDateTime(app.started_at)} (${ago(app.started_at)})`],
     ]),
     statusGroup('Base de datos', [
-      ['Estado', db.ok ? `Responde (${db.latency_ms} ms)` : `<strong>No responde</strong>: ${escapeHtml(db.error ?? '')}`],
-      ['Última migración aplicada', db.migration_version != null ? String(db.migration_version) : '—'],
+      [
+        'Estado',
+        db.ok
+          ? `Responde (${db.latency_ms} ms)`
+          : `<strong>No responde</strong>: ${escapeHtml(db.error ?? '')}`,
+      ],
+      [
+        'Última migración aplicada',
+        db.migration_version != null ? String(db.migration_version) : '—',
+      ],
     ]),
     statusGroup('Correo', [
-      ['SMTP configurado', status.mail.smtp_configured ? 'Sí' : 'No: los enlaces de acceso solo se escriben en el log del servidor'],
+      [
+        'SMTP configurado',
+        status.mail.smtp_configured
+          ? 'Sí'
+          : 'No: los enlaces de acceso solo se escriben en el log del servidor',
+      ],
     ]),
     statusGroup('Telegram', [
       ['Canal de logs configurado', yesNo(status.telegram.log_channel_configured)],
-      ['Bot en marcha', status.telegram.bot_running ? `Sí${status.telegram.bot_username ? ` (@${escapeHtml(status.telegram.bot_username)})` : ''}` : 'No'],
+      [
+        'Bot en marcha',
+        status.telegram.bot_running
+          ? `Sí${status.telegram.bot_username ? ` (@${escapeHtml(status.telegram.bot_username)})` : ''}`
+          : 'No',
+      ],
     ]),
     statusGroup('Ajustes', [
       ['Dirección pública', escapeHtml(settings.public_base_url)],
@@ -406,10 +461,13 @@ function renderStatus(status) {
       ['Validez del enlace enviado por el bot', formatDuration(settings.bot_dm_link_ttl_seconds)],
       ['Duración de una impersonación', formatDuration(settings.impersonation_ttl_seconds)],
     ]),
-    statusGroup('Ficheros', status.storage.map((dir) => [
-      storageLabels[dir.name] ?? dir.name,
-      `<code>${escapeHtml(dir.path)}</code> — ${dir.exists ? 'existe' : '<strong>no existe</strong>'}`,
-    ])),
+    statusGroup(
+      'Ficheros',
+      status.storage.map((dir) => [
+        storageLabels[dir.name] ?? dir.name,
+        `<code>${escapeHtml(dir.path)}</code> — ${dir.exists ? 'existe' : '<strong>no existe</strong>'}`,
+      ]),
+    ),
   ].join('');
 }
 
@@ -447,13 +505,15 @@ async function loadHolidays() {
     holidaysShown = await apiFetch(`/holidays?year=${holidaysYear}`);
     holidaysBody.innerHTML = holidaysShown.length
       ? holidaysShown
-        .map((holiday) => `
+          .map(
+            (holiday) => `
           <tr>
             <td>${describeDay(holidayDay(holiday))}</td>
             <td>${escapeHtml(holiday.name)}</td>
             <td><button type="button" class="btn btn-danger btn-small" data-delete-holiday="${holiday.id}">Borrar</button></td>
-          </tr>`)
-        .join('')
+          </tr>`,
+          )
+          .join('')
       : '<tr><td colspan="3">No hay festivos en este año.</td></tr>';
   } catch (err) {
     holidaysBody.innerHTML = '<tr><td colspan="3">No se pudieron cargar los festivos.</td></tr>';
@@ -474,7 +534,11 @@ holidaysBody.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-delete-holiday]');
   if (!button) return;
   const holiday = holidaysShown.find((h) => h.id === Number(button.dataset.deleteHoliday));
-  if (!holiday || !confirm(`¿Borrar el festivo «${holiday.name}» del ${describeDay(holidayDay(holiday))}?`)) return;
+  if (
+    !holiday ||
+    !confirm(`¿Borrar el festivo «${holiday.name}» del ${describeDay(holidayDay(holiday))}?`)
+  )
+    return;
   button.disabled = true;
   try {
     await apiFetch(`/holidays/${holiday.id}`, { method: 'DELETE' });
@@ -504,7 +568,10 @@ holidayForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch('/holidays', {
       method: 'POST',
-      body: JSON.stringify({ date: formData.get('date'), name: formData.get('name').toString().trim() }),
+      body: JSON.stringify({
+        date: formData.get('date'),
+        name: formData.get('name').toString().trim(),
+      }),
     });
     const year = Number(formData.get('date').toString().slice(0, 4));
     holidayDialog.close();
@@ -536,14 +603,23 @@ document.getElementById('holidays-copy').addEventListener('click', async () => {
       showFeedback(`Todos los festivos de ${holidaysYear - 1} ya están en ${holidaysYear}.`);
       return;
     }
-    if (!confirm(`Se copiarán ${toCopy.length} festivos de ${holidaysYear - 1} a ${holidaysYear}, el mismo día y mes. Los que cambian de fecha cada año (como Semana Santa) hay que corregirlos a mano. ¿Copiarlos?`)) return;
+    if (
+      !confirm(
+        `Se copiarán ${toCopy.length} festivos de ${holidaysYear - 1} a ${holidaysYear}, el mismo día y mes. Los que cambian de fecha cada año (como Semana Santa) hay que corregirlos a mano. ¿Copiarlos?`,
+      )
+    )
+      return;
     let copied = 0;
     for (const holiday of toCopy) {
       const day = `${holidaysYear}${holidayDay(holiday).slice(4)}`;
       // 29 February has no equivalent in a year that isn't a leap one.
-      if (day.endsWith('-02-29') && new Date(Date.UTC(holidaysYear, 1, 29)).getUTCMonth() !== 1) continue;
+      if (day.endsWith('-02-29') && new Date(Date.UTC(holidaysYear, 1, 29)).getUTCMonth() !== 1)
+        continue;
       try {
-        await apiFetch('/holidays', { method: 'POST', body: JSON.stringify({ date: day, name: holiday.name }) });
+        await apiFetch('/holidays', {
+          method: 'POST',
+          body: JSON.stringify({ date: day, name: holiday.name }),
+        });
         copied += 1;
       } catch (err) {
         showError(`Se copiaron ${copied} festivos; falló «${holiday.name}»: ${err.message}`);

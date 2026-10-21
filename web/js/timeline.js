@@ -37,7 +37,6 @@ function timelineEventText(event) {
   return `${eventLabels[event.type]}${reasonText}`;
 }
 
-
 // Same-date tie-break for the timeline sort below: an alta or a fin de
 // baja temporal (both "the person is active as of today") always shows
 // before a baja or an inicio de baja temporal dated the same day (both
@@ -70,7 +69,13 @@ async function loadTimelineData(login, memberships) {
   for (const m of memberships) {
     events.push({ date: m.start_date, type: 'alta', membership: m, statusKey: `alta-${m.id}` });
     if (m.end_date) {
-      events.push({ date: m.end_date, type: 'baja', membership: m, reason: m.end_reason, statusKey: `baja-${m.id}` });
+      events.push({
+        date: m.end_date,
+        type: 'baja',
+        membership: m,
+        reason: m.end_reason,
+        statusKey: `baja-${m.id}`,
+      });
     }
   }
 
@@ -78,9 +83,21 @@ async function loadTimelineData(login, memberships) {
   const leavesById = Object.fromEntries(leaves.map((l) => [l.id, l]));
   const openLeave = leaves.find((l) => !l.end_date) ?? null;
   for (const l of leaves) {
-    events.push({ date: l.start_date, type: 'leave_start', leave: l, reason: l.reason, statusKey: `leave_start-${l.id}` });
+    events.push({
+      date: l.start_date,
+      type: 'leave_start',
+      leave: l,
+      reason: l.reason,
+      statusKey: `leave_start-${l.id}`,
+    });
     if (l.end_date) {
-      events.push({ date: l.end_date, type: 'leave_end', leave: l, reason: l.reason, statusKey: `leave_end-${l.id}` });
+      events.push({
+        date: l.end_date,
+        type: 'leave_end',
+        leave: l,
+        reason: l.reason,
+        statusKey: `leave_end-${l.id}`,
+      });
     }
   }
   const membershipStatus = { openMembership, openLeave, lastMembership: memberships[0] ?? null };
@@ -120,10 +137,19 @@ async function loadTimelineData(login, memberships) {
     const priorityB = TIMELINE_TIE_BREAK_PRIORITY[b.type] ?? 1;
     return priorityA - priorityB;
   });
-  const lastStatusEventKey = events.filter((e) => STATUS_EVENT_TYPES.has(e.type)).at(-1)?.statusKey ?? null;
-  return { events, membershipsById, leavesById, licensesById, boardTermsById, currentBoardTerm, membershipStatus, lastStatusEventKey };
+  const lastStatusEventKey =
+    events.filter((e) => STATUS_EVENT_TYPES.has(e.type)).at(-1)?.statusKey ?? null;
+  return {
+    events,
+    membershipsById,
+    leavesById,
+    licensesById,
+    boardTermsById,
+    currentBoardTerm,
+    membershipStatus,
+    lastStatusEventKey,
+  };
 }
-
 
 // One row of the timeline: the date and what happened, and — on /socio only —
 // the buttons for it (already-built HTML, empty on /perfil).

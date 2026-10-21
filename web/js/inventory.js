@@ -20,7 +20,6 @@ const isAdmin = hasAnyRole(user, ['admin', 'board']);
 // so this is deliberately a separate check from isAdmin.
 const canManageMovements = hasAnyRole(user, ['admin', 'board', 'material']);
 
-
 const itemStatusLabels = {
   available: 'Disponible',
   on_loan: 'Prestado',
@@ -34,7 +33,12 @@ const itemStatusLabels = {
 
 const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
+const bagTypeLabels = {
+  caving: 'Espeleología',
+  canyoning: 'Cañones',
+  quick: 'Rápida',
+  special: 'Especial',
+};
 
 // Every movement type, for display — loans still show up in an item's
 // history even though they're no longer created from this page (see
@@ -61,7 +65,12 @@ const movementTypeOptions = Object.entries(typeLabels).filter(([type]) => type !
 // the "Socio" field is hidden outright for those, not just left empty.
 const recipientRequiredTypes = new Set(['rental']);
 const recipientForbiddenTypes = new Set(['acquisition', 'loss', 'abandonment', 'retirement']);
-const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
+const movementStatusLabels = {
+  active: 'Activo',
+  completed: 'Completado',
+  overdue: 'Vencido',
+  cancelled: 'Cancelado',
+};
 
 // Only rental is ever returned via PATCH .../return, and always all at
 // once — a loan's own "returned" state is the sum of separate 'return'
@@ -96,14 +105,28 @@ function personLabel(login) {
 function itemLabel(item, { includeCategory = true } = {}) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
-    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
+    const parts = [
+      brandModel || null,
+      `${item.diameter_mm} mm`,
+      ropeTypeLabels[item.rope_type] ?? item.rope_type,
+      item.manufacture_year,
+      item.length_m ? `${item.length_m} m` : null,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
-    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
+    const parts = [
+      brandModel || null,
+      `${item.capacity_liters} L`,
+      bagTypeLabels[item.bag_type] ?? item.bag_type,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [includeCategory ? item.category_name : null, brandModel || null, item.description || null];
+  const parts = [
+    includeCategory ? item.category_name : null,
+    brandModel || null,
+    item.description || null,
+  ];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
@@ -111,20 +134,28 @@ function itemLabel(item, { includeCategory = true } = {}) {
 // both find the same items, and there'll be enough material (300+
 // expected) that a plain <select> stops being usable for finding one.
 function normalizeForSearch(value) {
-  return (value ?? '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return (value ?? '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 function itemSearchText(item) {
-  return normalizeForSearch([
-    itemTypeLabels[item.item_type],
-    item.brand,
-    item.model,
-    item.code,
-    item.description,
-    item.category_name,
-    ropeTypeLabels[item.rope_type],
-    bagTypeLabels[item.bag_type],
-  ].filter(Boolean).join(' '));
+  return normalizeForSearch(
+    [
+      itemTypeLabels[item.item_type],
+      item.brand,
+      item.model,
+      item.code,
+      item.description,
+      item.category_name,
+      ropeTypeLabels[item.rope_type],
+      bagTypeLabels[item.bag_type],
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
 }
 
 // Rope/bag show their item type ("Cuerda"/"Saca"); gear shows its
@@ -186,7 +217,9 @@ async function expandItemMovements(itemId) {
   panel.innerHTML = 'Cargando…';
   try {
     const movements = await apiFetch(`/items/${itemId}/movements`);
-    panel.innerHTML = movements.length ? movements.map(renderMovementDetail).join('') : '<p>Todavía no tiene movimientos.</p>';
+    panel.innerHTML = movements.length
+      ? movements.map(renderMovementDetail).join('')
+      : '<p>Todavía no tiene movimientos.</p>';
   } catch (err) {
     panel.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
@@ -239,14 +272,18 @@ function openNewMovementDialog(itemId) {
   document.getElementById('new-movement-item-label').innerHTML = item ? itemLabel(item) : '';
   const isSingleUnit = !!item && (item.item_type === 'rope' || item.item_type === 'bag');
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
-  document.getElementById('mv-type').innerHTML = movementTypeOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  document.getElementById('mv-type').innerHTML = movementTypeOptions
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join('');
   updateMovementFormVisibility();
   openModal(document.getElementById('new-movement-dialog'));
 }
 
 function renderFilteredItems() {
   const query = normalizeForSearch(document.getElementById('item-search').value);
-  const filtered = query ? allItems.filter((item) => itemSearchText(item).includes(query)) : allItems;
+  const filtered = query
+    ? allItems.filter((item) => itemSearchText(item).includes(query))
+    : allItems;
   const tableBody = document.getElementById('items-table-body');
   tableBody.innerHTML = filtered.length
     ? filtered.map(renderItemRow).join('')
@@ -324,7 +361,9 @@ newMovementForm.addEventListener('submit', async (event) => {
       return;
     }
   } else if (type === 'return') {
-    showError('Elige una actividad de la lista: una devolución siempre va asociada a la actividad para la que se prestó el material.');
+    showError(
+      'Elige una actividad de la lista: una devolución siempre va asociada a la actividad para la que se prestó el material.',
+    );
     return;
   }
 
@@ -458,7 +497,18 @@ if (isAdmin) {
   // Only rope/bag/gear-specific controls toggle required — the fields
   // shared by every type (acquired_at, prices, loanable) stay as they
   // are regardless of item_type.
-  const requiredWhenVisible = ['ni-brand', 'ni-model', 'ni-code', 'ni-rope-type', 'ni-diameter-mm', 'ni-manufacture-year', 'ni-length-m', 'ni-bag-type', 'ni-capacity-liters', 'ni-category'];
+  const requiredWhenVisible = [
+    'ni-brand',
+    'ni-model',
+    'ni-code',
+    'ni-rope-type',
+    'ni-diameter-mm',
+    'ni-manufacture-year',
+    'ni-length-m',
+    'ni-bag-type',
+    'ni-capacity-liters',
+    'ni-category',
+  ];
 
   function updateItemTypeFieldsVisibility() {
     const type = itemTypeSelect.value;
@@ -479,7 +529,9 @@ if (isAdmin) {
 
   apiFetch('/material-categories')
     .then((categories) => {
-      categorySelect.innerHTML = categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      categorySelect.innerHTML = categories
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+        .join('');
     })
     .catch(() => showError('No se pudo cargar la lista de categorías.'));
 
@@ -556,8 +608,13 @@ if (canManageMovements) {
       directoryByLogin = Object.fromEntries(people.map((person) => [person.login, person]));
       userEntries = people
         .slice()
-        .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'))
-        .map((person) => ({ id: person.login, label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login) }));
+        .sort((a, b) =>
+          `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
+        )
+        .map((person) => ({
+          id: person.login,
+          label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+        }));
       document.getElementById('mv-user-options').innerHTML = renderPickerOptions(userEntries);
     })
     .catch(() => showError('No se pudo cargar la lista de socios.'));
@@ -568,7 +625,8 @@ if (canManageMovements) {
         id: activity.id,
         label: pickerLabel(`${formatDate(activity.start_date)} — ${activity.title}`, activity.id),
       }));
-      document.getElementById('mv-activity-options').innerHTML = renderPickerOptions(activityEntries);
+      document.getElementById('mv-activity-options').innerHTML =
+        renderPickerOptions(activityEntries);
     })
     .catch(() => showError('No se pudo cargar la lista de actividades.'));
 

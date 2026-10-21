@@ -95,13 +95,17 @@ python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"  
 ```
 Checks for the frontend, before a commit that touches `web/` (the files are plain ES
 modules, with no build step to catch a mistake): `node --check` parses a file without
-running it, and `biome lint web/js` (configuration in `biome.json`, lint only) reports
-unused imports and variables and the like:
+running it, `biome lint web/js` reports unused imports and variables and the like, and
+`biome format web/js` says whether the code is laid out to the one style the project has
+(two spaces, single quotes, lines of at most 100 characters; `biome format --write web/js`
+rewrites the files to it). All of it is configured in `biome.json`, and only covers
+`web/js`:
 ```sh
 for f in web/js/*.js; do node --check "$f"; done
 biome lint web/js
+biome format web/js
 ```
-Neither runs a page; for that, the headless Chromium below.
+None of them runs a page; for that, the headless Chromium below.
 
 Rebuilding/redeploying just the API after a backend change:
 ```sh

@@ -99,7 +99,11 @@ async function apiFetchForm(path, formData, options = {}) {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const response = await fetch(`${API_BASE}${path}`, { method: options.method || 'POST', headers, body: formData });
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: options.method || 'POST',
+    headers,
+    body: formData,
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
@@ -207,7 +211,11 @@ function initSidebarToggle() {
   toggle.addEventListener('click', () => setOpen(!sidebar.classList.contains('open')));
   document.getElementById('sidebar-close')?.addEventListener('click', () => setOpen(false));
   document.addEventListener('click', (event) => {
-    if (sidebar.classList.contains('open') && !sidebar.contains(event.target) && !toggle.contains(event.target)) {
+    if (
+      sidebar.classList.contains('open') &&
+      !sidebar.contains(event.target) &&
+      !toggle.contains(event.target)
+    ) {
       setOpen(false);
     }
   });
@@ -245,7 +253,12 @@ function escapeHtml(value) {
 // anything an admin created shows as typed instead. Shared by members.js
 // (role catalog table, "Nueva persona" checkboxes) and member.js (a
 // person's own roles panel) — previously defined identically in both.
-const knownRoleLabels = { admin: 'Administrador', board: 'Junta', member: 'Socio', former_member: 'Ex-socio' };
+const knownRoleLabels = {
+  admin: 'Administrador',
+  board: 'Junta',
+  member: 'Socio',
+  former_member: 'Ex-socio',
+};
 function roleLabel(name) {
   return knownRoleLabels[name] ?? name;
 }
@@ -264,7 +277,13 @@ const positionLabels = {
 // Friendly Spanish labels for an activity's type/status, shared by every
 // page that lists or shows one (activities.js, activity.js) — previously
 // defined identically in both.
-const typeLabels = { caving: 'Espeleología', canyoning: 'Cañones', training: 'Formación', social: 'Social', other: 'Otro' };
+const typeLabels = {
+  caving: 'Espeleología',
+  canyoning: 'Cañones',
+  training: 'Formación',
+  social: 'Social',
+  other: 'Otro',
+};
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
 // Shared "success/error banner" pair every page provides via its own
@@ -316,9 +335,13 @@ function dialogErrorBox(dialog) {
   // Capture phase: runs before the clicked button's own handler, so an
   // action that fails again simply shows its error again, while one that
   // succeeds leaves the old message gone.
-  dialog.addEventListener('click', (event) => {
-    if (event.target.closest('button')) clear();
-  }, true);
+  dialog.addEventListener(
+    'click',
+    (event) => {
+      if (event.target.closest('button')) clear();
+    },
+    true,
+  );
   return box;
 }
 

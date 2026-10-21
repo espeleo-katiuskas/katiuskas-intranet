@@ -1,6 +1,14 @@
 import { apiFetch, apiFetchBlob, escapeHtml, encodeFilePath, formatDate } from './api.js';
 import { renderMarkdown } from './markdown.js';
-import { joinPath, dirOf, nameOf, formatSize, fileKind, resolveRelativePath, downloadBlob } from './fileBrowser.js';
+import {
+  joinPath,
+  dirOf,
+  nameOf,
+  formatSize,
+  fileKind,
+  resolveRelativePath,
+  downloadBlob,
+} from './fileBrowser.js';
 
 // A per-person document browser, embedded (not a page of its own) in
 // both perfil.html (a socio's own files) and socio.html (admin/board
@@ -111,7 +119,9 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
     document.getElementById('uf-file-back').onclick = () => loadDirectory(dir);
     document.getElementById('uf-file-download').onclick = async () => {
       try {
-        const blob = await apiFetchBlob(`/users/${login}/files/file/${encodeFilePath(path)}?download=1`);
+        const blob = await apiFetchBlob(
+          `/users/${login}/files/file/${encodeFilePath(path)}?download=1`,
+        );
         downloadBlob(blob, name);
       } catch (err) {
         showError(err.message);
@@ -149,7 +159,8 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
         const url = URL.createObjectURL(blob);
         preview.innerHTML = `<iframe src="${url}" class="document-frame" sandbox=""></iframe>`;
       } else {
-        preview.innerHTML = '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
+        preview.innerHTML =
+          '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
       }
     } catch (err) {
       document.getElementById('uf-file-meta').textContent = '';

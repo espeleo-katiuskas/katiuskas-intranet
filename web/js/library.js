@@ -8,7 +8,15 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { renderMarkdown } from './markdown.js';
-import { joinPath, dirOf, nameOf, formatSize, fileKind, resolveRelativePath, downloadBlob } from './fileBrowser.js';
+import {
+  joinPath,
+  dirOf,
+  nameOf,
+  formatSize,
+  fileKind,
+  resolveRelativePath,
+  downloadBlob,
+} from './fileBrowser.js';
 
 await initPage();
 
@@ -18,7 +26,9 @@ const entriesList = document.getElementById('entries-list');
 const breadcrumbsEl = document.getElementById('breadcrumbs');
 
 function linkHrefFor(path, isDir) {
-  return isDir ? `/archivo?path=${encodeURIComponent(path)}` : `/archivo?view=${encodeURIComponent(path)}`;
+  return isDir
+    ? `/archivo?path=${encodeURIComponent(path)}`
+    : `/archivo?view=${encodeURIComponent(path)}`;
 }
 
 function renderBreadcrumbs(dirPath) {
@@ -118,7 +128,8 @@ async function loadFile(path) {
       const url = URL.createObjectURL(blob);
       preview.innerHTML = `<iframe src="${url}" class="document-frame" sandbox=""></iframe>`;
     } else {
-      preview.innerHTML = '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
+      preview.innerHTML =
+        '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
     }
   } catch (err) {
     document.getElementById('file-meta').textContent = '';

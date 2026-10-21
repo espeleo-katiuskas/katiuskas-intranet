@@ -1,4 +1,13 @@
-import { apiFetch, escapeHtml, formatCurrency, formatDate, hasAnyRole, currentUser, showError, showFeedback } from './api.js';
+import {
+  apiFetch,
+  escapeHtml,
+  formatCurrency,
+  formatDate,
+  hasAnyRole,
+  currentUser,
+  showError,
+  showFeedback,
+} from './api.js';
 import { initPage } from './layout.js';
 import { apiErrorText, choicesText, loadPeople, statusBadge } from './distributionCommon.js';
 
@@ -24,17 +33,26 @@ function renderOrder(order) {
   provisional = order.provisional;
   const noChoices = (l) => Object.keys(l.choices).length === 0;
   document.getElementById('order-lines').innerHTML = order.lines.length
-    ? order.lines.map((l) => {
-      let label;
-      if (!noChoices(l)) label = escapeHtml(choicesText(l.choices, hasOptions()));
-      else label = hasOptions() ? '<strong>Sin elegir</strong>' : 'Sin nada que elegir';
-      return `<tr><td>${label}</td><td>${l.count}</td></tr>`;
-    }).join('')
+    ? order.lines
+        .map((l) => {
+          let label;
+          if (!noChoices(l)) label = escapeHtml(choicesText(l.choices, hasOptions()));
+          else label = hasOptions() ? '<strong>Sin elegir</strong>' : 'Sin nada que elegir';
+          return `<tr><td>${label}</td><td>${l.count}</td></tr>`;
+        })
+        .join('')
     : '<tr><td colspan="2">Todavía no hay nada que pedir.</td></tr>';
   // In a distribution for all members everybody has a unit from the start, so
   // the ones that nobody has chosen the options of are what is still missing.
-  const missing = hasOptions() ? order.lines.filter(noChoices).reduce((sum, l) => sum + l.count, 0) : 0;
-  const missingText = missing === 0 ? '' : missing === 1 ? ' Falta por elegir 1 pedido.' : ` Faltan por elegir ${missing} pedidos.`;
+  const missing = hasOptions()
+    ? order.lines.filter(noChoices).reduce((sum, l) => sum + l.count, 0)
+    : 0;
+  const missingText =
+    missing === 0
+      ? ''
+      : missing === 1
+        ? ' Falta por elegir 1 pedido.'
+        : ` Faltan por elegir ${missing} pedidos.`;
   // While it is a draft nothing is made yet, but what has to be ordered is
   // already known: one for each member on the cutoff date.
   const draftText = provisional
@@ -48,7 +66,8 @@ function renderOrder(order) {
 function groupByPerson(all) {
   const groups = new Map();
   for (const u of all) {
-    if (!groups.has(u.beneficiary_login)) groups.set(u.beneficiary_login, { name: u.beneficiary_name, units: [] });
+    if (!groups.has(u.beneficiary_login))
+      groups.set(u.beneficiary_login, { name: u.beneficiary_name, units: [] });
     groups.get(u.beneficiary_login).units.push(u);
   }
   return [...groups.entries()];
@@ -60,7 +79,9 @@ function unitLine(u) {
   // Who entered it, when that isn't the person it is for (nobody did for an
   // own unit nobody has chosen yet).
   if (u.registered_by_login && u.registered_by_login !== u.beneficiary_login) {
-    parts.push(`apuntado por ${people.names[u.registered_by_login] ?? u.registered_by_login} el ${formatDate(u.registered_at)}`);
+    parts.push(
+      `apuntado por ${people.names[u.registered_by_login] ?? u.registered_by_login} el ${formatDate(u.registered_at)}`,
+    );
   }
   return `<li>${escapeHtml(parts.join(' · '))}</li>`;
 }
@@ -74,22 +95,27 @@ function paymentCell(login, list) {
   const mark = unpaid.length
     ? `<button type="button" class="btn btn-primary btn-small" data-pay-person="${escapeHtml(login)}">Marcar pagado (${formatCurrency(owed)})</button>`
     : '';
-  const undo = unpaid.length < toPay.length
-    ? `<button type="button" class="btn btn-secondary btn-small" data-unpay-person="${escapeHtml(login)}">${unpaid.length ? 'Quitar lo pagado' : 'Pagado · deshacer'}</button>`
-    : '';
+  const undo =
+    unpaid.length < toPay.length
+      ? `<button type="button" class="btn btn-secondary btn-small" data-unpay-person="${escapeHtml(login)}">${unpaid.length ? 'Quitar lo pagado' : 'Pagado · deshacer'}</button>`
+      : '';
   return `<div class="table-actions">${mark}${undo}</div>`;
 }
 
 function renderPeople() {
   const groups = groupByPerson(units);
   document.getElementById('people-list').innerHTML = groups.length
-    ? groups.map(([login, g]) => `
+    ? groups
+        .map(
+          ([login, g]) => `
         <tr>
           <td>${escapeHtml(g.name)}</td>
           <td><ul class="plain-list">${g.units.map(unitLine).join('')}</ul></td>
           <td>${formatCurrency(g.units.reduce((sum, u) => sum + u.price, 0))}</td>
           <td>${paymentCell(login, g.units)}</td>
-        </tr>`).join('')
+        </tr>`,
+        )
+        .join('')
     : `<tr><td colspan="4">${provisional ? 'Los pedidos de cada socio se crean al abrir el reparto.' : 'Todavía no ha pedido nadie.'}</td></tr>`;
 }
 
@@ -104,7 +130,10 @@ document.getElementById('people-list').addEventListener('click', async (event) =
   try {
     if (pay) {
       const ids = mine.filter((u) => !u.paid_at).map((u) => u.id);
-      await apiFetch(`${base}/payments`, { method: 'POST', body: JSON.stringify({ unit_ids: ids }) });
+      await apiFetch(`${base}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ unit_ids: ids }),
+      });
       showFeedback('Marcado como pagado.');
     } else {
       if (!confirm('¿Quitar la marca de pagado de los pedidos de esta persona?')) {
@@ -127,7 +156,11 @@ document.getElementById('people-list').addEventListener('click', async (event) =
 // all go out at once and only the drawing waits.
 async function load(ready = Promise.resolve()) {
   try {
-    const [order, all] = await Promise.all([apiFetch(`${base}/order`), apiFetch(`${base}/units`), ready]);
+    const [order, all] = await Promise.all([
+      apiFetch(`${base}/order`),
+      apiFetch(`${base}/units`),
+      ready,
+    ]);
     units = all;
     renderOrder(order);
     renderPeople();

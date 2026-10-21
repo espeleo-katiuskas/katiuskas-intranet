@@ -56,7 +56,10 @@ let licenseTypesById = {};
 
 function licenseTypeOptions(selectedId) {
   return allLicenseTypes
-    .map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`)
+    .map(
+      (t) =>
+        `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`,
+    )
     .join('');
 }
 
@@ -85,7 +88,9 @@ function renderRoleBadges(person) {
       // sees that request fail in the first place.
       const isOwnAdminRole = name === 'admin' && memberLogin === viewer.login;
       if (!canManageRole(name) || isOwnAdminRole) {
-        const title = isOwnAdminRole ? ' title="No puedes quitarte a ti mismo el rol de admin"' : '';
+        const title = isOwnAdminRole
+          ? ' title="No puedes quitarte a ti mismo el rol de admin"'
+          : '';
         return `<span class="badge"${title}>${label}</span>`;
       }
       const roleId = rolesByName[name]?.id;
@@ -95,7 +100,9 @@ function renderRoleBadges(person) {
 }
 
 function renderRoleAddControl(person) {
-  const assignable = allRoles.filter((role) => !person.roles.includes(role.name) && canManageRole(role.name));
+  const assignable = allRoles.filter(
+    (role) => !person.roles.includes(role.name) && canManageRole(role.name),
+  );
   if (assignable.length === 0) {
     return '';
   }
@@ -120,7 +127,9 @@ document.getElementById('member-roles-list').addEventListener('click', async (ev
   if (!button) return;
   button.disabled = true;
   try {
-    await apiFetch(`/users/${memberLogin}/roles/${button.dataset.removeRole}`, { method: 'DELETE' });
+    await apiFetch(`/users/${memberLogin}/roles/${button.dataset.removeRole}`, {
+      method: 'DELETE',
+    });
     showFeedback('Rol quitado.');
     await loadMember();
   } catch (err) {
@@ -135,7 +144,10 @@ document.getElementById('member-role-add').addEventListener('click', async (even
   const roleId = document.getElementById('role-select').value;
   button.disabled = true;
   try {
-    await apiFetch(`/users/${memberLogin}/roles`, { method: 'POST', body: JSON.stringify({ role_id: Number(roleId) }) });
+    await apiFetch(`/users/${memberLogin}/roles`, {
+      method: 'POST',
+      body: JSON.stringify({ role_id: Number(roleId) }),
+    });
     showFeedback('Rol añadido.');
     await loadMember();
   } catch (err) {
@@ -185,8 +197,12 @@ trackDirtyFields(editForm);
 const ADDRESS_CLUSTER_FIELDS = ['address', 'postal_code', 'city', 'province'];
 for (const name of ADDRESS_CLUSTER_FIELDS) {
   const field = editForm.elements[name];
-  field.addEventListener('focus', () => { field.readOnly = false; });
-  field.addEventListener('blur', () => { field.readOnly = true; });
+  field.addEventListener('focus', () => {
+    field.readOnly = false;
+  });
+  field.addEventListener('blur', () => {
+    field.readOnly = true;
+  });
 }
 
 function populateEditForm(person) {
@@ -242,9 +258,10 @@ async function loadMember(ready = Promise.resolve()) {
     lastLoadedPerson = person;
     document.getElementById('member-name').textContent = `${person.first_name} ${person.last_name}`;
     document.getElementById('member-email').textContent = person.email ?? '';
-    document.getElementById('member-number').textContent = person.membership_number != null
-      ? `N.º de socio: ${person.membership_number}`
-      : 'Sin número de socio todavía.';
+    document.getElementById('member-number').textContent =
+      person.membership_number != null
+        ? `N.º de socio: ${person.membership_number}`
+        : 'Sin número de socio todavía.';
     document.getElementById('member-last-login').textContent = person.last_login_at
       ? `Último acceso: ${formatDate(person.last_login_at)}${person.last_login_ip ? ` desde ${person.last_login_ip}` : ''}`
       : 'Todavía no ha iniciado sesión.';
@@ -316,7 +333,16 @@ let statusDialogBounds = {};
 let statusDialogOnSave = null;
 let statusDialogSuccessMessage = '';
 
-function openStatusDialog({ title, hint, initial, minExclusive, minLabel, maxInclusive, onSave, successMessage }) {
+function openStatusDialog({
+  title,
+  hint,
+  initial,
+  minExclusive,
+  minLabel,
+  maxInclusive,
+  onSave,
+  successMessage,
+}) {
   document.getElementById('status-dialog-title').textContent = title;
   const hintEl = document.getElementById('status-dialog-hint');
   hintEl.textContent = hint ?? '';
@@ -405,8 +431,11 @@ const addLicenseDialog = document.getElementById('add-license-dialog');
 initModal(addLicenseDialog);
 if (isRealAdmin) {
   document.getElementById('add-license-button').addEventListener('click', () => {
-    document.getElementById('al-license-type').innerHTML = licenseTypeOptions(allLicenseTypes[0]?.id);
-    document.getElementById('al-other-detail-field').hidden = !licenseTypesById[allLicenseTypes[0]?.id]?.is_other;
+    document.getElementById('al-license-type').innerHTML = licenseTypeOptions(
+      allLicenseTypes[0]?.id,
+    );
+    document.getElementById('al-other-detail-field').hidden =
+      !licenseTypesById[allLicenseTypes[0]?.id]?.is_other;
     document.getElementById('al-other-detail').value = '';
     document.getElementById('al-issued-date').value = today();
     document.getElementById('al-year').value = new Date().getFullYear();
@@ -415,7 +444,8 @@ if (isRealAdmin) {
   });
 
   document.getElementById('al-license-type').addEventListener('change', (event) => {
-    document.getElementById('al-other-detail-field').hidden = !licenseTypesById[Number(event.target.value)]?.is_other;
+    document.getElementById('al-other-detail-field').hidden =
+      !licenseTypesById[Number(event.target.value)]?.is_other;
   });
 
   document.getElementById('save-add-license').addEventListener('click', async () => {
@@ -498,7 +528,15 @@ let lastStatusEventKey = null;
 // action buttons need (see js/timeline.js for the events themselves).
 async function buildTimelineEvents(memberships) {
   const data = await loadTimelineData(memberLogin, memberships);
-  ({ membershipsById, leavesById, licensesById, boardTermsById, currentBoardTerm, membershipStatus, lastStatusEventKey } = data);
+  ({
+    membershipsById,
+    leavesById,
+    licensesById,
+    boardTermsById,
+    currentBoardTerm,
+    membershipStatus,
+    lastStatusEventKey,
+  } = data);
   return data.events;
 }
 
@@ -568,7 +606,8 @@ async function loadTimeline() {
     // threw here for every board viewer, landing the error's own
     // message in this section instead of the timeline.
     if (isRealAdmin) {
-      document.getElementById('membership-status-actions').innerHTML = renderMembershipStatusActions();
+      document.getElementById('membership-status-actions').innerHTML =
+        renderMembershipStatusActions();
       document.getElementById('board-status-actions').innerHTML = renderBoardStatusActions();
     }
     container.innerHTML = events.length
@@ -615,7 +654,9 @@ function renderMembershipStatusActions() {
 function renderBoardStatusActions() {
   if (!membershipStatus.openMembership) return '';
   if (currentBoardTerm) {
-    const label = escapeHtml(positionLabels[currentBoardTerm.position] ?? currentBoardTerm.position);
+    const label = escapeHtml(
+      positionLabels[currentBoardTerm.position] ?? currentBoardTerm.position,
+    );
     return `<button type="button" class="btn btn-secondary btn-small" data-status-action="leave-board">Deja el cargo de ${label}</button>`;
   }
   return '<button type="button" class="btn btn-secondary btn-small" data-status-action="join-board">+ Junta directiva</button>';
@@ -638,10 +679,11 @@ if (isRealAdmin) {
         minLabel: 'a la última baja',
         maxInclusive: today(),
         successMessage: 'Alta registrada.',
-        onSave: (date) => apiFetch(`/users/${memberLogin}/memberships`, {
-          method: 'POST',
-          body: JSON.stringify({ start_date: date }),
-        }),
+        onSave: (date) =>
+          apiFetch(`/users/${memberLogin}/memberships`, {
+            method: 'POST',
+            body: JSON.stringify({ start_date: date }),
+          }),
       });
       return;
     }
@@ -654,10 +696,11 @@ if (isRealAdmin) {
         minLabel: 'al alta actual',
         maxInclusive: today(),
         successMessage: 'Baja temporal registrada.',
-        onSave: (date) => apiFetch(`/users/${memberLogin}/leaves`, {
-          method: 'POST',
-          body: JSON.stringify({ start_date: date, end_date: null, reason: null }),
-        }),
+        onSave: (date) =>
+          apiFetch(`/users/${memberLogin}/leaves`, {
+            method: 'POST',
+            body: JSON.stringify({ start_date: date, end_date: null, reason: null }),
+          }),
       });
       return;
     }
@@ -670,10 +713,14 @@ if (isRealAdmin) {
         minLabel: 'al alta actual',
         maxInclusive: today(),
         successMessage: 'Baja registrada.',
-        onSave: (date) => apiFetch(`/memberships/${openMembership.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ start_date: openMembership.start_date.slice(0, 10), end_date: date }),
-        }),
+        onSave: (date) =>
+          apiFetch(`/memberships/${openMembership.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              start_date: openMembership.start_date.slice(0, 10),
+              end_date: date,
+            }),
+          }),
       });
       return;
     }
@@ -686,10 +733,15 @@ if (isRealAdmin) {
         minLabel: 'al inicio de la baja temporal',
         maxInclusive: today(),
         successMessage: 'Baja temporal finalizada.',
-        onSave: (date) => apiFetch(`/leaves/${openLeave.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ start_date: openLeave.start_date.slice(0, 10), end_date: date, reason: openLeave.reason ?? null }),
-        }),
+        onSave: (date) =>
+          apiFetch(`/leaves/${openLeave.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              start_date: openLeave.start_date.slice(0, 10),
+              end_date: date,
+              reason: openLeave.reason ?? null,
+            }),
+          }),
       });
       return;
     }
@@ -697,8 +749,9 @@ if (isRealAdmin) {
     if (button.dataset.statusAction === 'baja-definitiva-en-baja-temporal') {
       openStatusDialog({
         title: 'Baja definitiva',
-        hint: 'Termina la baja temporal actual y da de baja definitiva, con la misma fecha. '
-          + `Debe ser posterior al inicio de la baja temporal (${formatDate(openLeave.start_date)}) y no puede ser posterior a hoy.`,
+        hint:
+          'Termina la baja temporal actual y da de baja definitiva, con la misma fecha. ' +
+          `Debe ser posterior al inicio de la baja temporal (${formatDate(openLeave.start_date)}) y no puede ser posterior a hoy.`,
         minExclusive: openLeave.start_date.slice(0, 10),
         minLabel: 'al inicio de la baja temporal',
         maxInclusive: today(),
@@ -706,11 +759,18 @@ if (isRealAdmin) {
         onSave: async (date) => {
           await apiFetch(`/leaves/${openLeave.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ start_date: openLeave.start_date.slice(0, 10), end_date: date, reason: openLeave.reason ?? null }),
+            body: JSON.stringify({
+              start_date: openLeave.start_date.slice(0, 10),
+              end_date: date,
+              reason: openLeave.reason ?? null,
+            }),
           });
           await apiFetch(`/memberships/${openMembership.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ start_date: openMembership.start_date.slice(0, 10), end_date: date }),
+            body: JSON.stringify({
+              start_date: openMembership.start_date.slice(0, 10),
+              end_date: date,
+            }),
           });
         },
       });
@@ -727,7 +787,10 @@ document.getElementById('save-edit-board').addEventListener('click', async () =>
   const button = document.getElementById('save-edit-board');
   button.disabled = true;
   try {
-    await apiFetch(`/board-members/${editingBoardMemberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/board-members/${editingBoardMemberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
     showFeedback('Cargo actualizado.');
     editBoardDialog.close();
     await loadTimeline();
@@ -756,7 +819,10 @@ document.getElementById('save-edit-license').addEventListener('click', async () 
   const button = document.getElementById('save-edit-license');
   button.disabled = true;
   try {
-    await apiFetch(`/licenses/${editingLicenseId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    await apiFetch(`/licenses/${editingLicenseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
     showFeedback('Licencia actualizada.');
     editLicenseDialog.close();
     await loadTimeline();
@@ -791,10 +857,14 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       title: 'Editar alta',
       initial: m.start_date.slice(0, 10),
       successMessage: 'Alta actualizada.',
-      onSave: (date) => apiFetch(`/memberships/${m.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: date, end_date: m.end_date ? m.end_date.slice(0, 10) : null }),
-      }),
+      onSave: (date) =>
+        apiFetch(`/memberships/${m.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            start_date: date,
+            end_date: m.end_date ? m.end_date.slice(0, 10) : null,
+          }),
+        }),
     });
     return;
   }
@@ -816,10 +886,11 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       title: 'Editar baja',
       initial: m.end_date.slice(0, 10),
       successMessage: 'Baja actualizada.',
-      onSave: (date) => apiFetch(`/memberships/${m.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: date }),
-      }),
+      onSave: (date) =>
+        apiFetch(`/memberships/${m.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: date }),
+        }),
     });
     return;
   }
@@ -830,10 +901,11 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     await performTimelineDelete(
       deleteBajaButton,
       '¿Deshacer esta baja? La persona volverá a estar de alta.',
-      () => apiFetch(`/memberships/${m.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: null }),
-      }),
+      () =>
+        apiFetch(`/memberships/${m.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: null }),
+        }),
     );
     return;
   }
@@ -845,10 +917,15 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       title: 'Editar inicio de baja temporal',
       initial: l.start_date.slice(0, 10),
       successMessage: 'Baja temporal actualizada.',
-      onSave: (date) => apiFetch(`/leaves/${l.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: date, end_date: l.end_date ? l.end_date.slice(0, 10) : null, reason: l.reason ?? null }),
-      }),
+      onSave: (date) =>
+        apiFetch(`/leaves/${l.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            start_date: date,
+            end_date: l.end_date ? l.end_date.slice(0, 10) : null,
+            reason: l.reason ?? null,
+          }),
+        }),
     });
     return;
   }
@@ -858,7 +935,10 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     await performTimelineDelete(
       deleteLeaveStartButton,
       '¿Borrar esta baja temporal? Esta acción no se puede deshacer.',
-      () => apiFetch(`/leaves/${deleteLeaveStartButton.dataset.deleteLeaveStart}`, { method: 'DELETE' }),
+      () =>
+        apiFetch(`/leaves/${deleteLeaveStartButton.dataset.deleteLeaveStart}`, {
+          method: 'DELETE',
+        }),
     );
     return;
   }
@@ -870,10 +950,15 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       title: 'Editar fin de baja temporal',
       initial: l.end_date.slice(0, 10),
       successMessage: 'Baja temporal actualizada.',
-      onSave: (date) => apiFetch(`/leaves/${l.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: l.start_date.slice(0, 10), end_date: date, reason: l.reason ?? null }),
-      }),
+      onSave: (date) =>
+        apiFetch(`/leaves/${l.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            start_date: l.start_date.slice(0, 10),
+            end_date: date,
+            reason: l.reason ?? null,
+          }),
+        }),
     });
     return;
   }
@@ -884,10 +969,15 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     await performTimelineDelete(
       deleteLeaveEndButton,
       '¿Deshacer el fin de esta baja temporal? Volverá a estar en curso.',
-      () => apiFetch(`/leaves/${l.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ start_date: l.start_date.slice(0, 10), end_date: null, reason: l.reason ?? null }),
-      }),
+      () =>
+        apiFetch(`/leaves/${l.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            start_date: l.start_date.slice(0, 10),
+            end_date: null,
+            reason: l.reason ?? null,
+          }),
+        }),
     );
     return;
   }
@@ -903,7 +993,9 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     if (!confirm('¿Borrar esta licencia?')) return;
     deleteLicenseButton.disabled = true;
     try {
-      await apiFetch(`/licenses/${deleteLicenseButton.dataset.deleteLicense}`, { method: 'DELETE' });
+      await apiFetch(`/licenses/${deleteLicenseButton.dataset.deleteLicense}`, {
+        method: 'DELETE',
+      });
       await loadTimeline();
     } catch (err) {
       deleteLicenseButton.disabled = false;
@@ -923,7 +1015,8 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
     await performTimelineDelete(
       deleteBoardButton,
       '¿Borrar este cargo en la junta directiva? Esta acción no se puede deshacer.',
-      () => apiFetch(`/board-members/${deleteBoardButton.dataset.deleteBoard}`, { method: 'DELETE' }),
+      () =>
+        apiFetch(`/board-members/${deleteBoardButton.dataset.deleteBoard}`, { method: 'DELETE' }),
     );
   }
 });
@@ -936,7 +1029,12 @@ if (impersonateButton) {
     impersonateButton.remove();
   } else {
     impersonateButton.addEventListener('click', async () => {
-      if (!confirm('¿Entrar en la intranet como esta persona? Podrás salir de la impersonación en cualquier momento.')) return;
+      if (
+        !confirm(
+          '¿Entrar en la intranet como esta persona? Podrás salir de la impersonación en cualquier momento.',
+        )
+      )
+        return;
       // Readonly-until-focused and the beforeunload reset (see
       // ADDRESS_CLUSTER_FIELDS above) still weren't enough on their own
       // to stop Chrome from offering to save this address specifically
@@ -978,7 +1076,8 @@ async function loadActivities() {
       ? activities.map(renderActivityRow).join('')
       : '<tr><td colspan="6">Todavía no ha participado en ninguna actividad.</td></tr>';
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el historial de actividades.</td></tr>';
+    tableBody.innerHTML =
+      '<tr><td colspan="6">No se pudo cargar el historial de actividades.</td></tr>';
   }
 }
 
@@ -986,10 +1085,25 @@ async function loadActivities() {
 // movement history (GET /users/{login}/movements) never contains an
 // acquisition, loss, abandonment or retirement — no labels needed here
 // for those.
-const movementTypeLabels = { loan: 'Préstamo', rental: 'Alquiler', sale: 'Venta', return: 'Devolución' };
-const movementStatusLabels = { active: 'Activo', completed: 'Completado', overdue: 'Vencido', cancelled: 'Cancelado' };
+const movementTypeLabels = {
+  loan: 'Préstamo',
+  rental: 'Alquiler',
+  sale: 'Venta',
+  return: 'Devolución',
+};
+const movementStatusLabels = {
+  active: 'Activo',
+  completed: 'Completado',
+  overdue: 'Vencido',
+  cancelled: 'Cancelado',
+};
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: 'Rápida', special: 'Especial' };
+const bagTypeLabels = {
+  caving: 'Espeleología',
+  canyoning: 'Cañones',
+  quick: 'Rápida',
+  special: 'Especial',
+};
 
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); gear may have no known brand/model at all, so its
@@ -997,11 +1111,21 @@ const bagTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones', quick: '
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.item_type === 'rope') {
-    const parts = [brandModel || null, `${item.diameter_mm} mm`, ropeTypeLabels[item.rope_type] ?? item.rope_type, item.manufacture_year, item.length_m ? `${item.length_m} m` : null];
+    const parts = [
+      brandModel || null,
+      `${item.diameter_mm} mm`,
+      ropeTypeLabels[item.rope_type] ?? item.rope_type,
+      item.manufacture_year,
+      item.length_m ? `${item.length_m} m` : null,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   if (item.item_type === 'bag') {
-    const parts = [brandModel || null, `${item.capacity_liters} L`, bagTypeLabels[item.bag_type] ?? item.bag_type];
+    const parts = [
+      brandModel || null,
+      `${item.capacity_liters} L`,
+      bagTypeLabels[item.bag_type] ?? item.bag_type,
+    ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
   const parts = [item.category_name, brandModel || null, item.description || null];
@@ -1043,7 +1167,8 @@ async function loadMovements() {
       ? movements.map((m) => renderMovementRow(m, itemsById)).join('')
       : '<tr><td colspan="6">Todavía no tiene movimientos de material.</td></tr>';
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el historial de material.</td></tr>';
+    tableBody.innerHTML =
+      '<tr><td colspan="6">No se pudo cargar el historial de material.</td></tr>';
   }
 }
 
@@ -1091,14 +1216,15 @@ if (isRealAdmin) {
         minLabel: 'al inicio en el cargo',
         maxInclusive: today(),
         successMessage: 'Cargo finalizado.',
-        onSave: (date) => apiFetch(`/board-members/${currentBoardTerm.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            position: currentBoardTerm.position,
-            start_date: currentBoardTerm.start_date.slice(0, 10),
-            end_date: date,
+        onSave: (date) =>
+          apiFetch(`/board-members/${currentBoardTerm.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              position: currentBoardTerm.position,
+              start_date: currentBoardTerm.start_date.slice(0, 10),
+              end_date: date,
+            }),
           }),
-        }),
       });
     }
   });
