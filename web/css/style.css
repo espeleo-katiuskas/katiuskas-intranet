@@ -125,6 +125,10 @@ body {
   padding: 20px 0;
 }
 
+.sidebar-header {
+  display: none;
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -310,12 +314,12 @@ body {
     flex-direction: column;
   }
 
+  /* Always in the layout, parked off-screen to the left and slid in by
+     .open, so opening is an animation instead of a sudden appearance.
+     visibility keeps the hidden links out of the tab order and away from
+     screen readers; it flips at the end of the slide when closing and at
+     the start when opening (hence the delay on the closed state only). */
   .sidebar {
-    display: none;
-  }
-
-  .sidebar.open {
-    display: block;
     position: fixed;
     top: 0;
     left: 0;
@@ -323,6 +327,50 @@ body {
     width: 180px;
     z-index: 100;
     overflow-y: auto;
+    padding-top: 0;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0s linear 0.25s;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.25s ease;
+  }
+
+  /* The club logo on the left and a close "X" on the right, above the
+     links; on a white band like the topbar, where the logo is meant to
+     be seen. Only exists in this narrow layout. */
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    background: #fff;
+  }
+
+  .sidebar-logo {
+    height: 36px;
+    width: auto;
+  }
+
+  .sidebar-close {
+    padding: 0 6px;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .sidebar.open {
+      transition: none;
+    }
   }
 
   .sidebar-toggle {

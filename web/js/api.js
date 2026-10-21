@@ -205,6 +205,7 @@ function initSidebarToggle() {
   }
 
   toggle.addEventListener('click', () => setOpen(!sidebar.classList.contains('open')));
+  document.getElementById('sidebar-close')?.addEventListener('click', () => setOpen(false));
   document.addEventListener('click', (event) => {
     if (sidebar.classList.contains('open') && !sidebar.contains(event.target) && !toggle.contains(event.target)) {
       setOpen(false);

@@ -117,6 +117,7 @@ const TOPBAR_HTML = `
 function renderShell() {
   const activePath = ACTIVE_ALIASES[window.location.pathname] ?? window.location.pathname;
   document.getElementById('sidebar').innerHTML =
+    `<div class="sidebar-header"><img src="/images/logo-katiuskas.png" alt="Club de Espeleología Katiuskas" class="sidebar-logo"><button type="button" id="sidebar-close" class="sidebar-close" aria-label="Cerrar menú">&times;</button></div>` +
     `<nav class="sidebar-nav" id="sidebar-nav">${NAV_ITEMS.map((item) => renderNavLink(item, activePath)).join('')}</nav>`;
   document.getElementById('topbar').innerHTML = TOPBAR_HTML;
 }
