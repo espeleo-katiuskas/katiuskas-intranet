@@ -856,10 +856,14 @@ the send of a bot-flow magic-link DM.
   own long-poll connection dropping or timing out for a moment — near-daily in practice,
   almost always resolved by the very next attempt) is logged at `WARN`, below
   `telegram.LogHandler`'s own forwarding threshold (`slog.LevelError`, see the first
-  bullet) — only once failures actually repeat (`getUpdatesFailureLogThreshold`
-  consecutive ones) does `Run` escalate to `ERROR`, and only for that one call, not for
-  every one of however many more follow — a longer real outage doesn't re-notify the log
-  channel on every 5-second retry for as long as it lasts.
+  bullet) — only once they have gone on without a single success for
+  `getUpdatesFailureLogAfter` (5 minutes: a duration and not a count of failures, since
+  one can take milliseconds or the client's whole 40 s timeout, and Telegram has its own
+  bad minutes — rate limiting, a Bad Gateway, requests left hanging, every night around
+  3:10 — that are nothing to act on) does `Run` escalate to `ERROR` (`getUpdatesFailures`),
+  and only for that one call, not for every one of however many more follow — a longer
+  real outage doesn't re-notify the log channel on every 5-second retry for as long as it
+  lasts.
   `users.Repository.UserIDForTelegramChatID` tells apart a chat this doesn't recognize yet
   — every message from one gets a greeting plus a "share your contact" keyboard button
   (`Client.SendMessageRequestingContact`, sent with `is_persistent: true` so the client

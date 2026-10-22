@@ -660,27 +660,45 @@ func TestLatestUpdateOffsetSkipsExistingBacklogWithoutProcessingIt(t *testing.T)
 	}
 }
 
-// TestShouldEscalateGetUpdatesFailure covers the actual behavior
-// change: an isolated GetUpdates failure (a Telegram long-poll blip)
-// doesn't escalate to ERROR — only the one at exactly
-// getUpdatesFailureLogThreshold does, and none of the ones after that,
-// so a longer outage doesn't keep re-notifying the log channel for as
-// long as it lasts.
-func TestShouldEscalateGetUpdatesFailure(t *testing.T) {
-	cases := []struct {
-		consecutiveFailures int
-		want                bool
+// TestGetUpdatesFailuresEscalateOnceAfterTheRunLastsLongEnough covers the
+// behavior: failures — however many — that don't last
+// getUpdatesFailureLogAfter don't escalate to ERROR; the first one that
+// finds the run has lasted that long does, and none of the ones after
+// that, so a longer outage doesn't keep re-notifying the log channel for
+// as long as it lasts. A success starts a new run.
+func TestGetUpdatesFailuresEscalateOnceAfterTheRunLastsLongEnough(t *testing.T) {
+	start := time.Date(2026, 10, 22, 3, 10, 0, 0, time.UTC)
+	var f getUpdatesFailures
+	steps := []struct {
+		at   time.Duration
+		want bool
 	}{
-		{1, false},
-		{2, false},
-		{3, true},
-		{4, false},
-		{5, false},
+		{0, false},                // the run starts
+		{10 * time.Second, false}, // a burst of failures within a minute...
+		{55 * time.Second, false}, // ...like a Telegram hiccup
+		{getUpdatesFailureLogAfter - time.Second, false}, // just short
+		{getUpdatesFailureLogAfter, true},                // lasted long enough
+		{getUpdatesFailureLogAfter + time.Minute, false}, // already reported
+		{getUpdatesFailureLogAfter + time.Hour, false},   // still the same run
 	}
-	for _, c := range cases {
-		if got := shouldEscalateGetUpdatesFailure(c.consecutiveFailures); got != c.want {
-			t.Errorf("shouldEscalateGetUpdatesFailure(%d) = %v, want %v", c.consecutiveFailures, got, c.want)
+	for _, s := range steps {
+		if got := f.record(start.Add(s.at)); got != s.want {
+			t.Fatalf("record at +%v = %v, want %v", s.at, got, s.want)
 		}
+	}
+	if f.count != len(steps) {
+		t.Errorf("count = %d, want %d", f.count, len(steps))
+	}
+
+	f.reset()
+	if f.record(start.Add(24 * time.Hour)) {
+		t.Error("the first failure of a new run escalated")
+	}
+	if f.since != start.Add(24*time.Hour) || f.count != 1 {
+		t.Errorf("after reset the run should start over, got since=%v count=%d", f.since, f.count)
+	}
+	if !f.record(start.Add(24*time.Hour + getUpdatesFailureLogAfter)) {
+		t.Error("the new run should escalate once it lasts long enough")
 	}
 }
 

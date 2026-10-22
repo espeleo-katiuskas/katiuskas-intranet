@@ -166,15 +166,19 @@ const unauthorizedAfterLinkReplyFormat = "¡Gracias! Te hemos identificado como 
 // that Run notices ctx being cancelled in reasonable time between calls.
 const pollTimeoutSeconds = 30
 
-// getUpdatesFailureLogThreshold is how many consecutive GetUpdates
-// failures it takes for Run to treat one as a real, ongoing problem
-// (see logGetUpdatesFailure) rather than a one-off blip — Telegram's
-// own long-poll connection dropping or timing out for a moment, almost
-// always resolved by the very next attempt. Was 2 until a run of
-// exactly 2 consecutive failures turned out to still be common enough
-// in practice (roughly once a week) to be its own kind of blip, not a
-// real problem worth surfacing at ERROR.
-const getUpdatesFailureLogThreshold = 3
+// getUpdatesFailureLogAfter is how long GetUpdates has to keep failing,
+// without a single success in between, for Run to treat it as a real,
+// ongoing problem (see logGetUpdatesFailure) rather than a blip —
+// Telegram's long-poll connection dropping, or Telegram itself being
+// briefly unwell (rate limiting, a Bad Gateway, requests left hanging
+// for a minute or so: every night around 3:10 for a few minutes, in
+// practice, and nothing anyone here can act on). It is a duration and
+// not a number of failures because how long a failure takes varies from
+// a few milliseconds to the client's whole timeout, so a count says
+// little about how long the bot has actually been cut off; it was 3
+// failures in a row before, which a minute of Telegram trouble was
+// enough to reach.
+const getUpdatesFailureLogAfter = 5 * time.Minute
 
 // botClient is the subset of *telegram.Client this package needs — a
 // local interface, the same pattern other packages use for UserLookup,
@@ -215,32 +219,48 @@ func New(client *telegram.Client, usersService *users.Service, logNotifier teleg
 	return &Bot{client: client, users: usersService, logNotifier: logNotifier, magicLinks: magicLinks}
 }
 
-// shouldEscalateGetUpdatesFailure reports whether the nth consecutive
-// GetUpdates failure in a row should be logged at ERROR instead of
-// WARN — true only the one time a run of failures first reaches
-// getUpdatesFailureLogThreshold, not on every one after that, so a
-// longer outage doesn't re-spam the log channel on every retry once
-// it's already been flagged once.
-func shouldEscalateGetUpdatesFailure(consecutiveFailures int) bool {
-	return consecutiveFailures == getUpdatesFailureLogThreshold
+// getUpdatesFailures tracks a run of GetUpdates calls failing one after
+// another, since the first of them, and whether it has been reported yet.
+type getUpdatesFailures struct {
+	count     int
+	since     time.Time
+	escalated bool
 }
 
-// logGetUpdatesFailure logs one failed GetUpdates call at a level
-// matching how many times in a row it's now happened. Below
-// getUpdatesFailureLogThreshold, WARN: visible in `docker compose logs
-// api` for anyone actively looking, but below telegram.LogHandler's own
-// forwarding threshold (see cmd/api/main.go), so an isolated blip never
-// reaches the log channel at all. At exactly the threshold, ERROR —
-// this stopped looking like a blip and started looking like a real
-// problem, so it's worth surfacing there too. Past the threshold, back
-// to WARN, so an outage that drags on doesn't keep re-notifying the
-// channel every 5 seconds for as long as it lasts.
-func logGetUpdatesFailure(err error, consecutiveFailures int) {
-	if shouldEscalateGetUpdatesFailure(consecutiveFailures) {
-		slog.Error("telegram bot: get updates", "error", err, "consecutive_failures", consecutiveFailures)
-		return
+// record notes one more failure at now and reports whether it is the one
+// that should be logged at ERROR: the first to find the run has lasted
+// getUpdatesFailureLogAfter, and no other in the same run, so a longer
+// outage doesn't re-notify the log channel on every retry for as long as
+// it lasts.
+func (f *getUpdatesFailures) record(now time.Time) (escalate bool) {
+	if f.count == 0 {
+		f.since = now
 	}
-	slog.Warn("telegram bot: get updates", "error", err, "consecutive_failures", consecutiveFailures)
+	f.count++
+	if f.escalated || now.Sub(f.since) < getUpdatesFailureLogAfter {
+		return false
+	}
+	f.escalated = true
+	return true
+}
+
+// reset ends the run: the next failure starts a new one.
+func (f *getUpdatesFailures) reset() { *f = getUpdatesFailures{} }
+
+// logGetUpdatesFailure logs one failed GetUpdates call. At WARN it is
+// visible in `docker compose logs api` for anyone actively looking, but
+// below telegram.LogHandler's own forwarding threshold (see
+// cmd/api/main.go), so a blip never reaches the log channel at all. The
+// failure record reports (escalate) is the one that stopped looking like
+// a blip and started looking like a real problem, worth surfacing there
+// too, at ERROR.
+func logGetUpdatesFailure(err error, escalate bool, count int, failingFor time.Duration) {
+	level := slog.LevelWarn
+	if escalate {
+		level = slog.LevelError
+	}
+	slog.Log(context.Background(), level, "telegram bot: get updates",
+		"error", err, "consecutive_failures", count, "failing_for", failingFor.Round(time.Second))
 }
 
 // Run polls Telegram for new messages until ctx is cancelled. Meant to
@@ -259,27 +279,28 @@ func (b *Bot) Run(ctx context.Context) {
 	if err != nil {
 		slog.Error("telegram bot: get initial offset", "error", err)
 	}
-	// How many GetUpdates calls in a row have just failed — reset to 0
-	// on the next successful one. See logGetUpdatesFailure: a single
-	// failure is almost always Telegram's own long-poll connection
-	// dropping or timing out for a moment, not a real, ongoing problem,
-	// so it's logged at a level this process's own
-	// telegram.LogHandler (see cmd/api/main.go) doesn't forward to the
-	// log channel — only once failures actually start repeating does
-	// this stop looking like a blip and get escalated.
-	consecutiveFailures := 0
+	// The run of GetUpdates calls in a row that have just failed, reset on
+	// the next successful one. See logGetUpdatesFailure: a failure is
+	// almost always Telegram's own long-poll connection dropping or Telegram
+	// being unwell for a moment, not a real, ongoing problem, so it's
+	// logged at a level this process's own telegram.LogHandler (see
+	// cmd/api/main.go) doesn't forward to the log channel — only once they
+	// have gone on for getUpdatesFailureLogAfter does this stop looking
+	// like a blip and get escalated.
+	var failures getUpdatesFailures
 	for ctx.Err() == nil {
 		updates, err := b.client.GetUpdates(ctx, offset, pollTimeoutSeconds)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			consecutiveFailures++
-			logGetUpdatesFailure(err, consecutiveFailures)
+			now := b.clock()
+			escalate := failures.record(now)
+			logGetUpdatesFailure(err, escalate, failures.count, now.Sub(failures.since))
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		consecutiveFailures = 0
+		failures.reset()
 		for _, u := range updates {
 			offset = u.UpdateID + 1
 			b.handle(ctx, u)
@@ -326,15 +347,20 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 	b.handleRecognizedChat(ctx, msg, userID, idle)
 }
 
+// clock is the current time: time.Now unless a test set its own.
+func (b *Bot) clock() time.Time {
+	if b.now != nil {
+		return b.now()
+	}
+	return time.Now()
+}
+
 // noteMessage records that chatID just wrote and reports whether it had
 // been idle before this message: no earlier message within
 // idleBeforeEmailPrompt — or none the bot knows of, since it only remembers
 // them since it started.
 func (b *Bot) noteMessage(chatID int64) (idle bool) {
-	now := time.Now()
-	if b.now != nil {
-		now = b.now()
-	}
+	now := b.clock()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	last, seen := b.lastMessageAt[chatID]
