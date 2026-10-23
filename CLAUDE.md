@@ -1442,17 +1442,18 @@ for anybody else, so each script reaches those through a null-safe lookup (a bar
 `getElementById(...).addEventListener` on one of them would throw before the rest of the
 page ran). `/reparto-pedidos` (`requireAnyRole` admin/board/material; the old summary and
 collection pages are this one) is everything about the orders in one place: on top `GET
-.../order` (what has to be bought), below the units grouped by person (searchable; the ones
-with everything paid and handed out are hidden unless asked for). A row is a quantity (changed
-or removed with the dialog, while open), with its state in a few lines (`standing`): for an
-article with numbers (`isNumbered`) how many have a number, which are paid and which handed
-out; elsewhere counts. Actions are on what is typed in the row (`selection`: "0001-0010, 0015";
-blank = all that can be; or a count for rows without numbers, `quantityOf`) and go through the
-single `perform(act, unit)`: assign numbers / the next free / take them off, mark paid or take
-the payment off (admin/board; "Marcar todo lo posible" per person), hand out to the person in
-the "Entregado a" picker (with the "assign the missing numbers" checkbox), undo a delivery and
-return, confirming before handing over unpaid units, undoing and returning. What is typed in a
-row survives redrawing (`drafts`).
+.../order` (what has to be bought), below it a list with one line per order (searchable by member
+or number; the ones with everything paid and handed out are hidden unless asked for) and a summary:
+what, how many are handed out and paid, what it costs. "Más información" unfolds its detail
+(`detail`, kept in `unfolded`): for an article with numbers (`isNumbered`) how many are without one
+(with "Asignar los siguientes libres" or typed numbers) and the list of its numbered items, each
+with its paid / delivered state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by
+state, `pick`) and act on — mark paid or take the payment off (admin/board), hand out to the
+person in the "Entregado a" picker (with the "assign the missing numbers" checkbox), undo a
+delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same.
+Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
+units, undoing, returning or taking numbers off. What is unfolded, ticked and typed survives
+redrawing.
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
 `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
 `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`,

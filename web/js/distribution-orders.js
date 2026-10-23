@@ -120,25 +120,25 @@ function renderOrder(order) {
 }
 
 // ----- the orders of each member -----
+// One line for each order with a summary (how many, how many paid, how many handed
+// out) and, unfolded, the detail: the numbers to give it, a list of its numbered
+// items to choose from, and the actions.
 const list = document.getElementById('orders-list');
 const searchBox = document.getElementById('orders-search');
 const showDone = document.getElementById('show-done');
 const personInput = document.getElementById('pf-person');
 const assignBox = document.getElementById('pf-assign');
 
-// What was typed in a row's fields and isn't acted on yet, so that drawing the
-// list again after any action doesn't lose it.
-const drafts = new Map();
+// Orders unfolded, what is ticked in each (numbers), and what was typed in the
+// fields: all of it survives drawing the list again after any action.
+const unfolded = new Set();
+const ticked = new Map();
+const typed = new Map();
 
-function groupByPerson(all) {
-  const groups = new Map();
-  for (const u of all) {
-    if (!groups.has(u.beneficiary_login))
-      groups.set(u.beneficiary_login, { name: u.beneficiary_name, units: [] });
-    groups.get(u.beneficiary_login).units.push(u);
-  }
-  return [...groups.entries()];
-}
+const tickedOf = (u) => {
+  if (!ticked.has(u.id)) ticked.set(u.id, new Set());
+  return ticked.get(u.id);
+};
 
 const unitTitle = (u) => {
   const what = u.article_name
@@ -147,207 +147,144 @@ const unitTitle = (u) => {
   return u.is_extra ? `${what} (extra)` : what;
 };
 
-// A row's state in a few lines.
-function standing(u) {
+// The line of an order: what, how many are paid and handed out, what it costs.
+function summaryRow(u) {
   const article = articleOf(u);
-  const lines = [];
-  if (isNumbered(u)) {
-    const unnumbered = u.quantity - assigned(u).length;
-    lines.push(
-      `Con número: ${assigned(u).length ? formatIdentifiers(article, assigned(u)) : 'ninguno'} (${assigned(u).length} de ${u.quantity})${unnumbered ? ` · sin número: ${unnumbered}` : ''}`,
-    );
-    lines.push(
-      `Pagados: ${paidIds(u).length ? formatIdentifiers(article, paidIds(u)) : 'ninguno'} · Entregados: ${deliveredIds(u).length ? formatIdentifiers(article, deliveredIds(u)) : 'ninguno'}`,
-    );
-  } else {
-    const parts = [];
-    if (u.price > 0) parts.push(`pagadas ${u.paid_quantity} de ${u.quantity}`);
-    parts.push(`entregadas ${u.picked_up_quantity} de ${u.quantity}`);
-    lines.push(parts.join(' · '));
-  }
-  if (u.picked_up_at) {
-    const to =
-      u.picked_up_by_login === u.beneficiary_login ? '' : `, a ${nameOf(u.picked_up_by_login)}`;
-    lines.push(
-      `Última entrega: ${formatDateTime(u.picked_up_at)}${to} (apuntado por ${nameOf(u.pickup_recorded_by_login)})`,
-    );
-  }
-  return lines;
+  const extra = [];
+  if (u.registered_by_login && u.registered_by_login !== u.beneficiary_login)
+    extra.push(`apuntado por ${nameOf(u.registered_by_login)} el ${formatDate(u.registered_at)}`);
+  if (isUnchosen(u, hasOptions())) extra.push('sin elegir');
+  const numbers = isNumbered(u)
+    ? `<div class="hint">${assigned(u).length} de ${u.quantity} con número${assigned(u).length ? `: ${escapeHtml(formatIdentifiers(article, assigned(u)))}` : ''}</div>`
+    : '';
+  const open = unfolded.has(u.id);
+  const paid = u.price > 0 ? `${u.paid_quantity} de ${u.quantity}` : '—';
+  const cost = u.price > 0 ? formatCurrency(unitCost(u)) : 'Gratis';
+  return `<tr class="order-row" data-order="${u.id}">
+    <td>${escapeHtml(u.beneficiary_name)}</td>
+    <td><strong>${escapeHtml(unitTitle(u))}</strong>${extra.length ? `<div class="hint">${escapeHtml(extra.join(' · '))}</div>` : ''}${numbers}</td>
+    <td>${u.picked_up_quantity} de ${u.quantity}</td>
+    <td>${paid}</td>
+    <td>${cost}</td>
+    <td><button type="button" class="btn btn-secondary btn-small" data-toggle="${u.id}" aria-expanded="${open}">${open ? 'Ocultar' : 'Más información'}</button></td>
+  </tr>`;
 }
 
 function button(act, u, label, cls = 'btn-secondary', title = '') {
   return `<button type="button" class="btn ${cls} btn-small" data-act="${act}" data-unit="${u.id}"${title ? ` title="${escapeHtml(title)}"` : ''}>${label}</button>`;
 }
 
-function group(label, buttons) {
-  const shown = buttons.filter(Boolean);
-  return shown.length ? `<span class="hint">${label}:</span> ${shown.join(' ')}` : '';
+// The numbered items of an order, each with its state, to tick.
+function itemList(u) {
+  const article = articleOf(u);
+  const chosen = tickedOf(u);
+  const items = assigned(u)
+    .map((identifier) => {
+      const badges = [
+        paidIds(u).includes(identifier) ? '<span class="badge">pagado</span>' : '',
+        deliveredIds(u).includes(identifier) ? '<span class="badge">entregado</span>' : '',
+      ].join(' ');
+      return `<label class="checkbox-label" style="display:inline-flex;gap:.35rem;align-items:center;white-space:nowrap">
+        <input type="checkbox" data-item="${escapeHtml(identifier)}" data-unit="${u.id}"${chosen.has(identifier) ? ' checked' : ''}>
+        ${escapeHtml(formatIdentifiers(article, [identifier]))} ${badges}
+      </label>`;
+    })
+    .join('');
+  return `<div style="display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-height:14rem;overflow:auto;padding:.5rem;border:1px solid var(--border, #ddd);border-radius:6px">${items}</div>`;
 }
 
-// The controls of a row: change the order, number it, pay, hand out, return.
-function controls(u) {
-  const parts = [];
-  const orderButtons = [];
-  if (canEditOrder() && (u.picked_up_quantity === 0 || u.article_id)) {
-    if (hasOptions() || u.article_id) orderButtons.push(button('change', u, 'Cambiar'));
-    const removable =
-      u.picked_up_quantity === 0 && (u.is_extra || distribution.audience === 'signup');
-    if (removable) orderButtons.push(button('delete', u, 'Quitar pedido', 'btn-danger'));
-  }
-  if (orderButtons.length) parts.push(group('Pedido', orderButtons));
+function selectors(u) {
+  const pick = (kind, label) =>
+    `<button type="button" class="link-button" data-pick="${kind}" data-unit="${u.id}">${label}</button>`;
+  const parts = [
+    pick('all', 'todos'),
+    pick('none', 'ninguno'),
+    pick('unpaid', 'sin pagar'),
+    pick('undelivered', 'sin entregar'),
+  ];
+  if (paidIds(u).length) parts.push(pick('paid', 'pagados'));
+  if (deliveredIds(u).length) parts.push(pick('delivered', 'entregados'));
+  return `<span class="hint">Marcar:</span> ${parts.join(' · ')} <span class="hint" data-count-for="${u.id}">${tickedOf(u).size} marcados</span>`;
+}
 
+// What the person can do with the order, in the order it is wanted: give it
+// numbers, choose among its numbered items, change the order itself.
+function detail(u) {
+  const blocks = [];
   if (isNumbered(u)) {
-    const draft = drafts.get(`sel-${u.id}`) ?? '';
     const missing = u.quantity - assigned(u).length;
-    const field = `<input type="text" size="34" data-sel-for="${u.id}" value="${escapeHtml(draft)}" placeholder="Números${isDescribed(u) ? ' (0001-0010, 0015)' : ''}" aria-label="Números de ${escapeHtml(u.article_name)}">`;
-    const numbering = group('Números', [
-      button('add', u, 'Asignar', 'btn-secondary', 'Da al pedido los números escritos'),
-      isDescribed(u) && missing > 0
-        ? button(
-            'next',
-            u,
-            `Asignar los ${missing === 1 ? 'siguiente libre' : `${missing} siguientes libres`}`,
-            'btn-primary',
-          )
-        : '',
-      button(
-        'remove',
-        u,
-        'Quitar números',
-        'btn-secondary',
-        'Quita los escritos (si no están pagados ni entregados): quedan libres',
-      ),
-    ]);
-    const pay =
-      canMarkPaid && u.price > 0
-        ? group('Pago', [
-            unpaidAssigned(u).length ? button('pay', u, 'Marcar pagados', 'btn-primary') : '',
-            paidIds(u).length ? button('unpay', u, 'Quitar pago') : '',
-          ])
+    const field = typed.get(`add-${u.id}`) ?? '';
+    if (missing > 0) {
+      blocks.push(`<div class="table-actions"><strong>Sin número: ${missing}.</strong>
+        ${isDescribed(u) ? button('next', u, `Asignar ${missing === 1 ? 'el siguiente libre' : `los ${missing} siguientes libres`}`, 'btn-primary') : ''}
+        <input type="text" size="26" data-add-for="${u.id}" value="${escapeHtml(field)}" placeholder="Números concretos${isDescribed(u) ? ' (0001-0010, 0015)' : ''}" aria-label="Números concretos">
+        ${button('add', u, 'Asignar estos')}
+      </div>`);
+    }
+    if (assigned(u).length) {
+      const pay =
+        canMarkPaid && u.price > 0
+          ? `${button('pay', u, 'Marcar pagados', 'btn-primary')} ${button('unpay', u, 'Quitar pago')}`
+          : '';
+      const delivery = canDeliver()
+        ? `${button('deliver', u, 'Entregar', 'btn-primary')} ${button('undeliver', u, 'Deshacer entrega', 'btn-secondary', 'Vuelven a estar sin entregar, con su número')} ${button('return', u, 'Devolver', 'btn-danger', 'Salen del pedido y su número queda libre (solo lo entregado y sin pagar)')}`
         : '';
-    const delivery = canDeliver()
-      ? group('Entrega', [
-          u.quantity - u.picked_up_quantity > 0
-            ? button('deliver', u, 'Entregar', 'btn-primary')
-            : '',
-          u.picked_up_quantity > 0
-            ? button(
-                'undeliver',
-                u,
-                'Deshacer entrega',
-                'btn-secondary',
-                'Vuelven a estar sin entregar, con su número',
-              )
-            : '',
-          returnable(u) > 0
-            ? button(
-                'return',
-                u,
-                'Devolver',
-                'btn-danger',
-                'Salen del pedido y su número queda libre',
-              )
-            : '',
-        ])
-      : '';
-    parts.push(`<div>${field}</div>`, numbering, pay, delivery);
+      blocks.push(`<div>${selectors(u)}</div>${itemList(u)}
+        <div class="table-actions"><span class="hint">Con lo marcado:</span> ${pay} ${delivery} ${button('remove', u, 'Quitar números', 'btn-secondary', 'Quita el número a lo marcado (si no está pagado ni entregado): queda libre')}</div>`);
+    }
   } else {
-    const draft = drafts.get(`qty-${u.id}`) ?? '';
     const count =
       u.quantity > 1
-        ? `<input type="number" min="1" max="${u.quantity}" step="1" size="4" data-qty-for="${u.id}" value="${escapeHtml(draft)}" placeholder="todas" aria-label="Unidades">`
+        ? `<input type="number" min="1" max="${u.quantity}" step="1" size="4" data-qty-for="${u.id}" value="${escapeHtml(typed.get(`qty-${u.id}`) ?? '')}" placeholder="todas" aria-label="Unidades">`
         : '';
     const pay =
       canMarkPaid && u.price > 0
-        ? group('Pago', [
-            payable(u) > 0
-              ? button('pay', u, u.quantity > 1 ? 'Marcar pagadas' : 'Marcar pagado', 'btn-primary')
-              : '',
-            u.paid_quantity > 0
-              ? button('unpay', u, u.quantity > 1 ? 'Quitar pagadas' : 'Quitar pago')
-              : '',
-          ])
+        ? `${payable(u) > 0 ? button('pay', u, u.quantity > 1 ? 'Marcar pagadas' : 'Marcar pagado', 'btn-primary') : ''} ${u.paid_quantity > 0 ? button('unpay', u, u.quantity > 1 ? 'Quitar pagadas' : 'Quitar pago') : ''}`
         : '';
     const delivery = canDeliver()
-      ? group('Entrega', [
-          u.quantity - u.picked_up_quantity > 0
-            ? button('deliver', u, 'Entregar', 'btn-primary')
-            : '',
-          u.picked_up_quantity > 0
-            ? button(
-                'undeliver',
-                u,
-                'Deshacer entrega',
-                'btn-secondary',
-                'Vuelven a estar sin entregar',
-              )
-            : '',
-          returnable(u) > 0
-            ? button('return', u, 'Devolver', 'btn-danger', 'Salen del pedido')
-            : '',
-        ])
+      ? `${u.quantity - u.picked_up_quantity > 0 ? button('deliver', u, 'Entregar', 'btn-primary') : ''} ${u.picked_up_quantity > 0 ? button('undeliver', u, 'Deshacer entrega', 'btn-secondary', 'Vuelven a estar sin entregar') : ''} ${returnable(u) > 0 ? button('return', u, 'Devolver', 'btn-danger', 'Salen del pedido') : ''}`
       : '';
-    parts.push(count ? `<div>${count}</div>` : '', pay, delivery);
+    blocks.push(`<div class="table-actions">${count} ${pay} ${delivery}</div>`);
   }
-  return `<div class="table-actions">${parts.filter(Boolean).join(' ')}</div>`;
-}
+  const order = [];
+  if (canEditOrder() && (u.picked_up_quantity === 0 || u.article_id)) {
+    if (hasOptions() || u.article_id) order.push(button('change', u, 'Cambiar el pedido'));
+    if (u.picked_up_quantity === 0 && (u.is_extra || distribution.audience === 'signup'))
+      order.push(button('delete', u, 'Quitar el pedido', 'btn-danger'));
+  }
+  if (canMarkPaid && u.price > 0 && payableCost(u) > 0)
+    order.push(button('payall', u, `Pagar todo lo posible (${formatCurrency(payableCost(u))})`));
+  if (order.length)
+    blocks.push(
+      `<div class="table-actions"><span class="hint">Pedido:</span> ${order.join(' ')}</div>`,
+    );
 
-function unitBlock(u) {
-  const by =
-    u.registered_by_login && u.registered_by_login !== u.beneficiary_login
-      ? ` · apuntado por ${nameOf(u.registered_by_login)} el ${formatDate(u.registered_at)}`
-      : '';
-  const cost = u.price > 0 ? ` · ${formatCurrency(unitCost(u))}` : '';
-  const unchosen = isUnchosen(u, hasOptions()) ? ' · <strong>sin elegir</strong>' : '';
-  return `<li class="order-unit">
-    <div><strong>${escapeHtml(unitTitle(u))}</strong>${escapeHtml(cost)}${escapeHtml(by)}${unchosen}</div>
-    ${standing(u)
-      .map((line) => `<div class="hint">${escapeHtml(line)}</div>`)
-      .join('')}
-    ${controls(u)}
-  </li>`;
-}
-
-function paymentCell(login, units) {
-  const toPay = units.filter((u) => u.price > 0);
-  if (toPay.length === 0) return 'Gratis';
-  const total = toPay.reduce((sum, u) => sum + unitCost(u), 0);
-  const paid = toPay.reduce((sum, u) => sum + u.price * u.paid_quantity, 0);
-  const summary =
-    paid === 0
-      ? `Pendiente: ${formatCurrency(total)}`
-      : paid === total
-        ? 'Pagado'
-        : `Pagado ${formatCurrency(paid)} · pendiente ${formatCurrency(total - paid)}`;
-  const due = toPay.reduce((sum, u) => sum + payableCost(u), 0);
-  const quick =
-    canMarkPaid && due > 0
-      ? `<button type="button" class="btn btn-primary btn-small" data-pay-person="${escapeHtml(login)}">Marcar todo lo posible como pagado (${formatCurrency(due)})</button>`
-      : '';
-  return `<div>${escapeHtml(summary)}</div><div class="table-actions">${quick}</div>`;
+  const last = u.picked_up_at
+    ? `<div class="hint">Última entrega: ${escapeHtml(formatDateTime(u.picked_up_at))}${u.picked_up_by_login === u.beneficiary_login ? '' : `, a ${escapeHtml(nameOf(u.picked_up_by_login))}`} (apuntado por ${escapeHtml(nameOf(u.pickup_recorded_by_login))})</div>`
+    : '';
+  return `<tr class="order-detail" data-detail="${u.id}"><td></td><td colspan="5">${last}${blocks.join('')}</td></tr>`;
 }
 
 function render() {
   const needle = searchBox.value.trim().toLowerCase();
-  const groups = groupByPerson(units).filter(
-    ([, g]) =>
-      (!needle || g.name.toLowerCase().includes(needle)) &&
-      (showDone.checked || g.units.some((u) => !finished(u))),
+  const shown = units.filter(
+    (u) =>
+      (!needle ||
+        u.beneficiary_name.toLowerCase().includes(needle) ||
+        assigned(u).some((i) => i.toLowerCase().includes(needle))) &&
+      (showDone.checked || !finished(u)),
   );
-  list.innerHTML = groups.length
-    ? groups
-        .map(
-          ([login, g]) => `
-        <tr>
-          <td>${escapeHtml(g.name)}</td>
-          <td><ul class="plain-list">${g.units.map(unitBlock).join('')}</ul></td>
-          <td>${formatCurrency(g.units.reduce((sum, u) => sum + unitCost(u), 0))}<br>${paymentCell(login, g.units)}</td>
-        </tr>`,
-        )
-        .join('')
-    : `<tr><td colspan="3">${
+  // What is ticked can only be what the order has, still.
+  for (const u of units) {
+    const chosen = tickedOf(u);
+    for (const identifier of [...chosen])
+      if (!assigned(u).includes(identifier)) chosen.delete(identifier);
+  }
+  list.innerHTML = shown.length
+    ? shown.map((u) => summaryRow(u) + (unfolded.has(u.id) ? detail(u) : '')).join('')
+    : `<tr><td colspan="6">${
         units.length
-          ? 'Nadie con ese filtro.'
+          ? 'Nada con ese filtro.'
           : provisional
             ? 'Los pedidos de cada socio se crean al abrir el reparto.'
             : 'Todavía no ha pedido nadie.'
@@ -358,7 +295,7 @@ function render() {
   const handedOut = units.reduce((sum, u) => sum + u.picked_up_quantity, 0);
   const numbered = units.filter(isNumbered).reduce((sum, u) => sum + assigned(u).length, 0);
   const numberedTotal = units.filter(isNumbered).reduce((sum, u) => sum + u.quantity, 0);
-  const parts = [`${total} unidades pedidas`];
+  const parts = [`${units.length} pedidos, ${total} unidades`];
   if (units.some((u) => u.price > 0)) parts.push(`pagadas ${paid}`);
   parts.push(`entregadas ${handedOut}`);
   if (numberedTotal) parts.push(`con número ${numbered} de ${numberedTotal}`);
@@ -372,13 +309,6 @@ function render() {
 
 searchBox.addEventListener('input', render);
 showDone.addEventListener('change', render);
-
-list.addEventListener('input', (event) => {
-  const sel = event.target.closest('input[data-sel-for]');
-  if (sel) drafts.set(`sel-${sel.dataset.selFor}`, sel.value);
-  const qty = event.target.closest('input[data-qty-for]');
-  if (qty) drafts.set(`qty-${qty.dataset.qtyFor}`, qty.value);
-});
 
 // ----- editing the order -----
 const unitDialog = document.getElementById('edit-unit-dialog');
@@ -435,16 +365,7 @@ unitForm.addEventListener('submit', async (event) => {
 });
 
 // ----- the actions -----
-// What a row's fields say: the numbers typed, or how many units.
-function selection(u) {
-  const field = list.querySelector(`input[data-sel-for="${u.id}"]`);
-  return field
-    ? field.value
-        .split(/[,\n]/)
-        .map((v) => v.trim())
-        .filter(Boolean)
-    : [];
-}
+const encodeList = (items) => encodeURIComponent(items.join(','));
 
 function quantityOf(u) {
   const field = list.querySelector(`input[data-qty-for="${u.id}"]`);
@@ -452,28 +373,25 @@ function quantityOf(u) {
   return Number(field.value);
 }
 
-const encodeList = (items) => encodeURIComponent(items.join(','));
-
-// The request an action makes, or null when something is missing (said already).
+// What an action does, said already when something is missing; true when it
+// changed something and the list has to be read again.
 async function perform(act, u) {
   const numbered = isNumbered(u);
-  const sel = numbered ? selection(u) : [];
+  const chosen = [...tickedOf(u)];
   const quantity = numbered ? null : quantityOf(u);
   if (quantity !== null && (!Number.isInteger(quantity) || quantity < 1)) {
     showError('Pon cuántas unidades (un número entero de 1 en adelante), o déjalo en blanco.');
     return false;
   }
-  const withWhich = numbered
-    ? sel.length
-      ? { identifiers: sel }
-      : {}
-    : quantity
-      ? { quantity }
-      : {};
+  // Which units an action is about: the ticked numbers, or a count.
+  const needsTicks = ['pay', 'unpay', 'deliver', 'undeliver', 'return', 'remove'].includes(act);
+  if (numbered && needsTicks && chosen.length === 0) {
+    showError('Marca antes los números a los que se refiere.');
+    return false;
+  }
+  const withWhich = numbered ? { identifiers: chosen } : quantity ? { quantity } : {};
   const which = numbered
-    ? sel.length
-      ? `${sel.length === 1 ? 'el número' : 'los números'} ${sel.join(', ')}`
-      : 'todo lo que se pueda'
+    ? `${chosen.length} ${chosen.length === 1 ? 'unidad' : 'unidades'}`
     : quantity
       ? `${quantity} unidades`
       : 'todo lo que se pueda';
@@ -486,30 +404,34 @@ async function perform(act, u) {
       await apiFetch(`${base}/units/${u.id}`, { method: 'DELETE' });
       showFeedback('Pedido quitado.');
       return true;
-    case 'add':
-    case 'remove':
-      if (sel.length === 0) {
+    case 'add': {
+      const text = (typed.get(`add-${u.id}`) ?? '')
+        .split(/[,\n]/)
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (text.length === 0) {
         showError('Escribe los números, por ejemplo «0001-0010, 0015».');
         return false;
       }
-      if (act === 'add') {
-        await apiFetch(`${base}/units/${u.id}/identifiers`, {
-          method: 'POST',
-          body: JSON.stringify({ identifiers: sel }),
-        });
-        showFeedback('Números asignados.');
-      } else {
-        if (!confirm(`¿Quitar los números ${sel.join(', ')} del pedido? Quedan libres.`))
-          return false;
-        await apiFetch(`${base}/units/${u.id}/identifiers?identifiers=${encodeList(sel)}`, {
-          method: 'DELETE',
-        });
-        showFeedback('Números quitados.');
-      }
+      await apiFetch(`${base}/units/${u.id}/identifiers`, {
+        method: 'POST',
+        body: JSON.stringify({ identifiers: text }),
+      });
+      typed.delete(`add-${u.id}`);
+      showFeedback('Números asignados.');
       return true;
+    }
     case 'next':
       await apiFetch(`${base}/units/${u.id}/identifiers/assign`, { method: 'POST' });
       showFeedback('Números asignados.');
+      return true;
+    case 'remove':
+      if (!confirm(`¿Quitar el número a ${which}? Quedan libres.`)) return false;
+      await apiFetch(`${base}/units/${u.id}/identifiers?identifiers=${encodeList(chosen)}`, {
+        method: 'DELETE',
+      });
+      for (const identifier of chosen) tickedOf(u).delete(identifier);
+      showFeedback('Números quitados.');
       return true;
     case 'pay':
       await apiFetch(`${base}/payments`, {
@@ -518,11 +440,16 @@ async function perform(act, u) {
       });
       showFeedback('Marcado como pagado.');
       return true;
+    case 'payall':
+      await apiFetch(`${base}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ unit_ids: [u.id] }),
+      });
+      showFeedback('Marcado como pagado.');
+      return true;
     case 'unpay': {
       const query = numbered
-        ? sel.length
-          ? `?identifiers=${encodeList(sel)}`
-          : ''
+        ? `?identifiers=${encodeList(chosen)}`
         : quantity
           ? `?quantity=${quantity}`
           : '';
@@ -543,11 +470,10 @@ async function perform(act, u) {
         showError('Elige antes, arriba, a la persona que recoge («Entregado a»).');
         return false;
       }
-      if (
-        u.price > 0 &&
-        u.paid_quantity < u.quantity &&
-        !confirm('Hay unidades de este pedido sin pagar. ¿Entregar igualmente?')
-      )
+      const unpaid = numbered
+        ? chosen.some((i) => !paidIds(u).includes(i))
+        : u.paid_quantity < u.quantity;
+      if (u.price > 0 && unpaid && !confirm('Hay unidades sin pagar. ¿Entregar igualmente?'))
         return false;
       await apiFetch(`${base}/pickups`, {
         method: 'POST',
@@ -564,9 +490,7 @@ async function perform(act, u) {
       if (!confirm(`¿Deshacer la entrega de ${which}? Siguen en el pedido, sin entregar.`))
         return false;
       const query = numbered
-        ? sel.length
-          ? `?identifiers=${encodeList(sel)}`
-          : ''
+        ? `?identifiers=${encodeList(chosen)}`
         : quantity
           ? `?quantity=${quantity}`
           : '';
@@ -575,10 +499,6 @@ async function perform(act, u) {
       return true;
     }
     case 'return': {
-      if (numbered && sel.length === 0) {
-        showError('Escribe cuáles se devuelven («0001-0010, 0015»).');
-        return false;
-      }
       if (
         !confirm(
           `¿Devolver ${which}? Salen del pedido y, si tienen número, queda libre. No se puede deshacer.`,
@@ -589,6 +509,7 @@ async function perform(act, u) {
         method: 'POST',
         body: JSON.stringify(withWhich),
       });
+      for (const identifier of chosen) tickedOf(u).delete(identifier);
       showFeedback('Devolución apuntada.');
       return true;
     }
@@ -597,24 +518,63 @@ async function perform(act, u) {
   }
 }
 
+// Ticks the numbers of an order that have some state, in the page and in memory.
+function pick(u, kind) {
+  const paid = paidIds(u);
+  const delivered = deliveredIds(u);
+  const rules = {
+    all: () => true,
+    none: () => false,
+    unpaid: (i) => !paid.includes(i),
+    undelivered: (i) => !delivered.includes(i),
+    paid: (i) => paid.includes(i),
+    delivered: (i) => delivered.includes(i),
+  };
+  const chosen = tickedOf(u);
+  chosen.clear();
+  for (const identifier of assigned(u)) if (rules[kind](identifier)) chosen.add(identifier);
+  for (const box of list.querySelectorAll(`input[data-item][data-unit="${u.id}"]`)) {
+    box.checked = chosen.has(box.dataset.item);
+  }
+  updateCount(u);
+}
+
+function updateCount(u) {
+  const label = list.querySelector(`[data-count-for="${u.id}"]`);
+  if (label) label.textContent = `${tickedOf(u).size} marcados`;
+}
+
+list.addEventListener('change', (event) => {
+  const box = event.target.closest('input[data-item]');
+  if (!box) return;
+  const u = units.find((x) => x.id === Number(box.dataset.unit));
+  if (box.checked) tickedOf(u).add(box.dataset.item);
+  else tickedOf(u).delete(box.dataset.item);
+  updateCount(u);
+});
+
+list.addEventListener('input', (event) => {
+  const add = event.target.closest('input[data-add-for]');
+  if (add) typed.set(`add-${add.dataset.addFor}`, add.value);
+  const qty = event.target.closest('input[data-qty-for]');
+  if (qty) typed.set(`qty-${qty.dataset.qtyFor}`, qty.value);
+});
+
 list.addEventListener('click', async (event) => {
-  const pay = event.target.closest('button[data-pay-person]');
-  if (pay) {
-    const mine = units.filter(
-      (x) => x.beneficiary_login === pay.dataset.payPerson && x.price > 0 && payable(x) > 0,
+  const toggle = event.target.closest('button[data-toggle]');
+  if (toggle) {
+    const unitId = Number(toggle.dataset.toggle);
+    if (unfolded.has(unitId)) unfolded.delete(unitId);
+    else unfolded.add(unitId);
+    render();
+    return;
+  }
+  const picker = event.target.closest('button[data-pick]');
+  if (picker) {
+    pick(
+      units.find((x) => x.id === Number(picker.dataset.unit)),
+      picker.dataset.pick,
     );
-    pay.disabled = true;
-    try {
-      await apiFetch(`${base}/payments`, {
-        method: 'POST',
-        body: JSON.stringify({ unit_ids: mine.map((x) => x.id) }),
-      });
-      showFeedback('Marcado como pagado.');
-      await load();
-    } catch (err) {
-      pay.disabled = false;
-      fail(err);
-    }
     return;
   }
   const b = event.target.closest('button[data-act]');
@@ -623,8 +583,7 @@ list.addEventListener('click', async (event) => {
   b.disabled = true;
   try {
     if (await perform(b.dataset.act, u)) {
-      drafts.delete(`sel-${u.id}`);
-      drafts.delete(`qty-${u.id}`);
+      typed.delete(`qty-${u.id}`);
       await load();
     } else {
       b.disabled = false;

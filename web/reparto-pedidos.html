@@ -41,15 +41,15 @@
   </div>
   <div class="panel" id="orders-panel">
     <p class="hint">
-      Cada pedido es una cantidad, que se puede ampliar o reducir. Donde los artículos llevan
-      número, se asignan números a todos o a parte de ellos, y solo los que tienen número se
-      pueden pagar o entregar: escribe a cuáles se refiere cada acción («0001-0010, 0015»; en
-      blanco, a todos los que se puedan). Lo entregado y sin pagar se puede devolver: sale del
-      pedido y su número queda libre.
+      Cada línea es un pedido, con cuántas unidades son y cuántas están pagadas y entregadas;
+      «Más información» lo despliega. Donde los artículos llevan número, se asigna número a lo
+      que falte y, en la lista de lo numerado, se marcan los que se quieren pagar, entregar o
+      devolver: solo los que tienen número se pueden pagar o entregar, y lo entregado y sin
+      pagar se puede devolver (sale del pedido y su número queda libre).
     </p>
     <div class="field-grid">
       <div class="field">
-        <label for="orders-search">Buscar socio</label>
+        <label for="orders-search">Buscar <span class="optional">(un socio o un número)</span></label>
         <input id="orders-search" type="search" autocomplete="off" placeholder="Un nombre…">
       </div>
       <div class="field">
@@ -67,8 +67,8 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Socio</th><th>Pedido</th><th>Importe y pago</th></tr></thead>
-      <tbody id="orders-list"><tr><td colspan="3">Cargando…</td></tr></tbody>
+      <thead><tr><th>Socio</th><th>Pedido</th><th>Entregadas</th><th>Pagadas</th><th>Importe</th><th></th></tr></thead>
+      <tbody id="orders-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
     </table>
   </div>
 
