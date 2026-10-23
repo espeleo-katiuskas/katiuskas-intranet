@@ -886,17 +886,15 @@ salvo pedir unidades y editar las propias).
   `extra_price`. `closes_at` es la fecha límite para que los socios elijan.
 - **Estado** (`status`), cada uno con una cosa distinta que se puede hacer: `draft` (en
   preparación: se puede editar y solo lo ven admin y board), `open` (los socios piden
-  unidades y eligen las opciones), `closed` (ya no se puede cambiar nada, y todavía no se
-  puede entregar), `delivering` (se van entregando las unidades) y `done` (terminado). En
-  la interfaz: Borrador, Abierto, Cerrado, En entrega y Terminado. Solo se mueve un paso
-  cada vez, adelante o atrás, salvo que el reparto sea para todos los socios, sin opciones
-  y sin extras: los socios no tienen nada que hacer, así que abrir y cerrar no significan
-  nada y puede pasar directamente de `draft` a `delivering` (y volver), sin pasar por
-  `open` ni `closed` (`nothingToAsk` en `Service.Update`; las unidades propias se crean
-  por el camino, como siempre). La interfaz lo avisa y salta esos pasos. (Hubo `ordered` y
-  `received`, que nombraban cosas que pasan fuera de la aplicación y no cambiaban lo que
-  ella permite; la migración `00023` las sustituyó: `ordered` pasó a `closed` y `received`
-  a `delivering`.)
+  unidades y eligen las opciones), `closed` (ya no se puede pedir ni cambiar nada) y
+  `done` (terminado). En la interfaz: Borrador, Abierto, Cerrado y Terminado. Solo se mueve
+  un paso cada vez, adelante o atrás. Entregar (apuntar recogidas y números) se puede con el
+  reparto en cualquier estado menos `draft` (`Status.Deliverable`), porque el pedido suele
+  llegar antes de que se hayan cerrado las peticiones y quien no ha venido a por lo suyo
+  puede hacerlo ya terminado; en `draft` no (409 `not_deliverable`).
+  (Hubo `ordered` y `received`, que nombraban cosas que pasan fuera de la aplicación; la
+  migración `00023` las sustituyó por `closed` y `delivering`, y la `00025` quitó
+  `delivering`, que pasó a `closed`, porque entregar no depende de haber cerrado.)
 - **Opciones** (`distribution_options`): lo que hay que elegir, con sus valores posibles
   («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
   mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
@@ -926,7 +924,7 @@ salvo pedir unidades y editar las propias).
   da 409 `article_person_limit`) y `has_identifiers` (migración `00024`): cada unidad lleva su
   número —número de serie de una papeleta, serie y fracción de un décimo, texto libre de hasta
   60 caracteres—, que no se da al pedir sino al entregar. Se apuntan con
-  `PUT …/units/{id}/identifiers` (admin, board o material, solo con el reparto en `delivering`,
+  `PUT …/units/{id}/identifiers` (admin, board o material, solo con el reparto fuera de `draft`,
   en la tabla `distribution_unit_identifiers`, con un número único por artículo: 409
   `identifier_taken`), pueden ser menos que `quantity` y completarse después, pero una fila con
   números no se puede recoger hasta tenerlos todos (409 `identifiers_missing`, comprobado en
@@ -996,8 +994,8 @@ salvo pedir unidades y editar las propias).
 - **Pagado**: una marca por unidad (`paid_at` y quién la puso), que solo ponen y quitan
   admin y board (`POST /distributions/{id}/payments`, en lote). No hay enlace con
   Contabilidad.
-- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto en
-  `delivering` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
+- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto
+  fuera de `draft` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
   (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del
   beneficiario si alguien recoge cosas de otros, pero tiene que ser socia ahora o haberlo
   sido en `cutoff_date`, 409 `invalid_collector`). Es todo o nada.
@@ -1469,7 +1467,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
 | `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de «Es un extra» si hay; en un reparto para todos los socios sin opciones, donde el pedido propio ya está hecho y solo quedan los extras, no hay casilla, el botón dice «Pedido extra» y la ayuda da el precio: «Puedes pedir también extras a 8,00 €») y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó, su precio y si está recogido o no —nada del pago: la intranet no lo lleva—; sin la columna «Elegido» si no hay nada que elegir ni «Tipo» si no puede haber extras; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Un reparto para todos los socios sin opciones ni extras no tiene sección «Pedir» (no hay nada que pedir). Mientras el reparto es un borrador no hay ni «Pedir» ni «Tus pedidos» (nadie puede pedir nada todavía). Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
 | `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, las unidades que nadie ha elegido todavía («Sin elegir») con su recuento, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
-| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». Solo se puede apuntar con el reparto «En entrega». | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
+| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». No se puede apuntar con el reparto en borrador. | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
 | `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |
 | `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
 | `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`), y, desplegable bajo cada uno, qué personas lo tienen (de `GET /users`), con «×» para quitarlo y un buscador con «Dar este rol» para asignarlo (`POST`/`DELETE /users/{login}/roles`); los roles automáticos solo muestran quién los tiene, y a uno mismo no se le ofrece quitarse el de admin y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. También los festivos del calendario de actividades, año a año (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): con «Nuevo festivo», «Borrar» y «Copiar del año anterior» (mismo día y mes, salvo donde ya haya uno; los que se mueven, como Semana Santa, se corrigen a mano). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |

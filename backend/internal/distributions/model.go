@@ -8,20 +8,25 @@ import (
 // Status is where a distribution is in its life, each state being a different
 // thing people can do: draft (being prepared, editable, only admin/board see
 // it), open (members ask for units and choose their options), closed (nothing
-// changes any more, and nothing can be handed out yet), delivering (the units
-// are being handed out) and done. The values are the distribution_status enum
-// (migrations 00021 and 00023), in order.
+// can be asked for any more) and done (finished). Units can be handed out in any
+// state but draft — the order often arrives before the asking has ended, and
+// somebody may still come for theirs once it is done.
+// The values are the distribution_status enum (migrations 00021, 00023 and
+// 00024), in order.
 type Status string
 
 const (
-	StatusDraft      Status = "draft"
-	StatusOpen       Status = "open"
-	StatusClosed     Status = "closed"
-	StatusDelivering Status = "delivering"
-	StatusDone       Status = "done"
+	StatusDraft  Status = "draft"
+	StatusOpen   Status = "open"
+	StatusClosed Status = "closed"
+	StatusDone   Status = "done"
 )
 
-var statusOrder = []Status{StatusDraft, StatusOpen, StatusClosed, StatusDelivering, StatusDone}
+var statusOrder = []Status{StatusDraft, StatusOpen, StatusClosed, StatusDone}
+
+// Deliverable says whether units can be handed out (collections recorded, numbers
+// written down) in this state.
+func (s Status) Deliverable() bool { return s != StatusDraft }
 
 func (s Status) Valid() bool { return s.index() >= 0 }
 

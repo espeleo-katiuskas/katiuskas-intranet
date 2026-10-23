@@ -17,7 +17,7 @@ import {
   unitCost,
   unitLabel,
   syncArticleFields,
-  statusSteps,
+  STATUS_ORDER,
   apiErrorText,
   audienceLabels,
   bodyFrom,
@@ -106,7 +106,7 @@ function renderHeader() {
     'material',
   ]);
 
-  const steps = statusSteps(distribution);
+  const steps = STATUS_ORDER;
   const index = steps.indexOf(distribution.status);
   const back = document.getElementById('step-back');
   const forward = document.getElementById('step-forward');
@@ -116,9 +116,6 @@ function renderHeader() {
   if (index > 0) back.textContent = `Volver a «${distributionStatusLabels[steps[index - 1]]}»`;
   if (index < steps.length - 1)
     forward.textContent = `Pasar a «${distributionStatusLabels[steps[index + 1]]}»`;
-  // Say why "Abierto" and "Cerrado" are skipped, while it is still a draft.
-  const skipHint = document.getElementById('skip-hint');
-  if (skipHint) skipHint.hidden = !(nothingToAsk(distribution) && distribution.status === 'draft');
 }
 
 async function setStatus(status) {
@@ -142,7 +139,7 @@ function onClick(elementId, handler) {
 }
 
 onClick('step-back', () => {
-  const steps = statusSteps(distribution);
+  const steps = STATUS_ORDER;
   const previous = steps[steps.indexOf(distribution.status) - 1];
   // Back to a draft starts it over: the API deletes every order, with what was
   // chosen on it, so say so when there is any.
@@ -162,7 +159,7 @@ onClick('step-back', () => {
   setStatus(previous);
 });
 onClick('step-forward', () => {
-  const steps = statusSteps(distribution);
+  const steps = STATUS_ORDER;
   const next = steps[steps.indexOf(distribution.status) + 1];
   if (
     next === 'closed' &&

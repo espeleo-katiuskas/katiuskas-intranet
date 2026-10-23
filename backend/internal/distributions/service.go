@@ -15,7 +15,7 @@ var (
 	ErrInvalidPrice    = errors.New("prices can't be negative")
 	ErrInvalidMaxExtra = errors.New("max_extra needs an extra_price and can't be negative")
 	ErrInvalidOptions  = errors.New("each option needs a name and at least one value, and names and values can't repeat")
-	ErrInvalidStatus   = errors.New("status must be draft, open, closed, delivering or done")
+	ErrInvalidStatus   = errors.New("status must be draft, open, closed or done")
 	// ErrInvalidArticles means an article with no name or a negative price, a
 	// limit below 1, or two with the same name.
 	ErrInvalidArticles = errors.New("each article needs a distinct name, a price of at least 0 and, if it has a limit, one of at least 1")
@@ -43,10 +43,10 @@ var (
 	// ErrUnitLocked means a unit can't be changed any more: it was collected,
 	// or paid (only admin/board change those).
 	ErrUnitLocked = errors.New("this unit was already collected or paid and can't be changed")
-	// ErrNotDelivering means collections can only be recorded while the
-	// distribution is being delivered.
-	ErrNotDelivering = errors.New("the distribution is not being delivered")
-	ErrNoUnits       = errors.New("give at least one unit")
+	// ErrNotDeliverable means units can only be handed out (collections recorded,
+	// numbers written down) once the distribution is no longer a draft.
+	ErrNotDeliverable = errors.New("units can only be handed out once the distribution is no longer a draft")
+	ErrNoUnits        = errors.New("give at least one unit")
 	// ErrInvalidCollector means the person the units were handed to is neither a
 	// member now nor was one on the cutoff date.
 	ErrInvalidCollector = errors.New("whoever collects must be a member now or have been one on the cutoff date")
@@ -229,16 +229,7 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 			return Distribution{}, ErrInvalidStatus
 		}
 		step := in.Status.index() - current.Status.index()
-		allowed := step >= -1 && step <= 1
-		// A distribution for all members with nothing to choose and no extras has
-		// nothing to ask for, so there is nothing to open or close: it can go from
-		// draft straight to delivering, and back.
-		if !allowed && nothingToAsk(in, current) &&
-			((current.Status == StatusDraft && *in.Status == StatusDelivering) ||
-				(current.Status == StatusDelivering && *in.Status == StatusDraft)) {
-			allowed = true
-		}
-		if !allowed {
+		if step < -1 || step > 1 {
 			return Distribution{}, ErrInvalidTransition
 		}
 	}
@@ -251,18 +242,6 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 		return Distribution{}, err
 	}
 	return s.repo.Get(ctx, id)
-}
-
-// nothingToAsk says whether the distribution, as it will be once in is applied,
-// is for all members (nobody has to sign up) with no options to choose and no
-// extras to ask for: members have nothing to do, so the open and closed states
-// mean nothing for it.
-func nothingToAsk(in UpdateInput, current Distribution) bool {
-	options := len(current.Options)
-	if in.Options != nil {
-		options = len(*in.Options)
-	}
-	return in.Audience == AudienceAllMembers && in.ExtraPrice == nil && options == 0
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
@@ -462,8 +441,8 @@ func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staf
 	return s.repo.DeleteUnit(ctx, distributionID, id)
 }
 
-// MarkPickedUp records the collection of the given units, once the order has
-// arrived: pickedUpByID is who they were handed to (any person), recordedByID
+// MarkPickedUp records the collection of the given units, while the distribution
+// is not a draft: pickedUpByID is who they were handed to (any person), recordedByID
 // who wrote it down.
 func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []int64, recordedByID, pickedUpByID int64) error {
 	if len(ids) == 0 {
@@ -473,8 +452,8 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	if err != nil {
 		return err
 	}
-	if d.Status != StatusDelivering {
-		return ErrNotDelivering
+	if !d.Status.Deliverable() {
+		return ErrNotDeliverable
 	}
 	ok, err := s.repo.WasMemberNowOrOn(ctx, pickedUpByID, d.CutoffDate)
 	if err != nil {
@@ -497,7 +476,7 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 }
 
 // SetIdentifiers writes down the numbers of the items handed to the person, for
-// a row of an article that has them, while the distribution is being delivered.
+// a row of an article that has them, once the distribution is no longer a draft.
 // There can be fewer than its quantity (the rest are written later), never more,
 // and none empty or repeated.
 func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
@@ -509,8 +488,8 @@ func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, 
 	if err != nil {
 		return Unit{}, err
 	}
-	if d.Status != StatusDelivering {
-		return Unit{}, ErrNotDelivering
+	if !d.Status.Deliverable() {
+		return Unit{}, ErrNotDeliverable
 	}
 	clean := make([]string, 0, len(identifiers))
 	for _, identifier := range identifiers {

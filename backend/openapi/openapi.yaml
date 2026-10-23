@@ -1830,11 +1830,11 @@ paths:
         can change (anything else is 409 has_units), the limits to no less than
         what has been asked for (409 cap_below_requested). `status`
         moves one step at a time along draft, open (members ask for units),
-        closed (nothing changes, nothing can be handed out yet), delivering
-        (collections are recorded) and done — forward or back. A
-        distribution for all members with no options and no extras has
-        nothing for members to do, so it may also go straight from draft to
-        delivering, and back. Changing `audience` from `all_members` to
+        closed (nothing can be asked for or changed any more) and done —
+        forward or back, one step at a time. Units can be handed out
+        (collections recorded, numbers written down) in any state but draft,
+        since the order often arrives before the asking has ended.
+        Changing `audience` from `all_members` to
         `signup` deletes the automatic units nobody has touched (not chosen,
         not paid, not collected): whoever did choose has asked for it, which is
         signing up, so those and the extras stay; it is refused (409
@@ -2005,8 +2005,8 @@ paths:
     put:
       summary: Write down the numbers of the items handed out
       description: >
-        Requires admin, board or material, and the distribution `delivering`
-        (409 not_delivering). Replaces the numbers (serial numbers, series and
+        Requires admin, board or material, and the distribution not
+        a `draft` (409 not_deliverable). Replaces the numbers (serial numbers, series and
         fraction...) of a row of an article with `has_identifiers`: none empty
         or repeated, no more than the row's quantity, each at most 60
         characters (400 invalid_identifiers, also for a row of any other
@@ -2033,7 +2033,7 @@ paths:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
         "400": { description: invalid_identifiers. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_delivering or identifier_taken. }
+        "409": { description: not_deliverable or identifier_taken. }
 
   /distributions/{id}/units/{unitID}:
     patch:
@@ -2111,8 +2111,8 @@ paths:
     post:
       summary: Record that units were collected
       description: >
-        Requires admin, board or material, and the distribution `delivering`
-        (409 not_delivering). The units listed are all marked at once, handed
+        Requires admin, board or material, and the distribution not
+        a `draft` (409 not_deliverable). The units listed are all marked at once, handed
         to `picked_up_by_login` — not necessarily their beneficiary, as when
         somebody collects for others, but a member now or on the cutoff date
         (409 invalid_collector) — and the caller is kept as who wrote it
@@ -2135,7 +2135,7 @@ paths:
         "400": { description: no_units. }
         "403": { description: Not admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_delivering, invalid_collector, already_picked_up or identifiers_missing (a row of an article with numbers needs all of them first). }
+        "409": { description: not_deliverable, invalid_collector, already_picked_up or identifiers_missing (a row of an article with numbers needs all of them first). }
 
   /distributions/{id}/units/{unitID}/pickup:
     delete:
@@ -3519,7 +3519,7 @@ components:
         name: { type: string }
         description: { type: string }
         audience: { type: string, enum: [all_members, signup] }
-        status: { type: string, enum: [draft, open, closed, delivering, done] }
+        status: { type: string, enum: [draft, open, closed, done] }
         closes_at: { type: string, format: date-time, description: Deadline for members to choose; absent = none. }
         cutoff_date: { type: string, format: date, description: Only people who were members this day can have it; required for all_members. }
         price: { type: number, description: A member's own unit; 0 when free. }
@@ -3589,7 +3589,7 @@ components:
               has_identifiers: { type: boolean, default: false }
         status:
           type: string
-          enum: [draft, open, closed, delivering, done]
+          enum: [draft, open, closed, done]
           description: Only on PATCH.
 
     DistributionUnit:

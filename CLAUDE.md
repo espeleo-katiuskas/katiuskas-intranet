@@ -431,15 +431,13 @@ come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 **Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things
 the club hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a
 single article — two things to handle separately are two distributions — with a `status`
-(`draft` → `open` → `closed` → `delivering` → `done`, one step at a time, forward or back —
-except that a distribution for all members with no options and no extras, with nothing for
-members to do, may go straight `draft` ↔ `delivering`, `nothingToAsk`, and the page skips
-the two steps (`statusSteps`) and says why;
-each is a different thing people can do: a draft is editable and exists only for
-admin/board, members ask for units only while `open`, `closed` freezes everything with
-nothing to hand out yet, and `delivering` is when collections are recorded; migration
-`00023` replaced the former `ordered`/`received`, which named what happens outside the app
-without changing what the app allows), an `audience` (`all_members`,
+(`draft` → `open` → `closed` → `done`, one step at a time, forward or back; a draft is
+editable and exists only for admin/board, members ask for units only while `open`, `closed`
+freezes what can be asked for, and units can be handed out — collections recorded, numbers
+written down — in any state but `draft` (`Status.Deliverable`, `ErrNotDeliverable`,
+409 `not_deliverable`), since the order often arrives before the asking has ended; migration
+`00023` replaced the former `ordered`/`received` by `closed`/`delivering` and `00025`
+removed `delivering` (mapped to `closed`), as handing out doesn't depend on closing), an `audience` (`all_members`,
 everyone who was a member on `cutoff_date`, which is then required; or `signup`, where
 `cutoff_date` is optional and, when set, limits who can sign up to those members —
 `Repository.WasMemberOn`, a SQL check against `memberships.period`; with no cutoff date it
@@ -468,7 +466,7 @@ the same rules; a collected unit is final and a paid one only changes through ad
 (`ErrUnitLocked`). Paid is one mark per unit (`paid_at`, `paid_marked_by_id`), set and
 cleared by admin/board only (`POST .../payments`, batch, all-or-nothing via
 `Repository.markUnits`); there's no link to accounting. Collection (`POST .../pickups`,
-batch, admin/board/material, only while `delivering`) records three things per unit —
+batch, admin/board/material, only once it is not a draft) records three things per unit —
 `picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
 handed to: not necessarily the beneficiary, as when somebody collects for others, but a
 member now or on the cutoff date, `ErrInvalidCollector`, 409 `invalid_collector`), all set
@@ -538,8 +536,8 @@ and not below `Article.requested` (`replaceArticles`: `ErrHasUnits`/`ErrCapBelow
 `max_total` in `checkQuantity`, `ErrPersonLimit`, 409 `article_person_limit`) and
 `has_identifiers`: such an article's rows carry one number per item in
 `distribution_unit_identifiers` (unique per article, `ErrIdentifierTaken`), written with
-`PUT …/units/{id}/identifiers` (`Service.SetIdentifiers`, admin/board/material, only while
-`delivering`, at most `quantity`, completed later if need be) and required in full before
+`PUT …/units/{id}/identifiers` (`Service.SetIdentifiers`, admin/board/material, only once the
+distribution is not a draft, at most `quantity`, completed later if need be) and required in full before
 collection (`MissingIdentifiers`, `ErrIdentifiersMissing`); with units present, `max_total`,
 `max_per_person` and `has_identifiers` are the editable parts of an article. `Article.String` is what the edit notification diffs
 (without `Requested`, which moves as people ask). Frontend: one line per article in the
@@ -1408,7 +1406,7 @@ for anybody else, so each script reaches those through a null-safe lookup (a bar
 page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
 and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
 line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
-lists who is still to collect, with a checkbox per unit once the status is `delivering`,
+lists who is still to collect, with a checkbox per unit once the status is not `draft`,
 an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
 same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:

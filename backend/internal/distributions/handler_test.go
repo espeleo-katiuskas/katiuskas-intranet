@@ -366,17 +366,18 @@ func TestStatusMovesOneStepAtATime(t *testing.T) {
 	expect(t, e.do("PATCH", path, admin.token, body), http.StatusConflict, "invalid_status_transition")
 	body["status"] = "later"
 	expect(t, e.do("PATCH", path, admin.token, body), http.StatusBadRequest, "invalid_status")
-	for _, status := range []string{"open", "closed", "open", "closed", "delivering", "done", "delivering"} {
+	for _, status := range []string{"open", "closed", "open", "closed", "done", "closed"} {
 		if got := setStatus(t, e, admin, d.ID, status); string(got.Status) != status {
 			t.Fatalf("expected %s, got %s", status, got.Status)
 		}
 	}
 }
 
-// A distribution for all members with no options and no extras has nothing for
-// members to do, so it goes from draft straight to delivering (and back);
-// anything else still moves a step at a time.
-func TestNothingToAskSkipsOpenAndClosed(t *testing.T) {
+// Units are handed out in any state but draft — the order often arrives before
+// the asking has ended, and somebody may come for theirs once it is done.
+// Everybody's own unit of a distribution for all members is made when it
+// opens, so it can be handed out at once.
+func TestUnitsAreHandedOutInEveryStateButDraft(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newPerson(t, "", "admin")
 	member := e.newPerson(t, "2020-01-01", "member")
@@ -385,41 +386,38 @@ func TestNothingToAskSkipsOpenAndClosed(t *testing.T) {
 	plain := map[string]any{"name": "Taza", "audience": "all_members", "cutoff_date": "2026-10-01", "price": 3}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, plain), http.StatusCreated))
 	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
-	patch := func(body map[string]any, status string) *httptest.ResponseRecorder {
+	patch := func(status string) *httptest.ResponseRecorder {
 		b := map[string]any{}
-		for k, v := range body {
+		for k, v := range plain {
 			b[k] = v
 		}
 		b["status"] = status
 		return e.do("PATCH", path, admin.token, b)
 	}
+	// No shortcut for a distribution with nothing to ask: it moves a step at a time.
+	expect(t, patch("done"), http.StatusConflict, "invalid_status_transition")
+	mustStatus(t, patch("open"), http.StatusOK)
 
-	got := decode[distributions.Distribution](t, mustStatus(t, patch(plain, "delivering"), http.StatusOK))
-	if got.Status != distributions.StatusDelivering {
-		t.Fatalf("expected delivering, got %s", got.Status)
-	}
-	// Everybody's own unit is made on the way, so it can be handed out at once.
 	unit := unitFor(t, e, admin, d.ID, member.Login)
-	mustStatus(t, e.do("POST", path+"/pickups", material.token, map[string]any{"unit_ids": []int64{unit.ID}, "picked_up_by_login": member.Login}), http.StatusNoContent)
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/pickup", path, unit.ID), material.token, nil), http.StatusNoContent)
-	mustStatus(t, patch(plain, "draft"), http.StatusOK)
-	mustStatus(t, patch(plain, "delivering"), http.StatusOK)
-	mustStatus(t, patch(plain, "done"), http.StatusOK)
-
-	// With something to ask for, the shortcut is not there.
-	for name, change := range map[string]func(map[string]any){
-		"options": func(b map[string]any) {
-			b["options"] = []map[string]any{{"name": "Talla", "values": []string{"S", "M"}}}
-		},
-		"extras": func(b map[string]any) { b["extra_price"] = 5 },
-		"signup": func(b map[string]any) { b["audience"] = "signup" },
-	} {
-		body := map[string]any{"name": name, "audience": "all_members", "cutoff_date": "2026-10-01", "price": 3}
-		change(body)
-		other := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
-		body["status"] = "delivering"
-		expect(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", other.ID), admin.token, body), http.StatusConflict, "invalid_status_transition")
+	pickup := func() *httptest.ResponseRecorder {
+		return e.do("POST", path+"/pickups", material.token, map[string]any{"unit_ids": []int64{unit.ID}, "picked_up_by_login": member.Login})
 	}
+	undo := func() {
+		mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/pickup", path, unit.ID), material.token, nil), http.StatusNoContent)
+	}
+	mustStatus(t, pickup(), http.StatusNoContent)
+	undo()
+	mustStatus(t, patch("closed"), http.StatusOK)
+	mustStatus(t, pickup(), http.StatusNoContent)
+	undo()
+	mustStatus(t, patch("done"), http.StatusOK)
+	mustStatus(t, pickup(), http.StatusNoContent)
+	undo()
+	for _, status := range []string{"closed", "open", "draft"} {
+		mustStatus(t, patch(status), http.StatusOK)
+	}
+	// Nothing can be handed out of a draft (it has no units, either).
+	expect(t, pickup(), http.StatusConflict, "not_deliverable")
 }
 
 func TestRegisterOwnUnitAndForSomeoneElse(t *testing.T) {
@@ -494,7 +492,7 @@ func TestRegisterChecksChoicesEligibilityAndState(t *testing.T) {
 	setStatus(t, e, admin, id, "open")
 	mustStatus(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
 	setStatus(t, e, admin, id, "closed")
-	setStatus(t, e, admin, id, "delivering")
+	setStatus(t, e, admin, id, "done")
 	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusConflict, "not_open")
 }
 
@@ -707,10 +705,8 @@ func TestCollectionNeedsDeliveryToHaveBegunAndNamesBothPeople(t *testing.T) {
 	pickups := fmt.Sprintf("/api/v1/distributions/%d/pickups", d.ID)
 	both := []int64{own.ID, forChild.ID}
 
-	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusConflict, "not_delivering")
-	for _, status := range []string{"closed", "delivering"} {
-		setStatus(t, e, admin, d.ID, status)
-	}
+	// Open, closed or done, yes (the state it is in isn't what the checks below test).
+	setStatus(t, e, admin, d.ID, "closed")
 	expect(t, e.do("POST", pickups, parent.token, map[string]any{"unit_ids": both, "picked_up_by_login": parent.Login}), http.StatusForbidden, "forbidden")
 	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": []int64{}, "picked_up_by_login": parent.Login}), http.StatusBadRequest, "no_units")
 	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": both, "picked_up_by_login": "nobody.here"}), http.StatusNotFound, "not_found")

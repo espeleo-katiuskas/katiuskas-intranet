@@ -284,12 +284,7 @@ func TestCollectionAndPaymentOfArticleRowsAndDeletingThem(t *testing.T) {
 	member := e.newPerson(t, "2020-01-01", "member")
 	d := newOpenLottery(t, e, admin)
 	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, member, 1, 4), http.StatusCreated))
-	body := lottery()
-
-	body["status"] = "closed"
-	mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK)
-	body["status"] = "delivering"
-	mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK)
+	// Units are handed out while it is still open, without closing it first.
 	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{"unit_ids": []int64{u.ID}, "picked_up_by_login": member.Login}), http.StatusNoContent)
 
 	got := decode[distributions.Distribution](t, mustStatus(t, e.do("GET", distributionPath(d.ID), admin.token, nil), http.StatusOK))
@@ -370,9 +365,8 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 	ids := func(u distributions.Unit, by person, numbers ...string) *httptest.ResponseRecorder {
 		return e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), by.token, map[string]any{"identifiers": numbers})
 	}
-	// Nothing is written down while it is still being asked for.
-	expect(t, ids(papeletas, admin, "1"), http.StatusConflict, "not_delivering")
-	for _, status := range []string{"closed", "delivering"} {
+	// They are written down in any state but draft, done included.
+	for _, status := range []string{"closed", "done"} {
 		body["status"] = status
 		mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK)
 	}

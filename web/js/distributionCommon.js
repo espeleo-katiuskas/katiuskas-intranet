@@ -10,20 +10,18 @@ const distributionStatusLabels = {
   draft: 'Borrador',
   open: 'Abierto',
   closed: 'Cerrado',
-  delivering: 'En entrega',
   done: 'Terminado',
 };
 
 // What each state means, for a tooltip on its badge.
 const distributionStatusHints = {
   draft: 'Se puede editar. Los socios todavía no lo ven.',
-  open: 'Los socios pueden hacer su pedido y elegir las opciones.',
-  closed: 'Ya no se puede cambiar nada. Todavía no se puede entregar.',
-  delivering: 'Se pueden ir entregando los pedidos.',
+  open: 'Los socios pueden hacer su pedido y elegir las opciones. También se puede ir entregando.',
+  closed: 'Ya no se puede pedir ni cambiar nada. Se puede seguir entregando.',
   done: 'El reparto ha terminado.',
 };
 
-const STATUS_ORDER = ['draft', 'open', 'closed', 'delivering', 'done'];
+const STATUS_ORDER = ['draft', 'open', 'closed', 'done'];
 
 // A distribution with articles hands out several things in any quantity (the
 // lottery's papeletas and décimos) instead of one article with a price of its
@@ -46,15 +44,6 @@ function unitCost(u) {
 // nothing for members to do.
 function nothingToAsk(d) {
   return d.audience === 'all_members' && d.options.length === 0 && d.extra_price == null;
-}
-
-// The states a distribution moves through, one step at a time. When there is
-// nothing to ask for, open and closed mean nothing: it goes from draft straight
-// to delivering (the API allows the same). One already left in open or closed
-// keeps the whole list, so it can still be walked out of.
-function statusSteps(d) {
-  const skipping = ['draft', 'delivering', 'done'];
-  return nothingToAsk(d) && skipping.includes(d.status) ? skipping : STATUS_ORDER;
 }
 
 const audienceLabels = {
@@ -287,7 +276,7 @@ const errorMessages = {
   automatic_unit:
     'En un reparto para todos los socios cada uno tiene su pedido y no se puede quitar. Si no lo quiere, que no lo recoja.',
   unit_locked: 'Este pedido ya está pagado o recogido y no se puede cambiar.',
-  not_delivering: 'Solo se puede apuntar una recogida con el reparto «En entrega».',
+  not_deliverable: 'No se puede entregar con el reparto en borrador.',
   already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
   already_paid: 'Alguno de los pedidos ya estaba pagado.',
   has_units:
@@ -359,7 +348,6 @@ export {
   unitLabel,
   parseArticles,
   syncArticleFields,
-  statusSteps,
   audienceLabels,
   statusBadge,
   formatDateTime,
