@@ -459,7 +459,12 @@ async function askForArticles(beneficiary, submit) {
 const unitsList = document.getElementById('units-list');
 
 // Nothing about payment is shown yet: a unit is collected or it isn't.
-const unitState = (u) => (u.picked_up_at ? 'Recogido' : 'No recogido');
+const unitState = (u) => {
+  if (u.picked_up_quantity === 0) return 'No recogido';
+  return u.picked_up_quantity === u.quantity
+    ? 'Recogido'
+    : `Recogidas ${u.picked_up_quantity} de ${u.quantity}`;
+};
 
 function mineOnly(all) {
   // Admin, board and material get every unit from the API; this page is
@@ -468,7 +473,9 @@ function mineOnly(all) {
 }
 
 function canChange(u) {
-  if (u.picked_up_at) return false;
+  // What was handed out locks it, except for staff in a row of an article, which
+  // can't go below what went.
+  if (u.picked_up_quantity > 0 && (!isStaff || !u.article_id)) return false;
   if (u.paid_quantity > 0 && !isStaff) return false;
   return canOrderNow();
 }

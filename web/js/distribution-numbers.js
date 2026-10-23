@@ -39,7 +39,7 @@ function renderRows(articleId) {
       .map((p) => `<td>${escapeHtml(p)}</td>`)
       .join('');
     const holder = item.beneficiary_login
-      ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
+      ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a> <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
       : '<span class="hint">Libre</span>';
     return `<tr>${cells}<td>${holder}</td></tr>`;
   });

@@ -58,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.setIdentifiers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/identifiers/assign", h.authenticator.Protect(h.assignNumbers, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/distributions/{id}/articles/{articleID}/numbers", h.authenticator.Protect(h.numbers, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/return", h.authenticator.Protect(h.returnUnits, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.markPaid, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/payment", h.authenticator.Protect(h.clearPaid, "admin", "board"))
 }
@@ -119,6 +120,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrAlreadyPickedUp, http.StatusConflict, "already_picked_up"},
 		{ErrAlreadyPaid, http.StatusConflict, "already_paid"},
 		{ErrBelowPaid, http.StatusConflict, "quantity_below_paid"},
+		{ErrBelowDelivered, http.StatusConflict, "quantity_below_delivered"},
 		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},
 	}
 	for _, k := range known {
@@ -562,10 +564,17 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Whole rows (all that is still to hand out of each) by unit_ids, or part of a
+	// row by deliveries; both may come together.
 	var body struct {
-		UnitIDs         []int64 `json:"unit_ids"`
-		PickedUpByLogin string  `json:"picked_up_by_login"`
-		AssignNumbers   bool    `json:"assign_numbers"`
+		UnitIDs    []int64 `json:"unit_ids"`
+		Deliveries []struct {
+			UnitID      int64    `json:"unit_id"`
+			Quantity    int      `json:"quantity"`
+			Identifiers []string `json:"identifiers"`
+		} `json:"deliveries"`
+		PickedUpByLogin string `json:"picked_up_by_login"`
+		AssignNumbers   bool   `json:"assign_numbers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -582,12 +591,20 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.MarkPickedUp(r.Context(), id, body.UnitIDs, current.ID, pickedUpBy, body.AssignNumbers); err != nil {
+	var deliveries []Delivery
+	for _, unitID := range body.UnitIDs {
+		deliveries = append(deliveries, Delivery{UnitID: unitID})
+	}
+	for _, dl := range body.Deliveries {
+		deliveries = append(deliveries, Delivery{UnitID: dl.UnitID, Quantity: dl.Quantity, Identifiers: dl.Identifiers})
+	}
+	delivered, err := h.service.MarkPickedUp(r.Context(), id, deliveries, current.ID, pickedUpBy, body.AssignNumbers)
+	if err != nil {
 		writeError(w, err, "could not record the collection")
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📦 %s ha apuntado que %s ha recogido %d unidades de «%s».",
-		h.actorLogin(r.Context()), body.PickedUpByLogin, len(body.UnitIDs), d.Name))
+		h.actorLogin(r.Context()), body.PickedUpByLogin, delivered, d.Name))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -660,12 +677,50 @@ func (h *Handler) clearPickup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.service.ClearPickup(r.Context(), d.ID, unit.ID); err != nil {
+	// ?quantity=N (or ?identifiers=a,b) undoes only that much of the delivery.
+	quantity := 0
+	if q := r.URL.Query().Get("quantity"); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n < 1 {
+			writeError(w, ErrInvalidQuantity, "")
+			return
+		}
+		quantity = n
+	}
+	var identifiers []string
+	if list := r.URL.Query().Get("identifiers"); list != "" {
+		identifiers = strings.Split(list, ",")
+	}
+	if err := h.service.ClearPickup(r.Context(), d.ID, unit.ID, quantity, identifiers); err != nil {
 		writeError(w, err, "could not undo the collection")
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("↩️ %s ha deshecho la recogida de una unidad de «%s» de %s.",
 		h.actorLogin(r.Context()), d.Name, unit.BeneficiaryLogin))
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// returnUnits takes back units that were handed out and aren't paid: they leave
+// the order and their numbers are free again.
+func (h *Handler) returnUnits(w http.ResponseWriter, r *http.Request) {
+	d, unit, ok := h.unitForStaff(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Quantity    int      `json:"quantity"`
+		Identifiers []string `json:"identifiers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if err := h.service.ReturnUnits(r.Context(), d.ID, unit.ID, body.Quantity, body.Identifiers); err != nil {
+		writeError(w, err, "could not return the units")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("↩️ %s ha devuelto unidades de «%s» de %s en «%s».",
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 

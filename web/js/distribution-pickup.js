@@ -41,13 +41,58 @@ function canCollect() {
   return distribution?.status !== 'draft';
 }
 
+// How many units of a row are still to be handed out, and how many of those
+// handed out can be returned (not the ones paid: the row can't end up smaller
+// than what is paid).
+const remaining = (u) => u.quantity - u.picked_up_quantity;
+const returnable = (u) => Math.min(u.picked_up_quantity, u.quantity - (u.paid_quantity ?? 0));
+
+// The last delivery of a row: when, to whom and who wrote it down.
 function pickedUpText(u) {
   const when = formatDateTime(u.picked_up_at);
   const to =
     u.picked_up_by_login === u.beneficiary_login
       ? ''
       : `, entregado a ${nameOf(u.picked_up_by_login)}`;
-  return `Recogido el ${when}${to} (apuntado por ${nameOf(u.pickup_recorded_by_login)})`;
+  return `${u.picked_up_quantity > 1 || u.quantity > 1 ? 'Última entrega' : 'Recogido'} el ${when}${to} (apuntado por ${nameOf(u.pickup_recorded_by_login)})`;
+}
+
+// How a row stands: what was handed out (which numbers, when it has them), what
+// is assigned but not handed out yet.
+function standing(u) {
+  const article = articleOfUnit(u);
+  const parts = [];
+  if (u.quantity > 1) parts.push(`entregadas ${u.picked_up_quantity} de ${u.quantity}`);
+  else parts.push(u.picked_up_quantity ? 'recogido' : 'sin recoger');
+  const delivered = u.delivered_identifiers ?? [];
+  if (delivered.length) parts.push(`entregados: ${formatIdentifiers(article, delivered)}`);
+  const waiting = (u.identifiers ?? []).filter((i) => !delivered.includes(i));
+  if (waiting.length) parts.push(`asignados sin entregar: ${formatIdentifiers(article, waiting)}`);
+  return parts.join(' · ');
+}
+
+// The counter of a row and what can be done with that many: hand them out, undo
+// the delivery or take them back.
+function deliveryControls(u) {
+  if (!canCollect()) return '';
+  const left = remaining(u);
+  const count =
+    u.quantity > 1
+      ? `<input type="number" min="1" max="${u.quantity}" step="1" size="4" value="${left || u.picked_up_quantity}" data-qty-for="${u.id}" aria-label="Unidades de ${escapeHtml(u.article_name ?? 'este pedido')}">`
+      : '';
+  const give =
+    left > 0
+      ? `<button type="button" class="btn btn-primary btn-small" data-deliver-unit="${u.id}">Entregar</button>`
+      : '';
+  const undo =
+    u.picked_up_quantity > 0
+      ? `<button type="button" class="btn btn-secondary btn-small" data-undo-unit="${u.id}" title="Vuelven a estar sin entregar; los números siguen asignados">Deshacer entrega</button>`
+      : '';
+  const back =
+    returnable(u) > 0
+      ? `<button type="button" class="btn btn-danger btn-small" data-return-unit="${u.id}" title="Salen del pedido y sus números quedan libres">Devolver</button>`
+      : '';
+  return `<div class="table-actions">${count}${give}${undo}${back}</div>`;
 }
 
 // Units typed into a numbers field and not saved yet, so that drawing the list
@@ -88,14 +133,12 @@ function unitRow(u) {
   const label = [unitLabel(u, hasOptions(), distribution?.articles), u.is_extra ? 'extra' : null]
     .filter(Boolean)
     .join(' · ');
-  if (u.picked_up_at) {
-    return `<li>${escapeHtml(label)} — ${escapeHtml(pickedUpText(u))}
-      <button type="button" class="link-button" data-undo-unit="${u.id}">Deshacer</button>${identifiersEditor(u)}</li>`;
-  }
-  const checkbox = canCollect()
-    ? `<input type="checkbox" data-unit="${u.id}"${selected.has(u.id) ? ' checked' : ''}> `
-    : '';
-  return `<li><label>${checkbox}${escapeHtml(label)}</label>${identifiersEditor(u)}</li>`;
+  const checkbox =
+    canCollect() && remaining(u) > 0
+      ? `<input type="checkbox" data-unit="${u.id}"${selected.has(u.id) ? ' checked' : ''}> `
+      : '';
+  const last = u.picked_up_at ? ` — ${escapeHtml(pickedUpText(u))}` : '';
+  return `<li><label>${checkbox}${escapeHtml(label)}</label> (${escapeHtml(standing(u))})${last}${deliveryControls(u)}${identifiersEditor(u)}</li>`;
 }
 
 function paymentText(group) {
@@ -113,7 +156,7 @@ function render() {
     groups.get(u.beneficiary_login).units.push(u);
   }
   const shown = [...groups.values()].filter(
-    (g) => showPicked.checked || g.units.some((u) => !u.picked_up_at),
+    (g) => showPicked.checked || g.units.some((u) => remaining(u) > 0),
   );
   list.innerHTML = shown.length
     ? shown
@@ -122,7 +165,7 @@ function render() {
         <tr>
           <td>${escapeHtml(g.name)}</td>
           <td><ul class="plain-list">${g.units
-            .filter((u) => showPicked.checked || !u.picked_up_at)
+            .filter((u) => showPicked.checked || remaining(u) > 0)
             .map(unitRow)
             .join('')}</ul></td>
           <td>${paymentText(g.units)}</td>
@@ -131,12 +174,13 @@ function render() {
         .join('')
     : `<tr><td colspan="3">${units.length ? 'No queda nadie por recoger.' : 'Todavía no ha pedido nadie.'}</td></tr>`;
 
-  const done = units.filter((u) => u.picked_up_at).length;
-  const waiting = new Set(units.filter((u) => !u.picked_up_at).map((u) => u.beneficiary_login))
+  const done = units.reduce((sum, u) => sum + u.picked_up_quantity, 0);
+  const total = units.reduce((sum, u) => sum + u.quantity, 0);
+  const waiting = new Set(units.filter((u) => remaining(u) > 0).map((u) => u.beneficiary_login))
     .size;
   document.getElementById('pickup-progress').textContent =
     canCollect() || done > 0
-      ? `Recogidas ${done} de ${units.length} pedidos. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
+      ? `Entregadas ${done} de ${total} unidades. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
       : '';
   form.hidden = !canCollect();
   // Only offered where some article has its numbers described.
@@ -220,16 +264,74 @@ list.addEventListener('click', async (event) => {
     }
     return;
   }
+  const deliver = event.target.closest('button[data-deliver-unit]');
   const undo = event.target.closest('button[data-undo-unit]');
-  if (!undo) return;
-  if (!confirm('¿Deshacer esta recogida?')) return;
-  undo.disabled = true;
+  const giveBack = event.target.closest('button[data-return-unit]');
+  const button = deliver ?? undo ?? giveBack;
+  if (!button) return;
+  const unitId = Number(
+    deliver?.dataset.deliverUnit ?? undo?.dataset.undoUnit ?? giveBack?.dataset.returnUnit,
+  );
+  const u = units.find((x) => x.id === unitId);
+  // How many: what is typed next to the row (a row of one has no field).
+  const field = list.querySelector(`input[data-qty-for="${unitId}"]`);
+  const quantity = field ? Number(field.value) : u.quantity;
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    showError('Pon cuántas unidades (un número entero de 1 en adelante).');
+    return;
+  }
+  const word = quantity === 1 ? '1 unidad' : `${quantity} unidades`;
   try {
-    await apiFetch(`${base}/units/${undo.dataset.undoUnit}/pickup`, { method: 'DELETE' });
-    showFeedback('Recogida deshecha.');
+    button.disabled = true;
+    if (deliver) {
+      const login = resolvePickerId(people.entries, personInput.value);
+      if (!login) {
+        showError('Elige antes, abajo, a la persona que recoge («Entregado a»).');
+        button.disabled = false;
+        return;
+      }
+      if (
+        u.price > 0 &&
+        u.paid_quantity < u.picked_up_quantity + quantity &&
+        !confirm('Hay unidades que todavía no están pagadas. ¿Entregarlas igualmente?')
+      ) {
+        button.disabled = false;
+        return;
+      }
+      await apiFetch(`${base}/pickups`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deliveries: [{ unit_id: unitId, quantity }],
+          picked_up_by_login: login,
+          assign_numbers: assignBox.checked,
+        }),
+      });
+      showFeedback(`Entregadas ${word} a ${nameOf(login)}.`);
+    } else if (undo) {
+      if (!confirm(`¿Deshacer la entrega de ${word}? Siguen siendo del pedido, sin entregar.`)) {
+        button.disabled = false;
+        return;
+      }
+      await apiFetch(`${base}/units/${unitId}/pickup?quantity=${quantity}`, { method: 'DELETE' });
+      showFeedback('Entrega deshecha.');
+    } else {
+      if (
+        !confirm(
+          `¿Devolver ${word}? Salen del pedido, y si tienen número, queda libre. No se puede deshacer.`,
+        )
+      ) {
+        button.disabled = false;
+        return;
+      }
+      await apiFetch(`${base}/units/${unitId}/return`, {
+        method: 'POST',
+        body: JSON.stringify({ quantity }),
+      });
+      showFeedback('Devolución apuntada.');
+    }
     await load();
   } catch (err) {
-    undo.disabled = false;
+    button.disabled = false;
     fail(err);
   }
 });
@@ -289,7 +391,7 @@ async function load(ready = Promise.resolve()) {
     await ready;
     // Whatever was marked may have been collected since.
     for (const unitId of [...selected]) {
-      if (!units.some((u) => u.id === unitId && !u.picked_up_at)) selected.delete(unitId);
+      if (!units.some((u) => u.id === unitId && remaining(u) > 0)) selected.delete(unitId);
     }
     render();
   } catch (err) {

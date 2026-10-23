@@ -348,7 +348,7 @@ const errorMessages = {
     'En un reparto para todos los socios cada uno tiene su pedido y no se puede quitar. Si no lo quiere, que no lo recoja.',
   unit_locked: 'Este pedido ya está pagado o recogido y no se puede cambiar.',
   not_deliverable: 'No se puede entregar con el reparto en borrador.',
-  already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
+  already_picked_up: 'Se intenta entregar más unidades de las que quedan por entregar.',
   already_paid:
     'Alguno de los pedidos ya estaba pagado, o se marcan más unidades de las que quedan por pagar.',
   has_units:
@@ -372,8 +372,10 @@ const errorMessages = {
   invalid_identifiers:
     'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
   identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
+  quantity_below_delivered:
+    'No se puede pedir menos de lo que ya se ha entregado: devuelve antes lo que sobra.',
   quantity_below_paid:
-    'No se puede pedir menos de lo que ya está pagado: quita antes la marca de pagado.',
+    'El pedido no puede quedar por debajo de lo que ya está pagado: quita antes la marca de pagado.',
   invalid_numbering:
     'Cada parte del número necesita un nombre distinto y valores como «124-133, 137» (sin barras), con 100000 combinaciones como mucho.',
   number_in_use: 'Ese cambio dejaría fuera un número que ya tiene alguien.',

@@ -2126,7 +2126,10 @@ paths:
         (409 article_exhausted, article_person_limit). Allowed to
         the person it is for, whoever entered it, and admin/board/material, under the
         same open rules as asking for it (admin/board/material also after the
-        deadline). A collected unit is final (409 unit_locked); a paid one only
+        deadline). What is handed out can't be taken from under its owner
+        (409 unit_locked, also in any unit that isn't a row of an article);
+        in a row of an article admin/board/material can change it but not below
+        what was handed out (409 quantity_below_delivered). A paid one only
         changes through admin/board/material.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -2194,12 +2197,21 @@ paths:
       summary: Record that units were collected
       description: >
         Requires admin, board or material, and the distribution not
-        a `draft` (409 not_deliverable). The units listed are all marked at once, handed
-        to `picked_up_by_login` — not necessarily their beneficiary, as when
-        somebody collects for others, but a member now or on the cutoff date
-        (409 invalid_collector) — and the caller is kept as who wrote it
-        down. All or nothing: an id that isn't a unit of this distribution is
-        a 404, one already collected a 409 already_picked_up.
+        a `draft` (409 not_deliverable). A row of units can be collected in
+        part: each entry of `deliveries` hands out `quantity` units of a row
+        (all that are still to go when it is left out), and each id of
+        `unit_ids` all that is still to go of its row. For an article with
+        numbers the units are items, so only those with an assigned number can
+        go: the given `identifiers` (assigned to the row and not delivered), or
+        else the first assigned ones not delivered, there having to be that
+        many (409 identifiers_missing; with `assign_numbers` the missing ones
+        are first given from the next free, for articles whose numbers are
+        described). They are handed to `picked_up_by_login` — not necessarily
+        their beneficiary, as when somebody collects for others, but a member
+        now or on the cutoff date (409 invalid_collector) — and the caller is
+        kept as who wrote it down. All or nothing: an id that isn't a unit of
+        this distribution is a 404, more units than are still to go a 409
+        already_picked_up.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2208,9 +2220,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [unit_ids, picked_up_by_login]
+              required: [picked_up_by_login]
               properties:
                 unit_ids: { type: array, items: { type: integer } }
+                deliveries:
+                  type: array
+                  items:
+                    type: object
+                    required: [unit_id]
+                    properties:
+                      unit_id: { type: integer }
+                      quantity: { type: integer, description: How many units of the row; all that are left when omitted. }
+                      identifiers: { type: array, items: { type: string }, description: Which numbers go, for an article with numbers; their count is the quantity. }
                 picked_up_by_login: { type: string }
                 assign_numbers: { type: boolean, description: Give the next free numbers first to the units of articles with described numbers that lack some, in the order listed. }
       responses:
@@ -2223,15 +2244,53 @@ paths:
   /distributions/{id}/units/{unitID}/pickup:
     delete:
       summary: Undo a collection
-      description: Requires admin, board or material.
+      description: >
+        Requires admin, board or material. The units go back to not being
+        handed out — they stay in the order, and their numbers stay assigned
+        — `quantity` of them, the given delivered `identifiers`, or all that
+        were (400 invalid_quantity or invalid_identifiers for more, or ones
+        not delivered). To take units back for good, see `.../return`.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: unitID, in: path, required: true, schema: { type: integer } }
+        - { name: quantity, in: query, required: false, schema: { type: integer, minimum: 1 } }
+        - { name: identifiers, in: query, required: false, schema: { type: string }, description: Comma-separated numbers. }
       responses:
         "204": { description: Undone }
         "403": { description: Not admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /distributions/{id}/units/{unitID}/return:
+    post:
+      summary: Return units that were handed out
+      description: >
+        Requires admin, board or material, and the distribution not a draft
+        (409 not_deliverable). Takes back `quantity` of the units handed out
+        (the given delivered `identifiers`; or, when neither is said, all
+        that can be): they leave the order — it gets smaller, and the row is
+        deleted when nothing is left — and their numbers are free again.
+        Paid units can't be returned: the order can't end up smaller than what
+        is paid (409 quantity_below_paid), nor can more come back than was
+        handed out (400 invalid_quantity, invalid_identifiers).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: integer }
+                identifiers: { type: array, items: { type: string } }
+      responses:
+        "204": { description: Returned }
+        "400": { description: invalid_quantity or invalid_identifiers. }
+        "403": { description: Not admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_deliverable or quantity_below_paid. }
 
   /distributions/{id}/payments:
     post:
@@ -3725,6 +3784,8 @@ components:
         price: { type: number, description: What ONE unit cost when it was entered; the row costs price times quantity. }
         paid_at: { type: string, format: date-time }
         paid_marked_by_login: { type: string }
+        picked_up_quantity: { type: integer, description: How many of them have been handed out (0 to quantity); picked_up_at and the two people after it are those of the last delivery. }
+        delivered_identifiers: { type: array, items: { type: string }, description: The identifiers already handed out; the others are assigned but still to go. }
         picked_up_at: { type: string, format: date-time }
         pickup_recorded_by_login: { type: string, description: Who wrote the collection down (admin, board or material). }
         picked_up_by_login: { type: string, description: Who it was handed to; not necessarily the beneficiary. }

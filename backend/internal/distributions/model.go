@@ -157,16 +157,23 @@ type Unit struct {
 	ArticleName       *string   `json:"article_name,omitempty"`
 	// Identifiers are the numbers of the items handed out, for a row of an
 	// article that has them.
-	Identifiers []string          `json:"identifiers,omitempty"`
-	Quantity    int               `json:"quantity"`
-	Choices     map[string]string `json:"choices"`
-	Price       float64           `json:"price"`
+	Identifiers []string `json:"identifiers,omitempty"`
+	// DeliveredIdentifiers are those of Identifiers already handed out; the rest
+	// are assigned but still to be delivered.
+	DeliveredIdentifiers []string          `json:"delivered_identifiers,omitempty"`
+	Quantity             int               `json:"quantity"`
+	Choices              map[string]string `json:"choices"`
+	Price                float64           `json:"price"`
 	// PaidQuantity is how many of the unit's Quantity have been paid (a row of
 	// units can be paid in part); PaidAt and PaidMarkedByLogin are when and by
 	// whom the last payment was marked, and are there when something is paid.
-	PaidQuantity          int        `json:"paid_quantity"`
-	PaidAt                *time.Time `json:"paid_at,omitempty"`
-	PaidMarkedByLogin     *string    `json:"paid_marked_by_login,omitempty"`
+	PaidQuantity      int        `json:"paid_quantity"`
+	PaidAt            *time.Time `json:"paid_at,omitempty"`
+	PaidMarkedByLogin *string    `json:"paid_marked_by_login,omitempty"`
+	// PickedUpQuantity is how many of the unit's Quantity were handed out (a row
+	// can be collected in part); PickedUpAt and the two people after it are those of
+	// the last delivery, and are there when something was handed out.
+	PickedUpQuantity      int        `json:"picked_up_quantity"`
 	PickedUpAt            *time.Time `json:"picked_up_at,omitempty"`
 	PickupRecordedByLogin *string    `json:"pickup_recorded_by_login,omitempty"`
 	PickedUpByLogin       *string    `json:"picked_up_by_login,omitempty"`
@@ -276,9 +283,10 @@ type Order struct {
 // NumberHolder is who has a number: the unit it was given on and the person
 // that unit is for.
 type NumberHolder struct {
-	UnitID int64
-	Login  string
-	Name   string
+	UnitID    int64
+	Login     string
+	Name      string
+	Delivered bool
 }
 
 // NumberItem is one item of a numbered article: its number and, when somebody
@@ -288,6 +296,7 @@ type NumberItem struct {
 	UnitID           *int64  `json:"unit_id,omitempty"`
 	BeneficiaryLogin *string `json:"beneficiary_login,omitempty"`
 	BeneficiaryName  *string `json:"beneficiary_name,omitempty"`
+	Delivered        bool    `json:"delivered,omitempty"`
 }
 
 // Numbers is every item that exists of a numbered article, in order, with who
@@ -306,4 +315,14 @@ type Numbers struct {
 type Payment struct {
 	UnitID   int64
 	Quantity int
+}
+
+// Delivery is some units of a row handed out: Quantity of them (all that are
+// still to be handed out when it is 0) or, for an article with numbers, the
+// given Identifiers, which have to be assigned to the row and not delivered yet.
+// Without Identifiers, the first assigned ones that are not delivered go.
+type Delivery struct {
+	UnitID      int64
+	Quantity    int
+	Identifiers []string
 }

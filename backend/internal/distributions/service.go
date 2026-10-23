@@ -393,7 +393,10 @@ func (s *Service) checkEditable(d Distribution, u Unit, staff bool) error {
 	if err := s.checkOpen(d, staff); err != nil {
 		return err
 	}
-	if u.PickedUpAt != nil || (u.PaidQuantity > 0 && !staff) {
+	// What is paid is for staff to change; what was handed out too, and in a unit
+	// that isn't a row of an article (choices, one unit) not even them: a row of an
+	// article just can't get smaller than what was handed out.
+	if (u.PaidQuantity > 0 && !staff) || (u.PickedUpQuantity > 0 && (!staff || u.ArticleID == nil)) {
 		return ErrUnitLocked
 	}
 	return nil
@@ -452,59 +455,73 @@ func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staf
 	if err := s.checkEditable(d, u, staff); err != nil {
 		return err
 	}
+	// Units handed out have to be returned first.
+	if u.PickedUpQuantity > 0 {
+		return ErrUnitLocked
+	}
 	if d.Audience == AudienceAllMembers && !u.IsExtra {
 		return ErrAutomaticUnit
 	}
 	return s.repo.DeleteUnit(ctx, distributionID, id)
 }
 
-// MarkPickedUp records the collection of the given units, while the distribution
-// is not a draft: pickedUpByID is who they were handed to (any person), recordedByID
-// who wrote it down.
-func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []int64, recordedByID, pickedUpByID int64, assignNumbers bool) error {
-	if len(ids) == 0 {
-		return ErrNoUnits
+// MarkPickedUp records that the deliveries — some units of a row each, see
+// Delivery — were handed to pickedUpByID (any person), written down by
+// recordedByID, while the distribution is not a draft; it says how many units
+// went. For rows of articles with numbers, the units are the assigned numbers not
+// delivered yet, and with assignNumbers the missing ones are first given from the
+// next free (articles with described numbers).
+func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, deliveries []Delivery, recordedByID, pickedUpByID int64, assignNumbers bool) (int, error) {
+	if len(deliveries) == 0 {
+		return 0, ErrNoUnits
+	}
+	for _, dl := range deliveries {
+		if dl.Quantity < 0 || dl.Quantity > maxQuantity {
+			return 0, ErrInvalidQuantity
+		}
 	}
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !d.Status.Deliverable() {
-		return ErrNotDeliverable
+		return 0, ErrNotDeliverable
 	}
 	ok, err := s.repo.WasMemberNowOrOn(ctx, pickedUpByID, d.CutoffDate)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !ok {
-		return ErrInvalidCollector
+		return 0, ErrInvalidCollector
 	}
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
-		return err
+		return 0, err
 	}
-	// Units of articles with described numbers can be given the next free ones
-	// on the way, in the order they are listed.
 	if assignNumbers {
-		for _, id := range ids {
-			u, err := s.repo.GetUnit(ctx, distributionID, id)
+		for _, dl := range deliveries {
+			u, err := s.repo.GetUnit(ctx, distributionID, dl.UnitID)
 			if err != nil {
-				return err
+				return 0, err
 			}
-			if article, ok := articleOf(d, u); ok && len(article.IdentifierFields) > 0 {
-				if _, err := s.assignNumbers(ctx, d, u); err != nil {
-					return err
+			article, ok := articleOf(d, u)
+			if !ok || len(article.IdentifierFields) == 0 || len(dl.Identifiers) > 0 {
+				continue
+			}
+			// The ones to hand out are assigned numbers not delivered yet: give
+			// as many more as are missing.
+			n := dl.Quantity
+			if n == 0 {
+				n = u.Quantity - u.PickedUpQuantity
+			}
+			missing := n - (len(u.Identifiers) - len(u.DeliveredIdentifiers))
+			if missing > 0 && u.PickedUpQuantity+n <= u.Quantity {
+				if _, err := s.assignNumbers(ctx, d, u, len(u.Identifiers)+missing); err != nil {
+					return 0, err
 				}
 			}
 		}
 	}
-	missing, err := s.repo.MissingIdentifiers(ctx, distributionID, ids)
-	if err != nil {
-		return err
-	}
-	if missing > 0 {
-		return ErrIdentifiersMissing
-	}
-	return s.repo.MarkPickedUp(ctx, distributionID, ids, recordedByID, pickedUpByID)
+	return s.repo.Deliver(ctx, distributionID, deliveries, recordedByID, pickedUpByID)
 }
 
 // SetIdentifiers writes down the numbers of the items handed to the person, for
@@ -555,8 +572,31 @@ func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, 
 	return s.repo.GetUnit(ctx, distributionID, id)
 }
 
-func (s *Service) ClearPickup(ctx context.Context, distributionID, id int64) error {
-	return s.repo.ClearPickup(ctx, distributionID, id)
+// ClearPickup undoes a delivery of quantity units of the row (all of what was
+// delivered when 0), or of the given delivered identifiers: they go back to not
+// being handed out, and the numbers stay assigned to the row.
+func (s *Service) ClearPickup(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
+	if quantity < 0 {
+		return ErrInvalidQuantity
+	}
+	return s.repo.ClearPickup(ctx, distributionID, id, quantity, identifiers)
+}
+
+// ReturnUnits takes back units that were handed out and aren't paid: they leave
+// the order (it gets smaller) and their numbers are free again; see
+// Repository.ReturnUnits.
+func (s *Service) ReturnUnits(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return err
+	}
+	if !d.Status.Deliverable() {
+		return ErrNotDeliverable
+	}
+	if quantity < 0 {
+		return ErrInvalidQuantity
+	}
+	return s.repo.ReturnUnits(ctx, distributionID, id, quantity, identifiers)
 }
 
 // MarkPaid marks the payments, which may be of part of a row; see
@@ -603,10 +643,10 @@ func articleOf(d Distribution, u Unit) (Article, bool) {
 }
 
 // assignNumbers gives the unit as many of the next free numbers of its article
-// as it still lacks to have one per unit, in the order the numbering lists them
+// as it lacks to have target of them, in the order the numbering lists them
 // (the first field changing slowest), keeping the ones it has. Nothing is done
-// for a unit that already has all of them.
-func (s *Service) assignNumbers(ctx context.Context, d Distribution, u Unit) (Unit, error) {
+// for a unit that already has that many.
+func (s *Service) assignNumbers(ctx context.Context, d Distribution, u Unit, target int) (Unit, error) {
 	article, ok := articleOf(d, u)
 	if !ok {
 		return Unit{}, ErrNotNumbered
@@ -618,7 +658,7 @@ func (s *Service) assignNumbers(ctx context.Context, d Distribution, u Unit) (Un
 	if n == nil {
 		return Unit{}, ErrNotNumbered
 	}
-	need := u.Quantity - len(u.Identifiers)
+	need := target - len(u.Identifiers)
 	if need <= 0 {
 		return u, nil
 	}
@@ -660,7 +700,7 @@ func (s *Service) AssignNumbers(ctx context.Context, distributionID, id int64) (
 	if !d.Status.Deliverable() {
 		return Unit{}, ErrNotDeliverable
 	}
-	return s.assignNumbers(ctx, d, u)
+	return s.assignNumbers(ctx, d, u, u.Quantity)
 }
 
 // Numbers lists every item of a numbered article with who has it.
@@ -688,7 +728,7 @@ func (s *Service) Numbers(ctx context.Context, distributionID, articleID int64) 
 		n.each(func(identifier string) bool {
 			item := NumberItem{Identifier: identifier}
 			if h, ok := holders[identifier]; ok {
-				item.UnitID, item.BeneficiaryLogin, item.BeneficiaryName = &h.UnitID, &h.Login, &h.Name
+				item.UnitID, item.BeneficiaryLogin, item.BeneficiaryName, item.Delivered = &h.UnitID, &h.Login, &h.Name, h.Delivered
 				out.Assigned++
 			}
 			out.Items = append(out.Items, item)

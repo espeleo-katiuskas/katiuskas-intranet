@@ -141,7 +141,9 @@ function paymentControls(u) {
 // is paid, as long as nothing in it is collected (the API has the last word). The own unit of everybody in a
 // distribution for all members can't be removed.
 function canChangeUnit(u) {
-  return !u.picked_up_at && distribution?.status === 'open';
+  // A row handed out in part can still change (not below what went), but a unit
+  // that isn't a row of an article can't.
+  return (u.picked_up_quantity === 0 || Boolean(u.article_id)) && distribution?.status === 'open';
 }
 
 function changeControls(u) {

@@ -1014,8 +1014,9 @@ salvo pedir unidades y editar las propias).
   ellos. Los extras son de quien los pide (o del socio a cuyo nombre se apuntan): no se
   dice para quién son finalmente. Cambiar o quitar una unidad lo puede hacer para quien
   es, quien la apuntó y admin/board/material (los tres para cualquiera, y también pasado el plazo y
-  con algo pagado; solo admin/board marcan pagos), una unidad recogida
-  ya no se toca, y una pagada solo la tocan admin/board/material (409 `unit_locked`).
+  con algo pagado; solo admin/board marcan pagos); lo entregado no se le quita al
+  dueño (409 `unit_locked`), y una unidad que no es una fila de artículo, una vez entregada, no
+  la toca nadie; una pagada solo la tocan admin/board/material (409 `unit_locked`).
 - **Pagado**: una fila se puede pagar en parte. `paid_quantity` (de 0 a `quantity`, migración
   `00027`) dice cuántas unidades están pagadas; `paid_at` y quién lo marcó son los del último
   pago y están exactamente cuando hay algo pagado. Solo lo ponen y quitan admin y board:
@@ -1027,10 +1028,30 @@ salvo pedir unidades y editar las propias).
   `quantity_below_paid`). Una fila con algo pagado cuenta como pagada para los bloqueos de más
   arriba (solo la cambia admin/board). No hay enlace con Contabilidad.
 - **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto
-  fuera de `draft` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
-  (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del
-  beneficiario si alguien recoge cosas de otros, pero tiene que ser socia ahora o haberlo
-  sido en `cutoff_date`, 409 `invalid_collector`). Es todo o nada.
+  fuera de `draft` y solo admin, board o material. Una fila se puede recoger en parte
+  (`picked_up_quantity`, de 0 a `quantity`, migración `00028`), como se puede pagar en parte:
+  `deliveries` (`unit_id` y `quantity` unidades, o todas las que faltan) y `unit_ids` (todo lo
+  que falta de esas filas); pasarse de lo que falta, 409 `already_picked_up`. Guarda tres
+  cosas, las de la última entrega: cuándo, quién lo apuntó (quien llama) y a quién se le
+  entregó (`picked_up_by_login`: puede ser distinta del beneficiario si alguien recoge cosas
+  de otros, pero tiene que ser socia ahora o haberlo sido en `cutoff_date`, 409
+  `invalid_collector`). Es todo o nada. En un artículo con números las unidades son
+  elementos: **solo se entregan los que tienen número asignado**, los `identifiers` que se
+  digan (asignados a la fila y sin entregar) o, si no, los primeros asignados sin entregar,
+  tiene que haber tantos (409 `identifiers_missing`; con `assign_numbers` se asignan antes los
+  que falten, si los números están descritos). Cada número entregado lleva su `delivered_at`
+  (`DeliveredIdentifiers` en la unidad; lo asignado y sin entregar sigue en el estante) y no
+  se puede quitar de la lista. Tres cosas distintas se pueden hacer después: ampliar o reducir
+  el pedido (admin/board/material, nunca por debajo de lo entregado, 409
+  `quantity_below_delivered`; los demás no pueden tocar una fila entregada); **deshacer** una
+  entrega (`DELETE …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: vuelven a no estar
+  entregadas, siguen en el pedido y con su número); y **devolver**
+  (`POST …/units/{id}/return`, `quantity` o `identifiers`): lo devuelto sale del pedido, que
+  se hace más pequeño (y se borra la fila si no queda nada), y su número queda libre. Lo pagado
+  no se puede devolver: el pedido no puede quedar por debajo de lo pagado (409
+  `quantity_below_paid`) ni se devuelve más de lo entregado. Una fila con algo entregado no se
+  puede borrar sin devolver antes. Pedir otra vez el mismo artículo se suma siempre a la
+  misma fila.
 - **Resumen del pedido** (`GET /distributions/{id}/order`, admin, board y material): las
   unidades sumadas por combinación de opciones y los totales; las que nadie ha elegido
   todavía suman en una línea con `choices` vacío. Un reparto `all_members` todavía en
@@ -1499,7 +1520,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
 | `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de «Es un extra» si hay; en un reparto para todos los socios sin opciones, donde el pedido propio ya está hecho y solo quedan los extras, no hay casilla, el botón dice «Pedido extra» y la ayuda da el precio: «Puedes pedir también extras a 8,00 €») y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó, su precio y si está recogido o no —nada del pago: la intranet no lo lleva—; sin la columna «Elegido» si no hay nada que elegir ni «Tipo» si no puede haber extras; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Un reparto para todos los socios sin opciones ni extras no tiene sección «Pedir» (no hay nada que pedir). Mientras el reparto es un borrador no hay ni «Pedir» ni «Tus pedidos» (nadie puede pedir nada todavía). Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
 | `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, las unidades que nadie ha elegido todavía («Sin elegir») con su recuento, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
-| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». No se puede apuntar con el reparto en borrador. | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
+| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó. Cada pedido se puede entregar en parte (un número de unidades y «Entregar», a la persona de «Entregado a»), con «Deshacer entrega» (siguen en el pedido) y «Devolver» (salen del pedido y su número queda libre; no lo pagado), y se ve qué números se han entregado y cuáles están asignados sin entregar. No se puede apuntar con el reparto en borrador. | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
 | `/reparto-numeros?id=…` | Números: de cada artículo con los números descritos, todos los que existen con quién tiene cada uno y cuántos quedan libres, filtrable por libres o asignados y por número o nombre. | Admin, board y material. | `requireAnyRole`; el enlace sale en el reparto solo si algún artículo tiene números descritos. |
 | `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |
 | `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |

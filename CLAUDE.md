@@ -464,7 +464,9 @@ extra belongs to whoever it is entered for, with no notion of who ends up with t
 Changing/removing a unit is for its beneficiary, whoever entered it and admin/board/material
 (`Handler.ownUnit`; material counts as staff for it, so like admin/board it can also go past
 the deadline and change a paid unit, though only admin/board mark payments), under
-the same rules; a collected unit is final and a paid one only changes through admin/board/material
+the same rules; what was handed out is locked for the owner (a unit that isn't a row of an
+article is final once handed out, even for staff; in a row of an article staff can still resize it
+but not below `picked_up_quantity`, `ErrBelowDelivered`) and a paid one only changes through admin/board/material
 (`ErrUnitLocked`). Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
 `quantity` are paid, with `paid_at`/`paid_marked_by_id` as when and by whom the last payment was
 marked, set exactly when something is paid (`CHECK`s). Admin/board only: `POST .../payments`
@@ -477,11 +479,22 @@ is "paid" for `checkEditable`. Pickups still mark a whole row. There's no link t
 Asking again for an article (`CreateArticleUnit`) adds to the person's row of it that isn't
 collected yet, else makes a new row — the per-person unique index is gone, and
 `max_per_person` (`checkQuantity`) counts all their rows. Collection (`POST .../pickups`,
-batch, admin/board/material, only once it is not a draft) records three things per unit —
-`picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
-handed to: not necessarily the beneficiary, as when somebody collects for others, but a
-member now or on the cutoff date, `ErrInvalidCollector`, 409 `invalid_collector`), all set
-or all null by a `CHECK`. `GET .../order` (admin/board/material) sums the
+batch, admin/board/material, only once it is not a draft) can be partial like payment (migration
+`00028`): `picked_up_quantity` of a row's `quantity` are handed out, and `picked_up_at`,
+`pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was handed to: not necessarily
+the beneficiary, as when somebody collects for others, but a member now or on the cutoff date,
+`ErrInvalidCollector`, 409 `invalid_collector`) are those of the last delivery, set exactly when
+something was handed out (`CHECK`s). `Repository.Deliver` takes `deliveries` (`Delivery`: a
+row, a quantity or all that is left, optionally the identifiers) plus `unit_ids` for whole rows,
+all-or-nothing, `ErrAlreadyPickedUp` for more than is left. For an article with numbers each
+delivered unit is one of the row's identifiers (`distribution_unit_identifiers.delivered_at`):
+only the assigned and not delivered can go (the given ones or the first, else
+`ErrIdentifiersMissing`; `Service.MarkPickedUp` assigns the missing ones first with
+`assign_numbers`), and a delivered number can't be dropped from the row's list. `ClearPickup`
+(`DELETE .../pickup[?quantity|?identifiers]`) un-delivers, keeping the numbers assigned;
+`ReturnUnits` (`POST .../return`) takes units back for good: the row shrinks (deleted at zero),
+the numbers are deleted so they are free, and it can't go below what is paid (`ErrBelowPaid`)
+nor return more than was delivered. A row with anything delivered can't be deleted. `GET .../order` (admin/board/material) sums the
 units by combination of choices (`GROUP BY` the `choices` jsonb) with the totals, and for
 units nobody has chosen the options of yet add up under empty choices. For an `all_members`
 distribution still in `draft` — which has no units yet, they are made on opening — the
@@ -1435,7 +1448,9 @@ line counts them), with, for admin/board, payment controls per row (how many uni
 pagadas") and "Marcar todo pagado" per person; `/reparto-recogida`
 lists who is still to collect, with a checkbox per unit once the status is not `draft`,
 an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
-same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.
+same one), and per row a count field with "Entregar" (part of a row, to that person), "Deshacer
+entrega" and "Devolver" (`standing` says what went, which numbers, and which are assigned but
+not delivered), confirming before handing over unpaid units or returning.
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
 `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
 `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`,
