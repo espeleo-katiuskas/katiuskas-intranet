@@ -2,8 +2,9 @@ import { apiFetch, escapeHtml, formatCurrency, showError, showFeedback } from '.
 import { initPage } from './layout.js';
 import {
   apiErrorText,
-  choicesText,
   isUnchosen,
+  unitCost,
+  unitLabel,
   loadPeople,
   resolvePickerId,
   statusBadge,
@@ -46,24 +47,45 @@ function pickedUpText(u) {
   return `Recogido el ${when}${to} (apuntado por ${nameOf(u.pickup_recorded_by_login)})`;
 }
 
+// Units typed into a numbers field and not saved yet, so that drawing the list
+// again (every tick of a checkbox does) doesn't lose them.
+const draftIdentifiers = new Map();
+
+// Whether the unit's article has a number on each unit, and so a field to write
+// them down while the distribution is being delivered.
+function takesIdentifiers(u) {
+  return (
+    canCollect() && distribution?.articles?.some((a) => a.id === u.article_id && a.has_identifiers)
+  );
+}
+
+function identifiersEditor(u) {
+  if (!takesIdentifiers(u)) return '';
+  const value = draftIdentifiers.get(u.id) ?? (u.identifiers ?? []).join(', ');
+  return `<div class="table-actions">
+    <input type="text" size="34" data-ids-for="${u.id}" value="${escapeHtml(value)}" placeholder="${u.quantity} ${u.quantity === 1 ? 'número' : 'números'}, separados por comas" aria-label="Números de ${escapeHtml(u.article_name)}">
+    <button type="button" class="btn btn-secondary btn-small" data-save-ids="${u.id}">Guardar números</button>
+  </div>`;
+}
+
 function unitRow(u) {
-  const label = [choicesText(u.choices, hasOptions()), u.is_extra ? 'extra' : null]
+  const label = [unitLabel(u, hasOptions()), u.is_extra ? 'extra' : null]
     .filter(Boolean)
     .join(' · ');
   if (u.picked_up_at) {
     return `<li>${escapeHtml(label)} — ${escapeHtml(pickedUpText(u))}
-      <button type="button" class="link-button" data-undo-unit="${u.id}">Deshacer</button></li>`;
+      <button type="button" class="link-button" data-undo-unit="${u.id}">Deshacer</button>${identifiersEditor(u)}</li>`;
   }
   const checkbox = canCollect()
     ? `<input type="checkbox" data-unit="${u.id}"${selected.has(u.id) ? ' checked' : ''}> `
     : '';
-  return `<li><label>${checkbox}${escapeHtml(label)}</label></li>`;
+  return `<li><label>${checkbox}${escapeHtml(label)}</label>${identifiersEditor(u)}</li>`;
 }
 
 function paymentText(group) {
   const toPay = group.filter((u) => u.price > 0);
   if (toPay.length === 0) return 'Gratis';
-  const owed = toPay.filter((u) => !u.paid_at).reduce((sum, u) => sum + u.price, 0);
+  const owed = toPay.filter((u) => !u.paid_at).reduce((sum, u) => sum + unitCost(u), 0);
   return owed > 0 ? `Pendiente: ${formatCurrency(owed)}` : 'Pagado';
 }
 
@@ -130,7 +152,36 @@ list.addEventListener('change', (event) => {
   render();
 });
 
+list.addEventListener('input', (event) => {
+  const field = event.target.closest('input[data-ids-for]');
+  if (field) draftIdentifiers.set(Number(field.dataset.idsFor), field.value);
+});
+
 list.addEventListener('click', async (event) => {
+  const save = event.target.closest('button[data-save-ids]');
+  if (save) {
+    const unitId = Number(save.dataset.saveIds);
+    const field = list.querySelector(`input[data-ids-for="${unitId}"]`);
+    const identifiers = field.value
+      .split(/[,\n]/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    save.disabled = true;
+    try {
+      const updated = await apiFetch(`${base}/units/${unitId}/identifiers`, {
+        method: 'PUT',
+        body: JSON.stringify({ identifiers }),
+      });
+      draftIdentifiers.delete(unitId);
+      showFeedback('Números guardados.');
+      units = units.map((u) => (u.id === unitId ? updated : u));
+      render();
+    } catch (err) {
+      save.disabled = false;
+      fail(err);
+    }
+    return;
+  }
   const undo = event.target.closest('button[data-undo-unit]');
   if (!undo) return;
   if (!confirm('¿Deshacer esta recogida?')) return;

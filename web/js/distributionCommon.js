@@ -25,6 +25,23 @@ const distributionStatusHints = {
 
 const STATUS_ORDER = ['draft', 'open', 'closed', 'delivering', 'done'];
 
+// A distribution with articles hands out several things in any quantity (the
+// lottery's papeletas and décimos) instead of one article with a price of its
+// own: people ask for a number of each, and each can have a limit in all.
+function hasArticles(d) {
+  return (d.articles ?? []).length > 0;
+}
+
+// How many units of the article are left, or null when there is no limit.
+function articleLeft(article) {
+  return article.max_total == null ? null : Math.max(0, article.max_total - article.requested);
+}
+
+// What a row costs: a unit's price times how many it stands for.
+function unitCost(u) {
+  return u.price * (u.quantity ?? 1);
+}
+
 // A distribution for all members with no options to choose and no extras has
 // nothing for members to do.
 function nothingToAsk(d) {
@@ -65,6 +82,16 @@ function choicesText(choices, hasOptions = false) {
   return hasOptions ? 'Sin elegir' : '—';
 }
 
+// What a unit is, in a few words: "Papeleta × 7" for a row of an article,
+// otherwise what was chosen (see choicesText).
+function unitLabel(u, hasOptions = false) {
+  if (u.article_name) {
+    const numbers = u.identifiers?.length ? ` (${u.identifiers.join(', ')})` : '';
+    return `${u.article_name} × ${u.quantity}${numbers}`;
+  }
+  return choicesText(u.choices, hasOptions);
+}
+
 // A unit with options that nobody has chosen yet.
 function isUnchosen(unit, hasOptions) {
   return hasOptions && Object.keys(unit.choices ?? {}).length === 0;
@@ -84,6 +111,71 @@ function parseOptions(text) {
     });
 }
 
+// The articles textarea takes one article per line: "Papeletas: 5, máximo 200",
+// the price first (it may use a comma for decimals) and then, in any order and
+// all optional, "máximo N" (how many there are in all), "N por persona" and "con
+// números" (each unit has its own number, written down when it is handed out).
+const ARTICLE_PRICE = /^(.+?)\s*:\s*(\d+(?:[.,]\d+)?)\s*€?\s*(?:,(.*))?$/;
+
+function parseArticles(text) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const bad = () =>
+        new Error(
+          `No entiendo la línea «${line}» de los artículos. Usa «Nombre: precio», seguido si quieres de «máximo N», «N por persona» y «con números», por ejemplo «Papeletas: 5, máximo 200, 10 por persona, con números».`,
+        );
+      const match = ARTICLE_PRICE.exec(line);
+      if (!match) throw bad();
+      const article = {
+        name: match[1].trim(),
+        price: Number(match[2].replace(',', '.')),
+        max_total: null,
+        max_per_person: null,
+        has_identifiers: false,
+      };
+      for (const part of (match[3] ?? '').split(',').map((p) => p.trim())) {
+        const max = /^m[aá]x(?:imo|\.)?\s*(\d+)$/i.exec(part);
+        const perPerson = /^(\d+)\s*por persona$/i.exec(part);
+        if (!part) continue;
+        if (max) article.max_total = Number(max[1]);
+        else if (perPerson) article.max_per_person = Number(perPerson[1]);
+        else if (/^con n[uú]meros$/i.test(part)) article.has_identifiers = true;
+        else throw bad();
+      }
+      return article;
+    });
+}
+
+function articlesText(articles) {
+  return (articles ?? [])
+    .map((a) =>
+      [
+        `${a.name}: ${a.price}`,
+        a.max_total != null ? `máximo ${a.max_total}` : null,
+        a.max_per_person != null ? `${a.max_per_person} por persona` : null,
+        a.has_identifiers ? 'con números' : null,
+      ]
+        .filter(Boolean)
+        .join(', '),
+    )
+    .join('\n');
+}
+
+// With articles, what only fits a distribution without them is disabled in a
+// form and ignored when it is read: it is for whoever signs up, with no price,
+// extras or options of its own.
+const ARTICLE_EXCLUDED_FIELDS = ['audience', 'price', 'extra_price', 'max_extra', 'options'];
+
+function syncArticleFields(form) {
+  const on = form.elements.articles.value.trim() !== '';
+  for (const name of ARTICLE_EXCLUDED_FIELDS) form.elements[name].disabled = on;
+  if (on) form.elements.audience.value = 'signup';
+  form.querySelector('[data-articles-hint]').hidden = !on;
+}
+
 function optionsText(options) {
   return (options ?? []).map((o) => `${o.name}: ${o.values.join(', ')}`).join('\n');
 }
@@ -101,12 +193,29 @@ function readDistributionForm(form) {
   const data = new FormData(form);
   const text = (name) => data.get(name)?.toString().trim() ?? '';
   const number = (name) => (text(name) === '' ? null : Number(text(name).replace(',', '.')));
-  return {
+  const articles = parseArticles(text('articles'));
+  const common = {
     name: text('name'),
     description: text('description') || null,
-    audience: text('audience'),
     cutoff_date: text('cutoff_date') || null,
     closes_at: text('closes_at') ? new Date(text('closes_at')).toISOString() : null,
+    articles,
+  };
+  // The fields of a distribution with articles are disabled, so they aren't in
+  // the form data; what the API wants for it is spelled out here.
+  if (articles.length) {
+    return {
+      ...common,
+      audience: 'signup',
+      price: 0,
+      extra_price: null,
+      max_extra: null,
+      options: [],
+    };
+  }
+  return {
+    ...common,
+    audience: text('audience'),
     price: number('price') ?? 0,
     extra_price: number('extra_price'),
     max_extra: number('max_extra'),
@@ -127,6 +236,8 @@ function fillDistributionForm(form, d) {
   set('extra_price', d.extra_price);
   set('max_extra', d.max_extra);
   set('options', optionsText(d.options));
+  set('articles', articlesText(d.articles));
+  syncArticleFields(form);
 }
 
 // The people of a distribution's pages. `names` (login to full name, for
@@ -179,7 +290,8 @@ const errorMessages = {
   not_delivering: 'Solo se puede apuntar una recogida con el reparto «En entrega».',
   already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
   already_paid: 'Alguno de los pedidos ya estaba pagado.',
-  has_units: 'Ya hay pedidos (desde que se abre el reparto): no se pueden cambiar las opciones.',
+  has_units:
+    'Ya hay pedidos (desde que se abre el reparto): no se pueden cambiar las opciones ni los artículos, salvo el límite de cada uno.',
   has_settled_units: 'Hay pedidos ya pagados o recogidos: quita primero esas marcas.',
   invalid_status_transition: 'El estado solo puede avanzar o retroceder un paso cada vez.',
   cutoff_required: 'Un reparto para todos los socios necesita la fecha de corte.',
@@ -187,12 +299,30 @@ const errorMessages = {
     'El máximo de extras necesita un precio para los extras, y no puede ser negativo.',
   invalid_options: 'Cada cosa a elegir necesita un nombre y al menos un valor, sin repetirlos.',
   invalid_price: 'Los precios no pueden ser negativos.',
+  invalid_articles:
+    'Cada artículo necesita un nombre distinto, un precio de 0 o más y, si tiene límite, uno de al menos 1.',
+  articles_conflict:
+    'Un reparto con artículos es para quien se apunte y no tiene precio, extras ni opciones propios (cada artículo tiene su precio).',
+  article_required: 'Elige de qué artículo quieres pedir.',
+  invalid_quantity: 'La cantidad tiene que ser un número entre 1 y 100000.',
+  unknown_article: 'Ese artículo no es de este reparto.',
+  article_exhausted: 'No quedan tantas unidades de ese artículo.',
+  article_person_limit: 'Es más de lo que puede tener una persona de ese artículo.',
+  invalid_identifiers:
+    'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
+  identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
+  identifiers_missing:
+    'Faltan números: antes de entregar un artículo con números hay que apuntar todos los de cada pedido.',
+  cap_below_requested: 'El límite de un artículo no puede ser menor que lo que ya se ha pedido.',
 };
 
 // With the distribution at hand, a message can say what is possible in it: that
 // somebody already has their order only suggests asking for an extra when this
 // distribution has extras.
 function apiErrorText(err, distribution = null) {
+  if (err.code === 'already_registered' && hasArticles(distribution ?? {})) {
+    return 'Esa persona ya ha pedido ese artículo: cambia la cantidad en «Tus pedidos».';
+  }
   if (err.code === 'already_registered' && distribution?.extra_price != null) {
     return `${errorMessages.already_registered} Si quieres más, pide un extra.`;
   }
@@ -223,6 +353,12 @@ export {
   distributionStatusHints,
   STATUS_ORDER,
   nothingToAsk,
+  hasArticles,
+  articleLeft,
+  unitCost,
+  unitLabel,
+  parseArticles,
+  syncArticleFields,
   statusSteps,
   audienceLabels,
   statusBadge,

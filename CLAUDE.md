@@ -514,6 +514,41 @@ choose stays, as that is somebody who asked for it, which is signing up, and so 
 a paid or collected untouched one refuses it (`ErrHasSettledUnits`). The edit dialog asks
 first. The page confirms before stepping back.
 
+**Distribution articles** (`distribution_articles`, migration `00024`): the other kind of
+distribution, for things asked for in any quantity with a cap on how many exist in all (the
+Christmas lottery: 200 "papeletas" at 5 €, 1000 "décimos" at 20 €). A distribution with
+articles (`Distribution.Articles`, each with `price` and an optional `max_total`) is always
+`signup` with no price, extras or options of its own (`ErrArticlesConflict`, checked by
+`validateArticleKind` against what the distribution will be once an edit is applied, so a
+nil `Articles`/`Options` counts as the current ones); without articles everything above
+works as it always did. A person has one `distribution_units` row per article with a
+`quantity` (`article_id` set, never `is_extra`, empty `choices`: `CHECK`s of the
+migration) instead of one row per unit, so paid/collected marks apply to the whole row;
+`price` stays what ONE unit cost, the row costs `price × quantity` (`unitCost` in the
+frontend), and `quantity` is 1 outside articles. The own-unit unique index is now
+`WHERE NOT is_extra AND article_id IS NULL` — `SyncAutomaticUnits`' `ON CONFLICT` has to
+repeat that exact predicate — and articles have their own `(article_id, beneficiary_id)` one.
+`Repository.CreateArticleUnit`/`UpdateQuantity` lock the distribution row (`FOR UPDATE`) while
+they count what is left of the article (`remainingOf`), so two people asking at once can't
+both take the last units (`ErrArticleExhausted`, 409 `article_exhausted`, with how many are
+left in the message). Once any unit exists only each article's `max_total` can be edited,
+and not below `Article.requested` (`replaceArticles`: `ErrHasUnits`/`ErrCapBelowRequested`);
+`unit_count`/`picked_up_count` and the order summary count units (`sum(quantity)`), and
+`GET …/order` groups by article. Migration `00024` also has `max_per_person` (checked with
+`max_total` in `checkQuantity`, `ErrPersonLimit`, 409 `article_person_limit`) and
+`has_identifiers`: such an article's rows carry one number per item in
+`distribution_unit_identifiers` (unique per article, `ErrIdentifierTaken`), written with
+`PUT …/units/{id}/identifiers` (`Service.SetIdentifiers`, admin/board/material, only while
+`delivering`, at most `quantity`, completed later if need be) and required in full before
+collection (`MissingIdentifiers`, `ErrIdentifiersMissing`); with units present, `max_total`,
+`max_per_person` and `has_identifiers` are the editable parts of an article. `Article.String` is what the edit notification diffs
+(without `Requested`, which moves as people ask). Frontend: one line per article in the
+"Artículos" textarea, `Nombre: precio[, máximo N][, N por persona][, con números]` (`parseArticles`), which switches off the
+fields that don't apply (`syncArticleFields`); `/reparto` shows a quantity field per article
+with what is left, "Tus pedidos" rows are changed by quantity, `/reparto-pedido` shows
+each article against its cap, and `/reparto-recogida` has a numbers field per row of an
+article with numbers (`identifiersEditor`).
+
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather
 than a Go enum, so the list can grow with an `INSERT` instead of a deploy. Its `is_other`

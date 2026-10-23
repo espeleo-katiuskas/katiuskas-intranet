@@ -873,7 +873,8 @@ movimiento.
 
 Un reparto es una cosa que el club entrega a sus socios: camisetas, buffs, un cabo, tazas,
 pegatinas. Cada reparto es un solo artículo; si hay que gestionar por separado dos cosas,
-son dos repartos. Se crea con admin o board (el resto del API lo ve, pero no lo escribe,
+son dos repartos, salvo el caso de los **artículos** (más abajo), para cosas que se piden en
+cualquier cantidad. Se crea con admin o board (el resto del API lo ve, pero no lo escribe,
 salvo pedir unidades y editar las propias).
 
 - **Reparto** (`distributions`). Tiene `audience`: `all_members` (le corresponde a todo el
@@ -900,6 +901,39 @@ salvo pedir unidades y editar las propias).
   («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
   mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
   como cambiarlas, pero uno distinto da 409 `has_units`.
+- **Artículos** (`distribution_articles`, migración `00024`): un reparto puede, en vez de ser
+  un solo artículo con precio propio, repartir varios que cada socio pide en la cantidad que
+  quiera, como la lotería de Navidad: papeletas a 5 € (200 en total) y décimos a 20 € (1000
+  en total). Cada artículo tiene `name`, `price` (una unidad) y `max_total` opcional: cuántas
+  unidades hay para repartir entre todos (se pueden quedar sin repartir, pero no se reparte
+  más de lo que hay; sin `max_total` no hay tope). No hay límite por socio. Un reparto con
+  artículos es siempre `signup` y no tiene `price`, extras ni opciones propios (400
+  `articles_conflict`); sin artículos todo funciona como antes. Cada persona tiene una sola
+  fila por artículo, con `quantity` (la unidad sigue siendo una fila, pero esta fila vale
+  tantas unidades como `quantity`; `price` es lo que costaba UNA, así que la fila cuesta
+  `price × quantity`; sin artículos `quantity` es siempre 1), de modo que no hay que marcar
+  200 papeletas una a una como pagadas o recogidas. Se pide con `POST …/units` y
+  `article_id` + `quantity` (otra vez el mismo artículo, 409 `already_registered`), se cambia
+  con `PATCH …/units/{id}` y `quantity` (con las mismas reglas de estado que cualquier
+  unidad) y se quita con `DELETE`. El tope es el total de todos: `CreateArticleUnit` y
+  `UpdateQuantity` bloquean la fila del reparto mientras cuentan lo que queda, y pasarse da
+  409 `article_exhausted` (con cuántas quedan). `Article.requested` dice cuántas se han
+  pedido, y `unit_count`/`picked_up_count` cuentan unidades, no filas. Los artículos solo se
+  pueden cambiar mientras no haya unidades; después solo `max_total`, y no por debajo de lo
+  ya pedido (409 `has_units`, 409 `cap_below_requested`). `GET …/order` agrupa por artículo.
+  En la interfaz se escriben en una línea cada uno, «Papeletas: 5, máximo 200».
+  Además, cada artículo puede tener `max_per_person` (cuántas puede tener una persona; pasarse
+  da 409 `article_person_limit`) y `has_identifiers` (migración `00024`): cada unidad lleva su
+  número —número de serie de una papeleta, serie y fracción de un décimo, texto libre de hasta
+  60 caracteres—, que no se da al pedir sino al entregar. Se apuntan con
+  `PUT …/units/{id}/identifiers` (admin, board o material, solo con el reparto en `delivering`,
+  en la tabla `distribution_unit_identifiers`, con un número único por artículo: 409
+  `identifier_taken`), pueden ser menos que `quantity` y completarse después, pero una fila con
+  números no se puede recoger hasta tenerlos todos (409 `identifiers_missing`, comprobado en
+  `Service.MarkPickedUp`). Con unidades ya pedidas se pueden cambiar `max_total`,
+  `max_per_person` (nunca por debajo del mayor pedido, 409 `cap_below_requested`) y
+  `has_identifiers`. En la interfaz: «Papeletas: 5, máximo 200, 10 por persona, con números», y
+  `/reparto-recogida` muestra un campo de números por fila.
 - **Unidades** (`distribution_units`; en la interfaz se llaman «pedidos», y las unidades
   extra, «extras»): una fila por unidad pedida, para que dos camisetas
   extra puedan tener tallas distintas. `beneficiary_id` es para quién es;

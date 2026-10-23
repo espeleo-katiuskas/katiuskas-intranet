@@ -1778,7 +1778,17 @@ paths:
         for `signup`, where, when set, only those members can sign up. `price` is a
         member's own unit (0 = free); `extra_price` makes extra units
         possible and is what each costs; `max_extra` caps them per person
-        and needs `extra_price`.
+        and needs `extra_price`. With `articles` it is a different kind of
+        distribution — several things asked for in any quantity, like the
+        Christmas lottery's "papeletas" and "décimos": each article has its
+        own `price` and, optionally, `max_total`, how many there are to give
+        out in all. It is for whoever signs up and has no options, extras or
+        price of its own (400 articles_conflict); each article needs a
+        distinct name, a price of at least 0 and limits of at least 1 if it
+        has them (400 invalid_articles). An article may also cap what one
+        person can have (`max_per_person`) and carry a number on each unit
+        (`has_identifiers`: a serial number, a series and fraction), which is
+        written down when the units are handed out.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -1790,7 +1800,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
-        "400": { description: invalid_name, invalid_audience, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra or invalid_options. }
+        "400": { description: invalid_name, invalid_audience, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra, invalid_options, invalid_articles or articles_conflict. }
         "403": { description: Neither admin nor board. }
 
   /distributions/{id}:
@@ -1811,10 +1821,14 @@ paths:
       summary: Edit a distribution
       description: >
         Requires admin or board. Replaces every field of the creation body
-        wholesale, so one left out is turned off — except `options` and
-        `status`, which are only touched when sent. `options` can only be
-        replaced while nobody has asked for anything yet (409 has_units);
-        sending back exactly what is there is not a replacement. `status`
+        wholesale, so one left out is turned off — except `options`,
+        `articles` and `status`, which are only touched when sent. `options`
+        can only be replaced while nobody has asked for anything yet (409
+        has_units); sending back exactly what is there is not a replacement.
+        The same for `articles`, except that once somebody has asked only
+        each article's `max_total`, `max_per_person` and `has_identifiers`
+        can change (anything else is 409 has_units), the limits to no less than
+        what has been asked for (409 cap_below_requested). `status`
         moves one step at a time along draft, open (members ask for units),
         closed (nothing changes, nothing can be handed out yet), delivering
         (collections are recorded) and done — forward or back. A
@@ -1847,6 +1861,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
         "400": { description: Same as creating, plus invalid_status. }
+        "409": { description: invalid_status_transition, has_units, has_settled_units or cap_below_requested. }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: invalid_status_transition (not one step), or has_units (replacing the options after somebody asked). }
@@ -1946,7 +1961,15 @@ paths:
         `is_extra`, a person can also have extras up to `max_extra` counted by who they are for
         (409 extras_not_allowed, too_many_extras), at the extra price.
         `choices` must give exactly one listed value for each option (400
-        invalid_choices). Members can only do it while the distribution is
+        invalid_choices). In a distribution with articles, say which one with
+        `article_id` and how many with `quantity` (1 to 100000; 400
+        article_required, unknown_article, invalid_quantity): a person has one
+        row per article, with no limit on the quantity — asking again for the
+        same article is 409 already_registered, and changing it is a PATCH —
+        but there may be a limit on the article as a whole, and asking for
+        more than are left is 409 article_exhausted, and more than the article's
+        `max_per_person` is 409 article_person_limit. No extras, no choices.
+        Members can only do it while the distribution is
         `open` and before `closes_at`; admin/board can go on after the
         deadline, but also only while it is `open` (409 not_open otherwise): a
         closed distribution changes for nobody, and is reopened for a late
@@ -1962,6 +1985,8 @@ paths:
               properties:
                 beneficiary_login: { type: string, description: Defaults to the caller. }
                 is_extra: { type: boolean, default: false }
+                article_id: { type: integer, description: Only in a distribution with articles, and then required. }
+                quantity: { type: integer, description: How many of the article; only in a distribution with articles, and then required. }
                 choices:
                   type: object
                   additionalProperties: { type: string }
@@ -1972,15 +1997,52 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
-        "400": { description: invalid_choices. }
+        "400": { description: invalid_choices, article_required, unknown_article or invalid_quantity. }
         "404": { description: The distribution (or a draft, for a member) or the beneficiary doesn't exist. }
-        "409": { description: not_open, not_eligible, already_registered, extras_not_allowed or too_many_extras. }
+        "409": { description: not_open, not_eligible, already_registered, extras_not_allowed, too_many_extras, article_exhausted or article_person_limit. }
+
+  /distributions/{id}/units/{unitID}/identifiers:
+    put:
+      summary: Write down the numbers of the items handed out
+      description: >
+        Requires admin, board or material, and the distribution `delivering`
+        (409 not_delivering). Replaces the numbers (serial numbers, series and
+        fraction...) of a row of an article with `has_identifiers`: none empty
+        or repeated, no more than the row's quantity, each at most 60
+        characters (400 invalid_identifiers, also for a row of any other
+        article). Fewer than the quantity can be saved and completed later,
+        but a row can't be collected (409 identifiers_missing on
+        `POST .../pickups`) until it has all of them. A number is unique within
+        its article, whoever has it (409 identifier_taken).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                identifiers: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: The updated unit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: invalid_identifiers. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_delivering or identifier_taken. }
 
   /distributions/{id}/units/{unitID}:
     patch:
-      summary: Change what was chosen for a unit
+      summary: Change what was chosen for a unit, or how many
       description: >
-        Only `choices` can change (who entered it and when stay). Allowed to
+        Only `choices` can change (who entered it and when stay) — or, for a
+        row of an article, only `quantity` (400 invalid_quantity for the
+        other one, or one outside 1 to 100000), under the article's limit
+        (409 article_exhausted, article_person_limit). Allowed to
         the person it is for, whoever entered it, and admin/board, under the
         same open/deadline rules as asking for it. A collected unit is final
         (409 unit_locked); a paid one only changes through admin/board.
@@ -1995,16 +2057,17 @@ paths:
               type: object
               properties:
                 choices: { type: object, additionalProperties: { type: string } }
+                quantity: { type: integer, description: For a row of an article, instead of choices. }
       responses:
         "200":
           description: The updated unit
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
-        "400": { description: invalid_choices. }
+        "400": { description: invalid_choices or invalid_quantity. }
         "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open or unit_locked. }
+        "409": { description: not_open, unit_locked, article_exhausted or article_person_limit. }
     delete:
       summary: Remove a unit
       description: >
@@ -2072,7 +2135,7 @@ paths:
         "400": { description: no_units. }
         "403": { description: Not admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_delivering, invalid_collector or already_picked_up. }
+        "409": { description: not_delivering, invalid_collector, already_picked_up or identifiers_missing (a row of an article with numbers needs all of them first). }
 
   /distributions/{id}/units/{unitID}/pickup:
     delete:
@@ -3469,10 +3532,25 @@ components:
             properties:
               name: { type: string }
               values: { type: array, items: { type: string } }
+        articles:
+          type: array
+          description: >
+            What a distribution with articles hands out, in order (empty for
+            the usual kind: then it is price, extras and options).
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              price: { type: number, description: One unit. }
+              max_total: { type: integer, description: How many there are in all; absent = no limit. }
+              max_per_person: { type: integer, description: How many one person may have; absent = no limit. }
+              has_identifiers: { type: boolean, description: Each unit has its own number, written down when it is handed out. }
+              requested: { type: integer, description: How many have been asked for so far; with max_total, what is left is the difference. }
         created_by_login: { type: string }
         created_at: { type: string, format: date-time }
-        unit_count: { type: integer }
-        picked_up_count: { type: integer }
+        unit_count: { type: integer, description: In units — a row of an article counts as its quantity. }
+        picked_up_count: { type: integer, description: In units, like unit_count. }
         eligible:
           type: boolean
           description: Whether the caller may have it. Only on GET /distributions and GET /distributions/{id}.
@@ -3497,6 +3575,18 @@ components:
             properties:
               name: { type: string }
               values: { type: array, items: { type: string } }
+        articles:
+          type: array
+          description: Things asked for in any quantity; see POST /distributions.
+          items:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string }
+              price: { type: number, default: 0 }
+              max_total: { type: integer }
+              max_per_person: { type: integer }
+              has_identifiers: { type: boolean, default: false }
         status:
           type: string
           enum: [draft, open, closed, delivering, done]
@@ -3512,8 +3602,12 @@ components:
         registered_by_login: { type: string, description: Who really entered it — not the beneficiary when somebody did it for them. Absent for a member's own unit of a distribution for all members until somebody chooses its options; then it is who did. }
         registered_at: { type: string, format: date-time }
         is_extra: { type: boolean }
+        article_id: { type: integer, description: Only for a row of an article. }
+        article_name: { type: string }
+        identifiers: { type: array, items: { type: string }, description: The numbers of the items, for a row of an article with has_identifiers. }
+        quantity: { type: integer, description: How many units the row stands for; always 1 outside articles. }
         choices: { type: object, additionalProperties: { type: string } }
-        price: { type: number, description: What it cost when it was entered. }
+        price: { type: number, description: What ONE unit cost when it was entered; the row costs price times quantity. }
         paid_at: { type: string, format: date-time }
         paid_marked_by_login: { type: string }
         picked_up_at: { type: string, format: date-time }
@@ -3528,8 +3622,10 @@ components:
           items:
             type: object
             properties:
+              article_id: { type: integer, description: Only in a distribution with articles. }
+              article_name: { type: string }
               choices: { type: object, additionalProperties: { type: string } }
-              count: { type: integer }
+              count: { type: integer, description: In units. }
         total_units: { type: integer }
         total_amount: { type: number }
         provisional: { type: boolean, description: "true for a distribution for all members still in draft: the own unit of everybody who qualifies is counted although it isn't made yet." }

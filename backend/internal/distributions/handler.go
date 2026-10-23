@@ -36,7 +36,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // auditableFields are the Distribution fields update's notification diffs —
 // every one UpdateInput can change.
 var auditableFields = []string{
-	"Name", "Description", "Audience", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options",
+	"Name", "Description", "Audience", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options", "Articles",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -55,6 +55,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/distributions/{id}/order", h.authenticator.Protect(h.order, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/pickups", h.authenticator.Protect(h.markPickedUp, "admin", "board", "material"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/pickup", h.authenticator.Protect(h.clearPickup, "admin", "board", "material"))
+	mux.Handle("PUT /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.setIdentifiers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.markPaid, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/payment", h.authenticator.Protect(h.clearPaid, "admin", "board"))
 }
@@ -84,6 +85,17 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrInvalidMaxExtra, http.StatusBadRequest, "invalid_max_extra"},
 		{ErrInvalidOptions, http.StatusBadRequest, "invalid_options"},
 		{ErrInvalidStatus, http.StatusBadRequest, "invalid_status"},
+		{ErrInvalidArticles, http.StatusBadRequest, "invalid_articles"},
+		{ErrArticlesConflict, http.StatusBadRequest, "articles_conflict"},
+		{ErrArticleRequired, http.StatusBadRequest, "article_required"},
+		{ErrInvalidQuantity, http.StatusBadRequest, "invalid_quantity"},
+		{ErrUnknownArticle, http.StatusBadRequest, "unknown_article"},
+		{ErrArticleExhausted, http.StatusConflict, "article_exhausted"},
+		{ErrPersonLimit, http.StatusConflict, "article_person_limit"},
+		{ErrInvalidIdentifiers, http.StatusBadRequest, "invalid_identifiers"},
+		{ErrIdentifierTaken, http.StatusConflict, "identifier_taken"},
+		{ErrIdentifiersMissing, http.StatusConflict, "identifiers_missing"},
+		{ErrCapBelowRequested, http.StatusConflict, "cap_below_requested"},
 		{ErrInvalidChoices, http.StatusBadRequest, "invalid_choices"},
 		{ErrNoUnits, http.StatusBadRequest, "no_units"},
 		{ErrInvalidCollector, http.StatusConflict, "invalid_collector"},
@@ -139,17 +151,34 @@ func optionInputs(in []optionBody) []OptionInput {
 	return out
 }
 
+type articleBody struct {
+	Name           string  `json:"name"`
+	Price          float64 `json:"price"`
+	MaxTotal       *int    `json:"max_total"`
+	MaxPerPerson   *int    `json:"max_per_person"`
+	HasIdentifiers bool    `json:"has_identifiers"`
+}
+
+func articleInputs(in []articleBody) []ArticleInput {
+	out := make([]ArticleInput, len(in))
+	for i, a := range in {
+		out[i] = ArticleInput(a)
+	}
+	return out
+}
+
 type distributionBody struct {
-	Name        string        `json:"name"`
-	Description *string       `json:"description"`
-	Audience    Audience      `json:"audience"`
-	ClosesAt    *time.Time    `json:"closes_at"`
-	CutoffDate  *string       `json:"cutoff_date"`
-	Price       float64       `json:"price"`
-	ExtraPrice  *float64      `json:"extra_price"`
-	MaxExtra    *int          `json:"max_extra"`
-	Options     *[]optionBody `json:"options"`
-	Status      *Status       `json:"status"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description"`
+	Audience    Audience       `json:"audience"`
+	ClosesAt    *time.Time     `json:"closes_at"`
+	CutoffDate  *string        `json:"cutoff_date"`
+	Price       float64        `json:"price"`
+	ExtraPrice  *float64       `json:"extra_price"`
+	MaxExtra    *int           `json:"max_extra"`
+	Options     *[]optionBody  `json:"options"`
+	Articles    *[]articleBody `json:"articles"`
+	Status      *Status        `json:"status"`
 }
 
 // decodeDistribution reads a create/update body, with the cutoff date parsed.
@@ -246,6 +275,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Options != nil {
 		in.Options = optionInputs(*body.Options)
 	}
+	if body.Articles != nil {
+		in.Articles = articleInputs(*body.Articles)
+	}
 	d, err := h.service.Create(r.Context(), in)
 	if err != nil {
 		writeError(w, err, "could not create distribution")
@@ -273,6 +305,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if body.Options != nil {
 		options := optionInputs(*body.Options)
 		in.Options = &options
+	}
+	if body.Articles != nil {
+		articles := articleInputs(*body.Articles)
+		in.Articles = &articles
 	}
 	d, err := h.service.Update(r.Context(), id, in)
 	if err != nil {
@@ -369,6 +405,8 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 		BeneficiaryLogin *string           `json:"beneficiary_login"`
 		IsExtra          bool              `json:"is_extra"`
 		Choices          map[string]string `json:"choices"`
+		ArticleID        *int64            `json:"article_id"`
+		Quantity         int               `json:"quantity"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -390,13 +428,17 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 	}
 	unit, err := h.service.RegisterUnit(r.Context(), RegisterInput{
 		DistributionID: id, BeneficiaryID: beneficiaryID, RegisteredByID: current.ID,
-		IsExtra: body.IsExtra, Choices: body.Choices, Staff: isStaff(current),
+		IsExtra: body.IsExtra, Choices: body.Choices, ArticleID: body.ArticleID, Quantity: body.Quantity,
+		Staff: isStaff(current),
 	})
 	if err != nil {
 		writeError(w, err, "could not register unit")
 		return
 	}
 	what := "«" + d.Name + "»"
+	if unit.ArticleName != nil {
+		what = fmt.Sprintf("%d × «%s» de %s", unit.Quantity, *unit.ArticleName, what)
+	}
 	if body.IsExtra {
 		what = "una unidad extra de " + what
 	}
@@ -442,13 +484,31 @@ func (h *Handler) updateUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Choices map[string]string `json:"choices"`
+		Choices  map[string]string `json:"choices"`
+		Quantity *int              `json:"quantity"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
+	// What can change on a unit depends on what it is: how many, for a row of an
+	// article; what was chosen, for any other.
+	if unit.ArticleID != nil || body.Quantity != nil {
+		if body.Quantity == nil || unit.ArticleID == nil {
+			writeError(w, ErrInvalidQuantity, "")
+			return
+		}
+		updated, err := h.service.UpdateQuantity(r.Context(), d.ID, unit.ID, *body.Quantity, isStaff(current))
+		if err != nil {
+			writeError(w, err, "could not update unit")
+			return
+		}
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado a %d la cantidad de «%s» para %s en «%s».",
+			h.actorLogin(r.Context()), updated.Quantity, *updated.ArticleName, unit.BeneficiaryLogin, d.Name))
+		httpapi.WriteJSON(w, http.StatusOK, updated)
+		return
+	}
 	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, current.ID, isStaff(current))
 	if err != nil {
 		writeError(w, err, "could not update unit")
@@ -518,6 +578,35 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📦 %s ha apuntado que %s ha recogido %d unidades de «%s».",
 		h.actorLogin(r.Context()), body.PickedUpByLogin, len(body.UnitIDs), d.Name))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) setIdentifiers(w http.ResponseWriter, r *http.Request) {
+	d, unit, ok := h.unitForStaff(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Identifiers []string `json:"identifiers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	updated, err := h.service.SetIdentifiers(r.Context(), d.ID, unit.ID, body.Identifiers)
+	if err != nil {
+		writeError(w, err, "could not write down the numbers")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha apuntado los números de «%s» de %s en «%s»: %s.",
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(updated.Identifiers, ", ")))
+	httpapi.WriteJSON(w, http.StatusOK, updated)
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func (h *Handler) clearPickup(w http.ResponseWriter, r *http.Request) {

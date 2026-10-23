@@ -28,8 +28,9 @@
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Nuevo reparto</h3>
     <p class="hint">
-      Un reparto es un solo artículo (camiseta, buff, cabo…). Empieza como borrador, que
-      solo ven la administración y la Junta Directiva, hasta que lo abras.
+      Un reparto es un solo artículo (camiseta, buff, cabo…), o varios que se piden en la
+      cantidad que se quiera, con un máximo en total (la lotería de Navidad). Empieza como
+      borrador, que solo ven la administración y la Junta Directiva, hasta que lo abras.
     </p>
     <form id="new-distribution-form">
       <div class="field-grid">
@@ -71,6 +72,15 @@
         <div class="field span-2">
           <label for="nd-options">Qué hay que elegir <span class="optional">(una cosa por línea, por ejemplo «Talla: S, M, L, XL»)</span></label>
           <textarea id="nd-options" name="options"></textarea>
+        </div>
+        <div class="field span-2">
+          <label for="nd-articles">Artículos que se piden en cantidad <span class="optional">(opcional; uno por línea: «Nombre: precio», y si quieres «máximo N» en total, «N por persona» y «con números» si cada unidad lleva el suyo; por ejemplo «Papeletas: 5, máximo 200, 10 por persona, con números»)</span></label>
+          <textarea id="nd-articles" name="articles"></textarea>
+          <p class="hint" data-articles-hint hidden>
+            Con artículos cada socio pide las unidades que quiera de cada uno, hasta el máximo que
+            haya en total (si lo pones). Es para quien se apunte y no tiene precio, extras ni
+            opciones propios: cada artículo tiene el suyo.
+          </p>
         </div>
       </div>
       <div class="panel-actions">

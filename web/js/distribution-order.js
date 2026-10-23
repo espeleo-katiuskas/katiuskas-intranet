@@ -9,7 +9,16 @@ import {
   showFeedback,
 } from './api.js';
 import { initPage } from './layout.js';
-import { apiErrorText, choicesText, loadPeople, statusBadge } from './distributionCommon.js';
+import {
+  apiErrorText,
+  articleLeft,
+  choicesText,
+  hasArticles,
+  loadPeople,
+  statusBadge,
+  unitCost,
+  unitLabel,
+} from './distributionCommon.js';
 
 // What has to be bought, and what each member wants: for the people who put
 // the order together (admin, board) and hand it out (material).
@@ -29,7 +38,29 @@ const hasOptions = () => (distribution?.options.length ?? 0) > 0;
 
 let provisional = false;
 
+// With articles, what has to be bought is each article's total, whatever
+// anybody wants of it, against how many there are.
+function renderArticleOrder(order) {
+  document.getElementById('order-head').innerHTML =
+    '<th>Artículo</th><th>Pedidas</th><th>Máximo</th><th>Quedan</th><th>Importe</th>';
+  document.getElementById('order-lines').innerHTML = distribution.articles
+    .map((a) => {
+      const asked = order.lines
+        .filter((l) => l.article_id === a.id)
+        .reduce((sum, l) => sum + l.count, 0);
+      const left = articleLeft(a);
+      return `<tr><td>${escapeHtml(a.name)}</td><td>${asked}</td><td>${a.max_total ?? 'Sin límite'}</td><td>${left ?? '—'}</td><td>${formatCurrency(asked * a.price)}</td></tr>`;
+    })
+    .join('');
+  document.getElementById('order-totals').textContent =
+    `${order.total_units} unidades en total, por ${formatCurrency(order.total_amount)}.`;
+}
+
 function renderOrder(order) {
+  if (hasArticles(distribution ?? {})) {
+    renderArticleOrder(order);
+    return;
+  }
   provisional = order.provisional;
   const noChoices = (l) => Object.keys(l.choices).length === 0;
   document.getElementById('order-lines').innerHTML = order.lines.length
@@ -74,7 +105,7 @@ function groupByPerson(all) {
 }
 
 function unitLine(u) {
-  const parts = [choicesText(u.choices, hasOptions())];
+  const parts = [unitLabel(u, hasOptions())];
   if (u.is_extra) parts.push('extra');
   // Who entered it, when that isn't the person it is for (nobody did for an
   // own unit nobody has chosen yet).
@@ -90,7 +121,7 @@ function paymentCell(login, list) {
   const toPay = list.filter((u) => u.price > 0);
   if (toPay.length === 0) return 'Gratis';
   const unpaid = toPay.filter((u) => !u.paid_at);
-  const owed = unpaid.reduce((sum, u) => sum + u.price, 0);
+  const owed = unpaid.reduce((sum, u) => sum + unitCost(u), 0);
   if (!canMarkPaid) return unpaid.length ? `Pendiente: ${formatCurrency(owed)}` : 'Pagado';
   const mark = unpaid.length
     ? `<button type="button" class="btn btn-primary btn-small" data-pay-person="${escapeHtml(login)}">Marcar pagado (${formatCurrency(owed)})</button>`
@@ -111,7 +142,7 @@ function renderPeople() {
         <tr>
           <td>${escapeHtml(g.name)}</td>
           <td><ul class="plain-list">${g.units.map(unitLine).join('')}</ul></td>
-          <td>${formatCurrency(g.units.reduce((sum, u) => sum + u.price, 0))}</td>
+          <td>${formatCurrency(g.units.reduce((sum, u) => sum + unitCost(u), 0))}</td>
           <td>${paymentCell(login, g.units)}</td>
         </tr>`,
         )

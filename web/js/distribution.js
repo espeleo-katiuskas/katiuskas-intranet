@@ -12,6 +12,11 @@ import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import {
   nothingToAsk,
+  hasArticles,
+  articleLeft,
+  unitCost,
+  unitLabel,
+  syncArticleFields,
   statusSteps,
   apiErrorText,
   audienceLabels,
@@ -40,6 +45,18 @@ let people = { entries: [], names: {} };
 const fail = (err) => showError(apiErrorText(err, distribution));
 const nameOf = (login) => people.names[login] ?? login;
 
+// "Papeleta 5,00 € (quedan 120 de 200)": an article with what it costs and, when
+// there is a limit in all, how many are left.
+function articleText(a) {
+  const price = a.price > 0 ? formatCurrency(a.price) : 'gratis';
+  const left = articleLeft(a);
+  const notes = [
+    left == null ? null : `quedan ${left} de ${a.max_total}`,
+    a.max_per_person == null ? null : `hasta ${a.max_per_person} por persona`,
+  ].filter(Boolean);
+  return `${escapeHtml(a.name)} ${price}${notes.length ? ` (${notes.join(', ')})` : ''}`;
+}
+
 // What this distribution is, in a line.
 function describe(d) {
   const parts = [statusBadge(d.status), escapeHtml(audienceLabels[d.audience])];
@@ -50,10 +67,14 @@ function describe(d) {
         : `socios a ${formatDate(d.cutoff_date)}`,
     );
   }
-  parts.push(d.price > 0 ? `${formatCurrency(d.price)} cada uno` : 'gratis');
-  if (d.extra_price != null) {
-    const cap = d.max_extra != null ? `, hasta ${d.max_extra} por socio` : '';
-    parts.push(`extras a ${formatCurrency(d.extra_price)}${cap}`);
+  if (hasArticles(d)) {
+    parts.push(d.articles.map(articleText).join(' · '));
+  } else {
+    parts.push(d.price > 0 ? `${formatCurrency(d.price)} cada uno` : 'gratis');
+    if (d.extra_price != null) {
+      const cap = d.max_extra != null ? `, hasta ${d.max_extra} por socio` : '';
+      parts.push(`extras a ${formatCurrency(d.extra_price)}${cap}`);
+    }
   }
   if (d.closes_at) parts.push(`se elige hasta el ${formatDateTime(d.closes_at)}`);
   return parts.join(' · ');
@@ -167,6 +188,11 @@ function syncEditCutoff() {
     : '(opcional: si la pones, solo podrán apuntarse los socios de ese día)';
 }
 editAudience.addEventListener('change', syncEditCutoff);
+// With articles, the fields that only fit a single article are switched off.
+editForm.elements.articles.addEventListener('input', () => {
+  syncArticleFields(editForm);
+  syncEditCutoff();
+});
 
 onClick('open-edit', () => {
   fillDistributionForm(editForm, distribution);
@@ -269,6 +295,34 @@ function extrasOnly() {
   );
 }
 
+// One quantity field for each article, with what it costs and how many are left.
+// Whatever was typed stays when it is drawn again (the numbers left change as
+// people ask).
+function renderArticleFields() {
+  const box = document.getElementById('of-articles');
+  const typed = {};
+  box.querySelectorAll('input[data-article]').forEach((input) => {
+    typed[input.dataset.article] = input.value;
+  });
+  box.innerHTML = distribution.articles
+    .map((a) => {
+      const left = articleLeft(a);
+      const info = [
+        a.price > 0 ? `${formatCurrency(a.price)} cada una` : 'gratis',
+        left == null ? null : `quedan ${left}`,
+        a.max_per_person == null ? null : `máximo ${a.max_per_person} por persona`,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      return `
+      <div class="field">
+        <label for="of-article-${a.id}">${escapeHtml(a.name)} <span class="optional">(${info})</span></label>
+        <input id="of-article-${a.id}" type="number" min="0" max="${Math.min(left ?? 100000, a.max_per_person ?? 100000)}" step="1" data-article="${a.id}" value="${typed[a.id] ?? 0}">
+      </div>`;
+    })
+    .join('');
+}
+
 function allMembersHint() {
   const parts = ['Es para todos los socios: tu pedido ya está apuntado.'];
   if (distribution.options.length)
@@ -300,12 +354,24 @@ function renderOrderForm() {
         ? 'Ya ha pasado la fecha límite para pedir.'
         : 'Ya no se admiten pedidos.';
   } else {
-    status.textContent =
-      distribution.audience === 'signup'
+    status.textContent = hasArticles(distribution)
+      ? 'Pon cuántas quieres de cada artículo (0 si no quieres), para ti o para otro socio. Para cambiar lo que ya has pedido, usa «Tus pedidos».'
+      : distribution.audience === 'signup'
         ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
         : allMembersHint();
   }
   if (orderForm.hidden) return;
+  const articles = hasArticles(distribution);
+  document.getElementById('of-articles').hidden = !articles;
+  document.getElementById('of-options').hidden = articles;
+  if (articles) {
+    renderArticleFields();
+    document.getElementById('of-options').innerHTML = '';
+    extraField.hidden = true;
+    orderForm.querySelector('button[type="submit"]').textContent = 'Pedir';
+    return;
+  }
+  document.getElementById('of-articles').innerHTML = '';
   document.getElementById('of-options').innerHTML = optionSelects('of');
   extraField.hidden = distribution.extra_price == null || extrasOnly();
   orderForm.querySelector('button[type="submit"]').textContent = extrasOnly()
@@ -326,6 +392,10 @@ orderForm.addEventListener('submit', async (event) => {
     }
   }
   const submit = orderForm.querySelector('button[type="submit"]');
+  if (hasArticles(distribution)) {
+    await askForArticles(beneficiary, submit);
+    return;
+  }
   submit.disabled = true;
   try {
     await apiFetch(`${base}/units`, {
@@ -346,6 +416,41 @@ orderForm.addEventListener('submit', async (event) => {
     submit.disabled = false;
   }
 });
+
+// Asks for what was typed in each article's field, one request each, stopping at
+// the first the API refuses (what went through stays, and the lists are drawn
+// again either way, with what is left now).
+async function askForArticles(beneficiary, submit) {
+  const wanted = [...document.querySelectorAll('#of-articles input[data-article]')]
+    .map((input) => ({ article_id: Number(input.dataset.article), quantity: Number(input.value) }))
+    .filter((w) => w.quantity > 0);
+  if (wanted.length === 0) {
+    showError('Pon una cantidad en algún artículo.');
+    return;
+  }
+  submit.disabled = true;
+  let failure = null;
+  for (const w of wanted) {
+    try {
+      await apiFetch(`${base}/units`, {
+        method: 'POST',
+        body: JSON.stringify({ beneficiary_login: beneficiary, ...w }),
+      });
+      document.getElementById(`of-article-${w.article_id}`).value = 0;
+    } catch (err) {
+      failure = err;
+      break;
+    }
+  }
+  await loadUnits();
+  submit.disabled = false;
+  if (failure) {
+    fail(failure);
+    return;
+  }
+  showFeedback('Pedido apuntado.');
+  personInput.value = '';
+}
 
 // ----- the units shown -----
 const unitsList = document.getElementById('units-list');
@@ -370,6 +475,7 @@ function canChange(u) {
 // but nothing about paying: that isn't something the intranet keeps.
 function unitColumns() {
   const columns = [{ key: 'for', label: 'Para' }];
+  if (hasArticles(distribution)) columns.push({ key: 'article', label: 'Artículo' });
   if (distribution.options.length > 0) columns.push({ key: 'chosen', label: 'Elegido' });
   if (distribution.extra_price != null) columns.push({ key: 'kind', label: 'Tipo' });
   columns.push(
@@ -388,6 +494,8 @@ function unitCell(key, u, hasOptions) {
   switch (key) {
     case 'for':
       return escapeHtml(forMe ? 'Ti' : u.beneficiary_name);
+    case 'article':
+      return escapeHtml(unitLabel(u));
     case 'chosen':
       return unchosen
         ? '<strong>Sin elegir</strong>'
@@ -395,7 +503,7 @@ function unitCell(key, u, hasOptions) {
     case 'kind':
       return u.is_extra ? 'Extra' : 'Propia';
     case 'price':
-      return u.price > 0 ? formatCurrency(u.price) : 'Gratis';
+      return unitCost(u) > 0 ? formatCurrency(unitCost(u)) : 'Gratis';
     case 'entered':
       // Who entered it matters when it wasn't the person it is for. Nobody did
       // for an own unit of a distribution for all members until somebody chooses.
@@ -410,7 +518,7 @@ function unitCell(key, u, hasOptions) {
       const removable = u.is_extra || distribution.audience === 'signup';
       if (!canChange(u)) return '';
       return `<div class="table-actions">
-        ${hasOptions ? `<button type="button" class="btn ${unchosen ? 'btn-primary' : 'btn-secondary'} btn-small" data-change-unit="${u.id}">${unchosen ? 'Elegir' : 'Cambiar'}</button>` : ''}
+        ${hasOptions || u.article_id ? `<button type="button" class="btn ${unchosen ? 'btn-primary' : 'btn-secondary'} btn-small" data-change-unit="${u.id}">${unchosen ? 'Elegir' : 'Cambiar'}</button>` : ''}
         ${removable ? `<button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>` : ''}
       </div>`;
     }
@@ -432,12 +540,22 @@ function renderUnits() {
         )
         .join('')
     : `<tr><td colspan="${columns.length}">Todavía no hay nada a tu nombre.</td></tr>`;
+  const total = mine.reduce((sum, u) => sum + unitCost(u), 0);
+  document.getElementById('units-total').textContent =
+    total > 0 ? `Total de lo que has pedido: ${formatCurrency(total)}.` : '';
 }
 
 async function loadUnits() {
   try {
-    units = await apiFetch(`${base}/units`);
-    renderUnits();
+    // With articles, what is left of each changes as people ask, so the
+    // distribution is read again with the units and everything drawn anew.
+    if (hasArticles(distribution)) {
+      [units, distribution] = await Promise.all([apiFetch(`${base}/units`), apiFetch(base)]);
+      renderAll();
+    } else {
+      units = await apiFetch(`${base}/units`);
+      renderUnits();
+    }
   } catch (err) {
     unitsList.innerHTML = `<tr><td colspan="${distribution ? unitColumns().length : 4}">No se pudieron cargar los pedidos.</td></tr>`;
     fail(err);
@@ -456,7 +574,16 @@ unitsList.addEventListener('click', async (event) => {
     changing = units.find((u) => u.id === Number(change.dataset.changeUnit));
     document.getElementById('edit-unit-hint').textContent =
       `Para ${changing.beneficiary_login === me.login ? 'ti' : changing.beneficiary_name}.`;
-    document.getElementById('eu-options').innerHTML = optionSelects('eu', changing.choices);
+    // A row of an article changes in how many; any other, in what was chosen.
+    const byQuantity = Boolean(changing.article_id);
+    document.getElementById('edit-unit-title').textContent = byQuantity
+      ? `Cambiar la cantidad de ${changing.article_name}`
+      : 'Cambiar lo elegido';
+    document.getElementById('eu-quantity-field').hidden = !byQuantity;
+    document.getElementById('eu-quantity').value = changing.quantity;
+    document.getElementById('eu-options').innerHTML = byQuantity
+      ? ''
+      : optionSelects('eu', changing.choices);
     openModal(unitDialog);
   } else if (remove) {
     if (!confirm('¿Quitar este pedido?')) return;
@@ -475,10 +602,13 @@ unitsList.addEventListener('click', async (event) => {
 unitForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!changing) return;
+  const body = changing.article_id
+    ? { quantity: Number(document.getElementById('eu-quantity').value) }
+    : { choices: readChoices(document.getElementById('eu-options')) };
   try {
     await apiFetch(`${base}/units/${changing.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ choices: readChoices(document.getElementById('eu-options')) }),
+      body: JSON.stringify(body),
     });
     unitDialog.close();
     showFeedback('Cambio guardado.');

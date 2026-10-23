@@ -40,8 +40,9 @@
     <h3>Editar reparto</h3>
     <p class="hint">
       Los precios que cambies no afectan a lo que ya se eligió o se pagó; sí a los pedidos de
-      «todos los socios» que nadie ha tocado todavía. Las opciones solo se pueden cambiar
-      mientras no haya pedidos, es decir, hasta que se abra el reparto.
+      «todos los socios» que nadie ha tocado todavía. Las opciones y los artículos solo
+      se pueden cambiar mientras no haya pedidos, es decir, hasta que se abra el reparto; después,
+      solo el máximo de cada artículo, y no por debajo de lo ya pedido.
     </p>
     <form id="edit-distribution-form">
       <div class="field-grid">
@@ -84,6 +85,15 @@
           <label for="ed-options">Qué hay que elegir <span class="optional">(una cosa por línea, por ejemplo «Talla: S, M, L, XL»)</span></label>
           <textarea id="ed-options" name="options"></textarea>
         </div>
+        <div class="field span-2">
+          <label for="ed-articles">Artículos que se piden en cantidad <span class="optional">(opcional; uno por línea: «Nombre: precio», y si quieres «máximo N» en total, «N por persona» y «con números» si cada unidad lleva el suyo; por ejemplo «Papeletas: 5, máximo 200, 10 por persona, con números»)</span></label>
+          <textarea id="ed-articles" name="articles"></textarea>
+          <p class="hint" data-articles-hint hidden>
+            Con artículos cada socio pide las unidades que quiera de cada uno, hasta el máximo que
+            haya en total (si lo pones). Es para quien se apunte y no tiene precio, extras ni
+            opciones propios: cada artículo tiene el suyo.
+          </p>
+        </div>
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Guardar</button>
@@ -109,6 +119,7 @@
             <datalist id="of-person-options"></datalist>
           </div>
           <div id="of-options" class="span-2 field-grid"></div>
+          <div id="of-articles" class="field-grid" style="grid-column: 1 / -1" hidden></div>
           <div class="field span-2" id="of-extra-field" hidden>
             <label class="checkbox-label" for="of-extra"><input id="of-extra" type="checkbox"> <span id="of-extra-label">Es un extra</span></label>
           </div>
@@ -132,14 +143,19 @@
         <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
       </table>
     </div>
+    <p class="hint" id="units-total"></p>
   </div>
 
   <dialog id="edit-unit-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Cambiar lo elegido</h3>
+    <h3 id="edit-unit-title">Cambiar lo elegido</h3>
     <p class="hint" id="edit-unit-hint"></p>
     <form id="edit-unit-form">
       <div id="eu-options" class="field-grid"></div>
+      <div class="field" id="eu-quantity-field" hidden>
+        <label for="eu-quantity" id="eu-quantity-label">Cantidad</label>
+        <input id="eu-quantity" type="number" min="1" max="100000" step="1">
+      </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Guardar</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>

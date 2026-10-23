@@ -1,13 +1,24 @@
 import { apiFetch, escapeHtml, formatCurrency, showError } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { readDistributionForm, statusBadge, formatDateTime } from './distributionCommon.js';
+import {
+  hasArticles,
+  readDistributionForm,
+  statusBadge,
+  syncArticleFields,
+  formatDateTime,
+} from './distributionCommon.js';
 
 await initPage();
 
 const list = document.getElementById('distributions-list');
 
 function priceText(d) {
+  if (hasArticles(d)) {
+    return d.articles
+      .map((a) => `${a.name} ${a.price > 0 ? formatCurrency(a.price) : 'gratis'}`)
+      .join(' · ');
+  }
   const own = d.price > 0 ? formatCurrency(d.price) : 'Gratis';
   return d.extra_price != null ? `${own} (extra: ${formatCurrency(d.extra_price)})` : own;
 }
@@ -64,6 +75,14 @@ function syncCutoff() {
 audience.addEventListener('change', syncCutoff);
 dialog.addEventListener('close', syncCutoff);
 syncCutoff();
+
+// With articles, the fields that only fit a single article are switched off.
+function syncArticles() {
+  syncArticleFields(form);
+  syncCutoff();
+}
+form.elements.articles.addEventListener('input', syncArticles);
+dialog.addEventListener('close', syncArticles);
 
 // Only admin and board have the button; for anybody else it isn't on the page.
 document

@@ -3,6 +3,7 @@ package distributions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -32,6 +33,19 @@ var (
 	// carries that mark.
 	ErrAlreadyPickedUp = errors.New("a unit was already collected")
 	ErrAlreadyPaid     = errors.New("a unit was already marked as paid")
+	// ErrUnknownArticle means the article isn't one of the distribution's.
+	ErrUnknownArticle = errors.New("unknown article")
+	// ErrArticleExhausted means asking for that many would go over the number of
+	// units there are of the article in all.
+	ErrArticleExhausted = errors.New("there are not enough units left of this article")
+	// ErrCapBelowRequested means an article's limit can't go below what has
+	// already been asked for.
+	ErrCapBelowRequested = errors.New("an article's limit can't be lower than what has already been asked for")
+	// ErrPersonLimit means asking for that many would go over what one person may
+	// have of the article.
+	ErrPersonLimit = errors.New("this is more than one person may have of this article")
+	// ErrIdentifierTaken means another unit of the article already has that number.
+	ErrIdentifierTaken = errors.New("another unit of this article already has that number")
 	// ErrUnknownUser means a given user id doesn't exist.
 	ErrUnknownUser = errors.New("unknown user")
 )
@@ -52,8 +66,8 @@ func NewRepository(pool db.PGX) *Repository {
 const distributionSelect = `
 	SELECT d.id, d.name, d.description, d.audience, d.status, d.closes_at, d.cutoff_date,
 	       d.price::float8, d.extra_price::float8, d.max_extra, d.created_at, u.login,
-	       (SELECT count(*) FROM distribution_units x WHERE x.distribution_id = d.id),
-	       (SELECT count(*) FROM distribution_units x WHERE x.distribution_id = d.id AND x.picked_up_at IS NOT NULL)
+	       (SELECT COALESCE(sum(x.quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id),
+	       (SELECT COALESCE(sum(x.quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id AND x.picked_up_at IS NOT NULL)
 	FROM distributions d
 	JOIN users u ON u.id = d.created_by`
 
@@ -62,7 +76,8 @@ func scanDistribution(row pgx.Row, d *Distribution) error {
 		&d.Price, &d.ExtraPrice, &d.MaxExtra, &d.CreatedAt, &d.CreatedByLogin, &d.UnitCount, &d.PickedUpCount)
 }
 
-// attachOptions fills in Options for every given distribution, in one query.
+// attachOptions fills in Options and Articles for every given distribution, in
+// two queries.
 func (r *Repository) attachOptions(ctx context.Context, list []Distribution) error {
 	if len(list) == 0 {
 		return nil
@@ -90,7 +105,43 @@ func (r *Repository) attachOptions(ctx context.Context, list []Distribution) err
 		}
 		list[index[id]].Options = append(list[index[id]].Options, o)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range list {
+		list[i].Articles = []Article{}
+	}
+	articles, err := r.pool.Query(ctx, `
+		SELECT a.distribution_id, a.id, a.name, a.price::float8, a.max_total, a.max_per_person, a.has_identifiers,
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id)
+		FROM distribution_articles a
+		WHERE a.distribution_id = ANY($1) ORDER BY a.distribution_id, a.position
+	`, ids)
+	if err != nil {
+		return err
+	}
+	defer articles.Close()
+	for articles.Next() {
+		var id int64
+		var a Article
+		if err := articles.Scan(&id, &a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers, &a.Requested); err != nil {
+			return err
+		}
+		list[index[id]].Articles = append(list[index[id]].Articles, a)
+	}
+	return articles.Err()
+}
+
+func insertArticles(ctx context.Context, tx pgx.Tx, distributionID int64, articles []ArticleInput) error {
+	for i, a := range articles {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO distribution_articles (distribution_id, name, price, max_total, max_per_person, has_identifiers, position)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, distributionID, a.Name, a.Price, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers, i+1); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func insertOptions(ctx context.Context, tx pgx.Tx, distributionID int64, options []OptionInput) error {
@@ -122,6 +173,9 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Distribution, 
 		return Distribution{}, err
 	}
 	if err := insertOptions(ctx, tx, id, in.Options); err != nil {
+		return Distribution{}, err
+	}
+	if err := insertArticles(ctx, tx, id, in.Articles); err != nil {
 		return Distribution{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -246,7 +300,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 	// Everything somebody has already agreed to keeps what it cost.
 	if _, err := tx.Exec(ctx, `
 		UPDATE distribution_units SET price = $2
-		WHERE distribution_id = $1 AND registered_by_id IS NULL AND NOT is_extra
+		WHERE distribution_id = $1 AND registered_by_id IS NULL AND NOT is_extra AND article_id IS NULL
 		  AND paid_at IS NULL AND picked_up_at IS NULL AND price <> $2
 	`, id, in.Price); err != nil {
 		return Distribution{}, err
@@ -270,10 +324,94 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 			return Distribution{}, err
 		}
 	}
+	if in.Articles != nil {
+		if err := replaceArticles(ctx, tx, id, *in.Articles); err != nil {
+			return Distribution{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, err
 	}
 	return r.Get(ctx, id)
+}
+
+// replaceArticles makes articles the distribution's, in that order. Sending
+// back what is already there changes nothing. Once any unit exists the
+// articles themselves are fixed — units point at them — and only each one's
+// limits (MaxTotal, MaxPerPerson) and HasIdentifiers may change, the limits to no
+// less than what has already been asked for: ErrHasUnits for anything else,
+// ErrCapBelowRequested for a limit that is too low.
+func replaceArticles(ctx context.Context, tx pgx.Tx, id int64, articles []ArticleInput) error {
+	rows, err := tx.Query(ctx, `
+		SELECT a.id, a.name, a.price::float8, a.max_total, a.max_per_person, a.has_identifiers,
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id),
+		       (SELECT COALESCE(max(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id)
+		FROM distribution_articles a WHERE a.distribution_id = $1 ORDER BY a.position
+	`, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var current []Article
+	var biggest []int
+	for rows.Next() {
+		var a Article
+		var most int
+		if err := rows.Scan(&a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers, &a.Requested, &most); err != nil {
+			return err
+		}
+		current = append(current, a)
+		biggest = append(biggest, most)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+
+	var units int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM distribution_units WHERE distribution_id = $1`, id).Scan(&units); err != nil {
+		return err
+	}
+	if units == 0 {
+		same := slices.EqualFunc(current, articles, func(a Article, b ArticleInput) bool {
+			return a.Name == b.Name && a.Price == b.Price && intPtrsEqual(a.MaxTotal, b.MaxTotal) &&
+				intPtrsEqual(a.MaxPerPerson, b.MaxPerPerson) && a.HasIdentifiers == b.HasIdentifiers
+		})
+		if same {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM distribution_articles WHERE distribution_id = $1`, id); err != nil {
+			return err
+		}
+		return insertArticles(ctx, tx, id, articles)
+	}
+	if len(current) != len(articles) {
+		return ErrHasUnits
+	}
+	for i, a := range articles {
+		if current[i].Name != a.Name || current[i].Price != a.Price {
+			return ErrHasUnits
+		}
+		if (a.MaxTotal != nil && *a.MaxTotal < current[i].Requested) ||
+			(a.MaxPerPerson != nil && *a.MaxPerPerson < biggest[i]) {
+			return ErrCapBelowRequested
+		}
+	}
+	for i, a := range articles {
+		if _, err := tx.Exec(ctx, `
+			UPDATE distribution_articles SET max_total = $2, max_per_person = $3, has_identifiers = $4 WHERE id = $1
+		`, current[i].ID, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func intPtrsEqual(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // sameOptions reports whether options is nil or exactly what the distribution
@@ -385,9 +523,12 @@ func (r *Repository) ListMembers(ctx context.Context, today bool, day *time.Time
 
 const unitSelect = `
 	SELECT n.id, n.distribution_id, n.beneficiary_id, b.login, b.first_name || ' ' || b.last_name,
-	       n.registered_by_id, rb.login, n.registered_at, n.is_extra, n.choices, n.price::float8,
+	       n.registered_by_id, rb.login, n.registered_at, n.is_extra, n.article_id, ar.name, n.quantity,
+	       n.choices, n.price::float8,
+	       COALESCE((SELECT array_agg(i.identifier ORDER BY i.id) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id), '{}'),
 	       n.paid_at, pm.login, n.picked_up_at, pr.login, pu.login
 	FROM distribution_units n
+	LEFT JOIN distribution_articles ar ON ar.id = n.article_id
 	JOIN users b ON b.id = n.beneficiary_id
 	LEFT JOIN users rb ON rb.id = n.registered_by_id
 	LEFT JOIN users pm ON pm.id = n.paid_marked_by_id
@@ -396,7 +537,8 @@ const unitSelect = `
 
 func scanUnit(row pgx.Row, u *Unit) error {
 	return row.Scan(&u.ID, &u.DistributionID, &u.BeneficiaryID, &u.BeneficiaryLogin, &u.BeneficiaryName,
-		&u.RegisteredByID, &u.RegisteredByLogin, &u.RegisteredAt, &u.IsExtra, &u.Choices, &u.Price,
+		&u.RegisteredByID, &u.RegisteredByLogin, &u.RegisteredAt, &u.IsExtra, &u.ArticleID, &u.ArticleName,
+		&u.Quantity, &u.Choices, &u.Price, &u.Identifiers,
 		&u.PaidAt, &u.PaidMarkedByLogin, &u.PickedUpAt, &u.PickupRecordedByLogin, &u.PickedUpByLogin)
 }
 
@@ -451,7 +593,7 @@ func (r *Repository) CreateUnit(ctx context.Context, in RegisterInput) (Unit, er
 		var enteredBy *int64
 		err := tx.QueryRow(ctx, `
 			SELECT id, choices, registered_by_id FROM distribution_units
-			WHERE distribution_id = $1 AND beneficiary_id = $2 AND NOT is_extra
+			WHERE distribution_id = $1 AND beneficiary_id = $2 AND NOT is_extra AND article_id IS NULL
 			FOR UPDATE
 		`, in.DistributionID, in.BeneficiaryID).Scan(&existingID, &existingChoices, &enteredBy)
 		if err == nil && enteredBy == nil && len(existingChoices) == 0 && len(in.Choices) > 0 {
@@ -494,6 +636,129 @@ func (r *Repository) CreateUnit(ctx context.Context, in RegisterInput) (Unit, er
 	return r.GetUnit(ctx, in.DistributionID, id)
 }
 
+// checkQuantity says whether quantity units of the article can be had by one
+// person: not more than the article's per-person cap, nor than are left of it in
+// all (nil limits are no limit), with the article's row (and so the
+// distribution's, which its caller has locked) fixed for the rest of the
+// transaction. except is a unit whose own quantity doesn't count, because it is
+// the one being changed.
+func checkQuantity(ctx context.Context, tx pgx.Tx, articleID, except int64, quantity int) error {
+	var maxTotal, perPerson *int
+	var requested int
+	err := tx.QueryRow(ctx, `
+		SELECT a.max_total, a.max_per_person,
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id AND n.id <> $2)
+		FROM distribution_articles a WHERE a.id = $1
+	`, articleID, except).Scan(&maxTotal, &perPerson, &requested)
+	if err != nil {
+		return err
+	}
+	if perPerson != nil && quantity > *perPerson {
+		return fmt.Errorf("%w: %d at most", ErrPersonLimit, *perPerson)
+	}
+	if maxTotal != nil && quantity > *maxTotal-requested {
+		return fmt.Errorf("%w: %d left", ErrArticleExhausted, max(0, *maxTotal-requested))
+	}
+	return nil
+}
+
+// CreateArticleUnit enters what the beneficiary asks for of one article:
+// Quantity units at the article's price as it is now. The distribution's row is
+// locked while what is left is counted, so two people asking at once can't
+// both take the last ones.
+func (r *Repository) CreateArticleUnit(ctx context.Context, in RegisterInput) (Unit, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Unit{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var locked int64
+	err = tx.QueryRow(ctx, `SELECT id FROM distributions WHERE id = $1 FOR UPDATE`, in.DistributionID).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Unit{}, ErrNotFound
+	}
+	if err != nil {
+		return Unit{}, err
+	}
+	var price float64
+	err = tx.QueryRow(ctx, `
+		SELECT price::float8 FROM distribution_articles WHERE id = $1 AND distribution_id = $2
+	`, *in.ArticleID, in.DistributionID).Scan(&price)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Unit{}, ErrUnknownArticle
+	}
+	if err != nil {
+		return Unit{}, err
+	}
+	if err := checkQuantity(ctx, tx, *in.ArticleID, 0, in.Quantity); err != nil {
+		return Unit{}, err
+	}
+
+	var id int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO distribution_units (distribution_id, beneficiary_id, registered_by_id, article_id, quantity, price)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, in.DistributionID, in.BeneficiaryID, in.RegisteredByID, *in.ArticleID, in.Quantity, price).Scan(&id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case uniqueViolationCode:
+			return Unit{}, ErrAlreadyRegistered
+		case foreignKeyViolationCode:
+			return Unit{}, ErrUnknownUser
+		}
+	}
+	if err != nil {
+		return Unit{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Unit{}, err
+	}
+	return r.GetUnit(ctx, in.DistributionID, id)
+}
+
+// UpdateQuantity changes how many units a row of an article stands for, under
+// the same limit as asking for them. Who entered it and when stay as they were.
+func (r *Repository) UpdateQuantity(ctx context.Context, distributionID, id int64, quantity int) (Unit, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Unit{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var locked int64
+	err = tx.QueryRow(ctx, `SELECT id FROM distributions WHERE id = $1 FOR UPDATE`, distributionID).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Unit{}, ErrNotFound
+	}
+	if err != nil {
+		return Unit{}, err
+	}
+	var articleID *int64
+	err = tx.QueryRow(ctx, `SELECT article_id FROM distribution_units WHERE id = $1 AND distribution_id = $2`, id, distributionID).Scan(&articleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Unit{}, ErrUnitNotFound
+	}
+	if err != nil {
+		return Unit{}, err
+	}
+	if articleID == nil {
+		return Unit{}, ErrInvalidQuantity
+	}
+	if err := checkQuantity(ctx, tx, *articleID, id, quantity); err != nil {
+		return Unit{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE distribution_units SET quantity = $3 WHERE id = $1 AND distribution_id = $2`, id, distributionID, quantity); err != nil {
+		return Unit{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Unit{}, err
+	}
+	return r.GetUnit(ctx, distributionID, id)
+}
+
 // SyncAutomaticUnits gives every member on the cutoff date of a distribution
 // for all members their own unit, if they have none yet — nobody has to sign
 // up. The unit starts with no choices and nobody as who entered it, at the
@@ -509,7 +774,7 @@ func (r *Repository) SyncAutomaticUnits(ctx context.Context, d Distribution) err
 		INSERT INTO distribution_units (distribution_id, beneficiary_id, is_extra, choices, price)
 		SELECT $1, m.user_id, false, '{}', $3::numeric
 		FROM (SELECT DISTINCT user_id FROM memberships WHERE period @> $2::date) m
-		ON CONFLICT (distribution_id, beneficiary_id) WHERE NOT is_extra DO NOTHING
+		ON CONFLICT (distribution_id, beneficiary_id) WHERE NOT is_extra AND article_id IS NULL DO NOTHING
 	`, d.ID, d.CutoffDate, d.Price)
 	return err
 }
@@ -529,7 +794,7 @@ func (r *Repository) GetUnit(ctx context.Context, distributionID, id int64) (Uni
 func (r *Repository) ListUnits(ctx context.Context, distributionID int64, involving *int64) ([]Unit, error) {
 	rows, err := r.pool.Query(ctx, unitSelect+`
 		WHERE n.distribution_id = $1 AND ($2::bigint IS NULL OR n.beneficiary_id = $2 OR n.registered_by_id = $2)
-		ORDER BY b.first_name, b.last_name, n.beneficiary_id, n.is_extra, n.id
+		ORDER BY b.first_name, b.last_name, n.beneficiary_id, n.is_extra, ar.position, n.id
 	`, distributionID, involving)
 	if err != nil {
 		return nil, err
@@ -653,9 +918,12 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64) er
 func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 	order := Order{Lines: []OrderLine{}}
 	rows, err := r.pool.Query(ctx, `
-		SELECT choices, count(*), COALESCE(sum(price), 0)::float8
-		FROM distribution_units WHERE distribution_id = $1
-		GROUP BY choices ORDER BY choices::text
+		SELECT n.article_id, ar.name, n.choices, sum(n.quantity), COALESCE(sum(n.price * n.quantity), 0)::float8
+		FROM distribution_units n
+		LEFT JOIN distribution_articles ar ON ar.id = n.article_id
+		WHERE n.distribution_id = $1
+		GROUP BY n.article_id, ar.name, ar.position, n.choices
+		ORDER BY ar.position NULLS FIRST, n.choices::text
 	`, d.ID)
 	if err != nil {
 		return Order{}, err
@@ -664,7 +932,7 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 	for rows.Next() {
 		var line OrderLine
 		var amount float64
-		if err := rows.Scan(&line.Choices, &line.Count, &amount); err != nil {
+		if err := rows.Scan(&line.ArticleID, &line.ArticleName, &line.Choices, &line.Count, &amount); err != nil {
 			return Order{}, err
 		}
 		order.Lines = append(order.Lines, line)
@@ -684,7 +952,7 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 			SELECT count(*) FROM (SELECT DISTINCT user_id FROM memberships WHERE period @> $2::date) m
 			WHERE NOT EXISTS (
 				SELECT 1 FROM distribution_units n
-				WHERE n.distribution_id = $1 AND n.beneficiary_id = m.user_id AND NOT n.is_extra)
+				WHERE n.distribution_id = $1 AND n.beneficiary_id = m.user_id AND NOT n.is_extra AND n.article_id IS NULL)
 		`, d.ID, d.CutoffDate).Scan(&missing); err != nil {
 			return Order{}, err
 		}
@@ -697,7 +965,7 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 			// article with no options), or make that line.
 			merged := false
 			for i := range order.Lines {
-				if len(order.Lines[i].Choices) == 0 {
+				if order.Lines[i].ArticleID == nil && len(order.Lines[i].Choices) == 0 {
 					order.Lines[i].Count += missing
 					merged = true
 				}
@@ -708,4 +976,59 @@ func (r *Repository) Order(ctx context.Context, d Distribution) (Order, error) {
 		}
 	}
 	return order, nil
+}
+
+// SetIdentifiers replaces the numbers of the items of a row of an article that
+// has them. A number another unit of the same article already has is
+// ErrIdentifierTaken. It returns ErrInvalidIdentifiers when the unit isn't a row of
+// such an article, and nothing about how many there are — the service checks that.
+func (r *Repository) SetIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var articleID int64
+	err = tx.QueryRow(ctx, `
+		SELECT n.article_id FROM distribution_units n
+		JOIN distribution_articles a ON a.id = n.article_id
+		WHERE n.id = $1 AND n.distribution_id = $2 AND a.has_identifiers
+		FOR UPDATE OF n
+	`, id, distributionID).Scan(&articleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvalidIdentifiers
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM distribution_unit_identifiers WHERE unit_id = $1`, id); err != nil {
+		return err
+	}
+	for _, identifier := range identifiers {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO distribution_unit_identifiers (unit_id, article_id, identifier) VALUES ($1, $2, $3)
+		`, id, articleID, identifier)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+			return ErrIdentifierTaken
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// MissingIdentifiers counts the given units that are rows of an article with
+// numbers and don't have as many as their quantity yet.
+func (r *Repository) MissingIdentifiers(ctx context.Context, distributionID int64, ids []int64) (int, error) {
+	var missing int
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(*) FROM distribution_units n
+		JOIN distribution_articles a ON a.id = n.article_id
+		WHERE n.distribution_id = $1 AND n.id = ANY($2) AND a.has_identifiers
+		  AND (SELECT count(*) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id) <> n.quantity
+	`, distributionID, ids).Scan(&missing)
+	return missing, err
 }

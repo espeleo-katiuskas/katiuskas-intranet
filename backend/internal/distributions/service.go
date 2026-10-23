@@ -16,6 +16,19 @@ var (
 	ErrInvalidMaxExtra = errors.New("max_extra needs an extra_price and can't be negative")
 	ErrInvalidOptions  = errors.New("each option needs a name and at least one value, and names and values can't repeat")
 	ErrInvalidStatus   = errors.New("status must be draft, open, closed, delivering or done")
+	// ErrInvalidArticles means an article with no name or a negative price, a
+	// limit below 1, or two with the same name.
+	ErrInvalidArticles = errors.New("each article needs a distinct name, a price of at least 0 and, if it has a limit, one of at least 1")
+	// ErrArticlesConflict means a distribution with articles was also given what
+	// belongs to one without: it is for people who sign up, and has no options,
+	// extras or price of its own (each article has its price).
+	ErrArticlesConflict = errors.New("a distribution with articles is for whoever signs up and has no options, extras or price of its own")
+	// ErrArticleRequired means asking for a distribution with articles has to say
+	// which article, and how many.
+	ErrArticleRequired = errors.New("say which article you are asking for")
+	// ErrInvalidQuantity means a quantity outside 1..maxQuantity, or one given
+	// where it doesn't belong (or missing where it does).
+	ErrInvalidQuantity = errors.New("quantity is for units of an article only, and must be between 1 and 100000")
 	// ErrInvalidTransition means a status change that isn't one step forward
 	// or back.
 	ErrInvalidTransition = errors.New("the status can only move one step at a time")
@@ -42,6 +55,21 @@ var (
 	// on the cutoff date and would simply be made again.
 	ErrAutomaticUnit = errors.New("in a distribution for all members everybody has their own unit, which can't be removed")
 )
+
+const maxIdentifierLength = 60
+
+var (
+	// ErrInvalidIdentifiers means numbers given for a unit that doesn't take
+	// them, or more than its quantity, or an empty or repeated one.
+	ErrInvalidIdentifiers = errors.New("this unit takes no numbers, or they are empty, repeated or more than its quantity")
+	// ErrIdentifiersMissing means a unit of an article with numbers was to be
+	// collected without as many numbers as its quantity.
+	ErrIdentifiersMissing = errors.New("units of articles with numbers need all their numbers written down before they are collected")
+)
+
+// maxQuantity bounds one row's quantity: there is no per-person limit, so this
+// only keeps a typo from entering a number nobody meant.
+const maxQuantity = 100000
 
 type Service struct {
 	repo *Repository
@@ -76,6 +104,22 @@ func normalizeOptions(options []OptionInput) ([]OptionInput, error) {
 	return out, nil
 }
 
+// normalizeArticles trims every name and rejects an article with no name, a
+// negative price or a limit below 1, or a repeated name.
+func normalizeArticles(articles []ArticleInput) ([]ArticleInput, error) {
+	out := make([]ArticleInput, 0, len(articles))
+	names := map[string]bool{}
+	for _, a := range articles {
+		name := strings.TrimSpace(a.Name)
+		if name == "" || names[name] || a.Price < 0 || (a.MaxTotal != nil && *a.MaxTotal < 1) || (a.MaxPerPerson != nil && *a.MaxPerPerson < 1) {
+			return nil, ErrInvalidArticles
+		}
+		names[name] = true
+		out = append(out, ArticleInput{Name: name, Price: a.Price, MaxTotal: a.MaxTotal, MaxPerPerson: a.MaxPerPerson, HasIdentifiers: a.HasIdentifiers})
+	}
+	return out, nil
+}
+
 type fields struct {
 	name       string
 	audience   Audience
@@ -104,6 +148,18 @@ func validateFields(f fields) error {
 	return nil
 }
 
+// validateArticleKind checks that a distribution with articles has nothing that
+// belongs to one without.
+func validateArticleKind(f fields, articles, options int) error {
+	if articles == 0 {
+		return nil
+	}
+	if f.audience != AudienceSignup || f.price != 0 || f.extraPrice != nil || f.maxExtra != nil || options > 0 {
+		return ErrArticlesConflict
+	}
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, in CreateInput) (Distribution, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	if err := validateFields(fields{in.Name, in.Audience, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra}); err != nil {
@@ -114,6 +170,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Distribution, err
 		return Distribution{}, err
 	}
 	in.Options = options
+	articles, err := normalizeArticles(in.Articles)
+	if err != nil {
+		return Distribution{}, err
+	}
+	in.Articles = articles
+	if err := validateArticleKind(fields{in.Name, in.Audience, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra}, len(articles), len(options)); err != nil {
+		return Distribution{}, err
+	}
 	return s.repo.Create(ctx, in)
 }
 
@@ -137,13 +201,32 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 		}
 		in.Options = &options
 	}
+	current, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return Distribution{}, err
+	}
+	if in.Articles != nil {
+		articles, err := normalizeArticles(*in.Articles)
+		if err != nil {
+			return Distribution{}, err
+		}
+		in.Articles = &articles
+	}
+	// What the distribution will have once in is applied: a nil Articles or
+	// Options leaves the current ones.
+	articles, options := len(current.Articles), len(current.Options)
+	if in.Articles != nil {
+		articles = len(*in.Articles)
+	}
+	if in.Options != nil {
+		options = len(*in.Options)
+	}
+	if err := validateArticleKind(fields{in.Name, in.Audience, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra}, articles, options); err != nil {
+		return Distribution{}, err
+	}
 	if in.Status != nil {
 		if !in.Status.Valid() {
 			return Distribution{}, ErrInvalidStatus
-		}
-		current, err := s.repo.Get(ctx, id)
-		if err != nil {
-			return Distribution{}, err
 		}
 		step := in.Status.index() - current.Status.index()
 		allowed := step >= -1 && step <= 1
@@ -243,6 +326,23 @@ func (s *Service) RegisterUnit(ctx context.Context, in RegisterInput) (Unit, err
 	if err := s.checkOpen(d, in.Staff); err != nil {
 		return Unit{}, err
 	}
+	// A distribution with articles takes a quantity of one of them; one without
+	// takes neither.
+	if len(d.Articles) > 0 {
+		if in.ArticleID == nil {
+			return Unit{}, ErrArticleRequired
+		}
+		if in.IsExtra {
+			return Unit{}, ErrExtrasNotAllowed
+		}
+		if in.Quantity < 1 || in.Quantity > maxQuantity {
+			return Unit{}, ErrInvalidQuantity
+		}
+	} else if in.ArticleID != nil {
+		return Unit{}, ErrUnknownArticle
+	} else if in.Quantity != 0 {
+		return Unit{}, ErrInvalidQuantity
+	}
 	if in.Choices == nil {
 		in.Choices = map[string]string{}
 	}
@@ -269,6 +369,9 @@ func (s *Service) RegisterUnit(ctx context.Context, in RegisterInput) (Unit, err
 		if !eligible {
 			return Unit{}, ErrNotEligible
 		}
+	}
+	if in.ArticleID != nil {
+		return s.repo.CreateArticleUnit(ctx, in)
 	}
 	return s.repo.CreateUnit(ctx, in)
 }
@@ -321,6 +424,26 @@ func (s *Service) UpdateChoices(ctx context.Context, distributionID, id int64, c
 	return s.repo.UpdateChoices(ctx, distributionID, id, choices, actorID)
 }
 
+// UpdateQuantity changes how many units a row of an article stands for, under
+// the same rules as changing what was chosen.
+func (s *Service) UpdateQuantity(ctx context.Context, distributionID, id int64, quantity int, staff bool) (Unit, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return Unit{}, err
+	}
+	u, err := s.repo.GetUnit(ctx, distributionID, id)
+	if err != nil {
+		return Unit{}, err
+	}
+	if err := s.checkEditable(d, u, staff); err != nil {
+		return Unit{}, err
+	}
+	if u.ArticleID == nil || quantity < 1 || quantity > maxQuantity {
+		return Unit{}, ErrInvalidQuantity
+	}
+	return s.repo.UpdateQuantity(ctx, distributionID, id, quantity)
+}
+
 func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staff bool) error {
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
@@ -363,7 +486,47 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return err
 	}
+	missing, err := s.repo.MissingIdentifiers(ctx, distributionID, ids)
+	if err != nil {
+		return err
+	}
+	if missing > 0 {
+		return ErrIdentifiersMissing
+	}
 	return s.repo.MarkPickedUp(ctx, distributionID, ids, recordedByID, pickedUpByID)
+}
+
+// SetIdentifiers writes down the numbers of the items handed to the person, for
+// a row of an article that has them, while the distribution is being delivered.
+// There can be fewer than its quantity (the rest are written later), never more,
+// and none empty or repeated.
+func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return Unit{}, err
+	}
+	u, err := s.repo.GetUnit(ctx, distributionID, id)
+	if err != nil {
+		return Unit{}, err
+	}
+	if d.Status != StatusDelivering {
+		return Unit{}, ErrNotDelivering
+	}
+	clean := make([]string, 0, len(identifiers))
+	for _, identifier := range identifiers {
+		identifier = strings.TrimSpace(identifier)
+		if identifier == "" || len(identifier) > maxIdentifierLength || slices.Contains(clean, identifier) {
+			return Unit{}, ErrInvalidIdentifiers
+		}
+		clean = append(clean, identifier)
+	}
+	if len(clean) > u.Quantity {
+		return Unit{}, ErrInvalidIdentifiers
+	}
+	if err := s.repo.SetIdentifiers(ctx, distributionID, id, clean); err != nil {
+		return Unit{}, err
+	}
+	return s.repo.GetUnit(ctx, distributionID, id)
 }
 
 func (s *Service) ClearPickup(ctx context.Context, distributionID, id int64) error {
