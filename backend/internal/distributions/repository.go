@@ -48,6 +48,9 @@ var (
 	ErrIdentifierTaken = errors.New("another unit of this article already has that number")
 	// ErrBelowPaid means a quantity can't go below what has already been paid.
 	ErrBelowPaid = errors.New("the quantity can't be lower than what has already been paid")
+	// ErrBelowNumbered means a quantity can't go below the numbers already given to
+	// the row: some have to be taken off first.
+	ErrBelowNumbered = errors.New("the quantity can't be lower than the numbers already assigned: take some off first")
 	// ErrBelowDelivered means a quantity can't go below what has been handed out.
 	ErrBelowDelivered = errors.New("the quantity can't be lower than what has already been handed out")
 	// ErrUnknownUser means a given user id doesn't exist.
@@ -823,7 +826,7 @@ func (r *Repository) UpdateQuantity(ctx context.Context, distributionID, id int6
 		return Unit{}, ErrBelowDelivered
 	}
 	if quantity < numbered {
-		return Unit{}, ErrInvalidQuantity
+		return Unit{}, ErrBelowNumbered
 	}
 	if err := checkQuantity(ctx, tx, *articleID, id, beneficiaryID, quantity); err != nil {
 		return Unit{}, err

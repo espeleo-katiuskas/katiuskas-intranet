@@ -372,6 +372,8 @@ const errorMessages = {
   invalid_identifiers:
     'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
   identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
+  quantity_below_numbered:
+    'No se puede pedir menos de los números ya asignados: quita antes el número a los que sobren.',
   quantity_below_delivered:
     'No se puede pedir menos de lo que ya se ha entregado: devuelve antes lo que sobra.',
   quantity_below_paid:

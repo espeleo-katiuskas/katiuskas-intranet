@@ -2179,7 +2179,8 @@ paths:
         deadline). What is handed out can't be taken from under its owner
         (409 unit_locked, also in any unit that isn't a row of an article);
         in a row of an article admin/board/material can change it but not below
-        what was handed out (409 quantity_below_delivered). A paid one only
+        what was handed out (409 quantity_below_delivered), nor below the numbers
+        assigned to it (409 quantity_below_numbered). A paid one only
         changes through admin/board/material.
       security: [{ bearerAuth: [] }]
       parameters:

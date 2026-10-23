@@ -1055,7 +1055,7 @@ salvo pedir unidades y editar las propias).
   (`DeliveredIdentifiers` en la unidad; lo asignado y sin entregar sigue en el estante) y no
   se puede quitar de la lista. Tres cosas distintas se pueden hacer después: ampliar o reducir
   el pedido (admin/board/material, nunca por debajo de lo entregado, 409
-  `quantity_below_delivered`; los demás no pueden tocar una fila entregada); **deshacer** una
+  `quantity_below_delivered`, ni de los números asignados, 409 `quantity_below_numbered`: hay que quitar antes algún número; los demás no pueden tocar una fila entregada); **deshacer** una
   entrega (`DELETE …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: vuelven a no estar
   entregadas, siguen en el pedido y con su número); y **devolver**
   (`POST …/units/{id}/return`, `quantity` o `identifiers`): lo devuelto sale del pedido, que

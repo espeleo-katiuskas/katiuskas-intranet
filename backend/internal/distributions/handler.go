@@ -123,6 +123,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrAlreadyPaid, http.StatusConflict, "already_paid"},
 		{ErrBelowPaid, http.StatusConflict, "quantity_below_paid"},
 		{ErrBelowDelivered, http.StatusConflict, "quantity_below_delivered"},
+		{ErrBelowNumbered, http.StatusConflict, "quantity_below_numbered"},
 		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},
 	}
 	for _, k := range known {

@@ -1066,3 +1066,21 @@ func TestNumbersCanBeAddedAndRemovedAndRangesWorkEverywhere(t *testing.T) {
 		t.Errorf("unexpected row: %+v", got)
 	}
 }
+
+func TestAQuantityCantGoBelowTheNumbersAssignedAndSaysSo(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 5), http.StatusCreated))
+	path := fmt.Sprintf("%s/%d", unitsPath(d.ID), u.ID)
+	mustStatus(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0001-0004"}}), http.StatusOK)
+
+	expect(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 3}), http.StatusConflict, "quantity_below_numbered")
+	mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 4}), http.StatusOK)
+	// Taking numbers off makes room.
+	mustStatus(t, e.do("DELETE", path+"/identifiers?identifiers=0003-0004", admin.token, nil), http.StatusOK)
+	mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 2}), http.StatusOK)
+	// A quantity that is nonsense is still invalid_quantity.
+	expect(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 0}), http.StatusBadRequest, "invalid_quantity")
+}
