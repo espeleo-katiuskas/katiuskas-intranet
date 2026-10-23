@@ -1449,8 +1449,8 @@ what, how many are handed out and paid, what it costs. "Más información" unfol
 (with "Asignar los siguientes libres" or typed numbers) and the list of its numbered items, each
 with its paid / delivered state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by
 state, `pick`) and act on — mark paid or take the payment off (admin/board), hand out to the
-person in the "Entregado a" picker (with the "assign the missing numbers" checkbox), undo a
-delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same.
+person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled with the member the order is
+for; only members are offered), undo a delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same.
 Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
 units, undoing, returning or taking numbers off. What is unfolded, ticked and typed survives
 redrawing.

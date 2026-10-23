@@ -126,8 +126,6 @@ function renderOrder(order) {
 const list = document.getElementById('orders-list');
 const searchBox = document.getElementById('orders-search');
 const showDone = document.getElementById('show-done');
-const personInput = document.getElementById('pf-person');
-const assignBox = document.getElementById('pf-assign');
 
 // Orders unfolded, what is ticked in each (numbers), and what was typed in the
 // fields: all of it survives drawing the list again after any action.
@@ -302,9 +300,6 @@ function render() {
   document.getElementById('orders-progress').textContent = units.length
     ? `${parts.join(' · ')}.`
     : '';
-  document.getElementById('pf-assign-field').hidden = !(distribution?.articles ?? []).some(
-    (a) => a.identifier_fields.length > 0,
-  );
 }
 
 searchBox.addEventListener('input', render);
@@ -358,6 +353,39 @@ unitForm.addEventListener('submit', async (event) => {
     await apiFetch(`${base}/units/${changing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
     unitDialog.close();
     showFeedback('Cambio guardado.');
+    await load();
+  } catch (err) {
+    fail(err);
+  }
+});
+
+// ----- handing out: who gets it -----
+const deliverDialog = document.getElementById('deliver-dialog');
+const deliverForm = document.getElementById('deliver-form');
+const deliverPerson = document.getElementById('dd-person');
+initModal(deliverDialog, deliverForm);
+let delivering = null;
+
+deliverForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!delivering) return;
+  const login = resolvePickerId(people.entries, deliverPerson.value);
+  if (!login) {
+    showError('Elige a la persona que recoge de la lista.');
+    return;
+  }
+  const { u, withWhich, unpaid } = delivering;
+  if (unpaid && !confirm('Hay unidades sin pagar. ¿Entregar igualmente?')) return;
+  try {
+    await apiFetch(`${base}/pickups`, {
+      method: 'POST',
+      body: JSON.stringify({
+        deliveries: [{ unit_id: u.id, ...withWhich }],
+        picked_up_by_login: login,
+      }),
+    });
+    deliverDialog.close();
+    showFeedback(`Entregado a ${nameOf(login)}.`);
     await load();
   } catch (err) {
     fail(err);
@@ -465,26 +493,17 @@ async function perform(act, u) {
       return true;
     }
     case 'deliver': {
-      const login = resolvePickerId(people.entries, personInput.value);
-      if (!login) {
-        showError('Elige antes, arriba, a la persona que recoge («Entregado a»).');
-        return false;
-      }
+      // Who gets it is asked in a dialog; the delivery is made when it is accepted.
       const unpaid = numbered
         ? chosen.some((i) => !paidIds(u).includes(i))
         : u.paid_quantity < u.quantity;
-      if (u.price > 0 && unpaid && !confirm('Hay unidades sin pagar. ¿Entregar igualmente?'))
-        return false;
-      await apiFetch(`${base}/pickups`, {
-        method: 'POST',
-        body: JSON.stringify({
-          deliveries: [{ unit_id: u.id, ...withWhich }],
-          picked_up_by_login: login,
-          assign_numbers: assignBox.checked,
-        }),
-      });
-      showFeedback(`Entregado a ${nameOf(login)}.`);
-      return true;
+      delivering = { u, withWhich, unpaid: u.price > 0 && unpaid };
+      document.getElementById('deliver-hint').textContent = `${which} de ${u.beneficiary_name}.`;
+      // The member the order is for is the natural default for who collects it.
+      const owner = people.entries.find((e) => e.id === u.beneficiary_login);
+      deliverPerson.value = owner ? owner.label : '';
+      openModal(deliverDialog);
+      return false;
     }
     case 'undeliver': {
       if (!confirm(`¿Deshacer la entrega de ${which}? Siguen en el pedido, sin entregar.`))
@@ -619,7 +638,7 @@ const peopleRequest = loadPeople(id, 'pickup');
 const distributionRequest = apiFetch(base).then((d) => (distribution = d));
 const firstLoad = load(Promise.all([peopleRequest, distributionRequest.catch(() => {})]));
 people = await peopleRequest;
-document.getElementById('pf-person-options').innerHTML = people.entries
+document.getElementById('dd-person-options').innerHTML = people.entries
   .map((e) => `<option value="${escapeHtml(e.label)}"></option>`)
   .join('');
 try {

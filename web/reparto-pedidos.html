@@ -52,14 +52,6 @@
         <label for="orders-search">Buscar <span class="optional">(un socio o un número)</span></label>
         <input id="orders-search" type="search" autocomplete="off" placeholder="Un nombre…">
       </div>
-      <div class="field">
-        <label for="pf-person">Entregado a <span class="optional">(para las entregas)</span></label>
-        <input id="pf-person" type="text" list="pf-person-options" autocomplete="off" placeholder="Escribe un nombre…">
-        <datalist id="pf-person-options"></datalist>
-      </div>
-      <div class="field span-2" id="pf-assign-field" hidden>
-        <label class="checkbox-label" for="pf-assign"><input id="pf-assign" type="checkbox" checked> <span>Al entregar, asignar los números que falten (los siguientes libres, en el orden de la lista)</span></label>
-      </div>
     </div>
     <p class="filter-bar">
       <label class="checkbox-label" for="show-done"><input id="show-done" type="checkbox"> <span>Ver también los pedidos terminados (todo pagado y entregado)</span></label>
@@ -71,6 +63,24 @@
       <tbody id="orders-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
     </table>
   </div>
+
+  <dialog id="deliver-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Entregar</h3>
+    <p class="hint" id="deliver-hint"></p>
+    <form id="deliver-form">
+      <div class="field">
+        <label for="dd-person">Entregado a</label>
+        <input id="dd-person" type="text" list="dd-person-options" autocomplete="off" placeholder="Escribe un nombre…" required>
+        <datalist id="dd-person-options"></datalist>
+        <p class="hint">Puede ser otra persona distinta del socio, si recoge cosas de otros. Solo salen los socios de ahora y los que lo eran en la fecha de corte.</p>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Entregar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="edit-unit-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
