@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedidos del reparto — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <p><a id="back-link" href="/repartos">&larr; Volver al reparto</a></p>
+  <h1 id="orders-title">Pedidos</h1>
+  <p class="subtitle" id="orders-meta"></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="section-header">
+    <div>
+      <h2>Qué hay que pedir</h2>
+      <p class="subtitle" id="order-totals"></p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="order-head"><th>Lo elegido</th><th>Unidades</th></tr></thead>
+      <tbody id="order-lines"><tr><td colspan="2">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-header">
+    <div>
+      <h2>Pedidos de los socios</h2>
+      <p class="subtitle" id="orders-progress"></p>
+    </div>
+  </div>
+  <div class="panel" id="orders-panel">
+    <p class="hint">
+      Cada pedido es una cantidad, que se puede ampliar o reducir. Donde los artículos llevan
+      número, se asignan números a todos o a parte de ellos, y solo los que tienen número se
+      pueden pagar o entregar: escribe a cuáles se refiere cada acción («0001-0010, 0015»; en
+      blanco, a todos los que se puedan). Lo entregado y sin pagar se puede devolver: sale del
+      pedido y su número queda libre.
+    </p>
+    <div class="field-grid">
+      <div class="field">
+        <label for="orders-search">Buscar socio</label>
+        <input id="orders-search" type="search" autocomplete="off" placeholder="Un nombre…">
+      </div>
+      <div class="field">
+        <label for="pf-person">Entregado a <span class="optional">(para las entregas)</span></label>
+        <input id="pf-person" type="text" list="pf-person-options" autocomplete="off" placeholder="Escribe un nombre…">
+        <datalist id="pf-person-options"></datalist>
+      </div>
+      <div class="field span-2" id="pf-assign-field" hidden>
+        <label class="checkbox-label" for="pf-assign"><input id="pf-assign" type="checkbox" checked> <span>Al entregar, asignar los números que falten (los siguientes libres, en el orden de la lista)</span></label>
+      </div>
+    </div>
+    <p class="filter-bar">
+      <label class="checkbox-label" for="show-done"><input id="show-done" type="checkbox"> <span>Ver también los pedidos terminados (todo pagado y entregado)</span></label>
+    </p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Socio</th><th>Pedido</th><th>Importe y pago</th></tr></thead>
+      <tbody id="orders-list"><tr><td colspan="3">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+
+  <dialog id="edit-unit-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="edit-unit-title">Cambiar el pedido</h3>
+    <p class="hint" id="edit-unit-hint"></p>
+    <form id="edit-unit-form">
+      <div id="eu-options" class="field-grid"></div>
+      <div class="field" id="eu-quantity-field" hidden>
+        <label for="eu-quantity">Cantidad</label>
+        <input id="eu-quantity" type="number" min="1" max="100000" step="1">
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/distribution-orders.js"></script>
+</body>
+</html>

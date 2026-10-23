@@ -95,10 +95,8 @@ function renderHeader() {
   document.getElementById('distribution-description').textContent = distribution.description ?? '';
   // Buttons restricted by data-roles are removed from the page for everybody
   // else, hence the optional chaining on the ones that might not be there.
-  const orderLink = document.getElementById('link-order');
-  const pickupLink = document.getElementById('link-pickup');
-  if (orderLink) orderLink.href = `/reparto-pedido?id=${id}`;
-  if (pickupLink) pickupLink.href = `/reparto-recogida?id=${id}`;
+  const ordersLink = document.getElementById('link-orders');
+  if (ordersLink) ordersLink.href = `/reparto-pedidos?id=${id}`;
   // Only when some article has its numbers described, so there is something to list.
   const numbersLink = document.getElementById('link-numbers');
   if (numbersLink) {

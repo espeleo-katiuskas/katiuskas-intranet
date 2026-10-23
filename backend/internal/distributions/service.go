@@ -497,6 +497,17 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, delive
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return 0, err
 	}
+	// What is typed to say which units go can use ranges where the numbers are
+	// described.
+	for i, dl := range deliveries {
+		u, err := s.repo.GetUnit(ctx, distributionID, dl.UnitID)
+		if err != nil {
+			return 0, err
+		}
+		if deliveries[i].Identifiers, err = expandTokens(d, u, dl.Identifiers); err != nil {
+			return 0, err
+		}
+	}
 	if assignNumbers {
 		for _, dl := range deliveries {
 			u, err := s.repo.GetUnit(ctx, distributionID, dl.UnitID)
@@ -524,11 +535,64 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, delive
 	return s.repo.Deliver(ctx, distributionID, deliveries, recordedByID, pickedUpByID)
 }
 
-// SetIdentifiers writes down the numbers of the items handed to the person, for
-// a row of an article that has them, once the distribution is no longer a draft.
-// There can be fewer than its quantity (the rest are written later), never more,
-// and none empty or repeated.
-func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
+// numberingOf is the described numbering of the unit's article, or nil when its
+// numbers aren't described (or it has none).
+func numberingOf(d Distribution, u Unit) (*numbering, error) {
+	article, ok := articleOf(d, u)
+	if !ok {
+		return nil, nil
+	}
+	return buildNumbering(article.IdentifierFields)
+}
+
+// expandTokens trims what was typed to say which items an operation is about and,
+// where the numbers of the article are described, expands the ranges in it
+// ("0001-0010"; see numbering.expand).
+func expandTokens(d Distribution, u Unit, tokens []string) ([]string, error) {
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+	n, err := numberingOf(d, u)
+	if err != nil {
+		return nil, err
+	}
+	if n != nil {
+		return n.expand(tokens)
+	}
+	out := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		out = append(out, strings.TrimSpace(token)) // an empty one is refused later
+	}
+	return out, nil
+}
+
+// checkIdentifiers cleans a list of numbers for the unit: none empty, too long,
+// repeated or, where they are described, one that doesn't exist, and no more than
+// the unit's quantity.
+func checkIdentifiers(d Distribution, u Unit, identifiers []string) ([]string, error) {
+	n, err := numberingOf(d, u)
+	if err != nil {
+		return nil, err
+	}
+	clean := make([]string, 0, len(identifiers))
+	for _, identifier := range identifiers {
+		identifier = strings.TrimSpace(identifier)
+		if identifier == "" || len(identifier) > maxIdentifierLength || slices.Contains(clean, identifier) || (n != nil && !n.valid(identifier)) {
+			return nil, ErrInvalidIdentifiers
+		}
+		clean = append(clean, identifier)
+	}
+	if len(clean) > u.Quantity {
+		return nil, ErrInvalidIdentifiers
+	}
+	return clean, nil
+}
+
+// changeIdentifiers is what SetIdentifiers, AddIdentifiers and RemoveIdentifiers
+// have in common: it fetches the unit, expands what was typed, builds the new list
+// of numbers from the current one with change, and saves it, while the
+// distribution is not a draft.
+func (s *Service) changeIdentifiers(ctx context.Context, distributionID, id int64, typed []string, change func(current, typed []string) ([]string, error)) (Unit, error) {
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
 		return Unit{}, err
@@ -540,36 +604,52 @@ func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, 
 	if !d.Status.Deliverable() {
 		return Unit{}, ErrNotDeliverable
 	}
-	// Where the numbers of the article are described, what is typed may use
-	// ranges, and each has to be one of those that exist.
-	var n *numbering
-	for _, a := range d.Articles {
-		if u.ArticleID != nil && a.ID == *u.ArticleID {
-			if n, err = buildNumbering(a.IdentifierFields); err != nil {
-				return Unit{}, err
-			}
-		}
+	expanded, err := expandTokens(d, u, typed)
+	if err != nil {
+		return Unit{}, err
 	}
-	if n != nil {
-		if identifiers, err = n.expand(identifiers); err != nil {
-			return Unit{}, err
-		}
+	changed, err := change(u.Identifiers, expanded)
+	if err != nil {
+		return Unit{}, err
 	}
-	clean := make([]string, 0, len(identifiers))
-	for _, identifier := range identifiers {
-		identifier = strings.TrimSpace(identifier)
-		if identifier == "" || len(identifier) > maxIdentifierLength || slices.Contains(clean, identifier) || (n != nil && !n.valid(identifier)) {
-			return Unit{}, ErrInvalidIdentifiers
-		}
-		clean = append(clean, identifier)
-	}
-	if len(clean) > u.Quantity {
-		return Unit{}, ErrInvalidIdentifiers
+	clean, err := checkIdentifiers(d, u, changed)
+	if err != nil {
+		return Unit{}, err
 	}
 	if err := s.repo.SetIdentifiers(ctx, distributionID, id, clean); err != nil {
 		return Unit{}, err
 	}
 	return s.repo.GetUnit(ctx, distributionID, id)
+}
+
+// SetIdentifiers replaces the numbers of a row of an article that has them. There
+// can be fewer than its quantity (the rest are written later), never more, and
+// none empty or repeated; the ones paid or handed out have to stay.
+func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
+	return s.changeIdentifiers(ctx, distributionID, id, identifiers, func(_, typed []string) ([]string, error) { return typed, nil })
+}
+
+// AddIdentifiers gives the row more numbers, keeping those it has.
+func (s *Service) AddIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
+	return s.changeIdentifiers(ctx, distributionID, id, identifiers, func(current, typed []string) ([]string, error) {
+		return append(slices.Clone(current), typed...), nil
+	})
+}
+
+// RemoveIdentifiers takes numbers off the row, which has to have them and not
+// have paid or handed them out: they are free again.
+func (s *Service) RemoveIdentifiers(ctx context.Context, distributionID, id int64, identifiers []string) (Unit, error) {
+	if len(identifiers) == 0 {
+		return Unit{}, ErrInvalidIdentifiers
+	}
+	return s.changeIdentifiers(ctx, distributionID, id, identifiers, func(current, typed []string) ([]string, error) {
+		for _, identifier := range typed {
+			if !slices.Contains(current, identifier) {
+				return nil, ErrInvalidIdentifiers
+			}
+		}
+		return slices.DeleteFunc(slices.Clone(current), func(identifier string) bool { return slices.Contains(typed, identifier) }), nil
+	})
 }
 
 // ClearPickup undoes a delivery of quantity units of the row (all of what was
@@ -579,14 +659,31 @@ func (s *Service) ClearPickup(ctx context.Context, distributionID, id int64, qua
 	if quantity < 0 {
 		return ErrInvalidQuantity
 	}
+	d, u, err := s.distributionAndUnit(ctx, distributionID, id)
+	if err != nil {
+		return err
+	}
+	if identifiers, err = expandTokens(d, u, identifiers); err != nil {
+		return err
+	}
 	return s.repo.ClearPickup(ctx, distributionID, id, quantity, identifiers)
+}
+
+// distributionAndUnit fetches both.
+func (s *Service) distributionAndUnit(ctx context.Context, distributionID, id int64) (Distribution, Unit, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return Distribution{}, Unit{}, err
+	}
+	u, err := s.repo.GetUnit(ctx, distributionID, id)
+	return d, u, err
 }
 
 // ReturnUnits takes back units that were handed out and aren't paid: they leave
 // the order (it gets smaller) and their numbers are free again; see
 // Repository.ReturnUnits.
 func (s *Service) ReturnUnits(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
-	d, err := s.repo.Get(ctx, distributionID)
+	d, u, err := s.distributionAndUnit(ctx, distributionID, id)
 	if err != nil {
 		return err
 	}
@@ -596,11 +693,12 @@ func (s *Service) ReturnUnits(ctx context.Context, distributionID, id int64, qua
 	if quantity < 0 {
 		return ErrInvalidQuantity
 	}
+	if identifiers, err = expandTokens(d, u, identifiers); err != nil {
+		return err
+	}
 	return s.repo.ReturnUnits(ctx, distributionID, id, quantity, identifiers)
 }
 
-// MarkPaid marks the payments, which may be of part of a row; see
-// Repository.MarkPaid. It says how many units were marked.
 func (s *Service) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID int64) (int, error) {
 	if len(payments) == 0 {
 		return 0, ErrNoUnits
@@ -610,15 +708,33 @@ func (s *Service) MarkPaid(ctx context.Context, distributionID int64, payments [
 			return 0, ErrInvalidQuantity
 		}
 	}
-	if _, err := s.repo.Get(ctx, distributionID); err != nil {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
 		return 0, err
+	}
+	for i, p := range payments {
+		u, err := s.repo.GetUnit(ctx, distributionID, p.UnitID)
+		if err != nil {
+			return 0, err
+		}
+		if payments[i].Identifiers, err = expandTokens(d, u, p.Identifiers); err != nil {
+			return 0, err
+		}
 	}
 	return s.repo.MarkPaid(ctx, distributionID, payments, markedByID)
 }
 
-// ClearPaid takes quantity units off what is paid in a row (all when 0).
-func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quantity int) error {
-	return s.repo.ClearPaid(ctx, distributionID, id, quantity)
+// ClearPaid takes quantity units off what is paid in a row (all when 0), or the
+// given paid numbers.
+func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
+	d, u, err := s.distributionAndUnit(ctx, distributionID, id)
+	if err != nil {
+		return err
+	}
+	if identifiers, err = expandTokens(d, u, identifiers); err != nil {
+		return err
+	}
+	return s.repo.ClearPaid(ctx, distributionID, id, quantity, identifiers)
 }
 
 func (s *Service) Order(ctx context.Context, distributionID int64) (Order, error) {
@@ -728,7 +844,7 @@ func (s *Service) Numbers(ctx context.Context, distributionID, articleID int64) 
 		n.each(func(identifier string) bool {
 			item := NumberItem{Identifier: identifier}
 			if h, ok := holders[identifier]; ok {
-				item.UnitID, item.BeneficiaryLogin, item.BeneficiaryName, item.Delivered = &h.UnitID, &h.Login, &h.Name, h.Delivered
+				item.UnitID, item.BeneficiaryLogin, item.BeneficiaryName, item.Delivered, item.Paid = &h.UnitID, &h.Login, &h.Name, h.Delivered, h.Paid
 				out.Assigned++
 			}
 			out.Items = append(out.Items, item)

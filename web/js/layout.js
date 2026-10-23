@@ -89,8 +89,7 @@ const ACTIVE_ALIASES = {
   '/socio': '/socios',
   '/cuenta': '/contabilidad',
   '/reparto': '/repartos',
-  '/reparto-pedido': '/repartos',
-  '/reparto-recogida': '/repartos',
+  '/reparto-pedidos': '/repartos',
   '/reparto-numeros': '/repartos',
 };
 

@@ -56,6 +56,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/distributions/{id}/pickups", h.authenticator.Protect(h.markPickedUp, "admin", "board", "material"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/pickup", h.authenticator.Protect(h.clearPickup, "admin", "board", "material"))
 	mux.Handle("PUT /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.setIdentifiers, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.addIdentifiers, "admin", "board", "material"))
+	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.removeIdentifiers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/identifiers/assign", h.authenticator.Protect(h.assignNumbers, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/distributions/{id}/articles/{articleID}/numbers", h.authenticator.Protect(h.numbers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/return", h.authenticator.Protect(h.returnUnits, "admin", "board", "material"))
@@ -630,6 +632,50 @@ func (h *Handler) setIdentifiers(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 
+// addIdentifiers gives a row more numbers, keeping those it has.
+func (h *Handler) addIdentifiers(w http.ResponseWriter, r *http.Request) {
+	d, unit, ok := h.unitForStaff(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Identifiers []string `json:"identifiers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	updated, err := h.service.AddIdentifiers(r.Context(), d.ID, unit.ID, body.Identifiers)
+	if err != nil {
+		writeError(w, err, "could not add the numbers")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha asignado números de «%s» a %s en «%s»: %s.",
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(body.Identifiers, ", ")))
+	httpapi.WriteJSON(w, http.StatusOK, updated)
+}
+
+// removeIdentifiers takes numbers (?identifiers=0001-0003,0010) off a row, which
+// must not have paid or handed them out: they are free again.
+func (h *Handler) removeIdentifiers(w http.ResponseWriter, r *http.Request) {
+	d, unit, ok := h.unitForStaff(w, r)
+	if !ok {
+		return
+	}
+	var identifiers []string
+	if list := r.URL.Query().Get("identifiers"); list != "" {
+		identifiers = strings.Split(list, ",")
+	}
+	updated, err := h.service.RemoveIdentifiers(r.Context(), d.ID, unit.ID, identifiers)
+	if err != nil {
+		writeError(w, err, "could not remove the numbers")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha quitado números de «%s» a %s en «%s»: %s.",
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(identifiers, ", ")))
+	httpapi.WriteJSON(w, http.StatusOK, updated)
+}
+
 // assignNumbers gives the unit the next free numbers of its article up to its
 // quantity, keeping those it already has.
 func (h *Handler) assignNumbers(w http.ResponseWriter, r *http.Request) {
@@ -734,8 +780,9 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		UnitIDs  []int64 `json:"unit_ids"`
 		Payments []struct {
-			UnitID   int64 `json:"unit_id"`
-			Quantity int   `json:"quantity"`
+			UnitID      int64    `json:"unit_id"`
+			Quantity    int      `json:"quantity"`
+			Identifiers []string `json:"identifiers"`
 		} `json:"payments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -752,7 +799,7 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 		payments = append(payments, Payment{UnitID: unitID})
 	}
 	for _, p := range body.Payments {
-		payments = append(payments, Payment{UnitID: p.UnitID, Quantity: p.Quantity})
+		payments = append(payments, Payment{UnitID: p.UnitID, Quantity: p.Quantity, Identifiers: p.Identifiers})
 	}
 	current, _ := auth.UserFromContext(r.Context())
 	marked, err := h.service.MarkPaid(r.Context(), id, payments, current.ID)
@@ -780,7 +827,11 @@ func (h *Handler) clearPaid(w http.ResponseWriter, r *http.Request) {
 		}
 		quantity = n
 	}
-	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity); err != nil {
+	var identifiers []string
+	if list := r.URL.Query().Get("identifiers"); list != "" {
+		identifiers = strings.Split(list, ",")
+	}
+	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity, identifiers); err != nil {
 		writeError(w, err, "could not undo the payment")
 		return
 	}

@@ -577,10 +577,8 @@ collection (`MissingIdentifiers`, `ErrIdentifiersMissing`); with units present, 
 (without `Requested`, which moves as people ask). Frontend: one line per article in the
 "Artículos" textarea, `Nombre: precio[, máximo N][, N por persona][, con números]` (`parseArticles`), which switches off the
 fields that don't apply (`syncArticleFields`); `/reparto` shows a quantity field per article
-with what is left, "Tus pedidos" rows are changed by quantity, `/reparto-pedido` shows
-each article against its cap, `/reparto-recogida` has a numbers field per row of an
-article with numbers (`identifiersEditor`, with an "Asignar los siguientes libres" button for
-described ones and an "asignar los que falten" checkbox on the form), and
+with what is left, "Tus pedidos" rows are changed by quantity, `/reparto-pedidos` (below) shows
+each article against its cap and has every action on the orders, and
 `/reparto-numeros` (`distribution-numbers.js`, linked from `/reparto` when some article has
 described numbers) lists every number with who has it, filterable, and how many are free. The
 numbers are described in the articles textarea with indented lines under the article
@@ -1409,8 +1407,8 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/repartos`, `/reparto?id=…`, `/reparto-pedido?id=…` and `/reparto-recogida?id=…`
-(`distributions.js`, `distribution.js`, `distribution-order.js`, `distribution-pickup.js`,
+`/repartos`, `/reparto?id=…` and `/reparto-pedidos?id=…`
+(`distributions.js`, `distribution.js`, `distribution-orders.js`,
 sharing `js/distributionCommon.js`) are the interface for **Distributions** above — where
 what the code and the API call a unit is a "pedido" to the people reading these pages, and
 an extra unit an "extra", since "unidad" meant nothing to them — behind one "Repartos"
@@ -1442,15 +1440,19 @@ edit, and only admin deletes (`DELETE` is admin-only in the API, and the button 
 `data-roles="admin"`); every control restricted by `data-roles` is *removed* from the page
 for anybody else, so each script reaches those through a null-safe lookup (a bare
 `getElementById(...).addEventListener` on one of them would throw before the rest of the
-page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
-and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
-line counts them), with, for admin/board, payment controls per row (how many units, "Marcar pagadas" / "Quitar
-pagadas") and "Marcar todo pagado" per person; `/reparto-recogida`
-lists who is still to collect, with a checkbox per unit once the status is not `draft`,
-an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
-same one), and per row a count field with "Entregar" (part of a row, to that person), "Deshacer
-entrega" and "Devolver" (`standing` says what went, which numbers, and which are assigned but
-not delivered), confirming before handing over unpaid units or returning.
+page ran). `/reparto-pedidos` (`requireAnyRole` admin/board/material; the old summary and
+collection pages are this one) is everything about the orders in one place: on top `GET
+.../order` (what has to be bought), below the units grouped by person (searchable; the ones
+with everything paid and handed out are hidden unless asked for). A row is a quantity (changed
+or removed with the dialog, while open), with its state in a few lines (`standing`): for an
+article with numbers (`isNumbered`) how many have a number, which are paid and which handed
+out; elsewhere counts. Actions are on what is typed in the row (`selection`: "0001-0010, 0015";
+blank = all that can be; or a count for rows without numbers, `quantityOf`) and go through the
+single `perform(act, unit)`: assign numbers / the next free / take them off, mark paid or take
+the payment off (admin/board; "Marcar todo lo posible" per person), hand out to the person in
+the "Entregado a" picker (with the "assign the missing numbers" checkbox), undo a delivery and
+return, confirming before handing over unpaid units, undoing and returning. What is typed in a
+row survives redrawing (`drafts`).
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
 `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
 `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`,

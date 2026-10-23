@@ -160,10 +160,13 @@ type Unit struct {
 	Identifiers []string `json:"identifiers,omitempty"`
 	// DeliveredIdentifiers are those of Identifiers already handed out; the rest
 	// are assigned but still to be delivered.
-	DeliveredIdentifiers []string          `json:"delivered_identifiers,omitempty"`
-	Quantity             int               `json:"quantity"`
-	Choices              map[string]string `json:"choices"`
-	Price                float64           `json:"price"`
+	DeliveredIdentifiers []string `json:"delivered_identifiers,omitempty"`
+	// PaidIdentifiers are those of Identifiers already paid: in an article with
+	// numbers it is the items that are paid, and only those with a number can be.
+	PaidIdentifiers []string          `json:"paid_identifiers,omitempty"`
+	Quantity        int               `json:"quantity"`
+	Choices         map[string]string `json:"choices"`
+	Price           float64           `json:"price"`
 	// PaidQuantity is how many of the unit's Quantity have been paid (a row of
 	// units can be paid in part); PaidAt and PaidMarkedByLogin are when and by
 	// whom the last payment was marked, and are there when something is paid.
@@ -287,6 +290,7 @@ type NumberHolder struct {
 	Login     string
 	Name      string
 	Delivered bool
+	Paid      bool
 }
 
 // NumberItem is one item of a numbered article: its number and, when somebody
@@ -297,6 +301,7 @@ type NumberItem struct {
 	BeneficiaryLogin *string `json:"beneficiary_login,omitempty"`
 	BeneficiaryName  *string `json:"beneficiary_name,omitempty"`
 	Delivered        bool    `json:"delivered,omitempty"`
+	Paid             bool    `json:"paid,omitempty"`
 }
 
 // Numbers is every item that exists of a numbered article, in order, with who
@@ -311,10 +316,12 @@ type Numbers struct {
 }
 
 // Payment is some units of a row marked as paid: Quantity of them, or all that
-// are still to be paid when it is 0.
+// are still to be paid when it is 0 — in an article with numbers only the ones
+// with a number can be paid, the given Identifiers or else the first.
 type Payment struct {
-	UnitID   int64
-	Quantity int
+	UnitID      int64
+	Quantity    int
+	Identifiers []string
 }
 
 // Delivery is some units of a row handed out: Quantity of them (all that are

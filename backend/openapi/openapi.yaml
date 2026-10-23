@@ -2079,6 +2079,56 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   /distributions/{id}/units/{unitID}/identifiers:
+    post:
+      summary: Give a row more numbers
+      description: >
+        Requires admin, board or material, and the distribution not a draft.
+        Adds the `identifiers` (ranges are fine where the numbers are
+        described) to those the row has: each has to exist, not be taken
+        (409 identifier_taken) nor repeated, and they can't be more than the
+        row's quantity (400 invalid_identifiers). Only the items that have a
+        number can be paid or handed out.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                identifiers: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: The updated unit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: invalid_identifiers. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_deliverable or identifier_taken. }
+    delete:
+      summary: Take numbers off a row
+      description: >
+        Requires admin, board or material, and the distribution not a draft.
+        Takes the `identifiers` query (comma-separated, ranges allowed) off the
+        row, which has to have them and not have paid or handed them out (400
+        invalid_identifiers): they are free again.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+        - { name: identifiers, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The updated unit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: invalid_identifiers. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_deliverable. }
     put:
       summary: Write down the numbers of the items handed out
       description: >
@@ -2202,9 +2252,10 @@ paths:
         (all that are still to go when it is left out), and each id of
         `unit_ids` all that is still to go of its row. For an article with
         numbers the units are items, so only those with an assigned number can
-        go: the given `identifiers` (assigned to the row and not delivered), or
-        else the first assigned ones not delivered, there having to be that
-        many (409 identifiers_missing; with `assign_numbers` the missing ones
+        go: the given `identifiers` (assigned to the row and not delivered;
+        ranges are fine where the numbers are described), or else the first
+        assigned ones not delivered — all of them without a quantity — there
+        having to be that many (409 identifiers_missing; with `assign_numbers` the missing ones
         are first given from the next free, for articles whose numbers are
         described). They are handed to `picked_up_by_login` — not necessarily
         their beneficiary, as when somebody collects for others, but a member
@@ -2270,9 +2321,11 @@ paths:
         (the given delivered `identifiers`; or, when neither is said, all
         that can be): they leave the order — it gets smaller, and the row is
         deleted when nothing is left — and their numbers are free again.
-        Paid units can't be returned: the order can't end up smaller than what
-        is paid (409 quantity_below_paid), nor can more come back than was
-        handed out (400 invalid_quantity, invalid_identifiers).
+        Paid units can't be returned: in an article with numbers it is the
+        items that are paid, so a paid one is refused (409 quantity_below_paid)
+        and only the delivered and unpaid ones can come back; elsewhere the
+        order can't end up smaller than what is paid. Nor can more come back
+        than was handed out (400 invalid_quantity, invalid_identifiers).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2303,7 +2356,13 @@ paths:
         added to what was paid, keeping when and by whom; all or nothing (404
         for an id that isn't a unit of this distribution; 409 already_paid for
         more units than are pending, or a row with none pending; 400
-        invalid_quantity).
+        invalid_quantity). In a row of an article with numbers it is the items
+        that are paid, and only those with a number (assigned) can be: the
+        given `identifiers` (ranges are fine where the numbers are described),
+        or else the first assigned and unpaid — all of them without a quantity,
+        and `unit_ids` means all that have a number — and asking for more than
+        have a number is 409 identifiers_missing (400 invalid_identifiers for
+        one that isn't assigned or is paid already).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2322,6 +2381,7 @@ paths:
                     properties:
                       unit_id: { type: integer }
                       quantity: { type: integer, description: How many units of the row; all that are pending when left out. }
+                      identifiers: { type: array, items: { type: string }, description: Which numbers are paid, in an article with numbers; ranges allowed where they are described. }
       responses:
         "204": { description: Marked }
         "400": { description: no_units. }
@@ -2334,13 +2394,15 @@ paths:
       summary: Remove the paid mark from a unit
       description: >
         Requires admin or board. Takes `quantity` units off what is paid in the
-        row, or all of it without it (400 invalid_quantity for more than are
-        paid).
+        row, the given paid `identifiers`, or all of it without either (400
+        invalid_quantity or invalid_identifiers for more than are paid, or
+        numbers that aren't).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: unitID, in: path, required: true, schema: { type: integer } }
         - { name: quantity, in: query, required: false, schema: { type: integer, minimum: 1 } }
+        - { name: identifiers, in: query, required: false, schema: { type: string }, description: Comma-separated numbers (ranges allowed where described). }
       responses:
         "204": { description: Removed }
         "403": { description: Neither admin nor board. }
@@ -3786,6 +3848,7 @@ components:
         paid_marked_by_login: { type: string }
         picked_up_quantity: { type: integer, description: How many of them have been handed out (0 to quantity); picked_up_at and the two people after it are those of the last delivery. }
         delivered_identifiers: { type: array, items: { type: string }, description: The identifiers already handed out; the others are assigned but still to go. }
+        paid_identifiers: { type: array, items: { type: string }, description: The identifiers already paid (in an article with numbers it is the items that are paid). }
         picked_up_at: { type: string, format: date-time }
         pickup_recorded_by_login: { type: string, description: Who wrote the collection down (admin, board or material). }
         picked_up_by_login: { type: string, description: Who it was handed to; not necessarily the beneficiary. }

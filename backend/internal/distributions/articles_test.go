@@ -389,16 +389,20 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 	pickup := func(u distributions.Unit, who person) *httptest.ResponseRecorder {
 		return e.do("POST", distributionPath(d.ID)+"/pickups", material.token, map[string]any{"unit_ids": []int64{u.ID}, "picked_up_by_login": who.Login})
 	}
-	// Fewer than the quantity can be saved, but not collected.
+	// Nothing assigned: nothing can go.
+	expect(t, pickup(papeletas, a), http.StatusConflict, "identifiers_missing")
+	// Fewer than the quantity can be saved; only those can be handed out.
 	got := decode[distributions.Unit](t, mustStatus(t, ids(papeletas, material, " A-001 ", "A-002"), http.StatusOK))
 	if len(got.Identifiers) != 2 || got.Identifiers[0] != "A-001" {
 		t.Errorf("unexpected identifiers: %v", got.Identifiers)
 	}
-	expect(t, pickup(papeletas, a), http.StatusConflict, "identifiers_missing")
+	expect(t, e.do("POST", distributionPath(d.ID)+"/pickups", material.token, map[string]any{
+		"deliveries": []map[string]any{{"unit_id": papeletas.ID, "quantity": 3}}, "picked_up_by_login": a.Login,
+	}), http.StatusConflict, "identifiers_missing")
 	// A number is unique within the article, across people.
 	expect(t, ids(other, admin, "A-002", "A-009"), http.StatusConflict, "identifier_taken")
 	mustStatus(t, ids(other, admin, "B-001", "B-002"), http.StatusOK)
-	// Replacing is possible; then it can be collected.
+	// Replacing is possible; then it can all be collected.
 	mustStatus(t, ids(papeletas, admin, "A-001", "A-002", "A-003"), http.StatusOK)
 	mustStatus(t, pickup(papeletas, a), http.StatusNoContent)
 	// An article without numbers needs none.
@@ -670,7 +674,7 @@ func TestARowCanBePaidInPartAndAddingToItLeavesTheRestPending(t *testing.T) {
 	admin := e.newPerson(t, "", "admin")
 	board := e.newPerson(t, "2020-01-01", "member", "board")
 	a := e.newPerson(t, "2020-01-01", "member")
-	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	d := newDeliveringLottery(t, e, admin, lottery())
 	papeletas := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 10), http.StatusCreated))
 	decimos := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 4), http.StatusCreated))
 	payments := distributionPath(d.ID) + "/payments"
@@ -884,24 +888,32 @@ func TestHandedOutUnitsCanBeReturnedUnlessPaidAndTheirNumbersAreFreed(t *testing
 	}
 	before := free()
 
-	// Nothing handed out can't come back; neither more than was handed out, nor
-	// what would leave less than is paid (5 ordered, 2 paid: 3 at most).
+	// Nothing can come back that wasn't handed out, nor more than was; and only
+	// what isn't paid (0001 and 0002 are, the first two numbers assigned).
 	expect(t, giveBack(map[string]any{"quantity": 5}), http.StatusBadRequest, "invalid_quantity")
 	expect(t, giveBack(map[string]any{"identifiers": []string{"0005"}}), http.StatusBadRequest, "invalid_identifiers")
-	// Without saying, all that can: min(4 delivered, 5-2) = 3, the last delivered.
-	mustStatus(t, giveBack(map[string]any{"quantity": 3}), http.StatusNoContent)
+	expect(t, giveBack(map[string]any{"identifiers": []string{"0001"}}), http.StatusConflict, "quantity_below_paid")
+	expect(t, giveBack(map[string]any{"quantity": 3}), http.StatusConflict, "quantity_below_paid")
+	// Two can: the last delivered that aren't paid.
+	mustStatus(t, giveBack(map[string]any{"quantity": 2}), http.StatusNoContent)
 	got := row()
-	if got.Quantity != 2 || got.PickedUpQuantity != 1 || got.PaidQuantity != 2 || strings.Join(got.Identifiers, ",") != "0001" || strings.Join(got.DeliveredIdentifiers, ",") != "0001" {
+	if got.Quantity != 3 || got.PickedUpQuantity != 2 || got.PaidQuantity != 2 || strings.Join(got.Identifiers, ",") != "0001,0002" || strings.Join(got.DeliveredIdentifiers, ",") != "0001,0002" {
 		t.Errorf("unexpected row: %+v", got)
 	}
-	if free() != before+3 {
+	if free() != before+2 {
 		t.Errorf("the numbers returned should be free: %d -> %d", before, free())
 	}
-	// The one still handed out is paid-for territory now: 2 ordered, 2 paid.
-	expect(t, giveBack(map[string]any{"quantity": 1}), http.StatusConflict, "quantity_below_paid")
-	mustStatus(t, e.do("DELETE", unitPath+"/payment", admin.token, nil), http.StatusNoContent)
-	// Specific numbers, and the row goes when nothing is left.
+	// Nothing left that can be: both are paid.
+	expect(t, giveBack(map[string]any{}), http.StatusBadRequest, "invalid_quantity")
+	// Unpaying a specific one makes it returnable; and when nothing is left the
+	// row goes.
+	mustStatus(t, e.do("DELETE", unitPath+"/payment?identifiers=0001", admin.token, nil), http.StatusNoContent)
 	mustStatus(t, giveBack(map[string]any{"identifiers": []string{"0001"}}), http.StatusNoContent)
+	if got := row(); got.Quantity != 2 || got.PickedUpQuantity != 1 || got.PaidQuantity != 1 || strings.Join(got.Identifiers, ",") != "0002" {
+		t.Errorf("unexpected row: %+v", got)
+	}
+	mustStatus(t, e.do("DELETE", unitPath+"/payment", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, giveBack(map[string]any{}), http.StatusNoContent)
 	if got := row(); got.Quantity != 1 || got.PickedUpQuantity != 0 || got.PickedUpAt != nil || len(got.Identifiers) != 0 {
 		t.Errorf("unexpected row: %+v", got)
 	}
@@ -914,7 +926,7 @@ func TestHandedOutUnitsCanBeReturnedUnlessPaidAndTheirNumbersAreFreed(t *testing
 			t.Errorf("a row with nothing left should be gone: %+v", listed)
 		}
 	}
-	// Not in a draft, and not for somebody who isn't staff.
+	// Not for somebody who isn't staff.
 	expect(t, e.do("POST", fmt.Sprintf("%s/%d/return", unitsPath(d.ID), other.ID), a.token, map[string]any{}), http.StatusForbidden, "forbidden")
 }
 
@@ -938,4 +950,119 @@ func TestARowHandedOutInPartCanGrowAndShrinkButNotBelowWhatWentOut(t *testing.T)
 	mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 9}), http.StatusOK)
 	// Units handed out have to be returned before the row can go.
 	expect(t, e.do("DELETE", path, admin.token, nil), http.StatusConflict, "unit_locked")
+}
+
+func TestOnlyItemsWithANumberCanBePaidAndWhichOnesIsKnown(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 6), http.StatusCreated))
+	payments := distributionPath(d.ID) + "/payments"
+	pay := func(body map[string]any) *httptest.ResponseRecorder { return e.do("POST", payments, board.token, body) }
+	row := func() distributions.Unit { return unitByID(t, e, admin, d.ID, u.ID) }
+	setNumbers := func(numbers ...string) {
+		mustStatus(t, e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": numbers}), http.StatusOK)
+	}
+
+	// Six ordered, none has a number: nothing can be paid, whole row or not.
+	expect(t, pay(map[string]any{"unit_ids": []int64{u.ID}}), http.StatusConflict, "identifiers_missing")
+	expect(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "quantity": 1}}}), http.StatusConflict, "identifiers_missing")
+	setNumbers("0001-0004")
+	// More than have a number: no. Which ones can be said, or else the first.
+	expect(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "quantity": 5}}}), http.StatusConflict, "identifiers_missing")
+	mustStatus(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0003"}}}}), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0003" || got.PaidQuantity != 1 || deref(got.PaidMarkedByLogin) != board.Login {
+		t.Errorf("unexpected row: %+v", got)
+	}
+	expect(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0003"}}}}), http.StatusBadRequest, "invalid_identifiers")
+	expect(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0150"}}}}), http.StatusBadRequest, "invalid_identifiers")
+	expect(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001"}, "quantity": 2}}}), http.StatusBadRequest, "invalid_quantity")
+	mustStatus(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "quantity": 2}}}), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0002,0003" || got.PaidQuantity != 3 {
+		t.Errorf("the first unpaid ones go: %+v", got)
+	}
+	// A whole row means all that have a number and aren't paid; then no more.
+	mustStatus(t, pay(map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
+	if got := row(); got.PaidQuantity != 4 || got.Quantity != 6 {
+		t.Errorf("unexpected row: %+v", got)
+	}
+	expect(t, pay(map[string]any{"unit_ids": []int64{u.ID}}), http.StatusConflict, "already_paid")
+
+	// Numbers paid or handed out can't be taken off the list; the others can.
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"0001-0003"}}), http.StatusBadRequest, "invalid_identifiers")
+	// Unpaying is by which ones too.
+	clear := func(q string) *httptest.ResponseRecorder {
+		return e.do("DELETE", fmt.Sprintf("%s/%d/payment%s", unitsPath(d.ID), u.ID, q), board.token, nil)
+	}
+	expect(t, clear("?identifiers=0001,0099"), http.StatusBadRequest, "invalid_identifiers")
+	mustStatus(t, clear("?identifiers=0002"), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0003,0004" || got.PaidQuantity != 3 {
+		t.Errorf("unexpected row: %+v", got)
+	}
+	mustStatus(t, clear("?quantity=1"), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0003" {
+		t.Errorf("the last paid goes: %+v", got)
+	}
+	// Paid and delivered are independent: deliver an unpaid one, pay after.
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{
+		"deliveries": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0002"}}}, "picked_up_by_login": a.Login,
+	}), http.StatusNoContent)
+	mustStatus(t, pay(map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0002"}}}}), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0002,0003" || strings.Join(got.DeliveredIdentifiers, ",") != "0002" {
+		t.Errorf("unexpected row: %+v", got)
+	}
+}
+
+func TestNumbersCanBeAddedAndRemovedAndRangesWorkEverywhere(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 12), http.StatusCreated))
+	path := fmt.Sprintf("%s/%d", unitsPath(d.ID), u.ID)
+	row := func() distributions.Unit { return unitByID(t, e, admin, d.ID, u.ID) }
+	numbers := func() string { return strings.Join(row().Identifiers, ",") }
+
+	mustStatus(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0001-0003"}}), http.StatusOK)
+	mustStatus(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0010", "0020-0021"}}), http.StatusOK)
+	if numbers() != "0001,0002,0003,0010,0020,0021" {
+		t.Errorf("unexpected numbers: %s", numbers())
+	}
+	// One that is already there, or that doesn't exist, or that makes more than the quantity.
+	expect(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0002"}}), http.StatusBadRequest, "invalid_identifiers")
+	expect(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0300"}}), http.StatusBadRequest, "invalid_identifiers")
+	expect(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0100-0110"}}), http.StatusBadRequest, "invalid_identifiers")
+	// A number taken by somebody else.
+	other := decode[distributions.Unit](t, mustStatus(t, ask(e, d, e.newPerson(t, "2020-01-01", "member"), 0, 2), http.StatusCreated))
+	expect(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), other.ID), admin.token, map[string]any{"identifiers": []string{"0002"}}), http.StatusConflict, "identifier_taken")
+
+	// Remove: by range too; not one that isn't there, nor one paid or handed out.
+	mustStatus(t, e.do("DELETE", path+"/identifiers?identifiers=0020-0021,0010", admin.token, nil), http.StatusOK)
+	if numbers() != "0001,0002,0003" {
+		t.Errorf("unexpected numbers: %s", numbers())
+	}
+	expect(t, e.do("DELETE", path+"/identifiers?identifiers=0050", admin.token, nil), http.StatusBadRequest, "invalid_identifiers")
+	expect(t, e.do("DELETE", path+"/identifiers", admin.token, nil), http.StatusBadRequest, "invalid_identifiers")
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"payments": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001-0002"}}}}), http.StatusNoContent)
+	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0002" {
+		t.Errorf("a range should pay each number in it: %+v", got)
+	}
+	expect(t, e.do("DELETE", path+"/identifiers?identifiers=0002", admin.token, nil), http.StatusBadRequest, "invalid_identifiers")
+	mustStatus(t, e.do("DELETE", path+"/identifiers?identifiers=0003", admin.token, nil), http.StatusOK)
+
+	// Delivering, undoing and returning take ranges as well.
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{
+		"deliveries": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001-0002"}}}, "picked_up_by_login": a.Login,
+	}), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", path+"/pickup?identifiers=0001-0002", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", path+"/payment?identifiers=0001-0002", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{
+		"deliveries": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001-0002"}}}, "picked_up_by_login": a.Login,
+	}), http.StatusNoContent)
+	mustStatus(t, e.do("POST", path+"/return", admin.token, map[string]any{"identifiers": []string{"0001-0002"}}), http.StatusNoContent)
+	if got := row(); got.Quantity != 10 || len(got.Identifiers) != 0 {
+		t.Errorf("unexpected row: %+v", got)
+	}
 }

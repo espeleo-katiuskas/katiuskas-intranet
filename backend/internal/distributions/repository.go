@@ -562,6 +562,7 @@ const unitSelect = `
 	       n.choices, n.price::float8,
 	       COALESCE((SELECT array_agg(i.identifier ORDER BY i.id) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id), '{}'),
 	       COALESCE((SELECT array_agg(i.identifier ORDER BY i.id) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id AND i.delivered_at IS NOT NULL), '{}'),
+	       COALESCE((SELECT array_agg(i.identifier ORDER BY i.id) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id AND i.paid_at IS NOT NULL), '{}'),
 	       n.paid_quantity, n.paid_at, pm.login, n.picked_up_quantity, n.picked_up_at, pr.login, pu.login
 	FROM distribution_units n
 	LEFT JOIN distribution_articles ar ON ar.id = n.article_id
@@ -574,7 +575,7 @@ const unitSelect = `
 func scanUnit(row pgx.Row, u *Unit) error {
 	return row.Scan(&u.ID, &u.DistributionID, &u.BeneficiaryID, &u.BeneficiaryLogin, &u.BeneficiaryName,
 		&u.RegisteredByID, &u.RegisteredByLogin, &u.RegisteredAt, &u.IsExtra, &u.ArticleID, &u.ArticleName,
-		&u.Quantity, &u.Choices, &u.Price, &u.Identifiers, &u.DeliveredIdentifiers,
+		&u.Quantity, &u.Choices, &u.Price, &u.Identifiers, &u.DeliveredIdentifiers, &u.PaidIdentifiers,
 		&u.PaidQuantity, &u.PaidAt, &u.PaidMarkedByLogin, &u.PickedUpQuantity, &u.PickedUpAt, &u.PickupRecordedByLogin, &u.PickedUpByLogin)
 }
 
@@ -949,38 +950,32 @@ func (r *Repository) Deliver(ctx context.Context, distributionID int64, deliveri
 		}
 		remaining := quantity - picked
 		n := dl.Quantity
+		var pending []string
+		if numbered {
+			if pending, err = markedItems(ctx, tx, dl.UnitID, "", "delivered_at"); err != nil {
+				return 0, err
+			}
+		}
 		if len(dl.Identifiers) > 0 {
 			if dl.Quantity != 0 && dl.Quantity != len(dl.Identifiers) {
 				return 0, ErrInvalidQuantity
 			}
 			n = len(dl.Identifiers)
 		} else if n == 0 {
+			// All that can go: all that is left, or, in an article with numbers,
+			// all that has one assigned.
 			n = remaining
+			if numbered {
+				n = len(pending)
+				if n == 0 && remaining > 0 {
+					return 0, ErrIdentifiersMissing
+				}
+			}
 		}
 		if n < 1 || n > remaining {
 			return 0, ErrAlreadyPickedUp
 		}
 		if numbered {
-			rows, err := tx.Query(ctx, `
-				SELECT identifier FROM distribution_unit_identifiers
-				WHERE unit_id = $1 AND delivered_at IS NULL ORDER BY id
-			`, dl.UnitID)
-			if err != nil {
-				return 0, err
-			}
-			var pending []string
-			for rows.Next() {
-				var identifier string
-				if err := rows.Scan(&identifier); err != nil {
-					rows.Close()
-					return 0, err
-				}
-				pending = append(pending, identifier)
-			}
-			rows.Close()
-			if err := rows.Err(); err != nil {
-				return 0, err
-			}
 			chosen := dl.Identifiers
 			if len(chosen) == 0 {
 				if len(pending) < n {
@@ -1013,53 +1008,69 @@ func (r *Repository) Deliver(ctx context.Context, distributionID int64, deliveri
 	return total, tx.Commit(ctx)
 }
 
-// deliveredToTake says which delivered items of a row to take back: the given
-// identifiers, which have to be delivered, or else the last q delivered.
-func deliveredToTake(ctx context.Context, tx pgx.Tx, unitID int64, specified []string, q int) ([]string, error) {
-	rows, err := tx.Query(ctx, `
-		SELECT identifier FROM distribution_unit_identifiers
-		WHERE unit_id = $1 AND delivered_at IS NOT NULL ORDER BY id DESC
-	`, unitID)
+// markedItems lists the identifiers of a row, in the order they were assigned,
+// that have the `with` mark (a column: delivered_at, paid_at) and do not have the
+// `without` one; either may be empty for no condition.
+func markedItems(ctx context.Context, tx pgx.Tx, unitID int64, with, without string) ([]string, error) {
+	where := "unit_id = $1"
+	if with != "" {
+		where += " AND " + with + " IS NOT NULL"
+	}
+	if without != "" {
+		where += " AND " + without + " IS NULL"
+	}
+	rows, err := tx.Query(ctx, `SELECT identifier FROM distribution_unit_identifiers WHERE `+where+` ORDER BY id`, unitID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var delivered []string
+	var out []string
 	for rows.Next() {
 		var identifier string
 		if err := rows.Scan(&identifier); err != nil {
 			return nil, err
 		}
-		delivered = append(delivered, identifier)
+		out = append(out, identifier)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	return out, rows.Err()
+}
+
+// unitState is what moving units of a row needs to know.
+type unitState struct {
+	quantity, picked, paid int
+	numbered               bool
+}
+
+// lockUnit reads and locks a row of the distribution.
+func lockUnit(ctx context.Context, tx pgx.Tx, distributionID, id int64) (unitState, error) {
+	var st unitState
+	err := tx.QueryRow(ctx, `
+		SELECT n.quantity, n.picked_up_quantity, n.paid_quantity, COALESCE(a.has_identifiers, false)
+		FROM distribution_units n LEFT JOIN distribution_articles a ON a.id = n.article_id
+		WHERE n.id = $1 AND n.distribution_id = $2 FOR UPDATE OF n
+	`, id, distributionID).Scan(&st.quantity, &st.picked, &st.paid, &st.numbered)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrUnitNotFound
 	}
+	return st, err
+}
+
+// takeLast chooses which of the available items an operation on q of them is
+// about: the given ones, which have to be among them (notAmong is the error
+// otherwise), or else the last q.
+func takeLast(available, specified []string, q int, notAmong error) ([]string, error) {
 	if len(specified) > 0 {
 		for _, identifier := range specified {
-			if !slices.Contains(delivered, identifier) {
-				return nil, ErrInvalidIdentifiers
+			if !slices.Contains(available, identifier) {
+				return nil, notAmong
 			}
 		}
 		return specified, nil
 	}
-	if q > len(delivered) {
+	if q > len(available) {
 		return nil, ErrInvalidQuantity
 	}
-	return delivered[:q], nil
-}
-
-// lockRowForTakingBack reads what taking units back from a row needs.
-func lockRowForTakingBack(ctx context.Context, tx pgx.Tx, distributionID, id int64) (quantity, picked, paid int, numbered bool, err error) {
-	err = tx.QueryRow(ctx, `
-		SELECT n.quantity, n.picked_up_quantity, n.paid_quantity, COALESCE(a.has_identifiers, false)
-		FROM distribution_units n LEFT JOIN distribution_articles a ON a.id = n.article_id
-		WHERE n.id = $1 AND n.distribution_id = $2 FOR UPDATE OF n
-	`, id, distributionID).Scan(&quantity, &picked, &paid, &numbered)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = ErrUnitNotFound
-	}
-	return
+	return available[len(available)-q:], nil
 }
 
 // ClearPickup undoes a delivery: quantity units of the row (all that were
@@ -1073,7 +1084,7 @@ func (r *Repository) ClearPickup(ctx context.Context, distributionID, id int64, 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	_, picked, _, numbered, err := lockRowForTakingBack(ctx, tx, distributionID, id)
+	st, err := lockUnit(ctx, tx, distributionID, id)
 	if err != nil {
 		return err
 	}
@@ -1081,16 +1092,20 @@ func (r *Repository) ClearPickup(ctx context.Context, distributionID, id int64, 
 	if len(identifiers) > 0 {
 		q = len(identifiers)
 	} else if q == 0 {
-		q = picked
+		q = st.picked
 	}
 	if q == 0 {
 		return nil
 	}
-	if q < 1 || q > picked || (len(identifiers) > 0 && !numbered) {
+	if q < 1 || q > st.picked || (len(identifiers) > 0 && !st.numbered) {
 		return ErrInvalidQuantity
 	}
-	if numbered {
-		taken, err := deliveredToTake(ctx, tx, id, identifiers, q)
+	if st.numbered {
+		delivered, err := markedItems(ctx, tx, id, "delivered_at", "")
+		if err != nil {
+			return err
+		}
+		taken, err := takeLast(delivered, identifiers, q, ErrInvalidIdentifiers)
 		if err != nil {
 			return err
 		}
@@ -1110,12 +1125,13 @@ func (r *Repository) ClearPickup(ctx context.Context, distributionID, id int64, 
 	return tx.Commit(ctx)
 }
 
-// ReturnUnits takes back units that were handed out: quantity of them (all that
-// can be, when 0) or the given delivered Identifiers. They stop being part of
-// the row — it gets that much smaller, and is deleted when nothing is left —
-// and their numbers are free again. Paid units can't be returned: the row can't
-// end up smaller than what is paid (ErrBelowPaid), nor can more come back than
-// was delivered (ErrInvalidQuantity).
+// ReturnUnits takes back units that were handed out and aren't paid: quantity of
+// them (all that can be, when 0) or the given delivered Identifiers. They stop
+// being part of the row — it gets that much smaller, and is deleted when nothing
+// is left — and their numbers are free again. In an article with numbers it is
+// the items that are paid, so a paid one can't be returned (ErrBelowPaid); in
+// one without, the row can't end up smaller than what is paid. More than was
+// handed out is ErrInvalidQuantity.
 func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -1123,32 +1139,63 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	total, picked, paid, numbered, err := lockRowForTakingBack(ctx, tx, distributionID, id)
+	st, err := lockUnit(ctx, tx, distributionID, id)
 	if err != nil {
 		return err
 	}
+	var taken []string
 	q := quantity
-	if len(identifiers) > 0 {
-		q = len(identifiers)
-	} else if q == 0 {
-		q = min(picked, total-paid)
-	}
-	if q < 1 || q > picked || (len(identifiers) > 0 && !numbered) {
-		return ErrInvalidQuantity
-	}
-	if q > total-paid {
-		return ErrBelowPaid
-	}
-	if numbered {
-		taken, err := deliveredToTake(ctx, tx, id, identifiers, q)
+	if st.numbered {
+		returnable, err := markedItems(ctx, tx, id, "delivered_at", "paid_at")
 		if err != nil {
 			return err
 		}
+		delivered, err := markedItems(ctx, tx, id, "delivered_at", "")
+		if err != nil {
+			return err
+		}
+		if len(identifiers) > 0 {
+			q = len(identifiers)
+		} else if q == 0 {
+			q = len(returnable)
+		}
+		if q < 1 || q > st.picked {
+			return ErrInvalidQuantity
+		}
+		for _, identifier := range identifiers {
+			if !slices.Contains(returnable, identifier) {
+				if slices.Contains(delivered, identifier) {
+					return ErrBelowPaid
+				}
+				return ErrInvalidIdentifiers
+			}
+		}
+		if len(identifiers) == 0 && q > len(returnable) {
+			return ErrBelowPaid
+		}
+		if taken, err = takeLast(returnable, identifiers, q, ErrInvalidIdentifiers); err != nil {
+			return err
+		}
+	} else {
+		if len(identifiers) > 0 {
+			return ErrInvalidQuantity
+		}
+		if q == 0 {
+			q = min(st.picked, st.quantity-st.paid)
+		}
+		if q < 1 || q > st.picked {
+			return ErrInvalidQuantity
+		}
+		if q > st.quantity-st.paid {
+			return ErrBelowPaid
+		}
+	}
+	if len(taken) > 0 {
 		if _, err := tx.Exec(ctx, `DELETE FROM distribution_unit_identifiers WHERE unit_id = $1 AND identifier = ANY($2)`, id, taken); err != nil {
 			return err
 		}
 	}
-	if total-q == 0 {
+	if st.quantity-q == 0 {
 		if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1`, id); err != nil {
 			return err
 		}
@@ -1168,9 +1215,11 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 
 // MarkPaid adds the given payments to their rows, all or nothing, and says
 // how many units were marked in all. A payment is some units of a row (all that
-// are pending when its Quantity is 0); marking more than are pending, or
-// something already fully paid, is ErrAlreadyPaid. paid_at and who marked it
-// become those of this payment.
+// can be when its Quantity is 0). In a row of an article with numbers only the
+// items with a number can be paid: the given Identifiers, or else the first
+// assigned and unpaid (ErrIdentifiersMissing when there aren't that many); in
+// any other, a count, and more than are pending, or something already fully paid,
+// is ErrAlreadyPaid. paid_at and who marked it become those of this payment.
 func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID int64) (int, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -1180,24 +1229,59 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 
 	marked := 0
 	for _, p := range payments {
-		var quantity, paid int
-		err := tx.QueryRow(ctx, `
-			SELECT quantity, paid_quantity FROM distribution_units
-			WHERE id = $1 AND distribution_id = $2 FOR UPDATE
-		`, p.UnitID, distributionID).Scan(&quantity, &paid)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, ErrUnitNotFound
-		}
+		st, err := lockUnit(ctx, tx, distributionID, p.UnitID)
 		if err != nil {
 			return 0, err
 		}
-		pending := quantity - paid
 		n := p.Quantity
-		if n == 0 {
-			n = pending
-		}
-		if n < 1 || n > pending {
-			return 0, ErrAlreadyPaid
+		if st.numbered {
+			unpaid, err := markedItems(ctx, tx, p.UnitID, "", "paid_at")
+			if err != nil {
+				return 0, err
+			}
+			chosen := p.Identifiers
+			if len(chosen) > 0 {
+				if p.Quantity != 0 && p.Quantity != len(chosen) {
+					return 0, ErrInvalidQuantity
+				}
+				for _, identifier := range chosen {
+					if !slices.Contains(unpaid, identifier) {
+						return 0, ErrInvalidIdentifiers
+					}
+				}
+			} else {
+				if n == 0 {
+					n = len(unpaid)
+				}
+				if n < 1 {
+					if st.paid > 0 {
+						return 0, ErrAlreadyPaid
+					}
+					return 0, ErrIdentifiersMissing
+				}
+				if n > len(unpaid) {
+					return 0, ErrIdentifiersMissing
+				}
+				chosen = unpaid[:n]
+			}
+			if _, err := tx.Exec(ctx, `
+				UPDATE distribution_unit_identifiers SET paid_at = now(), paid_marked_by_id = $3
+				WHERE unit_id = $1 AND identifier = ANY($2)
+			`, p.UnitID, chosen, markedByID); err != nil {
+				return 0, err
+			}
+			n = len(chosen)
+		} else {
+			if len(p.Identifiers) > 0 {
+				return 0, ErrInvalidIdentifiers
+			}
+			pending := st.quantity - st.paid
+			if n == 0 {
+				n = pending
+			}
+			if n < 1 || n > pending {
+				return 0, ErrAlreadyPaid
+			}
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE distribution_units SET paid_quantity = paid_quantity + $2, paid_at = now(), paid_marked_by_id = $3 WHERE id = $1
@@ -1209,35 +1293,51 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 	return marked, tx.Commit(ctx)
 }
 
-// ClearPaid takes quantity units off what is paid in a row (all of it when 0).
-// Taking off more than is paid is ErrInvalidQuantity.
-func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int) error {
+// ClearPaid takes quantity units off what is paid in a row (all of it when 0), or
+// the given paid Identifiers in a row of an article with numbers. Taking off more
+// than is paid is ErrInvalidQuantity.
+func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	var paid int
-	err = tx.QueryRow(ctx, `SELECT paid_quantity FROM distribution_units WHERE id = $1 AND distribution_id = $2 FOR UPDATE`, id, distributionID).Scan(&paid)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrUnitNotFound
-	}
+	st, err := lockUnit(ctx, tx, distributionID, id)
 	if err != nil {
 		return err
 	}
-	if quantity == 0 {
-		quantity = paid
+	q := quantity
+	if len(identifiers) > 0 {
+		q = len(identifiers)
+	} else if q == 0 {
+		q = st.paid
 	}
-	if quantity < 0 || quantity > paid {
+	if q == 0 {
+		return nil
+	}
+	if q < 1 || q > st.paid || (len(identifiers) > 0 && !st.numbered) {
 		return ErrInvalidQuantity
+	}
+	if st.numbered {
+		paid, err := markedItems(ctx, tx, id, "paid_at", "")
+		if err != nil {
+			return err
+		}
+		taken, err := takeLast(paid, identifiers, q, ErrInvalidIdentifiers)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE distribution_unit_identifiers SET paid_at = NULL, paid_marked_by_id = NULL WHERE unit_id = $1 AND identifier = ANY($2)`, id, taken); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE distribution_units SET paid_quantity = paid_quantity - $2,
 			paid_at = CASE WHEN paid_quantity - $2 = 0 THEN NULL ELSE paid_at END,
 			paid_marked_by_id = CASE WHEN paid_quantity - $2 = 0 THEN NULL ELSE paid_marked_by_id END
 		WHERE id = $1
-	`, id, quantity); err != nil {
+	`, id, q); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -1332,8 +1432,8 @@ func (r *Repository) SetIdentifiers(ctx context.Context, distributionID, id int6
 	if err != nil {
 		return err
 	}
-	// What was handed out stays: the new list has to include it.
-	rows, err := tx.Query(ctx, `SELECT identifier FROM distribution_unit_identifiers WHERE unit_id = $1 AND delivered_at IS NOT NULL`, id)
+	// What was handed out or paid stays: the new list has to include it.
+	rows, err := tx.Query(ctx, `SELECT identifier FROM distribution_unit_identifiers WHERE unit_id = $1 AND (delivered_at IS NOT NULL OR paid_at IS NOT NULL)`, id)
 	if err != nil {
 		return err
 	}
@@ -1355,7 +1455,7 @@ func (r *Repository) SetIdentifiers(ctx context.Context, distributionID, id int6
 			return ErrInvalidIdentifiers
 		}
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM distribution_unit_identifiers WHERE unit_id = $1 AND delivered_at IS NULL`, id); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM distribution_unit_identifiers WHERE unit_id = $1 AND delivered_at IS NULL AND paid_at IS NULL`, id); err != nil {
 		return err
 	}
 	for _, identifier := range identifiers {
@@ -1407,7 +1507,7 @@ func (r *Repository) ArticleIdentifiers(ctx context.Context, articleID int64) ([
 // Holders says who has each number given for the article: identifier to unit.
 func (r *Repository) Holders(ctx context.Context, articleID int64) (map[string]NumberHolder, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT i.identifier, n.id, b.login, b.first_name || ' ' || b.last_name, i.delivered_at IS NOT NULL
+		SELECT i.identifier, n.id, b.login, b.first_name || ' ' || b.last_name, i.delivered_at IS NOT NULL, i.paid_at IS NOT NULL
 		FROM distribution_unit_identifiers i
 		JOIN distribution_units n ON n.id = i.unit_id
 		JOIN users b ON b.id = n.beneficiary_id
@@ -1421,7 +1521,7 @@ func (r *Repository) Holders(ctx context.Context, articleID int64) (map[string]N
 	for rows.Next() {
 		var identifier string
 		var h NumberHolder
-		if err := rows.Scan(&identifier, &h.UnitID, &h.Login, &h.Name, &h.Delivered); err != nil {
+		if err := rows.Scan(&identifier, &h.UnitID, &h.Login, &h.Name, &h.Delivered, &h.Paid); err != nil {
 			return nil, err
 		}
 		out[identifier] = h

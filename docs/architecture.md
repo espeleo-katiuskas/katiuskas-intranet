@@ -935,7 +935,7 @@ salvo pedir unidades y editar las propias).
   `Service.MarkPickedUp`). Con unidades ya pedidas se pueden cambiar `max_total`,
   `max_per_person` (nunca por debajo del mayor pedido, 409 `cap_below_requested`) y
   `has_identifiers`. En la interfaz: «Papeletas: 5, máximo 200, 10 por persona, con números», y
-  `/reparto-recogida` muestra un campo de números por fila.
+  `/reparto-pedidos` permite asignarlos.
   **Números descritos** (migración `00026`, `identifier_fields`): en vez de teclear los números
   uno a uno, se describen las partes del número y los valores de cada una, como una lista de
   valores y rangos (`numbering.go`): papeletas «Número: 0001-0200» (los ceros a la izquierda
@@ -1017,6 +1017,18 @@ salvo pedir unidades y editar las propias).
   con algo pagado; solo admin/board marcan pagos); lo entregado no se le quita al
   dueño (409 `unit_locked`), y una unidad que no es una fila de artículo, una vez entregada, no
   la toca nadie; una pagada solo la tocan admin/board/material (409 `unit_locked`).
+- **Unidades con y sin número**: en un artículo con números (`has_identifiers`) un pedido es
+  una cantidad (`quantity`, ampliable o reducible), y algunas de esas unidades pueden tener
+  asignado un número concreto (un identificador); las que no, son «unidades cualquiera».
+  **Solo las que tienen número se pueden pagar o entregar**, y se dice cuáles: cada
+  identificador lleva su `paid_at` y su `delivered_at` (migración `00029` para el pago), así
+  que se sabe qué números están pagados, cuáles entregados y cuáles solo asignados
+  (`paid_identifiers`, `delivered_identifiers`). Lo entregado y sin pagar se puede devolver,
+  diciendo cuáles; un número pagado o entregado no se puede quitar de la lista. Donde los
+  números están descritos, todo lo que acepta números (asignar, pagar, entregar, deshacer,
+  devolver) admite rangos (`0001-0010, 0015`, `Service.expandTokens`). Los artículos sin
+  números y las unidades sueltas siguen contando (`paid_quantity`, `picked_up_quantity`).
+  Asignar y quitar números sin reemplazar la lista: `POST` y `DELETE …/units/{id}/identifiers`.
 - **Pagado**: una fila se puede pagar en parte. `paid_quantity` (de 0 a `quantity`, migración
   `00027`) dice cuántas unidades están pagadas; `paid_at` y quién lo marcó son los del último
   pago y están exactamente cuando hay algo pagado. Solo lo ponen y quitan admin y board:
@@ -1519,8 +1531,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/archivo` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
 | `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
 | `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de «Es un extra» si hay; en un reparto para todos los socios sin opciones, donde el pedido propio ya está hecho y solo quedan los extras, no hay casilla, el botón dice «Pedido extra» y la ayuda da el precio: «Puedes pedir también extras a 8,00 €») y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó, su precio y si está recogido o no —nada del pago: la intranet no lo lleva—; sin la columna «Elegido» si no hay nada que elegir ni «Tipo» si no puede haber extras; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Un reparto para todos los socios sin opciones ni extras no tiene sección «Pedir» (no hay nada que pedir). Mientras el reparto es un borrador no hay ni «Pedir» ni «Tus pedidos» (nadie puede pedir nada todavía). Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
-| `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, las unidades que nadie ha elegido todavía («Sin elegir») con su recuento, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
-| `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó. Cada pedido se puede entregar en parte (un número de unidades y «Entregar», a la persona de «Entregado a»), con «Deshacer entrega» (siguen en el pedido) y «Devolver» (salen del pedido y su número queda libre; no lo pagado), y se ve qué números se han entregado y cuáles están asignados sin entregar. No se puede apuntar con el reparto en borrador. | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
+| `/reparto-pedidos?id=…` | Pedidos, todo en una página. Arriba, el resumen para hacer el pedido (unidades por combinación de opciones o por artículo, con el total y lo que queda). Debajo, los pedidos de cada socio (con buscador): cada uno es una cantidad que se puede cambiar o quitar y, donde los artículos llevan número, qué números tiene asignados, cuáles están pagados y cuáles entregados y cuántas unidades están sin número. Las acciones se hacen sobre lo que se escribe («0001-0010, 0015»; en blanco, todo lo que se pueda): asignar números (o los siguientes libres) o quitarlos, marcar pagados (admin y board) o quitar el pago, entregar (a la persona de «Entregado a»), deshacer la entrega y devolver. En artículos sin número, lo mismo con un número de unidades. Anota cuándo, quién lo apuntó y a quién se entregó. Avisa si se entrega algo sin pagar. | Admin, board y material (el pago, solo admin y board). | `requireAnyRole`; sustituye a las antiguas páginas de resumen y de recogida. |
 | `/reparto-numeros?id=…` | Números: de cada artículo con los números descritos, todos los que existen con quién tiene cada uno y cuántos quedan libres, filtrable por libres o asignados y por número o nombre. | Admin, board y material. | `requireAnyRole`; el enlace sale en el reparto solo si algún artículo tiene números descritos. |
 | `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |
 | `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |

@@ -1,5 +1,5 @@
-// What /repartos, /reparto, /reparto-pedido and
-// /reparto-recogida share: the labels of a distribution's states, how its
+// What /repartos, /reparto, /reparto-pedidos and
+// /reparto-numeros share: the labels of a distribution's states, how its
 // form is read and filled, how choices and people are shown, and the
 // searchable people picker. The server (internal/distributions) is the
 // authority on every rule; nothing here decides who may do what beyond hiding
