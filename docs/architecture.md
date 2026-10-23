@@ -1013,8 +1013,9 @@ salvo pedir unidades y editar las propias).
   `not_eligible`); admin y board, que apuntan en nombre de cualquiera, no necesitan serlo
   ellos. Los extras son de quien los pide (o del socio a cuyo nombre se apuntan): no se
   dice para quién son finalmente. Cambiar o quitar una unidad lo puede hacer para quien
-  es, quien la apuntó y admin/board, con las mismas reglas de estado; una unidad recogida
-  ya no se toca, y una pagada solo la toca admin/board (409 `unit_locked`).
+  es, quien la apuntó y admin/board/material (los tres para cualquiera, y también pasado el plazo y
+  con algo pagado; solo admin/board marcan pagos), una unidad recogida
+  ya no se toca, y una pagada solo la tocan admin/board/material (409 `unit_locked`).
 - **Pagado**: una fila se puede pagar en parte. `paid_quantity` (de 0 a `quantity`, migración
   `00027`) dice cuántas unidades están pagadas; `paid_at` y quién lo marcó son los del último
   pago y están exactamente cuando hay algo pagado. Solo lo ponen y quitan admin y board:

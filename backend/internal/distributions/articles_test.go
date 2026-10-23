@@ -733,3 +733,28 @@ func TestARowCanBePaidInPartAndAddingToItLeavesTheRestPending(t *testing.T) {
 		t.Errorf("nothing should be paid: %+v", u)
 	}
 }
+
+func TestMaterialCanChangeAndRemoveAnybodysOrder(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	owner := e.newPerson(t, "2020-01-01", "member")
+	other := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenLottery(t, e, admin)
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, owner, 0, 2), http.StatusCreated))
+	path := fmt.Sprintf("%s/%d", unitsPath(d.ID), u.ID)
+
+	expect(t, e.do("PATCH", path, other.token, map[string]any{"quantity": 3}), http.StatusForbidden, "forbidden")
+	expect(t, e.do("DELETE", path, other.token, nil), http.StatusForbidden, "forbidden")
+	// Material isn't the owner, nor entered it, and changes it all the same.
+	if got := decode[distributions.Unit](t, mustStatus(t, e.do("PATCH", path, material.token, map[string]any{"quantity": 3}), http.StatusOK)); got.Quantity != 3 || deref(got.RegisteredByLogin) != owner.Login {
+		t.Errorf("unexpected unit: %+v", got)
+	}
+	// What is paid locks it for its owner, not for material.
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
+	expect(t, e.do("PATCH", path, owner.token, map[string]any{"quantity": 4}), http.StatusConflict, "unit_locked")
+	mustStatus(t, e.do("PATCH", path, material.token, map[string]any{"quantity": 4}), http.StatusOK)
+	// Marking payments stays for admin/board.
+	expect(t, e.do("POST", distributionPath(d.ID)+"/payments", material.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusForbidden, "forbidden")
+	mustStatus(t, e.do("DELETE", path, material.token, nil), http.StatusNoContent)
+}

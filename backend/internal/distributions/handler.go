@@ -459,7 +459,9 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 }
 
 // ownUnit fetches a unit and checks the caller may change it: the person it
-// is for, whoever entered it, or admin/board.
+// is for, whoever entered it, or admin/board/material (who hand things out and
+// fix orders for whoever they are), who also go past the deadline and change
+// a paid unit: for changing orders they count as staff (Service's `staff`).
 func (h *Handler) ownUnit(w http.ResponseWriter, r *http.Request) (Distribution, Unit, bool) {
 	id, ok := parseID(w, r, "id")
 	if !ok {
@@ -479,8 +481,8 @@ func (h *Handler) ownUnit(w http.ResponseWriter, r *http.Request) (Distribution,
 		return Distribution{}, Unit{}, false
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if !isStaff(current) && current.ID != unit.BeneficiaryID && (unit.RegisteredByID == nil || current.ID != *unit.RegisteredByID) {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the person it is for, whoever entered it, board or admin can change this")
+	if !canSeeEveryone(current) && current.ID != unit.BeneficiaryID && (unit.RegisteredByID == nil || current.ID != *unit.RegisteredByID) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the person it is for, whoever entered it, material, board or admin can change this")
 		return Distribution{}, Unit{}, false
 	}
 	return d, unit, true
@@ -507,7 +509,7 @@ func (h *Handler) updateUnit(w http.ResponseWriter, r *http.Request) {
 			writeError(w, ErrInvalidQuantity, "")
 			return
 		}
-		updated, err := h.service.UpdateQuantity(r.Context(), d.ID, unit.ID, *body.Quantity, isStaff(current))
+		updated, err := h.service.UpdateQuantity(r.Context(), d.ID, unit.ID, *body.Quantity, canSeeEveryone(current))
 		if err != nil {
 			writeError(w, err, "could not update unit")
 			return
@@ -517,7 +519,7 @@ func (h *Handler) updateUnit(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, updated)
 		return
 	}
-	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, current.ID, isStaff(current))
+	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, current.ID, canSeeEveryone(current))
 	if err != nil {
 		writeError(w, err, "could not update unit")
 		return
@@ -533,7 +535,7 @@ func (h *Handler) deleteUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.DeleteUnit(r.Context(), d.ID, unit.ID, isStaff(current)); err != nil {
+	if err := h.service.DeleteUnit(r.Context(), d.ID, unit.ID, canSeeEveryone(current)); err != nil {
 		writeError(w, err, "could not delete unit")
 		return
 	}

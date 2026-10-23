@@ -461,8 +461,10 @@ also after the deadline, but only while `open` — a closed distribution changes
 reopening it is how a late addition is made (`Service.checkOpen`). Both the beneficiary
 and, unless admin/board, whoever enters it have to be eligible (`ErrNotEligible`); an
 extra belongs to whoever it is entered for, with no notion of who ends up with the item.
-Changing/removing a unit is for its beneficiary, whoever entered it and admin/board, under
-the same rules; a collected unit is final and a paid one only changes through admin/board
+Changing/removing a unit is for its beneficiary, whoever entered it and admin/board/material
+(`Handler.ownUnit`; material counts as staff for it, so like admin/board it can also go past
+the deadline and change a paid unit, though only admin/board mark payments), under
+the same rules; a collected unit is final and a paid one only changes through admin/board/material
 (`ErrUnitLocked`). Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
 `quantity` are paid, with `paid_at`/`paid_marked_by_id` as when and by whom the last payment was
 marked, set exactly when something is paid (`CHECK`s). Admin/board only: `POST .../payments`

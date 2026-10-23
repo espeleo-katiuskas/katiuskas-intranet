@@ -9,6 +9,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initModal, openModal } from './modal.js';
 import {
   apiErrorText,
   articleLeft,
@@ -136,6 +137,23 @@ function paymentControls(u) {
   return `<div class="table-actions">${count}${mark}${undo}</div>`;
 }
 
+// Changing or removing somebody's order: material, board and admin can, even if it
+// is paid, as long as nothing in it is collected (the API has the last word). The own unit of everybody in a
+// distribution for all members can't be removed.
+function canChangeUnit(u) {
+  return !u.picked_up_at && distribution?.status === 'open';
+}
+
+function changeControls(u) {
+  if (!canChangeUnit(u)) return '';
+  const changeable = hasOptions() || u.article_id;
+  const removable = u.is_extra || distribution.audience === 'signup';
+  return `<div class="table-actions">
+    ${changeable ? `<button type="button" class="btn btn-secondary btn-small" data-change-unit="${u.id}">Cambiar</button>` : ''}
+    ${removable ? `<button type="button" class="btn btn-danger btn-small" data-delete-unit="${u.id}">Quitar</button>` : ''}
+  </div>`;
+}
+
 function unitLine(u) {
   const parts = [unitLabel(u, hasOptions(), distribution?.articles)];
   if (u.is_extra) parts.push('extra');
@@ -148,7 +166,7 @@ function unitLine(u) {
   }
   const status = paymentStatus(u);
   if (status) parts.push(status);
-  return `<li>${escapeHtml(parts.join(' · '))}${paymentControls(u)}</li>`;
+  return `<li>${escapeHtml(parts.join(' · '))}${paymentControls(u)}${changeControls(u)}</li>`;
 }
 
 // What the person has paid of what they owe, and the controls for all of it at
@@ -193,7 +211,57 @@ function renderPeople() {
     : `<tr><td colspan="4">${provisional ? 'Los pedidos de cada socio se crean al abrir el reparto.' : 'Todavía no ha pedido nadie.'}</td></tr>`;
 }
 
+const unitDialog = document.getElementById('edit-unit-dialog');
+const unitForm = document.getElementById('edit-unit-form');
+initModal(unitDialog, unitForm);
+let changing = null;
+
+function optionSelects(choices = {}) {
+  return distribution.options
+    .map(
+      (option, i) => `
+      <div class="field">
+        <label for="eu-${i}">${escapeHtml(option.name)}</label>
+        <select id="eu-${i}" data-option="${escapeHtml(option.name)}" required>
+          <option value="">— Elige —</option>
+          ${option.values.map((v) => `<option${choices[option.name] === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}
+        </select>
+      </div>`,
+    )
+    .join('');
+}
+
 document.getElementById('people-list').addEventListener('click', async (event) => {
+  const change = event.target.closest('button[data-change-unit]');
+  const remove = event.target.closest('button[data-delete-unit]');
+  if (change) {
+    changing = units.find((u) => u.id === Number(change.dataset.changeUnit));
+    document.getElementById('edit-unit-hint').textContent = `Para ${changing.beneficiary_name}.`;
+    const byQuantity = Boolean(changing.article_id);
+    document.getElementById('edit-unit-title').textContent = byQuantity
+      ? `Cambiar la cantidad de ${changing.article_name}`
+      : 'Cambiar lo elegido';
+    document.getElementById('eu-quantity-field').hidden = !byQuantity;
+    document.getElementById('eu-quantity').value = changing.quantity;
+    document.getElementById('eu-options').innerHTML = byQuantity
+      ? ''
+      : optionSelects(changing.choices);
+    openModal(unitDialog);
+    return;
+  }
+  if (remove) {
+    if (!confirm('¿Quitar este pedido?')) return;
+    remove.disabled = true;
+    try {
+      await apiFetch(`${base}/units/${remove.dataset.deleteUnit}`, { method: 'DELETE' });
+      showFeedback('Pedido quitado.');
+      await load();
+    } catch (err) {
+      remove.disabled = false;
+      fail(err);
+    }
+    return;
+  }
   const payUnit = event.target.closest('button[data-pay-unit]');
   const unpayUnit = event.target.closest('button[data-unpay-unit]');
   const pay = event.target.closest('button[data-pay-person]');
@@ -287,3 +355,23 @@ try {
   fail(err);
 }
 await firstLoad;
+
+unitForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!changing) return;
+  const choices = {};
+  for (const select of document.querySelectorAll('#eu-options select[data-option]')) {
+    choices[select.dataset.option] = select.value;
+  }
+  const body = changing.article_id
+    ? { quantity: Number(document.getElementById('eu-quantity').value) }
+    : { choices };
+  try {
+    await apiFetch(`${base}/units/${changing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    unitDialog.close();
+    showFeedback('Cambio guardado.');
+    await load();
+  } catch (err) {
+    fail(err);
+  }
+});

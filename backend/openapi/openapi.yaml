@@ -2124,9 +2124,10 @@ paths:
         row of an article, only `quantity` (400 invalid_quantity for the
         other one, or one outside 1 to 100000), under the article's limit
         (409 article_exhausted, article_person_limit). Allowed to
-        the person it is for, whoever entered it, and admin/board, under the
-        same open/deadline rules as asking for it. A collected unit is final
-        (409 unit_locked); a paid one only changes through admin/board.
+        the person it is for, whoever entered it, and admin/board/material, under the
+        same open rules as asking for it (admin/board/material also after the
+        deadline). A collected unit is final (409 unit_locked); a paid one only
+        changes through admin/board/material.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2146,7 +2147,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
         "400": { description: invalid_choices or invalid_quantity. }
-        "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
+        "403": { description: Neither the person it is for, whoever entered it, nor admin/board/material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_open, unit_locked, quantity_below_paid, article_exhausted or article_person_limit. }
     delete:
@@ -2161,7 +2162,7 @@ paths:
         - { name: unitID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Removed }
-        "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
+        "403": { description: Neither the person it is for, whoever entered it, nor admin/board/material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_open, unit_locked or automatic_unit. }
 
