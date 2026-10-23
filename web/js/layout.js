@@ -91,6 +91,7 @@ const ACTIVE_ALIASES = {
   '/reparto': '/repartos',
   '/reparto-pedido': '/repartos',
   '/reparto-recogida': '/repartos',
+  '/reparto-numeros': '/repartos',
 };
 
 function renderNavLink(item, activePath) {

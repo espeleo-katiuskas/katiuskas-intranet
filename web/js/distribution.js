@@ -99,6 +99,12 @@ function renderHeader() {
   const pickupLink = document.getElementById('link-pickup');
   if (orderLink) orderLink.href = `/reparto-pedido?id=${id}`;
   if (pickupLink) pickupLink.href = `/reparto-recogida?id=${id}`;
+  // Only when some article has its numbers described, so there is something to list.
+  const numbersLink = document.getElementById('link-numbers');
+  if (numbersLink) {
+    numbersLink.href = `/reparto-numeros?id=${id}`;
+    numbersLink.hidden = !distribution.articles.some((a) => a.identifier_fields.length > 0);
+  }
   // The actions bar only holds things for admin/board/material.
   document.getElementById('distribution-actions').hidden = !hasAnyRole(me, [
     'admin',
@@ -492,7 +498,7 @@ function unitCell(key, u, hasOptions) {
     case 'for':
       return escapeHtml(forMe ? 'Ti' : u.beneficiary_name);
     case 'article':
-      return escapeHtml(unitLabel(u));
+      return escapeHtml(unitLabel(u, false, distribution.articles));
     case 'chosen':
       return unchosen
         ? '<strong>Sin elegir</strong>'

@@ -56,6 +56,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/distributions/{id}/pickups", h.authenticator.Protect(h.markPickedUp, "admin", "board", "material"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/pickup", h.authenticator.Protect(h.clearPickup, "admin", "board", "material"))
 	mux.Handle("PUT /api/v1/distributions/{id}/units/{unitID}/identifiers", h.authenticator.Protect(h.setIdentifiers, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/identifiers/assign", h.authenticator.Protect(h.assignNumbers, "admin", "board", "material"))
+	mux.Handle("GET /api/v1/distributions/{id}/articles/{articleID}/numbers", h.authenticator.Protect(h.numbers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.markPaid, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/payment", h.authenticator.Protect(h.clearPaid, "admin", "board"))
 }
@@ -95,6 +97,10 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrInvalidIdentifiers, http.StatusBadRequest, "invalid_identifiers"},
 		{ErrIdentifierTaken, http.StatusConflict, "identifier_taken"},
 		{ErrIdentifiersMissing, http.StatusConflict, "identifiers_missing"},
+		{ErrInvalidNumbering, http.StatusBadRequest, "invalid_numbering"},
+		{ErrNumberInUse, http.StatusConflict, "number_in_use"},
+		{ErrNotEnoughNumbers, http.StatusConflict, "not_enough_numbers"},
+		{ErrNotNumbered, http.StatusBadRequest, "article_not_numbered"},
 		{ErrCapBelowRequested, http.StatusConflict, "cap_below_requested"},
 		{ErrInvalidChoices, http.StatusBadRequest, "invalid_choices"},
 		{ErrNoUnits, http.StatusBadRequest, "no_units"},
@@ -152,11 +158,12 @@ func optionInputs(in []optionBody) []OptionInput {
 }
 
 type articleBody struct {
-	Name           string  `json:"name"`
-	Price          float64 `json:"price"`
-	MaxTotal       *int    `json:"max_total"`
-	MaxPerPerson   *int    `json:"max_per_person"`
-	HasIdentifiers bool    `json:"has_identifiers"`
+	Name             string            `json:"name"`
+	Price            float64           `json:"price"`
+	MaxTotal         *int              `json:"max_total"`
+	MaxPerPerson     *int              `json:"max_per_person"`
+	HasIdentifiers   bool              `json:"has_identifiers"`
+	IdentifierFields []IdentifierField `json:"identifier_fields"`
 }
 
 func articleInputs(in []articleBody) []ArticleInput {
@@ -555,6 +562,7 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		UnitIDs         []int64 `json:"unit_ids"`
 		PickedUpByLogin string  `json:"picked_up_by_login"`
+		AssignNumbers   bool    `json:"assign_numbers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -571,7 +579,7 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.MarkPickedUp(r.Context(), id, body.UnitIDs, current.ID, pickedUpBy); err != nil {
+	if err := h.service.MarkPickedUp(r.Context(), id, body.UnitIDs, current.ID, pickedUpBy, body.AssignNumbers); err != nil {
 		writeError(w, err, "could not record the collection")
 		return
 	}
@@ -600,6 +608,41 @@ func (h *Handler) setIdentifiers(w http.ResponseWriter, r *http.Request) {
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha apuntado los números de «%s» de %s en «%s»: %s.",
 		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(updated.Identifiers, ", ")))
 	httpapi.WriteJSON(w, http.StatusOK, updated)
+}
+
+// assignNumbers gives the unit the next free numbers of its article up to its
+// quantity, keeping those it already has.
+func (h *Handler) assignNumbers(w http.ResponseWriter, r *http.Request) {
+	d, unit, ok := h.unitForStaff(w, r)
+	if !ok {
+		return
+	}
+	updated, err := h.service.AssignNumbers(r.Context(), d.ID, unit.ID)
+	if err != nil {
+		writeError(w, err, "could not assign numbers")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha asignado los números de «%s» de %s en «%s»: %s.",
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(updated.Identifiers, ", ")))
+	httpapi.WriteJSON(w, http.StatusOK, updated)
+}
+
+// numbers lists every item of a numbered article and who has it.
+func (h *Handler) numbers(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	articleID, ok := parseID(w, r, "articleID")
+	if !ok {
+		return
+	}
+	numbers, err := h.service.Numbers(r.Context(), id, articleID)
+	if err != nil {
+		writeError(w, err, "could not list the numbers")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, numbers)
 }
 
 func deref(s *string) string {

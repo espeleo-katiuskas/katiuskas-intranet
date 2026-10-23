@@ -532,7 +532,17 @@ both take the last units (`ErrArticleExhausted`, 409 `article_exhausted`, with h
 left in the message). Once any unit exists only each article's `max_total` can be edited,
 and not below `Article.requested` (`replaceArticles`: `ErrHasUnits`/`ErrCapBelowRequested`);
 `unit_count`/`picked_up_count` and the order summary count units (`sum(quantity)`), and
-`GET …/order` groups by article. Migration `00024` also has `max_per_person` (checked with
+`GET …/order` groups by article. An article's numbers can be *described* (migration `00026`,
+`identifier_fields`, `numbering.go`): parts with a spec of values and ranges ("Serie:
+124-133, 137", "Número: 0001-0200", zero padding kept) whose every combination is an item
+that exists, so what is free, who has what and the next free ones are known. `max_total` is
+then always the number of items (`normalizeArticles` overwrites it) and `has_identifiers` is
+implied; a unit's number is its parts joined by `/`; typed numbers may use a range in the last
+part by position in its values (`numbering.expand`, so gaps are respected) and must exist
+(`valid`); `POST …/identifiers/assign` and `assign_numbers` on `POST …/pickups`
+(`Service.assignNumbers`) give the next free ones in listing order; `GET
+…/articles/{id}/numbers` lists every item with its holder. With units present the numbers can
+grow but not leave out one somebody has (`ErrNumberInUse`, in `replaceArticles`). Migration `00024` also has `max_per_person` (checked with
 `max_total` in `checkQuantity`, `ErrPersonLimit`, 409 `article_person_limit`) and
 `has_identifiers`: such an article's rows carry one number per item in
 `distribution_unit_identifiers` (unique per article, `ErrIdentifierTaken`), written with
@@ -544,8 +554,13 @@ collection (`MissingIdentifiers`, `ErrIdentifiersMissing`); with units present, 
 "Artículos" textarea, `Nombre: precio[, máximo N][, N por persona][, con números]` (`parseArticles`), which switches off the
 fields that don't apply (`syncArticleFields`); `/reparto` shows a quantity field per article
 with what is left, "Tus pedidos" rows are changed by quantity, `/reparto-pedido` shows
-each article against its cap, and `/reparto-recogida` has a numbers field per row of an
-article with numbers (`identifiersEditor`).
+each article against its cap, `/reparto-recogida` has a numbers field per row of an
+article with numbers (`identifiersEditor`, with an "Asignar los siguientes libres" button for
+described ones and an "asignar los que falten" checkbox on the form), and
+`/reparto-numeros` (`distribution-numbers.js`, linked from `/reparto` when some article has
+described numbers) lists every number with who has it, filterable, and how many are free. The
+numbers are described in the articles textarea with indented lines under the article
+(`  Serie: 124-133, 137`).
 
 **Licenses**: a license's type isn't free text — it's a `license_type_id` referencing the
 `license_types` catalog, seeded in the database (migration `00007_licenses.sql`) rather

@@ -24,6 +24,7 @@
   <div class="panel-actions" id="distribution-actions" hidden>
     <a id="link-order" class="btn btn-secondary btn-small" data-roles="admin,board,material">Resumen del pedido</a>
     <a id="link-pickup" class="btn btn-secondary btn-small" data-roles="admin,board,material">Recogida</a>
+    <a id="link-numbers" class="btn btn-secondary btn-small" data-roles="admin,board,material" hidden>Números</a>
     <button id="step-back" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" hidden></button>
     <button id="step-forward" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden></button>
     <button id="open-edit" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">Editar</button>
@@ -86,7 +87,11 @@
           <p class="hint" data-articles-hint hidden>
             Con artículos cada socio pide las unidades que quiera de cada uno, hasta el máximo que
             haya en total (si lo pones). Es para quien se apunte y no tiene precio, extras ni
-            opciones propios: cada artículo tiene el suyo.
+            opciones propios: cada artículo tiene el suyo. Si los números están todos
+            previstos, descríbelos debajo del artículo, con sangría, una línea por cada parte
+            del número y los valores que puede tomar, y así se sabe cuáles hay, quién tiene cada
+            uno y cuántos quedan libres (el máximo pasa a ser cuántos hay):
+            «Décimos: 20», luego «  Serie: 124-133, 137» y «  Fracción: 1-10».
           </p>
         </div>
       </div>

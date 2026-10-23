@@ -932,6 +932,26 @@ salvo pedir unidades y editar las propias).
   `max_per_person` (nunca por debajo del mayor pedido, 409 `cap_below_requested`) y
   `has_identifiers`. En la interfaz: «Papeletas: 5, máximo 200, 10 por persona, con números», y
   `/reparto-recogida` muestra un campo de números por fila.
+  **Números descritos** (migración `00026`, `identifier_fields`): en vez de teclear los números
+  uno a uno, se describen las partes del número y los valores de cada una, como una lista de
+  valores y rangos (`numbering.go`): papeletas «Número: 0001-0200» (los ceros a la izquierda
+  se respetan), décimos «Serie: 124-133, 137» y «Fracción: 1-10». Cada combinación es una
+  unidad que existe (la primera parte cambia más despacio: 124/1…124/10, 125/1…), de modo
+  que se sabe cuáles hay, quién tiene cada una y cuántas están libres. El máximo del
+  artículo pasa a ser cuántas hay (`max_total` se recalcula siempre, aunque se mande otro
+  valor) y el artículo lleva números aunque no se diga `con números`. El número de una
+  unidad se guarda como las partes unidas por una barra (`124/3`; ningún valor puede
+  llevar barra). Al apuntar números a mano valen rangos, en la última parte y por posición
+  en sus valores, así que un hueco se respeta (`133/9-10`, `0010-0020`); cada número tiene
+  que existir. Para no teclear, `POST …/units/{id}/identifiers/assign` da a una fila los
+  siguientes números libres hasta su cantidad (409 `not_enough_numbers` si no hay),
+  y `POST …/pickups` con `assign_numbers` lo hace con las filas que falten al entregar
+  (`Service.assignNumbers`, en el orden en que llegan). `GET …/articles/{id}/numbers`
+  (admin, board o material) lista todos los números con quién tiene cada uno y los
+  contadores. Con pedidos hechos, los números se pueden ampliar (otra serie comprada: la 137
+  después de la 133) pero no quitar uno que tenga alguien (409 `number_in_use`). En el
+  formulario cada parte va en una línea con sangría bajo el artículo («Décimos: 20», «  Serie:
+  124-133, 137», «  Fracción: 1-10»), y `/reparto-numeros?id=…` muestra la lista con filtros.
 - **Unidades** (`distribution_units`; en la interfaz se llaman «pedidos», y las unidades
   extra, «extras»): una fila por unidad pedida, para que dos camisetas
   extra puedan tener tallas distintas. `beneficiary_id` es para quién es;
@@ -1468,6 +1488,7 @@ Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
 | `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de «Es un extra» si hay; en un reparto para todos los socios sin opciones, donde el pedido propio ya está hecho y solo quedan los extras, no hay casilla, el botón dice «Pedido extra» y la ayuda da el precio: «Puedes pedir también extras a 8,00 €») y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó, su precio y si está recogido o no —nada del pago: la intranet no lo lleva—; sin la columna «Elegido» si no hay nada que elegir ni «Tipo» si no puede haber extras; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Un reparto para todos los socios sin opciones ni extras no tiene sección «Pedir» (no hay nada que pedir). Mientras el reparto es un borrador no hay ni «Pedir» ni «Tus pedidos» (nadie puede pedir nada todavía). Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
 | `/reparto-pedido?id=…` | Resumen para hacer el pedido: unidades por combinación de opciones con el total, las unidades que nadie ha elegido todavía («Sin elegir») con su recuento, y qué quiere cada socio (con quién apuntó cada unidad). Admin y board marcan lo pagado, por socio. | Admin, board y material. | `requireAnyRole`. |
 | `/reparto-recogida?id=…` | Recogida: quién ha recogido y quién falta, con las unidades marcables y «Entregado a» (se sugiere el propio socio, pero puede ser otra persona). Anota cuándo, quién lo apuntó y a quién se entregó, con «Deshacer». No se puede apuntar con el reparto en borrador. | Admin, board y material. | Avisa si se entregan unidades sin pagar. |
+| `/reparto-numeros?id=…` | Números: de cada artículo con los números descritos, todos los que existen con quién tiene cada uno y cuántos quedan libres, filtrable por libres o asignados y por número o nombre. | Admin, board y material. | `requireAnyRole`; el enlace sale en el reparto solo si algún artículo tiene números descritos. |
 | `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |
 | `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
 | `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`), y, desplegable bajo cada uno, qué personas lo tienen (de `GET /users`), con «×» para quitarlo y un buscador con «Dar este rol» para asignarlo (`POST`/`DELETE /users/{login}/roles`); los roles automáticos solo muestran quién los tiene, y a uno mismo no se le ofrece quitarse el de admin y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. También los festivos del calendario de actividades, año a año (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): con «Nuevo festivo», «Borrar» y «Copiar del año anterior» (mismo día y mes, salvo donde ya haya uno; los que se mueven, como Semana Santa, se corrigen a mano). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |

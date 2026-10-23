@@ -73,7 +73,14 @@ type Article struct {
 	// HasIdentifiers means each unit has its own number (a serial number, a
 	// series and fraction), written down when the units are handed out.
 	HasIdentifiers bool `json:"has_identifiers"`
-	Requested      int  `json:"requested"`
+	// IdentifierFields describe the numbers the items can have (see
+	// IdentifierField), so every one that exists is known: IdentifierTotal of
+	// them, IdentifiersAssigned already given to somebody. Empty means numbers
+	// are free text. With them MaxTotal is always IdentifierTotal.
+	IdentifierFields    []IdentifierField `json:"identifier_fields"`
+	IdentifierTotal     int               `json:"identifier_total,omitempty"`
+	IdentifiersAssigned int               `json:"identifiers_assigned,omitempty"`
+	Requested           int               `json:"requested"`
 }
 
 // String is how an article reads in a notification of what changed: without
@@ -88,6 +95,9 @@ func (a Article) String() string {
 	}
 	if a.HasIdentifiers {
 		s += " (con números)"
+	}
+	for _, f := range a.IdentifierFields {
+		s += fmt.Sprintf(" [%s: %s]", f.Name, f.Spec)
 	}
 	return s
 }
@@ -174,11 +184,12 @@ type OptionInput struct {
 
 // ArticleInput is an Article as given when creating or editing a distribution.
 type ArticleInput struct {
-	Name           string
-	Price          float64
-	MaxTotal       *int
-	MaxPerPerson   *int
-	HasIdentifiers bool
+	Name             string
+	Price            float64
+	MaxTotal         *int
+	MaxPerPerson     *int
+	HasIdentifiers   bool
+	IdentifierFields []IdentifierField
 }
 
 // CreateInput is what creating a distribution takes. A new one always starts
@@ -256,4 +267,32 @@ type Order struct {
 	TotalUnits  int         `json:"total_units"`
 	TotalAmount float64     `json:"total_amount"`
 	Provisional bool        `json:"provisional"`
+}
+
+// NumberHolder is who has a number: the unit it was given on and the person
+// that unit is for.
+type NumberHolder struct {
+	UnitID int64
+	Login  string
+	Name   string
+}
+
+// NumberItem is one item of a numbered article: its number and, when somebody
+// has it, who.
+type NumberItem struct {
+	Identifier       string  `json:"identifier"`
+	UnitID           *int64  `json:"unit_id,omitempty"`
+	BeneficiaryLogin *string `json:"beneficiary_login,omitempty"`
+	BeneficiaryName  *string `json:"beneficiary_name,omitempty"`
+}
+
+// Numbers is every item that exists of a numbered article, in order, with who
+// has each, and how many are given and free.
+type Numbers struct {
+	ArticleID int64             `json:"article_id"`
+	Fields    []IdentifierField `json:"fields"`
+	Total     int               `json:"total"`
+	Assigned  int               `json:"assigned"`
+	Free      int               `json:"free"`
+	Items     []NumberItem      `json:"items"`
 }

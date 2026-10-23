@@ -105,7 +105,7 @@ function groupByPerson(all) {
 }
 
 function unitLine(u) {
-  const parts = [unitLabel(u, hasOptions())];
+  const parts = [unitLabel(u, hasOptions(), distribution?.articles)];
   if (u.is_extra) parts.push('extra');
   // Who entered it, when that isn't the person it is for (nobody did for an
   // own unit nobody has chosen yet).

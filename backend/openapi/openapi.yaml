@@ -1788,7 +1788,15 @@ paths:
         has them (400 invalid_articles). An article may also cap what one
         person can have (`max_per_person`) and carry a number on each unit
         (`has_identifiers`: a serial number, a series and fraction), which is
-        written down when the units are handed out.
+        written down when the units are handed out. Those numbers can be
+        described with `identifier_fields`: parts of the number ("Serie",
+        "Fracción"), each with the values it can take as a `spec` of values and
+        ranges ("124-133, 137", "0001-0200": digits keep the width of the
+        ends when one has leading zeros, no value repeated or with a slash).
+        Every combination is an item that exists, so the article's `max_total`
+        is then always how many there are (what is sent is ignored), numbers
+        are implied, and what is free and who has what is known (400
+        invalid_numbering).
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -1826,9 +1834,11 @@ paths:
         can only be replaced while nobody has asked for anything yet (409
         has_units); sending back exactly what is there is not a replacement.
         The same for `articles`, except that once somebody has asked only
-        each article's `max_total`, `max_per_person` and `has_identifiers`
-        can change (anything else is 409 has_units), the limits to no less than
-        what has been asked for (409 cap_below_requested). `status`
+        each article's `max_total`, `max_per_person`, `has_identifiers` and
+        `identifier_fields` can change (anything else is 409 has_units), the
+        limits to no less than what has been asked for (409
+        cap_below_requested), and the numbers can grow (another series) but
+        not leave out one somebody has (409 number_in_use). `status`
         moves one step at a time along draft, open (members ask for units),
         closed (nothing can be asked for or changed any more) and done —
         forward or back, one step at a time. Units can be handed out
@@ -2001,6 +2011,69 @@ paths:
         "404": { description: The distribution (or a draft, for a member) or the beneficiary doesn't exist. }
         "409": { description: not_open, not_eligible, already_registered, extras_not_allowed, too_many_extras, article_exhausted or article_person_limit. }
 
+  /distributions/{id}/units/{unitID}/identifiers/assign:
+    post:
+      summary: Give a row the next free numbers
+      description: >
+        Requires admin, board or material, and the distribution not a draft.
+        For a row of an article whose numbers are described (400
+        article_not_numbered otherwise): gives it as many of the next free
+        numbers as it still lacks to have one per unit, in the order the numbers
+        are listed (the first part changing slowest), keeping those it has
+        (409 not_enough_numbers if there are fewer free).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: unitID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The updated unit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: article_not_numbered. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_deliverable, not_enough_numbers or identifier_taken. }
+
+  /distributions/{id}/articles/{articleID}/numbers:
+    get:
+      summary: Every number of an article and who has it
+      description: >
+        Requires admin, board or material. For an article whose numbers are
+        described (400 article_not_numbered otherwise; 400 unknown_article):
+        every item that exists, in order, with the person it was given to when
+        somebody has it, and how many are given and free.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: articleID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  article_id: { type: integer }
+                  fields:
+                    type: array
+                    items: { $ref: "#/components/schemas/IdentifierField" }
+                  total: { type: integer }
+                  assigned: { type: integer }
+                  free: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        identifier: { type: string, description: One value of each part joined by a slash. }
+                        unit_id: { type: integer }
+                        beneficiary_login: { type: string }
+                        beneficiary_name: { type: string }
+        "400": { description: article_not_numbered or unknown_article. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /distributions/{id}/units/{unitID}/identifiers:
     put:
       summary: Write down the numbers of the items handed out
@@ -2010,7 +2083,11 @@ paths:
         fraction...) of a row of an article with `has_identifiers`: none empty
         or repeated, no more than the row's quantity, each at most 60
         characters (400 invalid_identifiers, also for a row of any other
-        article). Fewer than the quantity can be saved and completed later,
+        article). Where the article's numbers are described, each has to be one
+        that exists — one value of each part joined by a slash, "124/3", or
+        "0007" for one part — and a range may be typed instead of listing
+        them: the last part by position in its values, "0010-0020",
+        "133/9-10" (so a gap in the values is respected). Fewer than the quantity can be saved and completed later,
         but a row can't be collected (409 identifiers_missing on
         `POST .../pickups`) until it has all of them. A number is unique within
         its article, whoever has it (409 identifier_taken).
@@ -2130,6 +2207,7 @@ paths:
               properties:
                 unit_ids: { type: array, items: { type: integer } }
                 picked_up_by_login: { type: string }
+                assign_numbers: { type: boolean, description: Give the next free numbers first to the units of articles with described numbers that lack some, in the order listed. }
       responses:
         "204": { description: Recorded }
         "400": { description: no_units. }
@@ -3546,6 +3624,11 @@ components:
               max_total: { type: integer, description: How many there are in all; absent = no limit. }
               max_per_person: { type: integer, description: How many one person may have; absent = no limit. }
               has_identifiers: { type: boolean, description: Each unit has its own number, written down when it is handed out. }
+              identifier_fields:
+                type: array
+                items: { $ref: "#/components/schemas/IdentifierField" }
+              identifier_total: { type: integer, description: How many items exist, when the numbers are described. }
+              identifiers_assigned: { type: integer, description: How many numbers have been given. }
               requested: { type: integer, description: How many have been asked for so far; with max_total, what is left is the difference. }
         created_by_login: { type: string }
         created_at: { type: string, format: date-time }
@@ -3587,10 +3670,20 @@ components:
               max_total: { type: integer }
               max_per_person: { type: integer }
               has_identifiers: { type: boolean, default: false }
+              identifier_fields:
+                type: array
+                items: { $ref: "#/components/schemas/IdentifierField" }
         status:
           type: string
           enum: [draft, open, closed, done]
           description: Only on PATCH.
+
+    IdentifierField:
+      type: object
+      required: [name, spec]
+      properties:
+        name: { type: string, example: Serie }
+        spec: { type: string, example: "124-133, 137" }
 
     DistributionUnit:
       type: object

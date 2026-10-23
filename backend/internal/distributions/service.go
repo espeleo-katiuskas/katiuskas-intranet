@@ -3,6 +3,7 @@ package distributions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -115,7 +116,23 @@ func normalizeArticles(articles []ArticleInput) ([]ArticleInput, error) {
 			return nil, ErrInvalidArticles
 		}
 		names[name] = true
-		out = append(out, ArticleInput{Name: name, Price: a.Price, MaxTotal: a.MaxTotal, MaxPerPerson: a.MaxPerPerson, HasIdentifiers: a.HasIdentifiers})
+		article := ArticleInput{Name: name, Price: a.Price, MaxTotal: a.MaxTotal, MaxPerPerson: a.MaxPerPerson, HasIdentifiers: a.HasIdentifiers}
+		// Described numbers: there are exactly as many items as combinations, which
+		// is what there is to give out, and each has a number.
+		article.IdentifierFields = []IdentifierField{}
+		for _, f := range a.IdentifierFields {
+			article.IdentifierFields = append(article.IdentifierFields, IdentifierField{Name: strings.TrimSpace(f.Name), Spec: strings.TrimSpace(f.Spec)})
+		}
+		n, err := buildNumbering(article.IdentifierFields)
+		if err != nil {
+			return nil, err
+		}
+		if n != nil {
+			total := n.total()
+			article.MaxTotal = &total
+			article.HasIdentifiers = true
+		}
+		out = append(out, article)
 	}
 	return out, nil
 }
@@ -444,7 +461,7 @@ func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staf
 // MarkPickedUp records the collection of the given units, while the distribution
 // is not a draft: pickedUpByID is who they were handed to (any person), recordedByID
 // who wrote it down.
-func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []int64, recordedByID, pickedUpByID int64) error {
+func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []int64, recordedByID, pickedUpByID int64, assignNumbers bool) error {
 	if len(ids) == 0 {
 		return ErrNoUnits
 	}
@@ -464,6 +481,21 @@ func (s *Service) MarkPickedUp(ctx context.Context, distributionID int64, ids []
 	}
 	if err := s.repo.SyncAutomaticUnits(ctx, d); err != nil {
 		return err
+	}
+	// Units of articles with described numbers can be given the next free ones
+	// on the way, in the order they are listed.
+	if assignNumbers {
+		for _, id := range ids {
+			u, err := s.repo.GetUnit(ctx, distributionID, id)
+			if err != nil {
+				return err
+			}
+			if article, ok := articleOf(d, u); ok && len(article.IdentifierFields) > 0 {
+				if _, err := s.assignNumbers(ctx, d, u); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	missing, err := s.repo.MissingIdentifiers(ctx, distributionID, ids)
 	if err != nil {
@@ -491,10 +523,25 @@ func (s *Service) SetIdentifiers(ctx context.Context, distributionID, id int64, 
 	if !d.Status.Deliverable() {
 		return Unit{}, ErrNotDeliverable
 	}
+	// Where the numbers of the article are described, what is typed may use
+	// ranges, and each has to be one of those that exist.
+	var n *numbering
+	for _, a := range d.Articles {
+		if u.ArticleID != nil && a.ID == *u.ArticleID {
+			if n, err = buildNumbering(a.IdentifierFields); err != nil {
+				return Unit{}, err
+			}
+		}
+	}
+	if n != nil {
+		if identifiers, err = n.expand(identifiers); err != nil {
+			return Unit{}, err
+		}
+	}
 	clean := make([]string, 0, len(identifiers))
 	for _, identifier := range identifiers {
 		identifier = strings.TrimSpace(identifier)
-		if identifier == "" || len(identifier) > maxIdentifierLength || slices.Contains(clean, identifier) {
+		if identifier == "" || len(identifier) > maxIdentifierLength || slices.Contains(clean, identifier) || (n != nil && !n.valid(identifier)) {
 			return Unit{}, ErrInvalidIdentifiers
 		}
 		clean = append(clean, identifier)
@@ -535,4 +582,112 @@ func (s *Service) Order(ctx context.Context, distributionID int64) (Order, error
 		return Order{}, err
 	}
 	return s.repo.Order(ctx, d)
+}
+
+// articleOf finds the article of a unit among the distribution's.
+func articleOf(d Distribution, u Unit) (Article, bool) {
+	for _, a := range d.Articles {
+		if u.ArticleID != nil && a.ID == *u.ArticleID {
+			return a, true
+		}
+	}
+	return Article{}, false
+}
+
+// assignNumbers gives the unit as many of the next free numbers of its article
+// as it still lacks to have one per unit, in the order the numbering lists them
+// (the first field changing slowest), keeping the ones it has. Nothing is done
+// for a unit that already has all of them.
+func (s *Service) assignNumbers(ctx context.Context, d Distribution, u Unit) (Unit, error) {
+	article, ok := articleOf(d, u)
+	if !ok {
+		return Unit{}, ErrNotNumbered
+	}
+	n, err := buildNumbering(article.IdentifierFields)
+	if err != nil {
+		return Unit{}, err
+	}
+	if n == nil {
+		return Unit{}, ErrNotNumbered
+	}
+	need := u.Quantity - len(u.Identifiers)
+	if need <= 0 {
+		return u, nil
+	}
+	assigned, err := s.repo.ArticleIdentifiers(ctx, article.ID)
+	if err != nil {
+		return Unit{}, err
+	}
+	taken := make(map[string]bool, len(assigned))
+	for _, identifier := range assigned {
+		taken[identifier] = true
+	}
+	var next []string
+	n.each(func(identifier string) bool {
+		if !taken[identifier] {
+			next = append(next, identifier)
+		}
+		return len(next) < need
+	})
+	if len(next) < need {
+		return Unit{}, fmt.Errorf("%w: %d free, %d needed", ErrNotEnoughNumbers, len(next), need)
+	}
+	if err := s.repo.SetIdentifiers(ctx, d.ID, u.ID, append(slices.Clone(u.Identifiers), next...)); err != nil {
+		return Unit{}, err
+	}
+	return s.repo.GetUnit(ctx, d.ID, u.ID)
+}
+
+// AssignNumbers is assignNumbers for one unit, once the distribution is no
+// longer a draft.
+func (s *Service) AssignNumbers(ctx context.Context, distributionID, id int64) (Unit, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return Unit{}, err
+	}
+	u, err := s.repo.GetUnit(ctx, distributionID, id)
+	if err != nil {
+		return Unit{}, err
+	}
+	if !d.Status.Deliverable() {
+		return Unit{}, ErrNotDeliverable
+	}
+	return s.assignNumbers(ctx, d, u)
+}
+
+// Numbers lists every item of a numbered article with who has it.
+func (s *Service) Numbers(ctx context.Context, distributionID, articleID int64) (Numbers, error) {
+	d, err := s.repo.Get(ctx, distributionID)
+	if err != nil {
+		return Numbers{}, err
+	}
+	for _, a := range d.Articles {
+		if a.ID != articleID {
+			continue
+		}
+		n, err := buildNumbering(a.IdentifierFields)
+		if err != nil {
+			return Numbers{}, err
+		}
+		if n == nil {
+			return Numbers{}, ErrNotNumbered
+		}
+		holders, err := s.repo.Holders(ctx, a.ID)
+		if err != nil {
+			return Numbers{}, err
+		}
+		out := Numbers{ArticleID: a.ID, Fields: a.IdentifierFields, Total: n.total(), Items: make([]NumberItem, 0, n.total())}
+		n.each(func(identifier string) bool {
+			item := NumberItem{Identifier: identifier}
+			if h, ok := holders[identifier]; ok {
+				item.UnitID, item.BeneficiaryLogin, item.BeneficiaryName = &h.UnitID, &h.Login, &h.Name
+				out.Assigned++
+			}
+			out.Items = append(out.Items, item)
+			return true
+		})
+		out.Free = out.Total - out.Assigned
+		return out, nil
+	}
+	return Numbers{}, ErrUnknownArticle
 }

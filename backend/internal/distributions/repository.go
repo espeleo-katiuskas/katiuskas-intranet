@@ -113,7 +113,9 @@ func (r *Repository) attachOptions(ctx context.Context, list []Distribution) err
 	}
 	articles, err := r.pool.Query(ctx, `
 		SELECT a.distribution_id, a.id, a.name, a.price::float8, a.max_total, a.max_per_person, a.has_identifiers,
-		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id)
+		       a.identifier_fields,
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id),
+		       (SELECT count(*) FROM distribution_unit_identifiers i WHERE i.article_id = a.id)
 		FROM distribution_articles a
 		WHERE a.distribution_id = ANY($1) ORDER BY a.distribution_id, a.position
 	`, ids)
@@ -124,20 +126,33 @@ func (r *Repository) attachOptions(ctx context.Context, list []Distribution) err
 	for articles.Next() {
 		var id int64
 		var a Article
-		if err := articles.Scan(&id, &a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers, &a.Requested); err != nil {
+		if err := articles.Scan(&id, &a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers,
+			&a.IdentifierFields, &a.Requested, &a.IdentifiersAssigned); err != nil {
 			return err
+		}
+		if n, err := buildNumbering(a.IdentifierFields); err == nil && n != nil {
+			a.IdentifierTotal = n.total()
 		}
 		list[index[id]].Articles = append(list[index[id]].Articles, a)
 	}
 	return articles.Err()
 }
 
+// fieldsOrEmpty is fields, as an empty list rather than nil (the column is
+// never null).
+func fieldsOrEmpty(fields []IdentifierField) []IdentifierField {
+	if fields == nil {
+		return []IdentifierField{}
+	}
+	return fields
+}
+
 func insertArticles(ctx context.Context, tx pgx.Tx, distributionID int64, articles []ArticleInput) error {
 	for i, a := range articles {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO distribution_articles (distribution_id, name, price, max_total, max_per_person, has_identifiers, position)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, distributionID, a.Name, a.Price, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers, i+1); err != nil {
+			INSERT INTO distribution_articles (distribution_id, name, price, max_total, max_per_person, has_identifiers, identifier_fields, position)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, distributionID, a.Name, a.Price, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers, fieldsOrEmpty(a.IdentifierFields), i+1); err != nil {
 			return err
 		}
 	}
@@ -343,7 +358,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 // ErrCapBelowRequested for a limit that is too low.
 func replaceArticles(ctx context.Context, tx pgx.Tx, id int64, articles []ArticleInput) error {
 	rows, err := tx.Query(ctx, `
-		SELECT a.id, a.name, a.price::float8, a.max_total, a.max_per_person, a.has_identifiers,
+		SELECT a.id, a.name, a.price::float8, a.max_total, a.max_per_person, a.has_identifiers, a.identifier_fields,
 		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id),
 		       (SELECT COALESCE(max(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id)
 		FROM distribution_articles a WHERE a.distribution_id = $1 ORDER BY a.position
@@ -357,7 +372,7 @@ func replaceArticles(ctx context.Context, tx pgx.Tx, id int64, articles []Articl
 	for rows.Next() {
 		var a Article
 		var most int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers, &a.Requested, &most); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Price, &a.MaxTotal, &a.MaxPerPerson, &a.HasIdentifiers, &a.IdentifierFields, &a.Requested, &most); err != nil {
 			return err
 		}
 		current = append(current, a)
@@ -375,7 +390,8 @@ func replaceArticles(ctx context.Context, tx pgx.Tx, id int64, articles []Articl
 	if units == 0 {
 		same := slices.EqualFunc(current, articles, func(a Article, b ArticleInput) bool {
 			return a.Name == b.Name && a.Price == b.Price && intPtrsEqual(a.MaxTotal, b.MaxTotal) &&
-				intPtrsEqual(a.MaxPerPerson, b.MaxPerPerson) && a.HasIdentifiers == b.HasIdentifiers
+				intPtrsEqual(a.MaxPerPerson, b.MaxPerPerson) && a.HasIdentifiers == b.HasIdentifiers &&
+				slices.Equal(a.IdentifierFields, fieldsOrEmpty(b.IdentifierFields))
 		})
 		if same {
 			return nil
@@ -398,9 +414,24 @@ func replaceArticles(ctx context.Context, tx pgx.Tx, id int64, articles []Articl
 		}
 	}
 	for i, a := range articles {
+		// New numbers can be added (another series bought) but not taken away from
+		// somebody who has them.
+		if n, err := buildNumbering(a.IdentifierFields); err != nil {
+			return err
+		} else if n != nil {
+			assigned, err := articleIdentifiers(ctx, tx, current[i].ID)
+			if err != nil {
+				return err
+			}
+			for _, identifier := range assigned {
+				if !n.valid(identifier) {
+					return ErrNumberInUse
+				}
+			}
+		}
 		if _, err := tx.Exec(ctx, `
-			UPDATE distribution_articles SET max_total = $2, max_per_person = $3, has_identifiers = $4 WHERE id = $1
-		`, current[i].ID, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers); err != nil {
+			UPDATE distribution_articles SET max_total = $2, max_per_person = $3, has_identifiers = $4, identifier_fields = $5 WHERE id = $1
+		`, current[i].ID, a.MaxTotal, a.MaxPerPerson, a.HasIdentifiers, fieldsOrEmpty(a.IdentifierFields)); err != nil {
 			return err
 		}
 	}
@@ -1031,4 +1062,57 @@ func (r *Repository) MissingIdentifiers(ctx context.Context, distributionID int6
 		  AND (SELECT count(*) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id) <> n.quantity
 	`, distributionID, ids).Scan(&missing)
 	return missing, err
+}
+
+// queryer is what articleIdentifiers needs: a pool or a transaction.
+type queryer interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// articleIdentifiers lists every number already given for the article, whoever has it.
+func articleIdentifiers(ctx context.Context, q queryer, articleID int64) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT identifier FROM distribution_unit_identifiers WHERE article_id = $1 ORDER BY id`, articleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var identifier string
+		if err := rows.Scan(&identifier); err != nil {
+			return nil, err
+		}
+		out = append(out, identifier)
+	}
+	return out, rows.Err()
+}
+
+// ArticleIdentifiers lists every number already given for the article.
+func (r *Repository) ArticleIdentifiers(ctx context.Context, articleID int64) ([]string, error) {
+	return articleIdentifiers(ctx, r.pool, articleID)
+}
+
+// Holders says who has each number given for the article: identifier to unit.
+func (r *Repository) Holders(ctx context.Context, articleID int64) (map[string]NumberHolder, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT i.identifier, n.id, b.login, b.first_name || ' ' || b.last_name
+		FROM distribution_unit_identifiers i
+		JOIN distribution_units n ON n.id = i.unit_id
+		JOIN users b ON b.id = n.beneficiary_id
+		WHERE i.article_id = $1
+	`, articleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]NumberHolder{}
+	for rows.Next() {
+		var identifier string
+		var h NumberHolder
+		if err := rows.Scan(&identifier, &h.UnitID, &h.Login, &h.Name); err != nil {
+			return nil, err
+		}
+		out[identifier] = h
+	}
+	return out, rows.Err()
 }

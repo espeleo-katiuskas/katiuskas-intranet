@@ -2,6 +2,7 @@ import { apiFetch, escapeHtml, formatCurrency, showError, showFeedback } from '.
 import { initPage } from './layout.js';
 import {
   apiErrorText,
+  formatIdentifiers,
   isUnchosen,
   unitCost,
   unitLabel,
@@ -31,6 +32,7 @@ const showPicked = document.getElementById('show-picked');
 const form = document.getElementById('pickup-form');
 const personInput = document.getElementById('pf-person');
 const submit = document.getElementById('pf-submit');
+const assignBox = document.getElementById('pf-assign');
 
 const hasOptions = () => (distribution?.options.length ?? 0) > 0;
 
@@ -59,17 +61,30 @@ function takesIdentifiers(u) {
   );
 }
 
+// An article whose numbers are described has every number that exists known, so
+// the next free ones can be given automatically and ranges can be typed.
+const articleOfUnit = (u) => distribution?.articles?.find((a) => a.id === u.article_id);
+const isNumbered = (u) => (articleOfUnit(u)?.identifier_fields ?? []).length > 0;
+
 function identifiersEditor(u) {
   if (!takesIdentifiers(u)) return '';
-  const value = draftIdentifiers.get(u.id) ?? (u.identifiers ?? []).join(', ');
+  const article = articleOfUnit(u);
+  const value = draftIdentifiers.get(u.id) ?? formatIdentifiers(article, u.identifiers, false);
+  const hint = isNumbered(u) ? ' (rangos como 0001-0010 valen)' : '';
+  const missing = u.quantity - (u.identifiers ?? []).length;
+  const assign =
+    isNumbered(u) && missing > 0
+      ? `<button type="button" class="btn btn-primary btn-small" data-assign-ids="${u.id}">Asignar ${missing === 1 ? 'el siguiente libre' : `los ${missing} siguientes libres`}</button>`
+      : '';
   return `<div class="table-actions">
-    <input type="text" size="34" data-ids-for="${u.id}" value="${escapeHtml(value)}" placeholder="${u.quantity} ${u.quantity === 1 ? 'número' : 'números'}, separados por comas" aria-label="Números de ${escapeHtml(u.article_name)}">
+    <input type="text" size="34" data-ids-for="${u.id}" value="${escapeHtml(value)}" placeholder="${u.quantity} ${u.quantity === 1 ? 'número' : 'números'}${hint}" aria-label="Números de ${escapeHtml(u.article_name)}">
     <button type="button" class="btn btn-secondary btn-small" data-save-ids="${u.id}">Guardar números</button>
+    ${assign}
   </div>`;
 }
 
 function unitRow(u) {
-  const label = [unitLabel(u, hasOptions()), u.is_extra ? 'extra' : null]
+  const label = [unitLabel(u, hasOptions(), distribution?.articles), u.is_extra ? 'extra' : null]
     .filter(Boolean)
     .join(' · ');
   if (u.picked_up_at) {
@@ -123,6 +138,10 @@ function render() {
       ? `Recogidas ${done} de ${units.length} pedidos. ${waiting === 1 ? 'Falta 1 socio' : `Faltan ${waiting} socios`} por recoger.`
       : '';
   form.hidden = !canCollect();
+  // Only offered where some article has its numbers described.
+  document.getElementById('pf-assign-field').hidden = !(distribution?.articles ?? []).some(
+    (a) => a.identifier_fields.length > 0,
+  );
   document.getElementById('pf-selected').textContent = selected.size
     ? selected.size === 1
       ? '1 pedido marcado.'
@@ -158,6 +177,24 @@ list.addEventListener('input', (event) => {
 });
 
 list.addEventListener('click', async (event) => {
+  const assign = event.target.closest('button[data-assign-ids]');
+  if (assign) {
+    const unitId = Number(assign.dataset.assignIds);
+    assign.disabled = true;
+    try {
+      const updated = await apiFetch(`${base}/units/${unitId}/identifiers/assign`, {
+        method: 'POST',
+      });
+      draftIdentifiers.delete(unitId);
+      showFeedback('Números asignados.');
+      units = units.map((u) => (u.id === unitId ? updated : u));
+      render();
+    } catch (err) {
+      assign.disabled = false;
+      fail(err);
+    }
+    return;
+  }
   const save = event.target.closest('button[data-save-ids]');
   if (save) {
     const unitId = Number(save.dataset.saveIds);
@@ -224,7 +261,11 @@ form.addEventListener('submit', async (event) => {
   try {
     await apiFetch(`${base}/pickups`, {
       method: 'POST',
-      body: JSON.stringify({ unit_ids: [...selected], picked_up_by_login: login }),
+      body: JSON.stringify({
+        unit_ids: [...selected],
+        picked_up_by_login: login,
+        assign_numbers: assignBox.checked,
+      }),
     });
     showFeedback(
       `Recogida apuntada: ${chosen.length === 1 ? '1 pedido entregado' : `${chosen.length} pedidos entregados`} a ${nameOf(login)}.`,

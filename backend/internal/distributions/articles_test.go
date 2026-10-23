@@ -406,3 +406,221 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 		t.Errorf("numbers should be off: %+v", got2.Articles[0])
 	}
 }
+
+// lotteryWithNumbers has the numbers described instead of free text: papeletas
+// 0001-0200 and décimos in series 124 to 133 and 137, with fractions 1 to 10.
+func lotteryWithNumbers() map[string]any {
+	body := lottery()
+	body["articles"] = []map[string]any{
+		{"name": "Papeleta", "price": 5, "identifier_fields": []map[string]any{{"name": "Número", "spec": "0001-0200"}}},
+		{"name": "Décimo", "price": 20, "identifier_fields": []map[string]any{
+			{"name": "Serie", "spec": "124-133, 137"}, {"name": "Fracción", "spec": "1-10"},
+		}},
+	}
+	return body
+}
+
+func newDeliveringLottery(t *testing.T, e *env, admin person, body map[string]any) distributions.Distribution {
+	t.Helper()
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	body["status"] = "open"
+	return decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+}
+
+func TestDescribedNumbersSetWhatThereIsToGiveOut(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, lotteryWithNumbers()), http.StatusCreated))
+	papeleta, decimo := d.Articles[0], d.Articles[1]
+	// There are exactly as many of each as combinations, and they have numbers.
+	if papeleta.IdentifierTotal != 200 || *papeleta.MaxTotal != 200 || !papeleta.HasIdentifiers ||
+		decimo.IdentifierTotal != 110 || *decimo.MaxTotal != 110 || len(decimo.IdentifierFields) != 2 {
+		t.Errorf("unexpected articles: %+v", d.Articles)
+	}
+	// What is written as a maximum is ignored: it is the number of items.
+	body := lotteryWithNumbers()
+	body["articles"].([]map[string]any)[0]["max_total"] = 5
+	other := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	if *other.Articles[0].MaxTotal != 200 {
+		t.Errorf("max_total should be the number of items: %+v", other.Articles[0])
+	}
+
+	for name, fields := range map[string][]map[string]any{
+		"no name":       {{"name": " ", "spec": "1-3"}},
+		"repeated name": {{"name": "A", "spec": "1-3"}, {"name": "A", "spec": "1-3"}},
+		"empty spec":    {{"name": "A", "spec": ""}},
+		"backwards":     {{"name": "A", "spec": "5-1"}},
+		"repeated":      {{"name": "A", "spec": "1-5, 3"}},
+		"separator":     {{"name": "A", "spec": "1/2"}},
+		"too many":      {{"name": "A", "spec": "1-1000"}, {"name": "B", "spec": "1-1000"}},
+	} {
+		body := lottery()
+		body["articles"] = []map[string]any{{"name": "X", "price": 1, "identifier_fields": fields}}
+		rec := e.do("POST", "/api/v1/distributions", admin.token, body)
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_numbering" {
+			t.Errorf("%s: expected 400 invalid_numbering, got %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestNextFreeNumbersAreGivenInOrder(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	a := e.newPerson(t, "2020-01-01", "member")
+	b := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	pa := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	pb := decode[distributions.Unit](t, mustStatus(t, ask(e, d, b, 0, 2), http.StatusCreated))
+	da := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 12), http.StatusCreated))
+
+	assign := func(u distributions.Unit, by person) *httptest.ResponseRecorder {
+		return e.do("POST", fmt.Sprintf("%s/%d/identifiers/assign", unitsPath(d.ID), u.ID), by.token, nil)
+	}
+	expect(t, assign(pa, a), http.StatusForbidden, "forbidden")
+	got := decode[distributions.Unit](t, mustStatus(t, assign(pa, material), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "0001,0002,0003" {
+		t.Errorf("unexpected numbers: %v", got.Identifiers)
+	}
+	got = decode[distributions.Unit](t, mustStatus(t, assign(pb, material), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "0004,0005" {
+		t.Errorf("the next ones should follow: %v", got.Identifiers)
+	}
+	// Asking again changes nothing; the first field changes slowest.
+	again := decode[distributions.Unit](t, mustStatus(t, assign(pb, material), http.StatusOK))
+	if len(again.Identifiers) != 2 {
+		t.Errorf("nothing more was needed: %v", again.Identifiers)
+	}
+	got = decode[distributions.Unit](t, mustStatus(t, assign(da, material), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "124/1,124/2,124/3,124/4,124/5,124/6,124/7,124/8,124/9,124/10,125/1,125/2" {
+		t.Errorf("unexpected numbers: %v", got.Identifiers)
+	}
+
+	// An article with no numbers described has nothing to give.
+	plain := newDeliveringLottery(t, e, admin, lottery())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, plain, a, 0, 1), http.StatusCreated))
+	expect(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers/assign", unitsPath(plain.ID), u.ID), material.token, nil), http.StatusBadRequest, "article_not_numbered")
+}
+
+func TestTypedNumbersMayBeRangesAndMustExist(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	b := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	pa := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 6), http.StatusCreated))
+	da := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 4), http.StatusCreated))
+	set := func(u distributions.Unit, numbers ...string) *httptest.ResponseRecorder {
+		return e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": numbers})
+	}
+
+	got := decode[distributions.Unit](t, mustStatus(t, set(pa, "0010-0012", "0020", "0100-0101"), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "0010,0011,0012,0020,0100,0101" {
+		t.Errorf("unexpected numbers: %v", got.Identifiers)
+	}
+	// The last field may be a range, and the gaps of its values count: 133 is
+	// followed by 137 in the series, not 134.
+	got = decode[distributions.Unit](t, mustStatus(t, set(da, "133/9-10", "137/1-2"), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "133/9,133/10,137/1,137/2" {
+		t.Errorf("unexpected numbers: %v", got.Identifiers)
+	}
+	for _, bad := range [][]string{{"0201"}, {"0000"}, {"1"}, {"124/11"}, {"134/1"}, {"124"}, {"0005-0003"}, {"abc"}} {
+		unit := pa
+		if strings.Contains(bad[0], "/") || bad[0] == "124" {
+			unit = da
+		}
+		expect(t, set(unit, bad...), http.StatusBadRequest, "invalid_identifiers")
+	}
+	// A number somebody has is taken, whoever asks.
+	pb := decode[distributions.Unit](t, mustStatus(t, ask(e, d, b, 0, 1), http.StatusCreated))
+	expect(t, set(pb, "0011"), http.StatusConflict, "identifier_taken")
+}
+
+func TestPickingUpCanGiveTheMissingNumbersOnTheWay(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	a := e.newPerson(t, "2020-01-01", "member")
+	b := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	pa := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	pb := decode[distributions.Unit](t, mustStatus(t, ask(e, d, b, 0, 2), http.StatusCreated))
+	pickups := distributionPath(d.ID) + "/pickups"
+
+	expect(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": []int64{pa.ID}, "picked_up_by_login": a.Login}), http.StatusConflict, "identifiers_missing")
+	mustStatus(t, e.do("POST", pickups, material.token, map[string]any{"unit_ids": []int64{pa.ID, pb.ID}, "picked_up_by_login": a.Login, "assign_numbers": true}), http.StatusNoContent)
+	if u := unitByID(t, e, admin, d.ID, pb.ID); strings.Join(u.Identifiers, ",") != "0004,0005" || u.PickedUpAt == nil {
+		t.Errorf("unexpected unit: %+v", u)
+	}
+}
+
+func TestNotEnoughFreeNumbers(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	body := lotteryWithNumbers()
+	body["articles"] = []map[string]any{{"name": "Papeleta", "price": 5, "identifier_fields": []map[string]any{{"name": "Número", "spec": "1-5"}}}}
+	d := newDeliveringLottery(t, e, admin, body)
+	expect(t, ask(e, d, a, 0, 6), http.StatusConflict, "article_exhausted")
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 5), http.StatusCreated))
+	// Somebody took numbers by hand that the automatic ones would have used; the
+	// ones left are fewer than needed only if the total allowed more than exists,
+	// which a described article never does — so shrink the numbers instead.
+	mustStatus(t, e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"3-4"}}), http.StatusOK)
+	got := decode[distributions.Unit](t, mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers/assign", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusOK))
+	if strings.Join(got.Identifiers, ",") != "3,4,1,2,5" {
+		t.Errorf("the free ones fill in, in order: %v", got.Identifiers)
+	}
+}
+
+func TestOverviewOfNumbersSaysWhoHasEachAndHowManyAreFree(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers/assign", unitsPath(d.ID), u.ID), material.token, nil), http.StatusOK)
+
+	path := fmt.Sprintf("%s/articles/%d/numbers", distributionPath(d.ID), d.Articles[0].ID)
+	expect(t, e.do("GET", path, a.token, nil), http.StatusForbidden, "forbidden")
+	n := decode[distributions.Numbers](t, mustStatus(t, e.do("GET", path, material.token, nil), http.StatusOK))
+	if n.Total != 200 || n.Assigned != 3 || n.Free != 197 || len(n.Items) != 200 ||
+		n.Items[0].Identifier != "0001" || deref(n.Items[0].BeneficiaryLogin) != a.Login || n.Items[3].BeneficiaryLogin != nil || n.Items[199].Identifier != "0200" {
+		t.Errorf("unexpected overview: %+v", n)
+	}
+	decimos := decode[distributions.Numbers](t, mustStatus(t, e.do("GET", fmt.Sprintf("%s/articles/%d/numbers", distributionPath(d.ID), d.Articles[1].ID), material.token, nil), http.StatusOK))
+	if decimos.Total != 110 || decimos.Items[10].Identifier != "125/1" || decimos.Items[109].Identifier != "137/10" || decimos.Items[100].Identifier != "137/1" {
+		t.Errorf("unexpected overview of the décimos: %+v", decimos.Items[100:])
+	}
+	expect(t, e.do("GET", fmt.Sprintf("%s/articles/%d/numbers", distributionPath(d.ID), d.Articles[0].ID+1000), material.token, nil), http.StatusBadRequest, "unknown_article")
+	plain := newDeliveringLottery(t, e, admin, lottery())
+	expect(t, e.do("GET", fmt.Sprintf("%s/articles/%d/numbers", distributionPath(plain.ID), plain.Articles[0].ID), material.token, nil), http.StatusBadRequest, "article_not_numbered")
+}
+
+func TestNumbersCanGrowButNotTakeAwayWhatSomebodyHas(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 2), http.StatusCreated))
+	mustStatus(t, e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"137/1-2"}}), http.StatusOK)
+
+	update := func(serie string) *httptest.ResponseRecorder {
+		body := lotteryWithNumbers()
+		body["status"] = "open"
+		body["articles"].([]map[string]any)[1]["identifier_fields"] = []map[string]any{{"name": "Serie", "spec": serie}, {"name": "Fracción", "spec": "1-10"}}
+		return e.do("PATCH", distributionPath(d.ID), admin.token, body)
+	}
+	// Another series bought: it is added, and with it what there is to give out.
+	got := decode[distributions.Distribution](t, mustStatus(t, update("124-133, 137, 140"), http.StatusOK))
+	if got.Articles[1].IdentifierTotal != 120 || *got.Articles[1].MaxTotal != 120 {
+		t.Errorf("unexpected article: %+v", got.Articles[1])
+	}
+	// One somebody has can't go; one nobody has can.
+	expect(t, update("124-133"), http.StatusConflict, "number_in_use")
+	mustStatus(t, update("124-130, 137"), http.StatusOK)
+	// And no fewer than the units asked for.
+	mustStatus(t, ask(e, got, e.newPerson(t, "2020-01-01", "member"), 1, 78), http.StatusCreated)
+	expect(t, update("137"), http.StatusConflict, "cap_below_requested")
+}

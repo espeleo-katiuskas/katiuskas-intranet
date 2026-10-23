@@ -73,9 +73,10 @@ function choicesText(choices, hasOptions = false) {
 
 // What a unit is, in a few words: "Papeleta × 7" for a row of an article,
 // otherwise what was chosen (see choicesText).
-function unitLabel(u, hasOptions = false) {
+function unitLabel(u, hasOptions = false, articles = []) {
   if (u.article_name) {
-    const numbers = u.identifiers?.length ? ` (${u.identifiers.join(', ')})` : '';
+    const article = articles.find((a) => a.id === u.article_id);
+    const numbers = u.identifiers?.length ? ` (${formatIdentifiers(article, u.identifiers)})` : '';
     return `${u.article_name} × ${u.quantity}${numbers}`;
   }
   return choicesText(u.choices, hasOptions);
@@ -104,53 +105,113 @@ function parseOptions(text) {
 // the price first (it may use a comma for decimals) and then, in any order and
 // all optional, "máximo N" (how many there are in all), "N por persona" and "con
 // números" (each unit has its own number, written down when it is handed out).
+// The numbers can be described, one indented line per part of the number with
+// the values it can take, and then every combination is an item that exists
+// (and the maximum is how many there are):
+//   Décimos: 20
+//     Serie: 124-133, 137
+//     Fracción: 1-10
 const ARTICLE_PRICE = /^(.+?)\s*:\s*(\d+(?:[.,]\d+)?)\s*€?\s*(?:,(.*))?$/;
+const NUMBERING_LINE = /^(.+?)\s*:\s*(\S.*)$/;
 
 function parseArticles(text) {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const bad = () =>
-        new Error(
-          `No entiendo la línea «${line}» de los artículos. Usa «Nombre: precio», seguido si quieres de «máximo N», «N por persona» y «con números», por ejemplo «Papeletas: 5, máximo 200, 10 por persona, con números».`,
-        );
-      const match = ARTICLE_PRICE.exec(line);
-      if (!match) throw bad();
-      const article = {
-        name: match[1].trim(),
-        price: Number(match[2].replace(',', '.')),
-        max_total: null,
-        max_per_person: null,
-        has_identifiers: false,
-      };
-      for (const part of (match[3] ?? '').split(',').map((p) => p.trim())) {
-        const max = /^m[aá]x(?:imo|\.)?\s*(\d+)$/i.exec(part);
-        const perPerson = /^(\d+)\s*por persona$/i.exec(part);
-        if (!part) continue;
-        if (max) article.max_total = Number(max[1]);
-        else if (perPerson) article.max_per_person = Number(perPerson[1]);
-        else if (/^con n[uú]meros$/i.test(part)) article.has_identifiers = true;
-        else throw bad();
-      }
-      return article;
-    });
+  const articles = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const bad = (what) =>
+      new Error(
+        `No entiendo la línea «${line}» de los artículos. ${what} Por ejemplo «Papeletas: 5, máximo 200, 10 por persona», y debajo, con sangría, «Número: 0001-0200».`,
+      );
+    // An indented line (or one starting with a dash) describes the numbers of the
+    // article above it.
+    if (/^(\s+|-\s)/.test(raw) && articles.length) {
+      const match = NUMBERING_LINE.exec(line.replace(/^-\s+/, ''));
+      if (!match) throw bad('Usa «Nombre: valores», por ejemplo «Serie: 124-133, 137».');
+      articles.at(-1).identifier_fields.push({ name: match[1].trim(), spec: match[2].trim() });
+      continue;
+    }
+    const match = ARTICLE_PRICE.exec(line);
+    if (!match)
+      throw bad(
+        'Usa «Nombre: precio», seguido si quieres de «máximo N», «N por persona» y «con números».',
+      );
+    const article = {
+      name: match[1].trim(),
+      price: Number(match[2].replace(',', '.')),
+      max_total: null,
+      max_per_person: null,
+      has_identifiers: false,
+      identifier_fields: [],
+    };
+    for (const part of (match[3] ?? '').split(',').map((p) => p.trim())) {
+      const max = /^m[aá]x(?:imo|\.)?\s*(\d+)$/i.exec(part);
+      const perPerson = /^(\d+)\s*por persona$/i.exec(part);
+      if (!part) continue;
+      if (max) article.max_total = Number(max[1]);
+      else if (perPerson) article.max_per_person = Number(perPerson[1]);
+      else if (/^con n[uú]meros$/i.test(part)) article.has_identifiers = true;
+      else throw bad('Usa «máximo N», «N por persona» o «con números» después del precio.');
+    }
+    articles.push(article);
+  }
+  return articles;
 }
 
 function articlesText(articles) {
   return (articles ?? [])
-    .map((a) =>
-      [
+    .map((a) => {
+      const numbered = (a.identifier_fields ?? []).length > 0;
+      const head = [
         `${a.name}: ${a.price}`,
-        a.max_total != null ? `máximo ${a.max_total}` : null,
+        // With the numbers described the maximum is how many there are.
+        a.max_total != null && !numbered ? `máximo ${a.max_total}` : null,
         a.max_per_person != null ? `${a.max_per_person} por persona` : null,
-        a.has_identifiers ? 'con números' : null,
+        a.has_identifiers && !numbered ? 'con números' : null,
       ]
         .filter(Boolean)
-        .join(', '),
-    )
+        .join(', ');
+      const fields = (a.identifier_fields ?? []).map((f) => `  ${f.name}: ${f.spec}`);
+      return [head, ...fields].join('\n');
+    })
     .join('\n');
+}
+
+// The numbers somebody has, as short as they can be said: consecutive ones become
+// a range ("0001-0050"), and in an article with several parts each is named
+// ("Serie 124 · Fracción 1-10"), unless named is false, which gives them in the
+// form the API takes ("124/1-10").
+function formatIdentifiers(article, identifiers, named = true) {
+  const fields = article?.identifier_fields ?? [];
+  const parts = (id) => id.split('/');
+  const runs = [];
+  for (const id of identifiers ?? []) {
+    const p = parts(id);
+    const last = p.at(-1);
+    const run = runs.at(-1);
+    const sameKind = run && run.prefix === p.slice(0, -1).join('/');
+    const consecutive =
+      sameKind &&
+      /^\d+$/.test(last) &&
+      /^\d+$/.test(run.to) &&
+      (last.length === run.to.length || (!last.startsWith('0') && !run.to.startsWith('0'))) &&
+      Number(last) === Number(run.to) + 1;
+    if (consecutive) run.to = last;
+    else runs.push({ prefix: p.slice(0, -1).join('/'), from: last, to: last });
+  }
+  return runs
+    .map((r) => {
+      const range = r.from === r.to ? r.from : `${r.from}-${r.to}`;
+      if (fields.length < 2) return range;
+      // As it can be typed back, with the parts joined by a slash.
+      if (!named) return r.prefix ? `${r.prefix}/${range}` : range;
+      const labelled = r.prefix
+        .split('/')
+        .map((v, i) => `${fields[i]?.name ?? ''} ${v}`.trim())
+        .concat(`${fields.at(-1).name} ${range}`);
+      return labelled.join(' · ');
+    })
+    .join(', ');
 }
 
 // With articles, what only fits a distribution without them is disabled in a
@@ -300,6 +361,11 @@ const errorMessages = {
   invalid_identifiers:
     'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
   identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
+  invalid_numbering:
+    'Cada parte del número necesita un nombre distinto y valores como «124-133, 137» (sin barras), con 100000 combinaciones como mucho.',
+  number_in_use: 'Ese cambio dejaría fuera un número que ya tiene alguien.',
+  not_enough_numbers: 'No quedan números libres suficientes.',
+  article_not_numbered: 'Los números de ese artículo no están descritos.',
   identifiers_missing:
     'Faltan números: antes de entregar un artículo con números hay que apuntar todos los de cada pedido.',
   cap_below_requested: 'El límite de un artículo no puede ser menor que lo que ya se ha pedido.',
@@ -347,6 +413,7 @@ export {
   unitCost,
   unitLabel,
   parseArticles,
+  formatIdentifiers,
   syncArticleFields,
   audienceLabels,
   statusBadge,
