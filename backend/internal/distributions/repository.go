@@ -46,6 +46,8 @@ var (
 	ErrPersonLimit = errors.New("this is more than one person may have of this article")
 	// ErrIdentifierTaken means another unit of the article already has that number.
 	ErrIdentifierTaken = errors.New("another unit of this article already has that number")
+	// ErrBelowPaid means a quantity can't go below what has already been paid.
+	ErrBelowPaid = errors.New("the quantity can't be lower than what has already been paid")
 	// ErrUnknownUser means a given user id doesn't exist.
 	ErrUnknownUser = errors.New("unknown user")
 )
@@ -557,7 +559,7 @@ const unitSelect = `
 	       n.registered_by_id, rb.login, n.registered_at, n.is_extra, n.article_id, ar.name, n.quantity,
 	       n.choices, n.price::float8,
 	       COALESCE((SELECT array_agg(i.identifier ORDER BY i.id) FROM distribution_unit_identifiers i WHERE i.unit_id = n.id), '{}'),
-	       n.paid_at, pm.login, n.picked_up_at, pr.login, pu.login
+	       n.paid_quantity, n.paid_at, pm.login, n.picked_up_at, pr.login, pu.login
 	FROM distribution_units n
 	LEFT JOIN distribution_articles ar ON ar.id = n.article_id
 	JOIN users b ON b.id = n.beneficiary_id
@@ -570,7 +572,7 @@ func scanUnit(row pgx.Row, u *Unit) error {
 	return row.Scan(&u.ID, &u.DistributionID, &u.BeneficiaryID, &u.BeneficiaryLogin, &u.BeneficiaryName,
 		&u.RegisteredByID, &u.RegisteredByLogin, &u.RegisteredAt, &u.IsExtra, &u.ArticleID, &u.ArticleName,
 		&u.Quantity, &u.Choices, &u.Price, &u.Identifiers,
-		&u.PaidAt, &u.PaidMarkedByLogin, &u.PickedUpAt, &u.PickupRecordedByLogin, &u.PickedUpByLogin)
+		&u.PaidQuantity, &u.PaidAt, &u.PaidMarkedByLogin, &u.PickedUpAt, &u.PickupRecordedByLogin, &u.PickedUpByLogin)
 }
 
 // CreateUnit enters one unit, taking its price from the distribution as it is
@@ -671,20 +673,22 @@ func (r *Repository) CreateUnit(ctx context.Context, in RegisterInput) (Unit, er
 // person: not more than the article's per-person cap, nor than are left of it in
 // all (nil limits are no limit), with the article's row (and so the
 // distribution's, which its caller has locked) fixed for the rest of the
-// transaction. except is a unit whose own quantity doesn't count, because it is
-// the one being changed.
-func checkQuantity(ctx context.Context, tx pgx.Tx, articleID, except int64, quantity int) error {
+// transaction. quantity is what the unit being entered or changed will stand for
+// (except, 0 for a new one, is that unit, whose present quantity doesn't count),
+// and a person's cap counts every row they have of the article.
+func checkQuantity(ctx context.Context, tx pgx.Tx, articleID, except, beneficiaryID int64, quantity int) error {
 	var maxTotal, perPerson *int
-	var requested int
+	var requested, theirs int
 	err := tx.QueryRow(ctx, `
 		SELECT a.max_total, a.max_per_person,
-		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id AND n.id <> $2)
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id AND n.id <> $2),
+		       (SELECT COALESCE(sum(n.quantity), 0) FROM distribution_units n WHERE n.article_id = a.id AND n.id <> $2 AND n.beneficiary_id = $3)
 		FROM distribution_articles a WHERE a.id = $1
-	`, articleID, except).Scan(&maxTotal, &perPerson, &requested)
+	`, articleID, except, beneficiaryID).Scan(&maxTotal, &perPerson, &requested, &theirs)
 	if err != nil {
 		return err
 	}
-	if perPerson != nil && quantity > *perPerson {
+	if perPerson != nil && theirs+quantity > *perPerson {
 		return fmt.Errorf("%w: %d at most", ErrPersonLimit, *perPerson)
 	}
 	if maxTotal != nil && quantity > *maxTotal-requested {
@@ -722,7 +726,32 @@ func (r *Repository) CreateArticleUnit(ctx context.Context, in RegisterInput) (U
 	if err != nil {
 		return Unit{}, err
 	}
-	if err := checkQuantity(ctx, tx, *in.ArticleID, 0, in.Quantity); err != nil {
+	// Asking again for something already asked for adds to the row that is still
+	// to be collected, if there is one — whatever is paid in it stays as it was,
+	// so what is added is to pay — and otherwise makes a new row.
+	var rowID int64
+	var rowQuantity int
+	err = tx.QueryRow(ctx, `
+		SELECT id, quantity FROM distribution_units
+		WHERE article_id = $1 AND beneficiary_id = $2 AND picked_up_at IS NULL
+		ORDER BY id LIMIT 1 FOR UPDATE
+	`, *in.ArticleID, in.BeneficiaryID).Scan(&rowID, &rowQuantity)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Unit{}, err
+	}
+	if err == nil {
+		if err := checkQuantity(ctx, tx, *in.ArticleID, rowID, in.BeneficiaryID, rowQuantity+in.Quantity); err != nil {
+			return Unit{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE distribution_units SET quantity = quantity + $2 WHERE id = $1`, rowID, in.Quantity); err != nil {
+			return Unit{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return Unit{}, err
+		}
+		return r.GetUnit(ctx, in.DistributionID, rowID)
+	}
+	if err := checkQuantity(ctx, tx, *in.ArticleID, 0, in.BeneficiaryID, in.Quantity); err != nil {
 		return Unit{}, err
 	}
 
@@ -735,8 +764,6 @@ func (r *Repository) CreateArticleUnit(ctx context.Context, in RegisterInput) (U
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case uniqueViolationCode:
-			return Unit{}, ErrAlreadyRegistered
 		case foreignKeyViolationCode:
 			return Unit{}, ErrUnknownUser
 		}
@@ -768,7 +795,13 @@ func (r *Repository) UpdateQuantity(ctx context.Context, distributionID, id int6
 		return Unit{}, err
 	}
 	var articleID *int64
-	err = tx.QueryRow(ctx, `SELECT article_id FROM distribution_units WHERE id = $1 AND distribution_id = $2`, id, distributionID).Scan(&articleID)
+	var beneficiaryID int64
+	var paid, numbered int
+	err = tx.QueryRow(ctx, `
+		SELECT article_id, beneficiary_id, paid_quantity,
+		       (SELECT count(*) FROM distribution_unit_identifiers i WHERE i.unit_id = distribution_units.id)
+		FROM distribution_units WHERE id = $1 AND distribution_id = $2
+	`, id, distributionID).Scan(&articleID, &beneficiaryID, &paid, &numbered)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Unit{}, ErrUnitNotFound
 	}
@@ -778,7 +811,14 @@ func (r *Repository) UpdateQuantity(ctx context.Context, distributionID, id int6
 	if articleID == nil {
 		return Unit{}, ErrInvalidQuantity
 	}
-	if err := checkQuantity(ctx, tx, *articleID, id, quantity); err != nil {
+	// Not below what is paid, nor below the numbers already written down.
+	if quantity < paid {
+		return Unit{}, ErrBelowPaid
+	}
+	if quantity < numbered {
+		return Unit{}, ErrInvalidQuantity
+	}
+	if err := checkQuantity(ctx, tx, *articleID, id, beneficiaryID, quantity); err != nil {
 		return Unit{}, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE distribution_units SET quantity = $3 WHERE id = $1 AND distribution_id = $2`, id, distributionID, quantity); err != nil {
@@ -924,24 +964,81 @@ func (r *Repository) ClearPickup(ctx context.Context, distributionID, id int64) 
 	return nil
 }
 
-// MarkPaid records that the given units were paid, and by whom it was noted.
-func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, ids []int64, markedByID int64) error {
-	return r.markUnits(ctx, distributionID, ids, "paid_at",
-		"paid_at = now(), paid_marked_by_id = $3", ErrAlreadyPaid, markedByID)
+// MarkPaid adds the given payments to their rows, all or nothing, and says
+// how many units were marked in all. A payment is some units of a row (all that
+// are pending when its Quantity is 0); marking more than are pending, or
+// something already fully paid, is ErrAlreadyPaid. paid_at and who marked it
+// become those of this payment.
+func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID int64) (int, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	marked := 0
+	for _, p := range payments {
+		var quantity, paid int
+		err := tx.QueryRow(ctx, `
+			SELECT quantity, paid_quantity FROM distribution_units
+			WHERE id = $1 AND distribution_id = $2 FOR UPDATE
+		`, p.UnitID, distributionID).Scan(&quantity, &paid)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrUnitNotFound
+		}
+		if err != nil {
+			return 0, err
+		}
+		pending := quantity - paid
+		n := p.Quantity
+		if n == 0 {
+			n = pending
+		}
+		if n < 1 || n > pending {
+			return 0, ErrAlreadyPaid
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE distribution_units SET paid_quantity = paid_quantity + $2, paid_at = now(), paid_marked_by_id = $3 WHERE id = $1
+		`, p.UnitID, n, markedByID); err != nil {
+			return 0, err
+		}
+		marked += n
+	}
+	return marked, tx.Commit(ctx)
 }
 
-func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE distribution_units SET paid_at = NULL, paid_marked_by_id = NULL
-		WHERE id = $1 AND distribution_id = $2
-	`, id, distributionID)
+// ClearPaid takes quantity units off what is paid in a row (all of it when 0).
+// Taking off more than is paid is ErrInvalidQuantity.
+func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var paid int
+	err = tx.QueryRow(ctx, `SELECT paid_quantity FROM distribution_units WHERE id = $1 AND distribution_id = $2 FOR UPDATE`, id, distributionID).Scan(&paid)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrUnitNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if quantity == 0 {
+		quantity = paid
+	}
+	if quantity < 0 || quantity > paid {
+		return ErrInvalidQuantity
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE distribution_units SET paid_quantity = paid_quantity - $2,
+			paid_at = CASE WHEN paid_quantity - $2 = 0 THEN NULL ELSE paid_at END,
+			paid_marked_by_id = CASE WHEN paid_quantity - $2 = 0 THEN NULL ELSE paid_marked_by_id END
+		WHERE id = $1
+	`, id, quantity); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // Order sums up what has been asked for, by combination of choices. Units

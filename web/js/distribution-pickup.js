@@ -4,7 +4,8 @@ import {
   apiErrorText,
   formatIdentifiers,
   isUnchosen,
-  unitCost,
+  pendingCost,
+  pendingQuantity,
   unitLabel,
   loadPeople,
   resolvePickerId,
@@ -100,7 +101,7 @@ function unitRow(u) {
 function paymentText(group) {
   const toPay = group.filter((u) => u.price > 0);
   if (toPay.length === 0) return 'Gratis';
-  const owed = toPay.filter((u) => !u.paid_at).reduce((sum, u) => sum + unitCost(u), 0);
+  const owed = toPay.reduce((sum, u) => sum + pendingCost(u), 0);
   return owed > 0 ? `Pendiente: ${formatCurrency(owed)}` : 'Pagado';
 }
 
@@ -244,7 +245,7 @@ form.addEventListener('submit', async (event) => {
   }
   const chosen = units.filter((u) => selected.has(u.id));
   if (
-    chosen.some((u) => u.price > 0 && !u.paid_at) &&
+    chosen.some((u) => u.price > 0 && pendingQuantity(u) > 0) &&
     !confirm('Hay pedidos que todavía no están pagados. ¿Apuntar la recogida igualmente?')
   ) {
     return;

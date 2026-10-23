@@ -40,6 +40,16 @@ function unitCost(u) {
   return u.price * (u.quantity ?? 1);
 }
 
+// How many units of a row are still to be paid (a row can be paid in part), and
+// what they cost.
+function pendingQuantity(u) {
+  return (u.quantity ?? 1) - (u.paid_quantity ?? 0);
+}
+
+function pendingCost(u) {
+  return u.price * pendingQuantity(u);
+}
+
 // A distribution for all members with no options to choose and no extras has
 // nothing for members to do.
 function nothingToAsk(d) {
@@ -339,7 +349,8 @@ const errorMessages = {
   unit_locked: 'Este pedido ya está pagado o recogido y no se puede cambiar.',
   not_deliverable: 'No se puede entregar con el reparto en borrador.',
   already_picked_up: 'Alguno de los pedidos ya estaba recogido.',
-  already_paid: 'Alguno de los pedidos ya estaba pagado.',
+  already_paid:
+    'Alguno de los pedidos ya estaba pagado, o se marcan más unidades de las que quedan por pagar.',
   has_units:
     'Ya hay pedidos (desde que se abre el reparto): no se pueden cambiar las opciones ni los artículos, salvo el límite de cada uno.',
   has_settled_units: 'Hay pedidos ya pagados o recogidos: quita primero esas marcas.',
@@ -361,6 +372,8 @@ const errorMessages = {
   invalid_identifiers:
     'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
   identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
+  quantity_below_paid:
+    'No se puede pedir menos de lo que ya está pagado: quita antes la marca de pagado.',
   invalid_numbering:
     'Cada parte del número necesita un nombre distinto y valores como «124-133, 137» (sin barras), con 100000 combinaciones como mucho.',
   number_in_use: 'Ese cambio dejaría fuera un número que ya tiene alguien.',
@@ -411,6 +424,8 @@ export {
   hasArticles,
   articleLeft,
   unitCost,
+  pendingQuantity,
+  pendingCost,
   unitLabel,
   parseArticles,
   formatIdentifiers,

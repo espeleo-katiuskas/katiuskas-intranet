@@ -393,7 +393,7 @@ func (s *Service) checkEditable(d Distribution, u Unit, staff bool) error {
 	if err := s.checkOpen(d, staff); err != nil {
 		return err
 	}
-	if u.PickedUpAt != nil || (u.PaidAt != nil && !staff) {
+	if u.PickedUpAt != nil || (u.PaidQuantity > 0 && !staff) {
 		return ErrUnitLocked
 	}
 	return nil
@@ -559,18 +559,26 @@ func (s *Service) ClearPickup(ctx context.Context, distributionID, id int64) err
 	return s.repo.ClearPickup(ctx, distributionID, id)
 }
 
-func (s *Service) MarkPaid(ctx context.Context, distributionID int64, ids []int64, markedByID int64) error {
-	if len(ids) == 0 {
-		return ErrNoUnits
+// MarkPaid marks the payments, which may be of part of a row; see
+// Repository.MarkPaid. It says how many units were marked.
+func (s *Service) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID int64) (int, error) {
+	if len(payments) == 0 {
+		return 0, ErrNoUnits
+	}
+	for _, p := range payments {
+		if p.Quantity < 0 || p.Quantity > maxQuantity {
+			return 0, ErrInvalidQuantity
+		}
 	}
 	if _, err := s.repo.Get(ctx, distributionID); err != nil {
-		return err
+		return 0, err
 	}
-	return s.repo.MarkPaid(ctx, distributionID, ids, markedByID)
+	return s.repo.MarkPaid(ctx, distributionID, payments, markedByID)
 }
 
-func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64) error {
-	return s.repo.ClearPaid(ctx, distributionID, id)
+// ClearPaid takes quantity units off what is paid in a row (all when 0).
+func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quantity int) error {
+	return s.repo.ClearPaid(ctx, distributionID, id, quantity)
 }
 
 func (s *Service) Order(ctx context.Context, distributionID int64) (Order, error) {

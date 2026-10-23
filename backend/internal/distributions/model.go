@@ -157,15 +157,19 @@ type Unit struct {
 	ArticleName       *string   `json:"article_name,omitempty"`
 	// Identifiers are the numbers of the items handed out, for a row of an
 	// article that has them.
-	Identifiers           []string          `json:"identifiers,omitempty"`
-	Quantity              int               `json:"quantity"`
-	Choices               map[string]string `json:"choices"`
-	Price                 float64           `json:"price"`
-	PaidAt                *time.Time        `json:"paid_at,omitempty"`
-	PaidMarkedByLogin     *string           `json:"paid_marked_by_login,omitempty"`
-	PickedUpAt            *time.Time        `json:"picked_up_at,omitempty"`
-	PickupRecordedByLogin *string           `json:"pickup_recorded_by_login,omitempty"`
-	PickedUpByLogin       *string           `json:"picked_up_by_login,omitempty"`
+	Identifiers []string          `json:"identifiers,omitempty"`
+	Quantity    int               `json:"quantity"`
+	Choices     map[string]string `json:"choices"`
+	Price       float64           `json:"price"`
+	// PaidQuantity is how many of the unit's Quantity have been paid (a row of
+	// units can be paid in part); PaidAt and PaidMarkedByLogin are when and by
+	// whom the last payment was marked, and are there when something is paid.
+	PaidQuantity          int        `json:"paid_quantity"`
+	PaidAt                *time.Time `json:"paid_at,omitempty"`
+	PaidMarkedByLogin     *string    `json:"paid_marked_by_login,omitempty"`
+	PickedUpAt            *time.Time `json:"picked_up_at,omitempty"`
+	PickupRecordedByLogin *string    `json:"pickup_recorded_by_login,omitempty"`
+	PickedUpByLogin       *string    `json:"picked_up_by_login,omitempty"`
 }
 
 // Person is somebody a distribution can be asked for or collected by, as the
@@ -295,4 +299,11 @@ type Numbers struct {
 	Assigned  int               `json:"assigned"`
 	Free      int               `json:"free"`
 	Items     []NumberItem      `json:"items"`
+}
+
+// Payment is some units of a row marked as paid: Quantity of them, or all that
+// are still to be paid when it is 0.
+type Payment struct {
+	UnitID   int64
+	Quantity int
 }

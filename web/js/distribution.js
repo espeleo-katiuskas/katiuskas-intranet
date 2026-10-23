@@ -358,7 +358,7 @@ function renderOrderForm() {
         : 'Ya no se admiten pedidos.';
   } else {
     status.textContent = hasArticles(distribution)
-      ? 'Pon cuántas quieres de cada artículo (0 si no quieres), para ti o para otro socio. Para cambiar lo que ya has pedido, usa «Tus pedidos».'
+      ? 'Pon cuántas quieres de cada artículo (0 si no quieres), para ti o para otro socio. Si ya has pedido, lo que pidas ahora se suma a tu pedido (y puedes cambiarlo en «Tus pedidos»).'
       : distribution.audience === 'signup'
         ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
         : allMembersHint();
@@ -469,7 +469,7 @@ function mineOnly(all) {
 
 function canChange(u) {
   if (u.picked_up_at) return false;
-  if (u.paid_at && !isStaff) return false;
+  if (u.paid_quantity > 0 && !isStaff) return false;
   return canOrderNow();
 }
 

@@ -906,12 +906,16 @@ salvo pedir unidades y editar las propias).
   unidades hay para repartir entre todos (se pueden quedar sin repartir, pero no se reparte
   más de lo que hay; sin `max_total` no hay tope). No hay límite por socio. Un reparto con
   artículos es siempre `signup` y no tiene `price`, extras ni opciones propios (400
-  `articles_conflict`); sin artículos todo funciona como antes. Cada persona tiene una sola
-  fila por artículo, con `quantity` (la unidad sigue siendo una fila, pero esta fila vale
+  `articles_conflict`); sin artículos todo funciona como antes. Cada persona tiene una fila por
+  artículo (o más: ver abajo), con `quantity` (la unidad sigue siendo una fila, pero esta fila vale
   tantas unidades como `quantity`; `price` es lo que costaba UNA, así que la fila cuesta
   `price × quantity`; sin artículos `quantity` es siempre 1), de modo que no hay que marcar
   200 papeletas una a una como pagadas o recogidas. Se pide con `POST …/units` y
-  `article_id` + `quantity` (otra vez el mismo artículo, 409 `already_registered`), se cambia
+  `article_id` + `quantity`, las veces que haga falta: volver a pedir el mismo artículo se suma
+  a la fila de esa persona que aún no se ha recogido (lo que tuviera pagado se queda como
+  estaba, así que lo añadido está sin pagar) o, si todas están recogidas, hace una nueva
+  (`CreateArticleUnit`; ya no hay índice único por persona y artículo, migración `00027`).
+  `max_per_person` cuenta todas las filas de la persona. Se cambia
   con `PATCH …/units/{id}` y `quantity` (con las mismas reglas de estado que cualquier
   unidad) y se quita con `DELETE`. El tope es el total de todos: `CreateArticleUnit` y
   `UpdateQuantity` bloquean la fila del reparto mientras cuentan lo que queda, y pasarse da
@@ -1011,9 +1015,16 @@ salvo pedir unidades y editar las propias).
   dice para quién son finalmente. Cambiar o quitar una unidad lo puede hacer para quien
   es, quien la apuntó y admin/board, con las mismas reglas de estado; una unidad recogida
   ya no se toca, y una pagada solo la toca admin/board (409 `unit_locked`).
-- **Pagado**: una marca por unidad (`paid_at` y quién la puso), que solo ponen y quitan
-  admin y board (`POST /distributions/{id}/payments`, en lote). No hay enlace con
-  Contabilidad.
+- **Pagado**: una fila se puede pagar en parte. `paid_quantity` (de 0 a `quantity`, migración
+  `00027`) dice cuántas unidades están pagadas; `paid_at` y quién lo marcó son los del último
+  pago y están exactamente cuando hay algo pagado. Solo lo ponen y quitan admin y board:
+  `POST /distributions/{id}/payments` suma pagos, en lote y todo o nada, con `payments`
+  (`unit_id` y `quantity` unidades, o todas las pendientes si falta) y `unit_ids` (todo lo
+  pendiente de esas filas); pasarse de lo pendiente da 409 `already_paid`. `DELETE
+  …/units/{id}/payment[?quantity=N]` quita N unidades pagadas, o todas. Pedir más de algo ya
+  pagado no hace pagado lo añadido, y no se puede bajar `quantity` por debajo de lo pagado (409
+  `quantity_below_paid`). Una fila con algo pagado cuenta como pagada para los bloqueos de más
+  arriba (solo la cambia admin/board). No hay enlace con Contabilidad.
 - **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto
   fuera de `draft` y solo admin, board o material. Guarda tres cosas: cuándo, quién lo apuntó
   (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del

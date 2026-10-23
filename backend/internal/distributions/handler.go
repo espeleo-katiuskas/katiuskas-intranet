@@ -118,6 +118,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrNotDeliverable, http.StatusConflict, "not_deliverable"},
 		{ErrAlreadyPickedUp, http.StatusConflict, "already_picked_up"},
 		{ErrAlreadyPaid, http.StatusConflict, "already_paid"},
+		{ErrBelowPaid, http.StatusConflict, "quantity_below_paid"},
 		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},
 	}
 	for _, k := range known {
@@ -671,8 +672,14 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Whole rows (what is still to pay of each) by unit_ids, or part of a row by
+	// payments; both may come together.
 	var body struct {
-		UnitIDs []int64 `json:"unit_ids"`
+		UnitIDs  []int64 `json:"unit_ids"`
+		Payments []struct {
+			UnitID   int64 `json:"unit_id"`
+			Quantity int   `json:"quantity"`
+		} `json:"payments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -683,13 +690,21 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not fetch distribution")
 		return
 	}
+	var payments []Payment
+	for _, unitID := range body.UnitIDs {
+		payments = append(payments, Payment{UnitID: unitID})
+	}
+	for _, p := range body.Payments {
+		payments = append(payments, Payment{UnitID: p.UnitID, Quantity: p.Quantity})
+	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.MarkPaid(r.Context(), id, body.UnitIDs, current.ID); err != nil {
+	marked, err := h.service.MarkPaid(r.Context(), id, payments, current.ID)
+	if err != nil {
 		writeError(w, err, "could not mark as paid")
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("💶 %s ha marcado como pagadas %d unidades de «%s».",
-		h.actorLogin(r.Context()), len(body.UnitIDs), d.Name))
+		h.actorLogin(r.Context()), marked, d.Name))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
@@ -698,7 +713,17 @@ func (h *Handler) clearPaid(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID); err != nil {
+	// ?quantity=N takes only N units off what is paid; without it, all of it.
+	quantity := 0
+	if q := r.URL.Query().Get("quantity"); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n < 1 {
+			writeError(w, ErrInvalidQuantity, "")
+			return
+		}
+		quantity = n
+	}
+	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity); err != nil {
 		writeError(w, err, "could not undo the payment")
 		return
 	}

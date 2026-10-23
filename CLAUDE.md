@@ -463,9 +463,18 @@ and, unless admin/board, whoever enters it have to be eligible (`ErrNotEligible`
 extra belongs to whoever it is entered for, with no notion of who ends up with the item.
 Changing/removing a unit is for its beneficiary, whoever entered it and admin/board, under
 the same rules; a collected unit is final and a paid one only changes through admin/board
-(`ErrUnitLocked`). Paid is one mark per unit (`paid_at`, `paid_marked_by_id`), set and
-cleared by admin/board only (`POST .../payments`, batch, all-or-nothing via
-`Repository.markUnits`); there's no link to accounting. Collection (`POST .../pickups`,
+(`ErrUnitLocked`). Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
+`quantity` are paid, with `paid_at`/`paid_marked_by_id` as when and by whom the last payment was
+marked, set exactly when something is paid (`CHECK`s). Admin/board only: `POST .../payments`
+adds payments, all-or-nothing (`Repository.MarkPaid`: `payments` of `quantity` units of a row,
+all that is pending when 0, plus `unit_ids` for whole rows; more than pending is
+`ErrAlreadyPaid`), `DELETE .../units/{id}/payment[?quantity=N]` takes units off
+(`ClearPaid`). Asking for more of something paid leaves the added units unpaid, and
+`UpdateQuantity` refuses to go below what is paid (`ErrBelowPaid`); a row with anything paid
+is "paid" for `checkEditable`. Pickups still mark a whole row. There's no link to accounting.
+Asking again for an article (`CreateArticleUnit`) adds to the person's row of it that isn't
+collected yet, else makes a new row — the per-person unique index is gone, and
+`max_per_person` (`checkQuantity`) counts all their rows. Collection (`POST .../pickups`,
 batch, admin/board/material, only once it is not a draft) records three things per unit —
 `picked_up_at`, `pickup_recorded_by_id` (the caller) and `picked_up_by_id` (whom it was
 handed to: not necessarily the beneficiary, as when somebody collects for others, but a
@@ -1420,7 +1429,8 @@ for anybody else, so each script reaches those through a null-safe lookup (a bar
 `getElementById(...).addEventListener` on one of them would throw before the rest of the
 page ran). `/reparto-pedido` (`requireAnyRole` admin/board/material) shows `GET .../order`
 and the units grouped by person (an unchosen one shows as "Sin elegir", and the totals
-line counts them), with "Marcar pagado" per person for admin/board; `/reparto-recogida`
+line counts them), with, for admin/board, payment controls per row (how many units, "Marcar pagadas" / "Quitar
+pagadas") and "Marcar todo pagado" per person; `/reparto-recogida`
 lists who is still to collect, with a checkbox per unit once the status is not `draft`,
 an "Entregado a" picker (suggesting the beneficiary when all the marked units are for the
 same one) and "Deshacer" per collected unit, confirming before handing over unpaid units.

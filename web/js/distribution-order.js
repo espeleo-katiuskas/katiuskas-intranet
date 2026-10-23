@@ -15,6 +15,8 @@ import {
   choicesText,
   hasArticles,
   loadPeople,
+  pendingCost,
+  pendingQuantity,
   statusBadge,
   unitCost,
   unitLabel,
@@ -104,6 +106,36 @@ function groupByPerson(all) {
   return [...groups.entries()];
 }
 
+// Whether the row has something to pay at all, and what is shown of it.
+const costs = (u) => u.price > 0;
+
+function paymentStatus(u) {
+  if (!costs(u)) return '';
+  const total = u.quantity ?? 1;
+  if (u.paid_quantity === 0) return 'sin pagar';
+  if (u.paid_quantity === total) return 'pagado';
+  return `pagadas ${u.paid_quantity} de ${total}`;
+}
+
+// A row's own payment controls (admin/board): how many units, and mark them as
+// paid or take them off. A row of one unit has nothing to count.
+function paymentControls(u) {
+  if (!canMarkPaid || !costs(u)) return '';
+  const total = u.quantity ?? 1;
+  const pending = pendingQuantity(u);
+  const count =
+    total > 1
+      ? `<input type="number" min="1" max="${total}" step="1" size="4" value="${pending || u.paid_quantity}" data-qty-for="${u.id}" aria-label="Unidades de ${escapeHtml(unitLabel(u, false, distribution?.articles))}">`
+      : '';
+  const mark = pending
+    ? `<button type="button" class="btn btn-primary btn-small" data-pay-unit="${u.id}">Marcar ${total > 1 ? 'pagadas' : 'pagado'}</button>`
+    : '';
+  const undo = u.paid_quantity
+    ? `<button type="button" class="btn btn-secondary btn-small" data-unpay-unit="${u.id}">Quitar ${total > 1 ? 'pagadas' : 'pagado'}</button>`
+    : '';
+  return `<div class="table-actions">${count}${mark}${undo}</div>`;
+}
+
 function unitLine(u) {
   const parts = [unitLabel(u, hasOptions(), distribution?.articles)];
   if (u.is_extra) parts.push('extra');
@@ -114,23 +146,34 @@ function unitLine(u) {
       `apuntado por ${people.names[u.registered_by_login] ?? u.registered_by_login} el ${formatDate(u.registered_at)}`,
     );
   }
-  return `<li>${escapeHtml(parts.join(' · '))}</li>`;
+  const status = paymentStatus(u);
+  if (status) parts.push(status);
+  return `<li>${escapeHtml(parts.join(' · '))}${paymentControls(u)}</li>`;
 }
 
+// What the person has paid of what they owe, and the controls for all of it at
+// once (each row has its own too).
 function paymentCell(login, list) {
-  const toPay = list.filter((u) => u.price > 0);
+  const toPay = list.filter(costs);
   if (toPay.length === 0) return 'Gratis';
-  const unpaid = toPay.filter((u) => !u.paid_at);
-  const owed = unpaid.reduce((sum, u) => sum + unitCost(u), 0);
-  if (!canMarkPaid) return unpaid.length ? `Pendiente: ${formatCurrency(owed)}` : 'Pagado';
-  const mark = unpaid.length
-    ? `<button type="button" class="btn btn-primary btn-small" data-pay-person="${escapeHtml(login)}">Marcar pagado (${formatCurrency(owed)})</button>`
-    : '';
-  const undo =
-    unpaid.length < toPay.length
-      ? `<button type="button" class="btn btn-secondary btn-small" data-unpay-person="${escapeHtml(login)}">${unpaid.length ? 'Quitar lo pagado' : 'Pagado · deshacer'}</button>`
+  const owed = toPay.reduce((sum, u) => sum + pendingCost(u), 0);
+  const total = toPay.reduce((sum, u) => sum + unitCost(u), 0);
+  const summary =
+    owed === 0
+      ? 'Pagado'
+      : owed === total
+        ? `Pendiente: ${formatCurrency(owed)}`
+        : `Pagado ${formatCurrency(total - owed)} · pendiente ${formatCurrency(owed)}`;
+  if (!canMarkPaid) return summary;
+  const mark =
+    owed > 0
+      ? `<button type="button" class="btn btn-primary btn-small" data-pay-person="${escapeHtml(login)}">Marcar todo pagado (${formatCurrency(owed)})</button>`
       : '';
-  return `<div class="table-actions">${mark}${undo}</div>`;
+  const undo =
+    owed < total
+      ? `<button type="button" class="btn btn-secondary btn-small" data-unpay-person="${escapeHtml(login)}">Quitar todo lo pagado</button>`
+      : '';
+  return `<div>${escapeHtml(summary)}</div><div class="table-actions">${mark}${undo}</div>`;
 }
 
 function renderPeople() {
@@ -151,30 +194,61 @@ function renderPeople() {
 }
 
 document.getElementById('people-list').addEventListener('click', async (event) => {
+  const payUnit = event.target.closest('button[data-pay-unit]');
+  const unpayUnit = event.target.closest('button[data-unpay-unit]');
   const pay = event.target.closest('button[data-pay-person]');
   const unpay = event.target.closest('button[data-unpay-person]');
-  const button = pay ?? unpay;
+  const button = payUnit ?? unpayUnit ?? pay ?? unpay;
   if (!button) return;
-  const login = (pay ?? unpay).dataset.payPerson ?? button.dataset.unpayPerson;
-  const mine = units.filter((u) => u.beneficiary_login === login && u.price > 0);
   button.disabled = true;
   try {
-    if (pay) {
-      const ids = mine.filter((u) => !u.paid_at).map((u) => u.id);
-      await apiFetch(`${base}/payments`, {
-        method: 'POST',
-        body: JSON.stringify({ unit_ids: ids }),
-      });
-      showFeedback('Marcado como pagado.');
-    } else {
-      if (!confirm('¿Quitar la marca de pagado de los pedidos de esta persona?')) {
+    if (payUnit || unpayUnit) {
+      // Some units of one row: as many as the number typed next to it.
+      const unitId = Number((payUnit ?? unpayUnit).dataset.payUnit ?? button.dataset.unpayUnit);
+      const row = units.find((u) => u.id === unitId);
+      const field = document.querySelector(`input[data-qty-for="${unitId}"]`);
+      const quantity = field ? Number(field.value) : (row.quantity ?? 1);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        showError('Pon cuántas unidades (un número entero de 1 en adelante).');
         button.disabled = false;
         return;
       }
-      for (const u of mine.filter((x) => x.paid_at)) {
-        await apiFetch(`${base}/units/${u.id}/payment`, { method: 'DELETE' });
+      if (payUnit) {
+        await apiFetch(`${base}/payments`, {
+          method: 'POST',
+          body: JSON.stringify({ payments: [{ unit_id: unitId, quantity }] }),
+        });
+        showFeedback(
+          quantity === 1
+            ? 'Marcada 1 unidad como pagada.'
+            : `Marcadas ${quantity} unidades como pagadas.`,
+        );
+      } else {
+        await apiFetch(`${base}/units/${unitId}/payment?quantity=${quantity}`, {
+          method: 'DELETE',
+        });
+        showFeedback('Marca de pagado quitada.');
       }
-      showFeedback('Marca de pagado quitada.');
+    } else {
+      const login = (pay ?? unpay).dataset.payPerson ?? button.dataset.unpayPerson;
+      const mine = units.filter((u) => u.beneficiary_login === login && costs(u));
+      if (pay) {
+        const ids = mine.filter((u) => pendingQuantity(u) > 0).map((u) => u.id);
+        await apiFetch(`${base}/payments`, {
+          method: 'POST',
+          body: JSON.stringify({ unit_ids: ids }),
+        });
+        showFeedback('Marcado como pagado.');
+      } else {
+        if (!confirm('¿Quitar la marca de pagado de los pedidos de esta persona?')) {
+          button.disabled = false;
+          return;
+        }
+        for (const u of mine.filter((x) => x.paid_quantity > 0)) {
+          await apiFetch(`${base}/units/${u.id}/payment`, { method: 'DELETE' });
+        }
+        showFeedback('Marca de pagado quitada.');
+      }
     }
     await load();
   } catch (err) {

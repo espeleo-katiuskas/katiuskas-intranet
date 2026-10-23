@@ -102,17 +102,19 @@ func TestAskingForSeveralOfEachArticleCostsQuantityTimesPrice(t *testing.T) {
 	mustStatus(t, ask(e, d, member, 1, 3), http.StatusCreated)
 	mustStatus(t, register(e, d.ID, member, map[string]any{"beneficiary_login": friend.Login, "article_id": d.Articles[1].ID, "quantity": 1}), http.StatusCreated)
 
-	// A second row for the same article is a change of quantity, not another ask.
-	expect(t, ask(e, d, member, 0, 1), http.StatusConflict, "already_registered")
+	// Asking again adds to what was asked for: no need to edit it.
+	if again := decode[distributions.Unit](t, mustStatus(t, ask(e, d, member, 0, 1), http.StatusCreated)); again.ID != papeletas.ID || again.Quantity != 8 {
+		t.Errorf("asking again should add to the same row: %+v", again)
+	}
 
 	got := decode[distributions.Distribution](t, mustStatus(t, e.do("GET", distributionPath(d.ID), member.token, nil), http.StatusOK))
-	if got.Articles[0].Requested != 7 || got.Articles[1].Requested != 4 || got.UnitCount != 11 {
+	if got.Articles[0].Requested != 8 || got.Articles[1].Requested != 4 || got.UnitCount != 12 {
 		t.Errorf("unexpected totals: %+v, %d units", got.Articles, got.UnitCount)
 	}
 
 	order := decode[distributions.Order](t, mustStatus(t, e.do("GET", distributionPath(d.ID)+"/order", admin.token, nil), http.StatusOK))
-	if order.TotalUnits != 11 || order.TotalAmount != 7*5+4*20 || len(order.Lines) != 2 ||
-		deref(order.Lines[0].ArticleName) != "Papeleta" || order.Lines[0].Count != 7 ||
+	if order.TotalUnits != 12 || order.TotalAmount != 8*5+4*20 || len(order.Lines) != 2 ||
+		deref(order.Lines[0].ArticleName) != "Papeleta" || order.Lines[0].Count != 8 ||
 		deref(order.Lines[1].ArticleName) != "Décimo" || order.Lines[1].Count != 4 {
 		t.Errorf("unexpected order: %+v", order)
 	}
@@ -207,7 +209,12 @@ func TestChangingAQuantityFollowsTheRulesOfChangingAUnit(t *testing.T) {
 	// Paid, only staff change it; collected, nobody does.
 	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
 	expect(t, e.do("PATCH", path, member.token, map[string]any{"quantity": 1}), http.StatusConflict, "unit_locked")
-	mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 1}), http.StatusOK)
+	// Not below what is paid; above it, and what is added is not paid.
+	expect(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 1}), http.StatusConflict, "quantity_below_paid")
+	more := decode[distributions.Unit](t, mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 12}), http.StatusOK))
+	if more.Quantity != 12 || more.PaidQuantity != 9 {
+		t.Errorf("unexpected unit: %+v", more)
+	}
 
 	// A unit of a distribution without articles has no quantity to change.
 	shirts := newOpenShirt(t, e, admin)
@@ -623,4 +630,106 @@ func TestNumbersCanGrowButNotTakeAwayWhatSomebodyHas(t *testing.T) {
 	// And no fewer than the units asked for.
 	mustStatus(t, ask(e, got, e.newPerson(t, "2020-01-01", "member"), 1, 78), http.StatusCreated)
 	expect(t, update("137"), http.StatusConflict, "cap_below_requested")
+}
+
+func TestAskingAgainAddsToTheRowStillToBeCollectedAndOtherwiseMakesANewOne(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	body := lottery()
+	body["articles"] = []map[string]any{{"name": "Papeleta", "price": 5, "max_per_person": 10}}
+	d := newDeliveringLottery(t, e, admin, body)
+
+	first := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 4), http.StatusCreated))
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{first.ID}}), http.StatusNoContent)
+	// A member can add to what is paid, which stays as it was.
+	row := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	if row.ID != first.ID || row.Quantity != 7 || row.PaidQuantity != 4 {
+		t.Errorf("unexpected row: %+v", row)
+	}
+	// The cap counts everything the person has.
+	rec := ask(e, d, a, 0, 4)
+	expect(t, rec, http.StatusConflict, "article_person_limit")
+	if !strings.Contains(rec.Body.String(), "10 at most") {
+		t.Errorf("should say the cap: %s", rec.Body.String())
+	}
+
+	// Once collected, a row is final: asking again makes another.
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{"unit_ids": []int64{first.ID}, "picked_up_by_login": a.Login}), http.StatusNoContent)
+	second := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	if second.ID == first.ID || second.Quantity != 3 || second.PaidQuantity != 0 {
+		t.Errorf("expected a new row: %+v", second)
+	}
+	expect(t, ask(e, d, a, 0, 1), http.StatusConflict, "article_person_limit")
+	// And the next one adds to that second row.
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d", unitsPath(d.ID), second.ID), a.token, nil), http.StatusNoContent)
+	if units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), a.token, nil), http.StatusOK)); len(units) != 1 {
+		t.Errorf("expected only the collected row, got %d", len(units))
+	}
+}
+
+func TestARowCanBePaidInPartAndAddingToItLeavesTheRestPending(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	papeletas := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 10), http.StatusCreated))
+	decimos := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 4), http.StatusCreated))
+	payments := distributionPath(d.ID) + "/payments"
+	pay := func(by person, body map[string]any) *httptest.ResponseRecorder {
+		return e.do("POST", payments, by.token, body)
+	}
+	unit := func(u distributions.Unit) distributions.Unit { return unitByID(t, e, admin, d.ID, u.ID) }
+
+	// Only admin and board, as before.
+	expect(t, pay(a, map[string]any{"unit_ids": []int64{papeletas.ID}}), http.StatusForbidden, "forbidden")
+	// Part of a row: three of the ten.
+	mustStatus(t, pay(board, map[string]any{"payments": []map[string]any{{"unit_id": papeletas.ID, "quantity": 3}}}), http.StatusNoContent)
+	if u := unit(papeletas); u.PaidQuantity != 3 || u.PaidAt == nil || deref(u.PaidMarkedByLogin) != board.Login {
+		t.Errorf("unexpected unit: %+v", u)
+	}
+	// Any part, more than once, together with whole rows: what is pending is 7.
+	mustStatus(t, pay(admin, map[string]any{
+		"payments": []map[string]any{{"unit_id": papeletas.ID, "quantity": 2}},
+		"unit_ids": []int64{decimos.ID},
+	}), http.StatusNoContent)
+	if u := unit(papeletas); u.PaidQuantity != 5 {
+		t.Errorf("expected 5 paid: %+v", u)
+	}
+	if u := unit(decimos); u.PaidQuantity != 4 {
+		t.Errorf("a whole row means all that is pending: %+v", u)
+	}
+	// Whatever is left is what "all" means; more than is pending, or nothing
+	// pending, is refused, and refuses the whole batch.
+	expect(t, pay(admin, map[string]any{"payments": []map[string]any{{"unit_id": papeletas.ID, "quantity": 6}}}), http.StatusConflict, "already_paid")
+	expect(t, pay(admin, map[string]any{"unit_ids": []int64{decimos.ID}}), http.StatusConflict, "already_paid")
+	expect(t, pay(admin, map[string]any{"payments": []map[string]any{{"unit_id": papeletas.ID, "quantity": 1}, {"unit_id": decimos.ID, "quantity": 1}}}), http.StatusConflict, "already_paid")
+	if u := unit(papeletas); u.PaidQuantity != 5 {
+		t.Errorf("a refused batch must change nothing: %+v", u)
+	}
+	expect(t, pay(admin, map[string]any{"payments": []map[string]any{{"unit_id": 999999, "quantity": 1}}}), http.StatusNotFound, "not_found")
+	expect(t, pay(admin, map[string]any{"payments": []map[string]any{{"unit_id": papeletas.ID, "quantity": -1}}}), http.StatusBadRequest, "invalid_quantity")
+	expect(t, pay(admin, map[string]any{}), http.StatusBadRequest, "no_units")
+
+	// Asking for more doesn't make what is added paid: 5 of 15.
+	more := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 5), http.StatusCreated))
+	if more.ID != papeletas.ID || more.Quantity != 15 || more.PaidQuantity != 5 {
+		t.Errorf("unexpected unit: %+v", more)
+	}
+
+	// Taking some off, or all of it.
+	clear := func(q string) *httptest.ResponseRecorder {
+		return e.do("DELETE", fmt.Sprintf("%s/%d/payment%s", unitsPath(d.ID), papeletas.ID, q), board.token, nil)
+	}
+	expect(t, clear("?quantity=6"), http.StatusBadRequest, "invalid_quantity")
+	expect(t, clear("?quantity=0"), http.StatusBadRequest, "invalid_quantity")
+	mustStatus(t, clear("?quantity=2"), http.StatusNoContent)
+	if u := unit(papeletas); u.PaidQuantity != 3 || u.PaidAt == nil {
+		t.Errorf("unexpected unit: %+v", u)
+	}
+	mustStatus(t, clear(""), http.StatusNoContent)
+	if u := unit(papeletas); u.PaidQuantity != 0 || u.PaidAt != nil || u.PaidMarkedByLogin != nil {
+		t.Errorf("nothing should be paid: %+v", u)
+	}
 }

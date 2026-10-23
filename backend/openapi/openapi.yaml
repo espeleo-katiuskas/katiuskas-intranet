@@ -1973,12 +1973,16 @@ paths:
         `choices` must give exactly one listed value for each option (400
         invalid_choices). In a distribution with articles, say which one with
         `article_id` and how many with `quantity` (1 to 100000; 400
-        article_required, unknown_article, invalid_quantity): a person has one
-        row per article, with no limit on the quantity — asking again for the
-        same article is 409 already_registered, and changing it is a PATCH —
-        but there may be a limit on the article as a whole, and asking for
-        more than are left is 409 article_exhausted, and more than the article's
-        `max_per_person` is 409 article_person_limit. No extras, no choices.
+        article_required, unknown_article, invalid_quantity): a person can
+        ask for as many as they want, as many times as they want — asking
+        again adds to their row of that article that is still to be collected
+        (whatever is paid in it stays as it was, so what is added is still to
+        pay) or, if every one was collected, makes a new row; changing a
+        quantity is also possible with a PATCH. There may be a limit on the
+        article as a whole, and asking for more than are left is 409
+        article_exhausted; more than the article's `max_per_person`, counting
+        every row the person has of it, is 409 article_person_limit. No extras,
+        no choices.
         Members can only do it while the distribution is
         `open` and before `closes_at`; admin/board can go on after the
         deadline, but also only while it is `open` (409 not_open otherwise): a
@@ -2144,7 +2148,7 @@ paths:
         "400": { description: invalid_choices or invalid_quantity. }
         "403": { description: Neither the person it is for, whoever entered it, nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open, unit_locked, article_exhausted or article_person_limit. }
+        "409": { description: not_open, unit_locked, quantity_below_paid, article_exhausted or article_person_limit. }
     delete:
       summary: Remove a unit
       description: >
@@ -2232,9 +2236,14 @@ paths:
     post:
       summary: Mark units as paid
       description: >
-        Requires admin or board. Marks all the listed units, keeping who did
-        it; all or nothing (404 for an id that isn't a unit of this
-        distribution, 409 already_paid).
+        Requires admin or board. A row of units can be paid in part: each
+        entry of `payments` marks `quantity` units of a row as paid (all that
+        are still pending when it is left out), and each id of `unit_ids` all
+        that is pending of its row; they can come together. What is marked is
+        added to what was paid, keeping when and by whom; all or nothing (404
+        for an id that isn't a unit of this distribution; 409 already_paid for
+        more units than are pending, or a row with none pending; 400
+        invalid_quantity).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2243,9 +2252,16 @@ paths:
           application/json:
             schema:
               type: object
-              required: [unit_ids]
               properties:
                 unit_ids: { type: array, items: { type: integer } }
+                payments:
+                  type: array
+                  items:
+                    type: object
+                    required: [unit_id]
+                    properties:
+                      unit_id: { type: integer }
+                      quantity: { type: integer, description: How many units of the row; all that are pending when left out. }
       responses:
         "204": { description: Marked }
         "400": { description: no_units. }
@@ -2256,11 +2272,15 @@ paths:
   /distributions/{id}/units/{unitID}/payment:
     delete:
       summary: Remove the paid mark from a unit
-      description: Requires admin or board.
+      description: >
+        Requires admin or board. Takes `quantity` units off what is paid in the
+        row, or all of it without it (400 invalid_quantity for more than are
+        paid).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: unitID, in: path, required: true, schema: { type: integer } }
+        - { name: quantity, in: query, required: false, schema: { type: integer, minimum: 1 } }
       responses:
         "204": { description: Removed }
         "403": { description: Neither admin nor board. }
@@ -3699,6 +3719,7 @@ components:
         article_name: { type: string }
         identifiers: { type: array, items: { type: string }, description: The numbers of the items, for a row of an article with has_identifiers. }
         quantity: { type: integer, description: How many units the row stands for; always 1 outside articles. }
+        paid_quantity: { type: integer, description: How many of them have been paid (0 to quantity); paid_at is when the last payment was marked. }
         choices: { type: object, additionalProperties: { type: string } }
         price: { type: number, description: What ONE unit cost when it was entered; the row costs price times quantity. }
         paid_at: { type: string, format: date-time }
