@@ -228,7 +228,7 @@ function detail(u) {
         ? `${button('deliver', u, 'Entregar', 'btn-primary')} ${button('undeliver', u, 'Deshacer entrega', 'btn-secondary', 'Vuelven a estar sin entregar, con su número')} ${button('return', u, 'Devolver', 'btn-danger', 'Salen del pedido y su número queda libre (solo lo entregado y sin pagar)')}`
         : '';
       blocks.push(`<div>${selectors(u)}</div>${itemList(u)}
-        <div class="table-actions"><span class="hint">Con lo marcado:</span> ${pay} ${delivery} ${button('remove', u, 'Quitar números', 'btn-secondary', 'Quita el número a lo marcado (si no está pagado ni entregado): queda libre')}</div>`);
+        <div class="table-actions"><span class="hint">Con lo marcado:</span> ${pay} ${delivery} ${button('remove', u, 'Quitar números', 'btn-secondary', 'Quita el número a lo marcado (si no está pagado ni entregado): las unidades siguen en el pedido, sin número, y el número queda libre')}</div>`);
     }
   } else {
     const count =
@@ -454,7 +454,12 @@ async function perform(act, u) {
       showFeedback('Números asignados.');
       return true;
     case 'remove':
-      if (!confirm(`¿Quitar el número a ${which}? Quedan libres.`)) return false;
+      if (
+        !confirm(
+          `¿Quitar el número a ${which}? Siguen en el pedido, sin número, y esos números quedarán libres.`,
+        )
+      )
+        return false;
       await apiFetch(`${base}/units/${u.id}/identifiers?identifiers=${encodeList(chosen)}`, {
         method: 'DELETE',
       });
@@ -520,7 +525,7 @@ async function perform(act, u) {
     case 'return': {
       if (
         !confirm(
-          `¿Devolver ${which}? Salen del pedido y, si tienen número, queda libre. No se puede deshacer.`,
+          `¿Devolver ${which}? Salen del pedido y, si tienen número, ese número quedará libre. No se puede deshacer.`,
         )
       )
         return false;
