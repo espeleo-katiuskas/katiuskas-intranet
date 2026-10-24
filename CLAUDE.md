@@ -1240,7 +1240,13 @@ rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted into ea
 session bootstrap (in place of what used to be five near-identical lines re-typed at the
 top of every `<page>.js`): it validates the session, applies role-based visibility, and
 wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
-same as `currentUser()` would. Its own `requireAnyRole` option additionally redirects home
+same as `currentUser()` would. The menu collapses below 800px (an overlay behind the hamburger)
+and, on a wide screen, can be hidden with the "×" at the top of it: `api.js`'s
+`initSidebarToggle` puts `.sidebar-hidden` on `.shell` — which looks like the narrow layout,
+`style.css` keeps the two rules alike — and remembers it in `localStorage`
+(`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there the hamburger
+brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match
+the media query). Its own `requireAnyRole` option additionally redirects home
 if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
 (admin/board), of `accounting.js`/`account.js` (admin/money) and of `admin.js` (admin),
 tighter than the ordinary

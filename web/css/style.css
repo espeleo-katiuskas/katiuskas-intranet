@@ -125,8 +125,27 @@ body {
   padding: 20px 0;
 }
 
+/* On a wide screen the header only holds the button that hides the menu (the
+   logo is already up in the topbar); the narrow layout below shows the logo too. */
 .sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 10px 8px;
+}
+
+.sidebar-logo {
   display: none;
+}
+
+.sidebar-close {
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .sidebar-nav {
@@ -309,7 +328,7 @@ body {
    page's own content below it, is simply what a fixed top-left overlay
    at a higher z-index does; nothing here carves out an exception for
    the topbar. */
-@media (max-width: 720px) {
+@media (max-width: 800px) {
   .shell {
     flex-direction: column;
   }
@@ -351,18 +370,9 @@ body {
   }
 
   .sidebar-logo {
+    display: block;
     height: 36px;
     width: auto;
-  }
-
-  .sidebar-close {
-    padding: 0 6px;
-    border: none;
-    background: none;
-    color: #fff;
-    font-size: 1.8rem;
-    line-height: 1;
-    cursor: pointer;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -375,6 +385,33 @@ body {
   .sidebar-toggle {
     display: block;
   }
+}
+
+/* The same collapsed layout on a wide screen, when the person hid the menu with
+   its own button (api.js's initSidebarToggle puts .sidebar-hidden on .shell and
+   remembers it): the menu is parked off-screen and the hamburger shows, as
+   below 800px — except that there the hamburger brings the normal layout back
+   instead of overlaying the menu. Keep these rules the same as the narrow
+   ones above. */
+.shell.sidebar-hidden {
+  flex-direction: column;
+}
+
+.shell.sidebar-hidden .sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 180px;
+  z-index: 100;
+  overflow-y: auto;
+  padding-top: 0;
+  transform: translateX(-100%);
+  visibility: hidden;
+}
+
+.shell.sidebar-hidden .sidebar-toggle {
+  display: block;
 }
 
 h1 {

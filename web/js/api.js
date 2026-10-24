@@ -198,18 +198,76 @@ function applyRoleVisibility() {
 // removed keeps its slot in that layout without needing it to stay
 // visible. A no-op on /login, the one page with no sidebar shell to
 // toggle at all.
+//
+// On a wide screen the menu is in the page, and can be hidden with the button at
+// the top of it (the same "×" the narrow layout has to close its overlay): `.shell`
+// gets `.sidebar-hidden`, which makes it look like the narrow layout (menu parked
+// off-screen, hamburger showing), and the choice is remembered. There the hamburger
+// doesn't overlay the menu but brings back the normal layout. Which behaviour
+// applies is decided by the same width as the narrow-screen media query in
+// style.css (NARROW_SCREEN, keep them in step).
+const NARROW_SCREEN = '(max-width: 800px)';
+const SIDEBAR_HIDDEN_KEY = 'katiuskas:sidebar-hidden';
+
+function sidebarHiddenSaved() {
+  try {
+    return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveSidebarHidden(hidden) {
+  try {
+    if (hidden) localStorage.setItem(SIDEBAR_HIDDEN_KEY, '1');
+    else localStorage.removeItem(SIDEBAR_HIDDEN_KEY);
+  } catch {
+    // Not remembered, which is all right.
+  }
+}
+
+// Applied as this file loads, before the menu is drawn, so a menu the person had
+// hidden doesn't flash on the page first. A no-op where there is no shell (/login).
+document.querySelector('.shell')?.classList.toggle('sidebar-hidden', sidebarHiddenSaved());
+
 function initSidebarToggle() {
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
-  if (!toggle || !sidebar) return;
+  const shell = document.querySelector('.shell');
+  if (!toggle || !sidebar || !shell) return;
+  const narrow = window.matchMedia(NARROW_SCREEN);
+
+  // What the toggle says about the menu: on a wide screen whether it is in the page,
+  // on a narrow one whether the overlay is open.
+  function syncExpanded() {
+    const expanded = narrow.matches
+      ? sidebar.classList.contains('open')
+      : !shell.classList.contains('sidebar-hidden');
+    toggle.setAttribute('aria-expanded', String(expanded));
+    document
+      .getElementById('sidebar-close')
+      ?.setAttribute('aria-label', narrow.matches ? 'Cerrar menú' : 'Ocultar menú');
+  }
 
   function setOpen(isOpen) {
     sidebar.classList.toggle('open', isOpen);
-    toggle.setAttribute('aria-expanded', String(isOpen));
+    syncExpanded();
   }
 
-  toggle.addEventListener('click', () => setOpen(!sidebar.classList.contains('open')));
-  document.getElementById('sidebar-close')?.addEventListener('click', () => setOpen(false));
+  function setHidden(hidden) {
+    shell.classList.toggle('sidebar-hidden', hidden);
+    saveSidebarHidden(hidden);
+    syncExpanded();
+  }
+
+  toggle.addEventListener('click', () => {
+    if (narrow.matches) setOpen(!sidebar.classList.contains('open'));
+    else setHidden(!shell.classList.contains('sidebar-hidden'));
+  });
+  document.getElementById('sidebar-close')?.addEventListener('click', () => {
+    if (narrow.matches) setOpen(false);
+    else setHidden(true);
+  });
   document.addEventListener('click', (event) => {
     if (
       sidebar.classList.contains('open') &&
@@ -219,6 +277,13 @@ function initSidebarToggle() {
       setOpen(false);
     }
   });
+  // Resizing across the breakpoint: an overlay left open has no meaning on the
+  // wide layout.
+  narrow.addEventListener('change', () => {
+    sidebar.classList.remove('open');
+    syncExpanded();
+  });
+  syncExpanded();
 }
 
 // Fills the shared shell's "Hola, <nombre>" greeting (#topbar-user-name

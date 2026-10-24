@@ -102,7 +102,7 @@ function renderNavLink(item, activePath) {
 
 const TOPBAR_HTML = `
   <div class="topbar-brand">
-    <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button>
+    <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="Menú" aria-expanded="false" aria-controls="sidebar">☰</button>
     <img src="/images/logo-katiuskas.png" alt="" class="topbar-logo">
     <h1>Club de Espeleología Katiuskas — Intranet</h1>
   </div>
