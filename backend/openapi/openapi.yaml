@@ -2346,6 +2346,40 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_deliverable or quantity_below_paid. }
 
+  /distribution-payments:
+    get:
+      summary: List the payments of every distribution
+      description: >
+        Requires admin or board (it says who paid what). Every payment marked in
+        the distributions, newest first: when, who wrote it down, whose order it
+        was for (the person who paid), what it was and how many units, the money,
+        the numbers it was about, and `total_after`, what that distribution had
+        collected up to and including the entry. Taking a payment off is an entry
+        with the signs changed, and so is deleting an order that had something
+        paid. `total_after` is summed over the distribution's whole history,
+        so it doesn't restart at the edge of a filter or a page. Narrowed by
+        `distribution_id` and an inclusive range `from`/`to` (YYYY-MM-DD; 400
+        invalid_date, invalid_date_range) and paged by `limit`/`offset`
+        (default 50, at most 100). What was paid before this list existed is one
+        entry per order, at the date of its last payment.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: distribution_id, in: query, required: false, schema: { type: integer } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DistributionPayment" }
+        "400": { description: invalid_id, invalid_date or invalid_date_range. }
+        "403": { description: Neither admin nor board. }
+
   /distributions/{id}/payments:
     post:
       summary: Mark units as paid
@@ -3853,6 +3887,24 @@ components:
         picked_up_at: { type: string, format: date-time }
         pickup_recorded_by_login: { type: string, description: Who wrote the collection down (admin, board or material). }
         picked_up_by_login: { type: string, description: Who it was handed to; not necessarily the beneficiary. }
+
+    DistributionPayment:
+      type: object
+      properties:
+        id: { type: integer }
+        distribution_id: { type: integer }
+        distribution_name: { type: string }
+        unit_id: { type: integer, description: The order it was about; absent if it was deleted since. }
+        occurred_at: { type: string, format: date-time }
+        recorded_by_login: { type: string, description: Who wrote the payment down. }
+        recorded_by_name: { type: string }
+        paid_by_login: { type: string, description: Whose order it was for, the person who paid. }
+        paid_by_name: { type: string }
+        description: { type: string, description: What was paid for, the article or the distribution. }
+        quantity: { type: integer, description: Units, negative when a payment was taken off. }
+        amount: { type: number, description: Money, with the sign of quantity. }
+        identifiers: { type: array, items: { type: string }, description: The numbers it was about, in an article with numbers. }
+        total_after: { type: number, description: What the distribution had collected up to and including this entry. }
 
     DistributionOrder:
       type: object

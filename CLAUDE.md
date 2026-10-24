@@ -467,7 +467,13 @@ the deadline and change a paid unit, though only admin/board mark payments), und
 the same rules; what was handed out is locked for the owner (a unit that isn't a row of an
 article is final once handed out, even for staff; in a row of an article staff can still resize it
 but not below `picked_up_quantity`, `ErrBelowDelivered`) and a paid one only changes through admin/board/material
-(`ErrUnitLocked`). Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
+(`ErrUnitLocked`). Every payment mark is also written into `distribution_payments` (migration `00030`, the list of
+payments: `logPayment`, called by `MarkPaid`, `ClearPaid` and `DeleteUnit` in the same
+transaction; negative entries for what is taken off or deleted, `unit_id` null once its order is
+gone), which `GET /distribution-payments` (admin/board) serves newest first with
+`total_after`, a window `SUM` per distribution over its whole history so it doesn't restart at a
+filter or page edge — the same idea as the accounting ledger's `balance_after`. The person who
+paid is the order's beneficiary; there is no separate payer. Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
 `quantity` are paid, with `paid_at`/`paid_marked_by_id` as when and by whom the last payment was
 marked, set exactly when something is paid (`CHECK`s). Admin/board only: `POST .../payments`
 adds payments, all-or-nothing (`Repository.MarkPaid`: `payments` of `quantity` units of a row,
@@ -1407,8 +1413,10 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/repartos`, `/reparto?id=…` and `/reparto-pedidos?id=…`
-(`distributions.js`, `distribution.js`, `distribution-orders.js`,
+`/repartos`, `/reparto?id=…`, `/reparto-pedidos?id=…` and `/reparto-pagos`
+(`distributions.js`, `distribution.js`, `distribution-orders.js`, `distribution-payments.js` — the
+list of payments, reached by the "Pagos" button of `/repartos`, admin/board, with a distribution
+filter and a date range and "Ver más" like the ledger of an account —
 sharing `js/distributionCommon.js`) are the interface for **Distributions** above — where
 what the code and the API call a unit is a "pedido" to the people reading these pages, and
 an extra unit an "extra", since "unidad" meant nothing to them — behind one "Repartos"

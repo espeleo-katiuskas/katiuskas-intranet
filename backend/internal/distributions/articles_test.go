@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
 )
@@ -1083,4 +1084,102 @@ func TestAQuantityCantGoBelowTheNumbersAssignedAndSaysSo(t *testing.T) {
 	mustStatus(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 2}), http.StatusOK)
 	// A quantity that is nonsense is still invalid_quantity.
 	expect(t, e.do("PATCH", path, admin.token, map[string]any{"quantity": 0}), http.StatusBadRequest, "invalid_quantity")
+}
+
+func TestListOfPaymentsIsChronologicalWithTheRunningTotalOfEachDistribution(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	a := e.newPerson(t, "2020-01-01", "member")
+	b := e.newPerson(t, "2020-01-01", "member")
+	lot := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	other := newDeliveringLottery(t, e, admin, lottery())
+	pa := decode[distributions.Unit](t, mustStatus(t, ask(e, lot, a, 0, 5), http.StatusCreated))
+	db := decode[distributions.Unit](t, mustStatus(t, ask(e, lot, b, 1, 2), http.StatusCreated))
+	po := decode[distributions.Unit](t, mustStatus(t, ask(e, other, a, 0, 6), http.StatusCreated))
+	pay := func(by person, d distributions.Distribution, u distributions.Unit, body map[string]any) {
+		body["unit_id"] = u.ID
+		mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", by.token, map[string]any{"payments": []map[string]any{body}}), http.StatusNoContent)
+	}
+	list := func(query string) []distributions.PaymentEntry {
+		return decode[[]distributions.PaymentEntry](t, mustStatus(t, e.do("GET", "/api/v1/distribution-payments"+query, board.token, nil), http.StatusOK))
+	}
+
+	// Who sees it: admin and board; not material, not a member.
+	expect(t, e.do("GET", "/api/v1/distribution-payments", material.token, nil), http.StatusForbidden, "forbidden")
+	expect(t, e.do("GET", "/api/v1/distribution-payments", a.token, nil), http.StatusForbidden, "forbidden")
+	if got := list(""); len(got) != 0 {
+		t.Fatalf("nothing paid yet: %+v", got)
+	}
+
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers", unitsPath(lot.ID), pa.ID), admin.token, map[string]any{"identifiers": []string{"0001-0005"}}), http.StatusOK)
+	pay(admin, lot, pa, map[string]any{"identifiers": []string{"0001-0002"}}) // 2 × 5 = 10
+	pay(board, other, po, map[string]any{"quantity": 4})                      // 4 × 5 = 20 in the other
+	pay(board, lot, pa, map[string]any{"quantity": 1})                        // 5 more: 0003
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers", unitsPath(lot.ID), db.ID), admin.token, map[string]any{"identifiers": []string{"124/1-2"}}), http.StatusOK)
+	pay(admin, lot, db, map[string]any{})                                                                                                          // 2 × 20 = 40: total 55
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment?identifiers=0002", unitsPath(lot.ID), pa.ID), board.token, nil), http.StatusNoContent) // −5: 50
+
+	got := list("")
+	if len(got) != 5 {
+		t.Fatalf("expected 5 entries, got %d: %+v", len(got), got)
+	}
+	// Newest first; each with what the distribution had collected by then.
+	want := []struct {
+		quantity int
+		amount   float64
+		total    float64
+		by       string
+		what     string
+	}{
+		{-1, -5, 50, board.Login, "Papeleta"},
+		{2, 40, 55, admin.Login, "Décimo"},
+		{1, 5, 15, board.Login, "Papeleta"},
+		{4, 20, 20, board.Login, "Papeleta"},
+		{2, 10, 10, admin.Login, "Papeleta"},
+	}
+	for i, w := range want {
+		g := got[i]
+		if g.Quantity != w.quantity || g.Amount != w.amount || g.TotalAfter != w.total || g.RecordedByLogin != w.by || g.Description != w.what {
+			t.Errorf("entry %d: expected %+v, got %+v", i, w, g)
+		}
+	}
+	if got[0].PaidByLogin != a.Login || strings.Join(got[0].Identifiers, ",") != "0002" || got[1].PaidByLogin != b.Login ||
+		strings.Join(got[1].Identifiers, ",") != "124/1,124/2" || got[0].DistributionName != lot.Name || got[0].OccurredAt.IsZero() {
+		t.Errorf("unexpected entries: %+v / %+v", got[0], got[1])
+	}
+	if len(got[3].Identifiers) != 0 {
+		t.Errorf("a payment of units without numbers has none: %+v", got[3])
+	}
+
+	// One distribution: its own total, whatever else was paid.
+	one := list(fmt.Sprintf("?distribution_id=%d", other.ID))
+	if len(one) != 1 || one[0].TotalAfter != 20 || one[0].PaidByLogin != a.Login {
+		t.Errorf("unexpected list of one distribution: %+v", one)
+	}
+	// Paging, and the total isn't restarted by it.
+	page := list("?limit=2&offset=2")
+	if len(page) != 2 || page[0].TotalAfter != 15 {
+		t.Errorf("unexpected page: %+v", page)
+	}
+	// A range of days leaves entries out without changing the totals of those it keeps.
+	today := time.Now().Format("2006-01-02")
+	if in := list("?from=" + today + "&to=" + today); len(in) != 5 || in[0].TotalAfter != 50 {
+		t.Errorf("today should have them all: %+v", in)
+	}
+	if none := list("?to=2000-01-01"); len(none) != 0 {
+		t.Errorf("nothing before 2000: %+v", none)
+	}
+	expect(t, e.do("GET", "/api/v1/distribution-payments?from=yesterday", board.token, nil), http.StatusBadRequest, "invalid_date")
+	expect(t, e.do("GET", "/api/v1/distribution-payments?from=2026-02-01&to=2026-01-01", board.token, nil), http.StatusBadRequest, "invalid_date_range")
+	expect(t, e.do("GET", "/api/v1/distribution-payments?distribution_id=x", board.token, nil), http.StatusBadRequest, "invalid_id")
+
+	// Deleting an order that had something paid takes it off in the list, and the
+	// entries stay.
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d", unitsPath(other.ID), po.ID), admin.token, nil), http.StatusNoContent)
+	after := list(fmt.Sprintf("?distribution_id=%d", other.ID))
+	if len(after) != 2 || after[0].Quantity != -4 || after[0].Amount != -20 || after[0].TotalAfter != 0 || after[0].UnitID != nil || after[0].RecordedByLogin != admin.Login {
+		t.Errorf("unexpected entries after deleting the order: %+v", after)
+	}
 }

@@ -443,7 +443,7 @@ func (s *Service) UpdateQuantity(ctx context.Context, distributionID, id int64, 
 	return s.repo.UpdateQuantity(ctx, distributionID, id, quantity)
 }
 
-func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staff bool) error {
+func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staff bool, actorID int64) error {
 	d, err := s.repo.Get(ctx, distributionID)
 	if err != nil {
 		return err
@@ -462,7 +462,7 @@ func (s *Service) DeleteUnit(ctx context.Context, distributionID, id int64, staf
 	if d.Audience == AudienceAllMembers && !u.IsExtra {
 		return ErrAutomaticUnit
 	}
-	return s.repo.DeleteUnit(ctx, distributionID, id)
+	return s.repo.DeleteUnit(ctx, distributionID, id, actorID)
 }
 
 // MarkPickedUp records that the deliveries — some units of a row each, see
@@ -726,7 +726,7 @@ func (s *Service) MarkPaid(ctx context.Context, distributionID int64, payments [
 
 // ClearPaid takes quantity units off what is paid in a row (all when 0), or the
 // given paid numbers.
-func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
+func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string, byID int64) error {
 	d, u, err := s.distributionAndUnit(ctx, distributionID, id)
 	if err != nil {
 		return err
@@ -734,7 +734,12 @@ func (s *Service) ClearPaid(ctx context.Context, distributionID, id int64, quant
 	if identifiers, err = expandTokens(d, u, identifiers); err != nil {
 		return err
 	}
-	return s.repo.ClearPaid(ctx, distributionID, id, quantity, identifiers)
+	return s.repo.ClearPaid(ctx, distributionID, id, quantity, identifiers, byID)
+}
+
+// ListPayments lists the payments of every distribution, newest first.
+func (s *Service) ListPayments(ctx context.Context, f PaymentFilter) ([]PaymentEntry, error) {
+	return s.repo.ListPayments(ctx, f)
 }
 
 func (s *Service) Order(ctx context.Context, distributionID int64) (Order, error) {

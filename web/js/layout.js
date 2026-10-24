@@ -90,6 +90,7 @@ const ACTIVE_ALIASES = {
   '/cuenta': '/contabilidad',
   '/reparto': '/repartos',
   '/reparto-pedidos': '/repartos',
+  '/reparto-pagos': '/repartos',
   '/reparto-numeros': '/repartos',
 };
 

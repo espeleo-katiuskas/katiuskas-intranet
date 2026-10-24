@@ -912,15 +912,88 @@ func (r *Repository) UpdateChoices(ctx context.Context, distributionID, id int64
 	return r.GetUnit(ctx, distributionID, id)
 }
 
-func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1 AND distribution_id = $2`, id, distributionID)
+// DeleteUnit removes a unit. If something of it was paid, what was paid goes into
+// the list of payments as taken off, by actorID.
+func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id, actorID int64) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrUnitNotFound
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	st, err := lockUnit(ctx, tx, distributionID, id)
+	if err != nil {
+		return err
 	}
-	return nil
+	if st.paid > 0 {
+		paid, err := markedItems(ctx, tx, id, "paid_at", "")
+		if err != nil {
+			return err
+		}
+		if err := logPayment(ctx, tx, id, -st.paid, paid, actorID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// logPayment writes down in the list of payments that quantity units of the unit
+// were paid (positive) or had their payment taken off (negative), with the
+// numbers they were about.
+func logPayment(ctx context.Context, tx pgx.Tx, unitID int64, quantity int, identifiers []string, byID int64) error {
+	if identifiers == nil {
+		identifiers = []string{}
+	}
+	_, err := tx.Exec(ctx, `
+		INSERT INTO distribution_payments (distribution_id, unit_id, beneficiary_id, description, quantity, amount, identifiers, recorded_by_id)
+		SELECT n.distribution_id, n.id, n.beneficiary_id, COALESCE(a.name, d.name), $2::integer, n.price * $2::integer, $3, $4
+		FROM distribution_units n
+		JOIN distributions d ON d.id = n.distribution_id
+		LEFT JOIN distribution_articles a ON a.id = n.article_id
+		WHERE n.id = $1
+	`, unitID, quantity, identifiers, byID)
+	return err
+}
+
+// ListPayments lists the payments, newest first, with what each distribution had
+// collected after each — summed over its whole history, whatever the filter
+// leaves out, so it never restarts at the edge of a range.
+func (r *Repository) ListPayments(ctx context.Context, f PaymentFilter) ([]PaymentEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT * FROM (
+			SELECT p.id, p.distribution_id, d.name, p.unit_id, p.occurred_at,
+			       rb.login, rb.first_name || ' ' || rb.last_name, b.login, b.first_name || ' ' || b.last_name,
+			       p.description, p.quantity, p.amount::float8, p.identifiers,
+			       SUM(p.amount) OVER (PARTITION BY p.distribution_id ORDER BY p.occurred_at, p.id)::float8 AS total_after
+			FROM distribution_payments p
+			JOIN distributions d ON d.id = p.distribution_id
+			JOIN users rb ON rb.id = p.recorded_by_id
+			JOIN users b ON b.id = p.beneficiary_id
+			WHERE ($1::bigint IS NULL OR p.distribution_id = $1)
+		) x
+		WHERE ($2::timestamptz IS NULL OR occurred_at >= $2::timestamptz)
+		  AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz + interval '1 day')
+		ORDER BY occurred_at DESC, id DESC
+		LIMIT $4 OFFSET $5
+	`, f.DistributionID, f.From, f.To, f.Limit, f.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []PaymentEntry{}
+	for rows.Next() {
+		var e PaymentEntry
+		if err := rows.Scan(&e.ID, &e.DistributionID, &e.DistributionName, &e.UnitID, &e.OccurredAt,
+			&e.RecordedByLogin, &e.RecordedByName, &e.PaidByLogin, &e.PaidByName,
+			&e.Description, &e.Quantity, &e.Amount, &e.Identifiers, &e.TotalAfter); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, rows.Err()
 }
 
 // Deliver marks the deliveries as handed out to pickedUpByID, recorded by
@@ -1237,6 +1310,7 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 			return 0, err
 		}
 		n := p.Quantity
+		var paidNow []string // the numbers this payment is about
 		if st.numbered {
 			unpaid, err := markedItems(ctx, tx, p.UnitID, "", "paid_at")
 			if err != nil {
@@ -1274,6 +1348,7 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 				return 0, err
 			}
 			n = len(chosen)
+			paidNow = chosen
 		} else {
 			if len(p.Identifiers) > 0 {
 				return 0, ErrInvalidIdentifiers
@@ -1291,6 +1366,9 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 		`, p.UnitID, n, markedByID); err != nil {
 			return 0, err
 		}
+		if err := logPayment(ctx, tx, p.UnitID, n, paidNow, markedByID); err != nil {
+			return 0, err
+		}
 		marked += n
 	}
 	return marked, tx.Commit(ctx)
@@ -1299,7 +1377,7 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 // ClearPaid takes quantity units off what is paid in a row (all of it when 0), or
 // the given paid Identifiers in a row of an article with numbers. Taking off more
 // than is paid is ErrInvalidQuantity.
-func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string) error {
+func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string, byID int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -1322,6 +1400,7 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, qu
 	if q < 1 || q > st.paid || (len(identifiers) > 0 && !st.numbered) {
 		return ErrInvalidQuantity
 	}
+	var takenOff []string
 	if st.numbered {
 		paid, err := markedItems(ctx, tx, id, "paid_at", "")
 		if err != nil {
@@ -1334,6 +1413,7 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, qu
 		if _, err := tx.Exec(ctx, `UPDATE distribution_unit_identifiers SET paid_at = NULL, paid_marked_by_id = NULL WHERE unit_id = $1 AND identifier = ANY($2)`, id, taken); err != nil {
 			return err
 		}
+		takenOff = taken
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE distribution_units SET paid_quantity = paid_quantity - $2,
@@ -1341,6 +1421,9 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, qu
 			paid_marked_by_id = CASE WHEN paid_quantity - $2 = 0 THEN NULL ELSE paid_marked_by_id END
 		WHERE id = $1
 	`, id, q); err != nil {
+		return err
+	}
+	if err := logPayment(ctx, tx, id, -q, takenOff, byID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

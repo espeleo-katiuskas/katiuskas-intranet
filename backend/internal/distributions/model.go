@@ -333,3 +333,33 @@ type Delivery struct {
 	Quantity    int
 	Identifiers []string
 }
+
+// PaymentEntry is one entry of the list of payments: some units of an order marked
+// as paid (Quantity and Amount positive) or a payment taken off (negative), who
+// wrote it down and when, whose order it was for — the person who paid — what it
+// was and which numbers. TotalAfter is what the distribution had collected
+// up to and including this entry.
+type PaymentEntry struct {
+	ID               int64     `json:"id"`
+	DistributionID   int64     `json:"distribution_id"`
+	DistributionName string    `json:"distribution_name"`
+	UnitID           *int64    `json:"unit_id,omitempty"`
+	OccurredAt       time.Time `json:"occurred_at"`
+	RecordedByLogin  string    `json:"recorded_by_login"`
+	RecordedByName   string    `json:"recorded_by_name"`
+	PaidByLogin      string    `json:"paid_by_login"`
+	PaidByName       string    `json:"paid_by_name"`
+	Description      string    `json:"description"`
+	Quantity         int       `json:"quantity"`
+	Amount           float64   `json:"amount"`
+	Identifiers      []string  `json:"identifiers"`
+	TotalAfter       float64   `json:"total_after"`
+}
+
+// PaymentFilter narrows and pages the list of payments: one distribution, an
+// inclusive range of days.
+type PaymentFilter struct {
+	DistributionID *int64
+	From, To       *time.Time
+	Limit, Offset  int
+}

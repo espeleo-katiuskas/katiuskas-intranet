@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagos de repartos — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <p><a href="/repartos">&larr; Volver a repartos</a></p>
+  <div class="section-header">
+    <div>
+      <h1>Pagos de repartos</h1>
+      <p class="subtitle">Lo que se ha ido cobrando en los repartos con algo que pagar, con lo cobrado en cada uno hasta ese momento.</p>
+    </div>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+  <p id="error" class="error-message" hidden></p>
+
+  <div class="panel">
+    <div class="field-grid">
+      <div class="field">
+        <label for="filter-distribution">Reparto</label>
+        <select id="filter-distribution"><option value="">Todos</option></select>
+      </div>
+      <div class="field">
+        <label for="filter-from">Desde</label>
+        <input id="filter-from" type="date">
+      </div>
+      <div class="field">
+        <label for="filter-to">Hasta</label>
+        <input id="filter-to" type="date">
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Reparto</th><th>Apuntado por</th><th>Qué</th><th>Pagado por</th>
+          <th>Importe</th><th>Acumulado del reparto</th>
+        </tr>
+      </thead>
+      <tbody id="payments-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+  <p><button id="load-more" type="button" class="btn btn-secondary btn-small" hidden>Ver más</button></p>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/distribution-payments.js"></script>
+</body>
+</html>
