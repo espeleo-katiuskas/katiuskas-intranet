@@ -2263,7 +2263,9 @@ paths:
         now or on the cutoff date (409 invalid_collector) — and the caller is
         kept as who wrote it down. All or nothing: an id that isn't a unit of
         this distribution is a 404, more units than are still to go a 409
-        already_picked_up.
+        already_picked_up (naming the numbers when they were given: one already
+        handed out, that way) and a number the row doesn't have a 400
+        identifier_not_assigned.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2300,8 +2302,10 @@ paths:
         Requires admin, board or material. The units go back to not being
         handed out — they stay in the order, and their numbers stay assigned
         — `quantity` of them, the given delivered `identifiers`, or all that
-        were (400 invalid_quantity or invalid_identifiers for more, or ones
-        not delivered). To take units back for good, see `.../return`.
+        were (400 invalid_quantity for more than were; a number the row doesn't
+        have is 400 identifier_not_assigned, one that isn't handed out 409
+        identifier_not_delivered, naming them at the end of the message). To
+        take units back for good, see `.../return`.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2326,7 +2330,9 @@ paths:
         items that are paid, so a paid one is refused (409 quantity_below_paid)
         and only the delivered and unpaid ones can come back; elsewhere the
         order can't end up smaller than what is paid. Nor can more come back
-        than was handed out (400 invalid_quantity, invalid_identifiers).
+        than was handed out (400 invalid_quantity). A number the row doesn't have
+        is 400 identifier_not_assigned and one that isn't handed out 409
+        identifier_not_delivered, naming them at the end of the message.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2395,8 +2401,9 @@ paths:
         given `identifiers` (ranges are fine where the numbers are described),
         or else the first assigned and unpaid — all of them without a quantity,
         and `unit_ids` means all that have a number — and asking for more than
-        have a number is 409 identifiers_missing (400 invalid_identifiers for
-        one that isn't assigned or is paid already).
+        have a number is 409 identifiers_missing. A number the row doesn't have
+        is 400 identifier_not_assigned, one that is paid already 409 already_paid,
+        naming them at the end of the message.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2429,8 +2436,9 @@ paths:
       description: >
         Requires admin or board. Takes `quantity` units off what is paid in the
         row, the given paid `identifiers`, or all of it without either (400
-        invalid_quantity or invalid_identifiers for more than are paid, or
-        numbers that aren't).
+        invalid_quantity for more than are paid). A number the row doesn't have is
+        400 identifier_not_assigned and one that isn't paid 409 identifier_not_paid,
+        naming them at the end of the message.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }

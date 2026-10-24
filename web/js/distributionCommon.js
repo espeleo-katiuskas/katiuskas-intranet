@@ -371,6 +371,10 @@ const errorMessages = {
   article_person_limit: 'Es más de lo que puede tener una persona de ese artículo.',
   invalid_identifiers:
     'Los números no pueden estar vacíos ni repetidos, ni ser más que la cantidad, y solo valen para artículos con números.',
+  identifier_not_assigned: 'Alguno de esos números no está asignado a este pedido.',
+  identifier_not_paid:
+    'Alguno de esos números no está pagado, así que no se le puede quitar el pago.',
+  identifier_not_delivered: 'Alguno de esos números no está entregado.',
   identifier_taken: 'Otra persona ya tiene alguno de esos números de ese artículo.',
   quantity_below_numbered:
     'No se puede pedir menos de los números ya asignados: quita antes el número a los que sobren.',
@@ -391,7 +395,27 @@ const errorMessages = {
 // With the distribution at hand, a message can say what is possible in it: that
 // somebody already has their order only suggests asking for an extra when this
 // distribution has extras.
+// The errors about numbers end with which numbers they are about ("…: 0003, 0004");
+// those are said after the message, and the generic "already paid / handed out" ones
+// say it is about those numbers when there are any.
+const ABOUT_NUMBERS = new Set([
+  'identifier_not_assigned',
+  'identifier_not_paid',
+  'identifier_not_delivered',
+  'quantity_below_paid',
+]);
+
+function numbersMentioned(err) {
+  return /: (.+)$/.exec(err.message ?? '')?.[1] ?? null;
+}
+
 function apiErrorText(err, distribution = null) {
+  const numbers = numbersMentioned(err);
+  if (numbers && ABOUT_NUMBERS.has(err.code)) {
+    return `${errorMessages[err.code]} (${numbers})`;
+  }
+  if (numbers && err.code === 'already_paid') return `Ya estaban pagados: ${numbers}.`;
+  if (numbers && err.code === 'already_picked_up') return `Ya estaban entregados: ${numbers}.`;
   if (err.code === 'already_registered' && hasArticles(distribution ?? {})) {
     return 'Esa persona ya ha pedido ese artículo: cambia la cantidad en «Tus pedidos».';
   }

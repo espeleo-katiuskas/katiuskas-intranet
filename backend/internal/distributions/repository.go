@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -48,6 +49,12 @@ var (
 	ErrIdentifierTaken = errors.New("another unit of this article already has that number")
 	// ErrBelowPaid means a quantity can't go below what has already been paid.
 	ErrBelowPaid = errors.New("the quantity can't be lower than what has already been paid")
+	// ErrIdentifierNotAssigned, ErrNotPaid and ErrNotDelivered mean numbers named in
+	// a request that the row hasn't got at all, or has but not paid or not
+	// delivered (what the operation needs them to be); the message ends with which.
+	ErrIdentifierNotAssigned = errors.New("these numbers are not assigned to this order")
+	ErrNotPaid               = errors.New("these numbers are not paid")
+	ErrNotDelivered          = errors.New("these numbers are not handed out")
 	// ErrBelowNumbered means a quantity can't go below the numbers already given to
 	// the row: some have to be taken off first.
 	ErrBelowNumbered = errors.New("the quantity can't be lower than the numbers already assigned: take some off first")
@@ -1059,10 +1066,8 @@ func (r *Repository) Deliver(ctx context.Context, distributionID int64, deliveri
 				}
 				chosen = pending[:n]
 			}
-			for _, identifier := range chosen {
-				if !slices.Contains(pending, identifier) {
-					return 0, ErrInvalidIdentifiers
-				}
+			if err := checkAmong(ctx, tx, dl.UnitID, chosen, pending, ErrAlreadyPickedUp); err != nil {
+				return 0, err
 			}
 			if _, err := tx.Exec(ctx, `
 				UPDATE distribution_unit_identifiers SET delivered_at = now() WHERE unit_id = $1 AND identifier = ANY($2)
@@ -1082,6 +1087,36 @@ func (r *Repository) Deliver(ctx context.Context, distributionID int64, deliveri
 		total += n
 	}
 	return total, tx.Commit(ctx)
+}
+
+// checkAmong checks that every number in specified is among available (the ones in
+// the state the operation needs). Otherwise it says which aren't: first those the
+// row doesn't have at all (ErrIdentifierNotAssigned), else those it has in
+// another state (wrongState).
+func checkAmong(ctx context.Context, tx pgx.Tx, unitID int64, specified, available []string, wrongState error) error {
+	var missing []string
+	for _, identifier := range specified {
+		if !slices.Contains(available, identifier) {
+			missing = append(missing, identifier)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	assigned, err := markedItems(ctx, tx, unitID, "", "")
+	if err != nil {
+		return err
+	}
+	var absent []string
+	for _, identifier := range missing {
+		if !slices.Contains(assigned, identifier) {
+			absent = append(absent, identifier)
+		}
+	}
+	if len(absent) > 0 {
+		return fmt.Errorf("%w: %s", ErrIdentifierNotAssigned, strings.Join(absent, ", "))
+	}
+	return fmt.Errorf("%w: %s", wrongState, strings.Join(missing, ", "))
 }
 
 // markedItems lists the identifiers of a row, in the order they were assigned,
@@ -1164,6 +1199,15 @@ func (r *Repository) ClearPickup(ctx context.Context, distributionID, id int64, 
 	if err != nil {
 		return err
 	}
+	if st.numbered && len(identifiers) > 0 {
+		delivered, err := markedItems(ctx, tx, id, "delivered_at", "")
+		if err != nil {
+			return err
+		}
+		if err := checkAmong(ctx, tx, id, identifiers, delivered, ErrNotDelivered); err != nil {
+			return err
+		}
+	}
 	q := quantity
 	if len(identifiers) > 0 {
 		q = len(identifiers)
@@ -1230,6 +1274,13 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 		if err != nil {
 			return err
 		}
+		if err := checkAmong(ctx, tx, id, identifiers, delivered, ErrNotDelivered); err != nil {
+			return err
+		}
+		// Delivered but paid: a paid number can't be returned.
+		if err := checkAmong(ctx, tx, id, identifiers, returnable, ErrBelowPaid); err != nil {
+			return err
+		}
 		if len(identifiers) > 0 {
 			q = len(identifiers)
 		} else if q == 0 {
@@ -1237,14 +1288,6 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 		}
 		if q < 1 || q > st.picked {
 			return ErrInvalidQuantity
-		}
-		for _, identifier := range identifiers {
-			if !slices.Contains(returnable, identifier) {
-				if slices.Contains(delivered, identifier) {
-					return ErrBelowPaid
-				}
-				return ErrInvalidIdentifiers
-			}
 		}
 		if len(identifiers) == 0 && q > len(returnable) {
 			return ErrBelowPaid
@@ -1321,10 +1364,8 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 				if p.Quantity != 0 && p.Quantity != len(chosen) {
 					return 0, ErrInvalidQuantity
 				}
-				for _, identifier := range chosen {
-					if !slices.Contains(unpaid, identifier) {
-						return 0, ErrInvalidIdentifiers
-					}
+				if err := checkAmong(ctx, tx, p.UnitID, chosen, unpaid, ErrAlreadyPaid); err != nil {
+					return 0, err
 				}
 			} else {
 				if n == 0 {
@@ -1387,6 +1428,15 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, qu
 	st, err := lockUnit(ctx, tx, distributionID, id)
 	if err != nil {
 		return err
+	}
+	if st.numbered && len(identifiers) > 0 {
+		paid, err := markedItems(ctx, tx, id, "paid_at", "")
+		if err != nil {
+			return err
+		}
+		if err := checkAmong(ctx, tx, id, identifiers, paid, ErrNotPaid); err != nil {
+			return err
+		}
 	}
 	q := quantity
 	if len(identifiers) > 0 {
