@@ -46,7 +46,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/distributions/{id}", h.authenticator.Protect(h.update, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}", h.authenticator.Protect(h.delete, "admin"))
 
-	mux.Handle("GET /api/v1/distribution-payments", h.authenticator.Protect(h.listPayments, "admin", "board"))
+	mux.Handle("GET /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.listPayments, "admin", "board"))
 	mux.Handle("GET /api/v1/distributions/{id}/people", h.authenticator.Protect(h.people))
 	mux.Handle("GET /api/v1/distributions/{id}/units", h.authenticator.Protect(h.listUnits))
 	mux.Handle("POST /api/v1/distributions/{id}/units", h.authenticator.Protect(h.registerUnit))
@@ -772,13 +772,21 @@ func (h *Handler) returnUnits(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
-// listPayments is the list of payments of every distribution, newest first, with
-// what each distribution had collected after each one; admin and board only, as
-// it says who paid what. distribution_id, from/to (YYYY-MM-DD, inclusive) and
-// limit/offset (default 50, at most 100) narrow and page it.
+// listPayments is the list of payments of one distribution, newest first, with
+// what it had collected after each one; admin and board only, as it says who paid
+// what. from/to (YYYY-MM-DD, inclusive) and limit/offset (default 50, at most
+// 100) narrow and page it.
 func (h *Handler) listPayments(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	if _, err := h.service.Get(r.Context(), id); err != nil {
+		writeError(w, err, "could not fetch distribution")
+		return
+	}
 	q := r.URL.Query()
-	filter := PaymentFilter{}
+	filter := PaymentFilter{DistributionID: &id}
 	filter.Limit, _ = strconv.Atoi(q.Get("limit"))
 	filter.Offset, _ = strconv.Atoi(q.Get("offset"))
 	if filter.Limit <= 0 || filter.Limit > 100 {
@@ -786,14 +794,6 @@ func (h *Handler) listPayments(w http.ResponseWriter, r *http.Request) {
 	}
 	if filter.Offset < 0 {
 		filter.Offset = 0
-	}
-	if raw := q.Get("distribution_id"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "distribution_id must be numeric")
-			return
-		}
-		filter.DistributionID = &n
 	}
 	for _, field := range []struct {
 		name string

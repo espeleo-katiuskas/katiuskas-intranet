@@ -470,7 +470,7 @@ but not below `picked_up_quantity`, `ErrBelowDelivered`) and a paid one only cha
 (`ErrUnitLocked`). Every payment mark is also written into `distribution_payments` (migration `00030`, the list of
 payments: `logPayment`, called by `MarkPaid`, `ClearPaid` and `DeleteUnit` in the same
 transaction; negative entries for what is taken off or deleted, `unit_id` null once its order is
-gone), which `GET /distribution-payments` (admin/board) serves newest first with
+gone), which `GET /distributions/{id}/payments` (admin/board, one distribution at a time) serves newest first with
 `total_after`, a window `SUM` per distribution over its whole history so it doesn't restart at a
 filter or page edge — the same idea as the accounting ledger's `balance_after`. The person who
 paid is the order's beneficiary; there is no separate payer. Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
@@ -1419,10 +1419,10 @@ pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
 `.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
 this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
-`/repartos`, `/reparto?id=…`, `/reparto-pedidos?id=…` and `/reparto-pagos`
+`/repartos`, `/reparto?id=…`, `/reparto-pedidos?id=…` and `/reparto-pagos?id=…`
 (`distributions.js`, `distribution.js`, `distribution-orders.js`, `distribution-payments.js` — the
-list of payments, reached by the "Pagos" button of `/repartos`, admin/board, with a distribution
-filter and a date range and "Ver más" like the ledger of an account —
+list of one distribution's payments, reached by the "Pagos" button of its page (admin/board, only
+when it has something to pay), with a date range and "Ver más" like the ledger of an account —
 sharing `js/distributionCommon.js`) are the interface for **Distributions** above — where
 what the code and the API call a unit is a "pedido" to the people reading these pages, and
 an extra unit an "extra", since "unidad" meant nothing to them — behind one "Repartos"

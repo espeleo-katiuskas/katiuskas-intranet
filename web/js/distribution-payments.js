@@ -2,14 +2,17 @@ import { apiFetch, escapeHtml, formatCurrency, showError } from './api.js';
 import { initPage } from './layout.js';
 import { formatDateTime, formatIdentifiers } from './distributionCommon.js';
 
-// Every payment marked in the distributions, newest first, with what each
-// distribution had collected after each one. Admin and board: it says who paid.
+// Every payment marked in one distribution, newest first, with what it had collected
+// after each one. Admin and board: it says who paid.
 await initPage({ requireAnyRole: ['admin', 'board'] });
+
+const id = Number(new URLSearchParams(window.location.search).get('id'));
+const base = `/distributions/${id}`;
+document.getElementById('back-link').href = `/reparto?id=${id}`;
 
 const PAGE_SIZE = 50;
 const list = document.getElementById('payments-list');
 const moreButton = document.getElementById('load-more');
-const distributionFilter = document.getElementById('filter-distribution');
 const fromFilter = document.getElementById('filter-from');
 const toFilter = document.getElementById('filter-to');
 
@@ -40,7 +43,6 @@ function what(e) {
 function row(e) {
   return `<tr>
     <td>${escapeHtml(formatDateTime(e.occurred_at))}</td>
-    <td>${e.distribution_name ? `<a href="/reparto-pedidos?id=${e.distribution_id}">${escapeHtml(e.distribution_name)}</a>` : ''}</td>
     <td>${escapeHtml(e.recorded_by_name)}</td>
     <td>${what(e)}</td>
     <td><a href="/socio?login=${encodeURIComponent(e.paid_by_login)}">${escapeHtml(e.paid_by_name)}</a></td>
@@ -54,43 +56,36 @@ function row(e) {
 async function load({ more = false } = {}) {
   if (!more) offset = 0;
   const params = new URLSearchParams({ limit: PAGE_SIZE + 1, offset });
-  if (distributionFilter.value) params.set('distribution_id', distributionFilter.value);
   if (fromFilter.value) params.set('from', fromFilter.value);
   if (toFilter.value) params.set('to', toFilter.value);
   try {
-    const entries = await apiFetch(`/distribution-payments?${params}`);
+    const entries = await apiFetch(`${base}/payments?${params}`);
     const page = entries.slice(0, PAGE_SIZE);
     const rows = page.map(row).join('');
     if (more) list.insertAdjacentHTML('beforeend', rows);
     else
-      list.innerHTML = rows || '<tr><td colspan="7">No hay ningún pago con ese filtro.</td></tr>';
+      list.innerHTML = rows || '<tr><td colspan="6">No hay ningún pago con ese filtro.</td></tr>';
     offset += page.length;
     moreButton.hidden = entries.length <= PAGE_SIZE;
   } catch (err) {
-    list.innerHTML = '<tr><td colspan="7">No se pudieron cargar los pagos.</td></tr>';
+    list.innerHTML = '<tr><td colspan="6">No se pudieron cargar los pagos.</td></tr>';
     showError(err.message);
   }
 }
 
-for (const field of [distributionFilter, fromFilter, toFilter]) {
+for (const field of [fromFilter, toFilter]) {
   field.addEventListener('change', () => load());
 }
 moreButton.addEventListener('click', () => load({ more: true }));
 
-// The distributions with something to pay are the ones worth choosing.
-async function loadDistributions() {
+async function showDistribution() {
   try {
-    const all = await apiFetch('/distributions');
-    const payable = all.filter(
-      (d) => d.price > 0 || (d.extra_price ?? 0) > 0 || (d.articles ?? []).some((a) => a.price > 0),
-    );
-    distributionFilter.insertAdjacentHTML(
-      'beforeend',
-      payable.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join(''),
-    );
-  } catch {
-    // Without the choices the list still shows everything.
+    const distribution = await apiFetch(base);
+    document.getElementById('payments-title').textContent = `Pagos: ${distribution.name}`;
+    document.title = `Pagos: ${distribution.name} — Club de Espeleología Katiuskas`;
+  } catch (err) {
+    showError(err.message);
   }
 }
 
-await Promise.all([loadDistributions(), load()]);
+await Promise.all([showDistribution(), load()]);

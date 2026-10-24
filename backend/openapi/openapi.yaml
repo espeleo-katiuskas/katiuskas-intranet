@@ -2346,25 +2346,25 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_deliverable or quantity_below_paid. }
 
-  /distribution-payments:
+  /distributions/{id}/payments:
     get:
-      summary: List the payments of every distribution
+      summary: List the payments of a distribution
       description: >
         Requires admin or board (it says who paid what). Every payment marked in
-        the distributions, newest first: when, who wrote it down, whose order it
+        the distribution, newest first: when, who wrote it down, whose order it
         was for (the person who paid), what it was and how many units, the money,
-        the numbers it was about, and `total_after`, what that distribution had
+        the numbers it was about, and `total_after`, what the distribution had
         collected up to and including the entry. Taking a payment off is an entry
         with the signs changed, and so is deleting an order that had something
         paid. `total_after` is summed over the distribution's whole history,
-        so it doesn't restart at the edge of a filter or a page. Narrowed by
-        `distribution_id` and an inclusive range `from`/`to` (YYYY-MM-DD; 400
-        invalid_date, invalid_date_range) and paged by `limit`/`offset`
-        (default 50, at most 100). What was paid before this list existed is one
-        entry per order, at the date of its last payment.
+        so it doesn't restart at the edge of a filter or a page. Narrowed by an
+        inclusive range `from`/`to` (YYYY-MM-DD; 400 invalid_date,
+        invalid_date_range) and paged by `limit`/`offset` (default 50, at most
+        100). What was paid before this list existed is one entry per order, at
+        the date of its last payment.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: distribution_id, in: query, required: false, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: from, in: query, required: false, schema: { type: string, format: date } }
         - { name: to, in: query, required: false, schema: { type: string, format: date } }
         - { name: limit, in: query, required: false, schema: { type: integer } }
@@ -2377,10 +2377,9 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/DistributionPayment" }
-        "400": { description: invalid_id, invalid_date or invalid_date_range. }
+        "400": { description: invalid_date or invalid_date_range. }
         "403": { description: Neither admin nor board. }
-
-  /distributions/{id}/payments:
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Mark units as paid
       description: >

@@ -97,6 +97,16 @@ function renderHeader() {
   // else, hence the optional chaining on the ones that might not be there.
   const ordersLink = document.getElementById('link-orders');
   if (ordersLink) ordersLink.href = `/reparto-pedidos?id=${id}`;
+  // The list of payments only where there is something to pay.
+  const paymentsLink = document.getElementById('link-payments');
+  if (paymentsLink) {
+    paymentsLink.href = `/reparto-pagos?id=${id}`;
+    paymentsLink.hidden = !(
+      distribution.price > 0 ||
+      (distribution.extra_price ?? 0) > 0 ||
+      distribution.articles.some((a) => a.price > 0)
+    );
+  }
   // Only when some article has its numbers described, so there is something to list.
   const numbersLink = document.getElementById('link-numbers');
   if (numbersLink) {
