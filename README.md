@@ -4,29 +4,34 @@ Base de datos en PostgreSQL, API REST en Go y frontend web en JavaScript, pensad
 que la misma API sirva también a una futura app móvil o a un cliente de terminal. Más
 información sobre el club en [katiuskas.es](https://katiuskas.es/).
 
-- `db/migrations/` — esquema de PostgreSQL (migraciones con
+- [`db/migrations/`](db/migrations/) — esquema de PostgreSQL (migraciones con
   [goose](https://github.com/pressly/goose)).
-- `backend/` — API REST en Go (`/api/v1`), ver `backend/openapi/openapi.yaml` para el
-  contrato completo.
-- `web/` — páginas web (HTML + JS) para socios y directiva.
-- `docs/architecture.md` — arquitectura y reglas de negocio.
-- `docs/api.md` — lista de endpoints de la API, para quien quiera usarla sin leer el OpenAPI.
-- `docs/database.md` — cómo se guardan los datos: tablas, columnas y restricciones.
-- `docs/backend-internals.md` y `docs/frontend.md` — el detalle de cómo funciona el backend,
-  recurso a recurso, y el frontend, página a página (en inglés).
-- `scripts/` — herramientas de línea de comandos; ver
+- [`backend/`](backend/) — API REST en Go (`/api/v1`), ver
+  [`backend/openapi/openapi.yaml`](backend/openapi/openapi.yaml) para el contrato completo.
+- [`web/`](web/) — páginas web (HTML + JS) para socios y junta directiva.
+- [`docs/architecture.md`](docs/architecture.md) — arquitectura y reglas de negocio.
+- [`docs/api.md`](docs/api.md) — lista de endpoints de la API, para quien quiera usarla sin leer
+  el OpenAPI.
+- [`docs/database.md`](docs/database.md) — cómo se guardan los datos: tablas, columnas y
+  restricciones.
+- [`docs/backend-internals.md`](docs/backend-internals.md) y [`docs/frontend.md`](docs/frontend.md)
+  — el detalle de cómo funciona el backend, recurso a recurso, y el frontend, página a página.
+- [`scripts/`](scripts/) — herramientas de línea de comandos; ver
   [`scripts/README.md`](scripts/README.md).
-- `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo
-  junto.
-- `docs/deployment.md` — cómo desplegar en producción en una máquina propia, con Docker.
-- `docs/deployment-no-docker.md` — lo mismo sin Docker, para un servidor con poco disco.
-- `docs/environments.md` — los tres entornos (local con Docker, y testing y producción con
-  systemd en el host del club) y cómo se actualiza cada uno.
+- [`docker-compose.yml`](docker-compose.yml) — PostgreSQL + API + frontend detrás de Caddy, para
+  levantar todo junto.
+- [`docs/deployment.md`](docs/deployment.md) — cómo desplegar en producción en una máquina propia,
+  con Docker.
+- [`docs/deployment-no-docker.md`](docs/deployment-no-docker.md) — lo mismo sin Docker, para un
+  servidor con poco disco.
+- [`docs/environments.md`](docs/environments.md) — los tres entornos (local con Docker, y testing
+  y producción con systemd en el host del club) y cómo se actualiza cada uno.
 
 ## Idioma
 
 Todo el código (identificadores, comentarios, logs y mensajes de error de la API) está
-en inglés. La documentación puede estar en español o inglés. El frontend web, al ser la
+en inglés, y también toda la documentación de `docs/` y de `scripts/` (este `README.md` queda en
+español por ahora). El frontend web, al ser la
 interfaz de las personas socias del club, está enteramente en español.
 
 ## Puesta en marcha rápida
@@ -58,7 +63,7 @@ mira los logs de la API (`docker compose logs api`) para encontrar el enlace de 
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
 Para desarrollo sin Docker, `make run` sirve la API en `:64711` (necesita `DATABASE_URL`
-apuntando a un PostgreSQL accesible); más detalles en `docs/architecture.md`.
+apuntando a un PostgreSQL accesible); más detalles en [`docs/architecture.md`](docs/architecture.md).
 
 ## Tests
 
