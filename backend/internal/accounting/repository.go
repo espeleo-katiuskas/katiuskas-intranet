@@ -249,6 +249,13 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			UNION ALL
 			SELECT a.id, tree.path || a.position
 			FROM accounts a JOIN tree ON a.parent_id = tree.id
+		), closure AS (
+			-- Every account with itself and everything below it: an account that
+			-- groups others has no entries, its balance and last movement are those
+			-- of its descendants.
+			SELECT id AS ancestor, id AS descendant FROM accounts
+			UNION ALL
+			SELECT closure.ancestor, a.id FROM accounts a JOIN closure ON a.parent_id = closure.descendant
 		)
 		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden, a.distribution_default,
 			account_effective_type(a.id),
@@ -256,7 +263,8 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			MAX(t.occurred_at) AS last_transaction_at
 		FROM accounts a
 		JOIN tree ON tree.id = a.id
-		LEFT JOIN transaction_entries te ON te.account_id = a.id
+		JOIN closure ON closure.ancestor = a.id
+		LEFT JOIN transaction_entries te ON te.account_id = closure.descendant
 		LEFT JOIN transactions t ON t.id = te.transaction_id
 		GROUP BY a.id, tree.path
 		ORDER BY tree.path

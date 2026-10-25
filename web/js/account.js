@@ -14,7 +14,6 @@ import { initPage } from './layout.js';
 import {
   accountingErrorText,
   accountTypes,
-  childrenByParent,
   flattenAccountTree,
   shownAccounts,
   accountLabel,
@@ -559,17 +558,10 @@ function refreshDuesLicensesSections(prefix) {
 // of everything below it, with their total as the balance.
 const isGroupView = () => allAccounts.some((a) => a.parent_id === accountId);
 
-function groupBalance(id) {
-  const children = childrenByParent(allAccounts);
-  const total = (parentId) =>
-    (children.get(parentId) ?? []).reduce((sum, a) => sum + (a.balance ?? 0) + total(a.id), 0);
-  return total(id);
-}
-
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
   document.getElementById('account-balance-line').textContent =
-    `Saldo actual: ${formatCurrency(isGroupView() ? groupBalance(account.id) : (account.balance ?? 0))}`;
+    `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
   // What the account is mainly for, when it or an ancestor says; one with no type of
   // its own has its parent's.
   const type = accountTypes[account.effective_type];

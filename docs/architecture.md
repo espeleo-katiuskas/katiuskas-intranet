@@ -1258,9 +1258,11 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
 #### Saldos y listados
 
 - `GET /accounts` recorre el árbol en profundidad (cada cuenta seguida de todos sus
-  descendientes antes del siguiente hermano) y añade a cada una su `balance` propio (suma
-  de sus movimientos directos, nunca de los de sus hijas) y `last_transaction_at`. Ninguna
-  otra ruta de `accounts` calcula estos dos campos.
+  descendientes antes del siguiente hermano) y añade a cada una su `balance` (suma
+  de sus movimientos) y `last_transaction_at` (el del más reciente). Una cuenta que agrupa otras,
+  que no tiene movimientos propios, lleva la suma de los saldos de todo lo que cuelga de ella y
+  la fecha más reciente de sus descendientes. Ninguna otra ruta de `accounts` calcula estos dos
+  campos.
 - `GET /transactions` y `GET /accounts/{id}/transactions` (el libro mayor de una cuenta,
   con `balance_after` corrido) están paginados, porque crecen sin límite con los años:
   - `limit` (50 por defecto, máximo 100) y `offset`; un valor fuera de rango (`limit`

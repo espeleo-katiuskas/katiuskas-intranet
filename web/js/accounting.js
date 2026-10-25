@@ -63,11 +63,15 @@ function parentSelectOptions(selectedParentId, excludeId) {
   // One that has transactions can't have child accounts (an account either
   // groups others or has transactions), so it isn't offered either — unless it is
   // the current parent.
+  // (A group's last_transaction_at is its descendants', so only a leaf counts.)
+  const parents = new Set(allAccounts.map((a) => a.parent_id));
   const offered = shownAccounts(
     allAccounts,
     (account) =>
       (showHidden || !account.hidden || account.id === selectedParentId) &&
-      (account.last_transaction_at == null || account.id === selectedParentId),
+      (parents.has(account.id) ||
+        account.last_transaction_at == null ||
+        account.id === selectedParentId),
   );
   const options = flattenAccountTree(offered)
     .filter(({ account }) => !excluded.has(account.id))

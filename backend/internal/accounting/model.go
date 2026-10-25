@@ -69,10 +69,11 @@ type Account struct {
 	// migration 00032_distribution_accounts.sql). Marking one takes the mark off
 	// whichever had it.
 	DistributionDefault bool `json:"distribution_default"`
-	// Balance and LastTransactionAt are this account's own direct
-	// activity — the sum of every entry ever posted straight to it
-	// (never rolled up from child accounts) and when the most recent
-	// one occurred (nil if never). Both are only ever populated by
+	// Balance and LastTransactionAt are this account's activity — the sum of
+	// every entry ever posted to it and when the most recent one occurred
+	// (nil if never) — and, for an account that groups others, which has no
+	// entries of its own, the sum and the latest of those of everything below it.
+	// Both are only ever populated by
 	// ListAccounts (see GET /accounts, Repository.ListAccounts) — left
 	// nil everywhere else (GetAccount, CreateAccount, UpdateAccount),
 	// since computing them costs an extra join those single-account

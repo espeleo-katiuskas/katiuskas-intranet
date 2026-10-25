@@ -1038,3 +1038,56 @@ func TestAccountHiddenFlagRoundTrips(t *testing.T) {
 		t.Errorf("expected an update that leaves hidden out to clear it, got %+v", shown)
 	}
 }
+
+// An account that groups others has no entries of its own: ListAccounts gives it
+// the sum of its descendants' balances (however deep) and their latest movement.
+func TestListAccountsRollsUpGroupsFromTheirDescendants(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	group := mustCreateAccount(t, repo, "Bancos", "572")
+	bank, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Santander", ParentID: &group.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checking, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Corriente", ParentID: &bank.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "BBVA", ParentID: &group.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	income := mustCreateAccount(t, repo, "Ingresos", "705")
+	older := time.Now().Add(-72 * time.Hour)
+	newer := time.Now().Add(-24 * time.Hour)
+	for _, tc := range []struct {
+		account int64
+		amount  float64
+		at      time.Time
+	}{{checking.ID, 100, older}, {other.ID, 40, newer}} {
+		if _, err := repo.CreateTransaction(ctx, accounting.CreateTransactionInput{
+			Description: "Cuota", OccurredAt: tc.at,
+			Entries: []accounting.EntryInput{{AccountID: tc.account, Amount: tc.amount}, {AccountID: income.ID, Amount: -tc.amount}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := repo.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[int64]accounting.Account{}
+	for _, a := range list {
+		byID[a.ID] = a
+	}
+	for _, c := range []struct {
+		id      int64
+		balance float64
+		last    time.Time
+	}{{group.ID, 140, newer}, {bank.ID, 100, older}, {checking.ID, 100, older}, {other.ID, 40, newer}} {
+		a := byID[c.id]
+		if a.Balance == nil || *a.Balance != c.balance || a.LastTransactionAt == nil || a.LastTransactionAt.Sub(c.last).Abs() > time.Millisecond {
+			t.Errorf("%s: expected balance %v and last %v, got %v and %v", a.Name, c.balance, c.last, a.Balance, a.LastTransactionAt)
+		}
+	}
+}

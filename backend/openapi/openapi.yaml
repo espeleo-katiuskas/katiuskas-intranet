@@ -4234,9 +4234,10 @@ components:
         top-level account) — the frontend builds any tree view it wants
         client-side from this. balance/last_transaction_at are only
         ever present from GET /accounts (never on GET/POST/PATCH
-        /accounts/{id}) — this account's own direct activity, summing
-        every entry ever posted straight to it, never rolled up from
-        any child account. allows_dues/allows_licenses mark the accounts a
+        /accounts/{id}) — this account's activity, summing every entry
+        ever posted to it and the latest of them; for an account that
+        has child accounts (and so no entries of its own) the sum, and
+        the latest, of everything below it. allows_dues/allows_licenses mark the accounts a
         transaction has to have an entry on to be allowed to record
         membership dues or federative licenses (both false until an admin
         or the money role marks them) — enforced by POST

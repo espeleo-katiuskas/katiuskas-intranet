@@ -1139,9 +1139,11 @@ migration `00018`; `validateEntries` checks it in Go before touching the databas
 alongside the two-entry minimum and non-zero amounts, `ErrDuplicateAccount`, 400
 `duplicate_account`) — its one entry's amount already says everything that moved through
 it, and the ledger's per-account running balance and "other accounts" detail both assume
-it. `GET /accounts` also joins in each account's own direct `balance` (summed from every
-entry ever posted straight to it) and `last_transaction_at` (the most recent one's
-`occurred_at`) — never rolled up from a child account, and never present on any other
+it. `GET /accounts` also joins in each account's `balance` (summed from every
+entry ever posted to it) and `last_transaction_at` (the most recent one's
+`occurred_at`) — for an account that groups others, which has no entries of its own, those of
+everything below it (a `closure` CTE of every account with its descendants), so a group shows the
+sum of its children's balances and the latest of their last movements — and never present on any other
 `accounts` route (`GET`/`POST`/`PATCH /accounts/{id}` are all just the row itself, no
 extra join); a `LEFT JOIN` against `transaction_entries`/`transactions` means an account
 with no entries at all still gets one row back rather than being silently missing,
@@ -1567,7 +1569,7 @@ redirected to `/`) — tighter than the API itself, which opens *reading* the ch
 baseline role the same as `GET /transactions`; admin/money can already write here too, so
 nothing on the page needs a narrower check than that one gate.
 
-`/cuenta?id=…` (`account.js`) is one account's own ledger (for a group, `isGroupView`: its descendants' entries with a "Cuenta" column between Fecha and Descripción linking to each one's page, where the transaction is corrected — no Editar, no new transactions, a header balance that is the sum of all its descendants' — and a row's detail lists the other accounts relative to the account the row is on) — reached only by clicking an
+`/cuenta?id=…` (`account.js`) is one account's own ledger (for a group, `isGroupView`: its descendants' entries with a "Cuenta" column between Fecha and Descripción linking to each one's page, where the transaction is corrected — no Editar, no new transactions, a header balance that, like in `/contabilidad`, is the sum of all its descendants' (it comes rolled up from `GET /accounts`) — and a row's detail lists the other accounts relative to the account the row is on) — reached only by clicking an
 account's name on `/contabilidad`, never linked from the sidebar itself, so it shares that
 same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/contabilidad`
 for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
