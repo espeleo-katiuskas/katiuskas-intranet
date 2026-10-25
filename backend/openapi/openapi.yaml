@@ -4250,7 +4250,11 @@ components:
         type:
           type: string
           enum: [asset, income, expense]
-          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. A distribution's payments have to be paid into an account of type asset.
+          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. This is the account's own type, the one PATCH replaces.
+        effective_type:
+          type: string
+          enum: [asset, income, expense]
+          description: The type that counts, read only, in every response. The account's own, or else its parent's, and so on up the hierarchy; absent when nobody has one. A distribution's payments have to be paid into an account whose effective type is asset, and recorded in one that is income.
         allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
         allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
         distribution_default: { type: boolean, description: The account the payments of distributions with no account of their own are recorded in; at most one account has it. }

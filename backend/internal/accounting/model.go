@@ -52,11 +52,15 @@ func (t AccountType) Valid() bool {
 // other, and the flag is only ever acted on by whoever reads it. Type is
 // optional like Code (nil, left out of the JSON, for an account that has none).
 type Account struct {
-	ID             int64        `json:"id"`
-	Name           string       `json:"name"`
-	Code           *string      `json:"code,omitempty"`
-	ParentID       *int64       `json:"parent_id,omitempty"`
+	ID       int64   `json:"id"`
+	Name     string  `json:"name"`
+	Code     *string `json:"code,omitempty"`
+	ParentID *int64  `json:"parent_id,omitempty"`
+	// Type is the account's own type, the one a PATCH replaces; EffectiveType is the
+	// one that counts — its own, or else its parent's (recursively) — and what every
+	// rule about the type uses. Absent when neither it nor any ancestor has one.
 	Type           *AccountType `json:"type,omitempty"`
+	EffectiveType  *AccountType `json:"effective_type,omitempty"`
 	AllowsDues     bool         `json:"allows_dues"`
 	AllowsLicenses bool         `json:"allows_licenses"`
 	Hidden         bool         `json:"hidden"`

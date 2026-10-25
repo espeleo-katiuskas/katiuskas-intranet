@@ -329,7 +329,9 @@ async function loadAccountOptions(form) {
   try {
     const all = await apiFetch('/accounts');
     const groups = new Set(all.map((a) => a.parent_id));
-    const accounts = all.filter((a) => !a.hidden && a.type === 'income' && !groups.has(a.id));
+    const accounts = all.filter(
+      (a) => !a.hidden && a.effective_type === 'income' && !groups.has(a.id),
+    );
     const standard = accounts.find((a) => a.distribution_default);
     select.innerHTML = [
       `<option value="">${standard ? `Por defecto (${escapeHtml(standard.name)})` : 'Por defecto (todavía no hay ninguna)'}</option>`,

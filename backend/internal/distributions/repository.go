@@ -219,7 +219,7 @@ func checkIncomeAccount(ctx context.Context, tx pgx.Tx, accountID *int64) error 
 		return nil
 	}
 	var kind *string
-	err := tx.QueryRow(ctx, `SELECT type::text FROM accounts WHERE id = $1`, *accountID).Scan(&kind)
+	err := tx.QueryRow(ctx, `SELECT account_effective_type(id)::text FROM accounts WHERE id = $1`, *accountID).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrUnknownAccount
 	}
@@ -1057,7 +1057,7 @@ func logPayment(ctx context.Context, tx pgx.Tx, unitID int64, quantity int, iden
 // the default for distributions, and they can't be the same.
 func paymentAccounts(ctx context.Context, tx pgx.Tx, distributionID, assetID int64) (int64, error) {
 	var kind *string
-	err := tx.QueryRow(ctx, `SELECT type::text FROM accounts WHERE id = $1`, assetID).Scan(&kind)
+	err := tx.QueryRow(ctx, `SELECT account_effective_type(id)::text FROM accounts WHERE id = $1`, assetID).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrUnknownAccount
 	}

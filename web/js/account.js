@@ -558,11 +558,15 @@ function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
   document.getElementById('account-balance-line').textContent =
     `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
-  // What the account is mainly for, when it says (nothing acts on it yet).
-  const type = accountTypes[account.type];
+  // What the account is mainly for, when it or an ancestor says; one with no type of
+  // its own has its parent's.
+  const type = accountTypes[account.effective_type];
   const typeLine = document.getElementById('account-type-line');
   typeLine.hidden = !type;
-  if (type) typeLine.textContent = `Tipo: ${type.label} (${type.hint})`;
+  if (type) {
+    const inherited = account.type ? '' : ', heredado de su cuenta superior';
+    typeLine.textContent = `Tipo: ${type.label} (${type.hint}${inherited})`;
+  }
 }
 
 // The "otra cuenta" pickers exclude only this account itself — unlike

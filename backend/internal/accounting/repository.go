@@ -142,9 +142,6 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 	}
 	defer tx.Rollback(ctx)
 
-	if in.DistributionDefault && (in.Type == nil || *in.Type != AccountTypeIncome) {
-		return Account{}, ErrNotIncomeForDistributions
-	}
 	if in.DistributionDefault {
 		if _, err := tx.Exec(ctx, `UPDATE accounts SET distribution_default = false WHERE distribution_default`); err != nil {
 			return Account{}, err
@@ -170,7 +167,36 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 	if err != nil {
 		return Account{}, err
 	}
+	if err := finishAccountChange(ctx, tx, &a); err != nil {
+		return Account{}, err
+	}
 	return a, tx.Commit(ctx)
+}
+
+// finishAccountChange runs, inside the transaction that created or edited an
+// account, what can only be known once it is in place: its effective type (the
+// function reads the table, so not in the same statement) and that the account
+// of every distribution, and the default one, are still of type income — a new or
+// moved account, or a changed type, can change the type of a whole subtree.
+func finishAccountChange(ctx context.Context, tx pgx.Tx, a *Account) error {
+	if err := tx.QueryRow(ctx, `SELECT account_effective_type($1)`, a.ID).Scan(&a.EffectiveType); err != nil {
+		return err
+	}
+	var broken bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM distributions d
+			WHERE d.account_id IS NOT NULL AND account_effective_type(d.account_id) IS DISTINCT FROM 'income'
+		) OR EXISTS (
+			SELECT 1 FROM accounts WHERE distribution_default AND account_effective_type(id) IS DISTINCT FROM 'income'
+		)
+	`).Scan(&broken); err != nil {
+		return err
+	}
+	if broken {
+		return ErrNotIncomeForDistributions
+	}
+	return nil
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) {
@@ -181,6 +207,10 @@ func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
+	if err != nil {
+		return Account{}, err
+	}
+	err = r.pool.QueryRow(ctx, `SELECT account_effective_type($1)`, id).Scan(&a.EffectiveType)
 	return a, err
 }
 
@@ -221,6 +251,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			FROM accounts a JOIN tree ON a.parent_id = tree.id
 		)
 		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden, a.distribution_default,
+			account_effective_type(a.id),
 			COALESCE(SUM(te.amount), 0) AS balance,
 			MAX(t.occurred_at) AS last_transaction_at
 		FROM accounts a
@@ -239,7 +270,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		var balance float64
-		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &balance, &a.LastTransactionAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.EffectiveType, &balance, &a.LastTransactionAt); err != nil {
 			return nil, err
 		}
 		a.Balance = &balance
@@ -354,19 +385,6 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 	}
 	defer tx.Rollback(ctx)
 
-	if in.DistributionDefault && (in.Type == nil || *in.Type != AccountTypeIncome) {
-		return Account{}, ErrNotIncomeForDistributions
-	}
-	if in.Type == nil || *in.Type != AccountTypeIncome {
-		// Losing the income type is refused while a distribution names the account.
-		var used bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM distributions WHERE account_id = $1)`, id).Scan(&used); err != nil {
-			return Account{}, err
-		}
-		if used {
-			return Account{}, ErrNotIncomeForDistributions
-		}
-	}
 	if in.DistributionDefault {
 		if _, err := tx.Exec(ctx, `UPDATE accounts SET distribution_default = false WHERE distribution_default AND id <> $1`, id); err != nil {
 			return Account{}, err
@@ -393,6 +411,9 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 		return Account{}, ErrUnknownAccount
 	}
 	if err != nil {
+		return Account{}, err
+	}
+	if err := finishAccountChange(ctx, tx, &a); err != nil {
 		return Account{}, err
 	}
 	return a, tx.Commit(ctx)

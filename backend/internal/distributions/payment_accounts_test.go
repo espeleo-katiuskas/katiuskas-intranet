@@ -301,3 +301,31 @@ func TestAccountsThatGroupOthersCantBePaidInOrNamed(t *testing.T) {
 	b["account_id"] = income
 	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusConflict, "account_has_children")
 }
+
+func TestAccountsInheritTheirTypeForPaymentsAndDistributions(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenLottery(t, e, admin)
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 1), http.StatusCreated))
+	sub := func(parent int64, name string) int64 {
+		t.Helper()
+		var id int64
+		if err := e.tx.QueryRow(context.Background(), `INSERT INTO accounts (name, parent_id, position) VALUES ($1, $2, 1) RETURNING id`, name, parent).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	// A typeless account under an asset is an asset to pay in, with no type of its own.
+	bank := sub(e.cash, "Cuenta del banco")
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}, "account_id": bank}), http.StatusNoContent)
+	// And one under an income account is an income account for a distribution.
+	income := e.newAccount(t, "Ingresos", "income")
+	b := lottery()
+	b["status"] = "open"
+	b["account_id"] = sub(income, "Lotería")
+	mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusOK)
+	// Under an asset, it isn't.
+	b["account_id"] = sub(e.cash, "Otra del banco")
+	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusBadRequest, "account_not_income")
+}

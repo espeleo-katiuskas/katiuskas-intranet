@@ -1185,6 +1185,13 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
   de la cuenta (`/cuenta`), se elige al crearla o editarla en Contabilidad, y la cuenta en la que se
   paga un reparto tiene que ser `asset`. Se podrán añadir
   más tipos al `enum`.
+- `effective_type` (migración 00034, solo lectura): el tipo que cuenta. Una cuenta sin tipo propio
+  hereda el de su cuenta superior, y así hacia arriba; ausente si nadie por encima tiene. `type` es
+  el propio, el que reemplaza un `PATCH`. Las reglas que dependen del tipo (la cuenta en la que se
+  paga es `asset`, la de un reparto y la de por defecto son `income`) usan el efectivo, y como
+  cambiar un tipo, mover una cuenta o crear una nueva puede cambiar el de todo un subárbol, al
+  guardar se comprueba que la cuenta de cada reparto y la de por defecto siguen siendo `income`
+  (409 `not_income_for_distributions`, y no se guarda nada).
 - `distribution_default` (migración 00032), booleano siempre presente: la cuenta donde se apuntan
   los pagos de los repartos que no tienen cuenta propia. Solo una cuenta lo tiene (índice único
   parcial); marcarla, al crear o editar, se lo quita a la que lo tuviera. Un `PATCH` que lo omite lo

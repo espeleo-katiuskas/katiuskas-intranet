@@ -61,7 +61,7 @@ function accountLabel(account) {
 
 // What an account is mainly for (the API's `type`; none is allowed): its name and a
 // line saying what it means, for the pickers of the create/edit dialogs and for the
-// account's own page. Nothing acts on it yet.
+// account's own page.
 const accountTypes = {
   asset: { label: 'Activo', hint: 'su saldo es dinero que tiene de verdad el club' },
   income: { label: 'Ingresos', hint: 'se usa sobre todo para lo que entra' },

@@ -1225,3 +1225,79 @@ func TestAccountsEitherHaveChildrenOrTransactions(t *testing.T) {
 		t.Fatalf("expected 200 moving under a group, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// An account with no type of its own has its parent's, recursively: the listing
+// says which in effective_type, and the rules about distributions' accounts
+// follow it, also when a parent's type changes under them.
+func TestAccountsWithoutTypeInheritTheirParents(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	create := func(body map[string]any) accounting.Account {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", token, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %v: %d: %s", body, rec.Code, rec.Body.String())
+		}
+		var a accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	effective := func(id int64) string {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/accounts", token, nil)
+		var all []accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range all {
+			if a.ID == id {
+				if a.EffectiveType == nil {
+					return ""
+				}
+				return string(*a.EffectiveType)
+			}
+		}
+		t.Fatalf("account %d not listed", id)
+		return ""
+	}
+	root := create(map[string]any{"name": "Ingresos", "type": "income"})
+	middle := create(map[string]any{"name": "Cuotas", "parent_id": root.ID})
+	leaf := create(map[string]any{"name": "Lotería", "parent_id": middle.ID, "distribution_default": true})
+	if leaf.EffectiveType == nil || *leaf.EffectiveType != accounting.AccountTypeIncome || leaf.Type != nil {
+		t.Fatalf("a created account says its effective type: %+v", leaf)
+	}
+	if got := effective(leaf.ID); got != "income" {
+		t.Fatalf("expected income inherited through two levels, got %q", got)
+	}
+	own := create(map[string]any{"name": "Gastos", "type": "expense", "parent_id": root.ID})
+	if got := effective(own.ID); got != "expense" {
+		t.Fatalf("an own type wins, got %q", got)
+	}
+	// A default account has to be income, inherited or not.
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", token, map[string]any{"name": "Mal", "parent_id": own.ID, "distribution_default": true})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for a default inheriting expense, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Changing the type of a parent changes the whole subtree, which is refused while
+	// the default account is under it.
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_income_for_distributions" {
+		t.Fatalf("expected 409 changing the type above the default, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := effective(leaf.ID); got != "income" {
+		t.Fatalf("the refused change must not stick, got %q", got)
+	}
+	// Moving the default account under an expense parent is refused too.
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", leaf.ID), token, map[string]any{"name": "Lotería", "parent_id": own.ID, "distribution_default": true})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 moving the default under an expense, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// A parent with no type anywhere above gives none.
+	loose := create(map[string]any{"name": "Suelta"})
+	child := create(map[string]any{"name": "Hija", "parent_id": loose.ID})
+	if effective(child.ID) != "" {
+		t.Fatalf("no type anywhere should give none")
+	}
+}

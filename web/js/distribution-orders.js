@@ -711,7 +711,9 @@ async function load(ready = Promise.resolve()) {
       requests.push(
         apiFetch('/accounts').then((all) => {
           const groups = new Set(all.map((a) => a.parent_id));
-          assetAccounts = all.filter((a) => a.type === 'asset' && !a.hidden && !groups.has(a.id));
+          assetAccounts = all.filter(
+            (a) => a.effective_type === 'asset' && !a.hidden && !groups.has(a.id),
+          );
         }),
       );
     }

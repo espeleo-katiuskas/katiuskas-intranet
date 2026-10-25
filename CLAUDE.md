@@ -1112,7 +1112,13 @@ the club really has —, `income`, `expense`; optional and left out of the JSON 
 a blank one normalized to none by `normalizeType`, `PATCH` replacing it, an unknown one 400
 `invalid_type`): it is shown on `/cuenta`'s header (`accountTypes` in
 `accountTree.js`), chosen in the create/edit dialogs, and the account a distribution's
-payment is made in has to be an `asset`. `distribution_default` (migration `00032`, always present in
+payment is made in has to be an `asset`. An account with no type of its own has its parent's, and so
+on up (migration `00034`, SQL function `account_effective_type`): `type` in the JSON is the own one,
+the one `PATCH` replaces, and `effective_type` the one that counts, which every rule (the asset paid
+in, the income account of a distribution, `distribution_default`) and the frontend's pickers and
+`/cuenta`'s header use. Since a change of type, of parent or a new account can alter a whole
+subtree, `finishAccountChange` re-checks in the same transaction that every distribution's account
+and the default one are still income (409 `not_income_for_distributions`, rolled back). `distribution_default` (migration `00032`, always present in
 the JSON, replaced wholesale by `PATCH`, with a "Repartos" badge and a checkbox in the dialogs) marks
 the account distributions record their payments in when they have none of their own. One with
 entries can't be deleted — they're history — so it's flagged instead, and *only the
