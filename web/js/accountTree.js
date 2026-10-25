@@ -80,6 +80,8 @@ function accountTypeOptions(selected = null) {
 // What the API's accounting error codes say, in the club's own words; anything else
 // falls back to the API's message.
 const accountingErrors = {
+  not_income_for_dues_licenses:
+    'Una cuenta para cuotas anuales o para licencias tiene que ser de tipo «ingresos» (propio o heredado de su cuenta superior), y no se puede cambiar el tipo de una cuenta, ni moverla, si eso deja de cumplirse.',
   account_has_children:
     'Una cuenta que agrupa otras cuentas no puede tener transacciones: usa una de sus cuentas hijas.',
   parent_has_entries:

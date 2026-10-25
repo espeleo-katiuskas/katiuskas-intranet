@@ -31,6 +31,10 @@ var (
 	// has transactions, never both (migration 00033).
 	ErrAccountHasChildren = errors.New("an account with child accounts can't have transactions: use one of its children")
 	ErrParentHasEntries   = errors.New("an account with transactions can't have child accounts")
+	// ErrNotIncomeForDuesLicenses means the same for an account marked for annual
+	// dues or federative licenses (allows_dues/allows_licenses): it has to be of
+	// type income.
+	ErrNotIncomeForDuesLicenses = errors.New("an account marked for dues or licenses has to be of type income")
 	// ErrDuplicateCode means another account already has this code.
 	ErrDuplicateCode = errors.New("another account already has this code")
 	// ErrAccountInUse means this account can't be deleted: it's still
@@ -175,26 +179,46 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 
 // finishAccountChange runs, inside the transaction that created or edited an
 // account, what can only be known once it is in place: its effective type (the
-// function reads the table, so not in the same statement) and that the account
-// of every distribution, and the default one, are still of type income — a new or
-// moved account, or a changed type, can change the type of a whole subtree.
+// function reads the table, so not in the same statement) and that nothing
+// that has to be income stopped being so — the account of a distribution and the
+// default one, and the accounts marked for dues or licenses. A new or moved
+// account, or a changed type, can change the type of a whole subtree, so it is the
+// account and everything below it that is checked, not accounts elsewhere that
+// may predate the rule.
 func finishAccountChange(ctx context.Context, tx pgx.Tx, a *Account) error {
 	if err := tx.QueryRow(ctx, `SELECT account_effective_type($1)`, a.ID).Scan(&a.EffectiveType); err != nil {
 		return err
 	}
-	var broken bool
+	var distributionsBroken, duesLicensesBroken bool
 	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM distributions d
-			WHERE d.account_id IS NOT NULL AND account_effective_type(d.account_id) IS DISTINCT FROM 'income'
-		) OR EXISTS (
-			SELECT 1 FROM accounts WHERE distribution_default AND account_effective_type(id) IS DISTINCT FROM 'income'
+		WITH RECURSIVE subtree AS (
+			SELECT id FROM accounts WHERE id = $1
+			UNION ALL
+			SELECT a.id FROM accounts a JOIN subtree s ON a.parent_id = s.id
 		)
-	`).Scan(&broken); err != nil {
+		SELECT
+			EXISTS (
+				SELECT 1 FROM distributions d
+				WHERE d.account_id IN (SELECT id FROM subtree)
+				  AND account_effective_type(d.account_id) IS DISTINCT FROM 'income'
+			) OR EXISTS (
+				SELECT 1 FROM accounts
+				WHERE id IN (SELECT id FROM subtree) AND distribution_default
+				  AND account_effective_type(id) IS DISTINCT FROM 'income'
+			),
+			EXISTS (
+				SELECT 1 FROM accounts
+				WHERE id IN (SELECT id FROM subtree) AND (allows_dues OR allows_licenses)
+				  AND account_effective_type(id) IS DISTINCT FROM 'income'
+			)
+	`, a.ID).Scan(&distributionsBroken, &duesLicensesBroken); err != nil {
 		return err
 	}
-	if broken {
+	if distributionsBroken {
 		return ErrNotIncomeForDistributions
+	}
+	if duesLicensesBroken {
+		return ErrNotIncomeForDuesLicenses
 	}
 	return nil
 }

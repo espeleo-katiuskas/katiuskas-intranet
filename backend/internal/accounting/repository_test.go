@@ -16,6 +16,8 @@ func newRepo(t *testing.T) *accounting.Repository {
 	return accounting.NewRepository(tx)
 }
 
+var income = accounting.AccountTypeIncome // the type accounts for dues or licenses need
+
 func strPtr(s string) *string { return &s }
 
 // codeOf reads an Account's own Code back out as a plain string ("" for
@@ -138,7 +140,7 @@ func TestCreateAccountStoresTheFlagsAndEveryReadSeesThem(t *testing.T) {
 	repo := newRepo(t)
 	ctx := context.Background()
 	created, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{
-		Name: "Cuotas", Code: strPtr("700"), AllowsDues: true,
+		Name: "Cuotas", Code: strPtr("700"), Type: &income, AllowsDues: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -176,14 +178,14 @@ func TestUpdateAccountReplacesTheFlags(t *testing.T) {
 	repo := newRepo(t)
 	ctx := context.Background()
 	a, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{
-		Name: "Cuotas y licencias", Code: strPtr("700"), AllowsDues: true, AllowsLicenses: true,
+		Name: "Cuotas y licencias", Code: strPtr("700"), Type: &income, AllowsDues: true, AllowsLicenses: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
 
 	onlyLicenses, err := repo.UpdateAccount(ctx, a.ID, accounting.UpdateAccountInput{
-		Name: a.Name, Code: a.Code, AllowsLicenses: true,
+		Name: a.Name, Code: a.Code, Type: &income, AllowsLicenses: true,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAccount: %v", err)
@@ -205,7 +207,7 @@ func TestMoveAccountReturnsTheFlags(t *testing.T) {
 	repo := newRepo(t)
 	ctx := context.Background()
 	mustCreateAccount(t, repo, "Primera", "1")
-	second, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Segunda", Code: strPtr("2"), AllowsDues: true})
+	second, err := repo.CreateAccount(ctx, accounting.CreateAccountInput{Name: "Segunda", Code: strPtr("2"), Type: &income, AllowsDues: true})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}

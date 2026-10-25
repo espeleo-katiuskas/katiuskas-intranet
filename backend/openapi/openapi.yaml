@@ -2909,7 +2909,9 @@ paths:
                   description: >
                     Marks this account as one a transaction can use to
                     record membership dues (cuotas anuales): see POST
-                    /users/{login}/dues. Omitted means false.
+                    /users/{login}/dues. Omitted means false. The account has
+                    to be of type income, its own or inherited, else 409
+                    not_income_for_dues_licenses (the same for allows_licenses).
                 allows_licenses:
                   type: boolean
                   default: false

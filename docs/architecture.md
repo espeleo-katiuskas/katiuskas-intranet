@@ -1199,7 +1199,11 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
 - `allows_dues` y `allows_licenses` (migración 00017, ambos `false` hasta que un admin o el
   rol `money` los marca): qué cuentas tiene que usar una transacción para poder registrar
   cuotas anuales o licencias federativas, que exigen `POST /users/{login}/dues` y
-  `POST /users/{login}/licenses`.
+  `POST /users/{login}/licenses`. Una cuenta marcada así tiene que ser de tipo `income` (el propio
+  o el heredado): si no, 409 `not_income_for_dues_licenses`, al crearla, al editarla, al moverla
+  o al cambiar el tipo de una cuenta de la que cuelga. Solo se comprueba la cuenta que se guarda y
+  lo que cuelga de ella, así que las que ya estaban marcadas antes de esta regla (sin tipo) no
+  bloquean otras ediciones; hay que ponerles el tipo la próxima vez que se editen.
 - `hidden` (migración 00019): marca una cuenta ya sin uso. No se puede borrar si tiene
   historial, así que se oculta del plan y de los selectores del frontend (que la muestran
   solo a petición) sin tocar nada de lo registrado contra ella.

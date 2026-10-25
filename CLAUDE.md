@@ -1117,8 +1117,12 @@ on up (migration `00034`, SQL function `account_effective_type`): `type` in the 
 the one `PATCH` replaces, and `effective_type` the one that counts, which every rule (the asset paid
 in, the income account of a distribution, `distribution_default`) and the frontend's pickers and
 `/cuenta`'s header use. Since a change of type, of parent or a new account can alter a whole
-subtree, `finishAccountChange` re-checks in the same transaction that every distribution's account
-and the default one are still income (409 `not_income_for_distributions`, rolled back). `distribution_default` (migration `00032`, always present in
+subtree, `finishAccountChange` re-checks in the same transaction that the account saved and
+everything below it that has to be income still is — a distribution's account and the default one
+(409 `not_income_for_distributions`) and an account marked `allows_dues`/`allows_licenses` (409
+`not_income_for_dues_licenses`) — and rolls back if not. Only that subtree is checked, so accounts
+that were marked before this rule (none had a type then) don't block edits elsewhere; they have to
+be given type income the next time they are edited. `distribution_default` (migration `00032`, always present in
 the JSON, replaced wholesale by `PATCH`, with a "Repartos" badge and a checkbox in the dialogs) marks
 the account distributions record their payments in when they have none of their own. One with
 entries can't be deleted — they're history — so it's flagged instead, and *only the

@@ -400,6 +400,8 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
 	case errors.Is(err, ErrUnknownAccount):
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_parent_account", err.Error())
+	case errors.Is(err, ErrNotIncomeForDuesLicenses):
+		httpapi.WriteError(w, http.StatusConflict, "not_income_for_dues_licenses", err.Error())
 	case errors.Is(err, ErrParentHasEntries):
 		httpapi.WriteError(w, http.StatusConflict, "parent_has_entries", err.Error())
 	case errors.Is(err, ErrDuplicateCode):

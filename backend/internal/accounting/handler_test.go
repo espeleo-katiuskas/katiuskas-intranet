@@ -450,7 +450,7 @@ func TestAccountJSONAlwaysCarriesBothFlags(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true})
+	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -478,14 +478,14 @@ func TestUpdateAccountReplacesTheFlagsAndAnOmittedOneMeansFalse(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
-		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+		map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true, "allows_licenses": true})
 	var a accounting.Account
 	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	path := "/api/v1/accounts/" + itoa(a.ID)
 
-	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Cuotas", "code": "700", "allows_licenses": true})
+	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_licenses": true})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -506,7 +506,7 @@ func TestUpdateAccountNotificationNamesAChangedFlag(t *testing.T) {
 	notifier.reset()
 
 	rec := doRequest(mux, http.MethodPatch, "/api/v1/accounts/"+itoa(a.ID), adminToken,
-		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true})
+		map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -758,7 +758,7 @@ func TestGetTransactionIncludesWhatItPaidForOnlyForAdminAndBoard(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
 	cuotas := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
-		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+		map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true, "allows_licenses": true})
 	var cuotasAccount accounting.Account
 	if err := json.Unmarshal(cuotas.Body.Bytes(), &cuotasAccount); err != nil {
 		t.Fatalf("decode account: %v", err)
@@ -898,7 +898,7 @@ func TestDeleteTransactionHandlesLicensesAndDues(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
 	cuotas := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
-		map[string]any{"name": "Cuotas", "code": "700", "allows_dues": true, "allows_licenses": true})
+		map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true, "allows_licenses": true})
 	var cuotasAccount accounting.Account
 	if err := json.Unmarshal(cuotas.Body.Bytes(), &cuotasAccount); err != nil {
 		t.Fatalf("decode account: %v", err)
@@ -1366,5 +1366,45 @@ func TestLedgerOfAGroupListsItsDescendantsWithATotalBalance(t *testing.T) {
 	got = nil
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got) != 2 || got[0].BalanceAfter != 80 || got[0].AccountName != "BBVA" {
 		t.Fatalf("unexpected leaf ledger: %v %+v", err, got)
+	}
+}
+
+// An account marked for annual dues or licenses has to be of type income, its own
+// or inherited. Only the account being saved and what is below it are checked, so
+// accounts that predate the rule don't block unrelated edits.
+func TestAccountsForDuesAndLicensesHaveToBeIncome(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	create := func(body map[string]any) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, "/api/v1/accounts", token, body)
+	}
+	for _, flag := range []string{"allows_dues", "allows_licenses"} {
+		rec := create(map[string]any{"name": "Sin tipo " + flag, flag: true})
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_income_for_dues_licenses" {
+			t.Fatalf("%s with no type: expected 409, got %d: %s", flag, rec.Code, rec.Body.String())
+		}
+		rec = create(map[string]any{"name": "Gastos " + flag, "type": "expense", flag: true})
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("%s as expense: expected 409, got %d: %s", flag, rec.Code, rec.Body.String())
+		}
+	}
+	rec := create(map[string]any{"name": "Ingresos", "type": "income"})
+	var root accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &root); err != nil || rec.Code != http.StatusCreated {
+		t.Fatalf("create root: %d %s", rec.Code, rec.Body.String())
+	}
+	// Inheriting income is enough.
+	rec = create(map[string]any{"name": "Cuotas", "parent_id": root.ID, "allows_dues": true})
+	var cuotas accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &cuotas); err != nil || rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 inheriting income, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The type above can't change out from under it.
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_income_for_dues_licenses" {
+		t.Fatalf("expected 409 changing the type above it, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if cuotas.EffectiveType == nil || *cuotas.EffectiveType != accounting.AccountTypeIncome {
+		t.Errorf("expected the inherited income type, got %+v", cuotas.EffectiveType)
 	}
 }
