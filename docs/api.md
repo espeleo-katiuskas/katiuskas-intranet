@@ -1,596 +1,602 @@
-# API HTTP
+# HTTP API
 
-Referencia rápida de los endpoints de la API del club. El contrato completo, con cada campo
-y cada error, está en [`backend/openapi/openapi.yaml`](../backend/openapi/openapi.yaml); este
-fichero es el resumen para quien solo quiere saber qué hay y cómo llamarlo. Cómo se guardan los
-datos está en [`database.md`](database.md) y las reglas de negocio, en
+Quick reference for the endpoints of the club API. The complete contract, with every field
+and every error, is in [`backend/openapi/openapi.yaml`](../backend/openapi/openapi.yaml); this
+file is the summary for whoever only wants to know what exists and how to call it. How the
+data is stored is in [`database.md`](database.md) and the business rules are in
 [`architecture.md`](architecture.md).
 
-Contenido:
+Contents:
 
-- [Convenciones](#convenciones)
-- [Sistema y sesión](#sistema-y-sesión)
-- [Personas](#personas)
+- [Conventions](#conventions)
+- [System and session](#system-and-session)
+- [People](#people)
 - [Roles](#roles)
-- [Sesiones y suplantación](#sesiones-y-suplantación)
-- [Socios](#socios)
-- [Actividades](#actividades)
-- [Memoria de una actividad](#memoria-de-una-actividad)
-- [Material](#material)
-- [Repartos](#repartos)
-- [Archivo de documentos y ficheros de personas](#archivo-de-documentos-y-ficheros-de-personas)
-- [Contabilidad](#contabilidad)
-- [Objetos](#objetos)
+- [Sessions and impersonation](#sessions-and-impersonation)
+- [Members](#members)
+- [Activities](#activities)
+- [Activity memoria](#activity-memoria)
+- [Equipment](#equipment)
+- [Distributions](#distributions)
+- [Document archive and per-person files](#document-archive-and-per-person-files)
+- [Accounting](#accounting)
+- [Objects](#objects)
 
-## Convenciones
+## Conventions
 
-- **Base**: todas las rutas cuelgan de `/api/v1`. Los cuerpos y las respuestas son JSON, salvo los
-  ficheros (`/library/file/…`, `/users/{login}/files/file/…`, el fichero de un recurso de la
-  memoria), que son los bytes, y la creación de un recurso de la memoria, que es
-  `multipart/form-data`.
-- **Sesión**: no hay contraseñas. `POST /auth/magic-link` manda un enlace con un código; se cambia
-  por un token opaco con `POST /auth/magic-link/consume` (o `…/consume-code`) y ese token va en cada
-  petición: `Authorization: Bearer <token>`. El token caduca a los 30 días y se puede revocar. Las
-  rutas de ficheros (`/library/file/…`, `/users/{login}/files/file/…`) aceptan también la cookie
-  `katiuskas_session`, que la API pone al iniciar sesión, para que un documento sea un enlace normal
-  del navegador.
-- **Rol base**: casi toda ruta con sesión exige además ser `admin`, `board` o `member` (un socio con
-  alta activa). Quien solo tenga otro rol, como `material` o `money`, recibe 403 en todas partes. En
-  las listas de abajo, «Cualquier rol base» significa justo eso. «La propia persona» es la
-  persona dueña del recurso, identificada por el `login` de la ruta.
-- **Personas**: se nombran siempre por `login` (por ejemplo `maria.garcia`), nunca por un id
-  numérico. El resto de recursos (actividad, licencia, token…) sí tienen un id numérico.
-- **Fechas**: un campo «fecha» se envía como `YYYY-MM-DD`, pero la respuesta lo devuelve como
-  timestamp RFC 3339 a medianoche UTC (`2024-03-15T00:00:00Z`): léanse solo sus diez primeros
-  caracteres. Un campo «fecha y hora» es un timestamp de verdad.
-- **Errores**: `{"error": {"code": "…", "message": "…"}}`, con el código HTTP correspondiente. Un
-  JSON mal formado es siempre `400 invalid_body` y un fallo inesperado `500 internal_error`; no se
-  repiten en cada ruta. Los códigos de abajo salen del OpenAPI y están sacados de él
-  automáticamente.
-- **Sustitución en `PATCH`**: en casi todos, lo que no se envía se apaga o se vacía (se sustituye
-  el registro entero), no se deja como estaba. Lo contrario se dice en la descripción de la ruta.
-- **Paginación**: los listados que crecen sin límite aceptan `limit` y `offset`. Un valor fuera de
-  rango vuelve al valor por defecto (50 casi siempre) en vez de dar error.
-- **Notación**: en los cuerpos, un `*` marca el campo obligatorio.
+- **Base**: all routes hang from `/api/v1`. Bodies and responses are JSON, except
+  files (`/library/file/…`, `/users/{login}/files/file/…`, the file of a memoria resource), which
+  are the raw bytes, and the creation of a memoria resource, which is `multipart/form-data`.
+- **Session**: there are no passwords. `POST /auth/magic-link` sends a link with a code; it is
+  exchanged for an opaque token with `POST /auth/magic-link/consume` (or `…/consume-code`) and that
+  token goes in every request: `Authorization: Bearer <token>`. The token expires after 30 days and
+  can be revoked. The file routes (`/library/file/…`, `/users/{login}/files/file/…`) also accept
+  the `katiuskas_session` cookie, which the API sets on sign-in, so that a document can be an
+  ordinary browser link.
+- **Baseline role**: almost every route with a session also requires being `admin`, `board` or
+  `member` (a member with an active joining). Someone who only has another role, such as `material`
+  or `money`, gets 403 everywhere. In the lists below, "Any baseline role" means exactly that.
+  "The person themselves" is the person who owns the resource, identified by the `login` in the
+  route.
+- **People**: always named by `login` (for example `maria.garcia`), never by a numeric id. The
+  other resources (activity, license, token…) do have a numeric id.
+- **Dates**: a "date" field is sent as `YYYY-MM-DD`, but the response returns it as an RFC 3339
+  timestamp at midnight UTC (`2024-03-15T00:00:00Z`): read only its first ten characters. A
+  "datetime" field is a real timestamp.
+- **Errors**: `{"error": {"code": "…", "message": "…"}}`, with the matching HTTP code. A
+  malformed JSON is always `400 invalid_body` and an unexpected failure `500 internal_error`; they
+  are not repeated on each route. The codes below come from the OpenAPI and were extracted from it
+  automatically.
+- **Replacement in `PATCH`**: in almost all of them, what is not sent is turned off or emptied
+  (the whole record is replaced), not left as it was. The opposite is said in the route's
+  description.
+- **Paging**: the listings that grow without limit accept `limit` and `offset`. An out-of-range
+  value goes back to the default (50 almost always) instead of giving an error.
+- **Notation**: in bodies, a `*` marks the required field.
 
-## Sistema y sesión
+## System and session
 
-Sin contraseñas: se entra con un enlace de un solo uso (o su código de 6 dígitos) que llega por
-correo y, si la persona tiene Telegram vinculado, también por Telegram.
+No passwords: people sign in with a single-use link (or its 6-digit code) that arrives by email and,
+if the person has linked Telegram, by Telegram too.
 
-- **GET** `/health` — *Público*. Comprueba que el proceso está vivo y llega a PostgreSQL. 200 o 503.
-  - devuelve: 200 `JSON`
-- **POST** `/auth/magic-link` — *Público*. Pide un enlace de acceso con el correo y el teléfono de
-  la persona. La respuesta es siempre la misma, coincida alguien o no. Limitado por dirección de
-  origen.
-  - cuerpo: `email*`, `phone*`
-  - devuelve: 200 `JSON`
-  - errores: 400 `invalid_body`, `missing_fields`; 429 `rate_limited`
-- **POST** `/auth/magic-link/consume` — *Público*. Cambia el token del enlace por un token de
-  sesión.
-  - cuerpo: `token*`
-  - devuelve: 200 `JSON`
-  - errores: 400 `invalid_body`; 401 `invalid_token`
-- **POST** `/auth/magic-link/consume-code` — *Público*. Cambia el código de 6 dígitos (más correo y
-  teléfono) por un token de sesión. Mismo límite por origen.
-  - cuerpo: `email*`, `phone*`, `code*`
-  - devuelve: 200 `JSON`
-  - errores: 400 `invalid_body`, `missing_fields`; 401 `invalid_code`; 429 `rate_limited`
-- **POST** `/auth/logout` — *Público*. Revoca el token de sesión (saber el token es la prueba).
-  Responde 204 siempre.
-  - cuerpo: `token*`
-  - devuelve: 204
-  - errores: 400 `invalid_body`
-- **GET** `/auth/telegram-bot` — *Público*. Usuario público del bot de Telegram, para ofrecerlo como
-  segunda forma de entrar. Vacío si no está configurado.
-  - devuelve: 200 `JSON`
-- **GET** `/auth/me` — *Cualquier rol base*. Quién es el dueño del token y qué roles tiene ahora.
-  Lleva `impersonated_by` en una sesión de suplantación.
-  - devuelve: 200 `JSON`
-- **POST** `/auth/impersonate/exit` — *Cualquier sesión válida*. Termina una suplantación y devuelve
-  un token nuevo para el admin que la empezó.
-  - devuelve: 200 `JSON`
-  - errores: 409 `not_impersonating`
-- **GET** `/admin/status` — *Admin*. Versión, base de datos y migración, correo, Telegram, plazos y
-  directorios del proceso en marcha. Nunca incluye secretos.
-  - devuelve: 200 `AdminStatus`
+- **GET** `/health` — *Public*. Checks that the process is alive and reaches PostgreSQL. 200 or 503.
+  - returns: 200 `JSON`
+- **POST** `/auth/magic-link` — *Public*. Asks for a sign-in link with the person's email and phone.
+  The response is always the same, whether anyone matches or not. Limited by origin address.
+  - body: `email*`, `phone*`
+  - returns: 200 `JSON`
+  - errors: 400 `invalid_body`, `missing_fields`; 429 `rate_limited`
+- **POST** `/auth/magic-link/consume` — *Public*. Exchanges the link's token for a session token.
+  - body: `token*`
+  - returns: 200 `JSON`
+  - errors: 400 `invalid_body`; 401 `invalid_token`
+- **POST** `/auth/magic-link/consume-code` — *Public*. Exchanges the 6-digit code (plus email and
+  phone) for a session token. Same limit by origin.
+  - body: `email*`, `phone*`, `code*`
+  - returns: 200 `JSON`
+  - errors: 400 `invalid_body`, `missing_fields`; 401 `invalid_code`; 429 `rate_limited`
+- **POST** `/auth/logout` — *Public*. Revokes the session token (knowing the token is the proof).
+  Always answers 204.
+  - body: `token*`
+  - returns: 204
+  - errors: 400 `invalid_body`
+- **GET** `/auth/telegram-bot` — *Public*. Public username of the Telegram bot, to offer it as a
+  second way to sign in. Empty if not configured.
+  - returns: 200 `JSON`
+- **GET** `/auth/me` — *Any baseline role*. Who owns the token and which roles they have now.
+  Carries `impersonated_by` in an impersonation session.
+  - returns: 200 `JSON`
+- **POST** `/auth/impersonate/exit` — *Any valid session*. Ends an impersonation and returns a new
+  token for the admin who started it.
+  - returns: 200 `JSON`
+  - errors: 409 `not_impersonating`
+- **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts and
+  directories of the running process. Never includes secrets.
+  - returns: 200 `AdminStatus`
 
-## Personas
+## People
 
-Una persona se identifica siempre por su `login`, nunca por un id numérico.
+A person is always identified by their `login`, never by a numeric id.
 
-- **GET** `/users` — *Cualquier rol base*. Lista de personas. Admin y board reciben la ficha
-  completa (`User`); un socio recibe `MemberListing`, solo de quien es o ha sido socio.
-  - devuelve: 200 `[User o MemberListing]`
-- **POST** `/users` — *Admin*. Crea una persona. El `login` se genera solo y viene en la respuesta.
-  - cuerpo: `login`, `first_name*`, `last_name*`, `email`, `national_id`, `birth_date*`, `gender`,
+- **GET** `/users` — *Any baseline role*. List of people. Admin and board get the full record
+  (`User`); a member gets `MemberListing`, only of those who are or have been members.
+  - returns: 200 `[User or MemberListing]`
+- **POST** `/users` — *Admin*. Creates a person. The `login` is generated automatically and comes in
+  the response.
+  - body: `login`, `first_name*`, `last_name*`, `email`, `national_id`, `birth_date*`, `gender`,
     `phone`, `address`, `postal_code`, `city`, `province`, `emergency_contact`, `role_names`
-  - devuelve: 201 `User`
-  - errores: 400 `invalid_body`, `invalid_date`, `unknown_role`, `role_names`, `automatic_role`,
+  - returns: 201 `User`
+  - errors: 400 `invalid_body`, `invalid_date`, `unknown_role`, `role_names`, `automatic_role`,
     `former_member`; 409 `duplicate`
-- **GET** `/users/directory` — *Cualquier rol base*. Solo `login`, nombre y apellidos de todas las
-  personas, para elegir a alguien en un selector.
-  - devuelve: 200 `[DirectoryEntry]`
-- **GET** `/users/{login}` — *La propia persona, admin o board*. Ficha completa de una persona.
-  - devuelve: 200 `User`
-- **PATCH** `/users/{login}` — *Admin; la propia persona solo sus datos de contacto*. Modifica datos
-  personales. Un socio que toque otros campos recibe 403 `restricted_fields`.
-  - cuerpo: `login`, `first_name`, `last_name`, `email`, `national_id`, `birth_date`, `gender`,
+- **GET** `/users/directory` — *Any baseline role*. Only `login`, first name and last name of
+  everyone, to pick someone in a selector.
+  - returns: 200 `[DirectoryEntry]`
+- **GET** `/users/{login}` — *The person themselves, admin or board*. Full record of a person.
+  - returns: 200 `User`
+- **PATCH** `/users/{login}` — *Admin; the person themselves only their contact details*. Modifies
+  personal data. A member who touches other fields gets 403 `restricted_fields`.
+  - body: `login`, `first_name`, `last_name`, `email`, `national_id`, `birth_date`, `gender`,
     `phone`, `address`, `postal_code`, `city`, `province`, `emergency_contact`
-  - devuelve: 200 `User`
-  - errores: 400 `invalid_body`, `invalid_date`, `invalid_login`; 403 `forbidden`,
+  - returns: 200 `User`
+  - errors: 400 `invalid_body`, `invalid_date`, `invalid_login`; 403 `forbidden`,
     `restricted_fields`; 409 `duplicate`
-- **DELETE** `/users/{login}` — *Admin*. Borra a la persona con su historial. No se puede borrar al
-  último admin.
-  - devuelve: 204
-  - errores: 409 `cannot_delete_self`, `has_references`, `last_admin`
+- **DELETE** `/users/{login}` — *Admin*. Deletes the person along with their history. The last admin
+  cannot be deleted.
+  - returns: 204
+  - errors: 409 `cannot_delete_self`, `has_references`, `last_admin`
 
 ## Roles
 
-`member`, `former_member` y `board` son automáticos: se calculan con las altas y los cargos y no se
-asignan a mano.
+`member`, `former_member` and `board` are automatic: they are computed from joinings and board
+positions and are not assigned by hand.
 
-- **GET** `/roles` — *Cualquier rol base*. Catálogo de roles (nombre y descripción), no quién los
-  tiene.
-  - devuelve: 200 `[Role]`
-- **POST** `/roles` — *Admin*. Crea un rol.
-  - cuerpo: `name*`, `description`
-  - devuelve: 201 `Role`
-  - errores: 400 `invalid_body`, `invalid_name`; 409 `duplicate`
-- **DELETE** `/roles/{id}` — *Admin*. Borra un rol (los de sistema no se pueden borrar).
-  - devuelve: 204
-  - errores: 400 `invalid_id`; 409 `system_role`, `former_member`
-- **POST** `/users/{login}/roles` — *Admin*. Da un rol a una persona. Rechaza los automáticos.
-  - cuerpo: `role_id*`
-  - devuelve: 204
-  - errores: 400 `invalid_body`; 404 `not_found`; 409 `automatic_role`
-- **DELETE** `/users/{login}/roles/{roleID}` — *Admin*. Quita un rol. Un admin no puede quitarse el
-  suyo (`self_admin_removal`) ni se puede dejar sin admin al club (`last_admin`).
-  - devuelve: 204
-  - errores: 400 `invalid_id`; 404 `not_found`; 409 `self_admin_removal`, `last_admin`,
+- **GET** `/roles` — *Any baseline role*. Catalog of roles (name and description), not who holds
+  them.
+  - returns: 200 `[Role]`
+- **POST** `/roles` — *Admin*. Creates a role.
+  - body: `name*`, `description`
+  - returns: 201 `Role`
+  - errors: 400 `invalid_body`, `invalid_name`; 409 `duplicate`
+- **DELETE** `/roles/{id}` — *Admin*. Deletes a role (system roles cannot be deleted).
+  - returns: 204
+  - errors: 400 `invalid_id`; 409 `system_role`, `former_member`
+- **POST** `/users/{login}/roles` — *Admin*. Gives a role to a person. Rejects the automatic ones.
+  - body: `role_id*`
+  - returns: 204
+  - errors: 400 `invalid_body`; 404 `not_found`; 409 `automatic_role`
+- **DELETE** `/users/{login}/roles/{roleID}` — *Admin*. Removes a role. An admin cannot remove their
+  own (`self_admin_removal`) and the club cannot be left without an admin (`last_admin`).
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `self_admin_removal`, `last_admin`,
     `automatic_role`
 
-## Sesiones y suplantación
+## Sessions and impersonation
 
-- **GET** `/tokens` — *Admin*. Sesiones de todo el mundo: por defecto las activas; `status=all`
-  añade el historial. Marca la propia como `current`.
+- **GET** `/tokens` — *Admin*. Everyone's sessions: the active ones by default; `status=all` adds
+  the history. Marks the caller's own as `current`.
   - query: `status`, `limit`, `offset`
-  - devuelve: 200 `[Token]`
-  - errores: 400 `invalid_status`
-- **GET** `/users/{login}/tokens` — *Admin*. Todas las sesiones que ha tenido una persona, sin el
-  valor del token.
-  - devuelve: 200 `[Token]`
-- **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Cambia la caducidad de una sesión.
-  - cuerpo: `expires_at*`
-  - devuelve: 204
-  - errores: 400 `invalid_body`
-- **DELETE** `/users/{login}/tokens/{tokenID}` — *Admin*. Revoca una sesión; la siguiente petición
-  con ella da 401.
-  - devuelve: 204
-  - errores: 400 `invalid_id`
-- **POST** `/users/{login}/impersonate` — *Admin*. Abre una sesión corta (1 hora) que actúa como esa
-  persona.
-  - devuelve: 201 `JSON`
-  - errores: 409 `cannot_impersonate_self`, `not_eligible`
+  - returns: 200 `[Token]`
+  - errors: 400 `invalid_status`
+- **GET** `/users/{login}/tokens` — *Admin*. All the sessions a person has had, without the token
+  value.
+  - returns: 200 `[Token]`
+- **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session.
+  - body: `expires_at*`
+  - returns: 204
+  - errors: 400 `invalid_body`
+- **DELETE** `/users/{login}/tokens/{tokenID}` — *Admin*. Revokes a session; the next request with
+  it gets 401.
+  - returns: 204
+  - errors: 400 `invalid_id`
+- **POST** `/users/{login}/impersonate` — *Admin*. Opens a short session (1 hour) that acts as that
+  person.
+  - returns: 201 `JSON`
+  - errors: 409 `cannot_impersonate_self`, `not_eligible`
 
-## Socios
+## Members
 
-Altas y bajas, cuotas anuales, licencias federativas, bajas temporales y Junta Directiva.
+Joinings and leavings, annual dues, federative licenses, temporary leaves and the board (Junta
+Directiva).
 
-- **GET** `/users/{login}/memberships` — *La propia persona, admin o board*. Periodos de alta y baja
-  de una persona.
-  - devuelve: 200 `[Membership]`
-- **POST** `/users/{login}/memberships` — *Admin*. Abre un periodo de socio. Asigna el número de
-  socio la primera vez.
-  - cuerpo: `start_date*`
-  - devuelve: 201 `Membership`
-  - errores: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
-- **GET** `/memberships` — *Admin o board*. Quién es socio hoy.
-  - devuelve: 200 `[Membership]`
-- **PATCH** `/memberships/{id}` — *Admin*. Corrige las fechas de un periodo o lo cierra.
-  - cuerpo: `start_date*`, `end_date`, `end_reason`
-  - devuelve: 200 `Membership`
-  - errores: 400 `invalid_id`; 409 `overlapping_period`, `outside_membership_period`
-- **DELETE** `/memberships/{id}` — *Admin*. Borra un periodo.
-  - devuelve: 204
-- **GET** `/users/{login}/dues` — *La propia persona, admin o board*. Cuotas anuales registradas,
-  con la fecha de pago.
-  - devuelve: 200 `[Due]`
-- **POST** `/users/{login}/dues` — *Admin*. Registra una cuota anual ligada a la transacción que la
-  cobró. Si la persona no tenía ningún alta, también la abre.
-  - cuerpo: `year*`, `transaction_id*`, `start_date`
-  - devuelve: 201 `Due`
-  - errores: 400 `invalid_body`, `missing_fields`, `invalid_date`, `start_date_required`,
+- **GET** `/users/{login}/memberships` — *The person themselves, admin or board*. Joining and
+  leaving periods of a person.
+  - returns: 200 `[Membership]`
+- **POST** `/users/{login}/memberships` — *Admin*. Opens a membership period. Assigns the membership
+  number the first time.
+  - body: `start_date*`
+  - returns: 201 `Membership`
+  - errors: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
+- **GET** `/memberships` — *Admin or board*. Who is a member today.
+  - returns: 200 `[Membership]`
+- **PATCH** `/memberships/{id}` — *Admin*. Corrects the dates of a period or closes it.
+  - body: `start_date*`, `end_date`, `end_reason`
+  - returns: 200 `Membership`
+  - errors: 400 `invalid_id`; 409 `overlapping_period`, `outside_membership_period`
+- **DELETE** `/memberships/{id}` — *Admin*. Deletes a period.
+  - returns: 204
+- **GET** `/users/{login}/dues` — *The person themselves, admin or board*. Registered annual dues,
+  with the payment date.
+  - returns: 200 `[Due]`
+- **POST** `/users/{login}/dues` — *Admin*. Registers an annual due tied to the transaction that
+  collected it. If the person had no joining at all, it also opens one.
+  - body: `year*`, `transaction_id*`, `start_date`
+  - returns: 201 `Due`
+  - errors: 400 `invalid_body`, `missing_fields`, `invalid_date`, `start_date_required`,
     `unknown_transaction`; 409 `due_already_recorded`, `transaction_not_for_dues`
-- **GET** `/users/{login}/licenses` — *La propia persona, admin o board*. Licencias federativas de
-  una persona.
-  - devuelve: 200 `[License]`
-- **POST** `/users/{login}/licenses` — *Admin*. Asigna una licencia. Solo a quien fue socio en algún
-  momento de su año.
-  - cuerpo: `license_type_id*`, `other_detail`, `issued_date*`, `year*`, `transaction_id`
-  - devuelve: 201 `License`
-  - errores: 400 `invalid_body`, `missing_fields`, `invalid_date`, `invalid_license_type`,
+- **GET** `/users/{login}/licenses` — *The person themselves, admin or board*. Federative licenses
+  of a person.
+  - returns: 200 `[License]`
+- **POST** `/users/{login}/licenses` — *Admin*. Assigns a license. Only to someone who was a member
+  at some point of its year.
+  - body: `license_type_id*`, `other_detail`, `issued_date*`, `year*`, `transaction_id`
+  - returns: 201 `License`
+  - errors: 400 `invalid_body`, `missing_fields`, `invalid_date`, `invalid_license_type`,
     `invalid_other_detail`, `unknown_transaction`; 409 `not_active_member`,
     `transaction_not_for_licenses`
-- **PATCH** `/licenses/{id}` — *Admin*. Corrige una licencia.
-  - cuerpo: `license_type_id*`, `other_detail`, `issued_date*`, `year*`
-  - devuelve: 200 `License`
-  - errores: 400 `invalid_id`, `invalid_body`, `missing_fields`, `invalid_date`,
+- **PATCH** `/licenses/{id}` — *Admin*. Corrects a license.
+  - body: `license_type_id*`, `other_detail`, `issued_date*`, `year*`
+  - returns: 200 `License`
+  - errors: 400 `invalid_id`, `invalid_body`, `missing_fields`, `invalid_date`,
     `invalid_license_type`, `invalid_other_detail`
-- **DELETE** `/licenses/{id}` — *Admin*. Borra una licencia.
-  - devuelve: 204
-- **GET** `/license-types` — *Admin*. Catálogo de tipos de licencia.
-  - devuelve: 200 `[LicenseType]`
-- **GET** `/users/{login}/leaves` — *La propia persona, admin o board*. Bajas temporales de una
-  persona.
-  - devuelve: 200 `[Leave]`
-- **POST** `/users/{login}/leaves` — *Admin*. Registra una baja temporal; tiene que caer dentro de
-  un periodo de socio.
-  - cuerpo: `start_date*`, `end_date`, `reason`
-  - devuelve: 201 `Leave`
-  - errores: 400 `invalid_body`; 409 `outside_membership_period`, `overlapping_period`
-- **PATCH** `/leaves/{id}` — *Admin*. Corrige una baja temporal.
-  - cuerpo: `start_date*`, `end_date`, `reason`
-  - devuelve: 200 `Leave`
-  - errores: 400 `invalid_id`; 409 `outside_membership_period`, `overlapping_period`
-- **DELETE** `/leaves/{id}` — *Admin*. Borra una baja temporal.
-  - devuelve: 204
-- **GET** `/board-members` — *Cualquier rol base*. Junta Directiva actual, con cargo y contacto.
-  - devuelve: 200 `[BoardMember]`
-- **GET** `/users/{login}/board-members` — *La propia persona, admin o board*. Cargos de una persona
-  en la Junta.
-  - devuelve: 200 `[BoardMember]`
-- **POST** `/users/{login}/board-members` — *Admin*. Abre un cargo.
-  - cuerpo: `position*`, `start_date*`
-  - devuelve: 201 `BoardMember`
-  - errores: 400 `invalid_body`; 409 `overlapping_period`
-- **PATCH** `/board-members/{id}` — *Admin*. Corrige el cargo o las fechas, o lo cierra.
-  - cuerpo: `position*`, `start_date*`, `end_date`
-  - devuelve: 200 `BoardMember`
-  - errores: 400 `invalid_id`; 409 `overlapping_period`
-- **DELETE** `/board-members/{id}` — *Admin*. Borra un cargo.
-  - devuelve: 204
+- **DELETE** `/licenses/{id}` — *Admin*. Deletes a license.
+  - returns: 204
+- **GET** `/license-types` — *Admin*. Catalog of license types.
+  - returns: 200 `[LicenseType]`
+- **GET** `/users/{login}/leaves` — *The person themselves, admin or board*. Temporary leaves of a
+  person.
+  - returns: 200 `[Leave]`
+- **POST** `/users/{login}/leaves` — *Admin*. Registers a temporary leave; it has to fall within a
+  membership period.
+  - body: `start_date*`, `end_date`, `reason`
+  - returns: 201 `Leave`
+  - errors: 400 `invalid_body`; 409 `outside_membership_period`, `overlapping_period`
+- **PATCH** `/leaves/{id}` — *Admin*. Corrects a temporary leave.
+  - body: `start_date*`, `end_date`, `reason`
+  - returns: 200 `Leave`
+  - errors: 400 `invalid_id`; 409 `outside_membership_period`, `overlapping_period`
+- **DELETE** `/leaves/{id}` — *Admin*. Deletes a temporary leave.
+  - returns: 204
+- **GET** `/board-members` — *Any baseline role*. Current board (Junta Directiva), with position and
+  contact.
+  - returns: 200 `[BoardMember]`
+- **GET** `/users/{login}/board-members` — *The person themselves, admin or board*. Board positions
+  of a person.
+  - returns: 200 `[BoardMember]`
+- **POST** `/users/{login}/board-members` — *Admin*. Opens a board position.
+  - body: `position*`, `start_date*`
+  - returns: 201 `BoardMember`
+  - errors: 400 `invalid_body`; 409 `overlapping_period`
+- **PATCH** `/board-members/{id}` — *Admin*. Corrects the position or the dates, or closes it.
+  - body: `position*`, `start_date*`, `end_date`
+  - returns: 200 `BoardMember`
+  - errors: 400 `invalid_id`; 409 `overlapping_period`
+- **DELETE** `/board-members/{id}` — *Admin*. Deletes a board position.
+  - returns: 204
 
-## Actividades
+## Activities
 
-- **GET** `/activities` — *Cualquier rol base*. Lista paginada, la más reciente primero.
-  `status=active` deja solo las que aún necesitan atención.
+- **GET** `/activities` — *Any baseline role*. Paged list, most recent first. `status=active` leaves
+  only the ones that still need attention.
   - query: `status`, `order`, `limit`, `offset`
-  - devuelve: 200 `[Activity]`
-- **POST** `/activities` — *Cualquier rol base*. Crea una actividad (con participantes iniciales si
-  se quiere). El organizador es quien la crea, salvo que admin o board nombren a otro.
-  - cuerpo: `title*`, `type`, `start_date*`, `end_date*`, `description`, `visibility`,
+  - returns: 200 `[Activity]`
+- **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if
+  wanted). The organizer is whoever creates it, unless admin or board name someone else.
+  - body: `title*`, `type`, `start_date*`, `end_date*`, `description`, `visibility`,
     `participant_logins`, `leader_login`
-  - devuelve: 201 `Activity`
-  - errores: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
+  - returns: 201 `Activity`
+  - errors: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`, `unknown_participant`; 403 `forbidden`; 404 `not_found`; 409
     `not_federated`
-- **GET** `/activities/{id}` — *Cualquier rol base*. Una actividad.
-  - devuelve: 200 `Activity`
-  - errores: 400 `invalid_id`
-- **PATCH** `/activities/{id}` — *Organizador, admin o board*. Modifica una actividad. Cambiar el
-  organizador es solo de admin o board.
-  - cuerpo: `title`, `type`, `start_date`, `end_date`, `description`, `status`, `visibility`,
+- **GET** `/activities/{id}` — *Any baseline role*. One activity.
+  - returns: 200 `Activity`
+  - errors: 400 `invalid_id`
+- **PATCH** `/activities/{id}` — *Organizer, admin or board*. Modifies an activity. Changing the
+  organizer is only for admin or board.
+  - body: `title`, `type`, `start_date`, `end_date`, `description`, `status`, `visibility`,
     `leader_login`
-  - devuelve: 200 `Activity`
-  - errores: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
+  - returns: 200 `Activity`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_status`, `invalid_visibility`; 403 `forbidden`; 404 `not_found`
-- **DELETE** `/activities/{id}` — *Organizador, admin o board*. Cancela una actividad.
-  - devuelve: 204
-  - errores: 400 `invalid_id`
-- **GET** `/activities/{id}/participants` — *Cualquier rol base*. Participantes.
-  - devuelve: 200 `[Participant]`
-  - errores: 400 `invalid_id`
-- **POST** `/activities/{id}/participants` — *Según la visibilidad*. Apuntarse, o apuntar a otra
-  persona. En una pública cada uno se apunta; en una privada solo organizador, admin o board. Las de
-  espeleo y barranquismo exigen licencia del año (`not_federated`).
-  - cuerpo: `login`
-  - devuelve: 204
-  - errores: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `not_federated`
-- **DELETE** `/activities/{id}/participants/{login}` — *Según la visibilidad*. Sale de la actividad,
-  o saca a otra persona (admin o board, o el organizador en una privada).
-  - devuelve: 204
-  - errores: 400 `invalid_id`
-- **GET** `/users/{login}/activities` — *Cualquier rol base*. Historial de actividades de una
-  persona (como organizador o participante).
-  - devuelve: 200 `[Activity]`
-- **GET** `/holidays` — *Cualquier rol base*. Festivos del club que marca el calendario.
+- **DELETE** `/activities/{id}` — *Organizer, admin or board*. Cancels an activity.
+  - returns: 204
+  - errors: 400 `invalid_id`
+- **GET** `/activities/{id}/participants` — *Any baseline role*. Participants.
+  - returns: 200 `[Participant]`
+  - errors: 400 `invalid_id`
+- **POST** `/activities/{id}/participants` — *Depends on the visibility*. Sign up, or sign up
+  another person. In a public one each person signs themselves up; in a private one only the
+  organizer, admin or board. Caving and canyoning ones require a license for the year
+  (`not_federated`).
+  - body: `login`
+  - returns: 204
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `not_federated`
+- **DELETE** `/activities/{id}/participants/{login}` — *Depends on the visibility*. Leave the
+  activity, or remove another person (admin or board, or the organizer in a private one).
+  - returns: 204
+  - errors: 400 `invalid_id`
+- **GET** `/users/{login}/activities` — *Any baseline role*. Activity history of a person (as
+  organizer or participant).
+  - returns: 200 `[Activity]`
+- **GET** `/holidays` — *Any baseline role*. Club holidays that the calendar marks.
   - query: `year`
-  - devuelve: 200 `[Holiday]`
-- **POST** `/holidays` — *Admin o board*. Añade un festivo.
-  - cuerpo: `date*`, `name*`
-  - devuelve: 201 `Holiday`
-  - errores: 400 `invalid_body`; 409 `duplicate_holiday`
-- **DELETE** `/holidays/{id}` — *Admin o board*. Borra un festivo.
-  - devuelve: 204
-  - errores: 400 `invalid_id`
+  - returns: 200 `[Holiday]`
+- **POST** `/holidays` — *Admin or board*. Adds a holiday.
+  - body: `date*`, `name*`
+  - returns: 201 `Holiday`
+  - errors: 400 `invalid_body`; 409 `duplicate_holiday`
+- **DELETE** `/holidays/{id}` — *Admin or board*. Deletes a holiday.
+  - returns: 204
+  - errors: 400 `invalid_id`
 
-## Memoria de una actividad
+## Activity memoria
 
-La memoria es una lista ordenada de recursos: entradas de texto o ficheros subidos (hasta 25 MiB).
+The memoria (the write-up of an activity) is an ordered list of resources: text entries or uploaded
+files (up to 25 MiB).
 
-- **GET** `/activities/{id}/resources` — *Cualquier rol base*. Recursos de la memoria, en orden.
-  - devuelve: 200 `[ActivityResource]`
-  - errores: 400 `invalid_id`
-- **POST** `/activities/{id}/resources` — *Admin, board, organizador o participante*. Añade un
-  recurso. Siempre `multipart/form-data`, también el de texto.
-  - cuerpo: `type*`, `title*`, `description`, `file`
-  - devuelve: 201 `ActivityResource`
-  - errores: 400 `invalid_id`, `invalid_body`, `invalid_type`, `title_required`,
+- **GET** `/activities/{id}/resources` — *Any baseline role*. Resources of the memoria, in order.
+  - returns: 200 `[ActivityResource]`
+  - errors: 400 `invalid_id`
+- **POST** `/activities/{id}/resources` — *Admin, board, organizer or participant*. Adds a resource.
+  Always `multipart/form-data`, the text one too.
+  - body: `type*`, `title*`, `description`, `file`
+  - returns: 201 `ActivityResource`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_type`, `title_required`,
     `description_required`, `file_required`; 413 `file_too_large`
-- **PUT** `/activities/{id}/resources/order` — *Admin, board, organizador o participante*. Sustituye
-  el orden entero con la lista completa de ids.
-  - cuerpo: `resource_ids*`
-  - devuelve: 200 `[ActivityResource]`
-  - errores: 400 `invalid_id`, `invalid_body`; 409 `reorder_mismatch`
-- **GET** `/activities/{id}/resources/{resourceID}` — *Cualquier rol base*. Un recurso.
-  - devuelve: 200 `ActivityResource`
-  - errores: 400 `invalid_id`; 404 `not_found`
-- **PATCH** `/activities/{id}/resources/{resourceID}` — *Su autor, admin o board*. Cambia título o
-  descripción.
-  - cuerpo: `title`, `description`
-  - devuelve: 200 `ActivityResource`
-  - errores: 400 `invalid_id`
-- **DELETE** `/activities/{id}/resources/{resourceID}` — *Su autor, admin o board*. Borra el recurso
-  y su fichero.
-  - devuelve: 204
-  - errores: 400 `invalid_id`
-- **GET** `/activities/{id}/resources/{resourceID}/file` — *Cualquier rol base*. Bytes del fichero
-  de un recurso (`?download=1` para descargarlo).
+- **PUT** `/activities/{id}/resources/order` — *Admin, board, organizer or participant*. Replaces
+  the whole order with the complete list of ids.
+  - body: `resource_ids*`
+  - returns: 200 `[ActivityResource]`
+  - errors: 400 `invalid_id`, `invalid_body`; 409 `reorder_mismatch`
+- **GET** `/activities/{id}/resources/{resourceID}` — *Any baseline role*. One resource.
+  - returns: 200 `ActivityResource`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PATCH** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Changes title
+  or description.
+  - body: `title`, `description`
+  - returns: 200 `ActivityResource`
+  - errors: 400 `invalid_id`
+- **DELETE** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Deletes the
+  resource and its file.
+  - returns: 204
+  - errors: 400 `invalid_id`
+- **GET** `/activities/{id}/resources/{resourceID}/file` — *Any baseline role*. Bytes of a
+  resource's file (`?download=1` to download it).
   - query: `download`
-  - errores: 400 `not_a_file`
+  - errors: 400 `not_a_file`
 
-## Material
+## Equipment
 
-- **GET** `/items` — *Cualquier rol base*. Catálogo de material.
-  - devuelve: 200 `[Item]`
-- **POST** `/items` — *Admin o board*. Da de alta un ítem (cuerda, saca o material genérico).
-  - cuerpo: `item_type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
+- **GET** `/items` — *Any baseline role*. Catalog of equipment.
+  - returns: 200 `[Item]`
+- **POST** `/items` — *Admin or board*. Adds an item (rope, bag or generic equipment).
+  - body: `item_type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
     `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
     `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `category_id`
-  - devuelve: 201 `Item`
-  - errores: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
+  - returns: 201 `Item`
+  - errors: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
     `single_unit_item`, `invalid_item_fields`
-- **GET** `/material-categories` — *Admin o board*. Categorías del material genérico.
-  - devuelve: 200 `[MaterialCategory]`
-- **GET** `/items/{id}/movements` — *Cualquier rol base*. Historial de movimientos de un ítem.
-  - devuelve: 200 `[Movement]`
-  - errores: 400 `invalid_id`
-- **GET** `/movements` — *Admin, board o material*. Movimientos: por defecto los activos, o todos
-  los de una actividad con `activity_id`.
+- **GET** `/material-categories` — *Admin or board*. Categories of generic equipment.
+  - returns: 200 `[MaterialCategory]`
+- **GET** `/items/{id}/movements` — *Any baseline role*. Movement history of an item.
+  - returns: 200 `[Movement]`
+  - errors: 400 `invalid_id`
+- **GET** `/movements` — *Admin, board or material*. Movements: the active ones by default, or all
+  those of an activity with `activity_id`.
   - query: `status`, `activity_id`
-  - devuelve: 200 `[Movement]`
-  - errores: 400 `invalid_activity_id`
-- **POST** `/movements` — *Admin, board o material*. Registra un movimiento (préstamo, alquiler,
-  venta, alta, baja, devolución).
-  - cuerpo: `item_id*`, `login`, `type*`, `quantity`, `transacted_at`, `activity_id`, `notes`
-  - devuelve: 201 `Movement`
-  - errores: 400 `invalid_body`, `invalid_date`, `invalid_type`, `login_required`,
+  - returns: 200 `[Movement]`
+  - errors: 400 `invalid_activity_id`
+- **POST** `/movements` — *Admin, board or material*. Records a movement (loan, rental, sale,
+  joining, write-off, return).
+  - body: `item_id*`, `login`, `type*`, `quantity`, `transacted_at`, `activity_id`, `notes`
+  - returns: 201 `Movement`
+  - errors: 400 `invalid_body`, `invalid_date`, `invalid_type`, `login_required`,
     `recipient_not_allowed`, `activity_required`; 404 `not_found`; 409 `insufficient_stock`,
     `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`
-- **PATCH** `/movements/{id}/return` — *Admin, board o material*. Cierra un alquiler abierto.
-  - devuelve: 200 `Movement`
-  - errores: 400 `invalid_id`; 404 `not_found`
-- **GET** `/users/{login}/movements` — *La propia persona, admin, board o material*. Compras,
-  alquileres y préstamos de una persona.
-  - devuelve: 200 `[Movement]`
+- **PATCH** `/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
+  - returns: 200 `Movement`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **GET** `/users/{login}/movements` — *The person themselves, admin, board or material*. Purchases,
+  rentals and loans of a person.
+  - returns: 200 `[Movement]`
 
-## Repartos
+## Distributions
 
-Un reparto es algo que el club entrega a sus socios (camisetas, lotería…). Estados: `draft`, `open`,
-`closed`, `done`. Pagar y quitar un pago exigen decir en qué cuenta de tipo `asset` se hizo
-(`account_id`) y apuntan una transacción en la cuenta del reparto.
+A distribution is something the club hands out to its members (shirts, lottery...). Statuses:
+`draft`, `open`, `closed`, `done`. Paying and taking off a payment require saying in which `asset`
+account it was made (`account_id`) and record a transaction in the distribution's account.
 
-- **GET** `/distributions` — *Cualquier rol base*. Repartos, con `eligible` para quien pregunta. Un
-  borrador solo lo ven admin y board.
-  - devuelve: 200 `[Distribution]`
-- **POST** `/distributions` — *Admin o board*. Crea un reparto, en borrador.
-  - cuerpo: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
+- **GET** `/distributions` — *Any baseline role*. Distributions, with `eligible` for the caller. A
+  draft is only seen by admin and board.
+  - returns: 200 `[Distribution]`
+- **POST** `/distributions` — *Admin or board*. Creates a distribution, as a draft.
+  - body: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
     `extra_price`, `max_extra`, `options`, `articles`, `status`
-  - devuelve: 201 `Distribution`
-  - errores: 400 `invalid_name`
-- **GET** `/distributions/{id}` — *Cualquier rol base*. Un reparto (un borrador es 404 para los
-  demás).
-  - devuelve: 200 `Distribution`
-- **PATCH** `/distributions/{id}` — *Admin o board*. Sustituye todos los campos; también sirve para
-  cambiar el estado un paso.
-  - cuerpo: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
+  - returns: 201 `Distribution`
+  - errors: 400 `invalid_name`
+- **GET** `/distributions/{id}` — *Any baseline role*. One distribution (a draft is 404 for everyone
+  else).
+  - returns: 200 `Distribution`
+- **PATCH** `/distributions/{id}` — *Admin or board*. Replaces all the fields; it also serves to
+  change the status one step.
+  - body: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
     `extra_price`, `max_extra`, `options`, `articles`, `status`
-  - devuelve: 200 `Distribution`
-  - errores: 409 `invalid_status_transition`
-- **DELETE** `/distributions/{id}` — *Admin*. Borra el reparto con sus pedidos, salvo que alguno
-  esté pagado o entregado.
-  - devuelve: 204
-  - errores: 409 `has_settled_units`
-- **GET** `/distributions/{id}/people` — *`for=order`: cualquier rol base; `for=pickup`: admin,
-  board o material*. Socios que ofrecen los selectores de pedir y de entregar.
+  - returns: 200 `Distribution`
+  - errors: 409 `invalid_status_transition`
+- **DELETE** `/distributions/{id}` — *Admin*. Deletes the distribution with its orders, unless one
+  of them is paid or collected.
+  - returns: 204
+  - errors: 409 `has_settled_units`
+- **GET** `/distributions/{id}/people` — *`for=order`: any baseline role; `for=pickup`: admin, board
+  or material*. Members that the ordering and collection selectors offer.
   - query: `for`
-  - devuelve: 200 `[{login, first_name, last_name}]`
-- **GET** `/distributions/{id}/units` — *Admin, board o material ven todas; los demás las suyas*.
-  Pedidos del reparto.
-  - devuelve: 200 `[DistributionUnit]`
-- **POST** `/distributions/{id}/units` — *Cualquier rol base*. Pide una unidad (o una cantidad de un
-  artículo), para uno mismo o para otro socio.
-  - cuerpo: `beneficiary_login`, `is_extra`, `article_id`, `quantity`, `choices`
-  - devuelve: 201 `DistributionUnit`
-  - errores: 400 `invalid_choices`; 409 `not_open`
-- **PATCH** `/distributions/{id}/units/{unitID}` — *Para quien es, quien la apuntó, admin, board o
-  material*. Cambia lo elegido o la cantidad.
-  - cuerpo: `choices`, `quantity`
-  - devuelve: 200 `DistributionUnit`
-  - errores: 400 `invalid_choices`, `invalid_quantity`; 409 `not_open`
-- **DELETE** `/distributions/{id}/units/{unitID}` — *Para quien es, quien la apuntó, admin, board o
-  material*. Quita un pedido (no el automático de un reparto para todos, ni uno con algo pagado).
-  - devuelve: 204
-  - errores: 409 `not_open`
-- **GET** `/distributions/{id}/order` — *Admin, board o material*. Lo que hay que pedir: unidades
-  sumadas por combinación de opciones.
-  - devuelve: 200 `DistributionOrder`
-- **GET** `/distributions/{id}/articles/{articleID}/numbers` — *Admin, board o material*. Todos los
-  números de un artículo y quién tiene cada uno.
-  - devuelve: 200 `JSON`
-  - errores: 400 `article_not_numbered`, `unknown_article`
-- **PUT** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board o material*. Sustituye
-  los números de un pedido.
-  - cuerpo: `identifiers`
-  - devuelve: 200 `DistributionUnit`
-  - errores: 400 `invalid_identifiers`; 409 `not_deliverable`, `identifier_taken`
-- **POST** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board o material*. Añade
-  números a un pedido.
-  - cuerpo: `identifiers`
-  - devuelve: 200 `DistributionUnit`
-  - errores: 400 `invalid_identifiers`; 409 `not_deliverable`, `identifier_taken`
-- **DELETE** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board o material*. Quita
-  números de un pedido.
+  - returns: 200 `[{login, first_name, last_name}]`
+- **GET** `/distributions/{id}/units` — *Admin, board or material see all; everyone else their own*.
+  Orders of the distribution.
+  - returns: 200 `[DistributionUnit]`
+- **POST** `/distributions/{id}/units` — *Any baseline role*. Orders a unit (or a quantity of an
+  article), for oneself or for another member.
+  - body: `beneficiary_login`, `is_extra`, `article_id`, `quantity`, `choices`
+  - returns: 201 `DistributionUnit`
+  - errors: 400 `invalid_choices`; 409 `not_open`
+- **PATCH** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it, admin,
+  board or material*. Changes the choices or the quantity.
+  - body: `choices`, `quantity`
+  - returns: 200 `DistributionUnit`
+  - errors: 400 `invalid_choices`, `invalid_quantity`; 409 `not_open`
+- **DELETE** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it,
+  admin, board or material*. Removes an order (not the automatic one of a distribution for
+  everybody, nor one with something paid).
+  - returns: 204
+  - errors: 409 `not_open`
+- **GET** `/distributions/{id}/order` — *Admin, board or material*. What has to be ordered: units
+  summed by combination of options.
+  - returns: 200 `DistributionOrder`
+- **GET** `/distributions/{id}/articles/{articleID}/numbers` — *Admin, board or material*. All the
+  numbers of an article and who has each one.
+  - returns: 200 `JSON`
+  - errors: 400 `article_not_numbered`, `unknown_article`
+- **PUT** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board or material*. Replaces
+  the numbers of an order.
+  - body: `identifiers`
+  - returns: 200 `DistributionUnit`
+  - errors: 400 `invalid_identifiers`; 409 `not_deliverable`, `identifier_taken`
+- **POST** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board or material*. Adds
+  numbers to an order.
+  - body: `identifiers`
+  - returns: 200 `DistributionUnit`
+  - errors: 400 `invalid_identifiers`; 409 `not_deliverable`, `identifier_taken`
+- **DELETE** `/distributions/{id}/units/{unitID}/identifiers` — *Admin, board or material*. Removes
+  numbers from an order.
   - query: `identifiers`*
-  - devuelve: 200 `DistributionUnit`
-  - errores: 400 `invalid_identifiers`; 409 `not_deliverable`
-- **POST** `/distributions/{id}/units/{unitID}/identifiers/assign` — *Admin, board o material*. Da a
-  un pedido los siguientes números libres.
-  - devuelve: 200 `DistributionUnit`
-  - errores: 400 `article_not_numbered`; 409 `not_deliverable`
-- **POST** `/distributions/{id}/pickups` — *Admin, board o material*. Apunta entregas, en lote y
-  todo o nada.
-  - cuerpo: `unit_ids`, `deliveries`, `picked_up_by_login*`, `assign_numbers`
-  - devuelve: 204
-  - errores: 400 `no_units`; 409 `not_deliverable`
-- **DELETE** `/distributions/{id}/units/{unitID}/pickup` — *Admin, board o material*. Deshace una
-  entrega.
+  - returns: 200 `DistributionUnit`
+  - errors: 400 `invalid_identifiers`; 409 `not_deliverable`
+- **POST** `/distributions/{id}/units/{unitID}/identifiers/assign` — *Admin, board or material*.
+  Gives an order the next free numbers.
+  - returns: 200 `DistributionUnit`
+  - errors: 400 `article_not_numbered`; 409 `not_deliverable`
+- **POST** `/distributions/{id}/pickups` — *Admin, board or material*. Records collections, in a
+  batch and all or nothing.
+  - body: `unit_ids`, `deliveries`, `picked_up_by_login*`, `assign_numbers`
+  - returns: 204
+  - errors: 400 `no_units`; 409 `not_deliverable`
+- **DELETE** `/distributions/{id}/units/{unitID}/pickup` — *Admin, board or material*. Undoes a
+  collection.
   - query: `quantity`, `identifiers`
-  - devuelve: 204
-- **POST** `/distributions/{id}/units/{unitID}/return` — *Admin, board o material*. Devuelve
-  unidades entregadas: salen del pedido y sus números quedan libres.
-  - cuerpo: `quantity`, `identifiers`
-  - devuelve: 204
-  - errores: 400 `invalid_quantity`, `invalid_identifiers`; 409 `not_deliverable`,
+  - returns: 204
+- **POST** `/distributions/{id}/units/{unitID}/return` — *Admin, board or material*. Returns
+  collected units: they leave the order and their numbers become free.
+  - body: `quantity`, `identifiers`
+  - returns: 204
+  - errors: 400 `invalid_quantity`, `invalid_identifiers`; 409 `not_deliverable`,
     `quantity_below_paid`
-- **GET** `/distributions/{id}/payments` — *Admin o board*. Lista de pagos del reparto, con el
-  acumulado.
+- **GET** `/distributions/{id}/payments` — *Admin or board*. List of the distribution's payments,
+  with the running total.
   - query: `from`, `to`, `limit`, `offset`
-  - devuelve: 200 `[DistributionPayment]`
-  - errores: 400 `invalid_date`, `invalid_date_range`
-- **POST** `/distributions/{id}/payments` — *Admin o board*. Marca pagos, en lote y todo o nada, y
-  los apunta en Contabilidad.
-  - cuerpo: `account_id`, `unit_ids`, `payments`
-  - devuelve: 204
-  - errores: 400 `no_units`; 409 `already_paid`
-- **DELETE** `/distributions/{id}/units/{unitID}/payment` — *Admin o board*. Quita un pago, con su
-  transacción inversa.
+  - returns: 200 `[DistributionPayment]`
+  - errors: 400 `invalid_date`, `invalid_date_range`
+- **POST** `/distributions/{id}/payments` — *Admin or board*. Marks payments, in a batch and all or
+  nothing, and records them in Accounting.
+  - body: `account_id`, `unit_ids`, `payments`
+  - returns: 204
+  - errors: 400 `no_units`; 409 `already_paid`
+- **DELETE** `/distributions/{id}/units/{unitID}/payment` — *Admin or board*. Takes off a payment,
+  with its reverse transaction.
   - query: `account_id`, `quantity`, `identifiers`
-  - devuelve: 204
-  - errores: 400 `account_required`; 409 `no_distribution_account`
+  - returns: 204
+  - errors: 400 `account_required`; 409 `no_distribution_account`
 
-## Archivo de documentos y ficheros de personas
+## Document archive and per-person files
 
-Árboles de directorios en disco, solo lectura: nada de esto está en la base de datos.
+Directory trees on disk, read-only: none of this is in the database.
 
-- **GET** `/library` — *Cualquier rol base*. Lista un directorio del archivo del club (`?path=`).
+- **GET** `/library` — *Any baseline role*. Lists a directory of the club's archive (`?path=`).
   - query: `path`
-  - devuelve: 200 `LibraryListing`
-  - errores: 400 `invalid_path`, `not_a_directory`
-- **GET** `/library/file/{path}` — *Cualquier rol base*. Contenido de un documento. También acepta
-  la cookie de sesión, para enlaces normales del navegador.
+  - returns: 200 `LibraryListing`
+  - errors: 400 `invalid_path`, `not_a_directory`
+- **GET** `/library/file/{path}` — *Any baseline role*. Content of a document. It also accepts the
+  session cookie, for ordinary browser links.
   - query: `download`
-  - errores: 400 `invalid_path`, `not_a_file`
-- **GET** `/users/{login}/files` — *La propia persona, admin o board*. Lista un directorio de los
-  ficheros de una persona.
+  - errors: 400 `invalid_path`, `not_a_file`
+- **GET** `/users/{login}/files` — *The person themselves, admin or board*. Lists a directory of a
+  person's files.
   - query: `path`
-  - devuelve: 200 `UserFileListing`
-  - errores: 400 `invalid_path`, `not_a_directory`
-- **GET** `/users/{login}/files/file/{path}` — *La propia persona, admin o board*. Contenido de un
-  fichero de una persona (también con la cookie de sesión).
+  - returns: 200 `UserFileListing`
+  - errors: 400 `invalid_path`, `not_a_directory`
+- **GET** `/users/{login}/files/file/{path}` — *The person themselves, admin or board*. Content of a
+  person's file (also with the session cookie).
   - query: `download`
-  - errores: 400 `invalid_path`, `not_a_file`
+  - errors: 400 `invalid_path`, `not_a_file`
 
-## Contabilidad
+## Accounting
 
-Plan de cuentas en árbol y transacciones de partida doble. Lectura para cualquier rol base;
-escritura de admin o del rol opcional `money`. `GET /transactions` y el libro de una cuenta se
-pagina con `limit` (50 por defecto, máximo 100) y `offset`, y se acota con `from` y `to` (días
-inclusivos, `YYYY-MM-DD`) y `q` (palabras que tienen que estar todas en la descripción, en cualquier
-orden y sin distinguir mayúsculas ni acentos).
+Chart of accounts as a tree and double-entry transactions. Reading for any baseline role; writing
+for admin or the optional `money` role. `GET /transactions` and an account's ledger are paged with
+`limit` (50 by default, at most 100) and `offset`, and narrowed with `from` and `to` (inclusive
+days, `YYYY-MM-DD`) and `q` (words that must all be in the description, in any order and ignoring
+case and accents).
 
-- **GET** `/accounts` — *Cualquier rol base*. Plan de cuentas en orden de árbol, con `balance` y
-  `last_transaction_at` (en un grupo, los de sus descendientes).
-  - devuelve: 200 `[Account]`
-- **POST** `/accounts` — *Admin o money*. Crea una cuenta.
-  - cuerpo: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
+- **GET** `/accounts` — *Any baseline role*. Chart of accounts in tree order, with `balance` and
+  `last_transaction_at` (in a group, those of its descendants).
+  - returns: 200 `[Account]`
+- **POST** `/accounts` — *Admin or money*. Creates an account.
+  - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
     `distribution_default`, `hidden`
-  - devuelve: 201 `Account`
-  - errores: 400 `invalid_body`, `missing_fields`, `invalid_type`, `unknown_parent_account`; 409
+  - returns: 201 `Account`
+  - errors: 400 `invalid_body`, `missing_fields`, `invalid_type`, `unknown_parent_account`; 409
     `duplicate_code`, `parent_has_entries`
-- **GET** `/accounts/{id}` — *Cualquier rol base*. Una cuenta.
-  - devuelve: 200 `Account`
-  - errores: 400 `invalid_id`
-- **PATCH** `/accounts/{id}` — *Admin o money*. Corrige nombre, código, cuenta superior, tipo y
-  marcas. Sustituye todos los campos.
-  - cuerpo: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
+- **GET** `/accounts/{id}` — *Any baseline role*. One account.
+  - returns: 200 `Account`
+  - errors: 400 `invalid_id`
+- **PATCH** `/accounts/{id}` — *Admin or money*. Corrects name, code, parent account, type and
+  flags. Replaces all the fields.
+  - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
     `distribution_default`, `hidden`
-  - devuelve: 200 `Account`
-  - errores: 400 `invalid_id`; 409 `duplicate_code`
-- **DELETE** `/accounts/{id}` — *Admin o money*. Borra una cuenta sin hijas ni apuntes.
-  - devuelve: 204
-  - errores: 400 `invalid_id`; 409 `account_in_use`
-- **POST** `/accounts/{id}/move` — *Admin o money*. Intercambia el orden con el hermano anterior
-  (`up`) o posterior (`down`). Devuelve el plan entero.
-  - cuerpo: `direction*`
-  - devuelve: 200 `[Account]`
-  - errores: 400 `invalid_id`
-- **GET** `/accounts/{id}/transactions` — *Cualquier rol base*. Libro de la cuenta, con saldo
-  corrido. En una cuenta que agrupa otras, los apuntes de todas sus descendientes.
+  - returns: 200 `Account`
+  - errors: 400 `invalid_id`; 409 `duplicate_code`
+- **DELETE** `/accounts/{id}` — *Admin or money*. Deletes an account with no children and no
+  entries.
+  - returns: 204
+  - errors: 400 `invalid_id`; 409 `account_in_use`
+- **POST** `/accounts/{id}/move` — *Admin or money*. Swaps the order with the previous (`up`) or
+  next (`down`) sibling. Returns the whole chart.
+  - body: `direction*`
+  - returns: 200 `[Account]`
+  - errors: 400 `invalid_id`
+- **GET** `/accounts/{id}/transactions` — *Any baseline role*. Ledger of the account, with running
+  balance. For an account that groups others, the entries of all its descendants.
   - query: `limit`, `offset`, `from`, `to`, `q`
-  - devuelve: 200 `[AccountEntry]`
-  - errores: 400 `invalid_id`
-- **GET** `/transactions` — *Cualquier rol base*. Transacciones, la más reciente primero.
+  - returns: 200 `[AccountEntry]`
+  - errors: 400 `invalid_id`
+- **GET** `/transactions` — *Any baseline role*. Transactions, most recent first.
   - query: `limit`, `offset`, `from`, `to`, `q`
-  - devuelve: 200 `[Transaction]`
-  - errores: 400 `invalid_date`, `invalid_date_range`
-- **POST** `/transactions` — *Admin o money*. Registra una transacción: dos o más apuntes que suman
-  cero.
-  - cuerpo: `description*`, `occurred_at*`, `entries*`
-  - devuelve: 201 `Transaction`
-  - errores: 400 `invalid_body`; 409 `unbalanced`, `account_has_children`
-- **GET** `/transactions/{id}` — *Cualquier rol base*. Una transacción; admin y board ven además las
-  cuotas y licencias que pagó.
-  - devuelve: 200 `JSON`
-  - errores: 400 `invalid_id`
-- **PATCH** `/transactions/{id}` — *Admin o money*. Sustituye descripción, fecha y apuntes.
-  - cuerpo: `description*`, `occurred_at*`, `entries*`
-  - devuelve: 200 `Transaction`
-  - errores: 400 `invalid_id`; 409 `unbalanced`
-- **DELETE** `/transactions/{id}` — *Admin o money*. Borra la transacción; si era el pago de un
-  reparto, lo deshace.
-  - devuelve: 204
-  - errores: 400 `invalid_id`; 409 `transaction_has_licenses`,
+  - returns: 200 `[Transaction]`
+  - errors: 400 `invalid_date`, `invalid_date_range`
+- **POST** `/transactions` — *Admin or money*. Records a transaction: two or more entries that sum
+  to zero.
+  - body: `description*`, `occurred_at*`, `entries*`
+  - returns: 201 `Transaction`
+  - errors: 400 `invalid_body`; 409 `unbalanced`, `account_has_children`
+- **GET** `/transactions/{id}` — *Any baseline role*. One transaction; admin and board also see the
+  dues and licenses it paid.
+  - returns: 200 `JSON`
+  - errors: 400 `invalid_id`
+- **PATCH** `/transactions/{id}` — *Admin or money*. Replaces description, date and entries.
+  - body: `description*`, `occurred_at*`, `entries*`
+  - returns: 200 `Transaction`
+  - errors: 400 `invalid_id`; 409 `unbalanced`
+- **DELETE** `/transactions/{id}` — *Admin or money*. Deletes the transaction; if it was the payment
+  of a distribution, it undoes it.
+  - returns: 204
+  - errors: 400 `invalid_id`; 409 `transaction_has_licenses`,
     `transaction_has_distribution_payments`
 
-## Objetos
+## Objects
 
-Campos de los objetos que devuelve o recibe la API (`*` = obligatorio al enviarlo; un campo
-sin marca puede faltar o ser nulo). El detalle de cada uno está en `components.schemas` del OpenAPI.
+Fields of the objects the API returns or receives (`*` = required when sending it; a field without a
+mark may be missing or null). The detail of each one is in `components.schemas` of the OpenAPI.
 
 ### `Error`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `error` | objeto |
+| `error` | object |
 
-Campos anidados:
+Nested fields:
 
 - `error`: `{code, message}`
 
 ### `AdminStatus`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `app` | objeto |
-| `database` | objeto |
-| `mail` | objeto |
-| `telegram` | objeto |
-| `settings` | objeto |
-| `storage` | [objeto] |
+| `app` | object |
+| `database` | object |
+| `mail` | object |
+| `telegram` | object |
+| `settings` | object |
+| `storage` | [object] |
 
-Campos anidados:
+Nested fields:
 
 - `app`: `{version, vcs_revision, vcs_time, vcs_modified, go_version, started_at}`
 - `database`: `{ok, latency_ms, error, migration_version}`
@@ -602,265 +608,265 @@ Campos anidados:
 
 ### `Token`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `created_at` | fecha y hora |
-| `expires_at` | fecha y hora |
-| `revoked_at` | fecha y hora |
-| `last_used_at` | fecha y hora |
-| `last_used_ip` | texto |
-| `current` | booleano |
-| `impersonated_by_login` | texto |
+| `id` | integer |
+| `user_login` | text |
+| `created_at` | datetime |
+| `expires_at` | datetime |
+| `revoked_at` | datetime |
+| `last_used_at` | datetime |
+| `last_used_ip` | text |
+| `current` | boolean |
+| `impersonated_by_login` | text |
 
 ### `Role`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `name` | texto |
-| `description` | texto |
-| `is_system` | booleano |
-| `is_automatic` | booleano |
+| `id` | integer |
+| `name` | text |
+| `description` | text |
+| `is_system` | boolean |
+| `is_automatic` | boolean |
 
 ### `User`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
-| `national_id` | texto |
-| `birth_date` | fecha |
+| `login` | text |
+| `first_name` | text |
+| `last_name` | text |
+| `national_id` | text |
+| `birth_date` | date |
 | `gender` | Gender |
-| `email` | texto |
-| `phone` | texto |
-| `address` | texto |
-| `postal_code` | texto |
-| `city` | texto |
-| `province` | texto |
-| `emergency_contact` | texto |
-| `roles` | [texto] |
-| `last_login_at` | fecha y hora |
-| `last_login_ip` | texto |
-| `membership_number` | entero |
-| `membership_start_date` | fecha |
-| `membership_end_date` | fecha |
-| `on_leave` | booleano |
-| `last_due_year` | entero |
-| `last_due_paid_at` | fecha y hora |
-| `license_type` | texto |
-| `license_year` | entero |
-| `license_issued_date` | fecha |
-| `created_at` | fecha y hora |
+| `email` | text |
+| `phone` | text |
+| `address` | text |
+| `postal_code` | text |
+| `city` | text |
+| `province` | text |
+| `emergency_contact` | text |
+| `roles` | [text] |
+| `last_login_at` | datetime |
+| `last_login_ip` | text |
+| `membership_number` | integer |
+| `membership_start_date` | date |
+| `membership_end_date` | date |
+| `on_leave` | boolean |
+| `last_due_year` | integer |
+| `last_due_paid_at` | datetime |
+| `license_type` | text |
+| `license_year` | integer |
+| `license_issued_date` | date |
+| `created_at` | datetime |
 
 ### `MemberListing`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
+| `login` | text |
+| `first_name` | text |
+| `last_name` | text |
 | `gender` | Gender |
 | `age_category` | youth/child/junior/senior/veteran_a/veteran_b |
-| `membership_number` | entero |
-| `membership_start_date` | fecha |
-| `membership_end_date` | fecha |
-| `on_leave` | booleano |
-| `license_type` | texto |
-| `license_year` | entero |
-| `last_due_year` | entero |
+| `membership_number` | integer |
+| `membership_start_date` | date |
+| `membership_end_date` | date |
+| `on_leave` | boolean |
+| `license_type` | text |
+| `license_year` | integer |
+| `last_due_year` | integer |
 
 ### `DirectoryEntry`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
+| `login` | text |
+| `first_name` | text |
+| `last_name` | text |
 
 ### `CreateUserInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `login` | texto |
-| `first_name*` | texto |
-| `last_name*` | texto |
-| `email` | texto |
-| `national_id` | texto |
-| `birth_date*` | fecha |
-| `gender` | objeto |
-| `phone` | texto |
-| `address` | texto |
-| `postal_code` | texto |
-| `city` | texto |
-| `province` | texto |
-| `emergency_contact` | texto |
-| `role_names` | [texto] |
+| `login` | text |
+| `first_name*` | text |
+| `last_name*` | text |
+| `email` | text |
+| `national_id` | text |
+| `birth_date*` | date |
+| `gender` | object |
+| `phone` | text |
+| `address` | text |
+| `postal_code` | text |
+| `city` | text |
+| `province` | text |
+| `emergency_contact` | text |
+| `role_names` | [text] |
 
 ### `UpdateUserInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
-| `email` | texto |
-| `national_id` | texto |
-| `birth_date` | fecha |
-| `gender` | objeto |
-| `phone` | texto |
-| `address` | texto |
-| `postal_code` | texto |
-| `city` | texto |
-| `province` | texto |
-| `emergency_contact` | texto |
+| `login` | text |
+| `first_name` | text |
+| `last_name` | text |
+| `email` | text |
+| `national_id` | text |
+| `birth_date` | date |
+| `gender` | object |
+| `phone` | text |
+| `address` | text |
+| `postal_code` | text |
+| `city` | text |
+| `province` | text |
+| `emergency_contact` | text |
 
 ### `Membership`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
-| `start_date` | fecha |
-| `end_date` | fecha |
-| `end_reason` | texto |
+| `id` | integer |
+| `user_login` | text |
+| `first_name` | text |
+| `last_name` | text |
+| `start_date` | date |
+| `end_date` | date |
+| `end_reason` | text |
 
 ### `Leave`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `start_date` | fecha |
-| `end_date` | fecha |
-| `reason` | texto |
+| `id` | integer |
+| `user_login` | text |
+| `start_date` | date |
+| `end_date` | date |
+| `reason` | text |
 
 ### `Due`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `year` | entero |
-| `transaction_id` | entero |
-| `created_at` | fecha y hora |
-| `paid_at` | fecha y hora |
+| `id` | integer |
+| `user_login` | text |
+| `year` | integer |
+| `transaction_id` | integer |
+| `created_at` | datetime |
+| `paid_at` | datetime |
 
 ### `LicenseType`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `name` | texto |
-| `is_other` | booleano |
+| `id` | integer |
+| `name` | text |
+| `is_other` | boolean |
 
 ### `License`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `license_type_id` | entero |
-| `type` | texto |
-| `other_detail` | texto |
-| `issued_date` | fecha |
-| `year` | entero |
-| `valid_until` | fecha |
-| `transaction_id` | entero |
-| `created_at` | fecha y hora |
+| `id` | integer |
+| `user_login` | text |
+| `license_type_id` | integer |
+| `type` | text |
+| `other_detail` | text |
+| `issued_date` | date |
+| `year` | integer |
+| `valid_until` | date |
+| `transaction_id` | integer |
+| `created_at` | datetime |
 
 ### `BoardMember`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `user_login` | texto |
-| `first_name` | texto |
-| `last_name` | texto |
-| `email` | texto |
-| `phone` | texto |
+| `id` | integer |
+| `user_login` | text |
+| `first_name` | text |
+| `last_name` | text |
+| `email` | text |
+| `phone` | text |
 | `position` | BoardPosition |
-| `start_date` | fecha |
-| `end_date` | fecha |
+| `start_date` | date |
+| `end_date` | date |
 
 ### `Activity`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `title` | texto |
+| `id` | integer |
+| `title` | text |
 | `type` | caving/canyoning/training/social/other |
-| `start_date` | fecha |
-| `end_date` | fecha |
-| `description` | texto |
+| `start_date` | date |
+| `end_date` | date |
+| `description` | text |
 | `status` | planned/completed/cancelled |
-| `leader_login` | texto |
+| `leader_login` | text |
 | `visibility` | public/private |
 
 ### `CreateActivityInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `title*` | texto |
+| `title*` | text |
 | `type` | caving/canyoning/training/social/other |
-| `start_date*` | fecha |
-| `end_date*` | fecha |
-| `description` | texto |
+| `start_date*` | date |
+| `end_date*` | date |
+| `description` | text |
 | `visibility` | public/private |
-| `participant_logins` | [texto] |
-| `leader_login` | texto |
+| `participant_logins` | [text] |
+| `leader_login` | text |
 
 ### `UpdateActivityInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `title` | texto |
+| `title` | text |
 | `type` | caving/canyoning/training/social/other |
-| `start_date` | fecha |
-| `end_date` | fecha |
-| `description` | texto |
+| `start_date` | date |
+| `end_date` | date |
+| `description` | text |
 | `status` | planned/completed/cancelled |
 | `visibility` | public/private |
-| `leader_login` | texto |
+| `leader_login` | text |
 
 ### `Participant`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `activity_id` | entero |
-| `user_login` | texto |
+| `activity_id` | integer |
+| `user_login` | text |
 | `role` | leader/participant |
-| `confirmed` | booleano |
+| `confirmed` | boolean |
 
 ### `Distribution`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `name` | texto |
-| `description` | texto |
+| `id` | integer |
+| `name` | text |
+| `description` | text |
 | `audience` | all_members/signup |
 | `status` | draft/open/closed/done |
-| `closes_at` | fecha y hora |
-| `cutoff_date` | fecha |
-| `account_id` | entero |
-| `account_name` | texto |
-| `price` | número |
-| `extra_price` | número |
-| `max_extra` | entero |
-| `options` | [objeto] |
-| `articles` | [objeto] |
-| `created_by_login` | texto |
-| `created_at` | fecha y hora |
-| `unit_count` | entero |
-| `picked_up_count` | entero |
-| `eligible` | booleano |
+| `closes_at` | datetime |
+| `cutoff_date` | date |
+| `account_id` | integer |
+| `account_name` | text |
+| `price` | number |
+| `extra_price` | number |
+| `max_extra` | integer |
+| `options` | [object] |
+| `articles` | [object] |
+| `created_by_login` | text |
+| `created_at` | datetime |
+| `unit_count` | integer |
+| `picked_up_count` | integer |
+| `eligible` | boolean |
 
-Campos anidados:
+Nested fields:
 
 - `options`: `[{name, values}]`
 - `articles`: `[{id, name, price, max_total, max_per_person, has_identifiers, identifier_fields,
@@ -868,278 +874,278 @@ Campos anidados:
 
 ### `DistributionInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `name*` | texto |
-| `description` | texto |
+| `name*` | text |
+| `description` | text |
 | `audience` | all_members/signup |
-| `closes_at` | fecha y hora |
-| `cutoff_date` | fecha |
-| `account_id` | entero |
-| `price` | número |
-| `extra_price` | número |
-| `max_extra` | entero |
-| `options` | [objeto] |
-| `articles` | [objeto] |
+| `closes_at` | datetime |
+| `cutoff_date` | date |
+| `account_id` | integer |
+| `price` | number |
+| `extra_price` | number |
+| `max_extra` | integer |
+| `options` | [object] |
+| `articles` | [object] |
 | `status` | draft/open/closed/done |
 
-Campos anidados:
+Nested fields:
 
 - `options`: `[{name, values}]`
 - `articles`: `[{name, price, max_total, max_per_person, has_identifiers, identifier_fields}]`
 
 ### `IdentifierField`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `name*` | texto |
-| `spec*` | texto |
+| `name*` | text |
+| `spec*` | text |
 
 ### `DistributionUnit`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `distribution_id` | entero |
-| `beneficiary_login` | texto |
-| `beneficiary_name` | texto |
-| `registered_by_login` | texto |
-| `registered_at` | fecha y hora |
-| `is_extra` | booleano |
-| `article_id` | entero |
-| `article_name` | texto |
-| `identifiers` | [texto] |
-| `quantity` | entero |
-| `paid_quantity` | entero |
-| `choices` | objeto |
-| `price` | número |
-| `paid_at` | fecha y hora |
-| `paid_marked_by_login` | texto |
-| `picked_up_quantity` | entero |
-| `delivered_identifiers` | [texto] |
-| `paid_identifiers` | [texto] |
-| `picked_up_at` | fecha y hora |
-| `pickup_recorded_by_login` | texto |
-| `picked_up_by_login` | texto |
+| `id` | integer |
+| `distribution_id` | integer |
+| `beneficiary_login` | text |
+| `beneficiary_name` | text |
+| `registered_by_login` | text |
+| `registered_at` | datetime |
+| `is_extra` | boolean |
+| `article_id` | integer |
+| `article_name` | text |
+| `identifiers` | [text] |
+| `quantity` | integer |
+| `paid_quantity` | integer |
+| `choices` | object |
+| `price` | number |
+| `paid_at` | datetime |
+| `paid_marked_by_login` | text |
+| `picked_up_quantity` | integer |
+| `delivered_identifiers` | [text] |
+| `paid_identifiers` | [text] |
+| `picked_up_at` | datetime |
+| `pickup_recorded_by_login` | text |
+| `picked_up_by_login` | text |
 
 ### `DistributionPayment`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `distribution_id` | entero |
-| `distribution_name` | texto |
-| `unit_id` | entero |
-| `transaction_id` | entero |
-| `occurred_at` | fecha y hora |
-| `recorded_by_login` | texto |
-| `recorded_by_name` | texto |
-| `paid_by_login` | texto |
-| `paid_by_name` | texto |
-| `description` | texto |
-| `quantity` | entero |
-| `amount` | número |
-| `identifiers` | [texto] |
-| `total_after` | número |
+| `id` | integer |
+| `distribution_id` | integer |
+| `distribution_name` | text |
+| `unit_id` | integer |
+| `transaction_id` | integer |
+| `occurred_at` | datetime |
+| `recorded_by_login` | text |
+| `recorded_by_name` | text |
+| `paid_by_login` | text |
+| `paid_by_name` | text |
+| `description` | text |
+| `quantity` | integer |
+| `amount` | number |
+| `identifiers` | [text] |
+| `total_after` | number |
 
 ### `DistributionOrder`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `lines` | [objeto] |
-| `total_units` | entero |
-| `total_amount` | número |
-| `provisional` | booleano |
+| `lines` | [object] |
+| `total_units` | integer |
+| `total_amount` | number |
+| `provisional` | boolean |
 
-Campos anidados:
+Nested fields:
 
 - `lines`: `[{article_id, article_name, choices, count}]`
 
 ### `Holiday`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `date` | fecha |
-| `name` | texto |
+| `id` | integer |
+| `date` | date |
+| `name` | text |
 
 ### `ActivityResource`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `activity_id` | entero |
+| `id` | integer |
+| `activity_id` | integer |
 | `type` | text/file |
-| `author_login` | texto |
-| `title` | texto |
-| `description` | texto |
-| `file_name` | texto |
-| `file_size` | entero |
-| `content_type` | texto |
-| `position` | entero |
-| `created_at` | fecha y hora |
+| `author_login` | text |
+| `title` | text |
+| `description` | text |
+| `file_name` | text |
+| `file_size` | integer |
+| `content_type` | text |
+| `position` | integer |
+| `created_at` | datetime |
 
 ### `MaterialCategory`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `name` | texto |
+| `id` | integer |
+| `name` | text |
 
 ### `Item`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
+| `id` | integer |
 | `item_type` | rope/bag/gear |
-| `brand` | texto |
-| `model` | texto |
-| `code` | texto |
-| `description` | texto |
-| `total_quantity` | entero |
-| `available_quantity` | entero |
-| `outstanding_loan_quantity` | entero |
+| `brand` | text |
+| `model` | text |
+| `code` | text |
+| `description` | text |
+| `total_quantity` | integer |
+| `available_quantity` | integer |
+| `outstanding_loan_quantity` | integer |
 | `status` | available/on_loan/rented/sold/lost/abandoned/maintenance/retired |
-| `loanable` | booleano |
-| `rentable` | booleano |
-| `sellable` | booleano |
-| `rental_price_per_week` | número |
-| `sale_price` | número |
+| `loanable` | boolean |
+| `rentable` | boolean |
+| `sellable` | boolean |
+| `rental_price_per_week` | number |
+| `sale_price` | number |
 | `rope_type` | caving/canyoning |
-| `diameter_mm` | número |
-| `manufacture_year` | entero |
-| `length_m` | entero |
+| `diameter_mm` | number |
+| `manufacture_year` | integer |
+| `length_m` | integer |
 | `bag_type` | caving/canyoning/quick/special |
-| `capacity_liters` | número |
-| `category_id` | entero |
-| `category_name` | texto |
+| `capacity_liters` | number |
+| `category_id` | integer |
+| `category_name` | text |
 
 ### `CreateItemInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
 | `item_type*` | rope/bag/gear |
-| `brand` | texto |
-| `model` | texto |
-| `code` | texto |
-| `description` | texto |
-| `acquired_at` | fecha |
-| `total_quantity` | entero |
-| `loanable` | booleano |
-| `rental_price_per_week` | número |
-| `sale_price` | número |
+| `brand` | text |
+| `model` | text |
+| `code` | text |
+| `description` | text |
+| `acquired_at` | date |
+| `total_quantity` | integer |
+| `loanable` | boolean |
+| `rental_price_per_week` | number |
+| `sale_price` | number |
 | `rope_type` | caving/canyoning |
-| `diameter_mm` | número |
-| `manufacture_year` | entero |
-| `length_m` | entero |
+| `diameter_mm` | number |
+| `manufacture_year` | integer |
+| `length_m` | integer |
 | `bag_type` | caving/canyoning/quick/special |
-| `capacity_liters` | número |
-| `category_id` | entero |
+| `capacity_liters` | number |
+| `category_id` | integer |
 
 ### `Movement`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `item_id` | entero |
-| `user_login` | texto |
+| `id` | integer |
+| `item_id` | integer |
+| `user_login` | text |
 | `type` | loan/rental/sale/acquisition/loss/abandonment/retirement/return |
-| `quantity` | entero |
-| `transacted_at` | fecha |
-| `returned_at` | fecha |
-| `price` | número |
+| `quantity` | integer |
+| `transacted_at` | date |
+| `returned_at` | date |
+| `price` | number |
 | `status` | active/completed/overdue/cancelled |
-| `recorded_by_login` | texto |
-| `activity_id` | entero |
-| `notes` | texto |
+| `recorded_by_login` | text |
+| `activity_id` | integer |
+| `notes` | text |
 
 ### `LibraryEntry`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `name` | texto |
+| `name` | text |
 | `type` | dir/file |
-| `size` | entero |
-| `modified_at` | fecha y hora |
+| `size` | integer |
+| `modified_at` | datetime |
 
 ### `LibraryListing`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `path` | texto |
+| `path` | text |
 | `entries` | [LibraryEntry] |
 
 ### `UserFileEntry`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `name` | texto |
+| `name` | text |
 | `type` | dir/file |
-| `size` | entero |
-| `modified_at` | fecha y hora |
+| `size` | integer |
+| `modified_at` | datetime |
 
 ### `UserFileListing`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `path` | texto |
+| `path` | text |
 | `entries` | [UserFileEntry] |
 
 ### `Account`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `name` | texto |
-| `code` | texto |
-| `parent_id` | entero |
+| `id` | integer |
+| `name` | text |
+| `code` | text |
+| `parent_id` | integer |
 | `type` | asset/income/expense |
 | `effective_type` | asset/income/expense |
-| `allows_dues` | booleano |
-| `allows_licenses` | booleano |
-| `distribution_default` | booleano |
-| `hidden` | booleano |
-| `balance` | número |
-| `last_transaction_at` | fecha y hora |
+| `allows_dues` | boolean |
+| `allows_licenses` | boolean |
+| `distribution_default` | boolean |
+| `hidden` | boolean |
+| `balance` | number |
+| `last_transaction_at` | datetime |
 
 ### `AccountEntry`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `transaction_id` | entero |
-| `account_id` | entero |
-| `account_name` | texto |
-| `occurred_at` | fecha y hora |
-| `description` | texto |
-| `amount` | número |
-| `balance_after` | número |
+| `transaction_id` | integer |
+| `account_id` | integer |
+| `account_name` | text |
+| `occurred_at` | datetime |
+| `description` | text |
+| `amount` | number |
+| `balance_after` | number |
 
 ### `Entry`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `account_id` | entero |
-| `amount` | número |
+| `id` | integer |
+| `account_id` | integer |
+| `amount` | number |
 
 ### `EntryInput`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `account_id*` | entero |
-| `amount*` | número |
+| `account_id*` | integer |
+| `amount*` | number |
 
 ### `Transaction`
 
-| Campo | Tipo |
+| Field | Type |
 |---|---|
-| `id` | entero |
-| `description` | texto |
-| `occurred_at` | fecha y hora |
-| `created_at` | fecha y hora |
+| `id` | integer |
+| `description` | text |
+| `occurred_at` | datetime |
+| `created_at` | datetime |
 | `entries` | [Entry] |
 
-### Enumerados
+### Enumerations
 
 - **`Gender`**: male / female
 - **`BoardPosition`**: president / vice_president / secretary / treasurer / member_at_large

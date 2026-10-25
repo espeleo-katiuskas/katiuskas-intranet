@@ -1,50 +1,47 @@
-# Despliegue en producción sin Docker (servidor con poco disco)
+# Production deployment without Docker (server with little disk)
 
-Alternativa a [`docs/deployment.md`](deployment.md) para un servidor propio con poco
-espacio en disco, donde el coste de Docker (el propio motor, más las imágenes de
-PostgreSQL, Caddy y el toolchain de Go de cada build) no compensa. Aquí todo corre como
-proceso nativo gestionado por `systemd`: PostgreSQL instalado por el paquete de la
-distribución, y dos binarios de Go estáticos (la API y `goose` para las migraciones)
-compilados en otra máquina y copiados por `scp` — el servidor nunca necesita el toolchain
-de Go instalado, ni siquiera durante una actualización.
+An alternative to [`docs/deployment.md`](deployment.md) for a self-hosted server with little disk
+space, where the cost of Docker (the engine itself, plus the PostgreSQL and Caddy images and the Go
+toolchain of every build) is not worth it. Here everything runs as a native process managed by
+`systemd`: PostgreSQL installed from the distribution's package, and two static Go binaries (the API
+and `goose` for the migrations) built on another machine and copied over with `scp` — the server
+never needs the Go toolchain installed, not even during an update.
 
-Escrita para Debian/Ubuntu (`apt`); en otra distribución cambian los nombres de paquete y
-el gestor (`dnf`, `pacman`...), pero la estructura es la misma.
+Written for Debian/Ubuntu (`apt`); on another distribution the package names and the package manager
+change (`dnf`, `pacman`...), but the structure is the same.
 
-Si el servidor ya tiene su propio Caddy gestionando HTTPS para otros dominios (el caso
-más habitual), no hace falta instalar uno nuevo ni levantar un proxy interno intermedio:
-basta con añadir un sitio más a ese mismo Caddy (ver el paso 5), que sirve el frontend
-desde disco y hace de reverse proxy hacia la API en `127.0.0.1:64711` — el mismo Caddy
-que ya usas para lo demás. Si en cambio el reverse proxy existente es otra cosa (nginx,
-Traefik...) que no puede servir ficheros estáticos y reenviar `/api/*` con la misma
-facilidad, el paso 5 explica también la alternativa de un Caddy local propio en
-`127.0.0.1:64710` — el mismo punto de entrada que usa la guía con Docker.
+If the server already has its own Caddy handling HTTPS for other domains (the most common case),
+there is no need to install a new one or to start an intermediate internal proxy: just add one more
+site to that same Caddy (see step 5), which serves the frontend from disk and acts as a reverse
+proxy to the API at `127.0.0.1:64711` — the same Caddy you already use for everything else. If
+instead the existing reverse proxy is something else (nginx, Traefik...) that cannot serve static
+files and forward `/api/*` as easily, step 5 also explains the alternative of a local Caddy of its
+own at `127.0.0.1:64710` — the same entry point the Docker guide uses.
 
-> **Varios entornos en un mismo host.** Esta es la guía que sigue el host del club: ejecuta
-> testing y producción una junto a la otra en una misma máquina, cada una actualizada
-> automáticamente por push (a `main` y a etiquetas semver, respectivamente). Para instalar
-> un segundo entorno, repite esta guía con su propio directorio, unidad, base de datos y
-> puertos — ver [`environments.md`](environments.md) para lo que debe ser distinto y lo que
-> se comparte.
+> **Several environments on one host.** This is the guide the club's host follows: it runs testing
+> and production side by side on one machine, each updated automatically by push (to `main` and to
+> semver tags, respectively). To install a second environment, repeat this guide with its own
+> directory, unit, database and ports — see [`environments.md`](environments.md) for what must be
+> different and what is shared.
 
-## Resumen de la máquina de destino
+## Overview of the target machine
 
 ```
 /opt/katiuskas-intranet/
 ├── bin/
-│   ├── katiuskas-api      # compilado en otra máquina, copiado por scp
-│   ├── seed-admin         # idem
-│   └── goose              # idem — solo hace falta para migrar, no en cada arranque
-├── web/                   # copia estática de web/ del repositorio
-├── db/migrations/         # copia de db/migrations/ del repositorio (solo los .sql)
+│   ├── katiuskas-api      # built on another machine, copied with scp
+│   ├── seed-admin         # same
+│   └── goose              # same — only needed to migrate, not on every start
+├── web/                   # static copy of the repository's web/
+├── db/migrations/         # copy of the repository's db/migrations/ (only the .sql files)
 ├── data/
 │   ├── library/           # LIBRARY_ROOT
 │   ├── user-files/        # USER_FILES_ROOT
 │   └── activity-resources/ # ACTIVITY_RESOURCES_ROOT
-└── api.env                # variables de entorno del servicio systemd, no legible por otros
+└── api.env                # environment variables of the systemd service, not readable by others
 ```
 
-Todo propiedad de un usuario de sistema dedicado, sin shell de login:
+Everything owned by a dedicated system user, with no login shell:
 
 ```sh
 sudo useradd --system --create-home --home-dir /opt/katiuskas-intranet \
@@ -58,132 +55,129 @@ sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
 ```sh
 sudo apt update
 sudo apt install -y postgresql
-sudo -u postgres psql -c "CREATE ROLE intranet WITH LOGIN PASSWORD '<contraseña-larga-aleatoria>';"
+sudo -u postgres psql -c "CREATE ROLE intranet WITH LOGIN PASSWORD '<long-random-password>';"
 sudo -u postgres psql -c "CREATE DATABASE intranet OWNER intranet;"
 ```
 
-El paquete de Debian/Ubuntu ya deja PostgreSQL escuchando solo en `localhost` y acepta
-conexiones por contraseña desde ahí (`pg_hba.conf`, método `scram-sha-256`/`md5` para
-`host ... 127.0.0.1/32`) — no hace falta tocar la configuración salvo que tu instalación
-la tenga ya modificada. Compruébalo con:
+The Debian/Ubuntu package already leaves PostgreSQL listening only on `localhost` and accepting
+password connections from there (`pg_hba.conf`, method `scram-sha-256`/`md5` for
+`host ... 127.0.0.1/32`) — there is no need to touch the configuration unless your installation has
+already modified it. Check it with:
 
 ```sh
-psql "postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable" -c '\conninfo'
+psql "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" -c '\conninfo'
 ```
 
-## 2. Compilar los binarios (en otra máquina)
+## 2. Building the binaries (on another machine)
 
-En cualquier máquina con Go instalado — tu propio ordenador, por ejemplo — con el
-repositorio clonado:
+On any machine with Go installed — your own computer, for example — with the repository cloned:
 
 ```sh
 cd backend
 
-# Arquitectura del servidor: comprueba con `uname -m` en el servidor.
+# Server architecture: check with `uname -m` on the server.
 #   x86_64  → GOARCH=amd64
 #   aarch64 → GOARCH=arm64
 export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 
 go build -o katiuskas-api ./cmd/api
 go build -o seed-admin ./cmd/seed-admin
-# La versión que muestra Admin → Estado del sistema la anota Go solo, a partir
-# de git (etiqueta, o commit posterior a ella, y `+dirty` si hay cambios sin
-# commitear): hace falta compilar desde el clon, con `git` instalado.
+# The version shown by Admin → Estado del sistema is recorded by Go itself, from
+# git (the tag, or a commit after it, and `+dirty` if there are uncommitted
+# changes): you have to build from the clone, with `git` installed.
 
-# goose no es una dependencia del módulo (ver go.mod) — se compila aparte,
-# fijado a v3.22.1 en vez de a `@latest`, para que compilar este binario dé
-# siempre el mismo goose sin importar cuándo o dónde se haga. No hace falta
-# instalar goose de forma permanente en ninguna máquina; solo compilar este
-# binario una vez.
+# goose is not a dependency of the module (see go.mod) — it is built separately,
+# pinned to v3.22.1 instead of `@latest`, so that building this binary always
+# gives the same goose no matter when or where it is done. There is no need to
+# install goose permanently on any machine; just build this binary once.
 GOBIN="$(pwd)" go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
 ```
 
-Los tres son binarios estáticos (`CGO_ENABLED=0`): no dependen de ninguna librería del
-sistema del servidor, solo hace falta que coincida el sistema operativo y la arquitectura.
+All three are static binaries (`CGO_ENABLED=0`): they do not depend on any library of the server's
+system, only the operating system and the architecture have to match.
 
-Cópialos, junto con el frontend y las migraciones, al servidor:
+Copy them, together with the frontend and the migrations, to the server:
 
 ```sh
-scp katiuskas-api seed-admin goose usuario@servidor:/opt/katiuskas-intranet/bin/
-scp -r ../web/. usuario@servidor:/opt/katiuskas-intranet/web/
-scp -r ../db/migrations/. usuario@servidor:/opt/katiuskas-intranet/db/migrations/
-ssh usuario@servidor sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
+scp katiuskas-api seed-admin goose user@server:/opt/katiuskas-intranet/bin/
+scp -r ../web/. user@server:/opt/katiuskas-intranet/web/
+scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
+ssh user@server sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
 ```
 
-Como `/opt/katiuskas-intranet` es propiedad de `katiuskas`, el usuario con el que haces
-`scp` necesita permiso de escritura ahí (por ejemplo, un grupo común con permisos `g+w`
-sobre esos directorios); si no, copia los ficheros a su propio `$HOME` y muévelos después
-con `sudo`.
+Since `/opt/katiuskas-intranet` is owned by `katiuskas`, the user you `scp` as needs write
+permission there (for example, a common group with `g+w` permissions on those directories);
+otherwise, copy the files to their own `$HOME` and move them afterwards with `sudo`.
 
-## 3. Migraciones y primera cuenta de administración
+## 3. Migrations and first admin account
 
-Desde el servidor (o en remoto, con `DATABASE_URL` apuntando a él si PostgreSQL fuera
-alcanzable desde fuera — no es el caso aquí, así que hazlo en el propio servidor):
+From the server (or remotely, with `DATABASE_URL` pointing at it if PostgreSQL were reachable from
+outside — it is not the case here, so do it on the server itself):
 
 ```sh
-export DATABASE_URL="postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable"
+export DATABASE_URL="postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable"
 
 sudo -u katiuskas \
   /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "$DATABASE_URL" up
 
 sudo -u katiuskas env DATABASE_URL="$DATABASE_URL" \
-  SEED_ADMIN_EMAIL=tu-email-real@tudominio.org SEED_ADMIN_PHONE=600111222 \
+  SEED_ADMIN_EMAIL=your-real-email@yourdomain.org SEED_ADMIN_PHONE=600111222 \
   /opt/katiuskas-intranet/bin/seed-admin
 ```
 
-No dejes los valores por defecto de `cmd/seed-admin` (`admin@club.test` / `600000000`):
-son de sobra conocidos y esa cuenta puede asignar el resto de roles. `seed-admin` es
-idempotente — si el email ya existe, no hace nada.
+Do not leave the default values of `cmd/seed-admin` (`admin@club.test` / `600000000`): they are far
+too well known and that account can assign all the other roles. `seed-admin` is idempotent — if the
+email already exists, it does nothing.
 
-## 4. Servicio systemd de la API
+## 4. systemd service for the API
 
-`/opt/katiuskas-intranet/api.env` (solo legible por `katiuskas`: `chmod 600`):
+`/opt/katiuskas-intranet/api.env` (readable only by `katiuskas`: `chmod 600`):
 
 ```sh
 sudo tee /opt/katiuskas-intranet/api.env >/dev/null <<'EOF'
 HTTP_ADDR=127.0.0.1:64711
-DATABASE_URL=postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable
+DATABASE_URL=postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable
 PUBLIC_BASE_URL=https://intranet.tudominio.org
 LIBRARY_ROOT=/opt/katiuskas-intranet/data/library
 USER_FILES_ROOT=/opt/katiuskas-intranet/data/user-files
 ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
-# Deja las cuatro SMTP_* comentadas para no enviar correo real: los enlaces
-# mágicos de acceso se registran entonces en `journalctl -u katiuskas-api`.
+# Leave the four SMTP_* commented out to send no real email: the magic
+# sign-in links are then logged in `journalctl -u katiuskas-api`.
 #SMTP_HOST=smtp.tudominio.org
 #SMTP_PORT=587
 #SMTP_USERNAME=
 #SMTP_PASSWORD=
 #SMTP_FROM=intranet@tudominio.org
-# Deja las dos TELEGRAM_* comentadas para no usar Telegram en absoluto:
-# los errores inesperados del API solo se registran en
-# `journalctl -u katiuskas-api`, igual que hasta ahora, sin aviso de
-# logins ni de cada alta/edición/baja, y el bot no reacciona a nadie que
-# le escriba. Rellénalas para activarlo todo: un aviso cada vez que
-# arranca el API, errores, un aviso por cada inicio de sesión, el enlace
-# y código de acceso también por Telegram (además del correo) a quien
-# tenga la cuenta vinculada, un mensaje propio por cada persona/socio/
-# rol/actividad/material/... que se crea, edita o borra (quién lo hizo
-# y, en una edición, qué cambió), y el bot pidiendo el contacto a quien
-# le escriba sin estar ya vinculado para asociar su cuenta de Telegram
-# con su teléfono.
+# Leave the two TELEGRAM_* commented out to not use Telegram at all:
+# unexpected API errors are only logged in
+# `journalctl -u katiuskas-api`, as before, with no notice of
+# logins or of each creation/edit/removal, and the bot does not react to
+# anyone who writes to it. Fill them in to activate everything: a notice
+# every time the API starts, errors, a notice for each sign-in, the sign-in
+# link and code also by Telegram (in addition to the email) to whoever
+# has the account linked, a message of its own for each person/member/
+# role/activity/equipment/... that is created, edited or deleted (who did it
+# and, for an edit, what changed), and the bot asking for the contact of
+# anyone who writes to it without being linked yet, to associate their
+# Telegram account with their phone.
 #TELEGRAM_BOT_TOKEN=
 #TELEGRAM_LOG_CHAT_ID=
-# TELEGRAM_BOT_USERNAME es independiente de las dos anteriores: el
-# nombre público del bot (sin la "@"), solo para que la página de acceso
-# ofrezca "entrar por Telegram" con un enlace directo. Solo tiene
-# sentido si también rellenas TELEGRAM_BOT_TOKEN arriba.
+# TELEGRAM_BOT_USERNAME is independent of the two above: the bot's public
+# name (without the "@"), only so that the sign-in page offers "sign in
+# with Telegram" with a direct link. It only makes sense if you also fill
+# in TELEGRAM_BOT_TOKEN above.
 #TELEGRAM_BOT_USERNAME=
 EOF
 sudo chown katiuskas:katiuskas /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env
 ```
 
-`HTTP_ADDR=127.0.0.1:64711`, a diferencia del `:64711` (todas las interfaces) del
-`docker-compose.yml` de desarrollo: aquí no hay red aislada de Docker separando la API
-del resto de la máquina, así que hay que restringirla a localhost explícitamente — solo
-Caddy, en el mismo host, necesita hablar con ella.
+`HTTP_ADDR=127.0.0.1:64711`, unlike the `:64711` (all interfaces) of the development
+`docker-compose.yml`: here there is no isolated Docker network separating the API from the rest of
+the machine, so it has to be restricted to localhost explicitly — only Caddy, on the same host,
+needs to talk to it.
 
-Unidad systemd, `/etc/systemd/system/katiuskas-api.service`:
+systemd unit, `/etc/systemd/system/katiuskas-api.service`:
 
 ```ini
 [Unit]
@@ -210,19 +204,18 @@ sudo systemctl enable --now katiuskas-api
 sudo systemctl status katiuskas-api
 ```
 
-`enable` hace que arranque solo al reiniciar la máquina; `Restart=on-failure` hace que se
-reinicie solo si el proceso cae — el equivalente exacto de `restart: unless-stopped` en la
-versión con Docker.
+`enable` makes it start by itself when the machine reboots; `Restart=on-failure` makes it restart by
+itself if the process dies — the exact equivalent of `restart: unless-stopped` in the Docker
+version.
 
 ## 5. Caddy
 
-### Ya tienes Caddy en la máquina (caso habitual)
+### You already have Caddy on the machine (the usual case)
 
-No instales un segundo Caddy ni un proxy interno de por medio: añade un bloque de sitio
-más a tu `Caddyfile` existente (o al fichero que importe, si usas `import` para separar
-sitios), con el dominio real de la intranet. Ese mismo Caddy sirve el frontend desde
-disco, hace de reverse proxy hacia la API, y gestiona el HTTPS de este dominio exactamente
-igual que ya hace con tus otros sitios:
+Do not install a second Caddy or an internal proxy in between: add one more site block to your
+existing `Caddyfile` (or to the file it imports, if you use `import` to separate sites), with the
+intranet's real domain. That same Caddy serves the frontend from disk, acts as a reverse proxy to
+the API, and handles this domain's HTTPS exactly as it already does for your other sites:
 
 ```
 intranet.tudominio.org {
@@ -252,41 +245,37 @@ intranet.tudominio.org {
 sudo systemctl reload caddy
 ```
 
-La línea `header Cache-Control "max-age=3600"` no es opcional. Sin ninguna cabecera de
-caché, los navegadores calculan por su cuenta cuánto tiempo vale un fichero (una décima
-parte de su antigüedad), así que uno sin cambios desde hacía semanas puede servirse
-desactualizado durante días tras un despliegue. Una hora fija es un compromiso: la
-alternativa, `no-cache` (preguntar al servidor por cada fichero, que contesta con un `304`
-mientras no haya cambiado), hacía que cambiar de página tardara casi un segundo a través de
-una conexión real, porque cada página arrastra una cadena de scripts (cada uno importa al
-siguiente, así que se cargan uno tras otro) y cada uno costaba una ida y vuelta. A cambio,
-tras un despliegue un navegador puede conservar una página o un script antiguos hasta una
-hora, y mezclarlos con ficheros nuevos (secciones que nunca aparecen, formularios que no
-envían campos nuevos...): quien necesite ver el cambio al momento fuerza el refresco
-(el modo depende del navegador y del dispositivo, y en un móvil o una tablet no hay una
-forma sencilla: de ahí una hora y no un día). Si hace falta otro plazo, es ese número.
+The line `header Cache-Control "max-age=3600"` is not optional. With no cache header at all,
+browsers work out for themselves how long a file is valid (a tenth of its age), so a file unchanged
+for weeks can be served stale for days after a deployment. A fixed hour is a trade-off: the
+alternative, `no-cache` (asking the server about every file, which answers with a `304` as long as
+it has not changed), made changing page take almost a second over a real connection, because each
+page drags along a chain of scripts (each one imports the next, so they load one after another) and
+each one cost a round trip. In exchange, after a deployment a browser may keep an old page or script
+for up to an hour, and mix them with new files (sections that never appear, forms that do not send
+new fields...): whoever needs to see the change at once forces a refresh (how depends on the browser
+and the device, and on a phone or a tablet there is no easy way: hence an hour and not a day). If
+another period is needed, that is the number to change.
 
-La línea `encode zstd gzip` comprime lo que viaja como texto (los scripts, los estilos y
-el JSON del API: solo `GET /users` pasa de 100 KB) y deja como están las imágenes y los
-PDF, que ya van comprimidos. Sin ella, cada página baja varias veces más bytes de los
-necesarios, algo que se nota sobre todo en el móvil.
+The line `encode zstd gzip` compresses what travels as text (the scripts, the styles and the API's
+JSON: `GET /users` alone goes from over 100 KB) and leaves images and PDFs as they are, since they
+are already compressed. Without it, each page downloads several times more bytes than necessary,
+which is noticeable above all on a phone.
 
-El bloque `handle_errors` hace que cualquier dirección que no sea una página muestre
-`404.html` con estado 404, sin redirigir: la barra de direcciones conserva lo que se
-escribió. Por eso `root` va fuera del `handle`, a nivel del sitio: `handle_errors` no
-vería el que está dentro. Las respuestas del API (`/api/*`) no pasan por aquí y siguen
-siendo las suyas.
+The `handle_errors` block makes any address that is not a page show `404.html` with a 404 status,
+without redirecting: the address bar keeps what was typed. That is why `root` goes outside the
+`handle`, at site level: `handle_errors` would not see the one inside. The API's responses
+(`/api/*`) do not go through here and remain its own.
 
-Si ese Caddy corre como un usuario que no puede leer `/opt/katiuskas-intranet/web`
-(propiedad de `katiuskas`), dale acceso de lectura, por ejemplo añadiendo a ese usuario al
-grupo `katiuskas`, o con permisos `o+rX` en `/opt/katiuskas-intranet/web`.
+If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (owned by `katiuskas`),
+give it read access, for example by adding that user to the `katiuskas` group, or with `o+rX`
+permissions on `/opt/katiuskas-intranet/web`.
 
-### Si el reverse proxy existente no es Caddy (nginx, Traefik...)
+### If the existing reverse proxy is not Caddy (nginx, Traefik...)
 
-Si tu reverse proxy no sirve ficheros estáticos y reenvía `/api/*` con la misma
-facilidad, instala un Caddy local dedicado solo para esto, escuchando en
-`127.0.0.1:64710`, y haz que tu reverse proxy existente le reenvíe el tráfico del dominio
-— el mismo punto de entrada que usa la guía con Docker:
+If your reverse proxy does not serve static files and forward `/api/*` as easily, install a local
+Caddy dedicated only to this, listening on `127.0.0.1:64710`, and make your existing reverse proxy
+forward the domain's traffic to it — the same entry point the Docker guide uses:
 
 ```sh
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -298,11 +287,11 @@ sudo apt update
 sudo apt install -y caddy
 ```
 
-Esto ya instala su propio servicio systemd (`caddy.service`), leyendo
-`/etc/caddy/Caddyfile`. Sustitúyelo por el equivalente de `deploy/Caddyfile` del
-repositorio, pero apuntando a `127.0.0.1:64711` en vez del nombre de servicio Docker
-`api`, y explícitamente ligado solo a localhost (`127.0.0.1:64710`, no `:64710` a secas
-— sin la red aislada de Docker, `:64710` escucharía en todas las interfaces):
+This already installs its own systemd service (`caddy.service`), reading `/etc/caddy/Caddyfile`.
+Replace it with the equivalent of the repository's `deploy/Caddyfile`, but pointing at
+`127.0.0.1:64711` instead of the Docker service name `api`, and explicitly bound to localhost only
+(`127.0.0.1:64710`, not a bare `:64710` — without Docker's isolated network, `:64710` would listen
+on all interfaces):
 
 ```sh
 sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
@@ -331,77 +320,73 @@ EOF
 sudo systemctl reload caddy
 ```
 
-Luego, en tu reverse proxy existente (fuera de este repositorio), añade un sitio para el
-dominio elegido que reenvíe a `http://127.0.0.1:64710` — el mismo paso que en
-`docs/deployment.md`.
+Then, in your existing reverse proxy (outside this repository), add a site for the chosen domain
+that forwards to `http://127.0.0.1:64710` — the same step as in `docs/deployment.md`.
 
-## Actualizar a una versión nueva
+## Updating to a new version
 
-Procedimiento manual. En el host del club, en su lugar, los push a `main` (testing) y a
-etiquetas semver (producción) disparan las actualizaciones automáticamente — ver
-[`environments.md`](environments.md).
+Manual procedure. On the club's host, instead, pushes to `main` (testing) and to semver tags
+(production) trigger the updates automatically — see [`environments.md`](environments.md).
 
-En la máquina de compilación:
+On the build machine:
 
 ```sh
 git pull
 cd backend
-export GOOS=linux GOARCH=amd64 CGO_ENABLED=0   # ajusta GOARCH si hace falta
+export GOOS=linux GOARCH=amd64 CGO_ENABLED=0   # adjust GOARCH if needed
 go build -o katiuskas-api ./cmd/api
 ```
 
-En el servidor:
+On the server:
 
 ```sh
-scp katiuskas-api usuario@servidor:/opt/katiuskas-intranet/bin/katiuskas-api.new
-ssh usuario@servidor 'sudo -u katiuskas mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
-scp -r ../db/migrations/. usuario@servidor:/opt/katiuskas-intranet/db/migrations/
-ssh usuario@servidor 'sudo -u katiuskas /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<contraseña>@localhost:5432/intranet?sslmode=disable" up'
-ssh usuario@servidor 'sudo systemctl restart katiuskas-api'
+scp katiuskas-api user@server:/opt/katiuskas-intranet/bin/katiuskas-api.new
+ssh user@server 'sudo -u katiuskas mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
+scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
+ssh user@server 'sudo -u katiuskas /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" up'
+ssh user@server 'sudo systemctl restart katiuskas-api'
 ```
 
-El frontend (`web/`) no necesita reconstruirse ni reiniciar Caddy — vuelve a copiar el
-árbol con `scp -r ../web/. usuario@servidor:/opt/katiuskas-intranet/web/` si ha cambiado;
-Caddy lo sirve directamente desde disco (con la caché de una hora descrita en el paso 5).
+The frontend (`web/`) does not need rebuilding or a Caddy restart — copy the tree again with
+`scp -r ../web/. user@server:/opt/katiuskas-intranet/web/` if it has changed; Caddy serves it
+directly from disk (with the one-hour cache described in step 5).
 
-## Copias de seguridad
+## Backups
 
-Igual que en `docs/deployment.md`, pero sobre rutas de disco reales en vez de volúmenes
-Docker:
+The same as in `docs/deployment.md`, but over real disk paths instead of Docker volumes:
 
 ```sh
 sudo -u postgres pg_dump intranet > backup-$(date +%Y%m%d).sql
 tar czf activity-resources-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data activity-resources
 ```
 
-`/opt/katiuskas-intranet/data/library` y `/opt/katiuskas-intranet/data/user-files` son
-directorios normales — cópialos como cualquier otro fichero del sistema.
+`/opt/katiuskas-intranet/data/library` and `/opt/katiuskas-intranet/data/user-files` are ordinary
+directories — copy them like any other file on the system.
 
-### Miniaturas de las licencias
+### License thumbnails
 
-Las copias de las licencias de cada persona (`user-files/<login>/licencias/`) se muestran en
-`/perfil` y `/socio` con una miniatura, que la aplicación no genera sola. Para crear las
-que falten (y renovar las que sean más antiguas que su fichero) ejecuta el script del
-repositorio, con el usuario dueño de los ficheros y apuntando al directorio de producción:
+The copies of each person's licenses (`user-files/<login>/licencias/`) are shown in `/perfil` and
+`/socio` with a thumbnail, which the application does not generate by itself. To create the missing
+ones (and renew those older than their file), run the repository's script, as the user that owns the
+files and pointing at the production directory:
 
 ```sh
 sudo -u katiuskas scripts/generate-license-thumbnails.sh --root /opt/katiuskas-intranet/data/user-files
 ```
 
-Necesita `pdftoppm` (paquete `poppler-utils`) para los PDF e ImageMagick (`imagemagick`)
-para las imágenes; `--help` lista las demás opciones (`--dry-run`, `--force`, o solo
-algunos logins). Es seguro ejecutarlo cuantas veces haga falta: lo que ya está al día se
-salta.
+It needs `pdftoppm` (package `poppler-utils`) for PDFs and ImageMagick (`imagemagick`) for images;
+`--help` lists the other options (`--dry-run`, `--force`, or just some logins). It is safe to run as
+many times as needed: whatever is already up to date is skipped.
 
-## Notas de seguridad
+## Security notes
 
-- Cambia `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` antes del primer despliegue, igual que en
+- Change `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` before the first deployment, as in
   `docs/deployment.md`.
-- `api.env` contiene la contraseña de PostgreSQL — `chmod 600`, propiedad de `katiuskas`,
-  nunca en el repositorio.
-- Ni PostgreSQL ni la API escuchan en ninguna interfaz externa: PostgreSQL solo acepta
-  conexiones locales y `HTTP_ADDR` está fijado a `127.0.0.1:64711` — todo el tráfico
-  externo pasa antes por Caddy (el tuyo ya existente, o uno local en `127.0.0.1:64710`
-  si usas otro reverse proxy — ver paso 5), igual que con Docker.
-- **No uses `scripts/get-token.sh`** aquí: además de ser solo para desarrollo, depende
-  del stack de `docker compose` local, que ni siquiera existe en este despliegue.
+- `api.env` contains the PostgreSQL password — `chmod 600`, owned by `katiuskas`, never in the
+  repository.
+- Neither PostgreSQL nor the API listens on any external interface: PostgreSQL only accepts local
+  connections and `HTTP_ADDR` is fixed to `127.0.0.1:64711` — all external traffic goes first
+  through Caddy (your existing one, or a local one at `127.0.0.1:64710` if you use another reverse
+  proxy — see step 5), as with Docker.
+- **Do not use `scripts/get-token.sh`** here: besides being development-only, it depends on the
+  local `docker compose` stack, which does not even exist in this deployment.

@@ -2,7 +2,7 @@
 
 The long form of how the backend works, resource by resource: the invariants and the reasons behind
 them, which are rarely visible in the code. [`architecture.md`](architecture.md) is the shorter
-overview (in Spanish), [`api.md`](api.md) lists the endpoints and [`database.md`](database.md) the
+overview, [`api.md`](api.md) lists the endpoints and [`database.md`](database.md) the
 tables; the frontend has its own file, [`frontend.md`](frontend.md). When something changes in a
 resource, change its section here.
 

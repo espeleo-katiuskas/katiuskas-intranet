@@ -1,236 +1,226 @@
-# Entornos: local, testing y producción
+# Environments: local, testing and production
 
-El proyecto se ejecuta en tres entornos:
+The project runs in three environments:
 
-| | Local | Testing | Producción |
+| | Local | Testing | Production |
 |---|---|---|---|
-| Dónde | máquina de desarrollo | host del club | host del club (la misma máquina que testing) |
-| Cómo corre | Docker (`docker-compose.yml`) | unidad de systemd, sin Docker | unidad de systemd, sin Docker |
+| Where | development machine | the club's host | the club's host (the same machine as testing) |
+| How it runs | Docker (`docker-compose.yml`) | systemd unit, without Docker | systemd unit, without Docker |
 | URL | `http://localhost:64710` | `https://testing.katiuskas.es` | `https://intranet.katiuskas.es` |
-| Para qué | probar los cambios antes de hacer commit o push | probar lo que ya está en `main` | las personas socias reales |
-| Se actualiza con | `docker compose up --build`, a mano | cada push a `main` | cada push de una etiqueta semver |
-| Base de datos | propia y desechable | propia | propia |
-| Datos | los que se creen en local | copia de los de producción | los reales |
-| Bot de Telegram | opcional | propio | propio |
-| `LIBRARY_ROOT`, `USER_FILES_ROOT`, `ACTIVITY_RESOURCES_ROOT` | propios | compartidos con producción | compartidos con testing |
+| What for | trying changes before committing or pushing | trying what is already in `main` | the real members |
+| Updated by | `docker compose up --build`, by hand | every push to `main` | every push of a semver tag |
+| Database | its own, disposable | its own | its own |
+| Data | whatever is created locally | a copy of production's | the real data |
+| Telegram bot | optional | its own | its own |
+| `LIBRARY_ROOT`, `USER_FILES_ROOT`, `ACTIVITY_RESOURCES_ROOT` | its own | shared with production | shared with testing |
 
-El entorno local no comparte nada con los otros dos; se levanta como se explica en la
-sección "Puesta en marcha rápida" del [`README.md`](../README.md). Testing y producción se
-instalan siguiendo [`deployment-no-docker.md`](deployment-no-docker.md); el resto de esta
-página cubre lo específico de tener esos dos en una misma máquina.
+The local environment shares nothing with the other two; it is brought up as explained in the
+"Quick start" section of the [`README.md`](../README.md). Testing and production are installed
+following [`deployment-no-docker.md`](deployment-no-docker.md); the rest of this page covers
+what is specific to having those two on one machine.
 
-## Cómo llegan las actualizaciones a cada entorno
+## How updates reach each environment
 
-- **Local:** a mano, con `docker compose up --build` (y `docker compose build api && docker
-  compose up -d api` para reconstruir solo la API).
-- **Un push a `main` actualiza testing automáticamente.** Por tanto, un push a `main` es un
-  despliegue, no solo una forma de publicar commits: lo que llegue a `main` está corriendo
-  en `testing.katiuskas.es` cuando termina la actualización.
-- **Un push de una etiqueta cuyo nombre es una versión semántica (`MAJOR.MINOR.PATCH`)
-  actualiza producción** al commit al que apunta esa etiqueta. Nada más cambia producción:
-  los push a `main` nunca llegan hasta ella.
-- Como testing sigue a `main` y producción solo se mueve con etiquetas, el flujo natural de
-  una versión es etiquetar un commit que ya lleva un tiempo corriendo en testing:
+- **Local:** by hand, with `docker compose up --build` (and `docker compose build api && docker
+  compose up -d api` to rebuild only the API).
+- **A push to `main` updates testing automatically.** So a push to `main` is a deployment, not
+  just a way of publishing commits: whatever reaches `main` is running on
+  `testing.katiuskas.es` once the update finishes.
+- **A push of a tag whose name is a semantic version (`MAJOR.MINOR.PATCH`) updates
+  production** to the commit that tag points at. Nothing else changes production: pushes to
+  `main` never reach it.
+- Since testing follows `main` and production only moves with tags, the natural flow for a
+  release is to tag a commit that has already been running in testing for a while:
 
   ```sh
-  git tag <versión> <commit>
-  git push origin <versión>
+  git tag <version> <commit>
+  git push origin <version>
   ```
 
-La automatización que hace estas actualizaciones no forma parte de este repositorio. El
-único workflow que hay aquí, `.github/workflows/ci.yml`, revisa, compila y prueba el código
-(además de validar el OpenAPI y construir la imagen de Docker) en los push a `main` y en las
-pull requests; no se ejecuta con los push de etiquetas y no despliega nada. El
-procedimiento manual de la guía de despliegue sigue siendo la referencia de qué implica una
-actualización.
+The automation that performs these updates is not part of this repository. The only workflow
+here, `.github/workflows/ci.yml`, checks, builds and tests the code (and also validates the
+OpenAPI and builds the Docker image) on pushes to `main` and on pull requests; it does not run
+on tag pushes and deploys nothing. The manual procedure in the deployment guide remains the
+reference for what an update involves.
 
-## Los datos de testing son una copia de los de producción
+## Testing's data is a copy of production's
 
-Cada vez que se despliega en producción, los datos de producción se copian a la base de
-datos de testing. Las dos bases de datos están separadas solo porque el esquema puede ser
-distinto: un commit de `main` con migraciones llega a testing antes que a producción. Quien
-dispara esa copia en cada despliegue no forma parte de este repositorio, pero sí el script
-que la hace, [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh):
-vacía la base de datos de testing, restaura en ella un volcado completo de la de producción
-(esquema, datos, valores de las secuencias y la tabla de versiones de goose) y aplica con
-`goose` las migraciones en las que testing va por delante. Además, salvo con `--no-files`,
-sustituye los ficheros de `ACTIVITY_RESOURCES_ROOT` de testing por hard-links a los de
-producción (ver la sección "Opciones para `ACTIVITY_RESOURCES_ROOT`"). Producción solo se
-lee. Se ejecuta como root o como un usuario que pueda parar y arrancar la unidad de testing:
+Every time production is deployed, production's data is copied into testing's database. The
+two databases are separate only because the schema can differ: a commit on `main` with
+migrations reaches testing before production. What triggers that copy on each deployment is
+not part of this repository, but the script that does it is,
+[`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh): it empties testing's
+database, restores into it a full dump of production's (schema, data, sequence values and
+goose's version table) and applies with `goose` the migrations testing is ahead by. In
+addition, unless `--no-files` is given, it replaces the files in testing's
+`ACTIVITY_RESOURCES_ROOT` with hard links to production's (see the section "Options for
+`ACTIVITY_RESOURCES_ROOT`"). Production is only read. It is run as root or as a user who can
+stop and start testing's unit:
 
 ```sh
-TESTING_SERVICE=<unidad de testing> \
-  scripts/copy-prod-to-testing.sh [--yes] [--no-files] <api.env de producción> <api.env de testing>
+TESTING_SERVICE=<testing unit> \
+  scripts/copy-prod-to-testing.sh [--yes] [--no-files] <production api.env> <testing api.env>
 ```
 
-Si ese usuario lo hace con `sudo`, `SYSTEMCTL="sudo systemctl"` (admite argumentos, por
-ejemplo `"sudo -n systemctl"`) hace que pare y arranque la unidad con él. Es lo único que
-usa `sudo`: el resto no necesita privilegios, pero sí poder leer los dos `api.env` (la guía
-de despliegue los deja con `chmod 600`, propiedad de `katiuskas`) y, para el paso de
-ficheros, ser el dueño de los de producción (`katiuskas`) o root.
+If that user does it with `sudo`, `SYSTEMCTL="sudo systemctl"` (it accepts arguments, for
+example `"sudo -n systemctl"`) makes it stop and start the unit with it. That is the only
+thing that uses `sudo`: the rest needs no privileges, but does need to be able to read both
+`api.env` files (the deployment guide leaves them with `chmod 600`, owned by `katiuskas`) and,
+for the files step, to be the owner of production's files (`katiuskas`) or root.
 
-Lee `DATABASE_URL` y `ACTIVITY_RESOURCES_ROOT` de los dos `api.env` (sin ejecutarlos) y
-necesita `psql` y `pg_dump` (paquete `postgresql-client`, con un `pg_dump` al menos tan
-nuevo como el servidor de producción) y el binario de `goose`, que por defecto busca en
-`bin/goose` junto al `api.env` de testing, con las migraciones en `db/migrations/` (como
-en la guía de despliegue; `GOOSE_BIN` y `MIGRATIONS_DIR` lo cambian); pide teclear el
-nombre de la base de datos de testing antes de borrarla (`--yes` lo omite, para
-automatizarlo); se niega a continuar si las dos URLs apuntan a la misma base de datos, si
-el rol de testing no es el dueño del esquema `public` o si producción tiene una migración
-que el código de testing no conoce; y, si algo falla una vez parada la unidad, la deja
-parada. Consecuencias de la copia:
+It reads `DATABASE_URL` and `ACTIVITY_RESOURCES_ROOT` from the two `api.env` files (without
+executing them) and needs `psql` and `pg_dump` (package `postgresql-client`, with a `pg_dump`
+at least as new as production's server) and the `goose` binary, which by default it looks for
+in `bin/goose` next to testing's `api.env`, with the migrations in `db/migrations/` (as in the
+deployment guide; `GOOSE_BIN` and `MIGRATIONS_DIR` change that); it asks you to type the name
+of testing's database before dropping it (`--yes` skips that, for automation); it refuses to
+continue if the two URLs point at the same database, if testing's role is not the owner of the
+`public` schema, or if production has a migration that testing's code does not know; and, if
+something fails once the unit is stopped, it leaves it stopped. Consequences of the copy:
 
-- **Lo que se haga en testing se pierde en el siguiente despliegue en producción.** Altas,
-  ediciones, roles, vínculos de Telegram... Entre dos despliegues testing diverge de
-  producción, y la copia siguiente lo sobrescribe.
-- **Testing contiene datos personales reales** de los socios (DNI, correo, teléfono,
-  contacto de emergencia...), y las mismas personas tienen allí los mismos roles que en
-  producción. Acceder a testing es acceder a datos reales.
-- **Testing conoce los correos y teléfonos reales.** Si tiene `SMTP_*` configurado,
-  enviará correos reales a socios reales; sin `SMTP_HOST`, los enlaces de acceso solo se
-  registran en los logs de la API.
+- **Whatever is done in testing is lost at the next production deployment.** Joinings,
+  edits, roles, Telegram links... Between two deployments testing diverges from production,
+  and the next copy overwrites it.
+- **Testing contains real personal data** of the members (DNI, email, phone, emergency
+  contact...), and the same people have the same roles there as in production. Accessing
+  testing is accessing real data.
+- **Testing knows the real emails and phones.** If it has `SMTP_*` configured, it will send
+  real emails to real members; without `SMTP_HOST`, sign-in links are only logged in the API
+  logs.
 
-## Qué tiene cada entorno por su cuenta (testing y producción)
+## What each environment has of its own (testing and production)
 
-Todo lo de esta tabla tiene que ser distinto entre testing y producción:
+Everything in this table has to differ between testing and production:
 
-| Ajuste | Por qué no se puede compartir |
+| Setting | Why it cannot be shared |
 |---|---|
-| URL pública (`PUBLIC_BASE_URL`) | Los enlaces de acceso la incluyen, así que cada entorno debe apuntar a su propio dominio. |
-| Base de datos (`DATABASE_URL`) | Son dos bases de datos separadas, nunca dos entornos en una, porque el esquema puede ser distinto: testing recibe cada migración primero, producción solo cuando se empuja una etiqueta. Los datos, en cambio, no son independientes (ver la sección anterior). |
-| Directorio de instalación | El código, `web/`, los binarios y el fichero de entorno (`api.env`) viven en cada entorno. |
-| Dirección de escucha (`HTTP_ADDR`, y el puerto del Caddy local si se usa uno) | Dos procesos no pueden escuchar en el mismo puerto, así que cada entorno necesita el suyo, y el reverse proxy de cada dominio debe reenviar al suyo. |
-| Bot de Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`) | El bot consulta Telegram con long polling, y un bot solo puede ser consultado por un proceso a la vez (una segunda consulta simultánea recibe un error de conflicto). Además, la página de acceso enlaza al bot que indica `TELEGRAM_BOT_USERNAME`, así que cada entorno debe apuntar al suyo. |
+| Public URL (`PUBLIC_BASE_URL`) | Sign-in links include it, so each environment must point at its own domain. |
+| Database (`DATABASE_URL`) | They are two separate databases, never two environments in one, because the schema can differ: testing receives each migration first, production only when a tag is pushed. The data, on the other hand, is not independent (see the previous section). |
+| Install directory | The code, `web/`, the binaries and the environment file (`api.env`) live in each environment. |
+| Listen address (`HTTP_ADDR`, and the local Caddy's port if one is used) | Two processes cannot listen on the same port, so each environment needs its own, and each domain's reverse proxy must forward to its own. |
+| Telegram bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`) | The bot polls Telegram with long polling, and a bot can only be polled by one process at a time (a second simultaneous poll gets a conflict error). In addition, the sign-in page links to the bot named by `TELEGRAM_BOT_USERNAME`, so each environment must point at its own. |
 
-Los enlaces de cuentas de Telegram (`users.telegram_chat_id`) viven en la base de datos,
-así que se copian a testing junto con el resto de los datos de producción. Pero son
-identificadores de chat, y el bot de testing solo puede escribir a quien haya iniciado
-antes una conversación con él.
+The Telegram account links (`users.telegram_chat_id`) live in the database, so they are copied
+to testing along with the rest of production's data. But they are chat identifiers, and
+testing's bot can only write to someone who has previously started a conversation with it.
 
-## Qué comparten testing y producción
+## What testing and production share
 
-`LIBRARY_ROOT` (documentos del club), `USER_FILES_ROOT` (documentos de cada persona) y
-`ACTIVITY_RESOURCES_ROOT` (ficheros adjuntos de las memorias de actividad) apuntan a los
-mismos directorios en los dos entornos. Ambos servicios tienen que poder leerlos y
-escribir donde haga falta.
+`LIBRARY_ROOT` (club documents), `USER_FILES_ROOT` (each person's documents) and
+`ACTIVITY_RESOURCES_ROOT` (files attached to the activity memorias) point at the same
+directories in both environments. Both services must be able to read them and to write where
+needed.
 
-- **`LIBRARY_ROOT` y `USER_FILES_ROOT`: sin conflictos de escritura.** La API solo lee
-  estos árboles (nada sube, renombra ni borra a través de ella), así que un fichero que se
-  deje en cualquiera de los dos directorios se ve en ambos entornos de inmediato.
-- **Los ficheros de cada persona se direccionan por login.** El directorio
-  `USER_FILES_ROOT/<login>/` es lo que ve la persona con ese login, y admin y junta pueden
-  leer el directorio de cualquier login. Como los datos de testing son una copia de los de
-  producción, los logins son los mismos en los dos entornos, y cada persona ve en testing
-  los mismos documentos que en producción. La consecuencia es que **dar admin o junta a
-  alguien en testing (para probar algo, por ejemplo) le da acceso de lectura a los
-  documentos personales reales de todos los socios** (un DNI escaneado, una autorización
-  firmada...), porque el directorio es el mismo que el de producción.
-- **`ACTIVITY_RESOURCES_ROOT` sí se escribe desde la API, y eso lo hace delicado.** Cada
-  fichero se guarda como `<id de actividad>/<id de recurso>`; la API lo crea al subir un
-  recurso de tipo fichero (y se niega, con un error, a pisar uno que ya exista) y lo
-  elimina del disco al borrar ese recurso. Como la base de datos de testing es una copia de
-  la de producción, sus recursos tienen los mismos ids y, por tanto, las mismas rutas.
-  Mientras el directorio sea el mismo:
-  - **borrar en testing un recurso de tipo fichero borra el fichero real**, que producción
-    sigue referenciando;
-  - **subir un fichero en testing ocupa una ruta que producción puede necesitar después**:
-    cada base de datos asigna los ids de recurso desde su propia secuencia, y los de
-    testing y producción pueden coincidir. Quien suba segundo recibe un error (500), sea
-    testing o producción; sin esa negativa a pisar, el segundo habría sobrescrito en
-    silencio el fichero del primero.
+- **`LIBRARY_ROOT` and `USER_FILES_ROOT`: no write conflicts.** The API only reads these trees
+  (nothing is uploaded, renamed or deleted through it), so a file left in either directory is
+  visible in both environments immediately.
+- **Each person's files are addressed by login.** The directory `USER_FILES_ROOT/<login>/` is
+  what the person with that login sees, and admin and board can read any login's directory.
+  Since testing's data is a copy of production's, the logins are the same in both
+  environments, and each person sees in testing the same documents as in production. The
+  consequence is that **giving admin or board to someone in testing (to try something, for
+  example) gives them read access to the real personal documents of all the members** (a
+  scanned DNI, a signed waiver...), because the directory is the same as production's.
+- **`ACTIVITY_RESOURCES_ROOT` is written to from the API, and that makes it delicate.** Each
+  file is stored as `<activity id>/<resource id>`; the API creates it when a file-type
+  resource is uploaded (and refuses, with an error, to overwrite one that already exists) and
+  removes it from disk when that resource is deleted. Since testing's database is a copy of
+  production's, its resources have the same ids and, therefore, the same paths. As long as the
+  directory is the same:
+  - **deleting a file-type resource in testing deletes the real file**, which production still
+    references;
+  - **uploading a file in testing occupies a path that production may need later**: each
+    database assigns resource ids from its own sequence, and testing's and production's may
+    coincide. Whoever uploads second gets an error (500), whether testing or production;
+    without that refusal to overwrite, the second would have silently overwritten the first's
+    file.
 
-  Hasta que este directorio deje de compartirse, subir o borrar ficheros de memorias en
-  testing no es seguro; el texto de una memoria, que solo vive en la base de datos, sí se
-  puede tocar sin riesgo. Las opciones para dejar de compartirlo están en la sección
-  siguiente.
+  Until this directory stops being shared, uploading or deleting memoria files in testing is
+  not safe; the text of a memoria, which lives only in the database, can be touched without
+  risk. The options for ceasing to share it are in the next section.
 
-## Opciones para `ACTIVITY_RESOURCES_ROOT`
+## Options for `ACTIVITY_RESOURCES_ROOT`
 
-1. **Compartido (la situación actual).** No hay copia ni espacio extra, pero sí los dos
-   riesgos de arriba: solo es seguro si en testing no se suben ni se borran ficheros de
-   memorias.
-2. **Directorio propio de testing, con una copia normal de producción.** Cada despliegue
-   en producción vuelve a copiar el directorio, siempre de producción hacia testing (por
-   ejemplo con `rsync -a --delete`). Aísla por completo los dos entornos; el coste es el
-   espacio y el tiempo de copia, porque son fotos y PDFs.
-3. **Directorio propio de testing, copiado con hard-links.** Los ficheros no se duplican:
-   cada uno es el mismo inodo con una entrada en cada árbol, así que testing no ocupa
-   espacio extra (salvo los directorios y lo que se suba en testing). Después de la copia,
-   subir un fichero en testing crea uno nuevo solo en testing, y borrar un recurso en
-   testing deja intacto el fichero de producción. Es seguro porque la API nunca modifica un
-   fichero ya guardado:
-   - al crear, `Storage.Save` abre el fichero con `O_EXCL`, así que nunca trunca uno
-     existente, que es lo único que cambiaría el contenido en los dos árboles a la vez;
-   - al borrar, `os.Remove` quita solo la entrada de ese árbol, y el fichero sigue en el
-     otro;
-   - no hay ninguna operación que reescriba los bytes de un recurso (para cambiarlos hay
-     que borrar el recurso y crear otro).
+1. **Shared (the current situation).** There is no copy and no extra space, but both risks
+   above apply: it is only safe if no memoria files are uploaded or deleted in testing.
+2. **A directory of testing's own, with a normal copy of production's.** Each production
+   deployment copies the directory again, always from production to testing (for example with
+   `rsync -a --delete`). It isolates the two environments completely; the cost is the space
+   and copy time, because they are photos and PDFs.
+3. **A directory of testing's own, copied with hard links.** The files are not duplicated:
+   each one is the same inode with an entry in each tree, so testing takes no extra space
+   (apart from the directories and whatever is uploaded in testing). After the copy, uploading
+   a file in testing creates a new one only in testing, and deleting a resource in testing
+   leaves production's file intact. It is safe because the API never modifies a file that is
+   already stored:
+   - when creating, `Storage.Save` opens the file with `O_EXCL`, so it never truncates an
+     existing one, which is the only thing that would change the content in both trees at
+     once;
+   - when deleting, `os.Remove` removes only that tree's entry, and the file stays in the
+     other;
+   - no operation rewrites a resource's bytes (to change them you have to delete the resource
+     and create another).
 
-   Condiciones:
-   - los dos directorios tienen que estar en el mismo sistema de ficheros (`stat -c %d`
-     da el mismo número para ambos);
-   - la copia tiene que hacerla el usuario dueño de los ficheros (`katiuskas`) o root: con
-     `fs.protected_hardlinks=1`, que es lo habitual, Linux no deja crear un hard-link a un
-     fichero ajeno;
-   - testing tiene que tener su propio `ACTIVITY_RESOURCES_ROOT`, distinto del de
-     producción;
-   - el servicio de testing tiene que ejecutarse con el mismo usuario que el de producción:
-     los directorios de actividad se crean con el mismo dueño y modo que los de producción
-     (`cp -a`), así que otro usuario podría leer los ficheros pero no subir ni borrar en
-     ellos.
+   Conditions:
+   - the two directories have to be on the same filesystem (`stat -c %d` gives the same number
+     for both);
+   - the copy has to be made by the user who owns the files (`katiuskas`) or root: with
+     `fs.protected_hardlinks=1`, which is the usual setting, Linux does not allow creating a
+     hard link to somebody else's file;
+   - testing has to have its own `ACTIVITY_RESOURCES_ROOT`, different from production's;
+   - the testing service has to run as the same user as production's: the activity
+     directories are created with the same owner and mode as production's (`cp -a`), so
+     another user could read the files but not upload or delete in them.
 
-   Es lo que hace `scripts/copy-prod-to-testing.sh` (salvo con `--no-files`): con testing
-   parado y antes del volcado de la base de datos, vacía el contenido del directorio de
-   testing, sin borrar el directorio en sí, y lo rellena con `cp -al` desde el de
-   producción. Antes de parar nada comprueba que testing tiene un directorio propio (no el
-   mismo que el de producción, ni uno dentro del otro), que no está en la raíz del
-   sistema de ficheros, que solo contiene directorios numéricos de actividad (si hay algo
-   más, se niega a vaciarlo), que los dos están en el mismo sistema de ficheros y que se
-   puede crear un hard-link. Mientras los dos entornos sigan compartiendo directorio, el
-   script se niega a ejecutar este paso: cambia primero el `ACTIVITY_RESOURCES_ROOT` de
-   testing, o usa `--no-files` para copiar solo la base de datos.
+   This is what `scripts/copy-prod-to-testing.sh` does (except with `--no-files`): with
+   testing stopped and before the database dump, it empties the contents of testing's
+   directory, without deleting the directory itself, and fills it with `cp -al` from
+   production's. Before stopping anything it checks that testing has a directory of its own
+   (not the same as production's, nor one inside the other), that it is not at the root of the
+   filesystem, that it contains only numeric activity directories (if there is anything else,
+   it refuses to empty it), that both are on the same filesystem and that a hard link can be
+   created. While the two environments still share a directory, the script refuses to run this
+   step: change testing's `ACTIVITY_RESOURCES_ROOT` first, or use `--no-files` to copy only the
+   database.
 
-   Limitación: depende de que ningún código futuro modifique en sitio un fichero guardado
-   (miniaturas, redimensionado de imágenes...), porque lo haría también en producción sin
-   avisar. `Storage.Save` lo deja anotado en su comentario.
+   Limitation: it depends on no future code modifying a stored file in place (thumbnails,
+   image resizing...), because it would do so in production too without warning.
+   `Storage.Save` notes this in its comment.
 
-**Secuencias y orden de la copia (opciones 2 y 3).** Cada id de recurso sale de una
-secuencia de PostgreSQL (`bigserial`), y una subida en testing solo puede chocar con un
-fichero que ya exista en su árbol si la secuencia de testing llega a un id que ese árbol
-ya tiene. Eso no se puede garantizar copiando en un orden u otro: depende de cómo se copie
-la base de datos y de qué ids haya en cada lado. Lo que sí se puede es reducir la
-probabilidad:
+**Sequences and copy order (options 2 and 3).** Each resource id comes from a PostgreSQL
+sequence (`bigserial`), and an upload in testing can only collide with a file that already
+exists in its tree if testing's sequence reaches an id that tree already has. That cannot be
+guaranteed by copying in one order or another: it depends on how the database is copied and
+which ids exist on each side. What can be done is reduce the probability:
 
-- si la base de datos se copia entera (`pg_dump` y restauración, que arrastran el valor de
-  las secuencias), copia los ficheros *antes* del volcado, para que producción no pueda
-  haber creado ninguno entre una cosa y la otra y dejado en el árbol un id por delante de
-  la secuencia;
-- si solo se copian las filas, hay que ajustar después la secuencia de testing con
-  `setval`, al menos por encima del id más alto del árbol de ficheros.
+- if the database is copied whole (`pg_dump` and restore, which carry the sequence values),
+  copy the files *before* the dump, so that production cannot have created any between one and
+  the other and left in the tree an id ahead of the sequence;
+- if only the rows are copied, testing's sequence has to be adjusted afterwards with `setval`,
+  at least above the highest id in the file tree.
 
-Aun así, ni el orden ni el estado de las secuencias pueden corromper nada: `Save` nunca
-pisa un fichero existente, así que lo peor que puede ocurrir es que una subida concreta en
-testing falle con un error (un id nuevo que cae en un fichero que ya existe, por ejemplo
-uno huérfano de producción), lo cual en testing es asumible.
+Even so, neither the order nor the state of the sequences can corrupt anything: `Save` never
+overwrites an existing file, so the worst that can happen is that one particular upload in
+testing fails with an error (a new id that lands on a file that already exists, for example an
+orphan from production), which in testing is acceptable.
 
-## Montar el segundo entorno a partir de la guía de despliegue
+## Setting up the second environment from the deployment guide
 
-La guía describe una única instalación con nombres fijos. Para el segundo entorno hay que
-repetirla cambiando:
+The guide describes a single installation with fixed names. For the second environment you
+have to repeat it changing:
 
-- el directorio de instalación (`/opt/katiuskas-intranet`);
-- el nombre de la unidad de systemd (`katiuskas-api`) y el fichero de entorno;
-- la base de datos y el rol de PostgreSQL (`intranet`);
-- los puertos de escucha (`64711`, y `64710` si se usa un Caddy local);
-- el dominio, tanto en el reverse proxy como en `PUBLIC_BASE_URL`;
-- las variables de Telegram, con un segundo bot.
+- the install directory (`/opt/katiuskas-intranet`);
+- the name of the systemd unit (`katiuskas-api`) and the environment file;
+- the PostgreSQL database and role (`intranet`);
+- the listen ports (`64711`, and `64710` if a local Caddy is used);
+- the domain, both in the reverse proxy and in `PUBLIC_BASE_URL`;
+- the Telegram variables, with a second bot.
 
-`LIBRARY_ROOT`, `USER_FILES_ROOT` y `ACTIVITY_RESOURCES_ROOT` son las únicas rutas que se
-apuntan al mismo sitio en los dos; ver la sección anterior para lo que eso implica.
+`LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT` are the only paths pointed at
+the same place in both; see the previous section for what that implies.
 
-## Copias de seguridad
+## Backups
 
-La copia de seguridad que importa es la de la base de datos de producción (ver la sección
-"Copias de seguridad" de la guía de despliegue): la de testing se rellena con esos mismos
-datos en cada despliegue en producción. Los tres directorios compartidos solo hace falta
-copiarlos una vez.
+The backup that matters is production's database (see the "Backups" section of the deployment
+guide): testing's is filled with that same data on every production deployment. The three
+shared directories only need to be backed up once.

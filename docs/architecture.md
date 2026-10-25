@@ -1,1447 +1,1422 @@
-# Arquitectura
+# Architecture
 
-Documento de referencia, en sincronía con el código: cómo está montado el sistema y las
-reglas de negocio que no caben en una tabla de rutas ni en un esquema de base de datos.
-Para lo demás hay dos ficheros aparte:
+Reference document, kept in sync with the code: how the system is put together and the business
+rules that fit neither in a table of routes nor in a database schema. For everything else there
+are separate files:
 
-- [`api.md`](api.md): todos los endpoints de la API, con quién puede llamarlos, sus parámetros y sus
-  errores. El contrato completo es
+- [`api.md`](api.md): every endpoint of the API, with who can call it, its parameters and its
+  errors. The complete contract is
   [`backend/openapi/openapi.yaml`](../backend/openapi/openapi.yaml).
-- [`database.md`](database.md): cómo se guardan los datos: tablas, columnas, restricciones,
-  triggers, enumerados y datos sembrados.
-- [`backend-internals.md`](backend-internals.md) y [`frontend.md`](frontend.md) (en inglés): la
-  versión larga de cómo funciona el backend, recurso a recurso, y cada página del frontend, con
-  los motivos de cada decisión.
+- [`database.md`](database.md): how the data is stored: tables, columns, constraints,
+  triggers, enums and seeded data.
+- [`backend-internals.md`](backend-internals.md) and [`frontend.md`](frontend.md): the long
+  version of how the backend works, resource by resource, and of each page of the frontend, with
+  the reasons for each decision.
 
-Contenido:
+Contents:
 
-- [Idioma](#idioma) y [Componentes](#componentes).
-- [Permisos](#permisos): qué puede hacer cada nivel de acceso.
-- [Reglas de negocio](#reglas-de-negocio): una subsección por recurso, con sus reglas.
-- [Backend](#backend-backend): capas, sesiones, Telegram.
-- [Frontend](#frontend-web): las páginas y su mecánica compartida.
-- [Cómo ejecutar en local](#cómo-ejecutar-en-local).
+- [Language](#language) and [Components](#components).
+- [Permissions](#permissions): what each access level can do.
+- [Business rules](#business-rules): one subsection per resource, with its rules.
+- [Backend](#backend-backend): layers, sessions, Telegram.
+- [Frontend](#frontend-web): the pages and their shared mechanics.
+- [Running locally](#running-locally).
 
-## Idioma
+## Language
 
-- Código (identificadores, comentarios, logs, mensajes de error de la API): **inglés**.
-- Documentación (este fichero, el README): español o inglés indistintamente.
-- Frontend web (`web/`): todo el texto visible para la persona usuaria, en **español**.
-  Los identificadores del propio código JS/HTML siguen en inglés.
+- Code (identifiers, comments, logs, API error messages): **English**.
+- Documentation (`docs/`; for now not the README, which is still in Spanish): **English**.
+- Web frontend (`web/`): all the text visible to the user, in **Spanish**.
+  The identifiers of the JS/HTML code itself stay in English.
 
-## Componentes
+## Components
 
 ```
-web/ (HTML + JS, español)  →  backend/ (API REST en Go, /api/v1)  →  PostgreSQL
+web/ (HTML + JS, Spanish)  →  backend/ (REST API in Go, /api/v1)  →  PostgreSQL
 ```
 
-Un único servicio en Go concentra la lógica de negocio y el acceso a datos. Ningún
-cliente toca PostgreSQL directamente, lo que permite añadir una app móvil o un cliente
-de terminal más adelante sin duplicar reglas de negocio: comparten el contrato descrito
-en `backend/openapi/openapi.yaml` (resumido en [`api.md`](api.md)). Los datos están en
-PostgreSQL ([`database.md`](database.md)), salvo tres árboles de ficheros en disco (el archivo de
-documentos, los ficheros de cada persona y los de la memoria de las actividades).
+A single Go service concentrates the business logic and the data access. No client touches
+PostgreSQL directly, which makes it possible to add a mobile app or a terminal client later
+without duplicating business rules: they share the contract described in
+`backend/openapi/openapi.yaml` (summarized in [`api.md`](api.md)). The data is in
+PostgreSQL ([`database.md`](database.md)), except for three file trees on disk (the document
+archive, each person's files and those of the activities' memoria).
 
-## Permisos
+## Permissions
 
-Hay tres niveles, de más a menos acceso. Cada ruta aplica el suyo con
-`Authenticator.Protect` más, cuando hace falta, una comprobación adicional dentro del
-propio handler. Además, `auth.BaselineRoles` exige admin, board o member en todas las
-rutas protegidas.
+There are three levels, from most to least access. Each route applies its own with
+`Authenticator.Protect` plus, when needed, an additional check inside the handler itself.
+In addition, `auth.BaselineRoles` requires admin, board or member on every protected
+route.
 
-| Nivel | Puede ver | Puede modificar |
+| Level | Can see | Can modify |
 |---|---|---|
-| `admin` | Todo | Todo, sin excepción |
-| `board` | Todos los datos del API | Actividades, material y festivos del calendario |
-| `member` (socio) | Una vista reducida de las personas y sus propios datos | Sus propios datos de contacto |
+| `admin` | Everything | Everything, without exception |
+| `board` | All the data of the API | Activities, equipment and the calendar's holidays |
+| `member` (socio) | A reduced view of people and their own data | Their own contact data |
 
 ### `admin`
 
-Puede hacer todo, sin excepción.
+Can do everything, without exception.
 
 ### `board`
 
-Puede **ver** todos los datos del API: personas, socios, licencias, cuotas, bajas
-temporales, Junta Directiva, roles, actividades, material y contabilidad.
+Can **see** all the data of the API: people, members, licenses, annual dues, temporary
+leaves, Junta Directiva, roles, activities, equipment and accounting.
 
-Solo puede **modificar**:
+Can only **modify**:
 
-- Actividades (cualquiera, no solo las suyas).
-- Material (alta de ítems y movimientos).
-- Los festivos del calendario.
+- Activities (any of them, not just their own).
+- Equipment (creating items and movements).
+- The calendar's holidays.
 
-Todo lo demás es admin-only: no puede crear ni borrar personas, dar de alta/baja,
-corregir bajas temporales, registrar cuotas, asignar licencias, gestionar la Junta
-Directiva ni asignar/quitar roles a nadie. Las rutas afectadas son las de `/users`,
-`/memberships`, `/leaves`, `/licenses`, `/board-members` y
+Everything else is admin-only: board cannot create or delete people, register joining/leaving,
+correct temporary leaves, register annual dues, assign licenses, manage the Junta
+Directiva or assign/remove roles for anyone. The routes affected are those of `/users`,
+`/memberships`, `/leaves`, `/licenses`, `/board-members` and
 `/users/{login}/{licenses,dues,leaves,memberships,roles}`.
 
-Tampoco puede escribir en contabilidad, que admite a admin y al rol opcional `money`
-(ver «Contabilidad»).
+Nor can it write to accounting, which admits admin and the optional `money` role
+(see "Accounting").
 
 ### `member` (socio)
 
-**Listado de personas.** Un member puede llamar a `GET /users`, pero no obtiene la ficha
-completa de cada persona sino solo `users.MemberListing`, y solo de quien es o ha sido
-socio (`membership_start_date` no nulo). `users.Handler.list` decide qué forma devolver
-según el rol de quien pregunta; no hay una ruta aparte.
+**List of people.** A member can call `GET /users`, but does not get the full record
+of each person, only `users.MemberListing`, and only for those who are or have been
+members (`membership_start_date` not null). `users.Handler.list` decides which shape to return
+depending on the role of whoever asks; there is no separate route.
 
-A quien nunca ha tenido un alta (una cuenta solo-admin, por ejemplo) `Handler.list` lo
-excluye directamente de este listado para member, aunque admin/board lo sigan viendo.
+Someone who has never joined (an admin-only account, for example) is excluded by `Handler.list`
+directly from this list for member, even though admin/board still see them.
 
-`MemberListing` (sus campos, en [`api.md`](api.md)) lleva nombre, género, la categoría de edad
-(ver «`users`», «Categoría de edad»), el número de socio, las fechas de alta y de baja,
-`on_leave`, la licencia federativa **del año actual** si la hay (una de otro año no se muestra,
-y tener `license_type` es estar federado) y `last_due_year`, el último año cuya cuota ha pagado.
+`MemberListing` (its fields are in [`api.md`](api.md)) carries name, gender, the age category
+(see "`users`", "Age category"), the membership number, the joining and leaving dates,
+`on_leave`, the federative license **of the current year** if there is one (one from another year
+is not shown, and having `license_type` means being federated) and `last_due_year`, the last year
+whose due they have paid.
 
-Quedan reservados a admin/board:
+These stay reserved to admin/board:
 
-- La fecha de obtención de la licencia.
-- Su fecha de fin, que no se muestra porque siempre es el 31 de diciembre.
-- `last_due_paid_at`, la fecha en que se pagó la última cuota.
+- The date the license was obtained.
+- Its end date, which is not shown because it is always December 31st.
+- `last_due_paid_at`, the date the last due was paid.
 
-**Categoría de edad.** `age_category` (`youth`, `child`, `junior`, `senior`, `veteran_a`,
-`veteran_b`: alevín, infantil, juvenil, mayor, veterano A y veterano B en la normativa del
-club) se calcula con `ageCategoryFor` a partir de `birth_date`, según la edad que la
-persona cumple en el año natural en curso. Sustituye a la fecha de nacimiento exacta, que
-no se expone aquí: el tramo basta para lo que hace falta ver de un vistazo sin revelar la
-fecha de nacimiento de nadie.
+**Age category.** `age_category` (`youth`, `child`, `junior`, `senior`, `veteran_a`,
+`veteran_b`: alevín, infantil, juvenil, mayor, veterano A and veterano B in the club's
+regulations) is computed with `ageCategoryFor` from `birth_date`, according to the age the
+person reaches in the current calendar year. It replaces the exact birth date, which is not
+exposed here: the bracket is enough for what needs to be seen at a glance without revealing
+anyone's birth date.
 
-**Roles y Junta Directiva.** `MemberListing` no lleva un campo `roles`: a un socio
-cualquiera no le hace falta saber qué roles internos (`admin`, `money`, `material` o
-cualquier etiqueta que haya creado un admin) tiene otra persona. Es información no
-pública, igual que el DNI o el contacto, y esta vista reducida existe para no enseñarla.
+**Roles and Junta Directiva.** `MemberListing` has no `roles` field: an ordinary member
+does not need to know which internal roles (`admin`, `money`, `material` or any label an
+admin has created) another person has. It is non-public information, like the DNI or the
+contact data, and this reduced view exists so as not to show it.
 
-- La única excepción es el cargo en la Junta, que sí es público dentro del club. Viene de
-  `GET /board-members`, abierto también a member, y de ahí `web/js/members.js` saca su
-  columna "Cargo" (`cargoFor`, compartida por `FULL_COLUMNS` y `MEMBER_COLUMNS`).
-  Quien no tiene cargo actual no muestra nada ahí, nunca un rol.
-- `GET /roles` es el catálogo de nombres y descripciones, de solo lectura para cualquiera.
-  No dice quién tiene cada rol, solo qué roles existen; asignar o quitar uno sigue siendo
-  cosa exclusiva de admin.
+- The only exception is the board position in the Junta, which is public within the club. It
+  comes from `GET /board-members`, also open to member, and from there `web/js/members.js` takes
+  its "Cargo" column (`cargoFor`, shared by `FULL_COLUMNS` and `MEMBER_COLUMNS`).
+  Whoever has no current position shows nothing there, never a role.
+- `GET /roles` is the catalog of names and descriptions, read-only for anyone.
+  It does not say who has each role, only which roles exist; assigning or removing one remains
+  exclusive to admin.
 
-**Tipo de socio.** Gracias a `on_leave`, "Tipo de socio" (Activo/Baja temporal/Ex-socio)
-se calcula igual para todos. El filtro correspondiente para member no ofrece "Nunca ha
-sido socio", porque `GET /users` nunca le manda a un member alguien que nunca haya sido
-socio.
+**Kind of member.** Thanks to `on_leave`, "Tipo de socio" (Activo/Baja temporal/Ex-socio)
+is computed the same for everyone. The corresponding filter for member does not offer "Nunca ha
+sido socio", because `GET /users` never sends a member anyone who has never been a
+member.
 
-**Edición de datos.** Sobre su propio registro, un member puede editar solo datos de
-contacto: `email`, `phone`, `address`, `postal_code`, `city`, `province` y
-`emergency_contact`. No puede cambiar nombre, apellidos, DNI, fecha de nacimiento ni
-género: `users.Handler.update` rechaza con 403 `restricted_fields` cualquier intento de
-tocar esos campos si quien llama no es admin, en vez de ignorarlos en silencio.
+**Editing data.** On their own record, a member can edit only contact data: `email`, `phone`,
+`address`, `postal_code`, `city`, `province` and `emergency_contact`. They cannot change first
+name, last name, DNI, birth date or gender: `users.Handler.update` rejects with 403
+`restricted_fields` any attempt to touch those fields if the caller is not admin, instead of
+silently ignoring them.
 
-**Ficha completa.** `GET /users/{login}` queda reservado a admin/board o a la propia
-persona.
+**Full record.** `GET /users/{login}` stays reserved to admin/board or to the person
+themselves.
 
-### Efecto en el frontend
+### Effect on the frontend
 
-**`/socios`.** Es visible para member además de admin/board:
+**`/socios`.** It is visible to member as well as admin/board:
 
-- Las columnas y los filtros se reducen a lo que `MemberListing` realmente trae
-  (`MEMBER_COLUMNS`/`MEMBER_FILTERS` en `web/js/members.js`, en vez de las versiones
-  `FULL_*`).
-- Las filas no son clicables: `/socio?login=…` es solo para admin/board.
-- «Nueva persona» lleva `data-roles="admin"` para que `applyRoleVisibility()` la quite del
-  todo, y `members.js` solo carga el catálogo de roles (para los checkboxes de ese diálogo)
-  si es admin. La lista de roles, para crear o borrar uno, ya no está aquí: vive en
-  `/admin`.
+- The columns and filters are reduced to what `MemberListing` actually carries
+  (`MEMBER_COLUMNS`/`MEMBER_FILTERS` in `web/js/members.js`, instead of the `FULL_*`
+  versions).
+- The rows are not clickable: `/socio?login=…` is only for admin/board.
+- "Nueva persona" carries `data-roles="admin"` so that `applyRoleVisibility()` removes it
+  altogether, and `members.js` only loads the role catalog (for the checkboxes of that dialog)
+  if the user is admin. The list of roles, to create or delete one, is no longer here: it lives
+  on `/admin`.
 
-**`/socio`.** Los botones de escritura (dar de alta, licencias, Junta Directiva, gestión
-de roles, borrar persona) llevan `data-roles="admin"` en el HTML estático.
+**`/socio`.** The write buttons (register joining, licenses, Junta Directiva, role
+management, delete person) carry `data-roles="admin"` in the static HTML.
 
-Las acciones que se generan dinámicamente por evento del timeline (los botones "Editar"
-de cada fila) se filtran en JavaScript comprobando `isRealAdmin`. Es necesario porque
-`data-roles` no llega a examinar contenido que todavía no existía cuando
-`applyRoleVisibility()` se ejecutó.
+The actions generated dynamically for each timeline event (the "Editar" buttons of
+each row) are filtered in JavaScript by checking `isRealAdmin`. This is necessary because
+`data-roles` never gets to examine content that did not yet exist when
+`applyRoleVisibility()` ran.
 
-## Reglas de negocio
+## Business rules
 
-Cada subsección recoge las reglas de un recurso (una tabla o un grupo de tablas relacionadas):
-lo que se puede hacer y lo que no, y por qué. Las columnas, las restricciones y los índices
-de cada tabla están en [`database.md`](database.md), y las rutas, con quién puede llamarlas,
-en [`api.md`](api.md). Las reglas que PostgreSQL no puede expresar con una restricción
-(porque dependen de varias filas o de otras tablas) se comprueban en el servicio o el
-repositorio de Go, y se indica dónde.
+Each subsection collects the rules of a resource (a table or a group of related tables):
+what can be done and what cannot, and why. The columns, constraints and indexes
+of each table are in [`database.md`](database.md), and the routes, with who can call them,
+in [`api.md`](api.md). The rules that PostgreSQL cannot express with a constraint
+(because they depend on several rows or on other tables) are checked in the Go service or
+repository, and it is indicated where.
 
 ### `users`
 
-Datos personales de cualquier persona vinculada al club. No hay una tabla aparte de
-cuentas de acceso ni ningún paso de "conceder acceso" (la tabla `accounts` es el plan
-contable, ver «Contabilidad»): lo que puede hacer una sesión depende solo de los roles de
-esa persona (ver «`roles` y `user_roles`»), y esos mismos roles deciden si le llega o no
-un enlace de acceso. No hay contraseñas.
+Personal data of anyone linked to the club. There is no separate table of access
+accounts nor any "grant access" step (the `accounts` table is the chart of accounts, see
+"Accounting"): what a session can do depends only on that person's roles (see "`roles` and
+`user_roles`"), and those same roles decide whether or not a sign-in link reaches them. There
+are no passwords.
 
-Los campos obligatorios al crear una persona son nombre, apellidos y fecha de nacimiento.
-`email` y `phone` son opcionales, pero a quien no tenga alguno registrado no le llega nunca un
-enlace de acceso.
+The required fields when creating a person are first name, last name and birth date.
+`email` and `phone` are optional, but whoever has neither registered never receives a
+sign-in link.
 
-#### Identidad y login
+#### Identity and login
 
-`login` es el único identificador de una persona que cruza el API: ninguna respuesta ni
-ruta expone jamás el id numérico interno.
+`login` is the only identifier of a person that crosses the API: no response or
+route ever exposes the internal numeric id.
 
-- **Generación**: automática al crear a la persona. Nombre y apellidos pasan por
-  `users.slugify` (acentos fuera, todo lo que no sea letra o dígito colapsado a un guión)
-  y se unen con un punto; si esa combinación ya existe se añade un sufijo numérico
-  (`users.Repository.generateLogin`).
-- **Edición**: solo admin, vía `PATCH /users/{login}`. El formato se comprueba con la misma
-  expresión regular (`ErrInvalidLogin` si no cumple; `ErrDuplicate` si ya es de otra
-  persona).
-- **Otros paquetes**: `tokens`, `roles`, `licenses`, `memberships`, `board`, `inventory` y
-  `activities` reciben un login en sus rutas y lo traducen al id interno con una interfaz
-  mínima definida en cada uno (`UserLookup`, con `UserIDForLogin`/`LoginForUserID`) que
-  `*users.Service` satisface de forma estructural. No pueden importar `users` directamente,
-  porque `users` ya importa a varios de ellos (`roles`, `memberships`, `licenses`).
-- **Listados mixtos**: un listado que puede mezclar a varias personas a la vez
-  (`GET /movements`, `GET /activities`, `GET /transactions`...) resuelve el login con un
-  `JOIN` SQL contra `users` en vez de una consulta por fila. Una escritura de una sola fila
-  con `INSERT`/`UPDATE ... RETURNING` (que no admite `JOIN`) lo resuelve a partir de un
-  login que el handler ya tiene a mano, o con una llamada a `LoginForUserID`.
+- **Generation**: automatic when the person is created. First and last name go through
+  `users.slugify` (accents removed, everything that is not a letter or digit collapsed into a
+  hyphen) and are joined with a dot; if that combination already exists a numeric suffix is
+  added (`users.Repository.generateLogin`).
+- **Editing**: admin only, via `PATCH /users/{login}`. The format is checked with the same
+  regular expression (`ErrInvalidLogin` if it does not comply; `ErrDuplicate` if it already
+  belongs to another person).
+- **Other packages**: `tokens`, `roles`, `licenses`, `memberships`, `board`, `inventory` and
+  `activities` receive a login in their routes and translate it to the internal id with a
+  minimal interface defined in each one (`UserLookup`, with `UserIDForLogin`/`LoginForUserID`)
+  that `*users.Service` satisfies structurally. They cannot import `users` directly,
+  because `users` already imports several of them (`roles`, `memberships`, `licenses`).
+- **Mixed listings**: a listing that can mix several people at once
+  (`GET /movements`, `GET /activities`, `GET /transactions`...) resolves the login with a
+  SQL `JOIN` against `users` instead of one query per row. A single-row write
+  with `INSERT`/`UPDATE ... RETURNING` (which does not admit `JOIN`) resolves it from a
+  login the handler already has at hand, or with a call to `LoginForUserID`.
 
-#### Número de socio
+#### Membership number
 
-`membership_number` vive en `users`, no en `memberships`: identifica a la persona mientras
-esté vinculada al club, no un periodo de alta concreto, así que darse de baja y volver a
-darse de alta nunca se lo cambia.
+`membership_number` lives in `users`, not in `memberships`: it identifies the person while
+they are linked to the club, not a specific membership period, so leaving and rejoining
+never changes it.
 
-- Se asigna automáticamente, nunca a mano, la primera vez que a alguien se le da de alta:
-  `memberships.Service.Create` llama a `users.Service.EnsureMembershipNumber`, que le pone
-  el siguiente número tras el más alto que haya en ese momento y no hace nada si la
-  persona ya tiene uno.
-- `memberships` no puede importar `users` (es al revés), así que expone la función como
-  `memberships.MembershipNumberAssigner` y `cmd/api`/`cmd/seed-admin` la conectan tras
-  construir ambos servicios.
+- It is assigned automatically, never by hand, the first time someone joins:
+  `memberships.Service.Create` calls `users.Service.EnsureMembershipNumber`, which gives them
+  the next number after the highest one at that moment and does nothing if the
+  person already has one.
+- `memberships` cannot import `users` (it is the other way round), so it exposes the function as
+  `memberships.MembershipNumberAssigner` and `cmd/api`/`cmd/seed-admin` wire it up after
+  building both services.
 
-#### Categoría de edad
+#### Age category
 
-La categoría (alevín, infantil, juvenil, mayor, veterano A, veterano B) no se guarda: el
-backend la calcula al vuelo (`ageCategoryFor`) a partir de `birth_date` y el año actual
-y la expone como `age_category` en `MemberListing`. `web/js/members.js` solo la traduce
-a su etiqueta.
+The category (alevín, infantil, juvenil, mayor, veterano A, veterano B) is not stored: the
+backend computes it on the fly (`ageCategoryFor`) from `birth_date` and the current year
+and exposes it as `age_category` in `MemberListing`. `web/js/members.js` only translates it
+to its label.
 
-#### Email y teléfono múltiples
+#### Multiple emails and phones
 
-`email` y `phone` pueden llevar más de un valor separados por espacio (igual que
-`emergency_contact`, que admite varios contactos en texto libre), en vez de una tabla
-aparte: encajar "alguno de estos" es una comprobación de solape de arrays
-(`string_to_array(...) && string_to_array(...)`), y esta escala de club no necesita más.
+`email` and `phone` can carry more than one value separated by spaces (like
+`emergency_contact`, which admits several contacts as free text), instead of a separate
+table: matching "any of these" is an array overlap check
+(`string_to_array(...) && string_to_array(...)`), and this club-sized scale needs nothing more.
 
-- **Unicidad**: un correo o un teléfono no puede pertenecer a dos personas a la vez, aunque
-  cada campo admita varios. Postgres no puede expresar "ninguna fila comparte un elemento"
-  con un `UNIQUE` de columna, así que `users.Repository` lo comprueba a mano en
-  `Create`/`Update` (`emailTakenByAnotherUser`/`phoneTakenByAnotherUser`, ver
+- **Uniqueness**: an email or a phone cannot belong to two people at once, even though
+  each field admits several. Postgres cannot express "no row shares an element"
+  with a column `UNIQUE`, so `users.Repository` checks it by hand in
+  `Create`/`Update` (`emailTakenByAnotherUser`/`phoneTakenByAnotherUser`, see
   [`database.md`](database.md)).
-- **Comparación del correo**: sin distinguir mayúsculas/minúsculas ("foo@x.com" y
-  "FOO@X.COM" cuentan como la misma dirección), igual que en `FindActiveByEmailAndPhone`.
-- **Comparación del teléfono**: solo por dígitos, igual que `FindActiveByEmailAndPhone`;
-  "611-222-333" y "611222333" cuentan como el mismo número. Al iniciar sesión, además, ese
-  teléfono tecleado puede llevar delante un "+34", que se ignora (`phoneDigitsForLogin`:
-  solo un "+34" literal, nunca un "34" suelto).
-- **Por qué**: si dos personas compartieran un correo o un teléfono, una búsqueda pensada
-  para resolver a una sola persona (`FindActiveByEmailAndPhone` para el correo,
-  `FindByPhoneNumber` de `internal/telegrambot` para el teléfono) acabaría resolviendo a la
-  que aparezca primero, en vez de dar error.
-- **Inicio de sesión**: tanto entrar como pedir el enlace de acceso funcionan contra
-  cualquiera de los correos/teléfonos registrados (`Repository.FindActiveByEmailAndPhone`).
-  El correo se compara sin distinguir mayúsculas, igual que `emailMatchesUser` en
-  `internal/telegrambot`, así que la misma dirección funciona igual entrando desde la web
-  o desde Telegram.
-- **Formato**: como el espacio separa varios teléfonos, uno solo no puede llevar espacios
-  internos (escribe "600111222", no "600 111 222"). Otra puntuación, como los guiones, da
-  igual.
+- **Email comparison**: case-insensitive ("foo@x.com" and
+  "FOO@X.COM" count as the same address), like in `FindActiveByEmailAndPhone`.
+- **Phone comparison**: by digits only, like `FindActiveByEmailAndPhone`;
+  "611-222-333" and "611222333" count as the same number. When signing in, moreover, the typed
+  phone may be preceded by a "+34", which is ignored (`phoneDigitsForLogin`:
+  only a literal "+34", never a bare "34").
+- **Why**: if two people shared an email or a phone, a lookup meant to resolve to a single
+  person (`FindActiveByEmailAndPhone` for the email, `FindByPhoneNumber` of
+  `internal/telegrambot` for the phone) would end up resolving to whichever
+  appears first, instead of failing.
+- **Signing in**: both signing in and requesting the sign-in link work against
+  any of the registered emails/phones (`Repository.FindActiveByEmailAndPhone`).
+  The email is compared case-insensitively, like `emailMatchesUser` in
+  `internal/telegrambot`, so the same address works the same whether signing in from the web
+  or from Telegram.
+- **Format**: since the space separates several phones, a single one cannot contain internal
+  spaces (write "600111222", not "600 111 222"). Other punctuation, such as hyphens, does not
+  matter.
 
 ### `magic_link_tokens`
 
-Enlaces de acceso de un solo uso. Junto con el enlace va un código numérico de 6 dígitos en el
-mismo correo, pensado para cuando el correo se lee desde un dispositivo distinto al que se
-quiere usar para entrar: escribir el código en `/login` es más práctico que copiar una URL
-larga.
+Single-use sign-in links. Together with the link goes a 6-digit numeric code in the
+same email, meant for when the email is read on a device other than the one
+used to sign in: typing the code on `/login` is more practical than copying a long
+URL.
 
-#### Enlace y código
+#### Link and code
 
-- Enlace y código representan el mismo intento de acceso en la misma fila: consumir uno
-  consume también el otro (`users.Repository.ConsumeMagicLinkToken` /
+- Link and code represent the same sign-in attempt in the same row: consuming one
+  also consumes the other (`users.Repository.ConsumeMagicLinkToken` /
   `ConsumeMagicLinkCode`).
-- El token del enlace (`auth.NewMagicLinkToken`, 128 bits/16 bytes) es a propósito más
-  corto que un token de sesión o de suplantación (`auth.NewOpaqueToken`, 256 bits/32
-  bytes). Es el único token opaco de esta aplicación que acaba en una URL en vez de ir
-  siempre en una cabecera, así que su longitud sí importa, y solo necesita resistir
-  intentos de adivinarlo mientras dure `MagicLinkTTL` (15 minutos por defecto), no seguir
-  siendo una credencial válida durante semanas.
-- 128 bits sigue siendo el mínimo que recomienda OWASP para un identificador de sesión, y
-  es astronómicamente inalcanzable por fuerza bruta en esa ventana. Eso importa porque
-  `POST /auth/magic-link/consume` no tiene ningún límite de intentos propio: la entropía
-  del token es la única defensa de ese endpoint.
-- Un código de 6 dígitos es mucho más fácil de adivinar, así que `code_attempts` cuenta
-  los intentos fallidos contra cada fila viva de esa persona y, pasado un límite
-  (`maxMagicLinkCodeAttempts`, 8), deja de aceptar el código del todo, sin que eso afecte
-  al enlace, que sigue siendo válido.
+- The link's token (`auth.NewMagicLinkToken`, 128 bits/16 bytes) is deliberately shorter
+  than a session or impersonation token (`auth.NewOpaqueToken`, 256 bits/32
+  bytes). It is the only opaque token in this application that ends up in a URL instead of
+  always travelling in a header, so its length does matter, and it only needs to resist
+  guessing attempts for as long as `MagicLinkTTL` lasts (15 minutes by default), not to keep
+  being a valid credential for weeks.
+- 128 bits is still the minimum OWASP recommends for a session identifier, and
+  is astronomically out of reach for brute force in that window. That matters because
+  `POST /auth/magic-link/consume` has no attempt limit of its own: the token's entropy
+  is the only defense of that endpoint.
+- A 6-digit code is much easier to guess, so `code_attempts` counts the failed
+  attempts against each live row of that person and, past a limit
+  (`maxMagicLinkCodeAttempts`, 8), stops accepting the code altogether, without affecting
+  the link, which stays valid.
 
-#### Petición y envío
+#### Request and delivery
 
-- Ambos se piden en `/auth/magic-link` dando el email y el teléfono de la persona. Solo se
-  generan y se envían por correo si ambos coinciden con alguien de `users` *y* esa persona
-  tiene al menos uno de los roles `admin`, `board` o `member` (`auth.BaselineRoles`, ver
-  «Permisos»): a quien no tiene ninguno no le serviría de nada iniciar sesión, así que
-  no se le manda nada.
-- La respuesta de `/auth/magic-link` es idéntica en los tres casos (no coincide nadie,
-  coincide alguien sin rol, se envía el correo de verdad), así que no sirve para averiguar
-  quién está en el sistema, ni quién tiene acceso, ni para mandar correo no deseado.
-- `POST /auth/magic-link/consume-code` identifica a la persona por email+teléfono igual que
-  la propia petición (el código por sí solo es demasiado corto para servir de clave de
-  búsqueda) y responde siempre con el mismo 401 genérico, también por no distinguir casos
-  desde fuera.
+- Both are requested at `/auth/magic-link` by giving the person's email and phone. They are only
+  generated and sent by email if both match someone in `users` *and* that person
+  has at least one of the roles `admin`, `board` or `member` (`auth.BaselineRoles`, see
+  "Permissions"): signing in would be of no use to someone who has none, so
+  nothing is sent to them.
+- The response of `/auth/magic-link` is identical in the three cases (nobody matches,
+  someone without a role matches, the email is really sent), so it cannot be used to find out
+  who is in the system, or who has access, or to send unwanted email.
+- `POST /auth/magic-link/consume-code` identifies the person by email+phone just like
+  the request itself (the code alone is too short to serve as a lookup key) and always
+  answers with the same generic 401, also so as not to distinguish cases from the
+  outside.
 
-#### Frenos contra el abuso
+#### Brakes against abuse
 
-- **Enfriamiento por persona** (`MagicLinkCooldown`, 60 s por defecto): si ya se le emitió
-  un enlace hace menos, no se emite otro, con la misma respuesta idéntica.
-- **Límite por dirección de origen** (`httpapi.IPRateLimiter`, 20 llamadas cada 15 minutos
-  por defecto), compartido por `POST /auth/magic-link` y
-  `POST /auth/magic-link/consume-code`. Esta última lo necesita porque su búsqueda por
-  email+teléfono ocurre antes de llegar al contador `code_attempts`. `consume` no lo lleva:
-  su defensa es la entropía del token.
+- **Per-person cooldown** (`MagicLinkCooldown`, 60 s by default): if a link was issued to them
+  less than that ago, another is not issued, with the same identical response.
+- **Per-origin-address limit** (`httpapi.IPRateLimiter`, 20 calls every 15 minutes
+  by default), shared by `POST /auth/magic-link` and
+  `POST /auth/magic-link/consume-code`. The latter needs it because its lookup by
+  email+phone happens before reaching the `code_attempts` counter. `consume` does not have it:
+  its defense is the token's entropy.
 
-#### Entrega por Telegram
+#### Delivery by Telegram
 
-Detalles del bot en «Telegram».
+Details of the bot in "Telegram".
 
-- Si la persona tiene su cuenta de Telegram vinculada, recibe el mismo enlace por Telegram
-  además del correo, nunca en su lugar: quien no lo tenga vinculado, o si ese envío falla,
-  sigue teniendo el correo.
-- La lógica de emitir el enlace (comprobar el rol, el tiempo de espera, crear el token,
-  enviarlo) vive en un único sitio interno, `authapi.Handler.issueMagicLink`, que usan
-  tanto la petición web como el bot de Telegram (`internal/telegrambot.Bot`): quien ya
-  tiene la cuenta vinculada, escribe al bot y demuestra su correo recibe el mismo enlace.
-- **Petición web**: el DM es fire-and-forget y el correo es el respaldo; ahí
-  `FindActiveByEmailAndPhone` garantiza que hay correo.
-- **Flujo del bot** (`viaTelegramBot`): el DM es la única vía. `issueMagicLink` vuelve justo
-  después de enviarlo y no manda correo, porque el DM ya es la respuesta a lo que la
-  persona acaba de escribir. Por eso el envío es síncrono y, si falla, el error
-  (`errMagicLinkTelegramDMFailed`) llega hasta `Bot.handleRecognizedChat`, que contesta con
-  `magicLinkDeliveryFailedMessage` en vez de dejar a la persona sin respuesta.
+- If the person has their Telegram account linked, they receive the same link by Telegram
+  in addition to the email, never instead of it: whoever has not linked it, or if that send
+  fails, still has the email.
+- The logic for issuing the link (checking the role, the waiting time, creating the token,
+  sending it) lives in a single internal place, `authapi.Handler.issueMagicLink`, used
+  both by the web request and by the Telegram bot (`internal/telegrambot.Bot`): whoever already
+  has the account linked, writes to the bot and proves their email gets the same link.
+- **Web request**: the DM is fire-and-forget and the email is the fallback; there
+  `FindActiveByEmailAndPhone` guarantees there is an email.
+- **Bot flow** (`viaTelegramBot`): the DM is the only channel. `issueMagicLink` returns right
+  after sending it and sends no email, because the DM already is the answer to what the
+  person has just typed. That is why the send is synchronous and, if it fails, the error
+  (`errMagicLinkTelegramDMFailed`) reaches `Bot.handleRecognizedChat`, which answers with
+  `magicLinkDeliveryFailedMessage` instead of leaving the person without an answer.
 
-#### Texto del DM
+#### Text of the DM
 
-- El correo (que puede leerse desde otro dispositivo y no tiene por qué responder a nada
-  que la persona acabe de hacer) siempre incluye el código de acceso y un "si no has
-  pedido esto, ignora este mensaje".
-- El DM copia eso tal cual cuando simplemente acompaña a una petición web.
-- Cuando es el propio bot el que responde a alguien que acaba de escribirle su correo
-  (`handleRecognizedChat`, ver «Telegram») omite ambas cosas: no hay ninguna página pidiendo
-  ese código en ese momento, y el mensaje es precisamente la respuesta a lo que esa
-  persona acaba de enviar, no algo que pueda llegar sin que lo haya pedido.
+- The email (which may be read on another device and need not be answering anything
+  the person has just done) always includes the sign-in code and an "if you did not
+  request this, ignore this message".
+- The DM copies that as is when it simply accompanies a web request.
+- When it is the bot itself answering someone who has just typed their email to it
+  (`handleRecognizedChat`, see "Telegram") it omits both: there is no page asking for
+  that code at that moment, and the message is precisely the answer to what that
+  person has just sent, not something that could arrive without their having asked for it.
 
-#### Borrado de los DM de enlace
+#### Deleting the link DMs
 
-Un DM con un enlace y un código que ya no funcionan solo confunde, así que se borra cuando
-caducan, se haya iniciado sesión o no; y antes, en cuanto la persona inicia sesión con
-cualquiera de los dos, o en cuanto se le manda otro enlace más reciente: solo tiene sentido
-conservar el último. Vale para los DM del bot y para los que acompañan a una petición web;
-solo cambia el plazo, el que cada mensaje dice de sí mismo.
+A DM with a link and a code that no longer work only confuses, so it is deleted when they
+expire, whether or not the person has signed in; and earlier, as soon as the person signs in
+with either of the two, or as soon as a more recent link is sent to them: it only makes sense
+to keep the last one. It applies to the bot's DMs and to those that accompany a web request;
+only the time limit changes, the one each message states about itself.
 
-- **Temporizador**: se envía con `Client.SendMessageForID` en vez del `SendMessage` normal,
-  precisamente para quedarse con el id del mensaje, y una goroutine, lanzada solo tras un
-  envío correcto, espera el plazo y llama a `Client.DeleteMessage` con ese id. El plazo del
-  DM del bot es `TelegramBotDMLinkTTL` (5 minutos por defecto, más corto que el
-  `MagicLinkTTL` real de 15 minutos, que sigue siendo el tiempo durante el que el enlace
-  funciona; el texto del mensaje menciona esos 5). El del DM de una petición web es el
-  `MagicLinkTTL`, que es lo que su texto dice, porque su código aún puede teclearse desde
-  otro dispositivo hasta entonces.
-- **Inicio de sesión**: cuando la persona inicia sesión (`Handler.issueSessionAndRespond`,
-  tanto si se consumió el enlace como el código, y desde el dispositivo que sea),
-  `Handler.deletePendingTelegramDM` borra al instante el DM pendiente de esa persona y
-  cancela su espera: una vez iniciada la sesión no tiene sentido dejarlo.
-- **Un enlace nuevo**: al enviar un DM de enlace se borra el anterior de esa persona
-  (`setPendingTelegramDM` devuelve el que sustituye y `deleteTelegramDMs` lo borra), sea
-  cual sea el flujo de uno y otro. Si dos peticiones seguidas terminan de enviarse en
-  desorden, se borra el de id menor, que es el más antiguo (los ids de Telegram crecen
-  dentro de un chat).
-- **Coordinación**: un mapa interno del handler (`pendingTelegramDMs`, con su propio
-  mutex, un mensaje por persona: el último) permite que el temporizador, el inicio de
-  sesión y un enlace nuevo borren cada mensaje sin que otro intente borrarlo también
-  después. El envío de un DM de petición web va en segundo plano y apunta el id del
-  mensaje, y programa su borrado, en cuanto lo recibe.
-- **Alcance**: es solo higiene, no algo de lo que dependa la seguridad. Si el borrado
-  falla, o el proceso se reinicia mientras tanto, el enlace deja de funcionar igual al
-  caducar; pero uno caducado que se queda ahí es confuso, y es una cosa más expuesta si
-  alguien accede más tarde al teléfono o a la sesión.
+- **Timer**: it is sent with `Client.SendMessageForID` instead of the normal `SendMessage`,
+  precisely to keep the message id, and a goroutine, launched only after a successful
+  send, waits for the time limit and calls `Client.DeleteMessage` with that id. The time limit of
+  the bot's DM is `TelegramBotDMLinkTTL` (5 minutes by default, shorter than the real
+  `MagicLinkTTL` of 15 minutes, which remains the time during which the link
+  works; the message text mentions those 5). That of the DM of a web request is
+  `MagicLinkTTL`, which is what its text says, because its code can still be typed from
+  another device until then.
+- **Sign-in**: when the person signs in (`Handler.issueSessionAndRespond`,
+  whether the link or the code was consumed, and from whichever device),
+  `Handler.deletePendingTelegramDM` immediately deletes that person's pending DM and
+  cancels its wait: once signed in there is no point in leaving it.
+- **A new link**: when a link DM is sent, that person's previous one is deleted
+  (`setPendingTelegramDM` returns the one it replaces and `deleteTelegramDMs` deletes it),
+  whatever the flow of each. If two consecutive requests finish sending out of
+  order, the one with the lower id is deleted, which is the oldest (Telegram ids grow
+  within a chat).
+- **Coordination**: an internal map of the handler (`pendingTelegramDMs`, with its own
+  mutex, one message per person: the latest) lets the timer, the sign-in and a new link
+  delete each message without another trying to delete it as well
+  afterwards. The send of a web request's DM goes in the background and records the id of the
+  message, and schedules its deletion, as soon as it receives it.
+- **Scope**: it is only hygiene, not something security depends on. If the deletion
+  fails, or the process restarts in the meantime, the link stops working anyway
+  when it expires; but an expired one that stays there is confusing, and it is one more thing
+  exposed if someone later gains access to the phone or the session.
 
-### `roles` y `user_roles`
+### `roles` and `user_roles`
 
-Catálogo de roles (gestionable: crear, borrar) y quién tiene cuáles (relación muchos a
-muchos).
+Catalog of roles (manageable: create, delete) and who holds which (many-to-many relation).
 
-#### Tipos de rol
+#### Kinds of role
 
-Los de sistema (`admin`, `board`, `member`, `former_member`) son los únicos a los que el
-código da permisos o comportamiento automático. Cualquier otro rol que cree un admin es una
-etiqueta organizativa: no desbloquea nada por sí solo salvo que se programe explícitamente
-(`material` y `money` son de este tipo y sí tienen efecto, ver «Material» y «Contabilidad»).
-Los automáticos (`member`, `former_member` y `board`) no los asigna ni los quita nadie a mano:
-`POST`/`DELETE /users/{login}/roles` los rechazan con 409. Qué roles hay y cuáles son de
-sistema o automáticos está en [`database.md`](database.md).
+The system ones (`admin`, `board`, `member`, `former_member`) are the only ones to which the code
+gives permissions or automatic behavior. Any other role an admin creates is an organizational
+label: it unlocks nothing by itself unless explicitly programmed (`material` and `money` are of
+this kind and do have an effect, see "`inventory_items` and `item_movements`" and "Accounting").
+The automatic ones (`member`, `former_member` and `board`) are neither assigned nor removed by
+anybody by hand: `POST`/`DELETE /users/{login}/roles` reject them with 409. Which roles exist and
+which of them are system or automatic ones is in [`database.md`](database.md).
 
-#### Cálculo de los roles automáticos
+#### How automatic roles are computed
 
-Se calculan al vuelo; `roles.Repository.ListNamesForUser` es el único sitio que sabe cómo.
+They are computed on the fly; `roles.Repository.ListNamesForUser` is the only place that knows
+how.
 
-- `member`: a partir de `memberships`, si la persona tiene un periodo de socio activo ahora
-  mismo.
-- `former_member`: si ha tenido algún periodo antes pero ninguno activo hoy.
-- `board`: a partir de `board_members`, si tiene un cargo de la Junta Directiva abierto
-  ahora mismo.
+- `member`: from `memberships`, if the person has a member period active right now.
+- `former_member`: if they have had some period before but none active today.
+- `board`: from `board_members`, if they have a board (Junta Directiva) position open right now.
 
-Ese cálculo es lo que resuelve cada petición autenticada (ver «Autenticación y
-sesiones»), así que los
-permisos basados en "soy socio" o "soy de la junta" siempre reflejan el estado real de
-alta, no una etiqueta que alguien olvidó quitar.
+That computation is what resolves every authenticated request (see "Authentication and
+sessions"), so permissions based on "I am a member" or "I am on the board" always reflect the real
+state of joining, not a label somebody forgot to remove.
 
-#### Quitar el rol `admin`
+#### Removing the `admin` role
 
-`admin` sí se asigna y quita a mano, pero `DELETE /users/{login}/roles/{roleID}` tiene dos
-salvaguardas propias, aparte de la comprobación de rol automático:
+`admin` is assigned and removed by hand, but `DELETE /users/{login}/roles/{roleID}` has two
+safeguards of its own, besides the automatic-role check:
 
-- **`self_admin_removal`** (409): un admin no puede quitarse su propio rol, incluso habiendo
-  otros admins de sobra. Ese click es fácil de dar por error (el botón "×" de su propia
-  fila en `/socio`) y, a diferencia de perder cualquier otro rol, nadie más está mirando
-  en ese momento para devolvérselo: tiene que ser otro admin quien lo haga.
-- **`last_admin`** (409): no se puede dejar a la última persona con admin sin ese rol, para
-  que siempre quede alguien que pueda gestionar personas y roles.
+- **`self_admin_removal`** (409): an admin cannot remove their own role, even when there are
+  plenty of other admins. That click is easy to make by mistake (the "×" button on their own row
+  in `/socio`) and, unlike losing any other role, nobody else is looking at that moment to give it
+  back: it has to be another admin who does it.
+- **`last_admin`** (409): the last person with admin cannot be left without that role, so that
+  there is always somebody who can manage people and roles.
 
-`roles.Service.Remove` comprueba primero `self_admin_removal` (`actorID == userID`), ya que
-es la regla más específica y no depende de cuántos admins más existan.
+`roles.Service.Remove` checks `self_admin_removal` first (`actorID == userID`), since it is the
+more specific rule and does not depend on how many other admins exist.
 
 ### `tokens`
 
-El token de sesión de cada persona: opaco (se guarda su hash SHA-256, nunca el valor en
-claro), revocable y con caducidad (30 días por defecto). Sus campos están en
-[`database.md`](database.md) y «Autenticación y sesiones», más abajo, cuenta cómo se resuelve
-cada petición. Un admin puede ver, re-caducar o revocar las sesiones de cualquier persona y
-listar las de todo el mundo (ver [`api.md`](api.md)); nunca ve el valor de un token, solo
-sus metadatos.
+Each person's session token: opaque (its SHA-256 hash is stored, never the plain value),
+revocable and with an expiry (30 days by default). Its fields are in [`database.md`](database.md)
+and "Authentication and sessions", further down, explains how each request is resolved. An admin
+can see, re-expire or revoke any person's sessions and list everybody's (see [`api.md`](api.md));
+they never see the value of a token, only its metadata.
 
-#### Impersonación
+#### Impersonation
 
-`POST /users/{login}/impersonate` (solo admin, no board: actuar como cualquiera, incluido
-otro admin, es un salto mayor que el resto de lo que board ya puede hacer) crea un token
-cuyo `user_id` es el de esa persona, con un `impersonated_by` (el id del admin) guardado
-junto a él.
+`POST /users/{login}/impersonate` (admin only, not board: acting as anybody, another admin
+included, is a bigger leap than the rest of what board can already do) creates a token whose
+`user_id` is that person's, with an `impersonated_by` (the admin's id) stored alongside it.
 
-- **Efecto**: como los roles se resuelven en vivo a partir de `user_id`, igual que en
-  cualquier sesión normal, esa sesión solo puede hacer lo mismo que esa persona, sin ningún
-  caso especial en el resto del API.
-- **Excepciones en `authapi`**: `GET /auth/me` añade `impersonated_by` a la respuesta (para
-  que el frontend pueda avisarlo) y `POST /auth/impersonate/exit` deja salir de la
-  impersonación pase lo que pase con los roles de la persona impersonada en ese momento.
-  Por eso ese endpoint solo exige `RequireAuth`, no `Protect` (que exigiría un rol base): si
-  la persona lo hubiera perdido mientras se la impersonaba, el admin se quedaría sin forma
-  de salir.
-- **Salir**: no reutiliza el token que tenía el admin antes de impersonar, porque el API
-  nunca vuelve a tener el valor en claro de un token ya emitido. Revoca la sesión de
-  impersonación y emite una nueva para el admin.
-- **Restricciones**: solo se puede impersonar a quien tenga ahora mismo algún rol base
-  (`auth.BaselineRoles`), igual que un enlace de acceso no se manda a quien no lo tiene, y
-  nunca a uno mismo.
-- **Duración**: `config.ImpersonationTokenTTL`, 1 hora frente a los 30 días de un token
-  normal. Una sesión actuando como otra persona es un riesgo mayor que una normal como para
-  dejarla viva un mes si alguien se olvida de salir.
+- **Effect**: since roles are resolved live from `user_id`, as in any normal session, that session
+  can only do the same as that person, with no special case in the rest of the API.
+- **Exceptions in `authapi`**: `GET /auth/me` adds `impersonated_by` to the response (so that the
+  frontend can warn about it) and `POST /auth/impersonate/exit` lets the admin leave the
+  impersonation whatever happens to the impersonated person's roles at that moment. That is why
+  that endpoint only requires `RequireAuth`, not `Protect` (which would require a baseline role):
+  if the person had lost it while being impersonated, the admin would be left with no way out.
+- **Leaving**: it does not reuse the token the admin had before impersonating, because the API
+  never again has the plain value of a token already issued. It revokes the impersonation session
+  and issues a new one for the admin.
+- **Restrictions**: only somebody who currently has some baseline role (`auth.BaselineRoles`) can
+  be impersonated, just as a sign-in link is not sent to somebody who lacks one, and never
+  oneself.
+- **Duration**: `config.ImpersonationTokenTTL`, 1 hour against the 30 days of a normal token. A
+  session acting as another person is too big a risk compared with a normal one to leave it alive
+  for a month if somebody forgets to leave.
 
 ### `memberships`
 
-Periodos de alta/baja de socio. Una persona puede tener varios periodos mientras no se
-solapen.
+Periods of joining/leaving as a member. A person may have several periods as long as they do not
+overlap.
 
-**Reglas**
+**Rules**
 
-- Un periodo no puede solaparse con otro de la misma persona (lo impide la base de datos).
-- `users.Service.enrichMany` (lo que usan `GET /users` y la ficha de una sola persona) pide
-  a cada paquete, una vez y para toda la lista, lo que añade a cada `User` (`ListByUsers`,
-  `OnLeaveAmong`, `LatestDues`, `CurrentByUsers` y `ListNamesForUsers`, una consulta con
-  `ANY($1)` cada una): antes eran cinco consultas por persona, y con 300 socios
-  `GET /users` tardaba unos 215 ms en vez de unos 10. Con los periodos de cada persona
-  (más reciente primero) separa las dos fechas que incorpora a cada `User`:
-  - `membership_start_date` es la del *primer* periodo (cuándo entró por primera vez, no
-    la última vez que ha vuelto a entrar tras una baja).
-  - `membership_end_date` es la del periodo *más reciente* (vacía si sigue de alta).
-- Así, quien ha estado varias veces en el club sigue mostrando su alta original, y la lista
-  de personas puede mostrar y ordenar por fecha de alta/baja sin una petición aparte por
-  persona.
-- Corregir un periodo (`PATCH /memberships/{id}`) revalida contra él las bajas temporales de
-  esa misma persona que cayeran dentro del periodo *tal como estaba antes* de la edición:
-  estrechar un periodo no puede verse bloqueado por una baja que pertenece a otro periodo
-  suyo.
-- Borrar un periodo (`DELETE /memberships/{id}`) no produce cascada: nada lo referencia.
-  Está pensado para el «deshacer mi última acción» del frontend en `/socio`, que solo lo
-  ofrece para la entrada de alta/baja/baja-temporal más reciente de la persona; esa
-  restricción vive en el frontend, no en el endpoint.
+- A period cannot overlap another of the same person (the database prevents it).
+- `users.Service.enrichMany` (what `GET /users` and the page of a single person use) asks each
+  package, once and for the whole list, for what it adds to each `User` (`ListByUsers`,
+  `OnLeaveAmong`, `LatestDues`, `CurrentByUsers` and `ListNamesForUsers`, one query with
+  `ANY($1)` each): before, it was five queries per person, and with 300 members `GET /users` took
+  about 215 ms instead of about 10. With each person's periods (most recent first) it separates
+  the two dates it adds to each `User`:
+  - `membership_start_date` is that of the *first* period (when they first joined, not the last
+    time they rejoined after leaving).
+  - `membership_end_date` is that of the *most recent* period (empty if they are still a member).
+- This way, somebody who has been in the club several times still shows their original joining
+  date, and the list of people can show and sort by joining/leaving date without a separate
+  request per person.
+- Correcting a period (`PATCH /memberships/{id}`) revalidates against it the temporary leaves of
+  that same person that fell inside the period *as it was before* the edit: narrowing a period
+  cannot be blocked by a leave that belongs to another period of theirs.
+- Deleting a period (`DELETE /memberships/{id}`) does not cascade: nothing references it. It is
+  meant for the frontend's "undo my last action" in `/socio`, which only offers it for the
+  person's most recent joining/leaving/temporary-leave entry; that restriction lives in the
+  frontend, not in the endpoint.
 
 ### `membership_dues`
 
-Cuotas anuales de socio, junto a `memberships`. Cada año que un socio lo sigue siendo debe
-una cuota que lo cubra: la primera, junto con la matrícula, el mismo día del alta, y luego
-una más cada año siguiente.
+Annual membership dues, next to `memberships`. Each year that a member remains one they owe a due
+that covers it: the first, together with the enrollment fee (matrícula), on the same day they
+join, and then one more each following year.
 
-**Claves**
+**Key points**
 
-- Una cuota sin transacción detrás todavía no significa nada, así que, a diferencia de un
-  periodo de alta, no hay fila para «impagada»; por eso `transaction_id` es obligatoria.
-- Clave por `user_id` a propósito, no por `membership_id`: la cuota de un año de quien se
-  reincorpora no está ligada de forma natural a un periodo concreto, y así un año nunca
-  necesita casar con los límites de un periodo.
-- Una cuota se borra con su transacción (`ON DELETE CASCADE`: es pura anotación contable, sin
-  sentido aparte de ella), mientras que una licencia usa `ON DELETE RESTRICT`: es un registro
-  real con sentido propio (prueba de estar federado) incluso aparte de su pago, así que la
-  transacción que la pagó no se puede borrar de debajo.
+- A due with no transaction behind it does not mean anything yet, so, unlike a joining period,
+  there is no row for "unpaid"; that is why `transaction_id` is mandatory.
+- Keyed by `user_id` on purpose, not by `membership_id`: the due of a year of somebody who rejoins
+  is not naturally tied to one particular period, and this way a year never needs to be matched
+  against the boundaries of a period.
+- A due is deleted together with its transaction (`ON DELETE CASCADE`: it is pure bookkeeping
+  annotation, meaningless apart from it), whereas a license uses `ON DELETE RESTRICT`: it is a
+  real record with a meaning of its own (proof of being federated) even apart from its payment, so
+  the transaction that paid for it cannot be deleted from under it.
 
-**Registro (`POST /users/{login}/dues`, solo admin)**
+**Recording (`POST /users/{login}/dues`, admin only)**
 
-- Es `Service.RecordDue`. Antes de nada comprueba la transacción: tiene que existir
-  (`ErrUnknownTransaction`) y tener al menos una entrada en una cuenta marcada
-  `allows_dues` (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`; ver
-  «Contabilidad»). Así, una cuota rechazada nunca deja un periodo de alta abierto como
-  efecto secundario.
-- Si la persona todavía no tiene ningún periodo de alta, se trata como su primera cuota y
-  también se le abre un periodo nuevo (con la `start_date` de la petición). A quien ya
-  tuvo un alta y se reincorpora se le deja enteramente al flujo de alta normal, aparte.
-- Por eso `start_date` es opcional: solo hace falta (400 `start_date_required`,
-  `ErrStartDateRequired`) cuando no hay ningún alta que abrir, y se ignora si la persona ya
-  tiene alguna; una `start_date` mal formada sigue siendo 400 `invalid_date`.
+- It is `Service.RecordDue`. Before anything else it checks the transaction: it has to exist
+  (`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
+  (`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`; see "Accounting"). This way, a
+  rejected due never leaves a joining period open as a side effect.
+- If the person has no joining period yet, it is treated as their first due and a new period is
+  also opened for them (with the `start_date` of the request). Somebody who already had a period
+  and rejoins is left entirely to the normal joining flow, separately.
+- That is why `start_date` is optional: it is only needed (400 `start_date_required`,
+  `ErrStartDateRequired`) when there is no period to open, and it is ignored if the person already
+  has one; a malformed `start_date` is still 400 `invalid_date`.
 
-**Lectura (`GET /users/{login}/dues`)**
+**Reading (`GET /users/{login}/dues`)**
 
-- Une la transacción de cada cuota para añadir `paid_at` (el `occurred_at` del pago, no
-  `created_at`: la cuota de un año pasado puede registrarse mucho después de haberse
-  pagado). Solo aparece en este listado, nunca en la respuesta del `POST`.
+- It joins each due's transaction to add `paid_at` (the payment's `occurred_at`, not `created_at`:
+  the due of a past year may be recorded long after it was paid). It only appears in this listing,
+  never in the response of the `POST`.
 
-**Frontend y límites**
+**Frontend and limits**
 
-- En `/socio`, cada cuota es un evento más («Cuota anual · año») del timeline «Historial
-  como socio», con la fecha del pago y sin botones de editar ni borrar. `/perfil` muestra
-  el mismo timeline, sin botones.
-- No hay endpoint para corregir o borrar una cuota, ni validación de que el año caiga
-  dentro de un periodo de alta activo; ambas cosas están fuera de alcance a propósito por
-  ahora.
+- In `/socio`, each due is one more event ("Cuota anual · year") of the "Historial como socio"
+  timeline, with the date of the payment and no edit or delete buttons. `/perfil` shows the same
+  timeline, without buttons.
+- There is no endpoint to correct or delete a due, nor any validation that the year falls inside
+  an active joining period; both things are out of scope on purpose for now.
 
 ### `membership_leaves`
 
-«Bajas temporales»: una ventana con fecha de inicio y fecha de fin opcional (vacía para una
-baja que sigue en curso, igual que el `end_date` de un periodo de socio).
+"Temporary leaves": a window with a start date and an optional end date (empty for a leave still
+in progress, like the `end_date` of a member period).
 
-Cuelga de la persona (`user_id`) directamente, no de un periodo de `memberships` concreto.
-Así, un único `GET /users/{login}/leaves` cubre todas las bajas que ha tenido, aunque hayan
-sido durante altas distintas, sin consultar periodo por periodo. Dos bajas de la misma
-persona no pueden solaparse (lo impide la base de datos, como con los periodos).
+It hangs from the person (`user_id`) directly, not from one particular `memberships` period. This
+way, a single `GET /users/{login}/leaves` covers all the leaves they have had, even if they were
+during different periods, without querying period by period. Two leaves of the same person cannot
+overlap (the database prevents it, as with periods).
 
-**Reglas**
+**Rules**
 
-- La ventana tiene que quedar *contenida* en alguno de los periodos de esa persona.
-  `memberships.Repository` no lo puede expresar con un `CHECK` entre dos tablas, así que
-  lo valida en Go: busca qué periodo (si hay alguno) contiene por completo esas fechas
-  antes de cada `INSERT`/`UPDATE` (`ErrLeaveOutsideMembership`,
-  `Repository.findContainingMembership`).
-- Una baja temporal no toca el periodo de socio al que pertenece, que sigue abierto
-  durante ella. Por eso `users.User.OnLeave` (`on_leave` en el JSON) es el único sitio que
-  distingue «activo» de «baja temporal» en la lista de personas; se calcula solo para
-  quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
+- The window has to be *contained* in one of that person's periods. `memberships.Repository`
+  cannot express this with a `CHECK` between two tables, so it validates it in Go: it looks for
+  which period (if any) fully contains those dates before each `INSERT`/`UPDATE`
+  (`ErrLeaveOutsideMembership`, `Repository.findContainingMembership`).
+- A temporary leave does not touch the member period it belongs to, which stays open during it.
+  That is why `users.User.OnLeave` (`on_leave` in the JSON) is the only place that tells "active"
+  from "temporary leave" in the list of people; it is computed only for somebody who already has
+  an active period, with `memberships.Service.IsOnLeave`.
 
-### `licenses` y `license_types`
+### `licenses` and `license_types`
 
-Licencias federativas y el catálogo de tipos. El tipo no es texto libre: se elige de un
-catálogo (`license_types`, migración 00007) guardado en la base de datos en vez de un enum
-de Go, porque el club espera que la lista cambie (una zona o federación nueva) y eso solo
-debería necesitar un `INSERT`, no un despliegue.
+Federative licenses and the catalog of types. The type is not free text: it is chosen from a
+catalog (`license_types`, migration 00007) stored in the database instead of a Go enum, because
+the club expects the list to change (a new zone or federation) and that should only need an
+`INSERT`, not a deployment.
 
-**Catálogo**
+**Catalog**
 
-Una licencia de tipo «Otra» exige además `other_detail` diciendo cuál es; esa validación
-vive en `licenses.Service.Create`, porque un `CHECK` no puede alcanzar `license_types.is_other`
-desde otra tabla. El catálogo (qué tipos hay) está en [`database.md`](database.md).
+A license of type "Otra" additionally requires `other_detail` saying which one it is; that
+validation lives in `licenses.Service.Create`, because a `CHECK` cannot reach
+`license_types.is_other` from another table. The catalog (which types exist) is in
+[`database.md`](database.md).
 
-**Año y pago**
+**Year and payment**
 
-- `year` es el año natural que de verdad cubre, no siempre el de `issued_date` (una licencia
-  pedida en diciembre suele cubrir el año siguiente). Es válida hasta el 31 de diciembre de su
-  `year`: `valid_until` se calcula en Go y nunca se almacena, igual que la categoría de edad.
-- `transaction_id` señala la transacción que la pagó (ver «Contabilidad») y no es editable
-  después: corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece.
+- `year` is the calendar year it actually covers, not always that of `issued_date` (a license
+  requested in December usually covers the following year). It is valid until December 31st of its
+  `year`: `valid_until` is computed in Go and never stored, like the age category.
+- `transaction_id` points at the transaction that paid for it (see "Accounting") and is not
+  editable afterward: correcting type, date or year is a different action from deciding which
+  payment it belongs to.
 
-**Reglas de creación (`Service.Create`)**
+**Creation rules (`Service.Create`)**
 
-- Sin `transaction_id` es la única forma de registrar una licencia que el club no ha
-  cobrado (por ejemplo, alguien federado en otro sitio), y entonces no hay nada más que
-  comprobar sobre el pago.
-- Si se da, tiene que existir (400 `unknown_transaction`) y tener al menos una entrada en
-  una cuenta marcada `allows_licenses` (migración 00017; 409
-  `transaction_not_for_licenses`). Esa comprobación es una consulta SQL contra las tablas
-  de contabilidad, igual que la clave foránea, sin importar `internal/accounting`, y va la
-  última, tras todo lo que solo depende de la petición.
-- Solo se le puede asignar una licencia a quien fuera socio en algún momento del año de la
-  licencia (`year`; `memberships.Service.WasMemberDuringYear`), no necesariamente ahora
-  mismo ni el día de `issued_date`. Por eso se puede dar de alta una licencia de un año en
-  que alguien sí era socio después de que haya causado baja, o con una fecha anterior a su
-  alta de ese año. Con un año que no toca ningún periodo de socio, 409
-  `not_active_member`.
+- Without `transaction_id` is the only way to record a license the club has not collected (for
+  example, somebody federated elsewhere), and then there is nothing else to check about the
+  payment.
+- If given, it has to exist (400 `unknown_transaction`) and have at least one entry on an account
+  marked `allows_licenses` (migration 00017; 409 `transaction_not_for_licenses`). That check is a
+  SQL query against the accounting tables, like the foreign key, without importing
+  `internal/accounting`, and it goes last, after everything that depends only on the request.
+- A license can only be assigned to somebody who was a member at some moment of the license's year
+  (`year`; `memberships.Service.WasMemberDuringYear`), not necessarily right now nor on the day of
+  `issued_date`. That is why a license can be recorded for a year in which somebody was indeed a
+  member after they have left, or with a date earlier than their joining of that year. With a year
+  that touches no member period, 409 `not_active_member`.
 
-**Corrección**
+**Correction**
 
-- `/licenses/{id}` va por id de licencia, no anidada bajo el usuario, igual que
-  `/leaves/{id}`.
-- `PATCH` no vuelve a exigir alta en el año, porque corrige una licencia existente en vez
-  de asignar una nueva; sigue funcionando aunque la persona ya haya causado baja.
+- `/licenses/{id}` goes by license id, not nested under the user, like `/leaves/{id}`.
+- `PATCH` does not require membership in the year again, because it corrects an existing license
+  instead of assigning a new one; it keeps working even if the person has already left.
 
-**Uso en otros sitios**
+**Use elsewhere**
 
-- `users.Service` incorpora a `User` solo la licencia del año actual de cada persona
-  (`licenses.Service.CurrentByUser`; una de otro año no cuenta), mientras que del periodo
-  de socio toma el más reciente. Es lo que muestra `GET /users`.
-- En `/socio`, cada licencia aparece como un evento más del timeline de altas y bajas, no
-  en una sección aparte.
+- `users.Service` adds to `User` only each person's license of the current year
+  (`licenses.Service.CurrentByUser`; one from another year does not count), whereas from the
+  member period it takes the most recent. That is what `GET /users` shows.
+- In `/socio`, each license appears as one more event of the joining and leaving timeline, not in
+  a separate section.
 
 ### `board_members`
 
-Quién ha estado en la Junta Directiva y con qué cargo, con la misma forma que `memberships`:
-fecha de inicio y de fin (vacía = sigue en el cargo).
+Who has been on the board (Junta Directiva) and in which position, with the same shape as
+`memberships`: start and end date (empty = still in the position).
 
-**Reglas**
+**Rules**
 
-- Una persona no puede tener dos cargos abiertos a la vez, sean o no el mismo; dos personas sí
-  pueden tener el mismo cargo a la vez (varios vocales simultáneos es normal).
-- El cargo se valida en Go antes de tocar la base de datos (`Position.Valid`,
-  `ErrInvalidPosition`, 400 `invalid_position`), tanto al crear como al corregir: el enum
-  de PostgreSQL lo rechazaría igualmente, pero como un 500.
+- A person cannot have two positions open at the same time, whether or not they are the same one;
+  two people can hold the same position at once (several members-at-large (vocales) at the same
+  time is normal).
+- The position is validated in Go before touching the database (`Position.Valid`,
+  `ErrInvalidPosition`, 400 `invalid_position`), both when creating and when correcting: the
+  PostgreSQL enum would reject it anyway, but as a 500.
 
-**Relación con otros paquetes**
+**Relation with other packages**
 
-- El paquete `board` no depende de `users` ni de `memberships` para calcular el rol
-  automático: se calcula con una consulta SQL directa contra `board_members` desde el
-  paquete `roles`, igual que `member`/`former_member` contra `memberships`. Por eso no
-  necesita el juego de interfaz que sí hace falta para `membership_number` (ver
-  «`users`»).
-- Su `handler.go` sí define, por otro motivo, la misma interfaz mínima `UserLookup` que
-  `tokens`/`roles`/`licenses`/`memberships`/`inventory`/`activities`: traducir el login de
-  sus rutas `/users/{login}/...` a un id.
+- The `board` package depends neither on `users` nor on `memberships` to compute the automatic
+  role: it is computed with a direct SQL query against `board_members` from the `roles` package,
+  like `member`/`former_member` against `memberships`. That is why it does not need the interface
+  arrangement that `membership_number` does (see "`users`").
+- Its `handler.go` does define, for another reason, the same minimal `UserLookup` interface as
+  `tokens`/`roles`/`licenses`/`memberships`/`inventory`/`activities`: translating the login of its
+  `/users/{login}/...` routes into an id.
 
-**Borrado y frontend**
+**Deletion and frontend**
 
-- Como con un periodo de alta, nada lo referencia por clave foránea, así que borrar nunca
-  produce cascada. Pero aquí no hay «mitad de cierre» a la que volver limpiando un campo:
-  al ser una sola fila con inicio y fin juntos, borrar siempre quita el cargo completo, se
-  pinche desde el evento que sea de los dos.
-- En `/socio`, un cargo aparece como dos eventos más (inicio y fin) en el timeline de
-  altas y bajas, cada uno con su botón «Editar»; solo el de inicio lleva además «Borrar».
+- As with a joining period, nothing references it by foreign key, so deleting never cascades. But
+  here there is no "closing half" to go back to by clearing a field: being a single row with start
+  and end together, deleting always removes the whole position, whichever of the two events it is
+  clicked from.
+- In `/socio`, a position appears as two more events (start and end) in the joining and leaving
+  timeline, each with its "Editar" button; only the start one also carries "Borrar".
 
-### `activities` y `activity_participants`
+### `activities` and `activity_participants`
 
-Actividades del club y quién participa. Crear una actividad está abierto a cualquier socio
-con acceso (no solo admin/board), que además puede apuntar de una vez a los participantes
-iniciales.
+Club activities and who takes part. Creating an activity is open to any member with access (not
+only admin/board), who can also sign up the initial participants in one go.
 
-**Organizador y edición**
+**Organizer and editing**
 
-- Toda actividad tiene un organizador obligatorio (`leader_id`, expuesto como
-  `leader_login`), que por defecto es quien la crea.
-- Solo admin/board pueden nombrar a otra persona al crearla o reasignarla después con
-  `PATCH` (403 `forbidden` para cualquier otro, también para el propio organizador, que sí
-  puede editar el resto de campos).
-- Editarla o cancelarla está reservado a ese organizador o a admin/board
-  (`Handler.canManage`, que consulta la actividad para comparar `leader_id` con el usuario
-  autenticado).
-- El tipo (`caving`, `canyoning`, `training`, `social`, `other`) también se puede cambiar
-  al editar.
+- Every activity has a mandatory organizer (`leader_id`, exposed as `leader_login`), which by
+  default is whoever creates it.
+- Only admin/board can name another person when creating it or reassign it afterward with `PATCH`
+  (403 `forbidden` for anybody else, also for the organizer themselves, who can edit the rest of
+  the fields).
+- Editing or canceling it is reserved for that organizer or admin/board (`Handler.canManage`,
+  which queries the activity to compare `leader_id` with the authenticated user).
+- The type (`caving`, `canyoning`, `training`, `social`, `other`) can also be changed when
+  editing.
 
-**Validación**
+**Validation**
 
-- `type`, `status` y `visibility` se comprueban en Go contra los valores de sus enums
-  (`Type.Valid`, `Status.Valid`, `Visibility.Valid`): uno desconocido da 400 `invalid_type`,
-  `invalid_status` o `invalid_visibility`.
-- `end_date` no puede ser anterior a `start_date` (400 `invalid_date_range`). Al editar se
-  compara con los valores ya fusionados, así que vale enviar solo una de las dos fechas.
-  La restricción `end_not_before_start` de la base de datos queda como última barrera.
+- `type`, `status` and `visibility` are checked in Go against the values of their enums
+  (`Type.Valid`, `Status.Valid`, `Visibility.Valid`): an unknown one gives 400 `invalid_type`,
+  `invalid_status` or `invalid_visibility`.
+- `end_date` cannot be earlier than `start_date` (400 `invalid_date_range`). When editing, it is
+  compared with the already merged values, so sending only one of the two dates is fine. The
+  database constraint `end_not_before_start` remains as the last barrier.
 
-**Federación**
+**Federation**
 
-- Apuntar a un participante en una actividad `caving` o `canyoning` exige que esa persona
-  tenga una licencia federativa del año actual (`licenses.Service.IsCurrentlyFederated`);
-  si no, 409 `not_federated`. Vale tanto al unirse después como al dar de alta
-  participantes iniciales en la creación.
+- Signing up a participant in a `caving` or `canyoning` activity requires that person to have a
+  federative license of the current year (`licenses.Service.IsCurrentlyFederated`); otherwise, 409
+  `not_federated`. It applies both when joining later and when signing up initial participants at
+  creation.
 
-**Visibilidad y participantes**
+**Visibility and participants**
 
-Cada actividad tiene una `visibility` (`public`, por defecto, o `private`; migración
-00005) que decide quién puede añadir participantes, no solo quién puede apuntarse.
-`Handler.join` consulta `leader_id` y `visibility` antes de delegar en `Service.Join`;
-`Handler.leave` (`DELETE .../participants/{login}`) hace lo simétrico.
+Each activity has a `visibility` (`public`, the default, or `private`; migration 00005) that
+decides who can add participants, not only who can sign up. `Handler.join` queries `leader_id` and
+`visibility` before delegating to `Service.Join`; `Handler.leave`
+(`DELETE .../participants/{login}`) does the symmetrical thing.
 
-| Acción | Actividad pública | Actividad privada |
+| Action | Public activity | Private activity |
 |---|---|---|
-| Apuntarse a uno mismo | cualquier member | solo organizador, board o admin lo hacen por él |
-| Añadir a otra persona | admin/board | organizador, board o admin |
-| Quitarse a uno mismo | cualquier member | cualquier member |
-| Quitar a otra persona | admin/board | organizador, admin/board |
+| Sign oneself up | any member | only the organizer, board or admin do it for them |
+| Add another person | admin/board | organizer, board or admin |
+| Remove oneself | any member | any member |
+| Remove another person | admin/board | organizer, admin/board |
 
-**Listado y festivos**
+**Listing and holidays**
 
-`GET /activities?status=active` deja solo lo que todavía necesita atención: lo no completado
-ni cancelado, y lo completado con algún préstamo sin devolver. Los festivos (`holidays`) los
-gestiona el mismo paquete `activities` y solo los usa la vista de calendario del frontend.
+`GET /activities?status=active` leaves only what still needs attention: what is neither completed
+nor canceled, and what is completed with some loan not yet returned. Holidays (`holidays`) are
+managed by the same `activities` package and are used only by the frontend's calendar view.
 
 ### `activity_resources`
 
-La memoria de una actividad: una lista ordenada de recursos que escribe quien participó en
-ella después de la salida. Cada recurso es una entrada de texto (título + `description` en
-texto/Markdown) o un fichero subido (título + el fichero, normalmente una foto o un PDF).
+The memoria of an activity: an ordered list of resources written by whoever took part in it after
+the trip. Each resource is a text entry (title + `description` in text/Markdown) or an uploaded
+file (title + the file, normally a photo or a PDF).
 
-**Almacenamiento**
+**Storage**
 
-- Los metadatos viven en PostgreSQL. El contenido de un recurso de tipo fichero vive
-  aparte, en disco (`config.ActivityResourcesRoot`), indexado por el id de la propia fila.
-  Es un volumen Docker con nombre, no un bind mount como `library`/`userfiles`, porque
-  aquí los ficheros solo llegan por `POST /activities/{id}/resources`, nunca puestos a
-  mano.
-- Un fichero se crea una sola vez y nunca se modifica: no hay forma de reemplazar sus
-  bytes (se borra el recurso y se añade otro), y `Storage.Save` lo crea con `O_EXCL`, de
-  modo que se niega a pisar uno que ya exista en vez de truncarlo. Borrar solo quita una
-  entrada de directorio.
-- Eso permite que otro árbol de directorios comparta los mismos ficheros con hard-links
-  (ver [`environments.md`](environments.md)) sin que escribir en uno cambie el otro.
+- The metadata lives in PostgreSQL. The content of a file resource lives apart, on disk
+  (`config.ActivityResourcesRoot`), indexed by the id of the row itself. It is a named Docker
+  volume, not a bind mount like `library`/`userfiles`, because here the files only arrive through
+  `POST /activities/{id}/resources`, never put there by hand.
+- A file is created once and never modified: there is no way to replace its bytes (the resource is
+  deleted and another is added), and `Storage.Save` creates it with `O_EXCL`, so it refuses to
+  overwrite one that already exists instead of truncating it. Deleting only removes a directory
+  entry.
+- That allows another directory tree to share the same files with hard links (see
+  [`environments.md`](environments.md)) without a write in one changing the other.
 
-**Permisos**: leer la memoria está abierto a cualquier rol base; añadir recursos o reordenarla
-lo puede hacer admin/board, el organizador o cualquiera que conste como participante (el
-organizador no tiene por qué ser un participante, así que se comprueban las dos cosas por
-separado); corregir o borrar uno concreto, solo quien lo escribió o admin/board. El orden se
-sustituye entero a la vez, y se rechaza una lista que no case exactamente con los recursos
-actuales en vez de intentar conciliarla.
+**Permissions**: reading the memoria is open to any baseline role; adding resources or reordering
+it can be done by admin/board, the organizer or anybody who is listed as a participant (the
+organizer is not necessarily a participant, so both things are checked separately); correcting or
+deleting a particular one, only whoever wrote it or admin/board. The order is replaced whole at
+once, and a list that does not match the current resources exactly is rejected instead of trying
+to reconcile it.
 
-### `inventory_items` e `item_movements`
+### `inventory_items` and `item_movements`
 
-Catálogo de material y sus movimientos. Los movimientos van en una única tabla con un
-discriminador de tipo (`type`) en vez de una tabla por tipo, y varios `CHECK`s impiden
-combinaciones sin sentido (una venta con fecha de devolución, por ejemplo).
+Catalog of the club's gear and its movements. The movements go in a single table with a type
+discriminator (`type`) instead of a table per type, and several `CHECK`s prevent meaningless
+combinations (a sale with a return date, for example).
 
-Los ítems del catálogo tienen tres formas (`rope`, `bag` y `gear`), con campos propios cada una;
-los detalles y qué es obligatorio en cada forma están en [`database.md`](database.md). Los
-movimientos van en una única tabla con un discriminador de tipo en vez de una tabla por tipo,
-y varios `CHECK` impiden combinaciones sin sentido (una venta con fecha de devolución, por
-ejemplo).
+The catalog items have three shapes (`rope`, `bag` and `gear`), each with its own fields; the
+details and what is mandatory in each shape are in [`database.md`](database.md). The movements go
+in a single table with a type discriminator instead of a table per type, and several `CHECK`s
+prevent meaningless combinations (a sale with a return date, for example).
 
-**Reglas**
+**Rules**
 
-- El alquiler se tarifica por semana (`rental_price_per_week`), no por día, y se cierra de
-  una sola vez con `returned_at` y `status='active'→'completed'`.
-  `PATCH /movements/{id}/return` solo se aplica a un alquiler abierto.
-- Un préstamo o una devolución siempre van vinculados a una actividad
-  (`item_movements.activity_id`, exigido por otro `CHECK`).
-- Una devolución no está ligada a ningún préstamo concreto: se valida en Go contra cuánto
-  de ese material tiene todavía pendiente la actividad
-  (`SUM(loan.quantity) − SUM(return.quantity)` para el mismo `item_id`/`activity_id`). Así
-  se pueden prestar 10 mosquetones y luego 15 más, y devolver 20 seguidos de los 5
-  restantes, sin casar cada devolución con un préstamo.
-- `total_quantity`, `available_quantity` y `outstanding_loan_quantity` de cada ítem nunca
-  se guardan: se recalculan siempre desde su historial de movimientos
-  (`inventory_item_quantities`, una vista).
+- A rental is priced per week (`rental_price_per_week`), not per day, and is closed in one go with
+  `returned_at` and `status='active'→'completed'`. `PATCH /movements/{id}/return` only applies to
+  an open rental.
+- A loan or a return is always linked to an activity (`item_movements.activity_id`, required by
+  another `CHECK`).
+- A return is not tied to any particular loan: it is validated in Go against how much of that gear
+  the activity still has outstanding (`SUM(loan.quantity) − SUM(return.quantity)` for the same
+  `item_id`/`activity_id`). This way 10 carabiners can be lent and then 15 more, and 20 returned
+  followed by the remaining 5, without matching each return with a loan.
+- `total_quantity`, `available_quantity` and `outstanding_loan_quantity` of each item are never
+  stored: they are always recomputed from its history of movements (`inventory_item_quantities`, a
+  view).
 
-**Permisos**: crear o modificar un movimiento requiere `admin`, `board` o el rol opcional
-`material`, que está sembrado pero no es de sistema (un club que no quiera esa distinción puede
-borrarlo y seguir usando `board`); dar de alta el material del catálogo es solo de admin/board.
+**Permissions**: creating or modifying a movement requires `admin`, `board` or the optional role
+`material`, which is seeded but is not a system one (a club that does not want that distinction
+can delete it and keep using `board`); adding gear to the catalog is for admin/board only.
+### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
-### Repartos (`distributions`, `distribution_options`, `distribution_units`)
+A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,
+stickers. Each distribution is a single item; if two things have to be handled separately,
+they are two distributions, except for the case of **articles** (below), for things that can be
+asked for in any quantity. It is created by admin or board (everybody else can see it through
+the API but not write it, except for asking for units and editing their own).
 
-Un reparto es una cosa que el club entrega a sus socios: camisetas, buffs, un cabo, tazas,
-pegatinas. Cada reparto es un solo artículo; si hay que gestionar por separado dos cosas,
-son dos repartos, salvo el caso de los **artículos** (más abajo), para cosas que se piden en
-cualquier cantidad. Se crea con admin o board (el resto del API lo ve, pero no lo escribe,
-salvo pedir unidades y editar las propias).
-
-- **Audiencia y precio.** Un reparto es para `all_members` (a todo el que fuera socio en
-  `cutoff_date`, obligatoria) o `signup` (solo quien se apunte; `cutoff_date` es opcional y, si
-  se pone, solo pueden apuntarse quienes fueran socios ese día: la comprobación mira los
-  periodos de `memberships`). `price` es el de la unidad propia (0 si es gratis); la presencia
-  de `extra_price` es lo que hace posibles las unidades extra, y `max_extra` las limita por
-  persona y exige `extra_price`. `closes_at` es la fecha límite para que los socios elijan.
-- **Estado** (`status`): `draft` (en preparación: se puede editar y solo lo ven admin y board),
-  `open` (los socios piden unidades y eligen las opciones), `closed` (ya no se puede pedir ni
-  cambiar nada) y `done` (terminado). En la interfaz: Borrador, Abierto, Cerrado y Terminado.
-  Solo se mueve un paso cada vez, adelante o atrás. Entregar (apuntar recogidas y números) se
-  puede con el reparto en cualquier estado menos `draft` (`Status.Deliverable`), porque el
-  pedido suele llegar antes de que se hayan cerrado las peticiones y quien no ha venido a por
-  lo suyo puede hacerlo ya terminado; en `draft` no (409 `not_deliverable`).
-- **Opciones** (`distribution_options`): lo que hay que elegir, con sus valores posibles
-  («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
-  mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
-  como cambiarlas, pero uno distinto da 409 `has_units`.
-- **Artículos** (`distribution_articles`, migración `00024`): un reparto puede, en vez de ser
-  un solo artículo con precio propio, repartir varios que cada socio pide en la cantidad que
-  quiera, como la lotería de Navidad: papeletas a 5 € (200 en total) y décimos a 20 € (1000
-  en total). Cada artículo tiene `name`, `price` (una unidad) y `max_total` opcional: cuántas
-  unidades hay para repartir entre todos (se pueden quedar sin repartir, pero no se reparte
-  más de lo que hay; sin `max_total` no hay tope). No hay límite por socio. Un reparto con
-  artículos es siempre `signup` y no tiene `price`, extras ni opciones propios (400
-  `articles_conflict`); sin artículos todo funciona como antes. Cada persona tiene una fila por
-  artículo (o más: ver abajo), con `quantity` (la unidad sigue siendo una fila, pero esta fila vale
-  tantas unidades como `quantity`; `price` es lo que costaba UNA, así que la fila cuesta
-  `price × quantity`; sin artículos `quantity` es siempre 1), de modo que no hay que marcar
-  200 papeletas una a una como pagadas o recogidas. Se pide con `POST …/units` y
-  `article_id` + `quantity`, las veces que haga falta: volver a pedir el mismo artículo se suma
-  a la fila de esa persona que aún no se ha recogido (lo que tuviera pagado se queda como
-  estaba, así que lo añadido está sin pagar) o, si todas están recogidas, hace una nueva
-  (`CreateArticleUnit`; ya no hay índice único por persona y artículo, migración `00027`).
-  `max_per_person` cuenta todas las filas de la persona. Se cambia
-  con `PATCH …/units/{id}` y `quantity` (con las mismas reglas de estado que cualquier
-  unidad) y se quita con `DELETE`. El tope es el total de todos: `CreateArticleUnit` y
-  `UpdateQuantity` bloquean la fila del reparto mientras cuentan lo que queda, y pasarse da
-  409 `article_exhausted` (con cuántas quedan). `Article.requested` dice cuántas se han
-  pedido, y `unit_count`/`picked_up_count` cuentan unidades, no filas. Los artículos solo se
-  pueden cambiar mientras no haya unidades; después solo `max_total`, y no por debajo de lo
-  ya pedido (409 `has_units`, 409 `cap_below_requested`). `GET …/order` agrupa por artículo.
-  En la interfaz se escriben en una línea cada uno, «Papeletas: 5, máximo 200».
-  Además, cada artículo puede tener `max_per_person` (cuántas puede tener una persona; pasarse
-  da 409 `article_person_limit`) y `has_identifiers` (migración `00024`): cada unidad lleva su
-  número —número de serie de una papeleta, serie y fracción de un décimo, texto libre de hasta
-  60 caracteres—, que no se da al pedir sino al entregar. Se apuntan con
-  `PUT …/units/{id}/identifiers` (admin, board o material, solo con el reparto fuera de `draft`,
-  en la tabla `distribution_unit_identifiers`, con un número único por artículo: 409
-  `identifier_taken`), pueden ser menos que `quantity` y completarse después, pero una fila con
-  números no se puede recoger hasta tenerlos todos (409 `identifiers_missing`, comprobado en
-  `Service.MarkPickedUp`). Con unidades ya pedidas se pueden cambiar `max_total`,
-  `max_per_person` (nunca por debajo del mayor pedido, 409 `cap_below_requested`) y
-  `has_identifiers`. En la interfaz: «Papeletas: 5, máximo 200, 10 por persona, con números», y
-  `/reparto-pedidos` permite asignarlos.
-  **Números descritos** (migración `00026`, `identifier_fields`): en vez de teclear los números
-  uno a uno, se describen las partes del número y los valores de cada una, como una lista de
-  valores y rangos (`numbering.go`): papeletas «Número: 0001-0200» (los ceros a la izquierda
-  se respetan), décimos «Serie: 124-133, 137» y «Fracción: 1-10». Cada combinación es una
-  unidad que existe (la primera parte cambia más despacio: 124/1…124/10, 125/1…), de modo
-  que se sabe cuáles hay, quién tiene cada una y cuántas están libres. El máximo del
-  artículo pasa a ser cuántas hay (`max_total` se recalcula siempre, aunque se mande otro
-  valor) y el artículo lleva números aunque no se diga `con números`. El número de una
-  unidad se guarda como las partes unidas por una barra (`124/3`; ningún valor puede
-  llevar barra). Al apuntar números a mano valen rangos, en la última parte y por posición
-  en sus valores, así que un hueco se respeta (`133/9-10`, `0010-0020`); cada número tiene
-  que existir. Para no teclear, `POST …/units/{id}/identifiers/assign` da a una fila los
-  siguientes números libres hasta su cantidad (409 `not_enough_numbers` si no hay),
-  y `POST …/pickups` con `assign_numbers` lo hace con las filas que falten al entregar
-  (`Service.assignNumbers`, en el orden en que llegan). `GET …/articles/{id}/numbers`
-  (admin, board o material) lista todos los números con quién tiene cada uno y los
-  contadores. Con pedidos hechos, los números se pueden ampliar (otra serie comprada: la 137
-  después de la 133) pero no quitar uno que tenga alguien (409 `number_in_use`). En el
-  formulario cada parte va en una línea con sangría bajo el artículo («Décimos: 20», «  Serie:
-  124-133, 137», «  Fracción: 1-10»), y `/reparto-numeros?id=…` muestra la lista con filtros.
-- **Unidades** (`distribution_units`; en la interfaz se llaman «pedidos», y las unidades
-  extra, «extras»): una fila por unidad pedida, para que dos camisetas
-  extra puedan tener tallas distintas. `beneficiary_id` es para quién es;
-  `registered_by_id` y `registered_at`, quién la apuntó de verdad y cuándo (otra persona
-  cuando un padre apunta a su hijo o un amigo añade extras a otro), y no cambian al editar
-  lo elegido. `price` es lo que costaba al apuntarla: cambiar el precio después no toca lo
-  ya pedido. Cada persona tiene como mucho una unidad propia (índice único) y los extras
-  que permita `max_extra`, contados por beneficiario, lo apunte quien lo apunte
-  (`CreateUnit` bloquea la fila del reparto mientras los cuenta).
-- **Unidad propia automática** (migración `00022`): en un reparto `all_members` nadie
-  tiene que apuntarse. En cuanto el reparto deja de ser borrador, todo el que fuera socio
-  en `cutoff_date` tiene su unidad propia, sin elecciones y sin nadie como `registered_by`
-  (`registered_by_id` admite `NULL`), con el precio que tenga el reparto en ese momento.
-  `Repository.SyncAutomaticUnits` las crea (`INSERT … ON CONFLICT DO NOTHING`, así que
-  puede ejecutarse cuando sea y a la vez): `Service` la llama al abrir el reparto y antes
-  de listar unidades, pedir una, sacar el resumen y apuntar una recogida, de modo que un
-  socio que cumpla los requisitos más tarde también aparece. Con opciones por elegir, una
-  unidad con `choices` vacío es una que nadie ha elegido todavía («Sin elegir»). Quien la
-  elige —el propio socio con `PATCH`, o cualquiera con `POST … /units` a su nombre, que en
-  vez de crear una segunda rellena esta— pasa a ser quien la apuntó, con la fecha; si no
-  hay opciones que elegir, pedirla de nuevo da 409 `already_registered`. La unidad propia
-  de un reparto `all_members` no se puede quitar (409 `automatic_unit`): volvería a
-  crearse. Como desde que se abre hay unidades, las opciones quedan bloqueadas
-  (`has_units`) desde entonces. El reparto sí se puede borrar (solo admin; board crea y
-  edita pero no borra): se lleva sus unidades, con lo que hayan elegido los socios, salvo
-  que alguna esté pagada o recogida (409 `has_settled_units`), en cuyo caso hay que
-  deshacer antes esas marcas. La interfaz avisa de cuántas unidades se pierden. Un cambio
-  de precio llega a las unidades automáticas que nadie ha tocado (sin elegir —sin
-  `registered_by`—, sin pagar y sin recoger), así que corregir el precio con el reparto ya
-  abierto no las deja con el antiguo; lo que ya eligió, pagó o recogió alguien conserva lo
-  que costaba. **Volver a `draft`** empieza el reparto de cero: se borran todas las
-  unidades —las propias de todos, los extras y, en uno por apuntarse, las inscripciones—,
-  también lo que hubiera elegido alguien, que quizá no encaje con las opciones que se le
-  vayan a dar; las automáticas de un reparto `all_members` se vuelven a crear, vacías, al
-  abrirlo. Si alguna está pagada o recogida lo impide (409 `has_settled_units`) hasta
-  deshacer esas marcas. La interfaz avisa antes de que se van a borrar los datos, si los
-  hay.
-  **Cambiar la audiencia de `all_members` a `signup`** (en la misma transacción de
-  `Repository.Update`) borra las unidades automáticas que nadie ha tocado —sin elegir, sin
-  pagar y sin recoger—, porque solo existían porque entraban todos; las que alguien sí
-  eligió se quedan, porque es alguien que lo ha pedido, que es lo que significa apuntarse, y
-  los extras también. Una sin tocar pero pagada o recogida lo impide (409
-  `has_settled_units`). El diálogo de edición pregunta antes.
-- **Quién sale en los selectores**. Ninguno ofrece a todo el mundo, solo socios
-  (`GET /distributions/{id}/people`): para pedir, los que pueden tenerlo —los socios en
-  `cutoff_date`, o los de hoy si no hay—; para entregar (`for=pickup`, admin, board y
-  material), además los socios de ahora, porque quien se ha hecho socio después puede
-  recoger por otros. Sin `cutoff_date`, un reparto `signup` es para los socios de hoy
+- **Audience and price.** A distribution is for `all_members` (everybody who was a member on
+  `cutoff_date`, which is then required) or `signup` (only those who sign up; `cutoff_date` is
+  optional and, when set, only those who were members that day can sign up: the check looks at
+  the periods in `memberships`). `price` is that of the own unit (0 if it is free); the presence
+  of `extra_price` is what makes extra units possible, and `max_extra` limits them per person
+  and requires `extra_price`. `closes_at` is the deadline for members to choose.
+- **Status** (`status`): `draft` (in preparation: it can be edited and only admin and board see
+  it), `open` (members ask for units and choose the options), `closed` (nothing can be asked for
+  or changed any more) and `done` (finished). In the interface: "Borrador", "Abierto", "Cerrado"
+  and "Terminado" (Draft, Open, Closed, Finished). It moves only one step at a time, forward or
+  back. Handing out (recording collections and numbers) is possible with the distribution in any
+  status except `draft` (`Status.Deliverable`), because the order usually arrives before the
+  requests have been closed and whoever has not come for their share can do so once it is
+  finished; in `draft` it is not (409 `not_deliverable`).
+- **Options** (`distribution_options`): what has to be chosen, with its possible values
+  ("Talla": S, M, L). A distribution has as many as it needs, or none. They can be changed as
+  long as nobody has asked for anything; afterwards, a `PATCH` that resends them identical does
+  not count as changing them, but a different one gives 409 `has_units`.
+- **Articles** (`distribution_articles`, migration `00024`): instead of being a single item with
+  its own price, a distribution can hand out several that each member asks for in whatever
+  quantity they want, like the Christmas lottery: "papeletas" at 5 € (200 in all) and "décimos"
+  at 20 € (1000 in all). Each article has `name`, `price` (one unit) and an optional
+  `max_total`: how many units there are to share among everybody (some may stay undistributed,
+  but no more than what exists is handed out; without `max_total` there is no cap). There is no
+  limit per member. A distribution with articles is always `signup` and has no `price`, extras
+  or options of its own (400 `articles_conflict`); without articles everything works as before.
+  Each person has one row per article (or more: see below), with `quantity` (the unit is still
+  a row, but this row is worth as many units as `quantity`; `price` is what ONE cost, so the row
+  costs `price × quantity`; without articles `quantity` is always 1), so that 200 "papeletas"
+  do not have to be marked as paid or collected one by one. They are asked for with
+  `POST …/units` and `article_id` + `quantity`, as many times as needed: asking again for the
+  same article adds to that person's row that has not been collected yet (what was already paid
+  stays as it was, so what is added is unpaid) or, if all of them are collected, makes a new one
+  (`CreateArticleUnit`; there is no longer a unique index per person and article, migration
+  `00027`). `max_per_person` counts all of the person's rows. It is changed with
+  `PATCH …/units/{id}` and `quantity` (with the same status rules as any unit) and removed with
+  `DELETE`. The cap is the total for everybody: `CreateArticleUnit` and `UpdateQuantity` lock
+  the distribution's row while they count what is left, and going over gives 409
+  `article_exhausted` (with how many are left). `Article.requested` says how many have been
+  asked for, and `unit_count`/`picked_up_count` count units, not rows. Articles can only be
+  changed while there are no units; afterwards only `max_total`, and not below what has already
+  been asked for (409 `has_units`, 409 `cap_below_requested`). `GET …/order` groups by article.
+  In the interface they are written one per line, "Papeletas: 5, máximo 200".
+  In addition, each article can have `max_per_person` (how many one person can have; going over
+  gives 409 `article_person_limit`) and `has_identifiers` (migration `00024`): each unit carries
+  its number —the serial number of a "papeleta", series and fraction of a "décimo", free text of
+  up to 60 characters—, which is not given when asking but when handing out. They are recorded
+  with `PUT …/units/{id}/identifiers` (admin, board or material, only with the distribution out
+  of `draft`, in the table `distribution_unit_identifiers`, with a number that is unique per
+  article: 409 `identifier_taken`), there can be fewer than `quantity` and they can be completed
+  later, but a row with numbers cannot be collected until it has all of them (409
+  `identifiers_missing`, checked in `Service.MarkPickedUp`). With units already asked for,
+  `max_total`, `max_per_person` (never below the largest order, 409 `cap_below_requested`) and
+  `has_identifiers` can be changed. In the interface: "Papeletas: 5, máximo 200, 10 por persona,
+  con números", and `/reparto-pedidos` allows assigning them.
+  **Described numbers** (migration `00026`, `identifier_fields`): instead of typing the numbers
+  one by one, the parts of the number and the values of each one are described, as a list of
+  values and ranges (`numbering.go`): "papeletas" "Número: 0001-0200" (leading zeros are kept),
+  "décimos" "Serie: 124-133, 137" and "Fracción: 1-10". Every combination is a unit that exists
+  (the first part changes more slowly: 124/1…124/10, 125/1…), so it is known which ones exist,
+  who has each one and how many are free. The article's maximum becomes how many there are
+  (`max_total` is always recalculated, even if another value is sent) and the article carries
+  numbers even if "con números" is not said. A unit's number is stored as its parts joined by a
+  slash (`124/3`; no value may contain a slash). When recording numbers by hand, ranges are
+  valid in the last part and by position in its values, so a gap is respected (`133/9-10`,
+  `0010-0020`); every number has to exist. To avoid typing, `POST …/units/{id}/identifiers/assign`
+  gives a row the next free numbers up to its quantity (409 `not_enough_numbers` if there are
+  not enough), and `POST …/pickups` with `assign_numbers` does it with the rows that lack them
+  when handing out (`Service.assignNumbers`, in the order they arrive).
+  `GET …/articles/{id}/numbers` (admin, board or material) lists all the numbers with who has
+  each one and the counters. With orders made, the numbers can be extended (another series
+  bought: the 137 after the 133) but a number somebody has cannot be removed (409
+  `number_in_use`). In the form each part goes on an indented line under the article
+  ("Décimos: 20", "  Serie: 124-133, 137", "  Fracción: 1-10"), and `/reparto-numeros?id=…`
+  shows the list with filters.
+- **Units** (`distribution_units`; in the interface they are called "pedidos" (orders), and the
+  extra units, "extras"): one row per unit asked for, so that two extra shirts can have
+  different sizes. `beneficiary_id` is who it is for; `registered_by_id` and `registered_at`,
+  who actually entered it and when (somebody else when a parent signs up their child or a
+  friend adds extras for another), and they do not change when the choices are edited. `price`
+  is what it cost when it was entered: changing the price afterwards does not touch what was
+  already ordered. Each person has at most one own unit (unique index) and the extras that
+  `max_extra` allows, counted by beneficiary, whoever enters them (`CreateUnit` locks the
+  distribution's row while it counts them).
+- **Automatic own unit** (migration `00022`): in an `all_members` distribution nobody has to
+  sign up. As soon as the distribution stops being a draft, everybody who was a member on
+  `cutoff_date` has their own unit, with no choices and nobody as `registered_by`
+  (`registered_by_id` admits `NULL`), at the price the distribution has at that moment.
+  `Repository.SyncAutomaticUnits` creates them (`INSERT … ON CONFLICT DO NOTHING`, so it can run
+  at any time and concurrently): `Service` calls it when the distribution is opened and before
+  listing units, asking for one, producing the summary and recording a collection, so that a
+  member who meets the requirements later also appears. With options to choose, a unit with
+  empty `choices` is one nobody has chosen yet ("Sin elegir"). Whoever chooses it —the member
+  themselves with `PATCH`, or anybody with `POST … /units` in their name, which fills this one
+  in instead of creating a second one— becomes whoever entered it, with the date; if there are
+  no options to choose, asking for it again gives 409 `already_registered`. The own unit of an
+  `all_members` distribution cannot be removed (409 `automatic_unit`): it would be created
+  again. Since units exist from the moment it is opened, the options are locked (`has_units`)
+  from then on. The distribution itself can be deleted (admin only; board creates and edits but
+  does not delete): it takes its units with it, with whatever the members have chosen, unless
+  one is paid or collected (409 `has_settled_units`), in which case those marks have to be
+  undone first. The interface warns how many units are lost. A price change reaches the
+  automatic units nobody has touched (not chosen —no `registered_by`—, not paid and not
+  collected), so correcting the price with the distribution already open does not leave them on
+  the old one; what somebody has already chosen, paid or collected keeps what it cost. **Going
+  back to `draft`** starts the distribution over: all the units are deleted —everybody's own,
+  the extras and, in one people sign up for, the sign-ups—, also whatever somebody may have
+  chosen, which may not fit the options about to be given; the automatic ones of an
+  `all_members` distribution are created again, empty, on opening it. If any is paid or
+  collected it prevents this (409 `has_settled_units`) until those marks are undone. The
+  interface warns beforehand that the data will be deleted, if there is any.
+  **Changing the audience from `all_members` to `signup`** (in the same transaction of
+  `Repository.Update`) deletes the automatic units nobody has touched —not chosen, not paid and
+  not collected—, because they existed only because everybody was in; the ones somebody did
+  choose stay, because that is somebody who asked for it, which is what signing up means, and so
+  do the extras. An untouched one that is paid or collected prevents it (409
+  `has_settled_units`). The edit dialog asks first.
+- **Who appears in the pickers**. None of them offers everybody, only members
+  (`GET /distributions/{id}/people`): to order, those who can have it —the members on
+  `cutoff_date`, or today's if there is none—; to hand out (`for=pickup`, admin, board and
+  material), also today's members, because somebody who became a member later can collect for
+  others. Without `cutoff_date`, a `signup` distribution is for today's members
   (`Service.IsEligible`).
-- **Quién puede pedir**. Cualquier socio, para sí o para otros (`beneficiary_login`),
-  mientras el reparto esté abierto y no haya pasado `closes_at`; admin y board también
-  pasada la fecha, pero solo con el reparto abierto: una vez cerrado no cambia nada, ni
-  para ellos, y para una adición tardía se vuelve a abrir. Tanto el beneficiario como
-  quien apunta tienen que ser elegibles, es decir, socios en `cutoff_date` (409
-  `not_eligible`); admin y board, que apuntan en nombre de cualquiera, no necesitan serlo
-  ellos. Los extras son de quien los pide (o del socio a cuyo nombre se apuntan): no se
-  dice para quién son finalmente. Cambiar o quitar una unidad lo puede hacer para quien
-  es, quien la apuntó y admin/board/material (los tres para cualquiera, y también pasado el plazo y
-  con algo pagado; solo admin/board marcan pagos); lo entregado no se le quita al
-  dueño (409 `unit_locked`), y una unidad que no es una fila de artículo, una vez entregada, no
-  la toca nadie; una pagada solo la tocan admin/board/material (409 `unit_locked`).
-- **Unidades con y sin número**: en un artículo con números (`has_identifiers`) un pedido es
-  una cantidad (`quantity`, ampliable o reducible), y algunas de esas unidades pueden tener
-  asignado un número concreto (un identificador); las que no, son «unidades cualquiera».
-  **Solo las que tienen número se pueden pagar o entregar**, y se dice cuáles: cada
-  identificador lleva su `paid_at` y su `delivered_at` (migración `00029` para el pago), así
-  que se sabe qué números están pagados, cuáles entregados y cuáles solo asignados
-  (`paid_identifiers`, `delivered_identifiers`). Lo entregado y sin pagar se puede devolver,
-  diciendo cuáles; un número pagado o entregado no se puede quitar de la lista. Donde los
-  números están descritos, todo lo que acepta números (asignar, pagar, entregar, deshacer,
-  devolver) admite rangos (`0001-0010, 0015`, `Service.expandTokens`). Los artículos sin
-  números y las unidades sueltas siguen contando (`paid_quantity`, `picked_up_quantity`).
-  Asignar y quitar números sin reemplazar la lista: `POST` y `DELETE …/units/{id}/identifiers`.
-- **Pagado**: una fila se puede pagar en parte. `paid_quantity` (de 0 a `quantity`, migración
-  `00027`) dice cuántas unidades están pagadas; `paid_at` y quién lo marcó son los del último
-  pago y están exactamente cuando hay algo pagado. Solo lo ponen y quitan admin y board:
-  `POST /distributions/{id}/payments` suma pagos, en lote y todo o nada, con `payments`
-  (`unit_id` y `quantity` unidades, o todas las pendientes si falta) y `unit_ids` (todo lo
-  pendiente de esas filas); pasarse de lo pendiente da 409 `already_paid`. `DELETE
-  …/units/{id}/payment[?quantity=N]` quita N unidades pagadas, o todas. Pedir más de algo ya
-  pagado no hace pagado lo añadido, y no se puede bajar `quantity` por debajo de lo pagado (409
-  `quantity_below_paid`). Una fila con algo pagado cuenta como pagada para los bloqueos de más
-  arriba (solo la cambia admin/board). **Cada pago queda en Contabilidad** (migración `00032`): el
-  reparto tiene una cuenta (`account_id` opcional; `account_name` en el JSON) donde se apuntan sus
-  pagos y, si no tiene, la cuenta marcada como `distribution_default` (solo una; marcar una quita la
-  marca de la otra). Las dos tienen que ser de tipo `income`: un reparto con otra cuenta es 400
-  `account_not_income`; marcar como por defecto una cuenta que no lo es, o quitar el tipo `income` a
-  una que usa algún reparto, es 409 `not_income_for_distributions`. Si no hay ninguna de las dos,
-  409 `no_distribution_account`. Al pagar (`account_id` en el cuerpo) o quitar un pago
-  (`?account_id=`) hay que decir en qué cuenta se ha pagado, que tiene que existir (400
-  `unknown_account`), ser de tipo `asset` (400 `account_not_asset`); sin cuenta, 400
-  `account_required`, salvo que lo pagado sea gratis, que no mueve dinero ni apunta nada. Por cada
-  persona de la petición se crea una transacción automática entre esa cuenta de activo (`+total`) y
-  la del reparto (`−total`; al quitar un pago, al revés) con una descripción en español, por ejemplo
-  «Pago de Ana Pérez en «Lotería de Navidad»: 3 × Papeleta (0001-0003)» o «Devolución del pago de
-  …». Un pedido con algo pagado no se puede borrar (409 `unit_paid`): primero se quita el pago.
-- **Lista de pagos** (`distribution_payments`; solo admin y board, porque dice quién ha pagado qué):
-  cada pago que se apunta deja una entrada con la fecha, quién lo apuntó, de quién era el pedido (el
-  que ha pagado: no se guarda un pagador distinto del socio del pedido), qué y cuántas unidades,
-  cuánto dinero y los números. Quitar un pago escribe la misma entrada con los signos cambiados, y
-  cada entrada apunta a su transacción contable (`transaction_id`). Borrar esa transacción deshace
-  sus pagos (cada entrada vuelve a dejar impago lo que pagó, o paga otra vez lo que quitó, y
-  desaparece de la lista) en la misma operación; si los pedidos han cambiado y ya no lo permiten, no
-  se borra nada y es 409 `transaction_has_distribution_payments`. Así que el acumulado del reparto
-  (`total_after`, una `SUM` en ventana por reparto sobre todo su historial, no solo lo que deja el
-  filtro) es la suma hasta ese momento y no se reinicia en el borde de un filtro o de una página. Se
-  ordena de más nuevo a más antiguo, con `from`/`to` y `limit`/`offset`, como el libro de una
-  cuenta. Lo pagado antes de que existiera la lista queda como una entrada por pedido, con la fecha
-  de su último pago (lo anterior no se guardó). En la interfaz, `/reparto-pagos?id=…`, que se abre
-  desde el botón «Pagos» del propio reparto (solo si tiene algo que pagar).
-- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto fuera de `draft` y
-  solo admin, board o material. Una fila se puede recoger en parte (`picked_up_quantity`, de 0 a
-  `quantity`, migración `00028`), como se puede pagar en parte: `deliveries` (`unit_id` y `quantity`
-  unidades, o todas las que faltan) y `unit_ids` (todo lo que falta de esas filas); pasarse de lo
-  que falta, 409 `already_picked_up`. Guarda tres cosas, las de la última entrega: cuándo, quién lo
-  apuntó (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del
-  beneficiario si alguien recoge cosas de otros, pero tiene que ser socia ahora o haberlo sido en
-  `cutoff_date`, 409 `invalid_collector`). Es todo o nada. En un artículo con números las unidades
-  son elementos: **solo se entregan los que tienen número asignado**, los `identifiers` que se digan
-  (asignados a la fila y sin entregar) o, si no, los primeros asignados sin entregar, tiene que
-  haber tantos (409 `identifiers_missing`; con `assign_numbers` se asignan antes los que falten, si
-  los números están descritos). Cada número entregado lleva su `delivered_at`
-  (`DeliveredIdentifiers` en la unidad; lo asignado y sin entregar sigue en el estante) y no se
-  puede quitar de la lista. Tres cosas distintas se pueden hacer después: ampliar o reducir el
-  pedido (admin/board/material, nunca por debajo de lo entregado, 409 `quantity_below_delivered`, ni
-  de los números asignados, 409 `quantity_below_numbered`: hay que quitar antes algún número; los
-  demás no pueden tocar una fila entregada); **deshacer** una entrega (`DELETE
-  …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: vuelven a no estar entregadas, siguen en el
-  pedido y con su número); y **devolver** (`POST …/units/{id}/return`, `quantity` o `identifiers`):
-  lo devuelto sale del pedido, que se hace más pequeño (y se borra la fila si no queda nada), y su
-  número queda libre. Lo pagado no se puede devolver: el pedido no puede quedar por debajo de lo
-  pagado (409 `quantity_below_paid`) ni se devuelve más de lo entregado. Una fila con algo entregado
-  no se puede borrar sin devolver antes. Pedir otra vez el mismo artículo se suma siempre a la misma
-  fila.
-- **Resumen del pedido** (`GET /distributions/{id}/order`): las unidades sumadas por
-  combinación de opciones; las que nadie ha elegido todavía suman en una línea con `choices`
-  vacío. Un reparto `all_members` todavía en
-  `draft` aún no tiene unidades (se crean al abrirlo), pero ya se sabe qué hay que pedir:
-  una por cada socio en `cutoff_date`. El resumen la cuenta aunque no exista
-  (`provisional: true`, sin crear nada: leerlo no cambia el reparto) y la página lo dice;
-  al abrirlo, las mismas cifras son ya reales.
+- **Who can order**. Any member, for themselves or for others (`beneficiary_login`), while the
+  distribution is open and `closes_at` has not passed; admin and board also after the date, but
+  only with the distribution open: once it is closed nothing changes, not even for them, and for
+  a late addition it is opened again. Both the beneficiary and whoever enters it have to be
+  eligible, that is, members on `cutoff_date` (409 `not_eligible`); admin and board, who enter
+  on behalf of anybody, do not need to be. Extras belong to whoever asks for them (or to the
+  member in whose name they are entered): who ends up with them is not said. Changing or
+  removing a unit can be done by the person it is for, whoever entered it and
+  admin/board/material (all three for anybody, and also after the deadline and with something
+  paid; only admin/board mark payments); what has been handed out is not taken away from the
+  owner (409 `unit_locked`), and a unit that is not an article row, once handed out, is touched
+  by nobody; a paid one is touched only by admin/board/material (409 `unit_locked`).
+- **Units with and without a number**: in an article with numbers (`has_identifiers`) an order
+  is a quantity (`quantity`, which can be increased or reduced), and some of those units can
+  have a specific number (an identifier) assigned; the ones that do not are "any" units.
+  **Only the ones with a number can be paid or handed out**, and it is said which ones: each
+  identifier carries its `paid_at` and its `delivered_at` (migration `00029` for payment), so it
+  is known which numbers are paid, which are handed out and which are only assigned
+  (`paid_identifiers`, `delivered_identifiers`). What is handed out and unpaid can be returned,
+  saying which ones; a paid or handed-out number cannot be removed from the list. Where the
+  numbers are described, everything that accepts numbers (assign, pay, hand out, undo, return)
+  accepts ranges (`0001-0010, 0015`, `Service.expandTokens`). Articles without numbers and
+  loose units keep counting (`paid_quantity`, `picked_up_quantity`). Assigning and removing
+  numbers without replacing the list: `POST` and `DELETE …/units/{id}/identifiers`.
+- **Paid**: a row can be partly paid. `paid_quantity` (from 0 to `quantity`, migration `00027`)
+  says how many units are paid; `paid_at` and who marked it are those of the last payment and
+  are present exactly when something is paid. Only admin and board set and remove it:
+  `POST /distributions/{id}/payments` adds payments, in a batch and all or nothing, with
+  `payments` (`unit_id` and `quantity` units, or all the pending ones if missing) and
+  `unit_ids` (everything pending in those rows); going over what is pending gives 409
+  `already_paid`. `DELETE …/units/{id}/payment[?quantity=N]` removes N paid units, or all of
+  them. Asking for more of something already paid does not make what is added paid, and
+  `quantity` cannot be lowered below what is paid (409 `quantity_below_paid`). A row with
+  something paid counts as paid for the locks above (only admin/board change it). **Every
+  payment is recorded in Accounting** (migration `00032`): the distribution has an account
+  (`account_id`, optional; `account_name` in the JSON) where its payments are entered and, if it
+  has none, the account marked as `distribution_default` (only one; marking one removes the mark
+  from the other). Both have to be of type `income`: a distribution with another account is 400
+  `account_not_income`; marking as default an account that is not, or removing the `income` type
+  from one that some distribution uses, is 409 `not_income_for_distributions`. If there is
+  neither of the two, 409 `no_distribution_account`. When paying (`account_id` in the body) or
+  removing a payment (`?account_id=`) it has to be said in which account it was paid, which has
+  to exist (400 `unknown_account`) and be of type `asset` (400 `account_not_asset`); with no
+  account, 400 `account_required`, unless what is paid is free, which moves no money and enters
+  nothing. For each person in the request an automatic transaction is created between that asset
+  account (`+total`) and the distribution's (`−total`; when a payment is removed, the other way
+  round) with a description in Spanish, for example "Pago de Ana Pérez en «Lotería de Navidad»:
+  3 × Papeleta (0001-0003)" or "Devolución del pago de …". An order with something paid cannot
+  be deleted (409 `unit_paid`): the payment is removed first.
+- **List of payments** (`distribution_payments`; only admin and board, because it says who has
+  paid what): every payment that is entered leaves an entry with the date, who entered it, whose
+  order it was (the one who paid: a payer distinct from the order's member is not stored), what
+  and how many units, how much money and the numbers. Removing a payment writes the same entry
+  with the signs changed, and each entry points to its accounting transaction
+  (`transaction_id`). Deleting that transaction undoes its payments (each entry leaves unpaid
+  again what it paid, or pays again what it removed, and disappears from the list) in the same
+  operation; if the orders have changed and no longer allow it, nothing is deleted and it is 409
+  `transaction_has_distribution_payments`. So the distribution's running total (`total_after`, a
+  window `SUM` per distribution over its whole history, not just what the filter lets through)
+  is the sum up to that moment and does not restart at the edge of a filter or a page. It is
+  ordered from newest to oldest, with `from`/`to` and `limit`/`offset`, like an account's ledger.
+  What was paid before the list existed stays as one entry per order, with the date of its last
+  payment (nothing earlier was stored). In the interface, `/reparto-pagos?id=…`, which is opened
+  from the "Pagos" button of the distribution itself (only if it has something to pay).
+- **Collection**: `POST /distributions/{id}/pickups`, in a batch, only with the distribution out
+  of `draft` and only admin, board or material. A row can be partly collected
+  (`picked_up_quantity`, from 0 to `quantity`, migration `00028`), as it can be partly paid:
+  `deliveries` (`unit_id` and `quantity` units, or all that are left) and `unit_ids` (everything
+  that is left in those rows); going over what is left, 409 `already_picked_up`. It stores three
+  things, those of the last delivery: when, who entered it (the caller) and to whom it was
+  handed (`picked_up_by_login`: it can be different from the beneficiary if somebody collects
+  things for others, but they have to be a member now or have been on `cutoff_date`, 409
+  `invalid_collector`). It is all or nothing. In an article with numbers the units are items:
+  **only the ones with an assigned number are handed out**, the `identifiers` that are given
+  (assigned to the row and not handed out) or, failing that, the first assigned ones not handed
+  out, and there have to be that many (409 `identifiers_missing`; with `assign_numbers` the
+  missing ones are assigned first, if the numbers are described). Each handed-out number carries
+  its `delivered_at` (`DeliveredIdentifiers` in the unit; what is assigned and not handed out is
+  still on the shelf) and cannot be removed from the list. Three different things can be done
+  afterwards: increase or reduce the order (admin/board/material, never below what has been
+  handed out, 409 `quantity_below_delivered`, nor below the assigned numbers, 409
+  `quantity_below_numbered`: some number has to be removed first; the others cannot touch a
+  handed-out row); **undo** a delivery (`DELETE
+  …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: they are no longer handed out, they stay
+  in the order and keep their number); and **return** (`POST …/units/{id}/return`, `quantity` or
+  `identifiers`): what is returned leaves the order, which becomes smaller (and the row is
+  deleted if nothing is left), and its number becomes free. What is paid cannot be returned: the
+  order cannot end up below what is paid (409 `quantity_below_paid`) and no more than what was
+  handed out is returned. A row with something handed out cannot be deleted without returning it
+  first. Asking again for the same article always adds to the same row.
+- **Order summary** (`GET /distributions/{id}/order`): the units added up by combination of
+  options; the ones nobody has chosen yet add up in one line with empty `choices`. An
+  `all_members` distribution still in `draft` has no units yet (they are created when it is
+  opened), but it is already known what has to be ordered: one per member on `cutoff_date`. The
+  summary counts them even though they do not exist (`provisional: true`, creating nothing:
+  reading it does not change the distribution) and the page says so; once it is opened, the same
+  figures are already real.
 
-### Archivo de documentos (`internal/library`)
+### Document archive (`internal/library`)
 
-El archivo de documentos del club (estatutos, reglamentos, normativas, memorias de
-actividades, actas de reuniones...): un árbol de directorios en disco, no PostgreSQL. Por
-eso, a diferencia de cualquier otro recurso, no hay `repository.go`/pgx: `Service` trabaja
-directamente contra el sistema de archivos.
+The club's document archive (statutes, regulations, rules, activity memorias, meeting
+minutes...): a directory tree on disk, not PostgreSQL. For that reason, unlike any other
+resource, there is no `repository.go`/pgx: `Service` works directly against the file system.
 
-**Origen de los datos**
+**Origin of the data**
 
-- Raíz en `config.LibraryRoot`, montada en el contenedor desde `./library` en el host (ver
+- Root in `config.LibraryRoot`, mounted in the container from `./library` on the host (see
   `docker-compose.yml`).
-- Los documentos los coloca quien administra el servidor, directamente en `./library`.
+- The documents are placed by whoever administers the server, directly in `./library`.
 
-**Acceso**
+**Access**
 
-Solo lectura y abierto a cualquier rol base: no hay forma de subir, renombrar ni borrar nada
-a través de la API. Las rutas están en [`api.md`](api.md). La ruta de un fichero es parte de la URL
-y no un parámetro de consulta, y el fichero acepta también la cookie de sesión (ver
-«Autenticación y sesiones») para que un documento sea un enlace normal del navegador.
+Read-only and open to any baseline role: there is no way to upload, rename or delete anything
+through the API. The routes are in [`api.md`](api.md). A file's path is part of the URL and not a
+query parameter, and the file route also accepts the session cookie (see "Authentication and
+sessions") so that a document can be a normal browser link.
 
-**Seguridad de rutas**
+**Path security**
 
-Cada ruta dada por quien llama se resuelve y se comprueba contra la raíz antes de tocar el
-disco (`Service.resolve`):
+Every path given by the caller is resolved and checked against the root before touching the disk
+(`Service.resolve`):
 
-- Un `".."` nunca puede escapar de la raíz: se ancla primero bajo una raíz sintética `/`
-  antes de limpiarla (el mismo truco que usa `net/http.FileServer`).
-- Un symlink que apunte fuera del árbol se detecta resolviéndolo y comprobando que el
-  destino real sigue dentro de la raíz.
+- A `".."` can never escape the root: it is first anchored under a synthetic root `/` before
+  being cleaned (the same trick `net/http.FileServer` uses).
+- A symlink pointing outside the tree is detected by resolving it and checking that the real
+  target is still inside the root.
 
-### Ficheros por persona (`internal/userfiles`)
+### Per-person files (`internal/userfiles`)
 
-Mismo modelo que `internal/library` (árbol en disco, `config.UserFilesRoot`, montado desde
-`./user-files` en el host, sin PostgreSQL), pero con un subdirectorio por login en vez de
-un árbol único compartido. Guarda los documentos propios de cada persona (DNI escaneado,
-una autorización firmada...).
+Same model as `internal/library` (a tree on disk, `config.UserFilesRoot`, mounted from
+`./user-files` on the host, no PostgreSQL), but with one subdirectory per login instead of a
+single shared tree. It holds each person's own documents (a scanned DNI, a signed
+authorization...).
 
-**Acceso**
+**Access**
 
-- Mismas rutas, listado, `?download=1`, soporte de Range y cookie de sesión que el archivo
-  (ver [`api.md`](api.md)).
-- A diferencia del archivo, no están abiertas a cualquier rol base: solo la propia persona o
-  admin/board pueden verlas (403 en cualquier otro caso). La comprobación está dentro del propio
-  handler, igual que `memberships.listByUser` e `inventory.listMovementsByUser`.
-- Una persona sin subdirectorio propio todavía (el caso normal, hasta que alguien le deja algún
-  fichero) ve un listado vacío en su propia raíz en vez de un 404.
+- Same routes, listing, `?download=1`, Range support and session cookie as the archive (see
+  [`api.md`](api.md)).
+- Unlike the archive, they are not open to any baseline role: only the person themselves or
+  admin/board can see them (403 otherwise). The check is inside the handler itself, like
+  `memberships.listByUser` and `inventory.listMovementsByUser`.
+- A person without a subdirectory of their own yet (the normal case, until somebody leaves them
+  a file) sees an empty listing at their own root instead of a 404.
+### Accounting (`accounts`, `transactions`, `transaction_entries`)
 
-### Contabilidad (`accounts`, `transactions`, `transaction_entries`)
+The club's money: a chart of accounts in a tree (`accounts`) and, against it, double-entry
+transactions (`transactions`) made of entries (`transaction_entries`).
 
-El dinero del club: un plan contable en árbol (`accounts`) y, contra él, transacciones
-(`transactions`) de partida doble compuestas de apuntes (`transaction_entries`).
+#### Chart of accounts (`accounts`)
 
-#### Plan de cuentas (`accounts`)
+The columns are in [`database.md`](database.md) and the routes in [`api.md`](api.md); these are
+the rules.
 
-Las columnas están en [`database.md`](database.md) y las rutas en [`api.md`](api.md); esto son las
-reglas.
+**Type.** An account may have a type of its own (`asset`: its balance is money the club really
+has; `income`: used mostly for what comes in; `expense`: mostly for what goes out). An account
+with no type of its own has that of its parent account, and so on upwards: that is its effective
+type (`effective_type` in the API, read-only; `type` is the own one, the one a `PATCH` replaces).
+The rules that depend on the type always use the effective one:
 
-**Tipo.** Una cuenta puede tener un tipo propio (`asset`: su saldo es dinero que tiene de verdad
-el club; `income`: se usa sobre todo para lo que entra; `expense`: sobre todo para lo que sale).
-Una cuenta sin tipo propio tiene el de su cuenta superior, y así hacia arriba: ese es su tipo
-efectivo (`effective_type` en la API, solo lectura; `type` es el propio, el que sustituye un
-`PATCH`). Las reglas que dependen del tipo usan siempre el efectivo:
+- The account a distribution is paid into has to be `asset`.
+- The account of a distribution and the one marked `distribution_default` have to be `income`.
+- An account marked `allows_dues` or `allows_licenses` (the ones a transaction has to use to be
+  able to record annual dues or federative licenses) has to be `income`.
 
-- La cuenta en la que se paga un reparto tiene que ser `asset`.
-- La cuenta de un reparto y la marcada `distribution_default` tienen que ser `income`.
-- Una cuenta marcada `allows_dues` o `allows_licenses` (las que tiene que usar una transacción
-  para poder registrar cuotas anuales o licencias federativas) tiene que ser `income`.
+Since changing a type, moving an account or creating a new one can change the type of a whole
+subtree, `finishAccountChange` checks, in the same transaction as the change, that the saved
+account and everything under it that has to be `income` still is (409
+`not_income_for_distributions` or `not_income_for_dues_licenses`, and nothing is saved). It only
+looks at that subtree, so accounts marked before the rule existed (with no type) do not block
+other edits; they have to be given a type the next time they are edited.
 
-Como cambiar un tipo, mover una cuenta o crear una nueva puede cambiar el tipo de todo un
-subárbol, `finishAccountChange` comprueba, en la misma transacción del cambio, que la cuenta
-guardada y todo lo que cuelga de ella que tiene que ser `income` lo sigue siendo (409
-`not_income_for_distributions` o `not_income_for_dues_licenses`, y no se guarda nada). Solo
-mira ese subárbol, así que las cuentas marcadas antes de que existiera la regla (sin tipo) no
-bloquean otras ediciones; hay que ponerles el tipo la próxima vez que se editen.
+**Flags.** `distribution_default` is the account where the payments of distributions with no
+account of their own are recorded; only one account has it, and marking one takes it away from
+whichever had it. `hidden` marks an account that is no longer used: it cannot be deleted if it has
+history, so it is hidden from the chart and from the frontend's pickers (which show it only on
+request) without touching what is recorded against it. Like the rest of the fields, a `PATCH`
+replaces the flags: leaving one out turns it off.
 
-**Marcas.** `distribution_default` es la cuenta donde se apuntan los pagos de los repartos que
-no tienen cuenta propia; solo una cuenta la tiene, y marcarla se la quita a la que la tuviera.
-`hidden` marca una cuenta ya sin uso: no se puede borrar si tiene historial, así que se oculta
-del plan y de los selectores del frontend (que la muestran solo a petición) sin tocar lo
-registrado contra ella. Como el resto de campos, un `PATCH` sustituye las marcas: omitir una la
-desactiva.
+**Hierarchy.**
 
-**Jerarquía.**
-
-- La jerarquía solo agrupa: una cuenta tiene cuentas hijas o tiene transacciones, nunca las dos
-  cosas. Lo hacen cumplir dos triggers de la base de datos (migración 00033), así que no se lo
-  salta nada, ni las transacciones de pagos de repartos: apuntar una transacción a una cuenta
-  con hijas es 409 `account_has_children`; crear una cuenta bajo otra que ya tiene apuntes, o
-  moverla a ella, es 409 `parent_has_entries`. Lo que ya existía antes de la migración no se toca.
-- `DELETE /accounts/{id}` solo funciona si la cuenta no tiene cuentas hijas ni apuntes
+- The hierarchy only groups: an account has child accounts or it has transactions, never both.
+  Two database triggers enforce it (migration 00033), so nothing gets around it, not even the
+  transactions of distribution payments: posting a transaction to an account with children is
+  409 `account_has_children`; creating an account under another that already has entries, or
+  moving it there, is 409 `parent_has_entries`. What already existed before the migration is
+  left alone.
+- `DELETE /accounts/{id}` only works if the account has no child accounts and no entries
   (409 `account_in_use`).
-- `PATCH` rechaza con 409 `circular_parent` un `parent_id` que sea la propia cuenta o un
-  descendiente.
-- `POST /accounts/{id}/move` intercambia la posición con el hermano inmediatamente anterior o
-  posterior, sin error si ya es el primero o el último de su grupo.
+- `PATCH` rejects with 409 `circular_parent` a `parent_id` that is the account itself or one of
+  its descendants.
+- `POST /accounts/{id}/move` swaps the position with the sibling immediately before or after it,
+  with no error if it is already the first or the last of its group.
 
-#### Transacciones y apuntes (`transactions`, `transaction_entries`)
+#### Transactions and entries (`transactions`, `transaction_entries`)
 
-- Cada transacción se compone de dos o más apuntes que suman exactamente cero: contabilidad de
-  partida doble estándar. Esa condición no puede ser un `CHECK` (solo vería su propia fila): la
-  comprueba un trigger de restricción diferido hasta el `COMMIT` (ver [`database.md`](database.md)).
-- Una cuenta no puede repetirse dentro de una misma transacción: su única entrada ya dice todo
-  lo que pasó por ella.
-- Corregir una transacción (`PATCH`) sustituye su descripción, su fecha y el conjunto entero
-  de apuntes a la vez; no hay edición de un apunte suelto.
-- Borrar una transacción se lleva sus apuntes y, por cascada, las cuotas que pagó. Si alguna
-  licencia la señala como su pago no se puede borrar (409 `transaction_has_licenses`), porque
-  `licenses.transaction_id` es `ON DELETE RESTRICT`: una licencia vale aunque se pierda el
-  rastro de cómo se pagó. Si era el pago de un reparto, borrarla deshace ese pago (ver
-  «Repartos»).
+- Each transaction is made of two or more entries that add up to exactly zero: standard
+  double-entry bookkeeping. That condition cannot be a `CHECK` (it would only see its own row):
+  it is checked by a constraint trigger deferred until `COMMIT` (see [`database.md`](database.md)).
+- An account cannot appear twice within one transaction: its single entry already says everything
+  that went through it.
+- Correcting a transaction (`PATCH`) replaces its description, its date and the whole set of
+  entries at once; there is no editing of a single entry.
+- Deleting a transaction takes its entries with it and, by cascade, the dues it paid. If any
+  license names it as its payment it cannot be deleted (409 `transaction_has_licenses`), because
+  `licenses.transaction_id` is `ON DELETE RESTRICT`: a license is valid even if the trace of how
+  it was paid is lost. If it was the payment of a distribution, deleting it undoes that payment
+  (see "Distributions (`distributions`, `distribution_options`, `distribution_units`)").
 
-#### Saldos y listados
+#### Balances and listings
 
-- `GET /accounts` recorre el árbol en profundidad (cada cuenta seguida de todos sus
-  descendientes antes del siguiente hermano) y añade a cada una su `balance` y su
-  `last_transaction_at`. Una cuenta que agrupa otras, que no tiene movimientos propios, lleva la
-  suma de los saldos de todo lo que cuelga de ella y la fecha más reciente de sus descendientes.
-- El libro de una cuenta (`GET /accounts/{id}/transactions`) lleva un `balance_after` corrido,
-  calculado sobre todo el historial de la cuenta antes de aplicar el rango y la página, así que
-  no se reinicia en el borde de una ventana ni cambia al buscar. En una cuenta que agrupa
-  otras, el libro lista los apuntes de todas sus descendientes, cada uno con la cuenta donde
-  está, y el `balance_after` es el total acumulado de todas ellas juntas hasta ese momento, no
-  el saldo de la cuenta del apunte.
-- La búsqueda por palabras de la descripción (`q`) normaliza las vocales con tilde, la `ü` y la
-  `ñ` con `translate()` en los dos lados, sin necesitar la extensión `unaccent`.
+- `GET /accounts` walks the tree depth-first (each account followed by all its descendants before
+  the next sibling) and adds to each one its `balance` and its `last_transaction_at`. An account
+  that groups others, with no movements of its own, carries the sum of the balances of everything
+  under it and the most recent date of its descendants.
+- The ledger of an account (`GET /accounts/{id}/transactions`) carries a running `balance_after`,
+  computed over the account's whole history before the range and the page are applied, so it does
+  not restart at the edge of a window or change when searching. For an account that groups
+  others, the ledger lists the entries of all its descendants, each with the account it is on,
+  and `balance_after` is the accumulated total of all of them together up to that moment, not the
+  balance of the entry's own account.
+- The search by words of the description (`q`) normalizes vowels with an accent, `ü` and `ñ` with
+  `translate()` on both sides, without needing the `unaccent` extension.
 
-#### Permisos
+#### Permissions
 
-La lectura de cuentas y transacciones está abierta a cualquier rol base: las cuentas del club
-son algo que cualquier socio puede ver. Escribir es de admin o del rol opcional `money`; board
-no tiene aquí ningún acceso de escritura especial, igual que no lo tiene sobre licencias ni
-sobre los datos de una persona. `GET /transactions/{id}` añade `dues` y `licenses` (las cuotas y
-licencias que esa transacción pagó) solo para admin y board, porque quién ha pagado qué es
-privado de esa persona. `Handler.getTransaction` las rellena a través de dos interfaces mínimas
-(`DuesLookup`, `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`.
+Reading accounts and transactions is open to any baseline role: the club's accounts are
+something any member can see. Writing is for admin or the optional `money` role; board has no
+special write access here, just as it has none over licenses or over a person's data.
+`GET /transactions/{id}` adds `dues` and `licenses` (the dues and licenses that transaction paid
+for) only for admin and board, because who paid what is private to that person.
+`Handler.getTransaction` fills them in through two minimal interfaces (`DuesLookup`,
+`LicensesLookup`) that `memberships.Service` and `licenses.Service` satisfy.
 
 ## Backend (`backend/`)
 
-### Capas y paquetes
+### Layers and packages
 
-El backend se separa en capas por paquete. El dominio no depende de `net/http`: el
-`handler.go` de cada recurso es la única capa que sabe que existe HTTP.
+The backend is separated into layers by package. The domain does not depend on `net/http`: each
+resource's `handler.go` is the only layer that knows HTTP exists.
 
-- `internal/httpapi`: router y helpers HTTP.
-- `internal/auth`: middleware de autenticación y autorización. No sabe nada de JWT ni de
-  base de datos; solo delega en un `SessionResolver`. No hay contraseñas que gestionar.
-- `internal/tokens`: el `SessionResolver` real. Valida un token opaco contra la base de
-  datos, calcula los roles al vuelo y expone la gestión de tokens para admin.
-- `internal/authapi`: magic-link, logout y `GET /auth/me`.
-- `internal/mail`: envío de correo. Si no hay `SMTP_HOST` configurado, registra el mensaje
-  en el log; si lo hay, lo manda de verdad.
-- `internal/telegram` e `internal/telegrambot`: cliente de la API de bots de Telegram y bot
-  que recibe mensajes (ver la subsección Telegram).
-- Un paquete por recurso de dominio: `users`, `roles`, `tokens`, `memberships`,
-  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory` y
+- `internal/httpapi`: router and HTTP helpers.
+- `internal/auth`: authentication and authorization middleware. It knows nothing about JWT or
+  the database; it only delegates to a `SessionResolver`. There are no passwords to manage.
+- `internal/tokens`: the real `SessionResolver`. It validates an opaque token against the
+  database, computes the roles on the fly and exposes token management for admin.
+- `internal/authapi`: magic link, logout and `GET /auth/me`.
+- `internal/mail`: sending email. If `SMTP_HOST` is not set, it writes the message to the log; if
+  it is, it really sends it.
+- `internal/telegram` and `internal/telegrambot`: client of the Telegram bot API and the bot
+  that receives messages (see the "Telegram" subsection).
+- One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
+  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory` and
   `accounting`.
-  Cada uno se divide en `model.go`, `repository.go` (pgx), `service.go` y `handler.go`.
-- `adminstatus` (`GET /admin/status`) no es un recurso de dominio: solo lee, y tiene un
-  único `handler.go` (ver «Estado del sistema» en la página `/admin`).
+  Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
+- `adminstatus` (`GET /admin/status`) is not a domain resource: it only reads, and has a single
+  `handler.go` (see "Estado del sistema" in the `/admin` page).
 
-`internal/library` e `internal/userfiles` son la excepción a ese patrón: como no hay nada
-en PostgreSQL detrás de ninguno de los dos, no tienen `repository.go`; su `service.go`
-trabaja directamente contra el sistema de archivos (ver «Archivo de documentos» y
-«Ficheros por persona»).
+`internal/library` and `internal/userfiles` are the exception to that pattern: since there is
+nothing in PostgreSQL behind either of them, they have no `repository.go`; their `service.go`
+works directly against the file system (see "Document archive (`internal/library`)" and
+"Per-person files (`internal/userfiles`)").
 
-`GET /api/v1/health` (lo que alcanza un reverse proxy o systemd bajo `/api/*`) no requiere
-autenticación y tiene un timeout propio de 2 s, para poder comprobar que el proceso está vivo
-y llega a PostgreSQL sin ningún token de sesión.
+`GET /api/v1/health` (what a reverse proxy or systemd reaches under `/api/*`) requires no
+authentication and has a timeout of its own of 2 s, so that it can be checked that the process
+is alive and reaches PostgreSQL without any session token.
 
-### Autenticación y sesiones
+### Authentication and sessions
 
-`auth.Authenticator.Protect` es el punto único por el que se registra cada ruta. Exige
-siempre tener al menos uno de los roles `admin`, `board` o `member`. Es un suelo que se
-aplica además de los roles concretos que pida la ruta, no un valor por defecto que esos
-roles sustituyan.
+`auth.Authenticator.Protect` is the single point through which every route is registered. It
+always requires holding at least one of the roles `admin`, `board` or `member`. It is a floor
+applied on top of the specific roles the route asks for, not a default that those roles replace.
 
-- Quien solo tenga, por ejemplo, `material` (sin ser también admin, board o socio activo)
-  no puede usar el API en absoluto, ni siquiera las rutas de material.
-- Como `member` es automático (se calcula de tener una alta activa ahora mismo), este suelo
-  también corta el acceso en el momento en que alguien deja de ser socio.
+- Whoever has only, for example, `material` (without also being admin, board or an active
+  member) cannot use the API at all, not even the equipment routes.
+- Since `member` is automatic (computed from having an active joining right now), this floor also
+  cuts access off the moment someone stops being a member.
 
-La sesión es un único token opaco y revocable (tabla `tokens`), sin par access/refresh: la
-seguridad extra de un token de acceso de vida corta no compensaba la complejidad, ni para
-el cliente ni para quien opere contra el API a mano (scripts, un cliente de terminal).
+The session is a single opaque, revocable token (table `tokens`), with no access/refresh pair:
+the extra security of a short-lived access token did not make up for the complexity, either for
+the client or for whoever works against the API by hand (scripts, a terminal client).
 
-- El token se usa directamente como credencial en cada petición.
-- Como es opaco, el cliente no puede leer nada de él: `GET /auth/me` es la forma de saber
-  quién es y qué roles tiene la sesión actual.
-- Empezar una sesión requiere antes un enlace de `/auth/magic-link` (15 min de validez, un
-  solo uso).
+- The token is used directly as the credential on every request.
+- Since it is opaque, the client cannot read anything from it: `GET /auth/me` is the way to know
+  who the current session is and what roles it has.
+- Starting a session first requires a link from `/auth/magic-link` (valid for 15 min, single
+  use).
 
-El mismo token se refleja además en una cookie `HttpOnly`/`Secure`/`SameSite=Lax`
-(`katiuskas_session`, limitada a `/api/v1`) cada vez que se emite o renueva una sesión
-(entrar, empezar o terminar una impersonación). `POST /auth/logout` la borra.
+The same token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
+(`katiuskas_session`, limited to `/api/v1`) every time a session is issued or renewed (signing
+in, starting or ending an impersonation). `POST /auth/logout` deletes it.
 
-- Ninguna ruta normal la mira: todas siguen leyendo solo la cabecera `Authorization`.
-- Existe únicamente para `auth.ProtectAllowingCookie`, que usan las rutas de fichero de
-  `internal/library` e `internal/userfiles` (y solo ellas).
-- Gracias a ella, un documento puede ser un enlace normal que el navegador abre en otra
-  pestaña o guarda con su nombre real, sin descargarlo con `fetch` y convertirlo en un
-  `Blob`.
+- No ordinary route looks at it: all of them keep reading only the `Authorization` header.
+- It exists only for `auth.ProtectAllowingCookie`, which the file routes of `internal/library`
+  and `internal/userfiles` use (and only those).
+- Thanks to it, a document can be a normal link that the browser opens in another tab or saves
+  under its real name, without downloading it with `fetch` and turning it into a `Blob`.
 
-### Primera cuenta de administración
+### First admin account
 
-`cmd/seed-admin` crea la primera cuenta `admin`: `POST /users` ya exige ese rol, así que
-sin este comando no habría forma de entrar en una base de datos recién migrada.
+`cmd/seed-admin` creates the first `admin` account: `POST /users` already requires that role, so
+without this command there would be no way into a freshly migrated database.
 
-- Es idempotente: no hace nada si el email ya existe.
-- Como no hay contraseña, para entrar hay que pedir un enlace desde la página de acceso con
-  `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PHONE`, y mirar los logs de la API (o el buzón, si hay
-  SMTP configurado).
+- It is idempotent: it does nothing if the email already exists.
+- Since there is no password, to sign in you have to request a link from the sign-in page with
+  `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PHONE`, and look at the API logs (or the mailbox, if SMTP is
+  configured).
 
-### Estado del sistema (`internal/adminstatus`)
+### System status (`internal/adminstatus`)
 
-`GET /admin/status` (solo admin, solo lectura; qué devuelve, en [`api.md`](api.md)) cuenta cómo
-va el proceso y cómo está configurado, para no tener que entrar en el servidor a averiguarlo.
-Nunca incluye nada secreto: ni tokens, ni contraseñas, ni cadenas de conexión. `cmd/api` le
-pasa lo que se sabe al arrancar (`adminstatus.Info`) y el handler añade lo que puede cambiar en
-cada petición. Una base de datos que no responde se cuenta en el cuerpo (`database.ok` falso),
-no con un código de error.
+`GET /admin/status` (admin only, read-only; what it returns is in [`api.md`](api.md)) tells how
+the process is doing and how it is set up, so that nobody has to log into the server to find out.
+It never includes anything secret: no tokens, passwords or connection strings. `cmd/api` hands it
+what is known at startup (`adminstatus.Info`) and the handler adds what can change on each
+request. A database that does not answer is reported in the body (`database.ok` false), not with
+an error code.
 
-La versión es la que Go anotó para el módulo principal (`debug.ReadBuildInfo().Main.Version`:
-una etiqueta si se compiló desde un commit etiquetado, o una pseudoversión con el commit y
-`+dirty` si había cambios; no hace falta pasarle nada al compilar, y queda vacía si el binario
-no se compiló desde una copia de git, como en la imagen de Docker). Para que Go la anote,
-`go.mod` y `go.sum` están en la raíz del repositorio y no en `backend/` (solo estampa versión
-cuando la raíz del módulo es la del repositorio); por eso las imágenes de Docker se construyen
-con la raíz como contexto, recortado por `.dockerignore`.
+The version is the one Go recorded for the main module (`debug.ReadBuildInfo().Main.Version`: a
+tag if it was built from a tagged commit, or a pseudo-version with the commit and `+dirty` if
+there were changes; nothing has to be passed at build time, and it is empty if the binary was not
+built from a git checkout, as in the Docker image). For Go to record it, `go.mod` and `go.sum`
+are at the repository root and not in `backend/` (it only stamps a version when the module root
+is the repository's); that is why the Docker images are built with the root as their context,
+trimmed by `.dockerignore`.
 
 ### Telegram
 
-`internal/telegram` es un cliente mínimo de la API de bots de Telegram, sin dependencias
-(solo `net/http` y `encoding/json`). Se usa hoy para siete funciones independientes, seis
-de ellas "fire-and-forget" (nunca añaden latencia a lo que las dispara) y una síncrona.
+`internal/telegram` is a minimal client of the Telegram bot API, with no dependencies (only
+`net/http` and `encoding/json`). Today it is used for seven independent functions, six of them
+"fire-and-forget" (they never add latency to what triggers them) and one synchronous.
 
-#### Avisos salientes
+#### Outgoing notices
 
-| Aviso | Cuándo se envía |
+| Notice | When it is sent |
 | --- | --- |
-| Logs de nivel error | Cada registro de nivel error o superior, además de registrarse normalmente. |
-| Login | Un aviso por cada login (`authapi.Handler.notifyLogin`). |
-| Acceso fallido | Cuando alguien escribe en `/login` unos datos que no sirven, para que un admin lo vea (`authapi.Handler.notifyAccessProblem`): «⚠️ Acceso fallido» si ninguna persona tiene ese correo y ese teléfono (se muestra lo escrito, recortado y en una línea) o si la persona no tiene ningún rol que dé acceso (su login), y «⚠️ Código de acceso rechazado» si el código es incorrecto o ha caducado (el login) o se escribe con datos que nadie tiene. A quien lo escribe no se le dice nada distinto, y una petición que funciona no avisa. |
-| Magic-link por DM | El mismo enlace (y, según el caso, el código; ver la sección Permisos) por DM a quien tenga la cuenta vinculada (`authapi.Handler.notifyMagicLinkViaTelegram`). |
-| Mutaciones | Un mensaje propio por cada acción que crea, edita o borra algo: persona, rol, membresía, licencia, actividad, material, cargo de la junta, recurso de la memoria de una actividad, token, cuenta o transacción. |
-| Arranque | `cmd/api/main.go` envía "🚀 API started" justo antes de arrancar el servidor, con la versión y la fecha del último commit si se conocen —«🚀 API started (version v0.3.6, commit del 17-10-2026)»; solo una de las dos, o ninguna, si es lo que hay— (`startupMessage`, a partir de `adminstatus.ReadBuild`: la misma información que Go anota en el binario y que muestra `/admin`). Es la excepción síncrona (mismo límite de 10 s): una llamada única al arrancar no compite con ninguna petición, así que bloquear en ella no cuesta nada perceptible. |
-| Bot | `internal/telegrambot.Bot`, el único que además *recibe* mensajes, por long polling y no por webhook (ver Bot de Telegram). |
+| Error-level logs | Every record of error level or above, in addition to being logged normally. |
+| Login | One notice for each login (`authapi.Handler.notifyLogin`). |
+| Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told nothing different, and a request that works does not notify. |
+| Magic link by DM | The same link (and, depending on the case, the code; see "Permissions") by DM to whoever has their account linked (`authapi.Handler.notifyMagicLinkViaTelegram`). |
+| Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, equipment, board position, resource of an activity's memoria, token, account or transaction. |
+| Startup | `cmd/api/main.go` sends "🚀 API started" right before starting the server, with the version and the date of the last commit if they are known — "🚀 API started (version v0.3.6, commit del 17-10-2026)"; only one of the two, or neither, if that is all there is — (`startupMessage`, from `adminstatus.ReadBuild`: the same information Go records in the binary and `/admin` shows). It is the synchronous exception (same 10 s limit): a single call at startup competes with no request, so blocking on it costs nothing noticeable. |
+| Bot | `internal/telegrambot.Bot`, the only one that also *receives* messages, by long polling and not by webhook (see "Telegram bot"). |
 
-Los avisos de mutaciones dicen quién lo hizo y, en una edición, exactamente qué cambió
-campo a campo. Se construyen con `httpapi.NotifyAsync` y `DiffFields`
-(`internal/httpapi/audit.go`):
+The mutation notices say who did it and, for an edit, exactly what changed field by field. They
+are built with `httpapi.NotifyAsync` and `DiffFields` (`internal/httpapi/audit.go`):
 
-- `DiffFields` compara solo los campos que ese endpoint puede tocar de verdad, nunca todos
-  los del struct, para que un campo calculado aparte (como la lista de roles) no aparezca
-  como un cambio que en realidad nunca ocurrió.
-- Devuelve una línea "campo: antes → después" por cada campo que de verdad difiera.
-- Cada paquete con rutas de escritura recibe su propio `httpapi.MutationNotifier` desde
-  `cmd/api/main.go`. Los avisos son por acción significativa, no por petición, de modo que
-  un simple toque de `last_used_at` en un token no avisa de nada.
+- `DiffFields` compares only the fields that endpoint can really touch, never all those of the
+  struct, so that a field computed elsewhere (such as the list of roles) does not appear as a
+  change that never actually happened.
+- It returns one line "field: before → after" for each field that really differs.
+- Each package with write routes receives its own `httpapi.MutationNotifier` from
+  `cmd/api/main.go`. The notices are per significant action, not per request, so a mere touch of
+  `last_used_at` on a token notifies nothing.
 
-Sin `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configurados:
+Without `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configured:
 
-- El `Sender` es un `NoopSender` y los avisos (errores, logins, mutaciones, arranque) caen
-  a registrar el mensaje en el log, igual que `mail` sin `SMTP_HOST`.
-- El magic-link por Telegram simplemente no se intenta (nadie puede tener
-  `telegram_chat_id` sin el bot corriendo).
-- Solo el bot se omite, porque no podría avisar al canal de nada.
+- The `Sender` is a `NoopSender` and the notices (errors, logins, mutations, startup) fall back
+  to writing the message to the log, like `mail` without `SMTP_HOST`.
+- The magic link by Telegram is simply not attempted (nobody can have a `telegram_chat_id`
+  without the bot running).
+- Only the bot is left out, because it could not notify the channel of anything.
 
-#### Bot de Telegram
+#### Telegram bot
 
-`internal/telegrambot.Bot` recibe mensajes por long polling. El flujo depende de si el chat
-ya está vinculado a una persona (`users.Repository.UserIDForTelegramChatID`).
+`internal/telegrambot.Bot` receives messages by long polling. The flow depends on whether the
+chat is already linked to a person (`users.Repository.UserIDForTelegramChatID`).
 
-Chat desconocido:
+Unknown chat:
 
-1. Cualquier mensaje recibe un saludo y un botón para compartir el contacto, en un teclado
-   personalizado con `is_persistent: true` para que el cliente lo muestre abierto en vez de
-   escondido tras su propio icono de teclado.
-2. El texto del saludo explica dónde está ese botón y cómo revelarlo si el cliente no
-   respeta el flag, porque nada en un teclado personalizado de Telegram es evidente para
-   quien no ha visto uno antes.
-3. Al recibir un contacto, `isOwnContact` comprueba que es el del propio remitente, antes
-   de mirar el teléfono (ver «Contacto ajeno», más abajo en esta misma lista).
-4. Si es el suyo, el teléfono se busca con `users.Repository.FindByPhoneNumber` (ver
-   «Búsqueda por teléfono», más abajo).
-5. Con coincidencia, se vincula su `telegram_chat_id` y `Bot.replyToLinkedContact` lo
-   confirma. Sin coincidencia, se le dice y se añade `contactClubHint` ("si crees que
-   deberías tener acceso, ponte en contacto con el club para comprobar tu situación", el
-   mismo consejo con el que termina `unauthorizedMessage`), porque un teléfono que de verdad
-   no está en la base de datos es justo el caso que merece que alguien del club lo
-   compruebe a mano.
-6. En ambos casos se responde con `Client.SendMessageRemovingKeyboard` en vez de un
-   `SendMessage` normal (era su propio contacto, y volver a pulsar el botón solo
-   reenviaría el mismo teléfono para la misma respuesta) y se avisa al canal de quién lo ha
-   intentado, con qué teléfono y si coincidía.
+1. Any message gets a greeting and a button to share the contact, in a custom keyboard with
+   `is_persistent: true` so that the client shows it open instead of hidden behind its own
+   keyboard icon.
+2. The text of the greeting explains where that button is and how to reveal it if the client does
+   not honor the flag, because nothing about a Telegram custom keyboard is obvious to someone who
+   has not seen one before.
+3. On receiving a contact, `isOwnContact` checks that it is the sender's own, before looking at
+   the phone (see "Foreign contact", further down in this same list).
+4. If it is theirs, the phone is looked up with `users.Repository.FindByPhoneNumber` (see "Lookup
+   by phone", below).
+5. With a match, their `telegram_chat_id` is linked and `Bot.replyToLinkedContact` confirms it.
+   With no match, they are told so and `contactClubHint` is added ("si crees que deberías tener
+   acceso, ponte en contacto con el club para comprobar tu situación", the same advice
+   `unauthorizedMessage` ends with), because a phone that really is not in the database is
+   exactly the case that deserves someone at the club checking by hand.
+6. In both cases the reply goes with `Client.SendMessageRemovingKeyboard` instead of a normal
+   `SendMessage` (it was their own contact, and pressing the button again would only resend the
+   same phone for the same answer) and the channel is notified of who tried, with which phone
+   and whether it matched.
 
-Contacto ajeno (`isOwnContact`):
+Foreign contact (`isOwnContact`):
 
-- Telegram permite adjuntar el contacto de cualquiera (una vCard escrita a mano, o el
-  contacto guardado de otra persona); solo el botón "compartir contacto" que envía el
-  propio bot garantiza que el contacto sea el del remitente.
-- Sin esta comprobación, compartir el teléfono de un socio de verdad en nombre de otra
-  persona vinculaba la cuenta de *ese socio* al chat de *quien lo enviaba*: un camino de
-  suplantación, no solo un problema de calidad de datos.
-- Un contacto ajeno se rechaza con una respuesta y un aviso propio al canal (más grave que
-  un simple "no coincide", por ser un posible intento de suplantación), sin llegar a mirar
-  el teléfono. El teclado de "compartir contacto" se queda para poder reintentarlo con el
-  propio.
+- Telegram allows attaching anybody's contact (a hand-written vCard, or another person's saved
+  contact); only the "share contact" button the bot itself sends guarantees that the contact is
+  the sender's.
+- Without this check, sharing a real member's phone in another person's name linked *that
+  member's* account to the chat of *whoever sent it*: an impersonation path, not just a
+  data-quality problem.
+- A foreign contact is rejected with a reply and a notice of its own to the channel (more serious
+  than a mere "no match", being a possible impersonation attempt), without ever looking at the
+  phone. The "share contact" keyboard stays, so that they can retry with their own.
 
-Búsqueda por teléfono (`FindByPhoneNumber`):
+Lookup by phone (`FindByPhoneNumber`):
 
-- Exige que el prefijo de país que Telegram siempre añade sea el de España ("34").
-- Nunca es un simple sufijo: dejaría a un "+33666777888" francés hacerse pasar por un
-  "666777888" español, ya que comparten todos los dígitos salvo el prefijo.
+- It requires that the country prefix Telegram always adds be Spain's ("34").
+- It is never a simple suffix match: that would let a French "+33666777888" pass as a Spanish
+  "666777888", since they share every digit except the prefix.
 
-Confirmación de la vinculación (`Bot.replyToLinkedContact`) comprueba ahí mismo
-`canUseTelegramLogin`, en vez de esperar a un mensaje posterior para descubrirlo:
+Confirmation of the link (`Bot.replyToLinkedContact`) checks `canUseTelegramLogin` right there,
+instead of waiting for a later message to find out:
 
-- A quien puede entrar le llega `emailPrompt` como segundo mensaje aparte.
-- A quien no puede le llega una única respuesta combinada
-  (`unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te hemos identificado como Nombre
-  Apellidos. Sin embargo, este bot está disponible únicamente para usuarios autorizados.
-  ..."), en vez de partir la noticia en dos mensajes sin nada útil en medio.
+- Whoever can sign in gets `emailPrompt` as a second, separate message.
+- Whoever cannot gets a single combined reply (`unauthorizedAfterLinkReplyFormat`, "¡Gracias! Te
+  hemos identificado como Nombre Apellidos. Sin embargo, este bot está disponible únicamente
+  para usuarios autorizados. ..."), instead of splitting the news into two messages with nothing
+  useful in between.
 
-Chat ya vinculado (mensaje normal, no un contacto): no repite el menú de compartir
-contacto, pero tampoco dispara un enlace de acceso al instante con cualquier mensaje. Eso
-se probó y se revirtió por ser un retroceso de seguridad: bastaba con tener el móvil (o la
-sesión de Telegram ya abierta) de un socio para entrar, sin la exigencia de conocer *a la
-vez* teléfono y correo que sí tiene el flujo web. El flujo es:
+Already linked chat (normal message, not a contact): it does not repeat the share-contact menu,
+but it does not trigger a sign-in link instantly on any message either. That was tried and
+reverted as a security regression: having the phone (or the already open Telegram session) of a
+member was enough to get in, without the requirement of knowing phone *and* email at once that
+the web flow does have. The flow is:
 
-1. `canUseTelegramLogin` exige el mismo rol base que cualquier ruta del API
-   (`auth.HasBaselineRole`: en la práctica, un socio activo vía el rol automático
-   "member", o admin/board) y además que la persona tenga correo y teléfono registrados.
-   Estar vinculado no implica poder entrar: la petición de magic-link desde la web ya exige
-   ambos como entrada (`FindActiveByEmailAndPhone`), pero un chat vinculado se resuelve
-   directamente por su `telegram_chat_id`, así que nada garantiza que los tenga.
-2. A quien no lo cumple nunca se le pide el correo: cualquier mensaje suyo recibe
-   `unauthorizedMessage` ("este bot está disponible únicamente para usuarios autorizados.
-   Si crees que deberías tener acceso, ponte en contacto con el club para comprobar tu
-   situación").
-3. A quien lo cumple, `Bot.handleRecognizedChat` le pide un segundo factor: no pasa nada
-   hasta que un mensaje es el correo registrado de esa cuenta (`emailMatchesUser`, sin
-   distinguir mayúsculas/minúsculas, contra el mismo formato de varios correos separados
-   por espacios que usa `FindActiveByEmailAndPhone`).
-4. Cualquier otro mensaje recibe una respuesta concreta de `emailAttemptReply` según *por
-   qué* no coincidió (ver la lista siguiente), salvo si el chat llevaba callado más de
-   `idleBeforeEmailPrompt` (30 minutos): quien lleva mucho sin escribir seguramente no
-   recuerda que lo que espera el bot es su correo, y un error le suena a reproche, así que
-   recibe el `emailPrompt` de siempre ("si quieres entrar en la Intranet de Katiuskas,
-   envíame tu dirección de correo electrónico"). `Bot.noteMessage` apunta cuándo escribió
-   cada chat por última vez (en memoria, así que tras un reinicio un chat cuenta como
-   inactivo hasta que vuelve a escribir) y todo mensaje cuenta como actividad: la
-   respuesta siguiente al `emailPrompt` vuelve a ser la concreta. Solo una coincidencia
-   exacta de una sola palabra se salta todo esto.
-5. Cuando coincide, borra ese mensaje del chat con `Client.DeleteMessage` (la API de bots
-   permite borrar un mensaje que el propio bot ha recibido en un chat privado), para que el
-   correo no quede a la vista de quien acceda después al móvil o a la sesión. Es
-   best-effort: si el borrado falla (por ejemplo, un mensaje de más de 48 h, el límite de
-   Telegram), el enlace se envía igualmente.
-6. Responde con un enlace de acceso nuevo, exactamente igual que si lo hubiera pedido desde
-   la web (`authapi.Handler.IssueMagicLinkForTelegramUser`; ver la sección Permisos).
+1. `canUseTelegramLogin` requires the same baseline role as any API route
+   (`auth.HasBaselineRole`: in practice, an active member through the automatic "member" role, or
+   admin/board) and also that the person have an email and a phone on file. Being linked does not
+   imply being able to sign in: the magic-link request from the web already requires both as
+   input (`FindActiveByEmailAndPhone`), but a linked chat is resolved directly by its
+   `telegram_chat_id`, so nothing guarantees they have them.
+2. Whoever does not meet it is never asked for the email: any message from them gets
+   `unauthorizedMessage` ("este bot está disponible únicamente para usuarios autorizados. Si
+   crees que deberías tener acceso, ponte en contacto con el club para comprobar tu situación").
+3. Whoever meets it is asked by `Bot.handleRecognizedChat` for a second factor: nothing happens
+   until a message is the account's registered email (`emailMatchesUser`, case-insensitive,
+   against the same format of several emails separated by spaces that
+   `FindActiveByEmailAndPhone` uses).
+4. Any other message gets a specific reply from `emailAttemptReply` depending on *why* it did not
+   match (see the next list), except if the chat had been silent for more than
+   `idleBeforeEmailPrompt` (30 minutes): someone who has not written for a long time surely does
+   not remember that what the bot expects is their email, and an error sounds like a reproach, so
+   they get the usual `emailPrompt` ("si quieres entrar en la Intranet de Katiuskas, envíame tu
+   dirección de correo electrónico"). `Bot.noteMessage` records when each chat last wrote (in
+   memory, so after a restart a chat counts as idle until it writes again) and every message
+   counts as activity: the reply after the `emailPrompt` is specific again. Only an exact
+   single-word match skips all this.
+5. When it matches, it deletes that message from the chat with `Client.DeleteMessage` (the bot
+   API allows deleting a message the bot itself received in a private chat), so that the email
+   is not left in view of whoever later gets at the phone or the session. It is best-effort: if
+   the deletion fails (for example, a message more than 48 h old, Telegram's limit), the link is
+   sent anyway.
+6. It replies with a new sign-in link, exactly as if it had been requested from the web
+   (`authapi.Handler.IssueMagicLinkForTelegramUser`; see "Permissions").
 
-Respuestas de `emailAttemptReply`:
+Replies of `emailAttemptReply`:
 
-| Respuesta | Cuándo |
+| Reply | When |
 | --- | --- |
-| `nonTextEmailReply` | Lo que llega no es texto (un `Text` vacío siempre significa eso: Telegram nunca manda un mensaje de texto de verdad con el cuerpo vacío). |
-| `onlyEmailReply` | Trae más de una palabra. |
-| `notAnEmailReplyFormat` | Es una sola palabra sin "@" (se repite en la respuesta). |
-| `unknownEmailReplyFormat` | Tiene forma de correo pero no es ninguno de los registrados en la cuenta (se repite la dirección y se sugiere contactar con el club si cree que es un error). |
+| `nonTextEmailReply` | What arrives is not text (an empty `Text` always means that: Telegram never sends a real text message with an empty body). |
+| `onlyEmailReply` | It has more than one word. |
+| `notAnEmailReplyFormat` | It is a single word with no "@" (it is repeated in the reply). |
+| `unknownEmailReplyFormat` | It has the shape of an email but is not any of those registered on the account (the address is repeated and contacting the club is suggested if they think it is a mistake). |
 
-Vínculo y cambio de teléfono: el vínculo solo vale lo que valga el número con el que se
-hizo. Por eso `users.Repository.Update` borra `telegram_chat_id` (lo deja en `NULL`) en
-cuanto un `PATCH` cambia de verdad el teléfono de la persona, o lo deja vacío. Si no, un
-chat vinculado a un número antiguo seguiría resolviendo a quien ya no lo tiene. Reenviar el
-mismo teléfono, o un `PATCH` que ni siquiera lo toca, deja el vínculo tal cual.
+Link and change of phone: the link is only worth as much as the number it was made with. That is
+why `users.Repository.Update` clears `telegram_chat_id` (leaves it `NULL`) as soon as a `PATCH`
+really changes the person's phone, or leaves it empty. Otherwise a chat linked to an old number
+would keep resolving to whoever no longer has it. Resending the same phone, or a `PATCH` that
+does not even touch it, leaves the link as it is.
 
-Vínculo y chat inalcanzable: el vínculo también se olvida cuando el bot descubre que ya no
-puede hablar con esa persona. `telegram.Client` devuelve las respuestas `ok=false` de
-Telegram como un `*telegram.APIError` (con su `ErrorCode`, el `error_code` que manda
-Telegram, y su `Description`), y `telegram.IsUnreachable` es cierto para cualquier 403
-Forbidden —todas las formas de no poder hablar con alguien (ha bloqueado al bot, ha
-cerrado o desactivado la cuenta) vienen con uno— o si la descripción contiene "chat not
-found" o "user not found" (un 400 por un chat que ya no existe). Entonces el envío del DM
-de acceso (`notifyMagicLinkViaTelegram`, en cualquiera de los dos flujos) llama a
-`users.Service.ClearTelegramChatID`: conservar el id solo volvería a fallar en cada inicio
-de sesión. Cualquier otro fallo (un tiempo de espera, un límite de frecuencia) deja el
-vínculo como está, y la persona puede volver a vincularse compartiendo su contacto con el
-bot. Solo cubre los DM de acceso, no las demás respuestas del bot en un chat. El envío del
-DM de una petición web va en su propia goroutine, que `Handler.WaitForBackgroundSends`
-permite esperar (los tests lo usan).
+Link and unreachable chat: the link is also forgotten when the bot finds out it can no longer
+talk to that person. `telegram.Client` returns Telegram's `ok=false` answers as a
+`*telegram.APIError` (with its `ErrorCode`, the `error_code` Telegram sends, and its
+`Description`), and `telegram.IsUnreachable` is true for any 403 Forbidden —every way of not
+being able to talk to someone (they blocked the bot, closed or deactivated their account) comes
+with one— or if the description contains "chat not found" or "user not found" (a 400 for a chat
+that no longer exists). Then the send of the sign-in DM (`notifyMagicLinkViaTelegram`, in either
+of the two flows) calls `users.Service.ClearTelegramChatID`: keeping the id would only fail again
+at every sign-in. Any other failure (a timeout, a rate limit) leaves the link as it is, and the
+person can link again by sharing their contact with the bot. It only covers the sign-in DMs, not
+the bot's other replies in a chat. The send of a web request's DM runs in its own goroutine,
+which `Handler.WaitForBackgroundSends` makes it possible to wait for (the tests use it).
 
 ## Frontend (`web/`)
 
-### Mecánica compartida
+### Shared mechanics
 
-Páginas multi-vista clásicas (no una SPA), sin paso de compilación: una
-`<página>.html` más su `js/<página>.js` por vista, que Caddy resuelve sin extensión
-(`/socios` → `socios.html`).
+Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus its
+`js/<page>.js` per view, which Caddy resolves without extension (`/socios` → `socios.html`).
 
-- **Cliente de API.** `web/js/api.js` es un cliente `fetch` compartido que añade el token
-  (guardado en `localStorage`) a cada petición y, al cargar cada página, llama a
-  `GET /auth/me` para confirmar que el token sigue siendo válido y saber quién es (login y
-  nombre, con lo que pinta el saludo de la barra superior y el aviso de impersonación sin
-  pedir nada más) y qué roles tiene.
-- **Estructura de página.** `js/layout.js` (`initPage()`) pinta una sola vez la barra
-  lateral y la superior, valida la sesión y aplica la visibilidad por rol. Admite además
-  `requireAnyRole`, que redirige al inicio a quien no tenga ninguno de los roles dados.
-- **Visibilidad por rol.** Se hace con `data-roles` y es solo ocultación en el cliente:
-  la autoridad es el API.
-- **Formularios.** Los de crear/editar son `<dialog>` modales (`js/modal.js`,
-  `initModal`); los errores que ocurren con uno abierto se muestran dentro de él.
+- **API client.** `web/js/api.js` is a shared `fetch` client that adds the token (kept in
+  `localStorage`) to every request and, on loading each page, calls `GET /auth/me` to confirm
+  that the token is still valid and to know who it is (login and name, with which it draws the
+  topbar greeting and the impersonation notice without asking for anything else) and what roles
+  it has.
+- **Page structure.** `js/layout.js` (`initPage()`) draws the sidebar and the topbar once,
+  validates the session and applies visibility by role. It also supports `requireAnyRole`, which
+  redirects to the home page whoever has none of the given roles.
+- **Visibility by role.** It is done with `data-roles` and is only hiding on the client: the
+  authority is the API.
+- **Forms.** The create/edit ones are modal `<dialog>`s (`js/modal.js`, `initModal`); errors that
+  happen with one open are shown inside it.
 
-### Páginas
+### Pages
 
-| Página | Qué muestra | Quién accede | Comportamientos clave |
+| Page | What it shows | Who can access | Key behaviors |
 | --- | --- | --- | --- |
-| `/` (`index.html`/`dashboard.js`) | Junta Directiva (`GET /board-members`) y enlaces a Documentos, Actas y Memorias. | Cualquier rol baseline. | Los enlaces son enlaces normales gracias a la cookie de sesión. |
-| `/socios` | Listado de personas. | Barra lateral: admin, board y member. | A member le reduce columnas y filtros a `MemberListing` y sus filas no son clicables; para admin y board, cada fila lleva a `/socio?login=<login>`. |
-| `/socio?login=…` (`socio.html`/`member.js`) | Ficha de una persona (ver abajo). | Solo admin y board. | Solo admin puede guardar los datos; board los ve deshabilitados. |
-| `/perfil` | Ficha propia: datos de contacto editables, el mismo «Historial como socio» que `/socio` (sin botones), licencias y ficheros. | Cualquier rol baseline. | Incluye el mismo visor de ficheros propios que `/socio`. |
-| `/actividades`, `/actividad?id=…` | Lista y detalle de una actividad: participantes, material prestado y memoria. | Cualquier rol baseline. | La lista incluye una vista de calendario anual que marca fines de semana y festivos (no hay página de calendario aparte). |
-| `/material` | Catálogo de material y sus movimientos. | Cualquier rol baseline. | "Nuevo material" solo para admin y board; los movimientos (préstamo, alquiler, venta), para admin, board y el rol `material`. |
-| `/archivo` | Archivo de documentos del club. | Cualquier rol baseline. | `js/fileBrowser.js` comparte con `userFiles.js` la lógica de listado y vista previa; los documentos Markdown se renderizan con `js/markdown.js`. |
-| `/repartos` | Lista de repartos (lo que el club entrega a los socios) con estado, precio y fecha límite; «Puedes pedirlo» en los abiertos que le corresponden a quien mira. «+ Nuevo reparto» abre un diálogo. | Cualquier rol baseline; los borradores y «+ Nuevo reparto» solo para admin y board. | Las opciones se escriben una por línea, «Talla: S, M, L». |
-| `/reparto?id=…` | Un reparto: descripción, estado y condiciones; formulario «Pedir» (para uno mismo o, en «A nombre de», para otro socio; casilla de «Es un extra» si hay; en un reparto para todos los socios sin opciones, donde el pedido propio ya está hecho y solo quedan los extras, no hay casilla, el botón dice «Pedido extra» y la ayuda da el precio: «Puedes pedir también extras a 8,00 €») y «Tus pedidos» (lo que se ha pedido para uno mismo o apuntado por uno, con quién lo apuntó, su precio y si está recogido o no —nada del pago: la intranet no lo lleva—; sin la columna «Elegido» si no hay nada que elegir ni «Tipo» si no puede haber extras; «Cambiar» y «Quitar» mientras se pueda). En un reparto para todos los socios cada uno ya tiene su unidad propia («Automático», «Sin elegir» hasta que alguien elige, con «Elegir» en lugar de «Cambiar» y sin «Quitar»), y el formulario sirve para elegir por otro socio o pedir extras. Un reparto para todos los socios sin opciones ni extras no tiene sección «Pedir» (no hay nada que pedir). Mientras el reparto es un borrador no hay ni «Pedir» ni «Tus pedidos» (nadie puede pedir nada todavía). Admin y board, además: pasar el estado un paso adelante o atrás, editar, y solo admin, borrar; admin, board y material: enlaces a las dos páginas siguientes. | Cualquier rol baseline; el formulario solo aparece si el reparto admite pedidos ahora y a la persona le corresponde. | Los códigos de error del API se dicen con palabras del club (`apiErrorText`). |
-| `/reparto-pagos?id=…` | Pagos de un reparto: lista cronológica (la más nueva primero) de todo lo cobrado en él: fecha, quién lo apuntó, qué (cuántas unidades y de qué, con los números), quién lo ha pagado, importe y lo cobrado en el reparto hasta ese momento. Los pagos retirados salen en negativo. Filtro por fechas y «Ver más». | Admin y board. | `requireAnyRole`; se llega con el botón «Pagos» de la página del reparto, que solo sale si tiene algo que pagar. |
-| `/reparto-pedidos?id=…` | Pedidos, todo en una página. Arriba, el resumen para hacer el pedido (unidades por combinación de opciones o por artículo, con el total y lo que queda). Debajo, una línea por pedido (con buscador por socio o número) con un resumen: qué es, cuántas unidades están entregadas y pagadas y el importe; «Más información» lo despliega. Donde los artículos llevan número, se asigna número a lo que falte (los siguientes libres o los que se escriban) y hay una lista de lo numerado, cada uno con su estado (pagado, entregado), en la que se marcan los que se quieren pagar (admin y board), entregar (un diálogo pregunta a quién, «Entregado a», con el propio socio por defecto), devolver, deshacer la entrega o quitarles el número. En artículos sin número, lo mismo con un número de unidades. Anota cuándo, quién lo apuntó y a quién se entregó. Avisa si se entrega algo sin pagar. | Admin, board y material (el pago, solo admin y board). | `requireAnyRole`; sustituye a las antiguas páginas de resumen y de recogida. |
-| `/reparto-numeros?id=…` | Números: de cada artículo con los números descritos, todos los que existen con quién tiene cada uno y cuántos quedan libres, filtrable por libres o asignados y por número o nombre. | Admin, board y material. | `requireAnyRole`; el enlace sale en el reparto solo si algún artículo tiene números descritos. |
-| `/404` (`404.html`) | La página que Caddy muestra, con estado 404 y sin cambiar la dirección, para cualquier dirección que no sea una página (`handle_errors` en `deploy/Caddyfile`). Con sesión es una página normal, con el menú para ir a otra; sin ella, un panel sencillo con un enlace a `/login`. | Cualquiera. | Usa rutas absolutas, porque se sirve en la dirección que se pidió, por profunda que sea. |
-| `/contabilidad` | Plan contable en árbol, con saldo, cuentas ocultas a petición y reordenación. | Solo admin y rol `money` (sidebar y página). | Más estrecho que el API, que abre la lectura a cualquier rol baseline. |
-| `/admin` (`admin.html`/`admin.js`) | Lo que solo les interesa a los administradores; por ahora, la lista de roles con crear y borrar (`GET`/`POST`/`DELETE /roles`), y, desplegable bajo cada uno, qué personas lo tienen (de `GET /users`), con «×» para quitarlo y un buscador con «Dar este rol» para asignarlo (`POST`/`DELETE /users/{login}/roles`); los roles automáticos solo muestran quién los tiene, y a uno mismo no se le ofrece quitarse el de admin y las sesiones abiertas (`GET /tokens`): quién, cuándo y desde dónde, con «Revocar» y «Caducidad» para las activas (y un aviso distinto si se revoca la propia); y el estado del sistema (`GET /admin/status`): versión, base de datos y migración, correo, Telegram, plazos y directorios. También los festivos del calendario de actividades, año a año (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): con «Nuevo festivo», «Borrar» y «Copiar del año anterior» (mismo día y mes, salvo donde ya haya uno; los que se mueven, como Semana Santa, se corrigen a mano). | Solo admin: la entrada «Admin» del menú solo la ven ellos y cualquier otra persona es enviada al inicio. | Está pensada para crecer con más secciones de administración. |
-| `/cuenta?id=…` | Libro mayor de una cuenta. | Solo admin y rol `money`. | Alta y corrección de transacciones y, desde sus diálogos, registro de cuotas y licencias contra la transacción. |
-| `login.html` | Acceso por correo y teléfono, con Telegram como segunda vía. | Sin sesión. | Es la única página sin barra lateral ni `initPage()`. Si se inicia sesión en otra ventana (el enlace del correo suele abrirse en otra), esta pasa sola a `/`: `auth.js` vigila el `token` de `localStorage` y lo comprueba con `GET /auth/me`. |
+| `/` (`index.html`/`dashboard.js`) | Junta Directiva (`GET /board-members`) and links to Documentos, Actas and Memorias. | Any baseline role. | The links are normal links thanks to the session cookie. |
+| `/socios` | List of people. | Sidebar: admin, board and member. | For a member it reduces columns and filters to `MemberListing` and its rows are not clickable; for admin and board, each row leads to `/socio?login=<login>`. |
+| `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. |
+| `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |
+| `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent equipment and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
+| `/material` | Equipment catalog and its movements. | Any baseline role. | "Nuevo material" only for admin and board; the movements (loan, rental, sale), for admin, board and the `material` role. |
+| `/archivo` | The club's document archive. | Any baseline role. | `js/fileBrowser.js` shares the listing and preview logic with `userFiles.js`; Markdown documents are rendered with `js/markdown.js`. |
+| `/repartos` | List of distributions (what the club hands out to members) with status, price and deadline; "Puedes pedirlo" on the open ones that apply to whoever is looking. "+ Nuevo reparto" opens a dialog. | Any baseline role; drafts and "+ Nuevo reparto" only for admin and board. | Options are written one per line, "Talla: S, M, L". |
+| `/reparto?id=…` | One distribution: description, status and conditions; "Pedir" form (for oneself or, in "A nombre de", for another member; an "Es un extra" checkbox if there is one; in a distribution for all members with no options, where the own order is already made and only extras are left, there is no checkbox, the button says "Pedido extra" and the help gives the price: "Puedes pedir también extras a 8,00 €") and "Tus pedidos" (what has been ordered for oneself or entered by oneself, with who entered it, its price and whether it is collected or not —nothing about payment: the intranet does not keep that—; without the "Elegido" column if there is nothing to choose, nor "Tipo" if there can be no extras; "Cambiar" and "Quitar" while possible). In a distribution for all members everyone already has their own unit ("Automático", "Sin elegir" until somebody chooses, with "Elegir" instead of "Cambiar" and no "Quitar"), and the form serves to choose for another member or to order extras. A distribution for all members with neither options nor extras has no "Pedir" section (there is nothing to order). While the distribution is a draft there is neither "Pedir" nor "Tus pedidos" (nobody can order anything yet). Admin and board, in addition: move the status one step forward or back, edit, and only admin, delete; admin, board and material: links to the next two pages. | Any baseline role; the form only appears if the distribution admits orders now and applies to the person. | The API's error codes are put into the club's own words (`apiErrorText`). |
+| `/reparto-pagos?id=…` | Payments of a distribution: chronological list (newest first) of everything collected in it: date, who entered it, what (how many units and of what, with the numbers), who paid it, amount and what has been collected in the distribution up to that moment. Withdrawn payments appear as negatives. Date filter and "Ver más". | Admin and board. | `requireAnyRole`; reached with the "Pagos" button of the distribution's page, which only appears if it has something to pay. |
+| `/reparto-pedidos?id=…` | Orders, all on one page. At the top, the summary for placing the order (units by combination of options or by article, with the total and what is left). Below, one line per order (with a search by member or number) with a summary: what it is, how many units are handed out and paid, and the amount; "Más información" unfolds it. Where articles carry a number, numbers are assigned to what is missing (the next free ones or the ones typed) and there is a list of the numbered items, each with its state (paid, handed out), in which one ticks those to be paid (admin and board), handed out (a dialog asks to whom, "Entregado a", with the member themself by default), returned, to undo the handing out or to take the number off. For articles with no number, the same with a number of units. It records when, who entered it and to whom it was handed. It warns if something is handed out unpaid. | Admin, board and material (payment, only admin and board). | `requireAnyRole`; replaces the old summary and collection pages. |
+| `/reparto-numeros?id=…` | Numbers: for each article with described numbers, all that exist with who has each one and how many are left free, filterable by free or assigned and by number or name. | Admin, board and material. | `requireAnyRole`; the link appears in the distribution only if some article has described numbers. |
+| `/404` (`404.html`) | The page Caddy shows, with status 404 and without changing the address, for any address that is not a page (`handle_errors` in `deploy/Caddyfile`). With a session it is a normal page, with the menu to go to another one; without it, a plain panel with a link to `/login`. | Anyone. | It uses absolute paths, because it is served at the address that was asked for, however deep. |
+| `/contabilidad` | Chart of accounts in a tree, with balance, hidden accounts on request and reordering. | Only admin and `money` role (sidebar and page). | Narrower than the API, which opens reading to any baseline role. |
+| `/admin` (`admin.html`/`admin.js`) | What only interests administrators; for now, the list of roles with create and delete (`GET`/`POST`/`DELETE /roles`), and, unfoldable under each one, which people have it (from `GET /users`), with "×" to remove it and a search with "Dar este rol" to assign it (`POST`/`DELETE /users/{login}/roles`); the automatic roles only show who has them, and one is not offered to remove one's own admin role; and the open sessions (`GET /tokens`): who, when and from where, with "Revocar" and "Caducidad" for the active ones (and a different warning if one's own is revoked); and the system status (`GET /admin/status`): version, database and migration, email, Telegram, timeouts and directories. Also the holidays of the activities calendar, year by year (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): with "Nuevo festivo", "Borrar" and "Copiar del año anterior" (same day and month, except where there is one already; the movable ones, such as Semana Santa, are corrected by hand). | Only admin: the "Admin" entry of the menu is seen only by them and anyone else is sent to the home page. | It is meant to grow with more administration sections. |
+| `/cuenta?id=…` | Ledger of an account. | Only admin and `money` role. | Creating and correcting transactions and, from their dialogs, recording dues and licenses against the transaction. |
+| `login.html` | Sign-in by email and phone, with Telegram as a second way. | No session. | It is the only page without a sidebar or `initPage()`. If a session is started in another window (the link in the email is usually opened in another one), this one moves to `/` by itself: `auth.js` watches the `token` in `localStorage` and checks it with `GET /auth/me`. |
 
-### Ficha de una persona (`/socio`)
+### A person's page (`/socio`)
 
-La página reúne, para la persona consultada:
+For the person being looked at, the page gathers:
 
-- sus datos editables (solo admin puede guardar; board los ve deshabilitados) y sus
-  roles;
-- el "Historial como socio": altas, bajas, bajas temporales, cuotas, licencias y cargos
-  de la Junta en un solo timeline;
-- su historial de actividades y de material (`GET /users/{login}/activities` y
+- their editable data (only admin can save; board sees it disabled) and their roles;
+- the "Historial como socio": joinings, leavings, temporary leaves, dues, licenses and Junta
+  positions in a single timeline;
+- their history of activities and equipment (`GET /users/{login}/activities` and
   `GET /users/{login}/movements`);
-- sus licencias federativas (`js/licenseFiles.js`: miniaturas de las copias de
-  `licencias/` en los ficheros de la persona; las miniaturas las genera, a demanda,
+- their federative licenses (`js/licenseFiles.js`: thumbnails of the copies in `licencias/` among
+  the person's files; the thumbnails are generated, on demand, by
   `scripts/generate-license-thumbnails.sh`);
-- sus ficheros propios (`GET /users/{login}/files`, `web/js/userFiles.js`): el mismo
-  visor embebido, con las mismas migas de pan y previsualización, aparece también en
-  `/perfil` para que cada socio vea los suyos.
+- their own files (`GET /users/{login}/files`, `web/js/userFiles.js`): the same embedded viewer,
+  with the same breadcrumbs and preview, also appears on `/perfil` so that each member sees
+  their own.
 
-### Acceso por Telegram en `login.html`
+### Telegram sign-in on `login.html`
 
-`login.html` ofrece Telegram como segunda vía de acceso, junto al formulario de correo y
-teléfono (nunca en su lugar). Al cargar, `auth.js` llama a `GET /auth/telegram-bot` (sin
-autenticación, sin datos secretos: el nombre público del bot es tan público como el
-enlace `t.me/<username>` que se construye con él) y, solo si viene un nombre de usuario,
-muestra un aviso con enlace directo al chat del bot.
+`login.html` offers Telegram as a second way to sign in, next to the email and phone form (never
+in its place). On loading, `auth.js` calls `GET /auth/telegram-bot` (without authentication,
+with no secret data: the bot's public name is as public as the `t.me/<username>` link built with
+it) and, only if a username comes back, shows a notice with a direct link to the bot's chat.
 
-Ese nombre se configura con `TELEGRAM_BOT_USERNAME`, independiente de
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` (ver «Telegram»).
+That name is configured with `TELEGRAM_BOT_USERNAME`, independent of
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` (see "Telegram").
 
-## Cómo ejecutar en local
+## Running locally
 
 ```sh
 docker compose up -d postgres
 export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
-make migrate-up          # requiere goose: https://github.com/pressly/goose
-make seed-admin          # crea la cuenta admin (sin contraseña: acceso por magic link)
-make run                 # sirve la API en :64711
+make migrate-up          # requires goose: https://github.com/pressly/goose
+make seed-admin          # creates the admin account (no password: sign-in by magic link)
+make run                 # serves the API on :64711
 ```
 
-El frontend es estático: se puede servir con cualquier servidor de ficheros apuntando a
-`web/` (o con `docker compose up` completo, que además levanta Caddy en `:64710`
-proxificando `/api/*` hacia el backend).
+The frontend is static: it can be served with any file server pointing at `web/` (or with the
+full `docker compose up`, which also brings up Caddy on `:64710` proxying `/api/*` to the
+backend).

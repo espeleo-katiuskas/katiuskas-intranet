@@ -7,8 +7,8 @@ explanations live in `docs/`; read the one that matches the task before changing
 ## Language
 
 - **All code** (identifiers, comments, logs, API error messages): **English**.
-- **Documentation** (`docs/`, `README.md`): Spanish or English, either is fine, but one language
-  per file.
+- **Documentation** (`docs/`): **English**, in every file. The `README.md` is still in Spanish for
+  now. The Spanish words of the club's domain stay as they are when quoting what the interface shows.
 - **Frontend** (`web/`): all user-visible text in **Spanish** — it's the interface for
   Club de Espeleología Katiuskas, a Spanish caving club. JS/HTML identifiers stay in English.
 
@@ -18,9 +18,9 @@ explanations live in `docs/`; read the one that matches the task before changing
 |---|---|
 | `docs/api.md` | every endpoint: who can call it, parameters, errors, objects. `backend/openapi/openapi.yaml` is the contract |
 | `docs/database.md` | tables, columns, constraints, triggers, seeded data, migrations |
-| `docs/backend-internals.md` | the long form, resource by resource (English): users/auth/roles, activities, distributions, licenses, dues, leaves, library, Telegram, accounting, test helpers |
-| `docs/frontend.md` | the conventions every page shares and each page in detail (English) |
-| `docs/architecture.md` | overview and business rules (Spanish) |
+| `docs/backend-internals.md` | the long form, resource by resource: users/auth/roles, activities, distributions, licenses, dues, leaves, library, Telegram, accounting, test helpers |
+| `docs/frontend.md` | the conventions every page shares and each page in detail |
+| `docs/architecture.md` | overview and business rules |
 | `docs/environments.md`, `docs/deployment*.md` | local / testing / production, and how to deploy |
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and

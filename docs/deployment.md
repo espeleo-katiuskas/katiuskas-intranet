@@ -1,60 +1,60 @@
-# Despliegue en producción (máquina propia)
+# Production deployment (own machine)
 
-Guía para poner la intranet en marcha en una máquina propia (no en un servicio de nube)
-que ya tiene su propio reverse proxy (Caddy u otro) gestionando HTTPS para varios
-dominios. El stack de la intranet no gestiona TLS ni certificados: el contenedor `web`
-escucha en texto plano solo en `127.0.0.1:64710` (igual que en desarrollo), y es el
-reverse proxy ya existente en la máquina el que le reenvía el tráfico del dominio que
-elijas. Pensada para una prueba inicial con un número reducido de personas.
+Guide to getting the intranet running on a machine of your own (not a cloud service) that
+already has its own reverse proxy (Caddy or another) handling HTTPS for several domains. The
+intranet stack does not manage TLS or certificates: the `web` container listens in plain text
+only on `127.0.0.1:64710` (the same as in development), and it is the reverse proxy already on
+the machine that forwards it the traffic of the domain you choose. Meant for an initial trial
+with a small number of people.
 
-Requiere Docker en la máquina. Si el disco es limitado y prefieres no pagar el coste de
-Docker (el motor más las imágenes de PostgreSQL/Caddy/Go), ver en su lugar
-[`docs/deployment-no-docker.md`](deployment-no-docker.md), la misma idea con procesos
-nativos gestionados por `systemd`.
+It requires Docker on the machine. If disk space is limited and you would rather not pay the
+cost of Docker (the engine plus the PostgreSQL/Caddy/Go images), see
+[`docs/deployment-no-docker.md`](deployment-no-docker.md) instead: the same idea with native
+processes managed by `systemd`.
 
-> **Nota.** El host del propio club no usa esta guía: ejecuta sus entornos de testing y
-> producción como unidades de systemd, sin Docker (ver
-> [`deployment-no-docker.md`](deployment-no-docker.md) y
-> [`environments.md`](environments.md)), y allí las actualizaciones son automáticas. Esta
-> guía es la alternativa con Docker, y todo lo que sigue se ejecuta a mano. Los
-> contenedores sí se reinician solos si se caen o si la máquina arranca de nuevo
-> (`restart: unless-stopped` en `docker-compose.production.yml`).
+> **Note.** The club's own host does not use this guide: it runs its testing and production
+> environments as systemd units, without Docker (see
+> [`deployment-no-docker.md`](deployment-no-docker.md) and
+> [`environments.md`](environments.md)), and there updates are automatic. This guide is the
+> Docker alternative, and everything below is run by hand. The containers do restart on their
+> own if they crash or when the machine boots again (`restart: unless-stopped` in
+> `docker-compose.production.yml`).
 
-## Requisitos previos
+## Prerequisites
 
-- Docker y el plugin `docker compose` instalados en la máquina (`docker compose version`).
-  No hace falta Go, goose, ni nada más — todo lo demás corre dentro de contenedores.
-- Un reverse proxy ya funcionando en la máquina (el mismo Caddy que uses para tus otros
-  dominios, por ejemplo) capaz de servir HTTPS para el dominio que quieras usar aquí y
-  reenviar ese tráfico a `http://127.0.0.1:64710`. Ese reverse proxy es responsabilidad
-  tuya, fuera de este repositorio — aquí solo se documenta a qué puerto apuntarlo.
-- Ningún puerto de este stack necesita abrirse directamente a Internet:
-  `docker-compose.production.yml` no publica PostgreSQL ni la API, y `web` (Caddy) solo
-  escucha en `127.0.0.1:64710`, igual que en desarrollo — nada llega desde fuera de la
-  máquina sin pasar antes por tu reverse proxy.
+- Docker and the `docker compose` plugin installed on the machine (`docker compose version`).
+  You need no Go, goose, or anything else — everything else runs inside containers.
+- A reverse proxy already working on the machine (the same Caddy you use for your other
+  domains, for example) able to serve HTTPS for the domain you want to use here and forward
+  that traffic to `http://127.0.0.1:64710`. That reverse proxy is your responsibility, outside
+  this repository — here we only document which port to point it at.
+- No port of this stack needs to be opened directly to the Internet:
+  `docker-compose.production.yml` does not publish PostgreSQL or the API, and `web` (Caddy)
+  only listens on `127.0.0.1:64710`, the same as in development — nothing reaches the machine
+  from outside without going through your reverse proxy first.
 
-## Primer despliegue
+## First deployment
 
-Clona el repositorio en la máquina y sitúate en su raíz:
+Clone the repository on the machine and go to its root:
 
 ```sh
-git clone <url-del-repositorio> katiuskas-intranet
+git clone <repository-url> katiuskas-intranet
 cd katiuskas-intranet
 ```
 
-Crea el fichero de configuración a partir de la plantilla y rellena los valores reales
-(dominio, contraseña de PostgreSQL, email/teléfono de la primera cuenta admin — ver los
-comentarios de cada variable en la propia plantilla):
+Create the configuration file from the template and fill in the real values (domain,
+PostgreSQL password, email/phone of the first admin account — see the comments on each
+variable in the template itself):
 
 ```sh
 cp .env.production.example .env
 $EDITOR .env
 ```
 
-`.env` ya está en `.gitignore`: nunca se sube al repositorio.
+`.env` is already in `.gitignore`: it is never pushed to the repository.
 
-Arranca primero solo PostgreSQL, aplica las migraciones y crea la primera cuenta de
-administración, y luego levanta el resto del stack:
+Start only PostgreSQL first, apply the migrations and create the first admin account, and then
+bring up the rest of the stack:
 
 ```sh
 docker compose -f docker-compose.production.yml up -d postgres
@@ -63,22 +63,22 @@ docker compose -f docker-compose.production.yml --profile tools run --rm seed-ad
 docker compose -f docker-compose.production.yml up -d
 ```
 
-`migrate` y `seed-admin` son tareas puntuales (perfil `tools`, no arrancan con `up -d`
-sin más) que compilan el backend hasta su fase intermedia con el toolchain de Go completo
-— necesitan acceso a Internet saliente la primera vez, para descargar `goose` y los
-módulos de Go. `seed-admin` es idempotente: si el email ya existe, no hace nada, así que
-volver a ejecutarlo por error no tiene efecto.
+`migrate` and `seed-admin` are one-off tasks (profile `tools`, they do not start with a plain
+`up -d`) that build the backend up to its intermediate stage with the full Go toolchain — they
+need outbound Internet access the first time, to download `goose` and the Go modules.
+`seed-admin` is idempotent: if the email already exists, it does nothing, so running it again
+by mistake has no effect.
 
-Comprueba que todo ha arrancado y que responde en localhost:
+Check that everything has started and that it responds on localhost:
 
 ```sh
 docker compose -f docker-compose.production.yml ps
 curl -I http://127.0.0.1:64710/
 ```
 
-Por último, añade un sitio a tu reverse proxy existente para el dominio elegido (el mismo
-que pusiste en `DOMAIN`) que reenvíe a `http://127.0.0.1:64710`. Por ejemplo, si ese
-reverse proxy es también Caddy, bastaría un bloque como:
+Finally, add a site to your existing reverse proxy for the chosen domain (the same one you put
+in `DOMAIN`) that forwards to `http://127.0.0.1:64710`. For example, if that reverse proxy is
+also Caddy, a block like this would be enough:
 
 ```
 intranet.tudominio.org {
@@ -86,37 +86,37 @@ intranet.tudominio.org {
 }
 ```
 
-en la configuración de ese Caddy (fuera de este repositorio), recargando su configuración
-después. Con eso `https://<tu-dominio>` debería servir el frontend, y
-`https://<tu-dominio>/api/*` la API — el propio Caddy interno del stack (`web`) ya reenvía
-`/api/*` hacia la API.
+in the configuration of that Caddy (outside this repository), reloading its configuration
+afterwards. With that, `https://<your-domain>` should serve the frontend, and
+`https://<your-domain>/api/*` the API — the stack's own internal Caddy (`web`) already
+forwards `/api/*` to the API.
 
-## Primer inicio de sesión
+## First sign-in
 
-No hay contraseñas: el acceso es por enlace mágico. Ve a `https://<tu-dominio>/login` e
-introduce el email y el teléfono que pusiste en `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE`.
+There are no passwords: sign-in is by magic link. Go to `https://<your-domain>/login` and
+enter the email and phone you put in `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE`.
 
-Si no has configurado `SMTP_*` en `.env`, el enlace no se envía por correo real — se
-registra en los logs de la API:
+If you have not configured `SMTP_*` in `.env`, the link is not sent by real email — it is
+logged in the API logs:
 
 ```sh
 docker compose -f docker-compose.production.yml logs -f api
 ```
 
-Esto es una opción válida (no solo "de desarrollo") para una prueba inicial con pocas
-personas: cada vez que alguien inicie sesión, revisa los logs y pásale el enlace. Cuando
-quieras enviar correos de verdad, rellena las variables `SMTP_*` en `.env` y reinicia el
-servicio `api` (`docker compose -f docker-compose.production.yml up -d api`).
+This is a valid option (not just a "development" one) for an initial trial with few people:
+every time someone signs in, check the logs and pass them the link. When you want to send real
+emails, fill in the `SMTP_*` variables in `.env` and restart the `api` service
+(`docker compose -f docker-compose.production.yml up -d api`).
 
-**No uses `scripts/get-token.sh`** para generar tokens en este entorno — su propia
-cabecera indica que solo está pensado para el stack de desarrollo local, nunca para nada
-parecido a producción.
+**Do not use `scripts/get-token.sh`** to generate tokens in this environment — its own header
+says it is only meant for the local development stack, never for anything resembling
+production.
 
-## Actualizar a una versión nueva
+## Updating to a new version
 
-Procedimiento manual: las actualizaciones automáticas del host del club (ver
-[`environments.md`](environments.md)) son para la variante sin Docker; con Docker se hace a
-mano. En la máquina de producción:
+Manual procedure: the automatic updates of the club's host (see
+[`environments.md`](environments.md)) are for the variant without Docker; with Docker it is
+done by hand. On the production machine:
 
 ```sh
 git pull
@@ -125,43 +125,43 @@ docker compose -f docker-compose.production.yml --profile tools run --rm migrate
 docker compose -f docker-compose.production.yml up -d
 ```
 
-El frontend (`web/`) no necesita reconstruirse ni reiniciar Caddy — se sirve directamente
-desde el árbol de ficheros bind-mounted, igual que en desarrollo. Eso sí, `deploy/Caddyfile`
-manda `Cache-Control: max-age=3600` con todo lo que sirve de `web/`, así que un navegador
-puede seguir usando una página o un script antiguos hasta una hora después de actualizar.
+The frontend (`web/`) does not need rebuilding or a Caddy restart — it is served directly from
+the bind-mounted file tree, the same as in development. However, `deploy/Caddyfile` sends
+`Cache-Control: max-age=3600` with everything it serves from `web/`, so a browser may keep
+using an old page or script for up to an hour after updating.
 
-## Copias de seguridad
+## Backups
 
-Nada de esto ocurre automáticamente; hazlo con la periodicidad que necesites (por ejemplo
-desde una tarea de `cron`).
+None of this happens automatically; do it as often as you need (for example from a `cron`
+job).
 
-Base de datos:
+Database:
 
 ```sh
 docker compose -f docker-compose.production.yml exec postgres \
   pg_dump -U intranet intranet > backup-$(date +%Y%m%d).sql
 ```
 
-Ficheros: `./library` y `./user-files` son directorios normales en el host (haz una copia
-como la de cualquier otro fichero); el contenido de las memorias de actividad vive en el
-volumen con nombre `activity_resources_data`, por ejemplo:
+Files: `./library` and `./user-files` are ordinary directories on the host (back them up like
+any other file); the content of the activity memorias lives in the named volume
+`activity_resources_data`, for example:
 
 ```sh
 docker run --rm -v katiuskas-intranet_activity_resources_data:/data -v "$(pwd)":/backup \
   alpine tar czf /backup/activity-resources-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
-(el prefijo `katiuskas-intranet_` en el nombre del volumen depende del nombre del
-directorio del proyecto — compruébalo con `docker volume ls` si no coincide).
+(the `katiuskas-intranet_` prefix in the volume name depends on the name of the project
+directory — check it with `docker volume ls` if it does not match).
 
-## Notas de seguridad
+## Security notes
 
-- Cambia `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` en `.env` antes del primer despliegue: los
-  valores por defecto de `cmd/seed-admin` (`admin@club.test` / `600000000`) son de sobra
-  conocidos y esa cuenta puede asignar el resto de roles.
-- `POSTGRES_PASSWORD` no necesita recordarse ni compartirse — solo la usan entre sí los
-  contenedores `api` y `postgres` — así que puede (y debe) ser un valor largo y aleatorio.
-- Ni PostgreSQL ni la API quedan expuestos directamente a Internet en
-  `docker-compose.production.yml`: `web` es el único servicio con un puerto publicado, y
-  solo en `127.0.0.1:64710` — todo el tráfico externo tiene que pasar antes por el
-  reverse proxy de la máquina.
+- Change `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` in `.env` before the first deployment: the
+  default values of `cmd/seed-admin` (`admin@club.test` / `600000000`) are all too well known
+  and that account can assign the rest of the roles.
+- `POSTGRES_PASSWORD` does not need to be remembered or shared — only the `api` and `postgres`
+  containers use it, between themselves — so it can (and should) be a long random value.
+- Neither PostgreSQL nor the API is exposed directly to the Internet in
+  `docker-compose.production.yml`: `web` is the only service with a published port, and only
+  on `127.0.0.1:64710` — all external traffic has to go through the machine's reverse proxy
+  first.
