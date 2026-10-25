@@ -758,6 +758,9 @@ func TestMaterialCanChangeAndRemoveAnybodysOrder(t *testing.T) {
 	mustStatus(t, e.do("PATCH", path, material.token, map[string]any{"quantity": 4}), http.StatusOK)
 	// Marking payments stays for admin/board.
 	expect(t, e.do("POST", distributionPath(d.ID)+"/payments", material.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusForbidden, "forbidden")
+	// An order with something paid can't go until the payment is taken off.
+	expect(t, e.do("DELETE", path, material.token, nil), http.StatusConflict, "unit_paid")
+	mustStatus(t, e.do("DELETE", path+"/payment", admin.token, nil), http.StatusNoContent)
 	mustStatus(t, e.do("DELETE", path, material.token, nil), http.StatusNoContent)
 }
 
@@ -1171,9 +1174,12 @@ func TestListOfPaymentsOfADistributionIsChronologicalWithItsRunningTotal(t *test
 	expect(t, e.do("GET", distributionPath(lot.ID)+"/payments?from=yesterday", board.token, nil), http.StatusBadRequest, "invalid_date")
 	expect(t, e.do("GET", distributionPath(lot.ID)+"/payments?from=2026-02-01&to=2026-01-01", board.token, nil), http.StatusBadRequest, "invalid_date_range")
 
-	// Deleting an order that had something paid takes it off in the list, and the
-	// entries stay.
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d", unitsPath(other.ID), po.ID), admin.token, nil), http.StatusNoContent)
+	// An order with something paid can't be deleted; taking the payment off comes
+	// first, and the entries stay.
+	orderPath := fmt.Sprintf("%s/%d", unitsPath(other.ID), po.ID)
+	expect(t, e.do("DELETE", orderPath, admin.token, nil), http.StatusConflict, "unit_paid")
+	mustStatus(t, e.do("DELETE", orderPath+"/payment", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", orderPath, admin.token, nil), http.StatusNoContent)
 	after := list(other, "")
 	if len(after) != 2 || after[0].Quantity != -4 || after[0].Amount != -20 || after[0].TotalAfter != 0 || after[0].UnitID != nil || after[0].RecordedByLogin != admin.Login {
 		t.Errorf("unexpected entries after deleting the order: %+v", after)

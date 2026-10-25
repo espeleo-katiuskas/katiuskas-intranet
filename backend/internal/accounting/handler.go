@@ -198,13 +198,14 @@ func parseListFilter(w http.ResponseWriter, r *http.Request) (ListFilter, bool) 
 
 func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 	var body struct {
-		Name           string  `json:"name"`
-		Code           *string `json:"code"`
-		ParentID       *int64  `json:"parent_id"`
-		Type           *string `json:"type"`
-		AllowsDues     bool    `json:"allows_dues"`
-		AllowsLicenses bool    `json:"allows_licenses"`
-		Hidden         bool    `json:"hidden"`
+		Name                string  `json:"name"`
+		Code                *string `json:"code"`
+		ParentID            *int64  `json:"parent_id"`
+		Type                *string `json:"type"`
+		AllowsDues          bool    `json:"allows_dues"`
+		AllowsLicenses      bool    `json:"allows_licenses"`
+		Hidden              bool    `json:"hidden"`
+		DistributionDefault bool    `json:"distribution_default"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return CreateAccountInput{}, err
@@ -216,6 +217,7 @@ func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 	return CreateAccountInput{
 		Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID, Type: accountType,
 		AllowsDues: body.AllowsDues, AllowsLicenses: body.AllowsLicenses, Hidden: body.Hidden,
+		DistributionDefault: body.DistributionDefault,
 	}, nil
 }
 
@@ -398,6 +400,8 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_parent_account", err.Error())
 	case errors.Is(err, ErrDuplicateCode):
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_code", err.Error())
+	case errors.Is(err, ErrNotIncomeForDistributions):
+		httpapi.WriteError(w, http.StatusConflict, "not_income_for_distributions", err.Error())
 	case errors.Is(err, ErrAccountInUse):
 		httpapi.WriteError(w, http.StatusConflict, "account_in_use", err.Error())
 	case errors.Is(err, ErrCircularParent):
@@ -413,7 +417,7 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 // accountAuditableFields are the Account fields updateAccount's own
 // mutation notification diffs (see httpapi.DiffFields) — matching
 // UpdateAccountInput's field set exactly.
-var accountAuditableFields = []string{"Name", "Code", "ParentID", "Type", "AllowsDues", "AllowsLicenses", "Hidden"}
+var accountAuditableFields = []string{"Name", "Code", "ParentID", "Type", "AllowsDues", "AllowsLicenses", "Hidden", "DistributionDefault"}
 
 // ---- Transactions ----
 
@@ -617,6 +621,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
 	case errors.Is(err, ErrTransactionHasLicenses):
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_licenses", err.Error())
+	case errors.Is(err, ErrTransactionHasDistributionPayments):
+		httpapi.WriteError(w, http.StatusConflict, "transaction_has_distribution_payments", err.Error())
 	case errors.Is(err, ErrTooFewEntries):
 		httpapi.WriteError(w, http.StatusBadRequest, "too_few_entries", err.Error())
 	case errors.Is(err, ErrInvalidAmount):

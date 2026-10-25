@@ -1038,15 +1038,29 @@ salvo pedir unidades y editar las propias).
   …/units/{id}/payment[?quantity=N]` quita N unidades pagadas, o todas. Pedir más de algo ya
   pagado no hace pagado lo añadido, y no se puede bajar `quantity` por debajo de lo pagado (409
   `quantity_below_paid`). Una fila con algo pagado cuenta como pagada para los bloqueos de más
-  arriba (solo la cambia admin/board). No hay enlace con Contabilidad.
+  arriba (solo la cambia admin/board). **Cada pago queda en Contabilidad** (migración `00032`): el
+  reparto tiene una cuenta (`account_id` opcional; `account_name` en el JSON) donde se apuntan sus
+  pagos y, si no tiene, la cuenta marcada como `distribution_default` (solo una; marcar una quita la
+  marca de la otra). Las dos tienen que ser de tipo `income`: un reparto con otra cuenta es 400
+  `account_not_income`; marcar como por defecto una cuenta que no lo es, o quitar el tipo `income` a
+  una que usa algún reparto, es 409 `not_income_for_distributions`. Si no hay ninguna de las dos,
+  409 `no_distribution_account`. Al pagar (`account_id` en el cuerpo) o quitar un pago
+  (`?account_id=`) hay que decir en qué cuenta se ha pagado, que tiene que existir (400
+  `unknown_account`), ser de tipo `asset` (400 `account_not_asset`); sin cuenta, 400
+  `account_required`, salvo que lo pagado sea gratis, que no mueve dinero ni apunta nada. Por cada
+  persona de la petición se crea una transacción automática entre esa cuenta de activo (`+total`) y
+  la del reparto (`−total`; al quitar un pago, al revés) con una descripción en español, por ejemplo
+  «Pago de Ana Pérez en «Lotería de Navidad»: 3 × Papeleta (0001-0003)» o «Devolución del pago de
+  …». Un pedido con algo pagado no se puede borrar (409 `unit_paid`): primero se quita el pago.
 - **Lista de pagos** (`distribution_payments`, migración `00030`; `GET /distributions/{id}/payments`,
   una por reparto, solo admin y board, porque dice quién ha pagado qué): cada pago que se apunta deja una
   entrada con la fecha, quién lo apuntó (`recorded_by`), de quién era el pedido (`paid_by`,
   quien ha pagado: no se guarda un pagador distinto del socio del pedido), qué y cuántas
   unidades (`description` es el artículo, o el reparto si no los tiene), cuánto dinero
   (`amount`, el precio de una unidad por las que son) y los números. Quitar un pago escribe la
-  misma entrada con los signos cambiados, y borrar un pedido con algo pagado también (la
-  entrada se queda, sin `unit_id`), así que el acumulado del reparto (`total_after`, una
+  misma entrada con los signos cambiados, y cada entrada apunta a su transacción contable
+  (`transaction_id`; esa transacción no se puede borrar mientras tanto, 409
+  `transaction_has_distribution_payments`), así que el acumulado del reparto (`total_after`, una
   `SUM` en ventana por reparto sobre todo su historial, no solo lo que deja el filtro) es la suma
   hasta ese momento y no se reinicia en el borde de un filtro o de una página. Se ordena de más
   nuevo a más antiguo, con `from`/`to` y `limit`/`offset`, como el libro de
@@ -1165,9 +1179,14 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
   `expense` (sobre todo para lo que sale). Una cuenta de agrupación, o una que no es ninguna de
   esas, no lo tiene (ausente del JSON, como `code`; en blanco o `null` es lo mismo que ausente,
   y un `PATCH` que lo omite lo borra, como con el resto de campos). Un valor que no sea uno de
-  los tres es 400 `invalid_type`. De momento no se usa para nada: solo se muestra en la ficha
-  de la cuenta (`/cuenta`) y se elige al crearla o editarla en Contabilidad. Se podrán añadir
+  los tres es 400 `invalid_type`. Se muestra en la ficha
+  de la cuenta (`/cuenta`), se elige al crearla o editarla en Contabilidad, y la cuenta en la que se
+  paga un reparto tiene que ser `asset`. Se podrán añadir
   más tipos al `enum`.
+- `distribution_default` (migración 00032), booleano siempre presente: la cuenta donde se apuntan
+  los pagos de los repartos que no tienen cuenta propia. Solo una cuenta lo tiene (índice único
+  parcial); marcarla, al crear o editar, se lo quita a la que lo tuviera. Un `PATCH` que lo omite lo
+  desmarca, como con el resto de campos.
 - `allows_dues` y `allows_licenses` (migración 00017, ambos `false` hasta que un admin o el
   rol `money` los marca): qué cuentas tiene que usar una transacción para poder registrar
   cuotas anuales o licencias federativas, que exigen `POST /users/{login}/dues` y

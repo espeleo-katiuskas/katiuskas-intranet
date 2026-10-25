@@ -1043,3 +1043,66 @@ func TestAccountTypeIsOptionalValidatedAndReplacedByUpdate(t *testing.T) {
 		t.Errorf("moving should keep the types: %d %s", moved.Code, moved.Body.String())
 	}
 }
+
+// Only one account is the default for the payments of distributions: marking
+// another takes the mark off the first, however it is done (create or edit), and
+// editing without the mark turns it off.
+func TestHandlerDistributionDefaultAccountIsUnique(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	create := func(name string, isDefault bool) accounting.Account {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": name, "type": "income", "distribution_default": isDefault})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d: %s", name, rec.Code, rec.Body.String())
+		}
+		var a accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	defaults := func() []string {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/accounts", adminToken, nil)
+		var all []accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, a := range all {
+			if a.DistributionDefault {
+				names = append(names, a.Name)
+			}
+		}
+		return names
+	}
+	first := create("Repartos", true)
+	if got := defaults(); len(got) != 1 || got[0] != "Repartos" {
+		t.Fatalf("expected Repartos as default, got %v", got)
+	}
+	create("Lotería", true)
+	if got := defaults(); len(got) != 1 || got[0] != "Lotería" {
+		t.Fatalf("creating another default should replace it, got %v", got)
+	}
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "income", "distribution_default": true})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"distribution_default":true`) {
+		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := defaults(); len(got) != 1 || got[0] != "Repartos" {
+		t.Fatalf("editing should move the mark, got %v", got)
+	}
+	// Only an income account can be the default, or lose that type while it is.
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "asset", "distribution_default": true})
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "not_income_for_distributions") {
+		t.Fatalf("expected 409 not_income_for_distributions, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Caja", "type": "asset", "distribution_default": true}); rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 creating an asset default, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Editing without it turns it off (PATCH replaces every field).
+	doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos"})
+	if got := defaults(); len(got) != 0 {
+		t.Fatalf("expected no default, got %v", got)
+	}
+}

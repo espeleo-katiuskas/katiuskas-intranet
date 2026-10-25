@@ -58,6 +58,8 @@ type env struct {
 	resolver testutil.FakeResolver
 	tx       pgx.Tx
 	notifier *fakeNotifier
+	// cash is an asset account payments are made in unless a test names another.
+	cash int64
 }
 
 func newEnv(t *testing.T) *env {
@@ -71,7 +73,15 @@ func newEnv(t *testing.T) *env {
 	mux := http.NewServeMux()
 	service := distributions.NewService(distributions.NewRepository(tx))
 	distributions.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
-	return &env{mux: mux, resolver: resolver, tx: tx, notifier: notifier}
+	e := &env{mux: mux, resolver: resolver, tx: tx, notifier: notifier}
+	ctx := context.Background()
+	if err := tx.QueryRow(ctx, `INSERT INTO accounts (name, type, position) VALUES ('Caja', 'asset', 1) RETURNING id`).Scan(&e.cash); err != nil {
+		t.Fatalf("insert cash account: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO accounts (name, type, position, distribution_default) VALUES ('Repartos', 'income', 2, true)`); err != nil {
+		t.Fatalf("insert default account: %v", err)
+	}
+	return e
 }
 
 // person is a user with a token for the given roles.
@@ -95,8 +105,25 @@ func (e *env) newPerson(t *testing.T, memberSince string, roleNames ...string) p
 
 func (e *env) do(method, path, token string, body any) *httptest.ResponseRecorder {
 	var reader *bytes.Reader
+	// Payments say which account the money went through; most tests don't care.
+	if method == http.MethodDelete && strings.Contains(path, "/payment") && !strings.Contains(path, "account_id=") {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		path += fmt.Sprintf("%saccount_id=%d", sep, e.cash)
+	}
 	if body != nil {
 		b, _ := json.Marshal(body)
+		if method == http.MethodPost && strings.HasSuffix(path, "/payments") {
+			var m map[string]any
+			if json.Unmarshal(b, &m) == nil {
+				if _, ok := m["account_id"]; !ok {
+					m["account_id"] = e.cash
+					b, _ = json.Marshal(m)
+				}
+			}
+		}
 		reader = bytes.NewReader(b)
 	} else {
 		reader = bytes.NewReader(nil)

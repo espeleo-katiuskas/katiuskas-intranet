@@ -36,7 +36,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // auditableFields are the Distribution fields update's notification diffs —
 // every one UpdateInput can change.
 var auditableFields = []string{
-	"Name", "Description", "Audience", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options", "Articles",
+	"Name", "Description", "Audience", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options", "Articles", "AccountName",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -128,6 +128,12 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrBelowPaid, http.StatusConflict, "quantity_below_paid"},
 		{ErrBelowDelivered, http.StatusConflict, "quantity_below_delivered"},
 		{ErrBelowNumbered, http.StatusConflict, "quantity_below_numbered"},
+		{ErrUnknownAccount, http.StatusBadRequest, "unknown_account"},
+		{ErrAccountNotIncome, http.StatusBadRequest, "account_not_income"},
+		{ErrAccountNotAsset, http.StatusBadRequest, "account_not_asset"},
+		{ErrAccountRequired, http.StatusBadRequest, "account_required"},
+		{ErrNoDistributionAccount, http.StatusConflict, "no_distribution_account"},
+		{ErrUnitPaid, http.StatusConflict, "unit_paid"},
 		{ErrAutomaticUnit, http.StatusConflict, "automatic_unit"},
 	}
 	for _, k := range known {
@@ -195,6 +201,7 @@ type distributionBody struct {
 	MaxExtra    *int           `json:"max_extra"`
 	Options     *[]optionBody  `json:"options"`
 	Articles    *[]articleBody `json:"articles"`
+	AccountID   *int64         `json:"account_id"`
 	Status      *Status        `json:"status"`
 }
 
@@ -287,7 +294,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	in := CreateInput{
 		Name: body.Name, Description: body.Description, Audience: body.Audience, ClosesAt: body.ClosesAt,
 		CutoffDate: cutoff, Price: body.Price, ExtraPrice: body.ExtraPrice, MaxExtra: body.MaxExtra,
-		CreatedBy: current.ID,
+		AccountID: body.AccountID, CreatedBy: current.ID,
 	}
 	if body.Options != nil {
 		in.Options = optionInputs(*body.Options)
@@ -317,7 +324,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	in := UpdateInput{
 		Name: body.Name, Description: body.Description, Audience: body.Audience, ClosesAt: body.ClosesAt,
 		CutoffDate: cutoff, Price: body.Price, ExtraPrice: body.ExtraPrice, MaxExtra: body.MaxExtra,
-		Status: body.Status,
+		AccountID: body.AccountID, Status: body.Status,
 	}
 	if body.Options != nil {
 		options := optionInputs(*body.Options)
@@ -544,7 +551,7 @@ func (h *Handler) deleteUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.DeleteUnit(r.Context(), d.ID, unit.ID, canSeeEveryone(current), current.ID); err != nil {
+	if err := h.service.DeleteUnit(r.Context(), d.ID, unit.ID, canSeeEveryone(current)); err != nil {
 		writeError(w, err, "could not delete unit")
 		return
 	}
@@ -838,8 +845,10 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 	// Whole rows (what is still to pay of each) by unit_ids, or part of a row by
 	// payments; both may come together.
 	var body struct {
-		UnitIDs  []int64 `json:"unit_ids"`
-		Payments []struct {
+		UnitIDs []int64 `json:"unit_ids"`
+		// AccountID is the asset account the payment was made in.
+		AccountID *int64 `json:"account_id"`
+		Payments  []struct {
 			UnitID      int64    `json:"unit_id"`
 			Quantity    int      `json:"quantity"`
 			Identifiers []string `json:"identifiers"`
@@ -862,7 +871,11 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 		payments = append(payments, Payment{UnitID: p.UnitID, Quantity: p.Quantity, Identifiers: p.Identifiers})
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	marked, err := h.service.MarkPaid(r.Context(), id, payments, current.ID)
+	var assetAccount int64
+	if body.AccountID != nil {
+		assetAccount = *body.AccountID
+	}
+	marked, err := h.service.MarkPaid(r.Context(), id, payments, current.ID, assetAccount)
 	if err != nil {
 		writeError(w, err, "could not mark as paid")
 		return
@@ -891,8 +904,18 @@ func (h *Handler) clearPaid(w http.ResponseWriter, r *http.Request) {
 	if list := r.URL.Query().Get("identifiers"); list != "" {
 		identifiers = strings.Split(list, ",")
 	}
+	// ?account_id= is the asset account the money goes back from.
+	var assetAccount int64
+	if raw := r.URL.Query().Get("account_id"); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "account_id must be numeric")
+			return
+		}
+		assetAccount = n
+	}
 	current, _ := auth.UserFromContext(r.Context())
-	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity, identifiers, current.ID); err != nil {
+	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity, identifiers, current.ID, assetAccount); err != nil {
 		writeError(w, err, "could not undo the payment")
 		return
 	}

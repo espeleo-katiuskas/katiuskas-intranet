@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -55,6 +56,20 @@ var (
 	ErrIdentifierNotAssigned = errors.New("these numbers are not assigned to this order")
 	ErrNotPaid               = errors.New("these numbers are not paid")
 	ErrNotDelivered          = errors.New("these numbers are not handed out")
+	// The accounting side of a payment: ErrUnknownAccount is an account that doesn't
+	// exist, ErrAccountNotAsset one that isn't an asset account to pay in,
+	// ErrAccountRequired a payment of money with no account said,
+	// ErrNoDistributionAccount a distribution with no account of its own while none
+	// is the default for distributions, and ErrAccountNotIncome a distribution
+	// naming an account that isn't of type income.
+	ErrUnknownAccount        = errors.New("unknown account")
+	ErrAccountNotAsset       = errors.New("the account paid in has to be of type asset")
+	ErrAccountNotIncome      = errors.New("the account of a distribution has to be of type income")
+	ErrAccountRequired       = errors.New("say the account the payment was made in")
+	ErrNoDistributionAccount = errors.New("this distribution has no account for its payments, and none is marked as the default for distributions")
+	// ErrUnitPaid means a unit with something paid can't be deleted: the payment
+	// has to be taken off first, which records it in the accounting.
+	ErrUnitPaid = errors.New("this order has payments: take them off first")
 	// ErrBelowNumbered means a quantity can't go below the numbers already given to
 	// the row: some have to be taken off first.
 	ErrBelowNumbered = errors.New("the quantity can't be lower than the numbers already assigned: take some off first")
@@ -69,6 +84,13 @@ const (
 	foreignKeyViolationCode = "23503"
 )
 
+// isForeignKeyViolation says whether err is Postgres refusing a reference to
+// something that doesn't exist.
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode
+}
+
 type Repository struct {
 	pool db.PGX
 }
@@ -79,15 +101,16 @@ func NewRepository(pool db.PGX) *Repository {
 
 const distributionSelect = `
 	SELECT d.id, d.name, d.description, d.audience, d.status, d.closes_at, d.cutoff_date,
-	       d.price::float8, d.extra_price::float8, d.max_extra, d.created_at, u.login,
+	       d.price::float8, d.extra_price::float8, d.max_extra, d.created_at, u.login, d.account_id, ac.name,
 	       (SELECT COALESCE(sum(x.quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id),
 	       (SELECT COALESCE(sum(x.picked_up_quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id)
 	FROM distributions d
-	JOIN users u ON u.id = d.created_by`
+	JOIN users u ON u.id = d.created_by
+	LEFT JOIN accounts ac ON ac.id = d.account_id`
 
 func scanDistribution(row pgx.Row, d *Distribution) error {
 	return row.Scan(&d.ID, &d.Name, &d.Description, &d.Audience, &d.Status, &d.ClosesAt, &d.CutoffDate,
-		&d.Price, &d.ExtraPrice, &d.MaxExtra, &d.CreatedAt, &d.CreatedByLogin, &d.UnitCount, &d.PickedUpCount)
+		&d.Price, &d.ExtraPrice, &d.MaxExtra, &d.CreatedAt, &d.CreatedByLogin, &d.AccountID, &d.AccountName, &d.UnitCount, &d.PickedUpCount)
 }
 
 // attachOptions fills in Options and Articles for every given distribution, in
@@ -185,6 +208,26 @@ func insertOptions(ctx context.Context, tx pgx.Tx, distributionID int64, options
 	return nil
 }
 
+// checkIncomeAccount says whether the account a distribution names (nil: the
+// default one, which is always an income account) exists and is of type income.
+func checkIncomeAccount(ctx context.Context, tx pgx.Tx, accountID *int64) error {
+	if accountID == nil {
+		return nil
+	}
+	var kind *string
+	err := tx.QueryRow(ctx, `SELECT type::text FROM accounts WHERE id = $1`, *accountID).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrUnknownAccount
+	}
+	if err != nil {
+		return err
+	}
+	if kind == nil || *kind != "income" {
+		return ErrAccountNotIncome
+	}
+	return nil
+}
+
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Distribution, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -192,12 +235,18 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Distribution, 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := checkIncomeAccount(ctx, tx, in.AccountID); err != nil {
+		return Distribution{}, err
+	}
 	var id int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO distributions (name, description, audience, closes_at, cutoff_date, price, extra_price, max_extra, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO distributions (name, description, audience, closes_at, cutoff_date, price, extra_price, max_extra, created_by, account_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
-	`, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.CreatedBy).Scan(&id)
+	`, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.CreatedBy, in.AccountID).Scan(&id)
+	if isForeignKeyViolation(err) {
+		return Distribution{}, ErrUnknownAccount
+	}
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -309,13 +358,19 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 		}
 	}
 
+	if err := checkIncomeAccount(ctx, tx, in.AccountID); err != nil {
+		return Distribution{}, err
+	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE distributions SET
 			name = $2, description = $3, audience = $4, closes_at = $5, cutoff_date = $6,
 			price = $7, extra_price = $8, max_extra = $9,
-			status = COALESCE($10, status)
+			status = COALESCE($10, status), account_id = $11
 		WHERE id = $1
-	`, id, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.Status)
+	`, id, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.Status, in.AccountID)
+	if isForeignKeyViolation(err) {
+		return Distribution{}, ErrUnknownAccount
+	}
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -919,9 +974,9 @@ func (r *Repository) UpdateChoices(ctx context.Context, distributionID, id int64
 	return r.GetUnit(ctx, distributionID, id)
 }
 
-// DeleteUnit removes a unit. If something of it was paid, what was paid goes into
-// the list of payments as taken off, by actorID.
-func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id, actorID int64) error {
+// DeleteUnit removes a unit — one with something paid can't go (ErrUnitPaid): the
+// payment has to be taken off first, which records it in the accounting.
+func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -933,13 +988,7 @@ func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id, actorID
 		return err
 	}
 	if st.paid > 0 {
-		paid, err := markedItems(ctx, tx, id, "paid_at", "")
-		if err != nil {
-			return err
-		}
-		if err := logPayment(ctx, tx, id, -st.paid, paid, actorID); err != nil {
-			return err
-		}
+		return ErrUnitPaid
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1`, id); err != nil {
 		return err
@@ -947,22 +996,147 @@ func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id, actorID
 	return tx.Commit(ctx)
 }
 
+// loggedPayment is what a payment entry says, for the transaction that records it.
+type loggedPayment struct {
+	id            int64
+	beneficiaryID int64
+	beneficiary   string // the person's name
+	distribution  string // the distribution's name
+	description   string
+	quantity      int
+	amount        float64
+	identifiers   []string
+}
+
 // logPayment writes down in the list of payments that quantity units of the unit
 // were paid (positive) or had their payment taken off (negative), with the
-// numbers they were about.
-func logPayment(ctx context.Context, tx pgx.Tx, unitID int64, quantity int, identifiers []string, byID int64) error {
+// numbers they were about, and says what it wrote.
+func logPayment(ctx context.Context, tx pgx.Tx, unitID int64, quantity int, identifiers []string, byID int64) (loggedPayment, error) {
 	if identifiers == nil {
 		identifiers = []string{}
 	}
-	_, err := tx.Exec(ctx, `
+	l := loggedPayment{quantity: quantity, identifiers: identifiers}
+	var distributionID int64
+	err := tx.QueryRow(ctx, `
 		INSERT INTO distribution_payments (distribution_id, unit_id, beneficiary_id, description, quantity, amount, identifiers, recorded_by_id)
 		SELECT n.distribution_id, n.id, n.beneficiary_id, COALESCE(a.name, d.name), $2::integer, n.price * $2::integer, $3, $4
 		FROM distribution_units n
 		JOIN distributions d ON d.id = n.distribution_id
 		LEFT JOIN distribution_articles a ON a.id = n.article_id
 		WHERE n.id = $1
-	`, unitID, quantity, identifiers, byID)
-	return err
+		RETURNING id, distribution_id, beneficiary_id, description, amount::float8
+	`, unitID, quantity, identifiers, byID).Scan(&l.id, &distributionID, &l.beneficiaryID, &l.description, &l.amount)
+	if err != nil {
+		return loggedPayment{}, err
+	}
+	err = tx.QueryRow(ctx, `
+		SELECT u.first_name || ' ' || u.last_name, d.name FROM users u, distributions d WHERE u.id = $1 AND d.id = $2
+	`, l.beneficiaryID, distributionID).Scan(&l.beneficiary, &l.distribution)
+	return l, err
+}
+
+// paymentAccounts checks the account a payment is made in and says which account
+// the distribution's payments are recorded in: the asset account has to exist and
+// be of type asset, the other is the distribution's own or else the one marked as
+// the default for distributions, and they can't be the same.
+func paymentAccounts(ctx context.Context, tx pgx.Tx, distributionID, assetID int64) (int64, error) {
+	var kind *string
+	err := tx.QueryRow(ctx, `SELECT type::text FROM accounts WHERE id = $1`, assetID).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrUnknownAccount
+	}
+	if err != nil {
+		return 0, err
+	}
+	if kind == nil || *kind != "asset" {
+		return 0, ErrAccountNotAsset
+	}
+	var recordedIn *int64
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(d.account_id, (SELECT id FROM accounts WHERE distribution_default))
+		FROM distributions d WHERE d.id = $1
+	`, distributionID).Scan(&recordedIn)
+	if err != nil {
+		return 0, err
+	}
+	if recordedIn == nil {
+		return 0, ErrNoDistributionAccount
+	}
+	return *recordedIn, nil
+}
+
+// recordPaymentTransactions records in the accounting what was just paid (or taken
+// off), one transaction for each person it was for: money moves between the asset
+// account it was paid in and the account of the distribution, with a description
+// in Spanish of what was paid and by whom, and the entries of the list of payments
+// point at it. A payment taken off is the same with the signs changed. Nothing is
+// recorded for what costs nothing; money with no account said is an error.
+func recordPaymentTransactions(ctx context.Context, tx pgx.Tx, distributionID, assetID int64, logged []loggedPayment) error {
+	var order []int64
+	groups := map[int64][]loggedPayment{}
+	for _, l := range logged {
+		if _, seen := groups[l.beneficiaryID]; !seen {
+			order = append(order, l.beneficiaryID)
+		}
+		groups[l.beneficiaryID] = append(groups[l.beneficiaryID], l)
+	}
+	var recordedIn int64
+	for _, person := range order {
+		group := groups[person]
+		total := 0.0
+		for _, l := range group {
+			total += l.amount
+		}
+		total = math.Round(total*100) / 100
+		if total == 0 {
+			continue
+		}
+		if assetID == 0 {
+			return ErrAccountRequired
+		}
+		if recordedIn == 0 {
+			var err error
+			if recordedIn, err = paymentAccounts(ctx, tx, distributionID, assetID); err != nil {
+				return err
+			}
+		}
+		var transactionID int64
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO transactions (description, occurred_at) VALUES ($1, now()) RETURNING id
+		`, paymentDescription(group, total)).Scan(&transactionID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO transaction_entries (transaction_id, account_id, amount) VALUES ($1, $2, $4), ($1, $3, -$4::numeric)
+		`, transactionID, assetID, recordedIn, total); err != nil {
+			return err
+		}
+		ids := make([]int64, len(group))
+		for i, l := range group {
+			ids[i] = l.id
+		}
+		if _, err := tx.Exec(ctx, `UPDATE distribution_payments SET transaction_id = $2 WHERE id = ANY($1)`, ids, transactionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// paymentDescription says in Spanish what a transaction of payments is: who paid
+// what in which distribution, or the payment taken off.
+func paymentDescription(group []loggedPayment, total float64) string {
+	parts := make([]string, len(group))
+	for i, l := range group {
+		parts[i] = fmt.Sprintf("%d × %s", max(l.quantity, -l.quantity), l.description)
+		if len(l.identifiers) > 0 {
+			parts[i] += " (" + formatNumbers(l.identifiers) + ")"
+		}
+	}
+	what := strings.Join(parts, "; ")
+	if total < 0 {
+		return fmt.Sprintf("Devolución del pago de %s en «%s»: %s", group[0].beneficiary, group[0].distribution, what)
+	}
+	return fmt.Sprintf("Pago de %s en «%s»: %s", group[0].beneficiary, group[0].distribution, what)
 }
 
 // ListPayments lists the payments, newest first, with what each distribution had
@@ -971,7 +1145,7 @@ func logPayment(ctx context.Context, tx pgx.Tx, unitID int64, quantity int, iden
 func (r *Repository) ListPayments(ctx context.Context, f PaymentFilter) ([]PaymentEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT * FROM (
-			SELECT p.id, p.distribution_id, d.name, p.unit_id, p.occurred_at,
+			SELECT p.id, p.distribution_id, d.name, p.unit_id, p.transaction_id, p.occurred_at,
 			       rb.login, rb.first_name || ' ' || rb.last_name, b.login, b.first_name || ' ' || b.last_name,
 			       p.description, p.quantity, p.amount::float8, p.identifiers,
 			       SUM(p.amount) OVER (PARTITION BY p.distribution_id ORDER BY p.occurred_at, p.id)::float8 AS total_after
@@ -993,7 +1167,7 @@ func (r *Repository) ListPayments(ctx context.Context, f PaymentFilter) ([]Payme
 	list := []PaymentEntry{}
 	for rows.Next() {
 		var e PaymentEntry
-		if err := rows.Scan(&e.ID, &e.DistributionID, &e.DistributionName, &e.UnitID, &e.OccurredAt,
+		if err := rows.Scan(&e.ID, &e.DistributionID, &e.DistributionName, &e.UnitID, &e.TransactionID, &e.OccurredAt,
 			&e.RecordedByLogin, &e.RecordedByName, &e.PaidByLogin, &e.PaidByName,
 			&e.Description, &e.Quantity, &e.Amount, &e.Identifiers, &e.TotalAfter); err != nil {
 			return nil, err
@@ -1339,7 +1513,7 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 // assigned and unpaid (ErrIdentifiersMissing when there aren't that many); in
 // any other, a count, and more than are pending, or something already fully paid,
 // is ErrAlreadyPaid. paid_at and who marked it become those of this payment.
-func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID int64) (int, error) {
+func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payments []Payment, markedByID, assetAccountID int64) (int, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -1347,6 +1521,7 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	marked := 0
+	var logged []loggedPayment
 	for _, p := range payments {
 		st, err := lockUnit(ctx, tx, distributionID, p.UnitID)
 		if err != nil {
@@ -1407,10 +1582,15 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 		`, p.UnitID, n, markedByID); err != nil {
 			return 0, err
 		}
-		if err := logPayment(ctx, tx, p.UnitID, n, paidNow, markedByID); err != nil {
+		l, err := logPayment(ctx, tx, p.UnitID, n, paidNow, markedByID)
+		if err != nil {
 			return 0, err
 		}
+		logged = append(logged, l)
 		marked += n
+	}
+	if err := recordPaymentTransactions(ctx, tx, distributionID, assetAccountID, logged); err != nil {
+		return 0, err
 	}
 	return marked, tx.Commit(ctx)
 }
@@ -1418,7 +1598,7 @@ func (r *Repository) MarkPaid(ctx context.Context, distributionID int64, payment
 // ClearPaid takes quantity units off what is paid in a row (all of it when 0), or
 // the given paid Identifiers in a row of an article with numbers. Taking off more
 // than is paid is ErrInvalidQuantity.
-func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string, byID int64) error {
+func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, quantity int, identifiers []string, byID, assetAccountID int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -1473,7 +1653,11 @@ func (r *Repository) ClearPaid(ctx context.Context, distributionID, id int64, qu
 	`, id, q); err != nil {
 		return err
 	}
-	if err := logPayment(ctx, tx, id, -q, takenOff, byID); err != nil {
+	l, err := logPayment(ctx, tx, id, -q, takenOff, byID)
+	if err != nil {
+		return err
+	}
+	if err := recordPaymentTransactions(ctx, tx, distributionID, assetAccountID, []loggedPayment{l}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

@@ -74,14 +74,15 @@ function parentSelectOptions(selectedParentId, excludeId) {
   return `<option value="" ${noneSelected}>— Ninguna (cuenta de primer nivel) —</option>${options}`;
 }
 
-// Small tags next to an account's name for the two things it's marked for
-// (allows_dues/allows_licenses), so which accounts a transaction can
+// Small tags next to an account's name for what it's marked for
+// (allows_dues/allows_licenses, the default of distributions), so which accounts a transaction can
 // record cuotas or licencias against is visible at a glance, not only
 // by opening each one's edit dialog.
 function accountTags(account) {
   const tags = [];
   if (account.allows_dues) tags.push('<span class="badge">Cuotas</span>');
   if (account.allows_licenses) tags.push('<span class="badge">Licencias</span>');
+  if (account.distribution_default) tags.push('<span class="badge">Repartos</span>');
   if (account.hidden) tags.push('<span class="badge">Oculta</span>');
   return tags.length ? ` ${tags.join(' ')}` : '';
 }
@@ -206,6 +207,9 @@ function openEditAccountDialog(account) {
   document.getElementById('ea-type').innerHTML = accountTypeOptions(account.type ?? null);
   document.getElementById('ea-allows-dues').checked = Boolean(account.allows_dues);
   document.getElementById('ea-allows-licenses').checked = Boolean(account.allows_licenses);
+  document.getElementById('ea-distribution-default').checked = Boolean(
+    account.distribution_default,
+  );
   document.getElementById('ea-hidden').checked = Boolean(account.hidden);
   openModal(editAccountDialog);
 }
@@ -226,6 +230,7 @@ editAccountForm.addEventListener('submit', async (event) => {
     // unchecked is sent as false, not omitted.
     allows_dues: document.getElementById('ea-allows-dues').checked,
     allows_licenses: document.getElementById('ea-allows-licenses').checked,
+    distribution_default: document.getElementById('ea-distribution-default').checked,
     hidden: document.getElementById('ea-hidden').checked,
   };
 
@@ -285,6 +290,7 @@ newAccountForm.addEventListener('submit', async (event) => {
     type: document.getElementById('na-type').value || null,
     allows_dues: document.getElementById('na-allows-dues').checked,
     allows_licenses: document.getElementById('na-allows-licenses').checked,
+    distribution_default: document.getElementById('na-distribution-default').checked,
     hidden: document.getElementById('na-hidden').checked,
   };
 

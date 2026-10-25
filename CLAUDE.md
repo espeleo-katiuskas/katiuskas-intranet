@@ -468,9 +468,10 @@ the same rules; what was handed out is locked for the owner (a unit that isn't a
 article is final once handed out, even for staff; in a row of an article staff can still resize it
 but not below `picked_up_quantity`, `ErrBelowDelivered`) and a paid one only changes through admin/board/material
 (`ErrUnitLocked`). Every payment mark is also written into `distribution_payments` (migration `00030`, the list of
-payments: `logPayment`, called by `MarkPaid`, `ClearPaid` and `DeleteUnit` in the same
-transaction; negative entries for what is taken off or deleted, `unit_id` null once its order is
-gone), which `GET /distributions/{id}/payments` (admin/board, one distribution at a time) serves newest first with
+payments: `logPayment`, called by `MarkPaid` and `ClearPaid` in the same
+transaction; negative entries for what is taken off, `unit_id` null if its order is
+gone since — an order with something paid can't be deleted, `ErrUnitPaid`, 409 `unit_paid`: the payment
+is taken off first), which `GET /distributions/{id}/payments` (admin/board, one distribution at a time) serves newest first with
 `total_after`, a window `SUM` per distribution over its whole history so it doesn't restart at a
 filter or page edge — the same idea as the accounting ledger's `balance_after`. The person who
 paid is the order's beneficiary; there is no separate payer. Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
@@ -481,7 +482,25 @@ all that is pending when 0, plus `unit_ids` for whole rows; more than pending is
 `ErrAlreadyPaid`), `DELETE .../units/{id}/payment[?quantity=N]` takes units off
 (`ClearPaid`). Asking for more of something paid leaves the added units unpaid, and
 `UpdateQuantity` refuses to go below what is paid (`ErrBelowPaid`); a row with anything paid
-is "paid" for `checkEditable`. Pickups still mark a whole row. There's no link to accounting.
+is "paid" for `checkEditable`. Pickups still mark a whole row. **Payments are
+recorded in accounting** (migration `00032_distribution_accounts.sql`): every distribution has an
+optional `account_id` (the account its payments go to; `account_name` in the JSON) and, when null, the
+account marked `accounts.distribution_default` — both have to be of type `income`: a distribution naming
+another type is 400 `account_not_income` (`checkIncomeAccount`), marking one as the default is refused by
+`accounting` (`ErrNotIncomeForDistributions`, 409 `not_income_for_distributions`), as is taking the
+`income` type off an account some distribution names — (at most one, a partial unique index; marking one in
+`accounting.Repository.Create`/`UpdateAccount` unmarks the other) is used — none of the two is 409
+`no_distribution_account`. `POST .../payments` takes `account_id` in the body and `DELETE
+.../payment` as `?account_id=`: the account the money was paid into or goes back from, which has to
+exist (`ErrUnknownAccount`, 400), be of type `asset` (`ErrAccountNotAsset`), and is required whenever money moves (`ErrAccountRequired`;
+what costs nothing needs no account and records nothing). In the same database transaction
+`recordPaymentTransactions` writes, per beneficiary of the request, a transaction with two entries —
+the asset `+total`, the distribution's account `−total`, signs changed when a payment is taken off —
+by direct SQL (not through `internal/accounting`, which this package doesn't import), with a Spanish
+description of who and what ("Pago de Nombre Apellidos en «Reparto»: 3 × Papeleta (0001-0003)";
+"Devolución del pago de …"), and sets `distribution_payments.transaction_id` of the entries it
+wrote (`ON DELETE RESTRICT`; `DELETE /transactions/{id}` answers 409
+`transaction_has_distribution_payments`).
 Asking again for an article (`CreateArticleUnit`) adds to the person's row of it that isn't
 collected yet, else makes a new row — the per-person unique index is gone, and
 `max_per_person` (`checkQuantity`) counts all their rows. Collection (`POST .../pickups`,
@@ -1087,8 +1106,11 @@ always-present/replaced-wholesale shape): an account that's no longer used. An a
 a `type` (migration `00031_accounts_type.sql`, the `account_type` enum: `asset` — its balance is money
 the club really has —, `income`, `expense`; optional and left out of the JSON when absent like `code`,
 a blank one normalized to none by `normalizeType`, `PATCH` replacing it, an unknown one 400
-`invalid_type`): for now it is only shown — on `/cuenta`'s header (`accountTypes` in
-`accountTree.js`) and chosen in the create/edit dialogs — and nothing acts on it. One with
+`invalid_type`): it is shown on `/cuenta`'s header (`accountTypes` in
+`accountTree.js`), chosen in the create/edit dialogs, and the account a distribution's
+payment is made in has to be an `asset`. `distribution_default` (migration `00032`, always present in
+the JSON, replaced wholesale by `PATCH`, with a "Repartos" badge and a checkbox in the dialogs) marks
+the account distributions record their payments in when they have none of their own. One with
 entries can't be deleted — they're history — so it's flagged instead, and *only the
 frontend acts on it*: the API lists, reads, edits and posts to a hidden account like any
 other. `DELETE /accounts/{id}` (admin/money) exists only for an account nothing references
@@ -1470,7 +1492,7 @@ with its paid / delivered state, to tick (`ticked`; "todos / sin pagar / sin ent
 state, `pick`) and act on — mark paid or take the payment off (admin/board), hand out to the
 person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled with the member the order is
 for; only members are offered), undo a delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same.
-Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
+Paying and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in its first option). Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
 units, undoing, returning or taking numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by part, digits
 as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list such as
 the numbers an error message or an entry of the list of payments names). The Telegram messages about numbers say them the same way

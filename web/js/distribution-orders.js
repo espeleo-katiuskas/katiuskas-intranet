@@ -393,7 +393,75 @@ deliverForm.addEventListener('submit', async (event) => {
   }
 });
 
+// ----- paying: in which account -----
+// Every payment (and taking one off) is a transaction in the accounting, so the
+// asset account the money went through (or comes back from) is asked each time,
+// starting from the one used last.
+const payDialog = document.getElementById('pay-dialog');
+const payForm = document.getElementById('pay-form');
+const payAccount = document.getElementById('pd-account');
+const LAST_ACCOUNT_KEY = 'katiuskas:distribution-pay-account';
+initModal(payDialog, payForm);
+let paying = null;
+let assetAccounts = [];
+
+function rememberedAccount() {
+  try {
+    return localStorage.getItem(LAST_ACCOUNT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberAccount(value) {
+  try {
+    localStorage.setItem(LAST_ACCOUNT_KEY, value);
+  } catch {
+    // Best effort: the choice is only a convenience.
+  }
+}
+
+// Asks for the account and then runs `run(accountId)`; with nothing to pay
+// (everything free) there is no money to move and it runs at once.
+async function withAccount(u, { title, hint, label, run, done }) {
+  if (!(u.price > 0)) {
+    await run(null);
+    showFeedback(done);
+    return true;
+  }
+  paying = { run, done };
+  document.getElementById('pay-title').textContent = title;
+  document.getElementById('pay-hint').textContent = hint;
+  document.getElementById('pd-account-label').textContent = label;
+  const last = rememberedAccount();
+  payAccount.innerHTML = [
+    '<option value="">— Elige una cuenta —</option>',
+    ...assetAccounts.map(
+      (a) =>
+        `<option value="${a.id}"${String(a.id) === last ? ' selected' : ''}>${escapeHtml(a.name)}</option>`,
+    ),
+  ].join('');
+  openModal(payDialog);
+  return false;
+}
+
+payForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!paying || !payAccount.value) return;
+  const { run, done } = paying;
+  try {
+    await run(Number(payAccount.value));
+    rememberAccount(payAccount.value);
+    payDialog.close();
+    showFeedback(done);
+    await load();
+  } catch (err) {
+    fail(err);
+  }
+});
+
 // ----- the actions -----
+const capitalized = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const encodeList = (items) => encodeURIComponent(items.join(','));
 
 function quantityOf(u) {
@@ -468,19 +536,21 @@ async function perform(act, u) {
       showFeedback('Números quitados.');
       return true;
     case 'pay':
-      await apiFetch(`${base}/payments`, {
-        method: 'POST',
-        body: JSON.stringify({ payments: [{ unit_id: u.id, ...withWhich }] }),
+    case 'payall': {
+      const payments =
+        act === 'pay' ? { payments: [{ unit_id: u.id, ...withWhich }] } : { unit_ids: [u.id] };
+      return withAccount(u, {
+        title: 'Registrar el pago',
+        hint: `${capitalized(act === 'pay' ? which : 'todo lo que se pueda')} de ${u.beneficiary_name}.`,
+        label: 'Cuenta en la que se ha pagado',
+        run: (accountId) =>
+          apiFetch(`${base}/payments`, {
+            method: 'POST',
+            body: JSON.stringify({ ...payments, account_id: accountId }),
+          }),
+        done: 'Marcado como pagado.',
       });
-      showFeedback('Marcado como pagado.');
-      return true;
-    case 'payall':
-      await apiFetch(`${base}/payments`, {
-        method: 'POST',
-        body: JSON.stringify({ unit_ids: [u.id] }),
-      });
-      showFeedback('Marcado como pagado.');
-      return true;
+    }
     case 'unpay': {
       const query = numbered
         ? `?identifiers=${encodeList(chosen)}`
@@ -494,9 +564,16 @@ async function perform(act, u) {
         !confirm('¿Quitar todo lo pagado de este pedido?')
       )
         return false;
-      await apiFetch(`${base}/units/${u.id}/payment${query}`, { method: 'DELETE' });
-      showFeedback('Marca de pagado quitada.');
-      return true;
+      return withAccount(u, {
+        title: 'Quitar el pago',
+        hint: `${capitalized(which)} de ${u.beneficiary_name}.`,
+        label: 'Cuenta de la que se devuelve el dinero',
+        run: (accountId) => {
+          const joined = accountId ? `${query ? '&' : '?'}account_id=${accountId}` : '';
+          return apiFetch(`${base}/units/${u.id}/payment${query}${joined}`, { method: 'DELETE' });
+        },
+        done: 'Marca de pagado quitada.',
+      });
     }
     case 'deliver': {
       // Who gets it is asked in a dialog; the delivery is made when it is accepted.
@@ -629,6 +706,14 @@ async function load(ready = Promise.resolve()) {
     // With articles, what is left of each changes with the orders, so the
     // distribution is read again with them.
     if (distribution && hasArticles(distribution)) requests.push(apiFetch(base));
+    // The accounts money can be paid into are read once, only by who can mark payments.
+    if (canMarkPaid && assetAccounts.length === 0) {
+      requests.push(
+        apiFetch('/accounts').then((all) => {
+          assetAccounts = all.filter((a) => a.type === 'asset' && !a.hidden);
+        }),
+      );
+    }
     const [order, all, , fresh] = await Promise.all(requests);
     if (fresh) distribution = fresh;
     units = all;

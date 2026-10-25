@@ -70,6 +70,11 @@
           <input id="nd-max-extra" name="max_extra" type="number" min="0" step="1">
         </div>
         <div class="field span-2">
+          <label for="nd-account">Cuenta de los pagos <span class="optional">(de tipo «ingresos»)</span></label>
+          <select id="nd-account" name="account_id"></select>
+          <p class="hint">Cada pago de este reparto se apunta en esta cuenta, contra la cuenta del dinero con que se pagó.</p>
+        </div>
+        <div class="field span-2">
           <label for="nd-options">Qué hay que elegir <span class="optional">(una cosa por línea, por ejemplo «Talla: S, M, L, XL»)</span></label>
           <textarea id="nd-options" name="options"></textarea>
         </div>

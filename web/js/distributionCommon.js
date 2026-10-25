@@ -296,6 +296,7 @@ function readDistributionForm(form) {
     description: text('description') || null,
     cutoff_date: text('cutoff_date') || null,
     closes_at: text('closes_at') ? new Date(text('closes_at')).toISOString() : null,
+    account_id: text('account_id') ? Number(text('account_id')) : null,
     articles,
   };
   // The fields of a distribution with articles are disabled, so they aren't in
@@ -320,6 +321,23 @@ function readDistributionForm(form) {
   };
 }
 
+// Offers, in the form's account select, "the default" (empty: the account marked
+// for the payments of distributions, named when there is one) and every account
+// of type income that isn't hidden.
+async function loadAccountOptions(form) {
+  const select = form.elements.account_id;
+  try {
+    const accounts = (await apiFetch('/accounts')).filter((a) => !a.hidden && a.type === 'income');
+    const standard = accounts.find((a) => a.distribution_default);
+    select.innerHTML = [
+      `<option value="">${standard ? `Por defecto (${escapeHtml(standard.name)})` : 'Por defecto (todavía no hay ninguna)'}</option>`,
+      ...accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`),
+    ].join('');
+  } catch {
+    select.innerHTML = '<option value="">Por defecto</option>';
+  }
+}
+
 function fillDistributionForm(form, d) {
   const set = (name, value) => {
     form.elements[name].value = value ?? '';
@@ -329,6 +347,7 @@ function fillDistributionForm(form, d) {
   set('audience', d.audience);
   set('cutoff_date', d.cutoff_date ? d.cutoff_date.slice(0, 10) : '');
   set('closes_at', d.closes_at ? toLocalInputValue(d.closes_at) : '');
+  set('account_id', d.account_id);
   set('price', d.price);
   set('extra_price', d.extra_price);
   set('max_extra', d.max_extra);
@@ -374,6 +393,17 @@ async function loadPeople(distributionId, purpose = null) {
 const errorMessages = {
   not_open:
     'Este reparto no admite pedidos ahora mismo (no está abierto, o ya pasó la fecha límite).',
+  unknown_account: 'Esa cuenta no existe.',
+  account_not_asset:
+    'La cuenta en la que se paga tiene que ser de tipo «activo» (caja, banco…). El tipo se cambia en Contabilidad.',
+  account_required: 'Elige la cuenta en la que se ha pagado.',
+  account_not_income:
+    'La cuenta de los pagos de un reparto tiene que ser de tipo «ingresos». El tipo se cambia en Contabilidad.',
+  not_income_for_distributions:
+    'La cuenta por defecto de los repartos, y la de un reparto, tienen que ser de tipo «ingresos»: no se puede marcar así una de otro tipo, ni cambiar el tipo de una que se usa para ello.',
+  no_distribution_account:
+    'Este reparto no tiene cuenta para sus pagos y no hay una cuenta por defecto: elige una al editarlo, o marca una en Contabilidad como cuenta por defecto de los repartos.',
+  unit_paid: 'Este pedido tiene pagos: quítalos antes de borrarlo.',
   not_eligible:
     'Solo pueden pedirlo socios: quienes lo eran en la fecha de corte (o, si no hay, los socios de hoy), tanto la persona para quien es como quien lo pide.',
   invalid_collector: 'Quien recoge tiene que ser socio ahora o haberlo sido en la fecha de corte.',
@@ -472,6 +502,7 @@ function bodyFrom(d, changes = {}) {
     audience: d.audience,
     cutoff_date: d.cutoff_date ? d.cutoff_date.slice(0, 10) : null,
     closes_at: d.closes_at ?? null,
+    account_id: d.account_id ?? null,
     price: d.price,
     extra_price: d.extra_price ?? null,
     max_extra: d.max_extra ?? null,
@@ -483,6 +514,7 @@ export {
   errorMessages,
   apiErrorText,
   bodyFrom,
+  loadAccountOptions,
   distributionStatusLabels,
   distributionStatusHints,
   STATUS_ORDER,

@@ -60,6 +60,11 @@ type Account struct {
 	AllowsDues     bool         `json:"allows_dues"`
 	AllowsLicenses bool         `json:"allows_licenses"`
 	Hidden         bool         `json:"hidden"`
+	// DistributionDefault marks the one account (at most one) that records the
+	// payments of every distribution that doesn't name an account of its own (see
+	// migration 00032_distribution_accounts.sql). Marking one takes the mark off
+	// whichever had it.
+	DistributionDefault bool `json:"distribution_default"`
 	// Balance and LastTransactionAt are this account's own direct
 	// activity — the sum of every entry ever posted straight to it
 	// (never rolled up from child accounts) and when the most recent
@@ -76,13 +81,14 @@ type Account struct {
 }
 
 type CreateAccountInput struct {
-	Name           string
-	Code           *string
-	ParentID       *int64
-	Type           *AccountType
-	AllowsDues     bool
-	AllowsLicenses bool
-	Hidden         bool
+	Name                string
+	Code                *string
+	ParentID            *int64
+	Type                *AccountType
+	AllowsDues          bool
+	AllowsLicenses      bool
+	Hidden              bool
+	DistributionDefault bool
 }
 
 // UpdateAccountInput replaces every field at once — the same
@@ -97,13 +103,14 @@ type CreateAccountInput struct {
 // same replace-everything rule: leaving one out of the request means
 // false, not "keep what it was" — Hidden included.
 type UpdateAccountInput struct {
-	Name           string
-	Code           *string
-	ParentID       *int64
-	Type           *AccountType
-	AllowsDues     bool
-	AllowsLicenses bool
-	Hidden         bool
+	Name                string
+	Code                *string
+	ParentID            *int64
+	Type                *AccountType
+	AllowsDues          bool
+	AllowsLicenses      bool
+	Hidden              bool
+	DistributionDefault bool
 }
 
 // MoveDirection is which adjacent sibling (same parent_id) to swap an

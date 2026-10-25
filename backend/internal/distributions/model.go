@@ -125,6 +125,11 @@ type Distribution struct {
 	Articles       []Article  `json:"articles"`
 	CreatedByLogin string     `json:"created_by_login"`
 	CreatedAt      time.Time  `json:"created_at"`
+	// AccountID is the account its payments are recorded in (see migration
+	// 00032_distribution_accounts.sql), absent when it uses the one marked as the
+	// default for distributions; AccountName is that account's name.
+	AccountID   *int64  `json:"account_id,omitempty"`
+	AccountName *string `json:"account_name,omitempty"`
 	// UnitCount and PickedUpCount are in units, not rows: a row of an article
 	// stands for as many as its quantity.
 	UnitCount     int   `json:"unit_count"`
@@ -219,6 +224,7 @@ type CreateInput struct {
 	MaxExtra    *int
 	Options     []OptionInput
 	Articles    []ArticleInput
+	AccountID   *int64
 	CreatedBy   int64
 }
 
@@ -242,6 +248,7 @@ type UpdateInput struct {
 	MaxExtra    *int
 	Options     *[]OptionInput
 	Articles    *[]ArticleInput
+	AccountID   *int64
 	Status      *Status
 }
 
@@ -353,7 +360,10 @@ type PaymentEntry struct {
 	Quantity         int       `json:"quantity"`
 	Amount           float64   `json:"amount"`
 	Identifiers      []string  `json:"identifiers"`
-	TotalAfter       float64   `json:"total_after"`
+	// TransactionID is the accounting transaction that recorded it, absent for the
+	// payments made before they were recorded there.
+	TransactionID *int64  `json:"transaction_id,omitempty"`
+	TotalAfter    float64 `json:"total_after"`
 }
 
 // PaymentFilter narrows and pages the list of payments: one distribution, an

@@ -3,6 +3,7 @@ import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import {
   hasArticles,
+  loadAccountOptions,
   readDistributionForm,
   statusBadge,
   syncArticleFields,
@@ -105,4 +106,5 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+await loadAccountOptions(form);
 await loadDistributions();

@@ -2209,7 +2209,9 @@ paths:
       description: >
         Same permissions and rules as changing its choices — except that a
         member's own unit in a distribution for all members can't be removed
-        (409 automatic_unit): it exists for everybody who qualifies.
+        (409 automatic_unit): it exists for everybody who qualifies — and one with
+        something paid can't be removed at all (409 unit_paid): take the payment
+        off first, which records it in the accounting.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2218,7 +2220,7 @@ paths:
         "204": { description: Removed }
         "403": { description: Neither the person it is for, whoever entered it, nor admin/board/material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open, unit_locked or automatic_unit. }
+        "409": { description: not_open, unit_locked, automatic_unit or unit_paid. }
 
   /distributions/{id}/order:
     get:
@@ -2361,8 +2363,7 @@ paths:
         was for (the person who paid), what it was and how many units, the money,
         the numbers it was about, and `total_after`, what the distribution had
         collected up to and including the entry. Taking a payment off is an entry
-        with the signs changed, and so is deleting an order that had something
-        paid. `total_after` is summed over the distribution's whole history,
+        with the signs changed. `total_after` is summed over the distribution's whole history,
         so it doesn't restart at the edge of a filter or a page. Narrowed by an
         inclusive range `from`/`to` (YYYY-MM-DD; 400 invalid_date,
         invalid_date_range) and paged by `limit`/`offset` (default 50, at most
@@ -2404,6 +2405,19 @@ paths:
         have a number is 409 identifiers_missing. A number the row doesn't have
         is 400 identifier_not_assigned, one that is paid already 409 already_paid,
         naming them at the end of the message.
+
+        Every payment is recorded in the accounting: `account_id` is the asset
+        account (type `asset`) the money was paid into, and one transaction is
+        written between it and the distribution's account (its own `account_id`
+        or else the one marked `distribution_default`), for each person the
+        payment was for, with a description in Spanish saying what was paid and
+        by whom. The entries of the list of payments point at it
+        (`transaction_id`). Nothing is recorded, and no account is needed, for
+        what costs nothing. 400 account_required (money with no account),
+        unknown_account, account_not_asset; 409 no_distribution_account (neither the
+        distribution nor the default has one). The distribution's own account and the
+        default one have to be of type `income` (400 account_not_income on a distribution,
+        409 not_income_for_distributions on an account).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2413,6 +2427,7 @@ paths:
             schema:
               type: object
               properties:
+                account_id: { type: integer, nullable: true, description: The asset account the money was paid into; required unless everything paid is free. }
                 unit_ids: { type: array, items: { type: integer } }
                 payments:
                   type: array
@@ -2425,10 +2440,10 @@ paths:
                       identifiers: { type: array, items: { type: string }, description: Which numbers are paid, in an article with numbers; ranges allowed where they are described. }
       responses:
         "204": { description: Marked }
-        "400": { description: no_units. }
+        "400": { description: no_units, account_required, unknown_account or account_not_asset. }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: already_paid. }
+        "409": { description: already_paid or no_distribution_account. }
 
   /distributions/{id}/units/{unitID}/payment:
     delete:
@@ -2438,17 +2453,23 @@ paths:
         row, the given paid `identifiers`, or all of it without either (400
         invalid_quantity for more than are paid). A number the row doesn't have is
         400 identifier_not_assigned and one that isn't paid 409 identifier_not_paid,
-        naming them at the end of the message.
+        naming them at the end of the message. Like paying, it is recorded in the
+        accounting, as the transaction with the signs changed: `account_id` is the
+        asset account the money goes back from (same errors as POST
+        /distributions/{id}/payments).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: unitID, in: path, required: true, schema: { type: integer } }
+        - { name: account_id, in: query, required: false, schema: { type: integer }, description: The asset account the money goes back from; required unless the units cost nothing. }
         - { name: quantity, in: query, required: false, schema: { type: integer, minimum: 1 } }
         - { name: identifiers, in: query, required: false, schema: { type: string }, description: Comma-separated numbers (ranges allowed where described). }
       responses:
         "204": { description: Removed }
+        "400": { description: account_required, unknown_account or account_not_asset. }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: no_distribution_account. }
 
   /users/{login}/movements:
     get:
@@ -2896,6 +2917,14 @@ paths:
                     Marks this account as one a transaction can use to
                     record federative licenses: see POST
                     /users/{login}/licenses. Omitted means false.
+                distribution_default:
+                  type: boolean
+                  default: false
+                  description: >
+                    Marks this account (which has to be of type income, else 409
+                    not_income_for_distributions) as the one the payments of distributions
+                    without an account of their own are recorded in. Only one
+                    account has it: marking this one takes the mark off the other.
                 hidden:
                   type: boolean
                   default: false
@@ -2933,7 +2962,7 @@ paths:
       summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
-        name/code/parent_id/type/allows_dues/allows_licenses/hidden always replace
+        name/code/parent_id/type/allows_dues/allows_licenses/distribution_default/hidden always replace
         the current values — omitting, nulling, or blanking code or type clears
         it, the same as an account that never had one, and omitting
         any flag turns it off rather than keeping it (400 invalid_type for a
@@ -2955,6 +2984,7 @@ paths:
                 type: { type: string, enum: [asset, income, expense], nullable: true }
                 allows_dues: { type: boolean, default: false }
                 allows_licenses: { type: boolean, default: false }
+                distribution_default: { type: boolean, default: false }
                 hidden: { type: boolean, default: false }
       responses:
         "200":
@@ -3193,7 +3223,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: transaction_has_licenses — a license still names this transaction as its payment. }
+        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — or transaction_has_distribution_payments — a payment of a distribution does. }
 
 components:
   securitySchemes:
@@ -3796,6 +3826,8 @@ components:
         status: { type: string, enum: [draft, open, closed, done] }
         closes_at: { type: string, format: date-time, description: Deadline for members to choose; absent = none. }
         cutoff_date: { type: string, format: date, description: Only people who were members this day can have it; required for all_members. }
+        account_id: { type: integer, description: The account its payments are recorded in; absent = the default one (the account marked distribution_default). }
+        account_name: { type: string }
         price: { type: number, description: A member's own unit; 0 when free. }
         extra_price: { type: number, description: Each extra unit; absent when there are no extras. }
         max_extra: { type: integer, description: Extras per person; absent = no cap. }
@@ -3843,6 +3875,7 @@ components:
         audience: { type: string, enum: [all_members, signup], default: all_members }
         closes_at: { type: string, format: date-time }
         cutoff_date: { type: string, format: date }
+        account_id: { type: integer, nullable: true, description: The account its payments are recorded in; null = the default one. 400 unknown_account if it doesn't exist, account_not_income if it isn't of type income. }
         price: { type: number, default: 0 }
         extra_price: { type: number }
         max_extra: { type: integer }
@@ -3914,6 +3947,7 @@ components:
         distribution_id: { type: integer }
         distribution_name: { type: string }
         unit_id: { type: integer, description: The order it was about; absent if it was deleted since. }
+        transaction_id: { type: integer, description: The accounting transaction that recorded it; absent for payments made before there were any. }
         occurred_at: { type: string, format: date-time }
         recorded_by_login: { type: string, description: Who wrote the payment down. }
         recorded_by_name: { type: string }
@@ -4210,9 +4244,10 @@ components:
         type:
           type: string
           enum: [asset, income, expense]
-          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. Only shown, nothing acts on it.
+          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. A distribution's payments have to be paid into an account of type asset.
         allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
         allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
+        distribution_default: { type: boolean, description: The account the payments of distributions with no account of their own are recorded in; at most one account has it. }
         hidden: { type: boolean, description: The account is no longer used; clients leave it out unless asked. }
         balance:
           type: number

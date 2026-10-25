@@ -25,6 +25,7 @@ import {
   distributionStatusLabels,
   isUnchosen,
   fillDistributionForm,
+  loadAccountOptions,
   formatDateTime,
   loadPeople,
   readDistributionForm,
@@ -205,7 +206,8 @@ editForm.elements.articles.addEventListener('input', () => {
   syncEditCutoff();
 });
 
-onClick('open-edit', () => {
+onClick('open-edit', async () => {
+  await loadAccountOptions(editForm);
   fillDistributionForm(editForm, distribution);
   syncEditCutoff();
   openModal(editDialog);

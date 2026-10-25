@@ -3,6 +3,7 @@ package accounting
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -19,6 +20,11 @@ var (
 	// split activities.ErrParticipantNotFound uses for its own
 	// input-referenced ids.
 	ErrUnknownAccount = errors.New("referenced account does not exist")
+	// ErrNotIncomeForDistributions means the account would be (or stay) the one
+	// distributions record their payments in without being of type income: the
+	// default account for distributions, or an account a distribution names, has
+	// to be an income account.
+	ErrNotIncomeForDistributions = errors.New("an account used for the payments of distributions has to be of type income")
 	// ErrDuplicateCode means another account already has this code.
 	ErrDuplicateCode = errors.New("another account already has this code")
 	// ErrAccountInUse means this account can't be deleted: it's still
@@ -32,6 +38,10 @@ var (
 	// outlives the record of how it was paid). Its dues, by contrast,
 	// are removed with it.
 	ErrTransactionHasLicenses = errors.New("transaction is still the payment of one or more licenses")
+	// ErrTransactionHasDistributionPayments means the transaction recorded the
+	// payment of something in a distribution (a payment marked there made it), so
+	// it can't be deleted: the payment has to be taken off there instead.
+	ErrTransactionHasDistributionPayments = errors.New("transaction recorded payments of a distribution: take them off there")
 	// ErrCircularParent means the given parent_id is this account
 	// itself, or one of its own descendants — setting it would make
 	// this account a descendant of one of its own descendants, a cycle
@@ -94,28 +104,48 @@ func NewRepository(pool db.PGX) *Repository {
 // activityresources.Repository.Create uses for a resource's own
 // position within its activity.
 func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (Account, error) {
+	// In its own (sub)transaction: taking the distributions' default mark off
+	// another account and giving it to this one is one change, and a rejected
+	// create (a duplicate code) must not leave the other one without it.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	if in.DistributionDefault && (in.Type == nil || *in.Type != AccountTypeIncome) {
+		return Account{}, ErrNotIncomeForDistributions
+	}
+	if in.DistributionDefault {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET distribution_default = false WHERE distribution_default`); err != nil {
+			return Account{}, err
+		}
+	}
 	var a Account
-	err := r.pool.QueryRow(ctx, `
-		INSERT INTO accounts (name, code, parent_id, type, allows_dues, allows_licenses, hidden, position)
-		SELECT $1, $2, $3, $7, $4, $5, $6, COALESCE(MAX(position), 0) + 1
+	err = tx.QueryRow(ctx, `
+		INSERT INTO accounts (name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, position)
+		SELECT $1, $2, $3, $7, $4, $5, $6, $8, COALESCE(MAX(position), 0) + 1
 		FROM accounts WHERE parent_id IS NOT DISTINCT FROM $3
-		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden
-	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, in.Type,
-	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden)
+		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default
+	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, in.Type, in.DistributionDefault,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
 	switch pgErrCode(err) {
 	case uniqueViolationCode:
 		return Account{}, ErrDuplicateCode
 	case foreignKeyViolationCode:
 		return Account{}, ErrUnknownAccount
 	}
-	return a, err
+	if err != nil {
+		return Account{}, err
+	}
+	return a, tx.Commit(ctx)
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden FROM accounts WHERE id = $1
-	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden)
+		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default FROM accounts WHERE id = $1
+	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -158,7 +188,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			SELECT a.id, tree.path || a.position
 			FROM accounts a JOIN tree ON a.parent_id = tree.id
 		)
-		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden,
+		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden, a.distribution_default,
 			COALESCE(SUM(te.amount), 0) AS balance,
 			MAX(t.occurred_at) AS last_transaction_at
 		FROM accounts a
@@ -177,7 +207,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		var balance float64
-		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &balance, &a.LastTransactionAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &balance, &a.LastTransactionAt); err != nil {
 			return nil, err
 		}
 		a.Balance = &balance
@@ -244,13 +274,40 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 		}
 	}
 
+	// Own (sub)transaction, as in CreateAccount: the default mark moves from one
+	// account to this one or doesn't move at all.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	if in.DistributionDefault && (in.Type == nil || *in.Type != AccountTypeIncome) {
+		return Account{}, ErrNotIncomeForDistributions
+	}
+	if in.Type == nil || *in.Type != AccountTypeIncome {
+		// Losing the income type is refused while a distribution names the account.
+		var used bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM distributions WHERE account_id = $1)`, id).Scan(&used); err != nil {
+			return Account{}, err
+		}
+		if used {
+			return Account{}, ErrNotIncomeForDistributions
+		}
+	}
+	if in.DistributionDefault {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET distribution_default = false WHERE distribution_default AND id <> $1`, id); err != nil {
+			return Account{}, err
+		}
+	}
 	var a Account
-	err := r.pool.QueryRow(ctx, `
-		UPDATE accounts SET name = $1, code = $2, parent_id = $3, type = $8, allows_dues = $4, allows_licenses = $5, hidden = $6
+	err = tx.QueryRow(ctx, `
+		UPDATE accounts SET name = $1, code = $2, parent_id = $3, type = $8, allows_dues = $4, allows_licenses = $5, hidden = $6,
+			distribution_default = $9
 		WHERE id = $7
-		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden
-	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, id, in.Type,
-	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden)
+		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default
+	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, id, in.Type, in.DistributionDefault,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -260,7 +317,10 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 	case foreignKeyViolationCode:
 		return Account{}, ErrUnknownAccount
 	}
-	return a, err
+	if err != nil {
+		return Account{}, err
+	}
+	return a, tx.Commit(ctx)
 }
 
 // wouldCreateCycle reports whether setting accountID's parent to
@@ -351,7 +411,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, position FROM accounts
+		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, position FROM accounts
 		WHERE parent_id IS NOT DISTINCT FROM $1
 		ORDER BY id
 		FOR UPDATE
@@ -370,7 +430,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	siblings := []sibling{}
 	for rows.Next() {
 		var s sibling
-		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.Type, &s.AllowsDues, &s.AllowsLicenses, &s.Hidden, &s.position); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.Type, &s.AllowsDues, &s.AllowsLicenses, &s.Hidden, &s.DistributionDefault, &s.position); err != nil {
 			return Account{}, err
 		}
 		if s.ID == id {
@@ -599,6 +659,11 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
 	defer tx.Rollback(ctx)
 	tag, err := tx.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
 	if pgErrCode(err) == foreignKeyViolationCode {
+		// Which thing still points at it: a license, or a payment of a distribution.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && strings.Contains(pgErr.TableName, "distribution_payments") {
+			return ErrTransactionHasDistributionPayments
+		}
 		return ErrTransactionHasLicenses
 	}
 	if err != nil {
