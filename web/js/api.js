@@ -351,84 +351,60 @@ const typeLabels = {
 };
 const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
 
-// Shared "success/error banner" pair every page provides via its own
-// #feedback/#error <p> elements (see e.g. socios.html) — previously
-// copy-pasted verbatim into every page script instead of living here.
-// Looked up by id on every call rather than cached at module load, so
-// these keep working regardless of when a page's own script runs
-// relative to the elements existing in the DOM; a page missing one of
-// the two ids (there are none today) just silently skips that half
-// instead of throwing.
+// The success banner every page provides via its own #feedback <p> (see
+// e.g. socios.html) — previously copy-pasted verbatim into every page script
+// instead of living here. Looked up by id on every call rather than cached at
+// module load, so it keeps working regardless of when a page's own script
+// runs relative to the element existing in the DOM. Errors don't use a banner:
+// see showError below.
 function showFeedback(message) {
   const feedbackBox = document.getElementById('feedback');
-  const errorBox = document.getElementById('error');
-  if (errorBox) errorBox.hidden = true;
   if (feedbackBox) {
     feedbackBox.textContent = message;
     feedbackBox.hidden = false;
   }
 }
 
-// A modal <dialog> sits in the top layer, over everything else, behind a
-// dimmed backdrop: a message written to the page's own #error box would
-// show up underneath it, practically out of sight, while the person is
-// still looking at the form that caused it. So while one is open, the
-// error goes into that dialog instead — right above its action buttons,
-// where the person's attention already is. The box is created the first
-// time it's needed (no dialog has to carry its own markup for it), and
-// cleared as soon as the person does anything in the form again, or the
-// dialog closes, so it never outlives the attempt it was about.
-function dialogErrorBox(dialog) {
-  let box = dialog.querySelector('[data-dialog-error]');
-  if (box) return box;
-  box = document.createElement('p');
-  box.className = 'error-message';
-  box.dataset.dialogError = '';
-  box.setAttribute('role', 'alert');
-  box.hidden = true;
-  const actions = dialog.querySelector('.panel-actions');
-  if (actions) actions.before(box);
-  else (dialog.querySelector('form') ?? dialog).append(box);
-
-  const clear = () => {
-    box.hidden = true;
-    box.textContent = '';
-  };
-  dialog.addEventListener('close', clear);
-  dialog.addEventListener('input', clear);
-  dialog.addEventListener('change', clear);
-  // Capture phase: runs before the clicked button's own handler, so an
-  // action that fails again simply shows its error again, while one that
-  // succeeds leaves the old message gone.
-  dialog.addEventListener(
-    'click',
-    (event) => {
-      if (event.target.closest('button')) clear();
-    },
-    true,
-  );
-  return box;
+// An error has to be seen: written to a box at the top of the page it could
+// be far from the button that was pressed, or just go unnoticed. So it goes
+// into a modal <dialog> of its own, in the top layer over everything —
+// including another dialog that happens to be open, which it leaves dimmed
+// and inert underneath — behind a dark backdrop, and nothing else can be
+// operated until it is closed (the "Cerrar" button, Escape or a click on the
+// backdrop). Created the first time it's needed, so no page carries markup
+// for it; a second error while it's open replaces the message.
+function errorDialog() {
+  let dialog = document.getElementById('error-dialog');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'error-dialog';
+  dialog.className = 'panel modal error-modal';
+  dialog.setAttribute('role', 'alertdialog');
+  dialog.setAttribute('aria-labelledby', 'error-dialog-title');
+  dialog.innerHTML = `
+    <h3 id="error-dialog-title">Ha ocurrido un error</h3>
+    <p id="error-dialog-message"></p>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-primary" data-error-close>Cerrar</button>
+    </div>`;
+  dialog.querySelector('[data-error-close]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.body.append(dialog);
+  return dialog;
 }
 
-// Callers that report something after saving and then close the dialog
-// (see account.js's "creada, pero no se pudo registrar") must close it
-// first: an error shown while it's still open goes into it, and would
-// vanish with it.
 function showError(message) {
-  const dialog = document.querySelector('dialog[open]');
-  if (dialog) {
-    const box = dialogErrorBox(dialog);
-    box.textContent = message;
-    box.hidden = false;
-    box.scrollIntoView({ block: 'nearest' });
-    return;
-  }
   const feedbackBox = document.getElementById('feedback');
-  const errorBox = document.getElementById('error');
   if (feedbackBox) feedbackBox.hidden = true;
-  if (errorBox) {
-    errorBox.textContent = message;
-    errorBox.hidden = false;
+  const dialog = errorDialog();
+  dialog.querySelector('#error-dialog-message').textContent = message;
+  if (!dialog.open) {
+    // showModal() would otherwise send the page back to the top (as openModal says).
+    const { scrollX, scrollY } = window;
+    dialog.showModal();
+    window.scrollTo(scrollX, scrollY);
   }
 }
 

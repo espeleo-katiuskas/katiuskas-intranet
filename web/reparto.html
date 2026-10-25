@@ -19,7 +19,6 @@
   <p id="distribution-description"></p>
 
   <p id="feedback" class="success-message" hidden></p>
-  <p id="error" class="error-message" hidden></p>
 
   <div class="panel-actions" id="distribution-actions" hidden>
     <a id="link-orders" class="btn btn-secondary btn-small" data-roles="admin,board,material">Pedidos</a>
@@ -119,7 +118,7 @@
       <form id="order-form" class="panel" hidden>
         <div class="field-grid">
           <div class="field span-2">
-            <label for="of-person">A nombre de <span class="optional">(opcional: tú por defecto; otro socio, si lo pides por él)</span></label>
+            <label for="of-person">A nombre de <span class="optional">(opcional: solo si pides para otro socio)</span></label>
             <input id="of-person" type="text" list="of-person-options" autocomplete="off" placeholder="Escribe un nombre…">
             <datalist id="of-person-options"></datalist>
           </div>

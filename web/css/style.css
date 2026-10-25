@@ -290,7 +290,7 @@ body {
   max-width: 1120px;
 }
 
-/* #feedback/#error (the shared top-of-page status banner every
+/* #feedback (the shared top-of-page status banner every
    authenticated page has, right after <main class="content"> opens —
    login.html's own request-feedback/request-error/code-error sit
    inline below the button they answer instead, on a page short enough
@@ -305,8 +305,7 @@ body {
    visible gets newly covered. Below .sidebar.open's own z-index (100,
    see the narrow-screen media query below) so the mobile menu still
    overlays it rather than the other way around. */
-#feedback,
-#error {
+#feedback {
   position: sticky;
   top: 0;
   z-index: 90;
@@ -1120,6 +1119,23 @@ dialog.modal::backdrop {
 
 .modal-close:hover {
   color: var(--ink);
+}
+
+/* api.js's showError: what went wrong, over everything, to be closed. */
+dialog.error-modal {
+  margin: auto; /* .panel's own margin-top would keep it at the top */
+  max-width: 440px;
+  border-top: 4px solid var(--danger);
+}
+
+dialog.error-modal h3 {
+  color: var(--danger);
+  margin-top: 0;
+}
+
+dialog.error-modal p {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 /* Buttons: one shared base, three intents, one size variant. */

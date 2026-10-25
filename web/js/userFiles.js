@@ -1,4 +1,11 @@
-import { apiFetch, apiFetchBlob, escapeHtml, encodeFilePath, formatDate } from './api.js';
+import {
+  apiFetch,
+  apiFetchBlob,
+  escapeHtml,
+  encodeFilePath,
+  formatDate,
+  showError,
+} from './api.js';
 import { renderMarkdown } from './markdown.js';
 import {
   joinPath,
@@ -51,16 +58,6 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
   const entriesList = document.getElementById('uf-entries-list');
   const section = document.getElementById('uf-section');
   if (!breadcrumbsEl || !directoryView || !fileView || !entriesList) return;
-
-  function showError(message) {
-    const feedbackBox = document.getElementById('feedback');
-    const errorBox = document.getElementById('error');
-    if (feedbackBox) feedbackBox.hidden = true;
-    if (errorBox) {
-      errorBox.textContent = message;
-      errorBox.hidden = false;
-    }
-  }
 
   function renderBreadcrumbs(dirPath) {
     const segments = dirPath ? dirPath.split('/') : [];
