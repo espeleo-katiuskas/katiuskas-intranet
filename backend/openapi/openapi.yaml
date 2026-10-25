@@ -3038,6 +3038,7 @@ paths:
         - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
         - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
         - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
+        - { name: q, in: query, schema: { type: string }, description: "Words (separated by spaces) that must all appear in the description, in any order, ignoring case and accents." }
       responses:
         "200":
           description: This account's own entries, newest first
@@ -3096,6 +3097,7 @@ paths:
         - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
         - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
         - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
+        - { name: q, in: query, schema: { type: string }, description: "Words (separated by spaces) that must all appear in the description, in any order, ignoring case and accents." }
       responses:
         "200":
           description: Transactions, most recent occurred_at first

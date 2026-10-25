@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -1104,5 +1105,68 @@ func TestHandlerDistributionDefaultAccountIsUnique(t *testing.T) {
 	doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos"})
 	if got := defaults(); len(got) != 0 {
 		t.Fatalf("expected no default, got %v", got)
+	}
+}
+
+// q narrows both listings to the transactions whose description has every word,
+// in any order, ignoring case and accents; the running balance of the ledger
+// stays what it is without the search.
+func TestListTransactionsSearchesWordsInTheDescription(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	caja := createAccount(t, mux, token, "Caja", "570")
+	otra := createAccount(t, mux, token, "Otra", "571")
+	now := time.Now()
+	for i, description := range []string{"Pago de cuota de Álvaro Núñez", "Compra de cuerdas", "Cuota de María 100%"} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", token,
+			transactionBody(now.Add(time.Duration(i)*time.Minute), description, entry(caja.ID, 10), entry(otra.ID, -10)))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+	descriptions := func(path, query string) []string {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, path+"?q="+url.QueryEscape(query), token, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s?q=%s: %d: %s", path, query, rec.Code, rec.Body.String())
+		}
+		var list []struct {
+			Description  string  `json:"description"`
+			BalanceAfter float64 `json:"balance_after"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range list {
+			out = append(out, e.Description)
+		}
+		return out
+	}
+	ledger := fmt.Sprintf("/api/v1/accounts/%d/transactions", caja.ID)
+	for _, path := range []string{"/api/v1/transactions", ledger} {
+		if got := descriptions(path, ""); len(got) != 3 {
+			t.Errorf("%s without q: %v", path, got)
+		}
+		if got := descriptions(path, "CUOTA"); len(got) != 2 {
+			t.Errorf("%s case: %v", path, got)
+		}
+		if got := descriptions(path, "alvaro nunez cuota"); len(got) != 1 || got[0] != "Pago de cuota de Álvaro Núñez" {
+			t.Errorf("%s accents and order: %v", path, got)
+		}
+		if got := descriptions(path, "cuota cuerdas"); len(got) != 0 {
+			t.Errorf("%s every word must be there: %v", path, got)
+		}
+		if got := descriptions(path, "100%"); len(got) != 1 {
+			t.Errorf("%s a percent sign is just a character: %v", path, got)
+		}
+		if got := descriptions(path, "_"); len(got) != 0 {
+			t.Errorf("%s an underscore is just a character: %v", path, got)
+		}
+	}
+	// The balance after a transaction doesn't depend on the search.
+	rec := doRequest(mux, http.MethodGet, ledger+"?q=cuerdas", token, nil)
+	if !strings.Contains(rec.Body.String(), `"balance_after":20`) {
+		t.Errorf("expected the balance after the second transaction, got %s", rec.Body.String())
 	}
 }

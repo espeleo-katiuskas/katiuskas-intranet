@@ -655,21 +655,23 @@ function renderEntryRow(entry) {
 
 // The ledger is read a page at a time (the newest ENTRIES_PAGE_SIZE
 // first, "Ver más" for the next ones), optionally within a Desde/Hasta
-// range, since after a few years an account holds thousands of entries.
+// range and to the descriptions that have some words, since after a few years an account holds thousands of entries.
 // One more than a page is requested each time purely to know whether a
 // "Ver más" is worth showing, without a separate count endpoint.
 const ENTRIES_PAGE_SIZE = 50;
+const entriesSearchInput = document.getElementById('entries-search');
 const entriesFromInput = document.getElementById('entries-from');
 const entriesToInput = document.getElementById('entries-to');
 const entriesLoadMore = document.getElementById('entries-load-more');
 const entriesTableBody = document.getElementById('entries-table-body');
 let entriesLoaded = 0;
-let entriesFilter = { from: '', to: '' };
+let entriesFilter = { from: '', to: '', words: '' };
 
 function entriesQuery(offset) {
   const params = new URLSearchParams({ limit: ENTRIES_PAGE_SIZE + 1, offset });
   if (entriesFilter.from) params.set('from', entriesFilter.from);
   if (entriesFilter.to) params.set('to', entriesFilter.to);
+  if (entriesFilter.words) params.set('q', entriesFilter.words);
   return `/accounts/${accountId}/transactions?${params}`;
 }
 
@@ -686,10 +688,10 @@ async function loadEntries({ append = false } = {}) {
     if (append) {
       entriesTableBody.insertAdjacentHTML('beforeend', html);
     } else {
-      const filtered = entriesFilter.from || entriesFilter.to;
+      const filtered = entriesFilter.from || entriesFilter.to || entriesFilter.words;
       entriesTableBody.innerHTML = page.length
         ? html
-        : `<tr><td colspan="5">${filtered ? 'No hay transacciones en ese rango de fechas.' : 'Todavía no hay transacciones en esta cuenta.'}</td></tr>`;
+        : `<tr><td colspan="5">${filtered ? 'Ninguna transacción coincide con la búsqueda y las fechas.' : 'Todavía no hay transacciones en esta cuenta.'}</td></tr>`;
     }
     entriesLoaded += page.length;
     entriesLoadMore.hidden = !hasMore;
@@ -716,14 +718,19 @@ document.getElementById('entries-filter').addEventListener('submit', (event) => 
     showError('La fecha «Hasta» no puede ser anterior a «Desde».');
     return;
   }
-  entriesFilter = { from: entriesFromInput.value, to: entriesToInput.value };
+  entriesFilter = {
+    from: entriesFromInput.value,
+    to: entriesToInput.value,
+    words: entriesSearchInput.value.trim(),
+  };
   loadEntries();
 });
 
 document.getElementById('entries-filter-clear').addEventListener('click', () => {
   entriesFromInput.value = '';
   entriesToInput.value = '';
-  entriesFilter = { from: '', to: '' };
+  entriesSearchInput.value = '';
+  entriesFilter = { from: '', to: '', words: '' };
   loadEntries();
 });
 

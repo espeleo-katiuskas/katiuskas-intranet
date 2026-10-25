@@ -1230,7 +1230,11 @@ newest-first, the opposite order from how it accumulates. Both this and
 `GET /transactions` take the same `limit`/`offset` (default 50, at most 100) and optional
 `from`/`to` (inclusive `YYYY-MM-DD` days; `parseListFilter`, a bad one is 400
 `invalid_date`/`invalid_date_range`) — `ListFilter` — since a few years of ledger is
-thousands of rows. The ledger's `balance_after` is a window `SUM` over the account's
+thousands of rows. A `q` of words keeps only the transactions whose description has every one,
+in any order and ignoring case and accents (`ListFilter.Words`, `descriptionHasWords`/
+`likePatterns`: `translate()` of the Spanish accented letters on both sides and `LIKE`, with
+`%`, `_` and `\` escaped, so it needs no `unaccent` extension); on the ledger it is applied
+after the running balance, which doesn't change with it. The ledger's `balance_after` is a window `SUM` over the account's
 *whole* history, computed in a subquery before the range and page are applied, so it never
 restarts from zero at the edge of a window. Open to any baseline role, same as every other
 read in this package; `Handler.listAccountEntries` checks the account actually exists
@@ -1557,8 +1561,8 @@ for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
 description, this account's own entry amount, its running balance after, and per-row
 Editar/Borrar (a row also opens on a click anywhere but those buttons, or Enter/Space when
 focused — see below). The listing is paginated (`loadEntries`): the newest 50
-(`ENTRIES_PAGE_SIZE`) first, "Ver más" for the next ones, and a Desde/Hasta filter above
-it (the `limit`/`offset`/`from`/`to` query parameters of that route; it asks for one entry
+(`ENTRIES_PAGE_SIZE`) first, "Ver más" for the next ones, and above it a "Buscar en la descripción" box with a Desde/Hasta filter
+(the `limit`/`offset`/`from`/`to`/`q` query parameters of that route, applied with "Filtrar"; it asks for one entry
 more than a page just to know whether to show "Ver más"). A "+ Nueva transacción" dialog,
 deliberately narrower than the full `POST /transactions` shape, creates transactions: a
 date, a description, and a growing list of *lines* (`setupEntryLines`), each an amount "en

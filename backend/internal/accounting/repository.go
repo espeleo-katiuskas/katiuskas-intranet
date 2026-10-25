@@ -241,6 +241,45 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 // which calls GetAccount first) — an unknown id here would just come
 // back an empty, not-an-error list, indistinguishable from a real
 // account with no entries yet.
+const (
+	accentedLetters = "áàâäéèêëíìîïóòôöúùûüñ"
+	plainLetters    = "aaaaeeeeiiiioooouuuun"
+)
+
+// descriptionHasWords is the SQL condition that every pattern of the array
+// parameter (from likePatterns) matches the column, with case and accents
+// ignored on both sides: it works wherever the unaccent extension isn't there.
+func descriptionHasWords(column, patterns string) string {
+	return `NOT EXISTS (SELECT 1 FROM unnest(` + patterns + `::text[]) AS p
+		WHERE translate(lower(` + column + `), '` + accentedLetters + `', '` + plainLetters + `') NOT LIKE p)`
+}
+
+// likePatterns turns the words searched for into LIKE patterns that contain
+// each one, normalized the way descriptionHasWords normalizes the column.
+func likePatterns(words []string) []string {
+	accented, plain := []rune(accentedLetters), []rune(plainLetters)
+	patterns := make([]string, 0, len(words))
+	for _, word := range words {
+		var b strings.Builder
+		b.WriteByte('%')
+		for _, c := range strings.ToLower(word) {
+			for i, a := range accented {
+				if c == a {
+					c = plain[i]
+					break
+				}
+			}
+			if c == '%' || c == '_' || c == '\\' {
+				b.WriteByte('\\')
+			}
+			b.WriteRune(c)
+		}
+		b.WriteByte('%')
+		patterns = append(patterns, b.String())
+	}
+	return patterns
+}
+
 func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, filter ListFilter) ([]AccountEntry, error) {
 	// The running balance is a window over *every* entry of the account,
 	// computed in the inner query before the date range and the page are
@@ -257,9 +296,10 @@ func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, fi
 		) ledger
 		WHERE ($2::timestamptz IS NULL OR occurred_at >= $2)
 		  AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz + interval '1 day')
+		  AND `+descriptionHasWords("description", "$6")+`
 		ORDER BY occurred_at DESC, transaction_id DESC
 		LIMIT $4 OFFSET $5
-	`, accountID, filter.From, filter.To, filter.Limit, filter.Offset)
+	`, accountID, filter.From, filter.To, filter.Limit, filter.Offset, likePatterns(filter.Words))
 	if err != nil {
 		return nil, err
 	}
@@ -565,8 +605,9 @@ func (r *Repository) ListTransactions(ctx context.Context, filter ListFilter) ([
 		SELECT id, description, occurred_at, created_at FROM transactions
 		WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
 		  AND ($2::timestamptz IS NULL OR occurred_at < $2::timestamptz + interval '1 day')
+		  AND `+descriptionHasWords("description", "$5")+`
 		ORDER BY occurred_at DESC, id DESC LIMIT $3 OFFSET $4
-	`, filter.From, filter.To, filter.Limit, filter.Offset)
+	`, filter.From, filter.To, filter.Limit, filter.Offset, likePatterns(filter.Words))
 	if err != nil {
 		return nil, err
 	}

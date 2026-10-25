@@ -136,7 +136,9 @@ type Entry struct {
 // ListFilter pages and narrows GET /transactions and
 // GET /accounts/{id}/transactions: Limit/Offset page through the
 // newest-first order, and From/To (both optional, both inclusive, whole
-// UTC days) keep only what occurred within that range. Both listings
+// UTC days) keep only what occurred within that range, and Words (each one
+// has to appear in the description, in any order, ignoring case and accents) keep
+// only the transactions that say all of them. Both listings
 // grow without bound as years of ledger pile up, so neither ever answers
 // with everything.
 type ListFilter struct {
@@ -144,6 +146,7 @@ type ListFilter struct {
 	Offset int
 	From   *time.Time // start of the first day included
 	To     *time.Time // start of the last day included
+	Words  []string   // every one must be in the description
 }
 
 // Repository.ListAccountEntries), not a generic cross-account listing:

@@ -1256,6 +1256,10 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
     en vez de dar error.
   - Rango de fechas inclusivo `from`/`to` como `YYYY-MM-DD`: una fecha mal formada da 400
     `invalid_date` y un rango que acaba antes de empezar, 400 `invalid_date_range`.
+  - `q`: palabras que tienen que aparecer todas en la descripción, en cualquier orden y sin
+    distinguir mayúsculas ni acentos (se normalizan las vocales con tilde, la `ü` y la `ñ`, sin
+    necesitar la extensión `unaccent`); `%`, `_` y `\` cuentan como caracteres normales. En el
+    libro de una cuenta no cambia el `balance_after` de cada línea.
 
 #### Permisos
 

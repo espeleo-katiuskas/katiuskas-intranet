@@ -157,7 +157,8 @@ func (h *Handler) listAccountEntries(w http.ResponseWriter, r *http.Request) {
 
 // parseListFilter reads the shared paging and date-range query
 // parameters of both transaction listings: limit (default 50, at most
-// 100), offset, and from/to as plain YYYY-MM-DD dates, both inclusive.
+// 100), offset, from/to as plain YYYY-MM-DD dates, both inclusive, and q, words
+// that all have to be in the description.
 // An out-of-range limit or a negative offset (a malformed or hand-edited
 // query string, which Postgres's own LIMIT/OFFSET would reject outright
 // as a raw 500) falls back to its default rather than failing; a date
@@ -189,6 +190,7 @@ func parseListFilter(w http.ResponseWriter, r *http.Request) (ListFilter, bool) 
 		}
 		*field.dest = &day
 	}
+	filter.Words = strings.Fields(q.Get("q"))
 	if filter.From != nil && filter.To != nil && filter.To.Before(*filter.From) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", "to must not be before from")
 		return ListFilter{}, false
