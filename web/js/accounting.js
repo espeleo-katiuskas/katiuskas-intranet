@@ -7,7 +7,12 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
-import { childrenByParent, flattenAccountTree, shownAccounts } from './accountTree.js';
+import {
+  accountTypeOptions,
+  childrenByParent,
+  flattenAccountTree,
+  shownAccounts,
+} from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
 // This whole page is restricted to admin/money, tighter than the API
@@ -198,6 +203,7 @@ function openEditAccountDialog(account) {
     account.parent_id ?? null,
     account.id,
   );
+  document.getElementById('ea-type').innerHTML = accountTypeOptions(account.type ?? null);
   document.getElementById('ea-allows-dues').checked = Boolean(account.allows_dues);
   document.getElementById('ea-allows-licenses').checked = Boolean(account.allows_licenses);
   document.getElementById('ea-hidden').checked = Boolean(account.hidden);
@@ -214,6 +220,8 @@ editAccountForm.addEventListener('submit', async (event) => {
     // normalization server-side too, so this isn't the only guard).
     code: document.getElementById('ea-code').value.trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
+    // None when "Sin tipo" is chosen: PATCH replaces it like every other field.
+    type: document.getElementById('ea-type').value || null,
     // PATCH replaces every field, these two included — a box left
     // unchecked is sent as false, not omitted.
     allows_dues: document.getElementById('ea-allows-dues').checked,
@@ -260,6 +268,7 @@ document.getElementById('accounts-table-body').addEventListener('click', async (
 const newAccountDialog = document.getElementById('new-account-dialog');
 const newAccountForm = document.getElementById('new-account-form');
 initModal(newAccountDialog, newAccountForm);
+document.getElementById('na-type').innerHTML = accountTypeOptions();
 
 document.getElementById('toggle-new-account').addEventListener('click', () => {
   openModal(newAccountDialog);
@@ -273,6 +282,7 @@ newAccountForm.addEventListener('submit', async (event) => {
     name: formData.get('name').toString().trim(),
     code: formData.get('code').toString().trim() || null,
     parent_id: parentValue ? Number(parentValue) : null,
+    type: document.getElementById('na-type').value || null,
     allows_dues: document.getElementById('na-allows-dues').checked,
     allows_licenses: document.getElementById('na-allows-licenses').checked,
     hidden: document.getElementById('na-hidden').checked,

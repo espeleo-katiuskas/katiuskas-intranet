@@ -955,3 +955,91 @@ func TestDeleteTransactionHandlesLicensesAndDues(t *testing.T) {
 		t.Errorf("expected only the 2026 due to remain, got %+v", dues)
 	}
 }
+
+// An account's type is optional, one of asset, income or expense, listed and
+// returned with the account; a blank one is no type; PATCH replaces it like
+// every other field, so leaving it out clears it.
+func TestAccountTypeIsOptionalValidatedAndReplacedByUpdate(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	decodeAccount := func(rec *httptest.ResponseRecorder) accounting.Account {
+		t.Helper()
+		var a accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatalf("decode %q: %v", rec.Body.String(), err)
+		}
+		return a
+	}
+	typeOf := func(a accounting.Account) string {
+		if a.Type == nil {
+			return ""
+		}
+		return string(*a.Type)
+	}
+
+	// Each of the three kinds, none, and a blank one (the same as none).
+	created := map[string]accounting.Account{}
+	for _, c := range []struct{ name, kind string }{{"Caja", "asset"}, {"Cuotas", "income"}, {"Material", "expense"}, {"Agrupación", ""}} {
+		body := map[string]any{"name": c.name}
+		if c.kind != "" {
+			body["type"] = c.kind
+		}
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for %q, got %d: %s", c.name, rec.Code, rec.Body.String())
+		}
+		a := decodeAccount(rec)
+		if typeOf(a) != c.kind {
+			t.Errorf("%s: expected type %q, got %q", c.name, c.kind, typeOf(a))
+		}
+		created[c.name] = a
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "En blanco", "type": "  "}); rec.Code != http.StatusCreated || typeOf(decodeAccount(rec)) != "" {
+		t.Errorf("a blank type should be none: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// A type that isn't one is refused, on creating and on editing.
+	for _, bad := range []string{"liability", "ASSET", "x"} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, map[string]any{"name": "Mala", "type": bad})
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_type" {
+			t.Errorf("%q on create: expected 400 invalid_type, got %d %s", bad, rec.Code, rec.Body.String())
+		}
+		path := "/api/v1/accounts/" + itoa(created["Caja"].ID)
+		rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja", "type": bad})
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_type" {
+			t.Errorf("%q on update: expected 400 invalid_type, got %d %s", bad, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The list carries them, and so does GET.
+	rec := doRequest(mux, http.MethodGet, "/api/v1/accounts", adminToken, nil)
+	var list []accounting.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	got := map[string]string{}
+	for _, a := range list {
+		got[a.Name] = typeOf(a)
+	}
+	if got["Caja"] != "asset" || got["Cuotas"] != "income" || got["Material"] != "expense" || got["Agrupación"] != "" {
+		t.Errorf("unexpected types in the list: %v", got)
+	}
+	if a := decodeAccount(doRequest(mux, http.MethodGet, "/api/v1/accounts/"+itoa(created["Cuotas"].ID), adminToken, nil)); typeOf(a) != "income" {
+		t.Errorf("GET should carry the type: %+v", a)
+	}
+
+	// An edit replaces it: another one, and none when it is left out.
+	path := "/api/v1/accounts/" + itoa(created["Caja"].ID)
+	if a := decodeAccount(doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja", "type": "expense"})); typeOf(a) != "expense" {
+		t.Errorf("expected the type to change: %+v", a)
+	}
+	if a := decodeAccount(doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja"})); a.Type != nil {
+		t.Errorf("leaving it out should clear it: %+v", a)
+	}
+
+	// Moving an account answers with the list, types included.
+	moved := doRequest(mux, http.MethodPost, "/api/v1/accounts/"+itoa(created["Cuotas"].ID)+"/move", adminToken, map[string]string{"direction": "up"})
+	if moved.Code != http.StatusOK || !strings.Contains(moved.Body.String(), `"type":"income"`) {
+		t.Errorf("moving should keep the types: %d %s", moved.Code, moved.Body.String())
+	}
+}

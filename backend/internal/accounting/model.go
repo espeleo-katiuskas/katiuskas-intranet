@@ -13,6 +13,22 @@ package accounting
 
 import "time"
 
+// AccountType says what an account is mainly for: asset (its balance is money
+// the club really has), income (used mainly for what comes in) or expense (mainly
+// for what goes out). The values are the account_type enum (migration
+// 00031_accounts_type.sql). Nothing acts on it yet — it's only shown.
+type AccountType string
+
+const (
+	AccountTypeAsset   AccountType = "asset"
+	AccountTypeIncome  AccountType = "income"
+	AccountTypeExpense AccountType = "expense"
+)
+
+func (t AccountType) Valid() bool {
+	return t == AccountTypeAsset || t == AccountTypeIncome || t == AccountTypeExpense
+}
+
 // Account is one node in the chart of accounts. Code is its own short,
 // unique identifier (e.g. "570" for "Caja") — optional, since a purely
 // organizational grouping node might never get one the way a real
@@ -33,15 +49,17 @@ import "time"
 // to stay — so it's only left out of what the frontend shows by default
 // (see migration 00019_accounts_hidden.sql). Nothing in the API treats
 // it differently: it's listed, readable, editable and postable like any
-// other, and the flag is only ever acted on by whoever reads it.
+// other, and the flag is only ever acted on by whoever reads it. Type is
+// optional like Code (nil, left out of the JSON, for an account that has none).
 type Account struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Code           *string `json:"code,omitempty"`
-	ParentID       *int64  `json:"parent_id,omitempty"`
-	AllowsDues     bool    `json:"allows_dues"`
-	AllowsLicenses bool    `json:"allows_licenses"`
-	Hidden         bool    `json:"hidden"`
+	ID             int64        `json:"id"`
+	Name           string       `json:"name"`
+	Code           *string      `json:"code,omitempty"`
+	ParentID       *int64       `json:"parent_id,omitempty"`
+	Type           *AccountType `json:"type,omitempty"`
+	AllowsDues     bool         `json:"allows_dues"`
+	AllowsLicenses bool         `json:"allows_licenses"`
+	Hidden         bool         `json:"hidden"`
 	// Balance and LastTransactionAt are this account's own direct
 	// activity — the sum of every entry ever posted straight to it
 	// (never rolled up from child accounts) and when the most recent
@@ -61,6 +79,7 @@ type CreateAccountInput struct {
 	Name           string
 	Code           *string
 	ParentID       *int64
+	Type           *AccountType
 	AllowsDues     bool
 	AllowsLicenses bool
 	Hidden         bool
@@ -81,6 +100,7 @@ type UpdateAccountInput struct {
 	Name           string
 	Code           *string
 	ParentID       *int64
+	Type           *AccountType
 	AllowsDues     bool
 	AllowsLicenses bool
 	Hidden         bool

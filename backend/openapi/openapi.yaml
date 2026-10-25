@@ -2872,6 +2872,16 @@ paths:
                     grouping node might never get one). Omitted, null, or
                     blank all mean the same thing: no code.
                 parent_id: { type: integer, nullable: true }
+                type:
+                  type: string
+                  enum: [asset, income, expense]
+                  nullable: true
+                  description: >
+                    Optional — what the account is mainly for: asset (its
+                    balance is money the club really has), income (used
+                    mainly for what comes in) or expense (mainly for what
+                    goes out). Omitted, null, or blank all mean no type.
+                    Nothing acts on it yet; it is only shown.
                 allows_dues:
                   type: boolean
                   default: false
@@ -2901,7 +2911,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "400":
-          description: invalid_body, missing_fields (name is empty), or unknown_parent_account (parent_id names no existing account)
+          description: invalid_body, missing_fields (name is empty), invalid_type (not asset, income or expense), or unknown_parent_account (parent_id names no existing account)
         "403": { description: Requires admin or the money role. }
         "409": { description: duplicate_code — another account already has this code. }
 
@@ -2923,10 +2933,11 @@ paths:
       summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
-        name/code/parent_id/allows_dues/allows_licenses/hidden always replace
-        the current values — omitting, nulling, or blanking code clears
+        name/code/parent_id/type/allows_dues/allows_licenses/hidden always replace
+        the current values — omitting, nulling, or blanking code or type clears
         it, the same as an account that never had one, and omitting
-        any flag turns it off rather than keeping it.
+        any flag turns it off rather than keeping it (400 invalid_type for a
+        type that isn't asset, income or expense).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2941,6 +2952,7 @@ paths:
                 name: { type: string }
                 code: { type: string, nullable: true }
                 parent_id: { type: integer, nullable: true }
+                type: { type: string, enum: [asset, income, expense], nullable: true }
                 allows_dues: { type: boolean, default: false }
                 allows_licenses: { type: boolean, default: false }
                 hidden: { type: boolean, default: false }
@@ -4195,6 +4207,10 @@ components:
         name: { type: string }
         code: { type: string, nullable: true }
         parent_id: { type: integer, nullable: true }
+        type:
+          type: string
+          enum: [asset, income, expense]
+          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. Only shown, nothing acts on it.
         allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
         allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
         hidden: { type: boolean, description: The account is no longer used; clients leave it out unless asked. }

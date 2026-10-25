@@ -201,6 +201,7 @@ func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 		Name           string  `json:"name"`
 		Code           *string `json:"code"`
 		ParentID       *int64  `json:"parent_id"`
+		Type           *string `json:"type"`
 		AllowsDues     bool    `json:"allows_dues"`
 		AllowsLicenses bool    `json:"allows_licenses"`
 		Hidden         bool    `json:"hidden"`
@@ -208,8 +209,12 @@ func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return CreateAccountInput{}, err
 	}
+	accountType, err := normalizeType(body.Type)
+	if err != nil {
+		return CreateAccountInput{}, err
+	}
 	return CreateAccountInput{
-		Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID,
+		Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID, Type: accountType,
 		AllowsDues: body.AllowsDues, AllowsLicenses: body.AllowsLicenses, Hidden: body.Hidden,
 	}, nil
 }
@@ -231,6 +236,25 @@ func normalizeCode(code *string) *string {
 	return &trimmed
 }
 
+// errInvalidAccountType is a type that isn't one of asset, income or expense.
+var errInvalidAccountType = errors.New("type must be asset, income or expense")
+
+// normalizeType trims the type and treats an empty one the same as an absent one (no
+// type, like normalizeCode does for the code); anything else has to be a known type.
+func normalizeType(raw *string) (*AccountType, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	trimmed := AccountType(strings.TrimSpace(*raw))
+	if trimmed == "" {
+		return nil, nil
+	}
+	if !trimmed.Valid() {
+		return nil, errInvalidAccountType
+	}
+	return &trimmed, nil
+}
+
 // accountLabel names an account for a mutation notification: its name,
 // plus its code in parentheses when it has one — some accounts
 // deliberately don't (see Account's own doc comment).
@@ -243,6 +267,10 @@ func accountLabel(a Account) string {
 
 func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 	in, err := decodeAccountBody(r)
+	if errors.Is(err, errInvalidAccountType) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
@@ -267,6 +295,10 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in, err := decodeAccountBody(r)
+	if errors.Is(err, errInvalidAccountType) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
@@ -381,7 +413,7 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 // accountAuditableFields are the Account fields updateAccount's own
 // mutation notification diffs (see httpapi.DiffFields) — matching
 // UpdateAccountInput's field set exactly.
-var accountAuditableFields = []string{"Name", "Code", "ParentID", "AllowsDues", "AllowsLicenses", "Hidden"}
+var accountAuditableFields = []string{"Name", "Code", "ParentID", "Type", "AllowsDues", "AllowsLicenses", "Hidden"}
 
 // ---- Transactions ----
 

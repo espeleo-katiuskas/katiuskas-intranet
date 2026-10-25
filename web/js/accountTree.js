@@ -59,4 +59,29 @@ function accountLabel(account) {
   return `${account.name}${codeSuffix}`;
 }
 
-export { childrenByParent, flattenAccountTree, shownAccounts, accountLabel };
+// What an account is mainly for (the API's `type`; none is allowed): its name and a
+// line saying what it means, for the pickers of the create/edit dialogs and for the
+// account's own page. Nothing acts on it yet.
+const accountTypes = {
+  asset: { label: 'Activo', hint: 'su saldo es dinero que tiene de verdad el club' },
+  income: { label: 'Ingresos', hint: 'se usa sobre todo para lo que entra' },
+  expense: { label: 'Gastos', hint: 'se usa sobre todo para lo que sale' },
+};
+
+// The options of a type picker, with the account's current type selected.
+function accountTypeOptions(selected = null) {
+  const options = Object.entries(accountTypes).map(
+    ([value, { label, hint }]) =>
+      `<option value="${value}"${selected === value ? ' selected' : ''}>${label} — ${hint}</option>`,
+  );
+  return `<option value=""${selected ? '' : ' selected'}>Sin tipo</option>${options.join('')}`;
+}
+
+export {
+  childrenByParent,
+  flattenAccountTree,
+  shownAccounts,
+  accountLabel,
+  accountTypes,
+  accountTypeOptions,
+};

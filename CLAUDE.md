@@ -1083,7 +1083,12 @@ enforced by `memberships.Service.RecordDue` and `licenses.Service.Create` (see
 `false` included, unlike the omitted-when-absent `code`/`parent_id`; like every other
 field, `UpdateAccountInput` replaces them wholesale, so a `PATCH` that leaves one out
 turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
-always-present/replaced-wholesale shape): an account that's no longer used. One with
+always-present/replaced-wholesale shape): an account that's no longer used. An account may also have
+a `type` (migration `00031_accounts_type.sql`, the `account_type` enum: `asset` — its balance is money
+the club really has —, `income`, `expense`; optional and left out of the JSON when absent like `code`,
+a blank one normalized to none by `normalizeType`, `PATCH` replacing it, an unknown one 400
+`invalid_type`): for now it is only shown — on `/cuenta`'s header (`accountTypes` in
+`accountTree.js`) and chosen in the create/edit dialogs — and nothing acts on it. One with
 entries can't be deleted — they're history — so it's flagged instead, and *only the
 frontend acts on it*: the API lists, reads, edits and posts to a hidden account like any
 other. `DELETE /accounts/{id}` (admin/money) exists only for an account nothing references

@@ -1160,6 +1160,14 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
 
 - `name`; `code` opcional pero único si existe (un código en blanco se normaliza a
   ausente, migración 00013); `parent_id` opcional hacia otra cuenta.
+- `type` (migración 00031), opcional: para qué se usa sobre todo la cuenta, `asset` (su saldo
+  es dinero que tiene de verdad el club), `income` (se usa sobre todo para lo que entra) o
+  `expense` (sobre todo para lo que sale). Una cuenta de agrupación, o una que no es ninguna de
+  esas, no lo tiene (ausente del JSON, como `code`; en blanco o `null` es lo mismo que ausente,
+  y un `PATCH` que lo omite lo borra, como con el resto de campos). Un valor que no sea uno de
+  los tres es 400 `invalid_type`. De momento no se usa para nada: solo se muestra en la ficha
+  de la cuenta (`/cuenta`) y se elige al crearla o editarla en Contabilidad. Se podrán añadir
+  más tipos al `enum`.
 - `allows_dues` y `allows_licenses` (migración 00017, ambos `false` hasta que un admin o el
   rol `money` los marca): qué cuentas tiene que usar una transacción para poder registrar
   cuotas anuales o licencias federativas, que exigen `POST /users/{login}/dues` y

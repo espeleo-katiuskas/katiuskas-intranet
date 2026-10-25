@@ -11,7 +11,7 @@ import {
   resolvePickerId,
 } from './api.js';
 import { initPage } from './layout.js';
-import { flattenAccountTree, shownAccounts, accountLabel } from './accountTree.js';
+import { accountTypes, flattenAccountTree, shownAccounts, accountLabel } from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
 // Reached only from /contabilidad's own account tree — same admin/money
@@ -552,6 +552,11 @@ function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
   document.getElementById('account-balance-line').textContent =
     `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
+  // What the account is mainly for, when it says (nothing acts on it yet).
+  const type = accountTypes[account.type];
+  const typeLine = document.getElementById('account-type-line');
+  typeLine.hidden = !type;
+  if (type) typeLine.textContent = `Tipo: ${type.label} (${type.hint})`;
 }
 
 // The "otra cuenta" pickers exclude only this account itself — unlike
