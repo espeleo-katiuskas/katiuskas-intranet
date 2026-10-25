@@ -3214,7 +3214,11 @@ paths:
         Requires admin or the money role. Also removes the membership
         dues it recorded (they cascade). A transaction that a license
         references can't be deleted (409 transaction_has_licenses): a
-        license outlives the record of how it was paid.
+        license outlives the record of how it was paid. If it recorded payments of a
+        distribution, deleting it undoes them (what they paid is unpaid again, what
+        they took off is paid again, and their entries leave the list of payments);
+        when the orders have changed since and no longer allow it nothing is deleted
+        (409 transaction_has_distribution_payments).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3223,7 +3227,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — or transaction_has_distribution_payments — a payment of a distribution does. }
+        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — or transaction_has_distribution_payments — its payments in a distribution can no longer be undone. }
 
 components:
   securitySchemes:

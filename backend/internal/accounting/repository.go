@@ -39,9 +39,11 @@ var (
 	// are removed with it.
 	ErrTransactionHasLicenses = errors.New("transaction is still the payment of one or more licenses")
 	// ErrTransactionHasDistributionPayments means the transaction recorded the
-	// payment of something in a distribution (a payment marked there made it), so
-	// it can't be deleted: the payment has to be taken off there instead.
-	ErrTransactionHasDistributionPayments = errors.New("transaction recorded payments of a distribution: take them off there")
+	// payment of something in a distribution and can't be deleted: deleting one
+	// undoes those payments, but the orders have changed since and no longer allow
+	// it (or, with no such hook, the payment is still there). The payment has to be
+	// taken off in the distribution instead.
+	ErrTransactionHasDistributionPayments = errors.New("transaction recorded payments of a distribution that can't be undone any more: take them off there")
 	// ErrCircularParent means the given parent_id is this account
 	// itself, or one of its own descendants — setting it would make
 	// this account a descendant of one of its own descendants, a cycle
@@ -88,6 +90,17 @@ func pgErrCode(err error) string {
 
 type Repository struct {
 	pool db.PGX
+	// beforeDelete, when set, runs inside the transaction that deletes an
+	// accounting transaction, before the delete itself: it is how the payments of
+	// distributions a transaction recorded are undone along with it (this package
+	// can't know about them). Whatever it returns is the delete's error.
+	beforeDelete func(ctx context.Context, tx db.PGX, transactionID int64) error
+}
+
+// BeforeDeleteTransaction sets what runs before a transaction is deleted, in the
+// same database transaction.
+func (r *Repository) BeforeDeleteTransaction(f func(ctx context.Context, tx db.PGX, transactionID int64) error) {
+	r.beforeDelete = f
 }
 
 func NewRepository(pool db.PGX) *Repository {
@@ -657,6 +670,11 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if r.beforeDelete != nil {
+		if err := r.beforeDelete(ctx, tx, id); err != nil {
+			return err
+		}
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
 	if pgErrCode(err) == foreignKeyViolationCode {
 		// Which thing still points at it: a license, or a payment of a distribution.

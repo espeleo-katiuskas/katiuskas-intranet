@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -198,6 +199,14 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
 
 	accountingRepo := accounting.NewRepository(repoPool)
+	// Deleting a transaction that recorded payments of a distribution undoes them.
+	accountingRepo.BeforeDeleteTransaction(func(ctx context.Context, tx db.PGX, transactionID int64) error {
+		err := distributions.UndoPaymentsOf(ctx, tx, transactionID)
+		if errors.Is(err, distributions.ErrPaymentsNotUndoable) {
+			return accounting.ErrTransactionHasDistributionPayments
+		}
+		return err
+	})
 	accountingService := accounting.NewService(accountingRepo)
 
 	mailer := mail.NewSenderFromConfig(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)

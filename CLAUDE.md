@@ -499,8 +499,12 @@ the asset `+total`, the distribution's account `−total`, signs changed when a 
 by direct SQL (not through `internal/accounting`, which this package doesn't import), with a Spanish
 description of who and what ("Pago de Nombre Apellidos en «Reparto»: 3 × Papeleta (0001-0003)";
 "Devolución del pago de …"), and sets `distribution_payments.transaction_id` of the entries it
-wrote (`ON DELETE RESTRICT`; `DELETE /transactions/{id}` answers 409
-`transaction_has_distribution_payments`).
+wrote (`ON DELETE RESTRICT`). A payment made by mistake is undone by deleting its transaction:
+`accounting.Repository` runs a hook (`BeforeDeleteTransaction`, wired in `cmd/api/main.go` to
+`distributions.UndoPaymentsOf`) in the same database transaction before deleting it, which unpays
+what each entry of the list of payments paid (or pays again what it took off) and removes those
+entries; if an order has changed since and no longer allows it, nothing is deleted and the answer is
+409 `transaction_has_distribution_payments` (`ErrPaymentsNotUndoable`).
 Asking again for an article (`CreateArticleUnit`) adds to the person's row of it that isn't
 collected yet, else makes a new row — the per-person unique index is gone, and
 `max_per_person` (`checkQuantity`) counts all their rows. Collection (`POST .../pickups`,

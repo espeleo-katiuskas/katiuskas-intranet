@@ -890,7 +890,9 @@ editTransactionForm.addEventListener('submit', async (event) => {
 
 async function deleteTransaction(transactionId) {
   if (
-    !confirm('¿Borrar esta transacción? También se elimina el apunte que crea en la otra cuenta.')
+    !confirm(
+      '¿Borrar esta transacción? También se elimina el apunte que crea en la otra cuenta. Si es el pago de un reparto, el pago también se deshace en el reparto.',
+    )
   )
     return;
   try {
@@ -899,7 +901,11 @@ async function deleteTransaction(transactionId) {
     await loadAccount();
     await loadEntries();
   } catch (err) {
-    showError(err.message);
+    showError(
+      err.code === 'transaction_has_distribution_payments'
+        ? 'Esta transacción es el pago de un reparto y ya no se puede deshacer porque los pedidos han cambiado: quita el pago en el reparto.'
+        : err.message,
+    );
   }
 }
 

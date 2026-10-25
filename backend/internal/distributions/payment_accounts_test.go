@@ -194,3 +194,87 @@ func TestPaymentsListPointsAtTheirTransaction(t *testing.T) {
 		t.Fatalf("expected the entry to point at its transaction: %d, %v", linked, err)
 	}
 }
+
+func (e *env) transactionsOfPayments(t *testing.T) []int64 {
+	t.Helper()
+	rows, err := e.tx.Query(context.Background(), `SELECT DISTINCT transaction_id FROM distribution_payments WHERE transaction_id IS NOT NULL ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (e *env) paidQuantity(t *testing.T, unitID int64) (paid int, entries int) {
+	t.Helper()
+	ctx := context.Background()
+	if err := e.tx.QueryRow(ctx, `SELECT paid_quantity FROM distribution_units WHERE id = $1`, unitID).Scan(&paid); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM distribution_payments`).Scan(&entries); err != nil {
+		t.Fatal(err)
+	}
+	return paid, entries
+}
+
+func TestUndoingThePaymentsOfATransactionLeavesTheOrderAsItWas(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"0001-0003"}}), http.StatusOK)
+	pay := distributionPath(d.ID) + "/payments"
+	mustStatus(t, e.do("POST", pay, admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
+	first := e.transactionsOfPayments(t)[0]
+
+	// A payment taken off is undone by deleting its transaction: it is paid again.
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment?identifiers=0002", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
+	reversal := e.transactionsOfPayments(t)[1]
+	if err := distributions.UndoPaymentsOf(ctx, e.tx, reversal); err != nil {
+		t.Fatalf("undo the reversal: %v", err)
+	}
+	if paid, entries := e.paidQuantity(t, u.ID); paid != 3 || entries != 1 {
+		t.Fatalf("expected 3 paid and 1 entry, got %d and %d", paid, entries)
+	}
+	// Undoing the payment itself: nothing paid, nothing in the list.
+	if err := distributions.UndoPaymentsOf(ctx, e.tx, first); err != nil {
+		t.Fatalf("undo the payment: %v", err)
+	}
+	if paid, entries := e.paidQuantity(t, u.ID); paid != 0 || entries != 0 {
+		t.Fatalf("expected nothing paid and no entries, got %d and %d", paid, entries)
+	}
+	var paidItems int
+	if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM distribution_unit_identifiers WHERE unit_id = $1 AND paid_at IS NOT NULL`, u.ID).Scan(&paidItems); err != nil || paidItems != 0 {
+		t.Errorf("the numbers should be unpaid: %d, %v", paidItems, err)
+	}
+	// It can be paid again afterwards.
+	mustStatus(t, e.do("POST", pay, admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
+}
+
+func TestPaymentsCantBeUndoneOnceTheOrderChanged(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenLottery(t, e, admin)
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 2), http.StatusCreated))
+	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
+	tid := e.transactionsOfPayments(t)[0]
+	// The same payment taken off by hand, so there is nothing left to unpay.
+	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
+	if err := distributions.UndoPaymentsOf(context.Background(), e.tx, tid); err != distributions.ErrPaymentsNotUndoable {
+		t.Fatalf("expected ErrPaymentsNotUndoable, got %v", err)
+	}
+	if paid, entries := e.paidQuantity(t, u.ID); paid != 0 || entries != 2 {
+		t.Errorf("nothing should have changed: %d paid, %d entries", paid, entries)
+	}
+}

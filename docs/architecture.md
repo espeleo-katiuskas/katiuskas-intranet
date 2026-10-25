@@ -1059,8 +1059,10 @@ salvo pedir unidades y editar las propias).
   unidades (`description` es el artículo, o el reparto si no los tiene), cuánto dinero
   (`amount`, el precio de una unidad por las que son) y los números. Quitar un pago escribe la
   misma entrada con los signos cambiados, y cada entrada apunta a su transacción contable
-  (`transaction_id`; esa transacción no se puede borrar mientras tanto, 409
-  `transaction_has_distribution_payments`), así que el acumulado del reparto (`total_after`, una
+  (`transaction_id`). Borrar esa transacción deshace sus pagos (cada entrada vuelve a dejar impago
+  lo que pagó, o paga otra vez lo que quitó, y desaparece de la lista) en la misma operación; si los
+  pedidos han cambiado y ya no lo permiten, no se borra nada y es 409
+  `transaction_has_distribution_payments`. Así que el acumulado del reparto (`total_after`, una
   `SUM` en ventana por reparto sobre todo su historial, no solo lo que deja el filtro) es la suma
   hasta ese momento y no se reinicia en el borde de un filtro o de una página. Se ordena de más
   nuevo a más antiguo, con `from`/`to` y `limit`/`offset`, como el libro de
