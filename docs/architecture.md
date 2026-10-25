@@ -1,13 +1,23 @@
 # Arquitectura
 
-Documento de referencia, en sincronía con el código.
+Documento de referencia, en sincronía con el código: cómo está montado el sistema y las
+reglas de negocio que no caben en una tabla de rutas ni en un esquema de base de datos.
+Para lo demás hay dos ficheros aparte:
+
+- [`api.md`](api.md): todos los endpoints de la API, con quién puede llamarlos, sus parámetros y sus
+  errores. El contrato completo es
+  [`backend/openapi/openapi.yaml`](../backend/openapi/openapi.yaml).
+- [`database.md`](database.md): cómo se guardan los datos: tablas, columnas, restricciones,
+  triggers, enumerados y datos sembrados.
+- [`backend-internals.md`](backend-internals.md) y [`frontend.md`](frontend.md) (en inglés): la
+  versión larga de cómo funciona el backend, recurso a recurso, y cada página del frontend, con
+  los motivos de cada decisión.
 
 Contenido:
 
 - [Idioma](#idioma) y [Componentes](#componentes).
 - [Permisos](#permisos): qué puede hacer cada nivel de acceso.
-- [Modelo de datos](#modelo-de-datos-dbmigrations): una subsección por tabla o recurso,
-  con sus reglas y sus rutas.
+- [Reglas de negocio](#reglas-de-negocio): una subsección por recurso, con sus reglas.
 - [Backend](#backend-backend): capas, sesiones, Telegram.
 - [Frontend](#frontend-web): las páginas y su mecánica compartida.
 - [Cómo ejecutar en local](#cómo-ejecutar-en-local).
@@ -28,7 +38,9 @@ web/ (HTML + JS, español)  →  backend/ (API REST en Go, /api/v1)  →  Postgr
 Un único servicio en Go concentra la lógica de negocio y el acceso a datos. Ningún
 cliente toca PostgreSQL directamente, lo que permite añadir una app móvil o un cliente
 de terminal más adelante sin duplicar reglas de negocio: comparten el contrato descrito
-en `backend/openapi/openapi.yaml`.
+en `backend/openapi/openapi.yaml` (resumido en [`api.md`](api.md)). Los datos están en
+PostgreSQL ([`database.md`](database.md)), salvo tres árboles de ficheros en disco (el archivo de
+documentos, los ficheros de cada persona y los de la memoria de las actividades).
 
 ## Permisos
 
@@ -77,15 +89,10 @@ según el rol de quien pregunta; no hay una ruta aparte.
 A quien nunca ha tenido un alta (una cuenta solo-admin, por ejemplo) `Handler.list` lo
 excluye directamente de este listado para member, aunque admin/board lo sigan viendo.
 
-`MemberListing` contiene:
-
-- Nombre, apellidos y género.
-- `age_category`: categoría de edad (ver «`users`», «Género y categoría»).
-- Número de socio y fecha de alta y de baja.
-- `on_leave`.
-- `license_type` y `license_year`: la licencia federativa **del año actual**, si la hay.
-  Una de otro año no se muestra, y tener `license_type` es estar federado.
-- `last_due_year`: el último año cuya cuota ha pagado.
+`MemberListing` (sus campos, en [`api.md`](api.md)) lleva nombre, género, la categoría de edad
+(ver «`users`», «Categoría de edad»), el número de socio, las fechas de alta y de baja,
+`on_leave`, la licencia federativa **del año actual** si la hay (una de otro año no se muestra,
+y tener `license_type` es estar federado) y `last_due_year`, el último año cuya cuota ha pagado.
 
 Quedan reservados a admin/board:
 
@@ -148,14 +155,14 @@ de cada fila) se filtran en JavaScript comprobando `isRealAdmin`. Es necesario p
 `data-roles` no llega a examinar contenido que todavía no existía cuando
 `applyRoleVisibility()` se ejecutó.
 
-## Modelo de datos (`db/migrations/`)
+## Reglas de negocio
 
-Esquema de PostgreSQL, con migraciones numeradas de
-[goose](https://github.com/pressly/goose). Cada subsección describe una tabla (o un grupo
-de tablas relacionadas) junto con las reglas de negocio que la rodean y sus rutas de la
-API. Las reglas que PostgreSQL no puede expresar con una restricción (porque dependen de
-varias filas o de otras tablas) se comprueban en el servicio o el repositorio de Go, y se
-indica dónde.
+Cada subsección recoge las reglas de un recurso (una tabla o un grupo de tablas relacionadas):
+lo que se puede hacer y lo que no, y por qué. Las columnas, las restricciones y los índices
+de cada tabla están en [`database.md`](database.md), y las rutas, con quién puede llamarlas,
+en [`api.md`](api.md). Las reglas que PostgreSQL no puede expresar con una restricción
+(porque dependen de varias filas o de otras tablas) se comprueban en el servicio o el
+repositorio de Go, y se indica dónde.
 
 ### `users`
 
@@ -165,26 +172,14 @@ contable, ver «Contabilidad»): lo que puede hacer una sesión depende solo de 
 esa persona (ver «`roles` y `user_roles`»), y esos mismos roles deciden si le llega o no
 un enlace de acceso. No hay contraseñas.
 
-**Campos de actividad de sesión**
-
-- `last_login_at` y `last_login_ip`: la IP de la última vez que inició sesión,
-  `X-Forwarded-For` si existe (en producción hay un proxy inverso por delante) y la propia
-  conexión si no.
-
-**Campos obligatorios y opcionales**
-
-- Los únicos campos realmente obligatorios al crear una persona son nombre, apellidos y
-  fecha de nacimiento.
-- `birth_date` es `NOT NULL` (migración `00002_users.sql`): toda persona necesita una, no
-  solo para calcular la categoría.
-- `email` es opcional: a quien no tenga ninguno registrado no le llega nunca un enlace de
-  acceso, igual que a quien no tiene teléfono.
+Los campos obligatorios al crear una persona son nombre, apellidos y fecha de nacimiento.
+`email` y `phone` son opcionales, pero a quien no tenga alguno registrado no le llega nunca un
+enlace de acceso.
 
 #### Identidad y login
 
-`login` (`text UNIQUE NOT NULL`, migración `00002_users.sql`) es el único identificador de
-una persona que cruza el API: ninguna respuesta ni ruta expone jamás el id numérico
-interno.
+`login` es el único identificador de una persona que cruza el API: ninguna respuesta ni
+ruta expone jamás el id numérico interno.
 
 - **Generación**: automática al crear a la persona. Nombre y apellidos pasan por
   `users.slugify` (acentos fuera, todo lo que no sea letra o dígito colapsado a un guión)
@@ -210,8 +205,6 @@ interno.
 esté vinculada al club, no un periodo de alta concreto, así que darse de baja y volver a
 darse de alta nunca se lo cambia.
 
-- Es un entero no negativo y único (`CHECK` e índice único, ver
-  `db/migrations/00002_users.sql`).
 - Se asigna automáticamente, nunca a mano, la primera vez que a alguien se le da de alta:
   `memberships.Service.Create` llama a `users.Service.EnsureMembershipNumber`, que le pone
   el siguiente número tras el más alto que haya en ese momento y no hace nada si la
@@ -220,14 +213,12 @@ darse de alta nunca se lo cambia.
   `memberships.MembershipNumberAssigner` y `cmd/api`/`cmd/seed-admin` la conectan tras
   construir ambos servicios.
 
-#### Género y categoría
+#### Categoría de edad
 
-- `gender` es un tipo enum de PostgreSQL (`male`/`female`), opcional y nulo por defecto:
-  nadie lo rellena al crear una persona salvo que se indique explícitamente.
-- La categoría (alevín, infantil, juvenil, mayor, veterano A, veterano B) no se guarda: el
-  backend la calcula al vuelo (`ageCategoryFor`) a partir de `birth_date` y el año actual
-  y la expone como `age_category` en `MemberListing`. `web/js/members.js` solo la traduce
-  a su etiqueta.
+La categoría (alevín, infantil, juvenil, mayor, veterano A, veterano B) no se guarda: el
+backend la calcula al vuelo (`ageCategoryFor`) a partir de `birth_date` y el año actual
+y la expone como `age_category` en `MemberListing`. `web/js/members.js` solo la traduce
+a su etiqueta.
 
 #### Email y teléfono múltiples
 
@@ -240,7 +231,7 @@ aparte: encajar "alguno de estos" es una comprobación de solape de arrays
   cada campo admita varios. Postgres no puede expresar "ninguna fila comparte un elemento"
   con un `UNIQUE` de columna, así que `users.Repository` lo comprueba a mano en
   `Create`/`Update` (`emailTakenByAnotherUser`/`phoneTakenByAnotherUser`, ver
-  `db/migrations/00002_users.sql`).
+  [`database.md`](database.md)).
 - **Comparación del correo**: sin distinguir mayúsculas/minúsculas ("foo@x.com" y
   "FOO@X.COM" cuentan como la misma dirección), igual que en `FindActiveByEmailAndPhone`.
 - **Comparación del teléfono**: solo por dígitos, igual que `FindActiveByEmailAndPhone`;
@@ -260,20 +251,12 @@ aparte: encajar "alguno de estos" es una comprobación de solape de arrays
   internos (escribe "600111222", no "600 111 222"). Otra puntuación, como los guiones, da
   igual.
 
-#### Directorio de personas (`GET /users/directory`)
-
-Abierto a cualquier persona autenticada, devuelve solo login, nombre y apellidos de todas
-las personas registradas (nada de teléfono, dirección, DNI...). Existe para que un socio
-cualquiera pueda elegir participantes al crear una actividad sin necesitar `GET /users`,
-que a un member solo le devuelve `MemberListing` de quien es o ha sido socio y a
-admin/board la ficha completa.
-
 ### `magic_link_tokens`
 
-Enlaces de acceso de un solo uso: hash del token, caducidad y marca de consumido. Junto
-con el hash de un código numérico de 6 dígitos que va en el mismo correo, pensado para
-cuando el correo se lee desde un dispositivo distinto al que se quiere usar para entrar:
-escribir el código en `/login` es más práctico que copiar una URL larga.
+Enlaces de acceso de un solo uso. Junto con el enlace va un código numérico de 6 dígitos en el
+mismo correo, pensado para cuando el correo se lee desde un dispositivo distinto al que se
+quiere usar para entrar: escribir el código en `/login` es más práctico que copiar una URL
+larga.
 
 #### Enlace y código
 
@@ -392,12 +375,13 @@ muchos).
 
 #### Tipos de rol
 
-- **De sistema** (`is_system`): `admin`, `board`, `member` y `former_member`. Son los únicos
-  a los que el código da permisos o comportamiento automático, y no se pueden borrar.
-- **Etiquetas organizativas**: cualquier otro rol que cree un admin. No desbloquea nada por
-  sí solo salvo que se programe explícitamente.
-- **Automáticos** (`is_automatic`): `member`, `former_member` y `board`. Nadie los asigna ni
-  los quita a mano: `POST`/`DELETE /users/{login}/roles` los rechazan con 409.
+Los de sistema (`admin`, `board`, `member`, `former_member`) son los únicos a los que el
+código da permisos o comportamiento automático. Cualquier otro rol que cree un admin es una
+etiqueta organizativa: no desbloquea nada por sí solo salvo que se programe explícitamente
+(`material` y `money` son de este tipo y sí tienen efecto, ver «Material» y «Contabilidad»).
+Los automáticos (`member`, `former_member` y `board`) no los asigna ni los quita nadie a mano:
+`POST`/`DELETE /users/{login}/roles` los rechazan con 409. Qué roles hay y cuáles son de
+sistema o automáticos está en [`database.md`](database.md).
 
 #### Cálculo de los roles automáticos
 
@@ -432,23 +416,11 @@ es la regla más específica y no depende de cuántos admins más existan.
 ### `tokens`
 
 El token de sesión de cada persona: opaco (se guarda su hash SHA-256, nunca el valor en
-claro), revocable y con `expires_at` (30 días por defecto).
-
-**Campos**
-
-- `last_used_at`/`last_used_ip`: se actualizan en cada petición que usa el token, con la
-  misma lógica de `X-Forwarded-For` que `users.last_login_ip`.
-
-**Rutas y permisos**
-
-- Un admin puede ver, re-caducar o revocar el token de cualquier persona:
-  `GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`. Nunca ve el valor del token,
-  solo sus metadatos.
-- `GET /tokens` (solo admin) lista los de todo el mundo: por defecto solo los activos (ni
-  revocados ni caducados), y con `?status=all` también el historial; primero los usados más
-  recientemente y los nunca usados al final, paginados con `limit` (100 por defecto, máximo
-  200) y `offset`. Marca como `current` la sesión que hace la petición (la encuentra por el
-  hash de su token), para que el admin sepa cuál es la suya: revocarla lo desconecta.
+claro), revocable y con caducidad (30 días por defecto). Sus campos están en
+[`database.md`](database.md) y «Autenticación y sesiones», más abajo, cuenta cómo se resuelve
+cada petición. Un admin puede ver, re-caducar o revocar las sesiones de cualquier persona y
+listar las de todo el mundo (ver [`api.md`](api.md)); nunca ve el valor de un token, solo
+sus metadatos.
 
 #### Impersonación
 
@@ -483,8 +455,7 @@ solapen.
 
 **Reglas**
 
-- La ausencia de solapes la garantiza una restricción `EXCLUDE USING gist` de PostgreSQL
-  sobre `(user_id, period)`, no una comprobación manual.
+- Un periodo no puede solaparse con otro de la misma persona (lo impide la base de datos).
 - `users.Service.enrichMany` (lo que usan `GET /users` y la ficha de una sola persona) pide
   a cada paquete, una vez y para toda la lista, lo que añade a cada `User` (`ListByUsers`,
   `OnLeaveAmong`, `LatestDues`, `CurrentByUsers` y `ListNamesForUsers`, una consulta con
@@ -497,18 +468,14 @@ solapen.
 - Así, quien ha estado varias veces en el club sigue mostrando su alta original, y la lista
   de personas puede mostrar y ordenar por fecha de alta/baja sin una petición aparte por
   persona.
-
-**Rutas y permisos**
-
-- `PATCH /memberships/{id}` corrige un periodo (fechas, motivo de baja) y revalida contra
-  él las bajas temporales de esa misma persona que cayeran dentro del periodo *tal como
-  estaba antes* de la edición: estrechar un periodo no puede verse bloqueado por una baja
-  que pertenece a otro periodo suyo.
-- `DELETE /memberships/{id}` (solo admin) lo borra sin más; nada lo referencia por clave
-  foránea, así que nunca produce cascada. Está pensado para el «deshacer mi última
-  acción» del frontend en `/socio`, que solo lo ofrece para la entrada de
-  alta/baja/baja-temporal más reciente de la persona; esa restricción vive en el
-  frontend, no en el endpoint.
+- Corregir un periodo (`PATCH /memberships/{id}`) revalida contra él las bajas temporales de
+  esa misma persona que cayeran dentro del periodo *tal como estaba antes* de la edición:
+  estrechar un periodo no puede verse bloqueado por una baja que pertenece a otro periodo
+  suyo.
+- Borrar un periodo (`DELETE /memberships/{id}`) no produce cascada: nada lo referencia.
+  Está pensado para el «deshacer mi última acción» del frontend en `/socio`, que solo lo
+  ofrece para la entrada de alta/baja/baja-temporal más reciente de la persona; esa
+  restricción vive en el frontend, no en el endpoint.
 
 ### `membership_dues`
 
@@ -516,21 +483,17 @@ Cuotas anuales de socio, junto a `memberships`. Cada año que un socio lo sigue 
 una cuota que lo cubra: la primera, junto con la matrícula, el mismo día del alta, y luego
 una más cada año siguiente.
 
-**Campos y claves**
+**Claves**
 
-- Una fila por `(user_id, year)` cubierto (`UNIQUE`; `ErrDueAlreadyRecorded` si se intenta
-  una segunda para el mismo año).
-- Siempre ligada a la `transaction_id` que registró el pago: una cuota sin transacción
-  detrás todavía no significa nada, así que, a diferencia de un periodo de alta, no hay
-  fila para «impagada».
+- Una cuota sin transacción detrás todavía no significa nada, así que, a diferencia de un
+  periodo de alta, no hay fila para «impagada»; por eso `transaction_id` es obligatoria.
 - Clave por `user_id` a propósito, no por `membership_id`: la cuota de un año de quien se
   reincorpora no está ligada de forma natural a un periodo concreto, y así un año nunca
   necesita casar con los límites de un periodo.
-- `membership_dues.transaction_id` usa `ON DELETE CASCADE` (una cuota es pura anotación
-  contable, sin sentido aparte de su transacción), mientras que
-  `licenses.transaction_id` usa el `ON DELETE RESTRICT` por defecto: una licencia es un
-  registro real con sentido propio (prueba de estar federado) incluso aparte de su pago,
-  así que la transacción que la pagó no se puede borrar de debajo.
+- Una cuota se borra con su transacción (`ON DELETE CASCADE`: es pura anotación contable, sin
+  sentido aparte de ella), mientras que una licencia usa `ON DELETE RESTRICT`: es un registro
+  real con sentido propio (prueba de estar federado) incluso aparte de su pago, así que la
+  transacción que la pagó no se puede borrar de debajo.
 
 **Registro (`POST /users/{login}/dues`, solo admin)**
 
@@ -548,7 +511,6 @@ una más cada año siguiente.
 
 **Lectura (`GET /users/{login}/dues`)**
 
-- Mismo reparto que las licencias: la propia persona o admin/board.
 - Une la transacción de cada cuota para añadir `paid_at` (el `occurred_at` del pago, no
   `created_at`: la cuota de un año pasado puede registrarse mucho después de haberse
   pagado). Solo aparece en este listado, nunca en la respuesta del `POST`.
@@ -567,13 +529,10 @@ una más cada año siguiente.
 «Bajas temporales»: una ventana con fecha de inicio y fecha de fin opcional (vacía para una
 baja que sigue en curso, igual que el `end_date` de un periodo de socio).
 
-**Campos y claves**
-
-- Cuelga de la persona (`user_id`) directamente, no de un periodo de `memberships`
-  concreto. Así, un único `GET /users/{login}/leaves` cubre todas las bajas que ha tenido,
-  aunque hayan sido durante altas distintas, sin consultar periodo por periodo.
-- Que dos bajas de la misma persona no se solapen lo garantiza
-  `EXCLUDE USING gist` sobre `(user_id, period)`, igual que con los propios periodos.
+Cuelga de la persona (`user_id`) directamente, no de un periodo de `memberships` concreto.
+Así, un único `GET /users/{login}/leaves` cubre todas las bajas que ha tenido, aunque hayan
+sido durante altas distintas, sin consultar periodo por periodo. Dos bajas de la misma
+persona no pueden solaparse (lo impide la base de datos, como con los periodos).
 
 **Reglas**
 
@@ -587,14 +546,6 @@ baja que sigue en curso, igual que el `end_date` de un periodo de socio).
   distingue «activo» de «baja temporal» en la lista de personas; se calcula solo para
   quien ya tiene un alta activa, con `memberships.Service.IsOnLeave`.
 
-**Rutas y permisos**
-
-| Ruta | Operación | Quién |
-|---|---|---|
-| `/users/{login}/leaves` | listar | la propia persona, admin o board |
-| `/users/{login}/leaves` | crear | admin |
-| `/leaves/{id}` | corregir/borrar | admin |
-
 ### `licenses` y `license_types`
 
 Licencias federativas y el catálogo de tipos. El tipo no es texto libre: se elige de un
@@ -604,23 +555,17 @@ debería necesitar un `INSERT`, no un despliegue.
 
 **Catálogo**
 
-- Viene sembrado con todas las combinaciones de zona (A/B/B1) × modalidad (BASICA/PLUS) ×
-  franja de edad (adulto, Infantil, Juvenil), más ZERO/ASEDEB/FAE/FERM/FMM, más «Otra»
-  como válvula de escape (`is_other`) para cualquier licencia que no encaje.
-- Una licencia de tipo «Otra» exige además `other_detail` diciendo cuál es; esa validación
-  vive en `licenses.Service.Create`, porque un `CHECK` no puede alcanzar
-  `license_types.is_other` desde otra tabla.
-- `GET /license-types` expone el catálogo, solo admin, igual que la propia asignación.
+Una licencia de tipo «Otra» exige además `other_detail` diciendo cuál es; esa validación
+vive en `licenses.Service.Create`, porque un `CHECK` no puede alcanzar `license_types.is_other`
+desde otra tabla. El catálogo (qué tipos hay) está en [`database.md`](database.md).
 
-**Campos**
+**Año y pago**
 
-- `year` (migración 00014): el año natural que de verdad cubre, no siempre el de
-  `issued_date` (una licencia pedida en diciembre suele cubrir el año siguiente).
-- Es de carácter anual: válida hasta el 31 de diciembre de su `year`. `valid_until` se
-  calcula en Go a partir de `year` y nunca se almacena, igual que la categoría de edad.
-- `transaction_id` es opcional (nulo desde la migración 00020) y señala la transacción que
-  la pagó (ver «Contabilidad»). No es editable después: corregir tipo, fecha o año es una
-  acción distinta de decidir a qué pago pertenece.
+- `year` es el año natural que de verdad cubre, no siempre el de `issued_date` (una licencia
+  pedida en diciembre suele cubrir el año siguiente). Es válida hasta el 31 de diciembre de su
+  `year`: `valid_until` se calcula en Go y nunca se almacena, igual que la categoría de edad.
+- `transaction_id` señala la transacción que la pagó (ver «Contabilidad») y no es editable
+  después: corregir tipo, fecha o año es una acción distinta de decidir a qué pago pertenece.
 
 **Reglas de creación (`Service.Create`)**
 
@@ -639,13 +584,7 @@ debería necesitar un `INSERT`, no un despliegue.
   alta de ese año. Con un año que no toca ningún periodo de socio, 409
   `not_active_member`.
 
-**Rutas y permisos**
-
-| Ruta | Quién |
-|---|---|
-| `GET /users/{login}/licenses` | la propia persona, admin o board |
-| `POST /users/{login}/licenses` | admin |
-| `PATCH`/`DELETE /licenses/{id}` | admin |
+**Corrección**
 
 - `/licenses/{id}` va por id de licencia, no anidada bajo el usuario, igual que
   `/leaves/{id}`.
@@ -662,16 +601,13 @@ debería necesitar un `INSERT`, no un despliegue.
 
 ### `board_members`
 
-Quién ha estado en la Junta Directiva y con qué cargo (`president`, `vice_president`,
-`secretary`, `treasurer`, `member_at_large` —vocal—, tipo `board_position`), con la misma
-forma que `memberships`: `start_date`/`end_date` (vacío = sigue en el cargo).
+Quién ha estado en la Junta Directiva y con qué cargo, con la misma forma que `memberships`:
+fecha de inicio y de fin (vacía = sigue en el cargo).
 
 **Reglas**
 
-- `EXCLUDE USING gist (user_id WITH =, period WITH &&)` impide que una persona tenga dos
-  cargos abiertos a la vez, sean o no el mismo.
-- No hay restricción sobre que dos personas tengan el mismo cargo a la vez (varios vocales
-  simultáneos es normal).
+- Una persona no puede tener dos cargos abiertos a la vez, sean o no el mismo; dos personas sí
+  pueden tener el mismo cargo a la vez (varios vocales simultáneos es normal).
 - El cargo se valida en Go antes de tocar la base de datos (`Position.Valid`,
   `ErrInvalidPosition`, 400 `invalid_position`), tanto al crear como al corregir: el enum
   de PostgreSQL lo rechazaría igualmente, pero como un 500.
@@ -687,15 +623,7 @@ forma que `memberships`: `start_date`/`end_date` (vacío = sigue en el cargo).
   `tokens`/`roles`/`licenses`/`memberships`/`inventory`/`activities`: traducir el login de
   sus rutas `/users/{login}/...` a un id.
 
-**Rutas y permisos**
-
-| Ruta | Operación | Quién |
-|---|---|---|
-| `GET /users/{login}/board-members` | listar | la propia persona, admin o board |
-| `POST /users/{login}/board-members` | crear | admin |
-| `GET /board-members` | Junta actual | cualquier member (y admin/board) |
-| `PATCH /board-members/{id}` | corregir cargo o fechas | admin |
-| `DELETE /board-members/{id}` | borrar | admin |
+**Borrado y frontend**
 
 - Como con un periodo de alta, nada lo referencia por clave foránea, así que borrar nunca
   produce cascada. Pero aquí no hay «mitad de cierre» a la que volver limpiando un campo:
@@ -753,31 +681,17 @@ Cada actividad tiene una `visibility` (`public`, por defecto, o `private`; migra
 | Quitarse a uno mismo | cualquier member | cualquier member |
 | Quitar a otra persona | admin/board | organizador, admin/board |
 
-**Listado**
+**Listado y festivos**
 
-- `GET /activities?status=active` filtra a lo que todavía necesita atención (no
-  planificada/cancelada, o completada pero con préstamo aún pendiente de devolver) en vez
-  de todo el histórico.
-- `?order=asc` cambia el orden por defecto (más reciente primero) a más antigua primero.
-
-**`holidays`**
-
-Festivos fijos del calendario del club, tabla propia sin relación con
-`activity_participants` pero gestionada por el mismo paquete `activities`
-(`activities.Handler`). `GET /holidays` está abierto a baseline; `POST`/`DELETE`, admin o
-board. Solo la usa la vista de calendario del frontend.
+`GET /activities?status=active` deja solo lo que todavía necesita atención: lo no completado
+ni cancelado, y lo completado con algún préstamo sin devolver. Los festivos (`holidays`) los
+gestiona el mismo paquete `activities` y solo los usa la vista de calendario del frontend.
 
 ### `activity_resources`
 
 La memoria de una actividad: una lista ordenada de recursos que escribe quien participó en
 ella después de la salida. Cada recurso es una entrada de texto (título + `description` en
 texto/Markdown) o un fichero subido (título + el fichero, normalmente una foto o un PDF).
-
-**Campos**
-
-- `type` los distingue, con un juego de `CHECK` que mantiene cada forma consistente
-  (`description` solo para texto, los campos de fichero solo para fichero).
-- `position`: densa 1..N dentro de su actividad.
 
 **Almacenamiento**
 
@@ -793,19 +707,12 @@ texto/Markdown) o un fichero subido (título + el fichero, normalmente una foto 
 - Eso permite que otro árbol de directorios comparta los mismos ficheros con hard-links
   (ver [`environments.md`](environments.md)) sin que escribir en uno cambie el otro.
 
-**Rutas y permisos**
-
-- El `POST` siempre es `multipart/form-data`, incluso para una entrada de texto (sin parte
-  de fichero), con un límite de 25 MiB.
-- `PUT /activities/{id}/resources/order` sustituye el orden entero a la vez a partir de una
-  lista completa de ids; rechaza cualquier lista que no case exactamente, en vez de
-  intentar conciliar una parcial.
-
-| Operación | Quién |
-|---|---|
-| Leer | cualquier rol baseline, igual que el resto de una actividad |
-| Crear, reordenar | admin/board, el organizador, o cualquiera que conste como participante |
-| Corregir o borrar uno concreto | solo quien lo escribió, o admin/board (aunque otro sea participante) |
+**Permisos**: leer la memoria está abierto a cualquier rol base; añadir recursos o reordenarla
+lo puede hacer admin/board, el organizador o cualquiera que conste como participante (el
+organizador no tiene por qué ser un participante, así que se comprueban las dos cosas por
+separado); corregir o borrar uno concreto, solo quien lo escribió o admin/board. El orden se
+sustituye entero a la vez, y se rechaza una lista que no case exactamente con los recursos
+actuales en vez de intentar conciliarla.
 
 ### `inventory_items` e `item_movements`
 
@@ -813,28 +720,11 @@ Catálogo de material y sus movimientos. Los movimientos van en una única tabla
 discriminador de tipo (`type`) en vez de una tabla por tipo, y varios `CHECK`s impiden
 combinaciones sin sentido (una venta con fecha de devolución, por ejemplo).
 
-**Ítems del catálogo** (`inventory_items.item_type`, tres formas):
-
-- `rope` y `bag` son objetos físicos individuales: cada uno tiene su propio código y
-  siempre `total_quantity` 1 (dar de alta una segunda cuerda es crear un ítem nuevo, no
-  sumar unidades a uno existente).
-- Campos propios de cuerda: `rope_type`, `diameter_mm`, `manufacture_year`, `length_m`.
-  Campos propios de saca: `bag_type`, `capacity_liters`.
-- `gear` es material genérico, archivado bajo una categoría del catálogo
-  `material_categories` (`GET /material-categories`, solo admin/board). Igual que
-  `license_types`, está en base de datos y no en un enum de Go, para que la lista pueda
-  crecer sin desplegar código.
-
-**Movimientos** (`item_movements.type`, ocho valores):
-
-| Tipo | Significado |
-|---|---|
-| `loan` | préstamo a una actividad |
-| `rental` | alquiler |
-| `sale` | venta |
-| `acquisition` | una nueva existencia entra al inventario |
-| `loss`, `abandonment`, `retirement` | una existencia sale para siempre, sin venta detrás |
-| `return` | devolución de un préstamo |
+Los ítems del catálogo tienen tres formas (`rope`, `bag` y `gear`), con campos propios cada una;
+los detalles y qué es obligatorio en cada forma están en [`database.md`](database.md). Los
+movimientos van en una única tabla con un discriminador de tipo en vez de una tabla por tipo,
+y varios `CHECK` impiden combinaciones sin sentido (una venta con fecha de devolución, por
+ejemplo).
 
 **Reglas**
 
@@ -852,22 +742,9 @@ combinaciones sin sentido (una venta con fecha de devolución, por ejemplo).
   se guardan: se recalculan siempre desde su historial de movimientos
   (`inventory_item_quantities`, una vista).
 
-**Permisos**
-
-- Crear o modificar un movimiento requiere `admin`, `board` o el rol opcional `material`
-  (sembrado por la migración pero no de sistema: un club que no quiera esa distinción puede
-  borrarlo y seguir usando `board`).
-- Dar de alta el propio material del catálogo está reservado a admin/board.
-
-### Historial de una persona (`GET /users/{login}/activities` y `/movements`)
-
-El historial de una persona visto desde su propia ficha, en vez de desde la actividad o el
-movimiento.
-
-- `GET /users/{login}/activities` está tan abierto como `listParticipants` (cualquier
-  persona autenticada).
-- `GET /users/{login}/movements` exige ser la propia persona o tener `admin`, `board` o
-  `material`, igual que `GET /movements`, porque un movimiento puede llevar precio.
+**Permisos**: crear o modificar un movimiento requiere `admin`, `board` o el rol opcional
+`material`, que está sembrado pero no es de sistema (un club que no quiera esa distinción puede
+borrarlo y seguir usando `board`); dar de alta el material del catálogo es solo de admin/board.
 
 ### Repartos (`distributions`, `distribution_options`, `distribution_units`)
 
@@ -877,24 +754,19 @@ son dos repartos, salvo el caso de los **artículos** (más abajo), para cosas q
 cualquier cantidad. Se crea con admin o board (el resto del API lo ve, pero no lo escribe,
 salvo pedir unidades y editar las propias).
 
-- **Reparto** (`distributions`). Tiene `audience`: `all_members` (le corresponde a todo el
-  que fuera socio en `cutoff_date`) o `signup` (solo quien se apunte). `cutoff_date` es
-  obligatoria en `all_members`, y opcional en `signup`: si se pone, solo pueden apuntarse
-  quienes fueran socios ese día (la comprobación mira los periodos de `memberships`). El
-  precio de la unidad propia es `price` (0 si es gratis); `extra_price` hace posibles las
-  unidades extra y es lo que cuestan; `max_extra` limita los extras por persona y exige
-  `extra_price`. `closes_at` es la fecha límite para que los socios elijan.
-- **Estado** (`status`), cada uno con una cosa distinta que se puede hacer: `draft` (en
-  preparación: se puede editar y solo lo ven admin y board), `open` (los socios piden
-  unidades y eligen las opciones), `closed` (ya no se puede pedir ni cambiar nada) y
-  `done` (terminado). En la interfaz: Borrador, Abierto, Cerrado y Terminado. Solo se mueve
-  un paso cada vez, adelante o atrás. Entregar (apuntar recogidas y números) se puede con el
-  reparto en cualquier estado menos `draft` (`Status.Deliverable`), porque el pedido suele
-  llegar antes de que se hayan cerrado las peticiones y quien no ha venido a por lo suyo
-  puede hacerlo ya terminado; en `draft` no (409 `not_deliverable`).
-  (Hubo `ordered` y `received`, que nombraban cosas que pasan fuera de la aplicación; la
-  migración `00023` las sustituyó por `closed` y `delivering`, y la `00025` quitó
-  `delivering`, que pasó a `closed`, porque entregar no depende de haber cerrado.)
+- **Audiencia y precio.** Un reparto es para `all_members` (a todo el que fuera socio en
+  `cutoff_date`, obligatoria) o `signup` (solo quien se apunte; `cutoff_date` es opcional y, si
+  se pone, solo pueden apuntarse quienes fueran socios ese día: la comprobación mira los
+  periodos de `memberships`). `price` es el de la unidad propia (0 si es gratis); la presencia
+  de `extra_price` es lo que hace posibles las unidades extra, y `max_extra` las limita por
+  persona y exige `extra_price`. `closes_at` es la fecha límite para que los socios elijan.
+- **Estado** (`status`): `draft` (en preparación: se puede editar y solo lo ven admin y board),
+  `open` (los socios piden unidades y eligen las opciones), `closed` (ya no se puede pedir ni
+  cambiar nada) y `done` (terminado). En la interfaz: Borrador, Abierto, Cerrado y Terminado.
+  Solo se mueve un paso cada vez, adelante o atrás. Entregar (apuntar recogidas y números) se
+  puede con el reparto en cualquier estado menos `draft` (`Status.Deliverable`), porque el
+  pedido suele llegar antes de que se hayan cerrado las peticiones y quien no ha venido a por
+  lo suyo puede hacerlo ya terminado; en `draft` no (409 `not_deliverable`).
 - **Opciones** (`distribution_options`): lo que hay que elegir, con sus valores posibles
   («Talla»: S, M, L). Un reparto tiene las que necesite o ninguna. Se pueden cambiar
   mientras nadie haya pedido nada; después, un `PATCH` que las reenvíe idénticas no cuenta
@@ -1052,58 +924,51 @@ salvo pedir unidades y editar las propias).
   la del reparto (`−total`; al quitar un pago, al revés) con una descripción en español, por ejemplo
   «Pago de Ana Pérez en «Lotería de Navidad»: 3 × Papeleta (0001-0003)» o «Devolución del pago de
   …». Un pedido con algo pagado no se puede borrar (409 `unit_paid`): primero se quita el pago.
-- **Lista de pagos** (`distribution_payments`, migración `00030`; `GET /distributions/{id}/payments`,
-  una por reparto, solo admin y board, porque dice quién ha pagado qué): cada pago que se apunta deja una
-  entrada con la fecha, quién lo apuntó (`recorded_by`), de quién era el pedido (`paid_by`,
-  quien ha pagado: no se guarda un pagador distinto del socio del pedido), qué y cuántas
-  unidades (`description` es el artículo, o el reparto si no los tiene), cuánto dinero
-  (`amount`, el precio de una unidad por las que son) y los números. Quitar un pago escribe la
-  misma entrada con los signos cambiados, y cada entrada apunta a su transacción contable
-  (`transaction_id`). Borrar esa transacción deshace sus pagos (cada entrada vuelve a dejar impago
-  lo que pagó, o paga otra vez lo que quitó, y desaparece de la lista) en la misma operación; si los
-  pedidos han cambiado y ya no lo permiten, no se borra nada y es 409
-  `transaction_has_distribution_payments`. Así que el acumulado del reparto (`total_after`, una
-  `SUM` en ventana por reparto sobre todo su historial, no solo lo que deja el filtro) es la suma
-  hasta ese momento y no se reinicia en el borde de un filtro o de una página. Se ordena de más
-  nuevo a más antiguo, con `from`/`to` y `limit`/`offset`, como el libro de
-  una cuenta. Lo pagado antes de que existiera la lista queda como una entrada por pedido, con
-  la fecha de su último pago (lo anterior no se guardó). En la interfaz, `/reparto-pagos?id=…`, que se abre desde el botón «Pagos» del propio reparto
-  (solo si tiene algo que pagar).
-- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto
-  fuera de `draft` y solo admin, board o material. Una fila se puede recoger en parte
-  (`picked_up_quantity`, de 0 a `quantity`, migración `00028`), como se puede pagar en parte:
-  `deliveries` (`unit_id` y `quantity` unidades, o todas las que faltan) y `unit_ids` (todo lo
-  que falta de esas filas); pasarse de lo que falta, 409 `already_picked_up`. Guarda tres
-  cosas, las de la última entrega: cuándo, quién lo apuntó (quien llama) y a quién se le
-  entregó (`picked_up_by_login`: puede ser distinta del beneficiario si alguien recoge cosas
-  de otros, pero tiene que ser socia ahora o haberlo sido en `cutoff_date`, 409
-  `invalid_collector`). Es todo o nada. En un artículo con números las unidades son
-  elementos: **solo se entregan los que tienen número asignado**, los `identifiers` que se
-  digan (asignados a la fila y sin entregar) o, si no, los primeros asignados sin entregar,
-  tiene que haber tantos (409 `identifiers_missing`; con `assign_numbers` se asignan antes los
-  que falten, si los números están descritos). Cada número entregado lleva su `delivered_at`
-  (`DeliveredIdentifiers` en la unidad; lo asignado y sin entregar sigue en el estante) y no
-  se puede quitar de la lista. Tres cosas distintas se pueden hacer después: ampliar o reducir
-  el pedido (admin/board/material, nunca por debajo de lo entregado, 409
-  `quantity_below_delivered`, ni de los números asignados, 409 `quantity_below_numbered`: hay que quitar antes algún número; los demás no pueden tocar una fila entregada); **deshacer** una
-  entrega (`DELETE …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: vuelven a no estar
-  entregadas, siguen en el pedido y con su número); y **devolver**
-  (`POST …/units/{id}/return`, `quantity` o `identifiers`): lo devuelto sale del pedido, que
-  se hace más pequeño (y se borra la fila si no queda nada), y su número queda libre. Lo pagado
-  no se puede devolver: el pedido no puede quedar por debajo de lo pagado (409
-  `quantity_below_paid`) ni se devuelve más de lo entregado. Una fila con algo entregado no se
-  puede borrar sin devolver antes. Pedir otra vez el mismo artículo se suma siempre a la
-  misma fila.
-- **Resumen del pedido** (`GET /distributions/{id}/order`, admin, board y material): las
-  unidades sumadas por combinación de opciones y los totales; las que nadie ha elegido
-  todavía suman en una línea con `choices` vacío. Un reparto `all_members` todavía en
+- **Lista de pagos** (`distribution_payments`; solo admin y board, porque dice quién ha pagado qué):
+  cada pago que se apunta deja una entrada con la fecha, quién lo apuntó, de quién era el pedido (el
+  que ha pagado: no se guarda un pagador distinto del socio del pedido), qué y cuántas unidades,
+  cuánto dinero y los números. Quitar un pago escribe la misma entrada con los signos cambiados, y
+  cada entrada apunta a su transacción contable (`transaction_id`). Borrar esa transacción deshace
+  sus pagos (cada entrada vuelve a dejar impago lo que pagó, o paga otra vez lo que quitó, y
+  desaparece de la lista) en la misma operación; si los pedidos han cambiado y ya no lo permiten, no
+  se borra nada y es 409 `transaction_has_distribution_payments`. Así que el acumulado del reparto
+  (`total_after`, una `SUM` en ventana por reparto sobre todo su historial, no solo lo que deja el
+  filtro) es la suma hasta ese momento y no se reinicia en el borde de un filtro o de una página. Se
+  ordena de más nuevo a más antiguo, con `from`/`to` y `limit`/`offset`, como el libro de una
+  cuenta. Lo pagado antes de que existiera la lista queda como una entrada por pedido, con la fecha
+  de su último pago (lo anterior no se guardó). En la interfaz, `/reparto-pagos?id=…`, que se abre
+  desde el botón «Pagos» del propio reparto (solo si tiene algo que pagar).
+- **Recogida**: `POST /distributions/{id}/pickups`, en lote, solo con el reparto fuera de `draft` y
+  solo admin, board o material. Una fila se puede recoger en parte (`picked_up_quantity`, de 0 a
+  `quantity`, migración `00028`), como se puede pagar en parte: `deliveries` (`unit_id` y `quantity`
+  unidades, o todas las que faltan) y `unit_ids` (todo lo que falta de esas filas); pasarse de lo
+  que falta, 409 `already_picked_up`. Guarda tres cosas, las de la última entrega: cuándo, quién lo
+  apuntó (quien llama) y a quién se le entregó (`picked_up_by_login`: puede ser distinta del
+  beneficiario si alguien recoge cosas de otros, pero tiene que ser socia ahora o haberlo sido en
+  `cutoff_date`, 409 `invalid_collector`). Es todo o nada. En un artículo con números las unidades
+  son elementos: **solo se entregan los que tienen número asignado**, los `identifiers` que se digan
+  (asignados a la fila y sin entregar) o, si no, los primeros asignados sin entregar, tiene que
+  haber tantos (409 `identifiers_missing`; con `assign_numbers` se asignan antes los que falten, si
+  los números están descritos). Cada número entregado lleva su `delivered_at`
+  (`DeliveredIdentifiers` en la unidad; lo asignado y sin entregar sigue en el estante) y no se
+  puede quitar de la lista. Tres cosas distintas se pueden hacer después: ampliar o reducir el
+  pedido (admin/board/material, nunca por debajo de lo entregado, 409 `quantity_below_delivered`, ni
+  de los números asignados, 409 `quantity_below_numbered`: hay que quitar antes algún número; los
+  demás no pueden tocar una fila entregada); **deshacer** una entrega (`DELETE
+  …/units/{id}/pickup[?quantity=N|?identifiers=a,b]`: vuelven a no estar entregadas, siguen en el
+  pedido y con su número); y **devolver** (`POST …/units/{id}/return`, `quantity` o `identifiers`):
+  lo devuelto sale del pedido, que se hace más pequeño (y se borra la fila si no queda nada), y su
+  número queda libre. Lo pagado no se puede devolver: el pedido no puede quedar por debajo de lo
+  pagado (409 `quantity_below_paid`) ni se devuelve más de lo entregado. Una fila con algo entregado
+  no se puede borrar sin devolver antes. Pedir otra vez el mismo artículo se suma siempre a la misma
+  fila.
+- **Resumen del pedido** (`GET /distributions/{id}/order`): las unidades sumadas por
+  combinación de opciones; las que nadie ha elegido todavía suman en una línea con `choices`
+  vacío. Un reparto `all_members` todavía en
   `draft` aún no tiene unidades (se crean al abrirlo), pero ya se sabe qué hay que pedir:
   una por cada socio en `cutoff_date`. El resumen la cuenta aunque no exista
   (`provisional: true`, sin crear nada: leerlo no cambia el reparto) y la página lo dice;
   al abrirlo, las mismas cifras son ya reales.
-- **Lectura**. `GET /distributions` lo abre cualquier rol baseline y devuelve `eligible`
-  para quien llama. `GET .../units` devuelve todas las unidades a admin, board y material,
-  y a los demás solo las suyas o las que ellos apuntaron.
 
 ### Archivo de documentos (`internal/library`)
 
@@ -1118,17 +983,12 @@ directamente contra el sistema de archivos.
   `docker-compose.yml`).
 - Los documentos los coloca quien administra el servidor, directamente en `./library`.
 
-**Rutas y permisos**
+**Acceso**
 
-- `GET /library?path=…` lista un directorio: subdirectorios primero, luego ficheros, en
-  orden alfabético; los ficheros ocultos nunca aparecen.
-- `GET /library/file/{path...}` sirve el contenido crudo de un fichero. La ruta es parte de
-  la URL, no un parámetro de consulta (`/library/file/actas/2026-02-01.pdf`).
-- Por defecto responde con `Content-Disposition: inline`; con `?download=1`, `attachment`.
-- Acepta también la cookie de sesión (ver la sección de sesión) para que un documento sea
-  un enlace normal del navegador.
-- Ambas rutas son de solo lectura y están abiertas a cualquier rol baseline
-  (admin/board/member). No hay forma de subir, renombrar ni borrar nada a través de la API.
+Solo lectura y abierto a cualquier rol base: no hay forma de subir, renombrar ni borrar nada
+a través de la API. Las rutas están en [`api.md`](api.md). La ruta de un fichero es parte de la URL
+y no un parámetro de consulta, y el fichero acepta también la cookie de sesión (ver
+«Autenticación y sesiones») para que un documento sea un enlace normal del navegador.
 
 **Seguridad de rutas**
 
@@ -1147,23 +1007,15 @@ Mismo modelo que `internal/library` (árbol en disco, `config.UserFilesRoot`, mo
 un árbol único compartido. Guarda los documentos propios de cada persona (DNI escaneado,
 una autorización firmada...).
 
-**Rutas**
+**Acceso**
 
-- `GET /users/{login}/files[?path=…]` y `GET /users/{login}/files/file/{path...}` calcan
-  la forma de `/library` y `/library/file/{path...}`: mismo listado, `?download=1`,
-  soporte de Range y la misma cookie de sesión para el fichero.
-
-**Permisos**
-
-- A diferencia del archivo, no están abiertas a cualquier rol baseline: solo la
-  propia persona o admin/board pueden verlas (403 en cualquier otro caso).
-- La comprobación está dentro del propio handler, igual que `memberships.listByUser` e
-  `inventory.listMovementsByUser`.
-
-**Caso sin subdirectorio**
-
-- Una persona sin subdirectorio propio todavía (el caso normal, hasta que alguien le deja
-  algún fichero) ve un listado vacío en su propia raíz en vez de un 404.
+- Mismas rutas, listado, `?download=1`, soporte de Range y cookie de sesión que el archivo
+  (ver [`api.md`](api.md)).
+- A diferencia del archivo, no están abiertas a cualquier rol base: solo la propia persona o
+  admin/board pueden verlas (403 en cualquier otro caso). La comprobación está dentro del propio
+  handler, igual que `memberships.listByUser` e `inventory.listMovementsByUser`.
+- Una persona sin subdirectorio propio todavía (el caso normal, hasta que alguien le deja algún
+  fichero) ve un listado vacío en su propia raíz en vez de un 404.
 
 ### Contabilidad (`accounts`, `transactions`, `transaction_entries`)
 
@@ -1172,132 +1024,87 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
 
 #### Plan de cuentas (`accounts`)
 
-**Campos**
+Las columnas están en [`database.md`](database.md) y las rutas en [`api.md`](api.md); esto son las
+reglas.
 
-- `name`; `code` opcional pero único si existe (un código en blanco se normaliza a
-  ausente, migración 00013); `parent_id` opcional hacia otra cuenta.
-- `type` (migración 00031), opcional: para qué se usa sobre todo la cuenta, `asset` (su saldo
-  es dinero que tiene de verdad el club), `income` (se usa sobre todo para lo que entra) o
-  `expense` (sobre todo para lo que sale). Una cuenta de agrupación, o una que no es ninguna de
-  esas, no lo tiene (ausente del JSON, como `code`; en blanco o `null` es lo mismo que ausente,
-  y un `PATCH` que lo omite lo borra, como con el resto de campos). Un valor que no sea uno de
-  los tres es 400 `invalid_type`. Se muestra en la ficha
-  de la cuenta (`/cuenta`), se elige al crearla o editarla en Contabilidad, y la cuenta en la que se
-  paga un reparto tiene que ser `asset`. Se podrán añadir
-  más tipos al `enum`.
-- `effective_type` (migración 00034, solo lectura): el tipo que cuenta. Una cuenta sin tipo propio
-  hereda el de su cuenta superior, y así hacia arriba; ausente si nadie por encima tiene. `type` es
-  el propio, el que reemplaza un `PATCH`. Las reglas que dependen del tipo (la cuenta en la que se
-  paga es `asset`, la de un reparto y la de por defecto son `income`) usan el efectivo, y como
-  cambiar un tipo, mover una cuenta o crear una nueva puede cambiar el de todo un subárbol, al
-  guardar se comprueba que la cuenta de cada reparto y la de por defecto siguen siendo `income`
-  (409 `not_income_for_distributions`, y no se guarda nada).
-- `distribution_default` (migración 00032), booleano siempre presente: la cuenta donde se apuntan
-  los pagos de los repartos que no tienen cuenta propia. Solo una cuenta lo tiene (índice único
-  parcial); marcarla, al crear o editar, se lo quita a la que lo tuviera. Un `PATCH` que lo omite lo
-  desmarca, como con el resto de campos.
-- `allows_dues` y `allows_licenses` (migración 00017, ambos `false` hasta que un admin o el
-  rol `money` los marca): qué cuentas tiene que usar una transacción para poder registrar
-  cuotas anuales o licencias federativas, que exigen `POST /users/{login}/dues` y
-  `POST /users/{login}/licenses`. Una cuenta marcada así tiene que ser de tipo `income` (el propio
-  o el heredado): si no, 409 `not_income_for_dues_licenses`, al crearla, al editarla, al moverla
-  o al cambiar el tipo de una cuenta de la que cuelga. Solo se comprueba la cuenta que se guarda y
-  lo que cuelga de ella, así que las que ya estaban marcadas antes de esta regla (sin tipo) no
-  bloquean otras ediciones; hay que ponerles el tipo la próxima vez que se editen.
-- `hidden` (migración 00019): marca una cuenta ya sin uso. No se puede borrar si tiene
-  historial, así que se oculta del plan y de los selectores del frontend (que la muestran
-  solo a petición) sin tocar nada de lo registrado contra ella.
-- Los tres booleanos aparecen siempre en el JSON de una cuenta (también como `false`) y,
-  como el resto de campos, un `PATCH` los sustituye: omitir uno lo desactiva.
-- `position`: orden propio entre hermanos (mismo `parent_id`, `NULL` contado como un grupo
-  más). Solo sirve para ordenar, nunca para identificar una fila.
+**Tipo.** Una cuenta puede tener un tipo propio (`asset`: su saldo es dinero que tiene de verdad
+el club; `income`: se usa sobre todo para lo que entra; `expense`: sobre todo para lo que sale).
+Una cuenta sin tipo propio tiene el de su cuenta superior, y así hacia arriba: ese es su tipo
+efectivo (`effective_type` en la API, solo lectura; `type` es el propio, el que sustituye un
+`PATCH`). Las reglas que dependen del tipo usan siempre el efectivo:
 
-**Reglas**
+- La cuenta en la que se paga un reparto tiene que ser `asset`.
+- La cuenta de un reparto y la marcada `distribution_default` tienen que ser `income`.
+- Una cuenta marcada `allows_dues` o `allows_licenses` (las que tiene que usar una transacción
+  para poder registrar cuotas anuales o licencias federativas) tiene que ser `income`.
 
+Como cambiar un tipo, mover una cuenta o crear una nueva puede cambiar el tipo de todo un
+subárbol, `finishAccountChange` comprueba, en la misma transacción del cambio, que la cuenta
+guardada y todo lo que cuelga de ella que tiene que ser `income` lo sigue siendo (409
+`not_income_for_distributions` o `not_income_for_dues_licenses`, y no se guarda nada). Solo
+mira ese subárbol, así que las cuentas marcadas antes de que existiera la regla (sin tipo) no
+bloquean otras ediciones; hay que ponerles el tipo la próxima vez que se editen.
+
+**Marcas.** `distribution_default` es la cuenta donde se apuntan los pagos de los repartos que
+no tienen cuenta propia; solo una cuenta la tiene, y marcarla se la quita a la que la tuviera.
+`hidden` marca una cuenta ya sin uso: no se puede borrar si tiene historial, así que se oculta
+del plan y de los selectores del frontend (que la muestran solo a petición) sin tocar lo
+registrado contra ella. Como el resto de campos, un `PATCH` sustituye las marcas: omitir una la
+desactiva.
+
+**Jerarquía.**
+
+- La jerarquía solo agrupa: una cuenta tiene cuentas hijas o tiene transacciones, nunca las dos
+  cosas. Lo hacen cumplir dos triggers de la base de datos (migración 00033), así que no se lo
+  salta nada, ni las transacciones de pagos de repartos: apuntar una transacción a una cuenta
+  con hijas es 409 `account_has_children`; crear una cuenta bajo otra que ya tiene apuntes, o
+  moverla a ella, es 409 `parent_has_entries`. Lo que ya existía antes de la migración no se toca.
 - `DELETE /accounts/{id}` solo funciona si la cuenta no tiene cuentas hijas ni apuntes
   (409 `account_in_use`).
 - `PATCH` rechaza con 409 `circular_parent` un `parent_id` que sea la propia cuenta o un
   descendiente.
-- La jerarquía solo agrupa: una cuenta tiene cuentas hijas o tiene transacciones, nunca las dos
-  cosas (migración 00033, con triggers en la base de datos, así que tampoco lo salta nada, ni las
-  transacciones de pagos de repartos). Apuntar una transacción a una cuenta con hijas es 409
-  `account_has_children`; crear una cuenta bajo otra que ya tiene apuntes, o moverla a ella, es
-  409 `parent_has_entries`. Lo que ya existía antes de la migración no se toca.
-- `POST /accounts/{id}/move` (`{"direction": "up"|"down"}`) intercambia la posición con el
-  hermano inmediatamente anterior o posterior, sin error si ya es el primero o el último de
-  su grupo.
+- `POST /accounts/{id}/move` intercambia la posición con el hermano inmediatamente anterior o
+  posterior, sin error si ya es el primero o el último de su grupo.
 
 #### Transacciones y apuntes (`transactions`, `transaction_entries`)
 
-**Estructura**
-
-- Cada transacción se compone de dos o más apuntes (una cuenta y un importe, positivo o
-  negativo) que deben sumar exactamente cero: contabilidad de partida doble estándar.
-- Esa condición no puede ser un `CHECK` (solo vería su propia fila): la comprueba un
-  trigger de restricción `DEFERRABLE INITIALLY DEFERRED` que se ejecuta al hacer commit,
-  una vez insertados todos los apuntes de la transacción.
-- Una cuenta no puede repetirse dentro de una misma transacción (restricción única
-  `(transaction_id, account_id)`, migración 00018): su única entrada ya dice todo lo que
-  pasó por ella.
-
-**Errores de escritura**
-
-| Código | Estado | Causa |
-|---|---|---|
-| `duplicate_account` | 400 | una cuenta repetida en la misma transacción |
-| `too_few_entries` | 400 | menos de dos apuntes |
-| `invalid_amount` | 400 | importe cero |
-| `unknown_account` | 400 | cuenta inexistente |
-| `unbalanced` | 409 | los apuntes no suman cero |
-
-**Corrección y borrado**
-
-- Corregir una transacción (`PATCH`) sustituye su descripción, su fecha y el conjunto
-  entero de apuntes a la vez; no hay edición de un apunte suelto.
-- `DELETE /transactions/{id}` la borra con todos sus apuntes y, por cascada, las cuotas que
-  pagó. Si alguna licencia la señala como su pago no se puede borrar: 409
-  `transaction_has_licenses` (`ErrTransactionHasLicenses`), porque `licenses.transaction_id`
-  es `ON DELETE RESTRICT` — una licencia vale aunque se pierda el rastro de cómo se pagó.
+- Cada transacción se compone de dos o más apuntes que suman exactamente cero: contabilidad de
+  partida doble estándar. Esa condición no puede ser un `CHECK` (solo vería su propia fila): la
+  comprueba un trigger de restricción diferido hasta el `COMMIT` (ver [`database.md`](database.md)).
+- Una cuenta no puede repetirse dentro de una misma transacción: su única entrada ya dice todo
+  lo que pasó por ella.
+- Corregir una transacción (`PATCH`) sustituye su descripción, su fecha y el conjunto entero
+  de apuntes a la vez; no hay edición de un apunte suelto.
+- Borrar una transacción se lleva sus apuntes y, por cascada, las cuotas que pagó. Si alguna
+  licencia la señala como su pago no se puede borrar (409 `transaction_has_licenses`), porque
+  `licenses.transaction_id` es `ON DELETE RESTRICT`: una licencia vale aunque se pierda el
+  rastro de cómo se pagó. Si era el pago de un reparto, borrarla deshace ese pago (ver
+  «Repartos»).
 
 #### Saldos y listados
 
 - `GET /accounts` recorre el árbol en profundidad (cada cuenta seguida de todos sus
-  descendientes antes del siguiente hermano) y añade a cada una su `balance` (suma
-  de sus movimientos) y `last_transaction_at` (el del más reciente). Una cuenta que agrupa otras,
-  que no tiene movimientos propios, lleva la suma de los saldos de todo lo que cuelga de ella y
-  la fecha más reciente de sus descendientes. Ninguna otra ruta de `accounts` calcula estos dos
-  campos.
-- `GET /transactions` y `GET /accounts/{id}/transactions` (el libro mayor de una cuenta,
-  con `balance_after` corrido) están paginados, porque crecen sin límite con los años:
-  - `limit` (50 por defecto, máximo 100) y `offset`; un valor fuera de rango (`limit`
-    menor o igual que 0 o mayor que 100, `offset` negativo) vuelve a su valor por defecto
-    en vez de dar error.
-  - Rango de fechas inclusivo `from`/`to` como `YYYY-MM-DD`: una fecha mal formada da 400
-    `invalid_date` y un rango que acaba antes de empezar, 400 `invalid_date_range`.
-  - En una cuenta que agrupa otras (y por tanto no tiene apuntes propios), el libro lista los
-    apuntes de todas sus descendientes, cada uno con la cuenta donde está (`account_id`,
-    `account_name`), y el `balance_after` es el total acumulado de todas ellas juntas hasta ese
-    momento (por fecha, transacción y apunte), no el saldo de la cuenta del apunte.
-  - `q`: palabras que tienen que aparecer todas en la descripción, en cualquier orden y sin
-    distinguir mayúsculas ni acentos (se normalizan las vocales con tilde, la `ü` y la `ñ`, sin
-    necesitar la extensión `unaccent`); `%`, `_` y `\` cuentan como caracteres normales. En el
-    libro de una cuenta no cambia el `balance_after` de cada línea.
+  descendientes antes del siguiente hermano) y añade a cada una su `balance` y su
+  `last_transaction_at`. Una cuenta que agrupa otras, que no tiene movimientos propios, lleva la
+  suma de los saldos de todo lo que cuelga de ella y la fecha más reciente de sus descendientes.
+- El libro de una cuenta (`GET /accounts/{id}/transactions`) lleva un `balance_after` corrido,
+  calculado sobre todo el historial de la cuenta antes de aplicar el rango y la página, así que
+  no se reinicia en el borde de una ventana ni cambia al buscar. En una cuenta que agrupa
+  otras, el libro lista los apuntes de todas sus descendientes, cada uno con la cuenta donde
+  está, y el `balance_after` es el total acumulado de todas ellas juntas hasta ese momento, no
+  el saldo de la cuenta del apunte.
+- La búsqueda por palabras de la descripción (`q`) normaliza las vocales con tilde, la `ü` y la
+  `ñ` con `translate()` en los dos lados, sin necesitar la extensión `unaccent`.
 
 #### Permisos
 
-- **Lectura** (`GET` de cuentas y transacciones): abierta a cualquier rol baseline; las
-  cuentas del club son algo que cualquier socio puede ver, no solo admin/board.
-- **Excepción solo para admin/board**: `GET /transactions/{id}` incluye además `dues` y
-  `licenses`, las cuotas y licencias que esa transacción pagó (siempre presentes para
-  ellos, `[]` si no pagó ninguna; ausentes para cualquier otro rol, porque quién ha pagado
-  qué es privado de esa persona, admin y board).
-  - Las rellena `Handler.getTransaction` a través de dos interfaces mínimas (`DuesLookup`,
-    `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`.
-  - El diálogo de editar transacción de `/cuenta` las muestra de solo lectura.
-- **Escritura**: reservada a admin o al rol opcional `money` (sembrado por la migración,
-  no de sistema, la misma forma que `material` en inventario). Board no tiene aquí ningún
-  acceso de escritura especial, igual que no lo tiene sobre licencias ni sobre los datos de
-  una persona.
+La lectura de cuentas y transacciones está abierta a cualquier rol base: las cuentas del club
+son algo que cualquier socio puede ver. Escribir es de admin o del rol opcional `money`; board
+no tiene aquí ningún acceso de escritura especial, igual que no lo tiene sobre licencias ni
+sobre los datos de una persona. `GET /transactions/{id}` añade `dues` y `licenses` (las cuotas y
+licencias que esa transacción pagó) solo para admin y board, porque quién ha pagado qué es
+privado de esa persona. `Handler.getTransaction` las rellena a través de dos interfaces mínimas
+(`DuesLookup`, `LicensesLookup`) que satisfacen `memberships.Service` y `licenses.Service`.
 
 ## Backend (`backend/`)
 
@@ -1328,10 +1135,9 @@ en PostgreSQL detrás de ninguno de los dos, no tienen `repository.go`; su `serv
 trabaja directamente contra el sistema de archivos (ver «Archivo de documentos» y
 «Ficheros por persona»).
 
-`GET /api/v1/health` (que es lo que alcanza un reverse proxy o systemd bajo `/api/*`) no
-requiere autenticación y tiene un timeout propio de 2 s. Responde si el proceso está vivo
-y, por separado, si en ese momento puede alcanzar PostgreSQL. Así se puede comprobar sin
-tener ningún token de sesión que mandar.
+`GET /api/v1/health` (lo que alcanza un reverse proxy o systemd bajo `/api/*`) no requiere
+autenticación y tiene un timeout propio de 2 s, para poder comprobar que el proceso está vivo
+y llega a PostgreSQL sin ningún token de sesión.
 
 ### Autenticación y sesiones
 
@@ -1378,31 +1184,20 @@ sin este comando no habría forma de entrar en una base de datos recién migrada
 
 ### Estado del sistema (`internal/adminstatus`)
 
-`GET /admin/status` (solo admin, solo lectura) cuenta cómo va el proceso y cómo está
-configurado, para no tener que entrar en el servidor a averiguarlo:
+`GET /admin/status` (solo admin, solo lectura; qué devuelve, en [`api.md`](api.md)) cuenta cómo
+va el proceso y cómo está configurado, para no tener que entrar en el servidor a averiguarlo.
+Nunca incluye nada secreto: ni tokens, ni contraseñas, ni cadenas de conexión. `cmd/api` le
+pasa lo que se sabe al arrancar (`adminstatus.Info`) y el handler añade lo que puede cambiar en
+cada petición. Una base de datos que no responde se cuenta en el cuerpo (`database.ok` falso),
+no con un código de error.
 
-- **Aplicación**: la versión que Go anotó para el módulo principal
-  (`debug.ReadBuildInfo().Main.Version`: una etiqueta si se compiló desde un commit
-  etiquetado, o una pseudoversión con el commit y `+dirty` si había cambios; no hace falta
-  pasarle nada al compilar, y queda vacía si el binario no se compiló desde una copia de
-  git, como en la imagen de Docker). Para que Go la anote, `go.mod` y `go.sum` están en la
-  raíz del repositorio y no en `backend/` (solo estampa versión cuando la raíz del módulo
-  es la del repositorio); por eso las imágenes de Docker se construyen con la raíz como
-  contexto, recortado por `.dockerignore`), el commit que Go anotó en el binario cuando se
-  compiló desde un checkout de git, la versión de Go y cuándo arrancó.
-- **Base de datos**: si responde y en cuánto tiempo (`SELECT 1`), y la última migración que
-  goose tiene aplicada (`goose_db_version`; no aparece si no se puede leer). Una base que no
-  responde se cuenta en el cuerpo (`database.ok` falso), no con un código de error.
-- **Correo y Telegram**: si hay SMTP configurado, si hay canal de logs, y si el bot está en
-  marcha (con su nombre público).
-- **Ajustes**: la dirección pública y los plazos en vigor (sesión, enlace de acceso, espera
-  entre enlaces, enlace por el bot, impersonación).
-- **Ficheros**: si existen los tres directorios (archivo, ficheros de las personas,
-  memorias de actividades).
-
-`cmd/api` le pasa lo que se sabe al arrancar (`adminstatus.Info`) y el handler añade lo que
-puede cambiar en cada petición. Nunca incluye nada secreto: ni tokens, ni contraseñas, ni
-cadenas de conexión.
+La versión es la que Go anotó para el módulo principal (`debug.ReadBuildInfo().Main.Version`:
+una etiqueta si se compiló desde un commit etiquetado, o una pseudoversión con el commit y
+`+dirty` si había cambios; no hace falta pasarle nada al compilar, y queda vacía si el binario
+no se compiló desde una copia de git, como en la imagen de Docker). Para que Go la anote,
+`go.mod` y `go.sum` están en la raíz del repositorio y no en `backend/` (solo estampa versión
+cuando la raíz del módulo es la del repositorio); por eso las imágenes de Docker se construyen
+con la raíz como contexto, recortado por `.dockerignore`.
 
 ### Telegram
 

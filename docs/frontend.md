@@ -1,0 +1,479 @@
+# Frontend
+
+How the web frontend (`web/`) is built and how each page works. The conventions every page shares
+come first, then the pages one by one. The endpoints a page calls are in [`api.md`](api.md); the
+rules behind them, in [`backend-internals.md`](backend-internals.md) and
+[`architecture.md`](architecture.md).
+
+**Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate
+choice, not just an unexamined default: every page already revalidates its own session and
+re-fetches its own data on load, so there's no cross-page state an SPA would actually
+save, and this stays free of a bundler or any client-side router), one `<page>.html` +
+`js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/socios` resolve
+to `socios.html`. The sidebar and topbar, identical on every authenticated page, are
+rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted into each
+`<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
+`<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own
+session bootstrap (in place of what used to be five near-identical lines re-typed at the
+top of every `<page>.js`): it validates the session, applies role-based visibility, and
+wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
+same as `currentUser()` would. The menu collapses below 800px (an overlay behind the hamburger)
+and, on a wide screen, can be hidden with the "×" at the top of it: `api.js`'s
+`initSidebarToggle` puts `.sidebar-hidden` on `.shell` — which looks like the narrow layout,
+`style.css` keeps the two rules alike — and remembers it in `localStorage`
+(`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there the hamburger
+brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match
+the media query). Its own `requireAnyRole` option additionally redirects home
+if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
+(admin/board), of `accounting.js`/`account.js` (admin/money) and of `admin.js` (admin),
+tighter than the ordinary
+baseline check every API route already enforces. Which sidebar link reads as "active" is
+computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad`
+or `/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a
+per-page `class="active"` written by hand — one less thing a new page could forget.
+`login.html` is the one page with no shell and no session yet, and never calls
+`initPage()`. `404.html` (`js/notfound.js`) is what Caddy serves, with a 404 status and
+without changing the address, for anything that isn't a page (`handle_errors` in
+`deploy/Caddyfile`, which is why `root` is declared at the site level there — an error
+handler can't see one set inside the `handle`; API responses are untouched). It can't assume
+who is looking: with a session token it becomes an ordinary page (`initPage()`, menu
+included), imported only then because `api.js` reads the token as soon as it loads; without
+one it shows a plain panel linking to `/login`. Everything it loads is by absolute path,
+since it is served at whatever address was asked for, however deep — which is also why
+`layout.js`'s topbar logo is `/images/…` and not relative.
+
+Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
+it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
+rules only add what a plain `.panel` never needed: the dimmed `::backdrop`, a max-width,
+and the "×" `.modal-close` button's own positioning) — never a `<div>` toggled to
+`hidden="false"` in place on the same page the way every one of these used to work.
+`js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call each page
+makes per dialog: it wires every `[data-modal-close]` element inside (the "×", a form's
+own "Cancelar") and a click that lands on the dialog element's own box rather than
+bubbling from its content (the standard way to detect a backdrop click on a native
+`<dialog>`) to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
+own `close` event, which fires no matter *how* it closed (×, Cancelar, backdrop, Escape,
+or a successful save that calls `close()` itself once done), so a caller's own submit
+handler never resets the form itself. Opening one is always page-specific and left to the
+caller, through `openModal(dialog)` (same file: `showModal()` plus restoring the page's
+scroll position, which browsers otherwise reset to the top): a static "+ Nueva X" button
+calling it directly, or — for a dialog shared by every row of a list rather than one
+pre-rendered per row (`accounting.js`'s own account edit, `account.js`'s transaction edit,
+three of `member.js`'s timeline dialogs) — an `open*Dialog(record)` function that fills
+the shared dialog's fields from that one record first (`member.js`'s are
+`openStatusDialog`, `openEditBoardDialog` and `openEditLicenseDialog`). The platform
+itself is what actually makes the rest of the page unreachable while one is open (real
+modality, not a hand-rolled overlay to keep in sync) and closes it on Escape — nothing in
+`modal.js` or any page's own script needs to implement either. The same goes for errors:
+Errors don't go to a banner: `showError` (`api.js`) opens a modal `<dialog id="error-dialog">`,
+created on demand, titled "Ha ocurrido un error", with the message and a "Cerrar" button. It is in
+the top layer over everything, even another open dialog, behind a dark backdrop, so the rest of the
+page can't be operated until it is closed (the button, Escape or a click on the backdrop); a second
+error while it's open replaces the message. `showFeedback` is still the sticky `#feedback` banner
+for successes — pages no longer have an `#error` element. `login.html`'s own inline messages next to
+the button they answer are the exception. `perfil.html`'s own "Mis datos" and `member.js`'s
+own "Datos" are both left as a plain inline form instead, not a dialog: a person's own
+core data is prominent enough on both pages (the entire reason `/perfil` exists at all;
+the very first thing an admin or board looks at on `/socio`) that hiding it behind an
+"Editar" button added friction for no real gain in clarity — plain `<input>`s directly on
+the page double as the read-only view too, so there's no separate view-only rendering to
+keep in sync with whatever the form itself holds. Populated once by
+`loadProfile()`/`loadMember()` and never reset to blank the way a "create new X" dialog's
+own form is on close, both add a "Cancelar" button next to "Guardar cambios" that puts
+back exactly what was last loaded (a plain local re-populate, not a re-fetch) — the one
+bit of a modal's own behavior (`initModal`'s reset-on-close) an inline form doesn't get
+for free, since there's no `close` event here to hang it from. `member.js`'s own version
+disables every field instead (not just the identity ones `profile.js` restricts) for
+anyone who isn't a real admin — board can still see a person's full data this way, just
+not submit any change to it, the same read-only-but-visible treatment `profile.js` already
+gives a plain member's own name/DNI/birth date/gender.
+
+`js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the
+session token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page
+load to validate the token and populate `currentUser()`. `applyRoleVisibility()` removes
+any `data-roles="admin,board"` element the current user's roles don't satisfy —
+client-side UI hiding only; the API is the actual authority. A permission that depends on
+data loaded asynchronously for one specific record (e.g. "is the viewer this activity's
+organizer?") can't be a static `data-roles` attribute, since `applyRoleVisibility()` only
+runs once at page load — that case computes a plain JS boolean after the data arrives and
+toggles `.hidden` directly instead (see `activity.js`'s
+`canManage`/`canJoinSelf`/`canAddOthers`). Detail pages read a login from the query string
+(`/socio?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern
+`login.html` uses for the magic-link token from an emailed URL. Its login code has no URL
+of its own to arrive in — `login.html`'s second panel gets it typed in by hand — so the
+email/phone from the first step are instead remembered in a plain JS variable across that
+two-step flow. That second panel appears whatever was typed, since the API answers the
+same way for details it doesn't know (so as not to reveal who has access), and so it never
+claims anything was sent: it says an email with a link and a code *will* arrive if the
+details are right. The link from that email is usually opened in another window or tab,
+which signs in there while this one keeps asking: `auth.js`'s `watchForSignInElsewhere`
+therefore listens for the `storage` event on the `token` key (and for the tab becoming
+visible again, for a browser that doesn't deliver it) and, when a stored token really is
+valid (`GET /auth/me`, as at load), sends this window to `/` already signed in — a stale
+or invalid one changes nothing. `login.html` also offers Telegram as a second way in,
+alongside (never instead of) the email/phone form: on load, `auth.js`'s
+`loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
+(`authapi.Handler.TelegramBotInfo`, backed by
+`config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since
+it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes
+back non-empty, un-hides a note linking straight to the bot's chat — left hidden by
+default so there's no dead link (or flash of one) when Telegram isn't configured at all,
+or the request itself fails.
+
+`library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
+own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
+document from the `/archivo` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
+and works with the resulting `Blob` client-side — an object URL for inline preview, a
+synthetic `<a download>` click to save — since a `Blob` is what lets it render Markdown
+inline and drive the download from a click handler rather than a bare link, not because
+the route itself needs the bearer header specifically. Markdown
+documents render through a small dependency-free converter (`js/markdown.js`) that
+resolves each document-relative link against the document's own directory and rewrites it
+into an in-app `/archivo` navigation link; HTML documents render in a fully sandboxed
+`<iframe>` instead, with no such link rewriting. `library.js` and `userFiles.js` (the
+embedded per-person file browser on `/perfil`/`/socio`) share this same
+listing/preview/download logic almost verbatim — `js/fileBrowser.js` pulls out the
+common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
+document-relative link resolver, `downloadBlob`) both import, rather than each carrying
+its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
+`formatSize`/`downloadBlob` from there too, the only two of these it also needed.
+
+`perfil.html`/`socio.html` each also render a "Licencias federativas" section — a year `<select>`,
+mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small clickable thumbnails rather
+than a plain list of text links — instead of pointing at that person's `licencias/` subdirectory
+(see [Dropping files
+in](backend-internals.md#dropping-files-into-the-library-and-the-per-person-directories)) through
+`userFiles.js`'s generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches
+that one directory's listing (`GET /users/{login}/files?path=licencias`), builds the `<select>` from
+whatever years actually have a license on file (ascending, most recent selected by default — nothing
+conjures up an empty year the way `loadActas` doesn't either), and renders each of that year's files
+as a `licenseCard`: a thumbnail linking straight at `GET /users/{login}/files/file/licencias/<name>`
+(a bare `<img>`/`<a href>`, the same cookie-authenticated plain-link shape `dashboard.js`'s own
+`fileLink` already uses for Documentos/Actas/Memorias, since this route accepts the session cookie
+too — see `internal/userfiles` above — so there's no need for `apiFetchBlob`'s Blob dance), with a
+"DD-MM-YYYY — Tipo de licencia" label underneath parsed the same way `dashboard.js`'s own
+`parseActaName`/`actaYear`/`formatActaDate` read `yyyy-mm-dd(-suffix).pdf` back out of an acta's
+filename; within a year, files sort by `(month, day, tipo_de_licencia)` rather than trusting the raw
+filename string, the same reasoning `loadActas`' own `renderSelectedYear` sorts by `(month, day,
+suffix)`. A file whose name doesn't match that convention has no year to file it under, so — the
+same as an acta named anything else — it's simply left out.
+
+The thumbnail itself is a companion file at
+`licencias/.thumbnails/<full original filename>.jpg` (any original extension — not just a
+PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing this
+module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
+starting with "."), the same "invisible companion file, fetched by exact path" trick
+`dashboard.js`'s own `.order.json` already relies on. Nothing in the running app generates
+one; `scripts/generate-license-thumbnails.sh` does, on demand, for every license copy that
+lacks one (see **Commands**); one dropped in by hand next to the license's own file works
+the same. It is meant to be 280px on its longest side — twice `.license-thumbnail`'s own
+140px display size in `style.css`, so it still looks sharp on a high-DPI screen.
+`licenseCard`'s `<img data-fallback-src>` tries that thumbnail first;
+`wireThumbnailFallbacks` catches a load failure (the common case until the script has been
+run) and falls back to the license's own file directly only if that file is itself an
+image (`fileKind`, `fileBrowser.js`) — nothing to generate a thumbnail for when the real
+file already is a small, displayable image — and, failing that too (a PDF or anything else
+with no thumbnail dropped in for it yet), swaps in a plain 📄 placeholder of the same size
+rather than the browser's own broken-image icon, so the grid stays visually consistent
+whether or not every license has a real thumbnail yet.
+
+A missing `licencias/` subdirectory 404s the same as any other unknown one
+(`userfiles.Service.ListDirectory`), caught and shown as "no hay copias" rather than an
+error — nobody's dropped a license copy in yet is the common case, not a real failure.
+`profile.js` passes `hideWhenEmpty: true` (mirroring `initUserFilesBrowser`'s own option)
+so "Mi perfil" doesn't show an empty section for the common case of no license on file
+yet; `member.js` leaves it on by default (always shown) so admin/board reviewing someone
+else's page can tell "no license copies yet" apart from a page that failed to load
+anything at all. `.info-card`/`.info-card label`/`.year-select` (the
+bordered-card-with-a-year-filter look Actas asambleas already had) live in the shared
+`style.css` rather than the page-specific `dashboard.css` precisely because these two
+pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
+`.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
+this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
+
+`/repartos`, `/reparto?id=…`, `/reparto-pedidos?id=…` and `/reparto-pagos?id=…` (`distributions.js`,
+`distribution.js`, `distribution-orders.js`, `distribution-payments.js` — the list of one
+distribution's payments, reached by the "Pagos" button of its page (admin/board, only when it has
+something to pay), with a date range and "Ver más" like the ledger of an account — sharing
+`js/distributionCommon.js`) are the interface for **Distributions** above — where what the code and
+the API call a unit is a "pedido" to the people reading these pages, and an extra unit an "extra",
+since "unidad" meant nothing to them — behind one "Repartos" sidebar entry (`layout.js` maps the
+three detail pages to it in `ACTIVE_ALIASES`). The list opens a new distribution from a dialog
+(admin/board; the options go in a textarea, one per line, "Talla: S, M, L", `parseOptions`) and
+shows "Puedes pedirlo" on the open ones whose `eligible` is true. The detail page renders the
+conditions and, except while it is a draft (`#ask-sections` is hidden then, and the orders are
+loaded only once it leaves the draft), a "Pedir" form (an "A nombre de" picker over `GET
+/users/directory`, one `<select>` per option, an extra checkbox when `extra_price` exists — except
+in a distribution for all members with no options, where the own order is already there and only
+extras are left: no checkbox, the request always goes as an extra, the button says "Pedido extra"
+(`extrasOnly`) and the subtitle gives the price, "Puedes pedir también extras a 8,00 €" —;
+`canOrderNow` repeats the API's own open/deadline rule only to decide whether to show it) and "Tus
+pedidos" — the units where the signed-in person is the beneficiary or entered them, since `GET
+.../units` returns everything to admin/board/material — with who entered each when that isn't the
+person it is for. In a distribution for all members the member's own unit is already in that table
+("Automático", "Sin elegir" with a primary "Elegir" button until somebody chooses, no "Quitar" since
+the API refuses it), and the whole "Pedir" section (`#order-section`, not just the form, so not even
+a "no longer admitting orders") is out when there is neither an option nor extras to ask for,
+`nothingToAsk`. The table's columns (`unitColumns`) are only the ones that mean something: "Elegido"
+only with options, "Tipo" (own or extra) only when extras exist, and nothing about payment for now —
+the state is "Recogido" or "No recogido"; the price (the unit's own, frozen) is shown in a "Precio"
+column, but nothing about paying (no state, no amount owed): the intranet doesn't keep that.
+Admin/board move the status one step at a time (`bodyFrom` rebuilds the whole body, as `PATCH`
+replaces every field) and edit, and only admin deletes (`DELETE` is admin-only in the API, and the
+button is `data-roles="admin"`); every control restricted by `data-roles` is *removed* from the page
+for anybody else, so each script reaches those through a null-safe lookup (a bare
+`getElementById(...).addEventListener` on one of them would throw before the rest of the page ran).
+`/reparto-pedidos` (`requireAnyRole` admin/board/material; the old summary and collection pages are
+this one) is everything about the orders in one place: on top `GET .../order` (what has to be
+bought), below it a list with one line per order (searchable by member or number; the ones with
+everything paid and handed out are hidden unless asked for) and a summary: what, how many are handed
+out and paid, what it costs. "Más información" unfolds its detail (`detail`, kept in `unfolded`):
+for an article with numbers (`isNumbered`) how many are without one (with "Asignar los siguientes
+libres" or typed numbers) and the list of its numbered items, each with its paid / delivered state,
+to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid
+or take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,
+"Entregado a", prefilled with the member the order is for; only members are offered), undo a
+delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same. Paying
+and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the
+non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped
+when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution
+have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in
+its first option). Everything goes through the single `perform(act, unit)`, confirming before
+handing over unpaid units, undoing, returning or taking numbers off. Wherever the frontend lists
+numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and joined into ranges
+(`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an error message or an
+entry of the list of payments names). The Telegram messages about numbers say them the same way
+(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
+the same order and ranges; each message says what it changed — numbers added, taken off or newly
+assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers
+("A nombre de", "Entregado a") offer only members, never everybody on file: `loadPeople(id,
+purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
+cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
+shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
+`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` now
+puts the API's error `code` on the thrown `Error`, which `distributionCommon.js`'s `apiErrorText`
+maps to Spanish messages (falling back to the API's own text).
+
+`/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
+and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,
+and last movement date (each name a plain `<a href="/cuenta?id=…">` into that one account's own
+detail page, below). There is deliberately no code column, nor codes in the parent pickers: a code
+only shows on that account's own `/cuenta` page, though the create/edit dialogs still have the field
+to set it. The page also has the controls to create an account ("+ Nueva cuenta" dialog), correct
+one's name/code/parent (one shared edit dialog, `openEditAccountDialog`), and swap it up or down
+among its own siblings. Both dialogs carry three checkboxes, "Para cuotas anuales", "Para licencias"
+and "Oculta" (`allows_dues`/`allows_licenses`/`hidden`, styled by `.checkbox-label` in `style.css`
+so the box sits next to its text instead of being stretched by `.field input`'s `width: 100%`),
+always sent explicitly — unchecked is `false`, not omitted, since `PATCH` replaces every field — and
+each row shows a small "Cuotas"/"Licencias"/"Oculta" badge next to the account's name for whichever
+are on, so which accounts a transaction can record those against is visible without opening each
+one. `js/accountTree.js` holds the `childrenByParent`/`flattenAccountTree` pair both this page and
+`account.js` need: `GET /accounts` already comes back as a pre-order, depth-first walk (see the
+`accounts` bullet under [Accounting](backend-internals.md#accounting)), so filtering that flat list
+down to a single `parent_id`, in the order it already arrives in, *is* that group's own sibling
+order — one pass groups every `parent_id` at once, no separate tree-building pass. Hidden accounts
+(`hidden`) are left out of the table, and of the parent pickers, unless a "Mostrar cuentas ocultas
+(N)" checkbox — shown only when there are any — is on (a view choice, never persisted); each is
+tagged "Oculta" and dimmed when shown; `shownAccounts` (`accountTree.js`) drops them while
+re-parenting their shown children onto the nearest shown ancestor, since filtering the flat list
+alone would lose those children from the tree walk. The ↑/↓ arrows follow the real sibling groups
+but count only shown siblings, and a move repeats once per hidden sibling it has to pass (the
+endpoint swaps with the very next one, which would otherwise look like nothing happened). A hidden
+account stays offered as the parent picker's choice when it is the current parent — dropping it
+would move the account to the top level on save. A `move`'s own response (the whole reordered list)
+re-renders directly from `applyAccountsList` rather than triggering a follow-up `GET`. Only admin
+and the optional "money" role ever see `/contabilidad` in the sidebar at all, or can even land on
+the page (`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than the API
+itself, which opens *reading* the chart to every baseline role the same as `GET /transactions`;
+admin/money can already write here too, so nothing on the page needs a narrower check than that one
+gate.
+
+`/cuenta?id=…` (`account.js`) is one account's own ledger (for a group, `isGroupView`: its
+descendants' entries with a "Cuenta" column between Fecha and Descripción linking to each one's
+page, where the transaction is corrected — no Editar, no new transactions, a header balance that,
+like in `/contabilidad`, is the sum of all its descendants' (it comes rolled up from `GET
+/accounts`) — and a row's detail lists the other accounts relative to the account the row is on) —
+reached only by clicking an account's name on `/contabilidad`, never linked from the sidebar itself,
+so it shares that same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
+`/contabilidad` for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
+`/socio`→`/socios` treatment every other detail-off-a-listing page gets). Renders `GET
+/accounts/{id}/transactions` (see [Accounting](backend-internals.md#accounting)) as a table — date,
+description, this account's own entry amount, its running balance after, and per-row Editar/Borrar
+(a row also opens on a click anywhere but those buttons, or Enter/Space when focused — see below).
+The listing is paginated (`loadEntries`): the newest 50 (`ENTRIES_PAGE_SIZE`) first, "Ver más" for
+the next ones, and above it a "Buscar en la descripción" box with a Desde/Hasta filter (the
+`limit`/`offset`/`from`/`to`/`q` query parameters of that route, applied with "Filtrar"; it asks for
+one entry more than a page just to know whether to show "Ver más"). A "+ Nueva transacción" dialog,
+deliberately narrower than the full `POST /transactions` shape, creates transactions: a date, a
+description, and a growing list of *lines* (`setupEntryLines`), each an amount "en esta cuenta" plus
+the "otra cuenta" it comes from or goes to. As soon as the last line has both fields a new empty one
+appears below it; a line with neither is ignored, one with only one is an error, the same account
+can't be on two lines, and the account picker starts on a "— Elige una cuenta —" placeholder
+precisely so "filled" means something. On save (`entriesBody`, shared by creating a new transaction
+and correcting an existing one) this account gets one entry for the *sum* of every line's amount,
+added up in whole cents so floating point never shows up in the result, and each other account gets
+the exact negative of its own line — so the entries sum to zero without whoever is typing having to
+think about the balancing side. Amounts that cancel out (this account would get a zero entry) are
+refused. A read-only "Total en esta cuenta" next to the date (`updateTotal`) shows that sum live, on
+every keystroke, so it counts a line whose account isn't picked yet and ignores an empty or
+non-numeric amount. A row's own "Editar" fetches that one transaction fresh (`GET
+/transactions/{id}`, never kept in memory alongside the ledger listing, which only ever carries this
+account's own side of each one) and turns each of its *other* entries into a line (amount negated
+back); if it doesn't have exactly one entry on this account, or has no other entry (only possible by
+calling the API directly), editing is refused with an explanation instead of silently merging them.
+The dues/licenses sections follow every account picked on any line (`sectionsFor`), not just one.
+"Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete buttons use) removes the whole
+transaction, every entry included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`)
+expands a detail row right below it — starting under "Descripción" (an empty first cell), with no
+line between the two and the same background, so it reads as the continuation of the row above
+rather than as another row — listing the transaction's *other* accounts — each name (just the name,
+no code — the code only appears in the page's own header) linking to that account's own ledger, with
+the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with `GET /transactions/{id}`
+the first time (the listing only ever carries this account's own side, see `AccountEntry`) and
+resolved to names from `allAccounts`, which the page already has; it works for transactions of any
+number of entries. Under them it also lists the cuotas anuales and licencias the transaction paid
+for — each as the person's name (from `GET /users/directory`, which the page loads for everyone who
+can reach it, not just for the admin pickers) linking to `/socio`, plus year (and license type) —
+from the `dues`/`licenses` that same response carries for admin/board only, so they simply don't
+appear for anyone else. Clicking the row again collapses it, a click on Editar/Borrar or on a link
+never toggles it, and any reload of the list starts every row collapsed. Pressing "n" anywhere on
+the page opens the new-transaction dialog (ignored while typing in a field, with a modifier held, or
+with a dialog already open), which puts focus on the date; the edit dialog puts it on the
+description. The date input only ever collects a plain date, but `occurred_at` is a real timestamp —
+sent as that date at noon UTC (not midnight) specifically so `formatDate`'s own local-timezone
+getters can never roll it back to the previous day for anyone viewing from behind UTC; editing an
+existing transaction collapses whatever time of day it actually had down to this same convention.
+Both dialogs also carry, for a real admin only (`data-roles="admin"`; POST dues/licenses is
+admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registrar" section
+(`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips sent as `POST
+/users/{login}/dues`/`licenses` once the transaction itself is saved. Each section is hidden
+(`hidden`) until it could actually succeed: `sectionsFor` shows dues if this account or any account
+picked on a line has `allows_dues`, licenses if any has `allows_licenses`, re-evaluated whenever a
+line's picker changes and whenever a dialog opens, and a section that gets hidden also drops its
+pending chips — otherwise one added while a qualifying account was selected would still be sent, and
+only rejected by the API after the transaction was already saved. Separately from that, the edit
+dialog lists what earlier saves already registered against the transaction, read-only (no ×: nothing
+removes a due) from the `dues`/`licenses` its own `GET /transactions/{id}` already returns
+(`setExisting`): a section stays visible for as long as it has something to list even when no
+account qualifies any more (the flag was since turned off, or the accounts changed) — a record of
+what was paid, not something about to be sent — while its add controls follow the qualifying rule
+above. When neither section applies, a hint explains that an account has to be marked for it, in
+Contabilidad, instead of showing nothing. The "+ Nueva transacción" dialog opens with today's date
+(`todayAsInputValue`, built from local getters: `toISOString()` would be UTC's date, already
+tomorrow's for part of the evening east of it), and each section's "Año" input starts from the
+transaction's date — that date's own year, or the next one in December, since a payment that late is
+almost always for the following year (`suggestedYear`). The inputs keep following the date until the
+person types in one, which is then left alone until the dialog is next opened (`editedYearInputs`,
+cleared by `reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
+dialog does the same from its own date. Each line's "otra cuenta" picker (the same list in the
+create and edit dialogs) leaves hidden accounts out — except those the transaction being edited
+already uses, which stay choosable (`otherAccountOptions`'s `keepHidden`) — and lists every other
+account by name only, no code (indented the same way `accounting.js`'s own pickers are, via
+`flattenAccountTree`) — excluding only this account itself, not its ordinary parent/children the way
+`accounting.js`'s own "cuenta superior" picker excludes descendants: there's no circular
+relationship to guard against here, any two distinct accounts can be on the two sides of a
+transaction. The page's own header (name, code, current balance) and that picker both come from one
+`GET /accounts` call — that listing already carries every account's own balance, so there's no need
+for a second, single-account fetch just for the header (`GET /accounts/{id}` alone never populates
+it — see [Accounting](backend-internals.md#accounting)).
+
+`/socios` (`members.js`) is a read-only, sortable table of people; every action about a person lives
+on their own `/socio?login=<login>` page, which a row opens for admin/board only. "+ Nueva persona"
+is admin-only, in the markup and in `members.js`, which loads the role catalog (for that dialog's
+role checkboxes) only for an admin. The list of roles itself, to create or delete one, is no longer
+here: it lives on `/admin`, the page behind the "Admin" sidebar entry (admin only, `NAV_ITEMS`'
+`roles: ['admin']`), meant for whatever else only administrators care about —
+`admin.html`/`admin.js`, which for now holds an "Estado del sistema" section (`GET /admin/status`,
+see **Admin status**: version and commit, database and migration, email, Telegram, timeouts,
+directories, with an "Actualizar" button), a "Roles" section (`GET`/`POST`/`DELETE /roles`; a "Ver"
+under each role unfolds who holds it, taken from `GET /users` — admin sees everybody with their
+`roles` — with a "×" per person (`DELETE /users/{login}/roles/{id}`) and a name picker with "Dar
+este rol" (`POST /users/{login}/roles`); the automatic roles only list their holders, and the
+admin's own admin role has no "×", as on `/socio`; the unfolded roles survive the re-render in
+`expandedRoles`) and a "Sesiones" one: every session from `GET /tokens` (a person's name from the
+directory, last use and address, creation and expiry, "Activa"/"Caducada"/"Revocada", a badge on an
+impersonation's and on the admin's own "Esta sesión"), 50 at a time with "Ver más" and a checkbox
+for the expired and revoked ones, where an active one can be revoked (a different warning for one's
+own, which signs out) or have its expiry changed, through `/users/{login}/tokens/{id}`, and a
+"Festivos" one: the club holidays the activities calendar tints, a year at a time with ‹ › (`GET
+/holidays?year=`), each with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo" dialog (`POST
+/holidays`; a date that already has one is the API's 409 `duplicate_holiday`) and "Copiar del año
+anterior", which POSTs last year's holidays on the same day and month except where the year already
+has one (movable ones such as Semana Santa are fixed by hand; there is no edit). Admin/board get
+`FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to
+what `users.MemberListing` carries (see **Permission tiers**). Row filters ("Género", "Tipo de
+socio", "Categoría", "Cuota anual", "Federación") and the column toggles sit behind a "Filtros…"
+button, and above it a "Buscar persona" box (`matchesSearch`: every word typed has to appear, in any
+order and ignoring accents and case, in the name, membership number, login and — admin/board only,
+as that is all their listing carries — email, phone and DNI; it narrows what the filters leave and
+isn't persisted). Every filter starts with every option checked except "Tipo de socio", which starts
+with only "Activo" and "Baja temporal", so the default view is the current membership. "Cuota anual"
+splits people on whether `last_due_year` is the current year ("A corriente de pago"), and
+"Federación" on whether `license_type` is present — `GET /users` only reports a license for the
+current year, so having one *is* being federated. Filters, visible columns and sort order persist in
+`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page
+lands on the same view, and a counter shows how many people the current filters leave. With nothing
+saved, the columns shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia"
+(each column's `default` flag); the rest are optional in the "Filtros…" panel.
+
+A page's requests that don't depend on each other go out together, not one after another
+(each wait in a row costs a full round trip, which is most of what a page load takes once
+the API itself is fast): `/socios` asks for `/users`, `/board-members` and, for an admin,
+`/roles` at once and draws the table when the board positions are in too
+(`loadUsers(ready)` — only the drawing waits, not the slow `/users` request), and `/admin`
+loads its five sections with one `Promise.all` (the sessions are drawn again with the names
+if the directory arrives after them). That is the convention for a page's first load, and
+the rest follow it: `/actividades`, `/actividad`, `/material`, `/socio`, `/cuenta` and the
+distribution pages start every independent request together, and whatever drawing needs
+something else (the directory of names, the role catalog, the people) takes it as a `ready`
+promise to wait for after its own data arrives, so only the drawing waits. The one
+dependency that remains is `/reparto`, which asks for the orders only once it knows the
+status isn't draft.
+
+On `/socio`, a real admin also has a "+ Licencia sin pago" button (`add-license-dialog`)
+that records a license with no transaction (`POST /users/{login}/licenses` without
+`transaction_id`) — the way to register one the club didn't collect, such as someone
+federated elsewhere. Licenses the club does collect are registered from their transaction
+on `/cuenta`, as above.
+
+## Serving the frontend, and checking a page in a headless browser
+
+The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Caddyfile`),
+and sends `Cache-Control: max-age=3600` for everything it serves from there: without any
+cache header, browsers guess a freshness lifetime of a tenth of the file's age, so a file
+unchanged for weeks can be served stale for days after a deploy. A fixed hour is the
+trade-off: `no-cache` (revalidate each file, a cheap 304) made every navigation take about
+a second over a real connection — a page loads a chain of scripts that import one another,
+so each costs a revalidation round trip in sequence. The price is that after a deploy a
+browser may keep an old page or script for up to an hour, mixed with new ones; the people
+who use the intranet daily are the developers, who know to reload the page bypassing the
+cache (how depends on the browser and device, and on a phone or tablet there is no easy
+way — hence an hour and not a day). Only `web/` goes through this rule: documents and
+files come from `/api/*`, which Caddy leaves to the API. The same Caddyfile compresses
+whatever travels as text (`encode zstd gzip`: the scripts and styles are about a third of
+their size, and the API's JSON — `GET /users` is over 100 KB — much less than that), and
+leaves images and PDFs alone. The club's own Caddy, outside this repo, needs both lines in
+its site block (`docs/deployment-no-docker.md`).
+
+Checking how a page actually looks, in an environment with no GUI: Claude Code's own
+browser-automation tool ("Claude in Chrome") needs a real, windowed Google Chrome plus a
+direct Anthropic plan login, neither of which exists on a headless dev box — but
+`chromium` (`sudo apt-get install chromium`; a system package, not part of this repo) run
+headless and driven over the Chrome DevTools Protocol works just as well for a quick
+visual check. Launch it once, keeping it running in the background:
+```sh
+chromium --headless=new --disable-gpu --no-sandbox \
+  --user-data-dir=/tmp/chromium-profile --remote-debugging-port=9333 about:blank &
+```
+Then script it — no Node/Playwright available either, so a plain Python script talking
+raw WebSocket frames to `ws://localhost:9333/devtools/page/<id>` (the id comes from
+`PUT http://localhost:9333/json/new?<url>`) works, needing nothing beyond the standard
+library (`socket`, `hashlib`, `struct`, `json`). To view a page that requires being
+signed in: mint a session token with `scripts/get-token.sh <login>` (dev only), navigate
+to the app's own origin first, run `Runtime.evaluate` with
+`localStorage.setItem('token', '<token>')` — the same key `js/api.js` itself reads on
+every page load — then `Page.navigate` to the real page and, once
+`Page.loadEventFired` fires and a couple of seconds have passed for that page's own
+client-side fetches to resolve, `Page.captureScreenshot` (`captureBeyondViewport: true`
+to get the whole page, not just the current viewport).

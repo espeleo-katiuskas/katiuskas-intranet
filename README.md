@@ -9,7 +9,11 @@ información sobre el club en [katiuskas.es](https://katiuskas.es/).
 - `backend/` — API REST en Go (`/api/v1`), ver `backend/openapi/openapi.yaml` para el
   contrato completo.
 - `web/` — páginas web (HTML + JS) para socios y directiva.
-- `docs/architecture.md` — arquitectura y decisiones de diseño.
+- `docs/architecture.md` — arquitectura y reglas de negocio.
+- `docs/api.md` — lista de endpoints de la API, para quien quiera usarla sin leer el OpenAPI.
+- `docs/database.md` — cómo se guardan los datos: tablas, columnas y restricciones.
+- `docs/backend-internals.md` y `docs/frontend.md` — el detalle de cómo funciona el backend,
+  recurso a recurso, y el frontend, página a página (en inglés).
 - `scripts/` — herramientas de línea de comandos; ver
   [`scripts/README.md`](scripts/README.md).
 - `docker-compose.yml` — PostgreSQL + API + frontend detrás de Caddy, para levantar todo
