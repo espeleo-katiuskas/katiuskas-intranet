@@ -35,7 +35,7 @@ function what(e) {
 
 function row(e) {
   return `<tr>
-    <td>${escapeHtml(formatDateTime(e.occurred_at))}</td>
+    <td class="nowrap">${escapeHtml(formatDateTime(e.occurred_at))}</td>
     <td>${escapeHtml(e.recorded_by_name)}</td>
     <td>${what(e)}</td>
     <td><a href="/socio?login=${encodeURIComponent(e.paid_by_login)}">${escapeHtml(e.paid_by_name)}</a></td>

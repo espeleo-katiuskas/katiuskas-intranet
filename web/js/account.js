@@ -670,7 +670,7 @@ function renderEntryRow(entry) {
     : `<button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>`;
   return `
     <tr class="entry-row" data-entry-row="${entry.transaction_id}" data-entry-account="${entry.account_id}" tabindex="0" aria-expanded="false">
-      <td>${formatDate(entry.occurred_at)}</td>
+      <td class="nowrap">${formatDate(entry.occurred_at)}</td>
       ${accountCell}
       <td>${escapeHtml(entry.description)}</td>
       <td class="balance-cell">${formatCurrency(entry.amount)}</td>

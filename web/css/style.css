@@ -1198,6 +1198,14 @@ a.btn {
   font-variant-numeric: tabular-nums;
 }
 
+/* Dates and amounts stay on one line however long the description next to them
+   is: a table gives the columns of a long text most of the width and would
+   otherwise break these in two. */
+.balance-cell,
+.nowrap {
+  white-space: nowrap;
+}
+
 .breadcrumbs {
   margin: 16px 0;
   color: var(--ink-muted);

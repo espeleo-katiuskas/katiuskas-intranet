@@ -102,7 +102,7 @@ function renderAccountRow({ account, depth, isFirst, isLast }) {
     <tr${account.hidden ? ' class="account-hidden"' : ''}>
       <td style="padding-left: ${1.25 * depth + 0.75}rem"><a href="/cuenta?id=${account.id}">${escapeHtml(account.name)}</a>${accountTags(account)}</td>
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
-      <td>${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
+      <td class="nowrap">${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
       <td>
         <div class="table-actions">
           ${isFirst ? '' : `<button type="button" class="btn btn-secondary btn-small" data-account-move-up="${account.id}">↑</button>`}
