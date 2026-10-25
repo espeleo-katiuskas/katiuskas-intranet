@@ -710,7 +710,8 @@ async function load(ready = Promise.resolve()) {
     if (canMarkPaid && assetAccounts.length === 0) {
       requests.push(
         apiFetch('/accounts').then((all) => {
-          assetAccounts = all.filter((a) => a.type === 'asset' && !a.hidden);
+          const groups = new Set(all.map((a) => a.parent_id));
+          assetAccounts = all.filter((a) => a.type === 'asset' && !a.hidden && !groups.has(a.id));
         }),
       );
     }

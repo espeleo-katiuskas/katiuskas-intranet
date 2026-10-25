@@ -327,7 +327,9 @@ function readDistributionForm(form) {
 async function loadAccountOptions(form) {
   const select = form.elements.account_id;
   try {
-    const accounts = (await apiFetch('/accounts')).filter((a) => !a.hidden && a.type === 'income');
+    const all = await apiFetch('/accounts');
+    const groups = new Set(all.map((a) => a.parent_id));
+    const accounts = all.filter((a) => !a.hidden && a.type === 'income' && !groups.has(a.id));
     const standard = accounts.find((a) => a.distribution_default);
     select.innerHTML = [
       `<option value="">${standard ? `Por defecto (${escapeHtml(standard.name)})` : 'Por defecto (todavía no hay ninguna)'}</option>`,
@@ -399,8 +401,8 @@ const errorMessages = {
   account_required: 'Elige la cuenta en la que se ha pagado.',
   account_not_income:
     'La cuenta de los pagos de un reparto tiene que ser de tipo «ingresos». El tipo se cambia en Contabilidad.',
-  not_income_for_distributions:
-    'La cuenta por defecto de los repartos, y la de un reparto, tienen que ser de tipo «ingresos»: no se puede marcar así una de otro tipo, ni cambiar el tipo de una que se usa para ello.',
+  account_has_children:
+    'Una cuenta que agrupa otras cuentas no puede tener transacciones: usa una de sus cuentas hijas.',
   no_distribution_account:
     'Este reparto no tiene cuenta para sus pagos y no hay una cuenta por defecto: elige una al editarlo, o marca una en Contabilidad como cuenta por defecto de los repartos.',
   unit_paid: 'Este pedido tiene pagos: quítalos antes de borrarlo.',

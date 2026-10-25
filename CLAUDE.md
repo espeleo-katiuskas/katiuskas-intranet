@@ -1219,7 +1219,16 @@ vanish from the listing, which is exactly why `UpdateAccount` rejects
 from, the account being edited — checked by walking *up* from the proposed parent (a query
 genuinely capable of looping forever against pre-existing bad data, unlike the listing's
 own downward walk), so that one's own recursion is capped at a depth no real chart of
-accounts would ever approach, purely so it can't hang even then.
+accounts would ever approach, purely so it can't hang even then. The hierarchy only groups: an
+account has child accounts or has transactions, never both (migration `00033`, two triggers so that
+no path skips it, the transactions of a distribution's payments included): an entry on an account
+with children is 409 `account_has_children` (`ErrAccountHasChildren`, on creating or correcting a
+transaction), and giving as parent — creating under it or moving to it — an account that already
+has entries is 409 `parent_has_entries` (`ErrParentHasEntries`); the triggers say which in the
+error's `ConstraintName`. The frontend leaves out of the parent pickers the accounts that have
+transactions (`last_transaction_at`) and shows the ones with children disabled in the "otra cuenta"
+picker, hides "+ Nueva transacción" on a group's page and leaves them out of the distribution and
+payment pickers.
 `GET /accounts/{id}/transactions` is one account's own ledger — the `AccountEntry` rows it
 was posted against, a page at a time (not the same shape as a bare `Entry`: each one
 inlines its own transaction's `description`/`occurred_at`, and a `balance_after` instead

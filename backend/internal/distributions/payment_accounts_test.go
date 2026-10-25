@@ -278,3 +278,26 @@ func TestPaymentsCantBeUndoneOnceTheOrderChanged(t *testing.T) {
 		t.Errorf("nothing should have changed: %d paid, %d entries", paid, entries)
 	}
 }
+
+func TestAccountsThatGroupOthersCantBePaidInOrNamed(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenLottery(t, e, admin)
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 1), http.StatusCreated))
+	child := func(parent int64, name, kind string) {
+		t.Helper()
+		if _, err := e.tx.Exec(context.Background(), `INSERT INTO accounts (name, type, parent_id, position) VALUES ($1, $2::account_type, $3, 1)`, name, kind, parent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The asset account groups another one now.
+	child(e.cash, "Cuenta del banco", "asset")
+	expect(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusConflict, "account_has_children")
+	// And so does an income account a distribution would name.
+	income := e.newAccount(t, "Ingresos agrupados", "income")
+	child(income, "Ingresos hijos", "income")
+	b := lottery()
+	b["account_id"] = income
+	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusConflict, "account_has_children")
+}

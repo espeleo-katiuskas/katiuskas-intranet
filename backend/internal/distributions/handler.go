@@ -130,6 +130,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrBelowNumbered, http.StatusConflict, "quantity_below_numbered"},
 		{ErrUnknownAccount, http.StatusBadRequest, "unknown_account"},
 		{ErrAccountNotIncome, http.StatusBadRequest, "account_not_income"},
+		{ErrAccountHasChildren, http.StatusConflict, "account_has_children"},
 		{ErrAccountNotAsset, http.StatusBadRequest, "account_not_asset"},
 		{ErrAccountRequired, http.StatusBadRequest, "account_required"},
 		{ErrNoDistributionAccount, http.StatusConflict, "no_distribution_account"},

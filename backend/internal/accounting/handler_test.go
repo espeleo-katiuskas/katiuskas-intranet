@@ -1170,3 +1170,58 @@ func TestListTransactionsSearchesWordsInTheDescription(t *testing.T) {
 		t.Errorf("expected the balance after the second transaction, got %s", rec.Body.String())
 	}
 }
+
+// An account either groups other accounts or has transactions, never both: no
+// entry can be posted to one with children, and one with entries can't be given
+// as a parent, when creating or editing.
+func TestAccountsEitherHaveChildrenOrTransactions(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	bancos := createAccount(t, mux, token, "Bancos", "")
+	banco := doRequest(mux, http.MethodPost, "/api/v1/accounts", token, map[string]any{"name": "Banco", "parent_id": bancos.ID})
+	if banco.Code != http.StatusCreated {
+		t.Fatalf("create child: %d: %s", banco.Code, banco.Body.String())
+	}
+	var child accounting.Account
+	if err := json.Unmarshal(banco.Body.Bytes(), &child); err != nil {
+		t.Fatal(err)
+	}
+	caja := createAccount(t, mux, token, "Caja", "")
+	post := func(accounts ...int64) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, "/api/v1/transactions", token,
+			transactionBody(time.Now(), "Movimiento", entry(accounts[0], 5), entry(accounts[1], -5)))
+	}
+	// The group can't be on a transaction, create or edit; its child can.
+	rec := post(bancos.ID, caja.ID)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "account_has_children" {
+		t.Fatalf("expected 409 account_has_children, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = post(child.ID, caja.ID)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("a leaf can have transactions: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created accounting.Transaction
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(mux, http.MethodPatch, "/api/v1/transactions/"+itoa(created.ID), token,
+		transactionBody(time.Now(), "Movimiento", entry(bancos.ID, 5), entry(caja.ID, -5)))
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "account_has_children" {
+		t.Fatalf("expected 409 editing a transaction onto a group, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Caja has entries now, so it can't become a parent.
+	rec = doRequest(mux, http.MethodPost, "/api/v1/accounts", token, map[string]any{"name": "Hija de caja", "parent_id": caja.ID})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "parent_has_entries" {
+		t.Fatalf("expected 409 parent_has_entries creating, got %d: %s", rec.Code, rec.Body.String())
+	}
+	other := createAccount(t, mux, token, "Otra", "")
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": caja.ID})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "parent_has_entries" {
+		t.Fatalf("expected 409 parent_has_entries editing, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// An account with no entries can still be moved under a group.
+	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": bancos.ID})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 moving under a group, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

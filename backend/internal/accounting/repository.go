@@ -25,6 +25,12 @@ var (
 	// default account for distributions, or an account a distribution names, has
 	// to be an income account.
 	ErrNotIncomeForDistributions = errors.New("an account used for the payments of distributions has to be of type income")
+	// ErrAccountHasChildren means an entry was posted to an account that has child
+	// accounts, and ErrParentHasEntries an account was given as parent (on create
+	// or edit) when it already has entries: an account either groups others or
+	// has transactions, never both (migration 00033).
+	ErrAccountHasChildren = errors.New("an account with child accounts can't have transactions: use one of its children")
+	ErrParentHasEntries   = errors.New("an account with transactions can't have child accounts")
 	// ErrDuplicateCode means another account already has this code.
 	ErrDuplicateCode = errors.New("another account already has this code")
 	// ErrAccountInUse means this account can't be deleted: it's still
@@ -79,6 +85,16 @@ const (
 	foreignKeyViolationCode = "23503"
 	checkViolationCode      = "23514"
 )
+
+// pgConstraint is the name of the constraint a database error is about, which
+// the triggers of the accounting tables set to say which rule they enforce.
+func pgConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
 
 func pgErrCode(err error) string {
 	var pgErr *pgconn.PgError
@@ -142,6 +158,9 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default
 	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, in.Type, in.DistributionDefault,
 	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
+	if pgConstraint(err) == "parent_has_entries" {
+		return Account{}, ErrParentHasEntries
+	}
 	switch pgErrCode(err) {
 	case uniqueViolationCode:
 		return Account{}, ErrDuplicateCode
@@ -363,6 +382,9 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
+	}
+	if pgConstraint(err) == "parent_has_entries" {
+		return Account{}, ErrParentHasEntries
 	}
 	switch pgErrCode(err) {
 	case uniqueViolationCode:
@@ -803,6 +825,9 @@ func insertEntries(ctx context.Context, tx pgx.Tx, transactionID int64, inputs [
 			RETURNING id, account_id, amount
 		`, transactionID, in.AccountID, in.Amount).Scan(&e.ID, &e.AccountID, &e.Amount)
 		if err != nil {
+			if pgConstraint(err) == "account_has_children" {
+				return nil, ErrAccountHasChildren
+			}
 			switch pgErrCode(err) {
 			case foreignKeyViolationCode:
 				return nil, ErrUnknownAccount

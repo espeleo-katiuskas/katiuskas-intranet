@@ -62,9 +62,13 @@ var (
 	// ErrNoDistributionAccount a distribution with no account of its own while none
 	// is the default for distributions, and ErrAccountNotIncome a distribution
 	// naming an account that isn't of type income.
-	ErrUnknownAccount        = errors.New("unknown account")
-	ErrAccountNotAsset       = errors.New("the account paid in has to be of type asset")
-	ErrAccountNotIncome      = errors.New("the account of a distribution has to be of type income")
+	ErrUnknownAccount   = errors.New("unknown account")
+	ErrAccountNotAsset  = errors.New("the account paid in has to be of type asset")
+	ErrAccountNotIncome = errors.New("the account of a distribution has to be of type income")
+	// ErrAccountHasChildren is an account that groups others, which can't have
+	// transactions: only an account with no child accounts can be paid in or be the
+	// account of a distribution.
+	ErrAccountHasChildren    = errors.New("an account with child accounts can't have transactions: use one of its children")
 	ErrAccountRequired       = errors.New("say the account the payment was made in")
 	ErrNoDistributionAccount = errors.New("this distribution has no account for its payments, and none is marked as the default for distributions")
 	// ErrUnitPaid means a unit with something paid can't be deleted: the payment
@@ -224,6 +228,18 @@ func checkIncomeAccount(ctx context.Context, tx pgx.Tx, accountID *int64) error 
 	}
 	if kind == nil || *kind != "income" {
 		return ErrAccountNotIncome
+	}
+	return noChildren(ctx, tx, *accountID)
+}
+
+// noChildren says ErrAccountHasChildren when the account groups other accounts.
+func noChildren(ctx context.Context, tx pgx.Tx, accountID int64) error {
+	var has bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM accounts WHERE parent_id = $1)`, accountID).Scan(&has); err != nil {
+		return err
+	}
+	if has {
+		return ErrAccountHasChildren
 	}
 	return nil
 }
@@ -1051,6 +1067,9 @@ func paymentAccounts(ctx context.Context, tx pgx.Tx, distributionID, assetID int
 	if kind == nil || *kind != "asset" {
 		return 0, ErrAccountNotAsset
 	}
+	if err := noChildren(ctx, tx, assetID); err != nil {
+		return 0, err
+	}
 	var recordedIn *int64
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(d.account_id, (SELECT id FROM accounts WHERE distribution_default))
@@ -1109,6 +1128,11 @@ func recordPaymentTransactions(ctx context.Context, tx pgx.Tx, distributionID, a
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO transaction_entries (transaction_id, account_id, amount) VALUES ($1, $2, $4), ($1, $3, -$4::numeric)
 		`, transactionID, assetID, recordedIn, total); err != nil {
+			// The account of the distribution (maybe the default one) may group others.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.ConstraintName == "account_has_children" {
+				return ErrAccountHasChildren
+			}
 			return err
 		}
 		ids := make([]int64, len(group))

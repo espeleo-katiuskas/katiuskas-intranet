@@ -8,6 +8,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import {
+  accountingErrorText,
   accountTypeOptions,
   childrenByParent,
   flattenAccountTree,
@@ -59,9 +60,14 @@ function parentSelectOptions(selectedParentId, excludeId) {
   // A hidden account is only offered while hidden ones are shown, or when
   // it is this account's current parent — dropping that one would make
   // saving silently move the account to the top level.
+  // One that has transactions can't have child accounts (an account either
+  // groups others or has transactions), so it isn't offered either — unless it is
+  // the current parent.
   const offered = shownAccounts(
     allAccounts,
-    (account) => showHidden || !account.hidden || account.id === selectedParentId,
+    (account) =>
+      (showHidden || !account.hidden || account.id === selectedParentId) &&
+      (account.last_transaction_at == null || account.id === selectedParentId),
   );
   const options = flattenAccountTree(offered)
     .filter(({ account }) => !excluded.has(account.id))
@@ -184,7 +190,7 @@ async function moveAccount(id, direction) {
     }
     applyAccountsList(list);
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   }
 }
 
@@ -245,7 +251,7 @@ editAccountForm.addEventListener('submit', async (event) => {
     editAccountDialog.close();
     await loadAccounts();
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   } finally {
     submitButton.disabled = false;
   }
@@ -302,7 +308,7 @@ newAccountForm.addEventListener('submit', async (event) => {
     newAccountDialog.close();
     await loadAccounts();
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   } finally {
     submitButton.disabled = false;
   }

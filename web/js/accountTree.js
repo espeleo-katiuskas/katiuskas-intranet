@@ -77,7 +77,23 @@ function accountTypeOptions(selected = null) {
   return `<option value=""${selected ? '' : ' selected'}>Sin tipo</option>${options.join('')}`;
 }
 
+// What the API's accounting error codes say, in the club's own words; anything else
+// falls back to the API's message.
+const accountingErrors = {
+  account_has_children:
+    'Una cuenta que agrupa otras cuentas no puede tener transacciones: usa una de sus cuentas hijas.',
+  parent_has_entries:
+    'Una cuenta que ya tiene transacciones no puede tener cuentas hijas: elige otra cuenta superior.',
+  not_income_for_distributions:
+    'La cuenta por defecto de los repartos, y la de un reparto, tienen que ser de tipo «ingresos»: no se puede marcar así una de otro tipo, ni cambiar el tipo de una que se usa para ello.',
+};
+
+function accountingErrorText(err) {
+  return accountingErrors[err.code] ?? err.message;
+}
+
 export {
+  accountingErrorText,
   childrenByParent,
   flattenAccountTree,
   shownAccounts,

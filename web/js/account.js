@@ -11,7 +11,13 @@ import {
   resolvePickerId,
 } from './api.js';
 import { initPage } from './layout.js';
-import { accountTypes, flattenAccountTree, shownAccounts, accountLabel } from './accountTree.js';
+import {
+  accountingErrorText,
+  accountTypes,
+  flattenAccountTree,
+  shownAccounts,
+  accountLabel,
+} from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
 // Reached only from /contabilidad's own account tree — same admin/money
@@ -570,13 +576,16 @@ function renderHeader(account) {
 // transaction being edited already uses, which have to stay choosable
 // or the dialog couldn't even show what it currently says.
 function otherAccountOptions(selectedId, keepHidden = new Set()) {
+  // An account that groups others can't have transactions: shown, not choosable.
+  const groups = new Set(allAccounts.map((a) => a.parent_id).filter((id) => id != null));
   return flattenAccountTree(
     shownAccounts(allAccounts, (a) => !a.hidden || keepHidden.has(a.id) || a.id === accountId),
   )
     .filter(({ account }) => account.id !== accountId)
     .map(({ account, depth }) => {
       const selected = account.id === selectedId ? 'selected' : '';
-      return `<option value="${account.id}" ${selected}>${'— '.repeat(depth)}${escapeHtml(account.name)}</option>`;
+      const disabled = groups.has(account.id) ? 'disabled' : '';
+      return `<option value="${account.id}" ${selected} ${disabled}>${'— '.repeat(depth)}${escapeHtml(account.name)}</option>`;
     })
     .join('');
 }
@@ -595,6 +604,10 @@ async function loadAccount() {
       return;
     }
     renderHeader(account);
+    // An account that groups others has no transactions of its own.
+    document.getElementById('toggle-new-transaction').hidden = allAccounts.some(
+      (a) => a.parent_id === accountId,
+    );
     transactionLines.nt.setLines([]);
     refreshDuesLicensesSections('nt');
   } catch {
@@ -700,7 +713,7 @@ async function loadEntries({ append = false } = {}) {
       entriesTableBody.innerHTML =
         '<tr><td colspan="5">No se pudieron cargar las transacciones.</td></tr>';
     entriesLoadMore.hidden = true;
-    showError(err.message);
+    showError(accountingErrorText(err));
   } finally {
     entriesLoadMore.disabled = false;
   }
@@ -853,7 +866,7 @@ async function openEditTransactionDialog(transactionId) {
     openModal(editTransactionDialog);
     document.getElementById('et-description').focus();
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   }
 }
 
@@ -889,7 +902,7 @@ editTransactionForm.addEventListener('submit', async (event) => {
     await loadAccount();
     await loadEntries();
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   } finally {
     submitButton.disabled = false;
   }
@@ -976,8 +989,10 @@ document.addEventListener('keydown', (event) => {
   if (event.key !== 'n' || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest('input, textarea, select, [contenteditable]')) return;
   if (document.querySelector('dialog[open]')) return;
+  const newTransaction = document.getElementById('toggle-new-transaction');
+  if (newTransaction.hidden) return;
   event.preventDefault();
-  document.getElementById('toggle-new-transaction').click();
+  newTransaction.click();
 });
 
 // The date, the description and the lines (see setupEntryLines) drive the
@@ -1011,7 +1026,7 @@ newTransactionForm.addEventListener('submit', async (event) => {
     await loadAccount();
     await loadEntries();
   } catch (err) {
-    showError(err.message);
+    showError(accountingErrorText(err));
   } finally {
     submitButton.disabled = false;
   }

@@ -400,6 +400,8 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "account not found")
 	case errors.Is(err, ErrUnknownAccount):
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_parent_account", err.Error())
+	case errors.Is(err, ErrParentHasEntries):
+		httpapi.WriteError(w, http.StatusConflict, "parent_has_entries", err.Error())
 	case errors.Is(err, ErrDuplicateCode):
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_code", err.Error())
 	case errors.Is(err, ErrNotIncomeForDistributions):
@@ -633,6 +635,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusBadRequest, "duplicate_account", err.Error())
 	case errors.Is(err, ErrUnknownAccount):
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_account", err.Error())
+	case errors.Is(err, ErrAccountHasChildren):
+		httpapi.WriteError(w, http.StatusConflict, "account_has_children", err.Error())
 	case errors.Is(err, ErrUnbalanced):
 		httpapi.WriteError(w, http.StatusConflict, "unbalanced", err.Error())
 	default:

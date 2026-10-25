@@ -2443,7 +2443,7 @@ paths:
         "400": { description: no_units, account_required, unknown_account or account_not_asset. }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: already_paid or no_distribution_account. }
+        "409": { description: already_paid, no_distribution_account or account_has_children (the account paid in, or the one the payments go to, groups other accounts). }
 
   /distributions/{id}/units/{unitID}/payment:
     delete:
@@ -2942,7 +2942,7 @@ paths:
         "400":
           description: invalid_body, missing_fields (name is empty), invalid_type (not asset, income or expense), or unknown_parent_account (parent_id names no existing account)
         "403": { description: Requires admin or the money role. }
-        "409": { description: duplicate_code — another account already has this code. }
+        "409": { description: duplicate_code — another account already has this code — or parent_has_entries — the parent already has transactions (an account has children or transactions, never both). }
 
   /accounts/{id}:
     get:
@@ -2995,7 +2995,7 @@ paths:
         "400": { description: invalid_id, invalid_body, missing_fields (name is empty), or unknown_parent_account. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: duplicate_code, or circular_parent (parent_id is this account itself, or one of its own descendants). }
+        "409": { description: duplicate_code, circular_parent (parent_id is this account itself, or one of its own descendants), or parent_has_entries (the new parent already has transactions). }
     delete:
       summary: Delete an account
       description: >
@@ -3141,7 +3141,7 @@ paths:
               schema: { $ref: "#/components/schemas/Transaction" }
         "400": { description: invalid_body (malformed JSON, or occurred_at isn't RFC 3339), missing_fields (description is empty), too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account. }
         "403": { description: Requires admin or the money role. }
-        "409": { description: unbalanced — entries don't sum to zero. }
+        "409": { description: unbalanced — entries don't sum to zero — or account_has_children — an entry is on an account that has child accounts (an account has children or transactions, never both). }
 
   /transactions/{id}:
     get:
@@ -3209,7 +3209,7 @@ paths:
         "400": { description: invalid_id, invalid_body, missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account — same as POST. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: unbalanced. }
+        "409": { description: unbalanced, or account_has_children (an entry is on an account that has child accounts). }
     delete:
       summary: Delete a transaction (and its entries)
       description: >

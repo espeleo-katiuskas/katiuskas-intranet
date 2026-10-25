@@ -1207,6 +1207,11 @@ El dinero del club: un plan contable en árbol (`accounts`) y, contra él, trans
   (409 `account_in_use`).
 - `PATCH` rechaza con 409 `circular_parent` un `parent_id` que sea la propia cuenta o un
   descendiente.
+- La jerarquía solo agrupa: una cuenta tiene cuentas hijas o tiene transacciones, nunca las dos
+  cosas (migración 00033, con triggers en la base de datos, así que tampoco lo salta nada, ni las
+  transacciones de pagos de repartos). Apuntar una transacción a una cuenta con hijas es 409
+  `account_has_children`; crear una cuenta bajo otra que ya tiene apuntes, o moverla a ella, es
+  409 `parent_has_entries`. Lo que ya existía antes de la migración no se toca.
 - `POST /accounts/{id}/move` (`{"direction": "up"|"down"}`) intercambia la posición con el
   hermano inmediatamente anterior o posterior, sin error si ya es el primero o el último de
   su grupo.
