@@ -3,6 +3,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  normalizeForSearch,
   roleLabel,
   positionLabels,
   showFeedback,
@@ -362,9 +363,41 @@ document.getElementById('row-filters').addEventListener('change', (event) => {
   renderUsersTable();
 });
 
-function filteredPeople() {
-  return people.filter((p) => FILTERS.every((f) => activeFilterValues[f.key].has(f.value(p))));
+// What the search looks into: the name as it is read, the membership number, the
+// login and, for admin/board (the only ones whose listing carries them), the
+// email, phone and DNI.
+function searchTextOf(person) {
+  return normalizeForSearch(
+    [
+      `${person.first_name} ${person.last_name}`,
+      person.membership_number,
+      person.login,
+      person.email,
+      person.phone,
+      person.national_id,
+    ]
+      .filter((part) => part != null)
+      .join(' '),
+  );
 }
+
+const peopleSearch = document.getElementById('people-search');
+
+// Every word typed has to be somewhere in the person, in any order.
+function matchesSearch(person) {
+  const words = normalizeForSearch(peopleSearch.value).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const text = searchTextOf(person);
+  return words.every((word) => text.includes(word));
+}
+
+function filteredPeople() {
+  return people.filter(
+    (p) => matchesSearch(p) && FILTERS.every((f) => activeFilterValues[f.key].has(f.value(p))),
+  );
+}
+
+peopleSearch.addEventListener('input', () => renderUsersTable());
 
 const FULL_COLUMNS = [
   {
@@ -607,7 +640,7 @@ function renderUsersTable() {
   const visible = filteredPeople();
   setPeopleCount(visible.length);
   if (visible.length === 0) {
-    tableBody.innerHTML = `<tr><td colspan="${Math.max(visibleColumns.size, 1)}">Ninguna persona coincide con los filtros.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="${Math.max(visibleColumns.size, 1)}">Ninguna persona coincide con la búsqueda y los filtros.</td></tr>`;
     return;
   }
 

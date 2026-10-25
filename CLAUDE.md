@@ -1670,7 +1670,7 @@ Santa are fixed by hand; there is no edit). Admin/board get `FULL_COLUMNS` and
 `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what
 `users.MemberListing` carries (see **Permission tiers**). Row filters ("Género", "Tipo de
 socio", "Categoría", "Cuota anual", "Federación") and the column toggles sit behind a
-"Filtros…" button. Every filter starts with every option checked except "Tipo de socio",
+"Filtros…" button, and above it a "Buscar persona" box (`matchesSearch`: every word typed has to appear, in any order and ignoring accents and case, in the name, membership number, login and — admin/board only, as that is all their listing carries — email, phone and DNI; it narrows what the filters leave and isn't persisted). Every filter starts with every option checked except "Tipo de socio",
 which starts with only "Activo" and "Baja temporal", so the default view is the current
 membership. "Cuota anual" splits people on whether `last_due_year` is the current year ("A
 corriente de pago"), and "Federación" on whether `license_type` is present — `GET /users`

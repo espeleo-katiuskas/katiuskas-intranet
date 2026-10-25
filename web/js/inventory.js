@@ -3,6 +3,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
+  normalizeForSearch,
   pickerLabel,
   renderPickerOptions,
   resolvePickerId,
@@ -133,14 +134,6 @@ function itemLabel(item, { includeCategory = true } = {}) {
 // Accent-insensitive substring match — "cañones" and "canones" should
 // both find the same items, and there'll be enough material (300+
 // expected) that a plain <select> stops being usable for finding one.
-function normalizeForSearch(value) {
-  return (value ?? '')
-    .toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
 function itemSearchText(item) {
   return normalizeForSearch(
     [

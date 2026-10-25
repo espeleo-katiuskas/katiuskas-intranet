@@ -425,6 +425,16 @@ function formatCurrency(amount) {
   return `${Number(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })} €`;
 }
 
+// Lowercase and without accents, so a search for "cañones" and one for
+// "canones" find the same things.
+function normalizeForSearch(value) {
+  return (value ?? '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 // A plain <select> stops being usable once there are hundreds of
 // people or activities to choose from, especially with no obvious
 // ordering. These three helpers back a searchable alternative instead:
@@ -456,6 +466,7 @@ function resolvePickerId(entries, typedValue) {
 
 export {
   API_BASE,
+  normalizeForSearch,
   apiFetch,
   apiFetchBlob,
   apiFetchForm,
