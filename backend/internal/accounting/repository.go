@@ -331,23 +331,33 @@ func likePatterns(words []string) []string {
 }
 
 func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, filter ListFilter) ([]AccountEntry, error) {
+	// The entries are those of the account and of everything below it in the
+	// hierarchy: for one that groups others (and so has none of its own) all of its
+	// descendants', the balance running over their sum, in date order.
 	// The running balance is a window over *every* entry of the account,
 	// computed in the inner query before the date range and the page are
 	// applied outside it — so an entry's balance_after is the same
 	// whichever window it's seen through, not a balance restarting from
 	// zero at the top of the page.
 	rows, err := r.pool.Query(ctx, `
-		SELECT transaction_id, occurred_at, description, amount, balance_after FROM (
-			SELECT t.id AS transaction_id, t.occurred_at, t.description, te.amount::float8 AS amount,
-				(SUM(te.amount) OVER (ORDER BY t.occurred_at, t.id))::float8 AS balance_after
+		WITH RECURSIVE subtree AS (
+			SELECT id FROM accounts WHERE id = $1
+			UNION ALL
+			SELECT a.id FROM accounts a JOIN subtree s ON a.parent_id = s.id
+		)
+		SELECT transaction_id, account_id, account_name, occurred_at, description, amount, balance_after FROM (
+			SELECT t.id AS transaction_id, te.id AS entry_id, te.account_id, a.name AS account_name,
+				t.occurred_at, t.description, te.amount::float8 AS amount,
+				(SUM(te.amount) OVER (ORDER BY t.occurred_at, t.id, te.id))::float8 AS balance_after
 			FROM transaction_entries te
 			JOIN transactions t ON t.id = te.transaction_id
-			WHERE te.account_id = $1
+			JOIN accounts a ON a.id = te.account_id
+			WHERE te.account_id IN (SELECT id FROM subtree)
 		) ledger
 		WHERE ($2::timestamptz IS NULL OR occurred_at >= $2)
 		  AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz + interval '1 day')
 		  AND `+descriptionHasWords("description", "$6")+`
-		ORDER BY occurred_at DESC, transaction_id DESC
+		ORDER BY occurred_at DESC, transaction_id DESC, entry_id DESC
 		LIMIT $4 OFFSET $5
 	`, accountID, filter.From, filter.To, filter.Limit, filter.Offset, likePatterns(filter.Words))
 	if err != nil {
@@ -358,7 +368,7 @@ func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, fi
 	list := []AccountEntry{}
 	for rows.Next() {
 		var e AccountEntry
-		if err := rows.Scan(&e.TransactionID, &e.OccurredAt, &e.Description, &e.Amount, &e.BalanceAfter); err != nil {
+		if err := rows.Scan(&e.TransactionID, &e.AccountID, &e.AccountName, &e.OccurredAt, &e.Description, &e.Amount, &e.BalanceAfter); err != nil {
 			return nil, err
 		}
 		list = append(list, e)

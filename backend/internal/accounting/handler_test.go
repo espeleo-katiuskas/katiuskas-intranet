@@ -1301,3 +1301,70 @@ func TestAccountsWithoutTypeInheritTheirParents(t *testing.T) {
 		t.Fatalf("no type anywhere should give none")
 	}
 }
+
+// The ledger of an account that groups others lists the entries of all its
+// descendants, oldest balance first, each with the account it is on, and the
+// running balance is that of all of them together.
+func TestLedgerOfAGroupListsItsDescendantsWithATotalBalance(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	token := testutil.TokenFor(resolver, 1, "admin")
+	bancos := createAccount(t, mux, token, "Bancos", "")
+	child := func(name string, parent int64) accounting.Account {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", token, map[string]any{"name": name, "parent_id": parent})
+		var a accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+		return a
+	}
+	santander := child("Santander", bancos.ID)
+	corriente := child("Corriente", santander.ID)
+	bbva := child("BBVA", bancos.ID)
+	ingresos := createAccount(t, mux, token, "Ingresos", "")
+	day := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	post := func(offset int, description string, account int64, amount float64, other int64) {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/transactions", token,
+			transactionBody(day.AddDate(0, 0, offset), description, entry(account, amount), entry(other, -amount)))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("post %s: %d %s", description, rec.Code, rec.Body.String())
+		}
+	}
+	post(0, "Cuota", corriente.ID, 100, ingresos.ID)
+	post(1, "Otra cuota", bbva.ID, 50, ingresos.ID)
+	post(2, "Traspaso", bbva.ID, 30, corriente.ID) // both inside the group: two rows
+	rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/accounts/%d/transactions", bancos.ID), token, nil)
+	var got []accounting.AccountEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	// Newest first: the transfer's two rows, then the other two.
+	type row struct {
+		account string
+		amount  float64
+		balance float64
+	}
+	var rows []row
+	for _, e := range got {
+		rows = append(rows, row{e.AccountName, e.Amount, e.BalanceAfter})
+	}
+	// The total is that of the whole group up to each row, not of its account: the
+	// transfer's two rows leave it at 180 and then 150 (its entries are in the order
+	// they were written, listed newest first).
+	want := []row{{"Corriente", -30, 150}, {"BBVA", 30, 180}, {"BBVA", 50, 150}, {"Corriente", 100, 100}}
+	if len(rows) != 4 {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Fatalf("row %d: expected %+v, got %+v", i, want[i], rows[i])
+		}
+	}
+	// A leaf still lists only its own entries, with its own balance.
+	rec = doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/accounts/%d/transactions", bbva.ID), token, nil)
+	got = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got) != 2 || got[0].BalanceAfter != 80 || got[0].AccountName != "BBVA" {
+		t.Fatalf("unexpected leaf ledger: %v %+v", err, got)
+	}
+}

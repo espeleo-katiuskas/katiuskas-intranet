@@ -14,6 +14,7 @@ import { initPage } from './layout.js';
 import {
   accountingErrorText,
   accountTypes,
+  childrenByParent,
   flattenAccountTree,
   shownAccounts,
   accountLabel,
@@ -554,10 +555,21 @@ function refreshDuesLicensesSections(prefix) {
   section.setVisibility(sectionsFor(transactionLines[prefix].selectedAccountIds()));
 }
 
+// An account with child accounts has no entries of its own: its page lists those
+// of everything below it, with their total as the balance.
+const isGroupView = () => allAccounts.some((a) => a.parent_id === accountId);
+
+function groupBalance(id) {
+  const children = childrenByParent(allAccounts);
+  const total = (parentId) =>
+    (children.get(parentId) ?? []).reduce((sum, a) => sum + (a.balance ?? 0) + total(a.id), 0);
+  return total(id);
+}
+
 function renderHeader(account) {
   document.getElementById('account-title').textContent = accountLabel(account);
   document.getElementById('account-balance-line').textContent =
-    `Saldo actual: ${formatCurrency(account.balance ?? 0)}`;
+    `Saldo actual: ${formatCurrency(isGroupView() ? groupBalance(account.id) : (account.balance ?? 0))}`;
   // What the account is mainly for, when it or an ancestor says; one with no type of
   // its own has its parent's.
   const type = accountTypes[account.effective_type];
@@ -609,9 +621,8 @@ async function loadAccount() {
     }
     renderHeader(account);
     // An account that groups others has no transactions of its own.
-    document.getElementById('toggle-new-transaction').hidden = allAccounts.some(
-      (a) => a.parent_id === accountId,
-    );
+    document.getElementById('toggle-new-transaction').hidden = isGroupView();
+    document.getElementById('entries-account-head').hidden = !isGroupView();
     transactionLines.nt.setLines([]);
     refreshDuesLicensesSections('nt');
   } catch {
@@ -653,16 +664,28 @@ function signedCurrency(amount) {
   return `${amount > 0 ? '+' : ''}${formatCurrency(amount)}`;
 }
 
+const columnCount = () => (isGroupView() ? 6 : 5);
+
 function renderEntryRow(entry) {
+  const group = isGroupView();
+  // In a group's list each row says which of its accounts the entry is on, and
+  // that account's own page is where the transaction is corrected.
+  const accountCell = group
+    ? `<td><a href="/cuenta?id=${entry.account_id}">${escapeHtml(entry.account_name)}</a></td>`
+    : '';
+  const editButton = group
+    ? ''
+    : `<button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>`;
   return `
-    <tr class="entry-row" data-entry-row="${entry.transaction_id}" tabindex="0" aria-expanded="false">
+    <tr class="entry-row" data-entry-row="${entry.transaction_id}" data-entry-account="${entry.account_id}" tabindex="0" aria-expanded="false">
       <td>${formatDate(entry.occurred_at)}</td>
+      ${accountCell}
       <td>${escapeHtml(entry.description)}</td>
       <td class="balance-cell">${formatCurrency(entry.amount)}</td>
       <td class="balance-cell">${formatCurrency(entry.balance_after)}</td>
       <td>
         <div class="table-actions">
-          <button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>
+          ${editButton}
           <button type="button" class="btn btn-danger btn-small" data-delete-entry="${entry.transaction_id}">Borrar</button>
         </div>
       </td>
@@ -682,6 +705,7 @@ const entriesToInput = document.getElementById('entries-to');
 const entriesLoadMore = document.getElementById('entries-load-more');
 const entriesTableBody = document.getElementById('entries-table-body');
 let entriesLoaded = 0;
+let accountsReady = Promise.resolve();
 let entriesFilter = { from: '', to: '', words: '' };
 
 function entriesQuery(offset) {
@@ -699,6 +723,7 @@ async function loadEntries({ append = false } = {}) {
   entriesLoadMore.disabled = true;
   try {
     const fetched = await apiFetch(entriesQuery(entriesLoaded));
+    await accountsReady; // whether this is a group decides the columns
     const hasMore = fetched.length > ENTRIES_PAGE_SIZE;
     const page = fetched.slice(0, ENTRIES_PAGE_SIZE);
     const html = page.map(renderEntryRow).join('');
@@ -708,14 +733,13 @@ async function loadEntries({ append = false } = {}) {
       const filtered = entriesFilter.from || entriesFilter.to || entriesFilter.words;
       entriesTableBody.innerHTML = page.length
         ? html
-        : `<tr><td colspan="5">${filtered ? 'Ninguna transacción coincide con la búsqueda y las fechas.' : 'Todavía no hay transacciones en esta cuenta.'}</td></tr>`;
+        : `<tr><td colspan="${columnCount()}">${filtered ? 'Ninguna transacción coincide con la búsqueda y las fechas.' : 'Todavía no hay transacciones en esta cuenta.'}</td></tr>`;
     }
     entriesLoaded += page.length;
     entriesLoadMore.hidden = !hasMore;
   } catch (err) {
     if (!append)
-      entriesTableBody.innerHTML =
-        '<tr><td colspan="5">No se pudieron cargar las transacciones.</td></tr>';
+      entriesTableBody.innerHTML = `<tr><td colspan="${columnCount()}">No se pudieron cargar las transacciones.</td></tr>`;
     entriesLoadMore.hidden = true;
     showError(accountingErrorText(err));
   } finally {
@@ -757,8 +781,8 @@ document.getElementById('entries-filter-clear').addEventListener('click', () => 
 // AccountEntry's doc comment), so the full transaction is fetched the
 // first time a row is opened; account names come from allAccounts,
 // which this page already has.
-function renderEntryDetail(transaction) {
-  const others = transaction.entries.filter((e) => e.account_id !== accountId);
+function renderEntryDetail(transaction, entryAccountId) {
+  const others = transaction.entries.filter((e) => e.account_id !== entryAccountId);
   let html = '';
   if (others.length) {
     const items = others
@@ -812,12 +836,15 @@ async function toggleEntryDetail(row) {
   // An empty first cell, so the detail lines up under "Descripción" rather
   // than starting at the row's left edge, where it would read as another
   // row of the table instead of the continuation of the one above it.
-  detail.innerHTML = '<td></td><td colspan="4">Cargando…</td>';
+  detail.innerHTML = `${'<td></td>'.repeat(isGroupView() ? 2 : 1)}<td colspan="4">Cargando…</td>`;
   row.after(detail);
   row.setAttribute('aria-expanded', 'true');
   try {
     const transaction = await apiFetch(`/transactions/${row.dataset.entryRow}`);
-    detail.lastElementChild.innerHTML = renderEntryDetail(transaction);
+    detail.lastElementChild.innerHTML = renderEntryDetail(
+      transaction,
+      Number(row.dataset.entryAccount),
+    );
   } catch {
     detail.lastElementChild.textContent = 'No se pudo cargar el detalle de esta transacción.';
   }
@@ -1037,4 +1064,5 @@ newTransactionForm.addEventListener('submit', async (event) => {
 });
 
 // Independent requests: all go out at once.
-await Promise.all([loadAccount(), loadEntries(), loadCatalogs()]);
+accountsReady = loadAccount();
+await Promise.all([accountsReady, loadEntries(), loadCatalogs()]);

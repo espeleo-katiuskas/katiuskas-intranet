@@ -3018,6 +3018,9 @@ paths:
     get:
       summary: This account's own ledger
       description: >
+        For an account that has child accounts (and so no entries of its own), the
+        entries of all its descendants instead, each with the account it is on, and
+        balance_after is the running total of all of them together, in date order.
         The entries posted against this one account, a page at a time
         (limit/offset, newest first) and optionally within a from/to date
         range — an account holds thousands after a few years, so this
@@ -4279,6 +4282,8 @@ components:
         appears in the context of one already-known account.
       properties:
         transaction_id: { type: integer }
+        account_id: { type: integer, description: The account the entry is posted to (the account itself, or one of its descendants in the ledger of one that groups others). }
+        account_name: { type: string }
         occurred_at: { type: string, format: date-time }
         description: { type: string }
         amount:

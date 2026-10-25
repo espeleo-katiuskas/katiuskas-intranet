@@ -162,8 +162,16 @@ type ListFilter struct {
 // same day still resolve deterministically). Listed newest first,
 // matching every other listing in this app, even though BalanceAfter
 // is necessarily computed oldest-first internally.
+//
+// For an account that groups others (it has child accounts, and so no
+// entries of its own) the listing is of every entry of all its descendants,
+// each with the AccountID/AccountName it was posted to, and BalanceAfter is
+// the running total of all of them together, not of the account the entry is
+// on.
 type AccountEntry struct {
 	TransactionID int64     `json:"transaction_id"`
+	AccountID     int64     `json:"account_id"`
+	AccountName   string    `json:"account_name"`
 	OccurredAt    time.Time `json:"occurred_at"`
 	Description   string    `json:"description"`
 	Amount        float64   `json:"amount"`

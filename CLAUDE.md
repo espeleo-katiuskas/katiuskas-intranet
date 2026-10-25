@@ -1235,7 +1235,7 @@ error's `ConstraintName`. The frontend leaves out of the parent pickers the acco
 transactions (`last_transaction_at`) and shows the ones with children disabled in the "otra cuenta"
 picker, hides "+ Nueva transacción" on a group's page and leaves them out of the distribution and
 payment pickers.
-`GET /accounts/{id}/transactions` is one account's own ledger — the `AccountEntry` rows it
+`GET /accounts/{id}/transactions` is one account's own ledger — or, for one that groups others (it has no entries of its own), that of everything below it: every entry of all its descendants, each with the `account_id`/`account_name` it is on and a `balance_after` that is the running total of all of them together (ordered by date, transaction and entry), not the balance of the account the entry is on — the `AccountEntry` rows it
 was posted against, a page at a time (not the same shape as a bare `Entry`: each one
 inlines its own transaction's `description`/`occurred_at`, and a `balance_after` instead
 of just an `amount`), newest first same as `GET /transactions` itself.
@@ -1567,7 +1567,7 @@ redirected to `/`) — tighter than the API itself, which opens *reading* the ch
 baseline role the same as `GET /transactions`; admin/money can already write here too, so
 nothing on the page needs a narrower check than that one gate.
 
-`/cuenta?id=…` (`account.js`) is one account's own ledger — reached only by clicking an
+`/cuenta?id=…` (`account.js`) is one account's own ledger (for a group, `isGroupView`: its descendants' entries with a "Cuenta" column between Fecha and Descripción linking to each one's page, where the transaction is corrected — no Editar, no new transactions, a header balance that is the sum of all its descendants' — and a row's detail lists the other accounts relative to the account the row is on) — reached only by clicking an
 account's name on `/contabilidad`, never linked from the sidebar itself, so it shares that
 same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to `/contabilidad`
 for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
