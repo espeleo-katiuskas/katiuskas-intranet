@@ -1221,3 +1221,46 @@ func TestNumbersNotInTheStateAnOperationNeedsAreNamedInTheError(t *testing.T) {
 		t.Errorf("unexpected row: %+v", got)
 	}
 }
+
+// numbersMessage waits for the next notification about numbers.
+func (n *fakeNotifier) numbersMessage(t *testing.T) string {
+	t.Helper()
+	for {
+		if msg := n.waitForMessage(t); strings.Contains(msg, "🔢") {
+			return msg
+		}
+	}
+}
+
+func TestMessagesAboutNumbersSayThemInOrderAndAsRanges(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	a := e.newPerson(t, "2020-01-01", "member")
+	d := newDeliveringLottery(t, e, admin, lotteryWithNumbers())
+	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 12), http.StatusCreated))
+	path := fmt.Sprintf("%s/%d", unitsPath(d.ID), u.ID)
+	has := func(msg, want string) {
+		t.Helper()
+		if !strings.HasSuffix(msg, ": "+want+".") {
+			t.Errorf("expected the message to end in %q, got %q", want, msg)
+		}
+	}
+
+	// Typed out of order and in pieces; said sorted and joined.
+	mustStatus(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0010", "0003", "0001-0002", "0020"}}), http.StatusOK)
+	has(e.notifier.numbersMessage(t), "0001-0003, 0010, 0020")
+	// Only what was added, not what it already had.
+	mustStatus(t, e.do("POST", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0005", "0004"}}), http.StatusOK)
+	has(e.notifier.numbersMessage(t), "0004-0005")
+	// Taking off says what went.
+	mustStatus(t, e.do("DELETE", path+"/identifiers?identifiers=0010,0001-0002", admin.token, nil), http.StatusOK)
+	has(e.notifier.numbersMessage(t), "0001-0002, 0010")
+	// The next free ones: only the new ones — 8 are lacking, and the free numbers in
+	// order are 0001-0002 (taken off above) and from 0006 on (0003-0005 and 0020 are
+	// in the row).
+	mustStatus(t, e.do("POST", path+"/identifiers/assign", admin.token, nil), http.StatusOK)
+	has(e.notifier.numbersMessage(t), "0001-0002, 0006-0011")
+	// Replacing the list says the whole new list.
+	mustStatus(t, e.do("PUT", path+"/identifiers", admin.token, map[string]any{"identifiers": []string{"0030", "0028-0029"}}), http.StatusOK)
+	has(e.notifier.numbersMessage(t), "0028-0030")
+}

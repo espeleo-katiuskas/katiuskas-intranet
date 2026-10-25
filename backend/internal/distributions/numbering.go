@@ -3,6 +3,7 @@ package distributions
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -207,4 +208,122 @@ func (n *numbering) expand(tokens []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// compareNumbers orders two numbers part by part (a number is its parts joined by a
+// slash): the parts that are all digits as numbers — "9" before "10", the same
+// number with leading zeros shortest first — and any other text as text. The same
+// order as the frontend's sortIdentifiers.
+func compareNumbers(a, b string) int {
+	pa := strings.Split(a, identifierSeparator)
+	pb := strings.Split(b, identifierSeparator)
+	for i := 0; i < min(len(pa), len(pb)); i++ {
+		x, y := pa[i], pb[i]
+		if allDigits(x) && allDigits(y) {
+			// Compared as numbers by length first (no leading zeros) then by digits,
+			// which holds for any length without overflowing.
+			sx, sy := strings.TrimLeft(x, "0"), strings.TrimLeft(y, "0")
+			if len(sx) != len(sy) {
+				return len(sx) - len(sy)
+			}
+			if c := strings.Compare(sx, sy); c != 0 {
+				return c
+			}
+			if len(x) != len(y) {
+				return len(x) - len(y)
+			}
+			continue
+		}
+		if c := compareText(x, y); c != 0 {
+			return c
+		}
+	}
+	return len(pa) - len(pb)
+}
+
+// compareText orders text with the digits in it as numbers ("A-9" before "A-10"),
+// ignoring case.
+func compareText(x, y string) int {
+	x, y = strings.ToLower(x), strings.ToLower(y)
+	for x != "" && y != "" {
+		if allDigits(x[:1]) && allDigits(y[:1]) {
+			dx, dy := leadingDigits(x), leadingDigits(y)
+			if c := compareNumbers(dx, dy); c != 0 {
+				return c
+			}
+			x, y = x[len(dx):], y[len(dy):]
+			continue
+		}
+		if x[0] != y[0] {
+			return int(x[0]) - int(y[0])
+		}
+		x, y = x[1:], y[1:]
+	}
+	return len(x) - len(y)
+}
+
+// leadingDigits is the digits a string starts with.
+func leadingDigits(s string) string {
+	n := 0
+	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+		n++
+	}
+	return s[:n]
+}
+
+// formatNumbers says a list of numbers as short as it can be, for a message: in
+// order, with the consecutive ones joined into ranges ("0001-0003, 0010",
+// "124/1-10, 125/1-2"), the same as the frontend shows them.
+func formatNumbers(identifiers []string) string {
+	sorted := slices.Clone(identifiers)
+	slices.SortFunc(sorted, compareNumbers)
+	type run struct{ prefix, from, to string }
+	var runs []run
+	for _, id := range sorted {
+		cut := strings.LastIndex(id, identifierSeparator)
+		prefix, last := "", id
+		if cut >= 0 {
+			prefix, last = id[:cut], id[cut+1:]
+		}
+		if n := len(runs); n > 0 {
+			r := &runs[n-1]
+			if r.prefix == prefix && allDigits(last) && allDigits(r.to) &&
+				(len(last) == len(r.to) || (!strings.HasPrefix(last, "0") && !strings.HasPrefix(r.to, "0"))) &&
+				isNext(r.to, last) {
+				r.to = last
+				continue
+			}
+		}
+		runs = append(runs, run{prefix, last, last})
+	}
+	parts := make([]string, len(runs))
+	for i, r := range runs {
+		text := r.from
+		if r.from != r.to {
+			text = r.from + "-" + r.to
+		}
+		if r.prefix != "" {
+			text = r.prefix + identifierSeparator + text
+		}
+		parts[i] = text
+	}
+	return strings.Join(parts, ", ")
+}
+
+// isNext says whether next is the number after prev, both only digits.
+func isNext(prev, next string) bool {
+	a, errA := strconv.Atoi(prev)
+	b, errB := strconv.Atoi(next)
+	return errA == nil && errB == nil && b == a+1
+}
+
+// withoutThose is list without the numbers that are in take away, in its order.
+func withoutThose(list, takeAway []string) []string {
+	var out []string
+	for _, identifier := range list {
+		if !slices.Contains(takeAway, identifier) {
+			out = append(out, identifier)
+		}
+	}
+	return out
 }

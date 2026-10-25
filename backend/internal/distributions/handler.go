@@ -633,7 +633,7 @@ func (h *Handler) setIdentifiers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha apuntado los números de «%s» de %s en «%s»: %s.",
-		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(updated.Identifiers, ", ")))
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, formatNumbers(updated.Identifiers)))
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 
@@ -655,8 +655,11 @@ func (h *Handler) addIdentifiers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not add the numbers")
 		return
 	}
+	// Said as what was added — the numbers it has now that it didn't have — in order
+	// and as ranges, whatever way they were typed.
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha asignado números de «%s» a %s en «%s»: %s.",
-		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(body.Identifiers, ", ")))
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name,
+		formatNumbers(withoutThose(updated.Identifiers, unit.Identifiers))))
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 
@@ -677,7 +680,8 @@ func (h *Handler) removeIdentifiers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha quitado números de «%s» a %s en «%s»: %s.",
-		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(identifiers, ", ")))
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name,
+		formatNumbers(withoutThose(unit.Identifiers, updated.Identifiers))))
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 
@@ -694,7 +698,8 @@ func (h *Handler) assignNumbers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔢 %s ha asignado los números de «%s» de %s en «%s»: %s.",
-		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name, strings.Join(updated.Identifiers, ", ")))
+		h.actorLogin(r.Context()), deref(unit.ArticleName), unit.BeneficiaryLogin, d.Name,
+		formatNumbers(withoutThose(updated.Identifiers, unit.Identifiers))))
 	httpapi.WriteJSON(w, http.StatusOK, updated)
 }
 

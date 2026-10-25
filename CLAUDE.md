@@ -1468,7 +1468,10 @@ for; only members are offered), undo a delivery, return, take the numbers off; e
 Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
 units, undoing, returning or taking numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by part, digits
 as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list such as
-the numbers an error message or an entry of the list of payments names). What is unfolded, ticked and typed survives
+the numbers an error message or an entry of the list of payments names). The Telegram messages about numbers say them the same way
+(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
+the same order and ranges; each message says what it changed — numbers added, taken off or newly
+assigned — not what was typed). What is unfolded, ticked and typed survives
 redrawing.
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
 `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —
