@@ -1,0 +1,26 @@
+# Updates testing and production from the repository, once: each one only if what
+# it should be running has changed. Started every minute by katiuskas-deploy.timer.
+# See docs/environments.md ("Pull-based deployment") for how to install it.
+#
+# It runs as the owner of the installations, not as root; the only privileged thing
+# it does, restarting the APIs' units, goes through sudo (the sudoers rule is in
+# docs/environments.md), which is why NoNewPrivileges is not set.
+[Unit]
+Description=Katiuskas intranet: update testing and production from the repository
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=katiuskas
+Group=katiuskas
+# REPO_URL, STATE_DIR, the directories and units of each environment and the rest
+# of deploy.sh's settings; see deploy/systemd/deploy.env.example.
+EnvironmentFile=/etc/katiuskas-deploy.env
+# A root-owned copy of scripts/deploy.sh, so that what the timer runs is not
+# something the unprivileged user (or the code it builds) can change.
+ExecStart=/opt/katiuskas-deploy/deploy.sh
+# Building from scratch and migrating can take a while on a small machine.
+TimeoutStartSec=30min
+Nice=10
+PrivateTmp=true

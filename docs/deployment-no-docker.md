@@ -19,7 +19,7 @@ files and forward `/api/*` as easily, step 5 also explains the alternative of a 
 own at `127.0.0.1:64710` — the same entry point the Docker guide uses.
 
 > **Several environments on one host.** This is the guide the club's host follows: it runs testing
-> and production side by side on one machine, each updated automatically by push (to `main` and to
+> and production side by side on one machine, each updated automatically (the host pulls `main`, and
 > semver tags, respectively). To install a second environment, repeat this guide with its own
 > directory, unit, database and ports — see [`environments.md`](environments.md) for what must be
 > different and what is shared.
@@ -325,8 +325,8 @@ that forwards to `http://127.0.0.1:64710` — the same step as in `docs/deployme
 
 ## Updating to a new version
 
-Manual procedure. On the club's host, instead, pushes to `main` (testing) and to semver tags
-(production) trigger the updates automatically — see [`environments.md`](environments.md).
+Manual procedure. On the club's host, instead, a timer pulls `main` (testing) and the semver tags
+(production) and updates them automatically — see [`environments.md`](environments.md).
 
 On the build machine:
 

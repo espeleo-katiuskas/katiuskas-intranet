@@ -8,7 +8,7 @@ The project runs in three environments:
 | How it runs | Docker (`docker-compose.yml`) | systemd unit, without Docker | systemd unit, without Docker |
 | URL | `http://localhost:64710` | `https://testing.katiuskas.es` | `https://intranet.katiuskas.es` |
 | What for | trying changes before committing or pushing | trying what is already in `main` | the real members |
-| Updated by | `docker compose up --build`, by hand | every push to `main` | every push of a semver tag |
+| Updated by | `docker compose up --build`, by hand | the host, when `main` changes | the host, when a new semver tag appears |
 | Database | its own, disposable | its own | its own |
 | Data | whatever is created locally | a copy of production's | the real data |
 | Telegram bot | optional | its own | its own |
@@ -23,12 +23,13 @@ what is specific to having those two on one machine.
 
 - **Local:** by hand, with `docker compose up --build` (and `docker compose build api && docker
   compose up -d api` to rebuild only the API).
-- **A push to `main` updates testing automatically.** So a push to `main` is a deployment, not
-  just a way of publishing commits: whatever reaches `main` is running on
-  `testing.katiuskas.es` once the update finishes.
-- **A push of a tag whose name is a semantic version (`MAJOR.MINOR.PATCH`) updates
-  production** to the commit that tag points at. Nothing else changes production: pushes to
-  `main` never reach it.
+- **Testing follows `main`.** The host looks at the repository every minute, and when the tip of
+  `main` is not what testing runs, it builds that commit and installs it. So reaching `main`
+  is a deployment, not just a way of publishing commits: whatever gets there is running on
+  `testing.katiuskas.es` a minute or two later.
+- **Production follows the highest tag whose name is a semantic version (`MAJOR.MINOR.PATCH`,
+  with an optional leading `v`)**, and runs the commit that tag points at. Nothing else changes
+  production: `main` never reaches it. To roll back, tag a new, higher version.
 - Since testing follows `main` and production only moves with tags, the natural flow for a
   release is to tag a commit that has already been running in testing for a while:
 
@@ -37,25 +38,120 @@ what is specific to having those two on one machine.
   git push origin <version>
   ```
 
-The automation that performs these updates is not part of this repository. The only workflow
-here, `.github/workflows/ci.yml`, checks, builds and tests the code (and also validates the
-OpenAPI and builds the Docker image) on pushes to `main` and on pull requests; it does not run
-on tag pushes and deploys nothing. The manual procedure in the deployment guide remains the
-reference for what an update involves.
+Nothing is pushed to the host: it pulls. See "Pull-based deployment" below for how it works and
+how to set it up. The only workflow in the repository, `.github/workflows/ci.yml`, checks, builds
+and tests the code (and also validates the OpenAPI and builds the Docker image) on pushes to
+`main` and on pull requests; it does not run on tag pushes and deploys nothing. The manual
+procedure in the deployment guide remains the reference for what an update involves.
+
+## Pull-based deployment
+
+[`scripts/deploy.sh`](../scripts/deploy.sh) updates testing and production from the repository,
+and a single systemd timer ([`deploy/systemd/`](../deploy/systemd/)) runs it every minute. There
+is no webhook to authenticate and no CI runner with access to the host, which matters because the
+repository is public: the host only makes outgoing, read-only requests to the repository's fixed
+URL (`git ls-remote`, `git fetch`), and nothing that reaches it from the network can make it deploy
+anything.
+
+Each run asks the repository, once, for the tip of `main` and the tags, works out what each
+environment should run (the tip of `main` for testing, the highest version tag for production) and
+compares it with what it last deployed (`STATE_DIR/<environment>/deployed`). If both are the same,
+that was all: one `git ls-remote`. Otherwise it fetches once and updates, one after the other,
+the environments that need it, testing first. For each one it:
+
+1. checks the commit out of its own clone (for production, only if the tagged commit is in the
+   history of `main`; a tag anywhere else is refused);
+2. builds the API and `seed-admin` with Go, and goose (pinned, built once);
+3. applies the migrations with goose, before touching what is installed, so that if one fails what
+   runs is untouched;
+4. installs the binaries, `web/` and the migrations (the directories are swapped, not copied in
+   place) and restarts the API's unit;
+5. polls the health check until it answers, and if it does not, puts the previous binary back
+   (migrations are forward-only and stay applied);
+6. records what it deployed and, if there is an `AFTER_DEPLOY` hook, runs it.
+
+A failure in one environment does not stop the other: the run goes on with it and exits with an
+error at the end (so the unit shows as failed). A commit that fails is not tried again for 15
+minutes (`RETRY_AFTER`), so a broken commit does not rebuild every minute; a new commit or
+`--force` tries immediately. The script says what it does in the unit's journal
+(`journalctl -u katiuskas-deploy`).
+
+**Setting it up** (once, on the club's host, as root):
+
+```sh
+# The host builds, so it needs git and Go (the toolchain is not downloaded: it has to be at
+# least the version go.mod asks for). The build and the Go caches take a few hundred MB;
+# `STATE_DIR/cache` can be deleted whenever disk is needed (`chmod -R u+w` it first: Go makes
+# its module cache read-only), and the next run rebuilds it.
+sudo mkdir -p /opt/katiuskas-deploy /var/lib/katiuskas-deploy
+sudo chown katiuskas:katiuskas /var/lib/katiuskas-deploy
+
+# Root-owned copies, so that what the timer runs is not something the unprivileged user
+# (or the code it builds) can change. Install them again when these files change.
+sudo install -m 0755 scripts/deploy.sh /opt/katiuskas-deploy/deploy.sh
+sudo install -m 0755 scripts/copy-prod-to-testing.sh /opt/katiuskas-deploy/copy-prod-to-testing.sh
+sudo install -m 0755 deploy/systemd/after-production.sh.example \
+  /opt/katiuskas-deploy/after-production.sh
+
+# The settings: copy the example and edit REPO_URL, the directories and the units.
+sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
+  /etc/katiuskas-deploy.env
+
+sudo install -m 0644 deploy/systemd/katiuskas-deploy.service \
+  deploy/systemd/katiuskas-deploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+The only privileged things are restarting the APIs' units and, for the copy of production's data
+into testing, stopping and starting testing's. A sudoers rule (`sudo visudo -f
+/etc/sudoers.d/katiuskas-deploy`) allows exactly that and nothing else:
+
+```
+katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-api, \
+  /usr/bin/systemctl restart katiuskas-api-testing, \
+  /usr/bin/systemctl stop katiuskas-api-testing, /usr/bin/systemctl start katiuskas-api-testing
+```
+
+Before starting the timer, say what each environment is running now, so that the first run does
+not deploy it again (and, for production, run the copy of its data into testing):
+
+```sh
+run() {
+  sudo -u katiuskas bash -c \
+    "set -a; . /etc/katiuskas-deploy.env; set +a; /opt/katiuskas-deploy/deploy.sh $*"
+}
+run --dry-run      # says what it would deploy to each environment
+run --adopt        # "both are already running that"
+sudo systemctl enable --now katiuskas-deploy.timer
+```
+
+`--adopt` records the repository's current answer as deployed, so use it only if the environments
+really run that; to adopt only one of them, give its name (`run --adopt production`). If an
+environment runs something else, skip it for that one and let the first run deploy it. A host with
+only one of the environments just leaves the other's `..._INSTALL_DIR` out of the settings.
+
+What to protect on the repository's side, because it is now what decides what runs:
+
+- **`main`**: require pull requests (and, if there is more than one maintainer, a review), and
+  forbid direct pushes and force pushes. Testing runs whatever gets there, with a copy of the real
+  data.
+- **Tags**: a ruleset so that only the maintainers can create tags, since a tag deploys to
+  production. A tag whose commit is not in `main` is refused by the script anyway, but it does
+  not stop one that is.
+- **Actions** (if the repository is public): require approval for runs from outside collaborators.
 
 ## Testing's data is a copy of production's
 
-Every time production is deployed, production's data is copied into testing's database. The
-two databases are separate only because the schema can differ: a commit on `main` with
-migrations reaches testing before production. What triggers that copy on each deployment is
-not part of this repository, but the script that does it is,
+Every time production is deployed, production's data is copied into testing's database. The two
+databases are separate only because the schema can differ: a commit on `main` with migrations
+reaches testing before production. It is run by the `AFTER_DEPLOY` hook of the production update
+(see "Pull-based deployment"), and the script that does it is
 [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh): it empties testing's
-database, restores into it a full dump of production's (schema, data, sequence values and
-goose's version table) and applies with `goose` the migrations testing is ahead by. In
-addition, unless `--no-files` is given, it replaces the files in testing's
-`ACTIVITY_RESOURCES_ROOT` with hard links to production's (see the section "Options for
-`ACTIVITY_RESOURCES_ROOT`"). Production is only read. It is run as root or as a user who can
-stop and start testing's unit:
+database, restores into it a full dump of production's (schema, data, sequence values and goose's
+version table) and applies with `goose` the migrations testing is ahead by. In addition, unless
+`--no-files` is given, it replaces the files in testing's `ACTIVITY_RESOURCES_ROOT` with hard links
+to production's (see the section "Options for `ACTIVITY_RESOURCES_ROOT`"). Production is only read.
+It is run as root or as a user who can stop and start testing's unit:
 
 ```sh
 TESTING_SERVICE=<testing unit> \

@@ -8,6 +8,7 @@ the top of the file itself; `generate-license-thumbnails.sh` also with `--help`,
 | --- | --- | --- |
 | `get-token.sh` | Creates a session token for a person directly in the database (by login, or looking the person up by email or name with `--user`) and prints it, to try the API with `curl` or to enter the web without going through the sign-in link. | Local development only, with `docker compose` up. **Never in production.** |
 | `copy-prod-to-testing.sh` | Replaces the testing database with a copy of the production one, migrates it up to the schema the testing code expects and links (hard links) the production activity memoria files. It only reads production; everything that was in testing is lost. | The club's host, on every production deployment. See [`environments.md`](../docs/environments.md). |
+| `deploy.sh` | Updates testing and production from the repository: finds what each should run (the tip of `main`, or the highest version tag), builds it, applies the migrations, installs it and restarts the service, with a health check and rollback of the binary. Run by a single systemd timer; nothing is pushed to the host. | The club's host, every minute. See [`environments.md`](../docs/environments.md) ("Pull-based deployment") and [`deploy/systemd/`](../deploy/systemd/). |
 | `generate-license-thumbnails.sh` | Creates the missing (or outdated) thumbnails of the federative license copies in `user-files/<login>/licencias/`: the first page of a PDF, or a reduced version of an image. | Whenever license copies are added, both locally and in production. See [`deployment-no-docker.md`](../docs/deployment-no-docker.md). |
 
 ## Examples
@@ -20,4 +21,9 @@ TESTING_SERVICE=<testing systemd unit> \
   scripts/copy-prod-to-testing.sh [--yes] [--no-files] <production api.env> <testing api.env>
 
 scripts/generate-license-thumbnails.sh --dry-run
+
+REPO_URL=https://github.com/<owner>/<repository>.git STATE_DIR=/var/lib/katiuskas-deploy \
+  TESTING_INSTALL_DIR=/opt/katiuskas-intranet-testing TESTING_SERVICE=katiuskas-api-testing \
+  PRODUCTION_INSTALL_DIR=/opt/katiuskas-intranet PRODUCTION_SERVICE=katiuskas-api \
+  scripts/deploy.sh --dry-run
 ```
