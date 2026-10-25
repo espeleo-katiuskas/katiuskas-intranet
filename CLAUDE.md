@@ -1466,7 +1466,9 @@ state, `pick`) and act on — mark paid or take the payment off (admin/board), h
 person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled with the member the order is
 for; only members are offered), undo a delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same.
 Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
-units, undoing, returning or taking numbers off. What is unfolded, ticked and typed survives
+units, undoing, returning or taking numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by part, digits
+as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list such as
+the numbers an error message or an entry of the list of payments names). What is unfolded, ticked and typed survives
 redrawing.
 Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
 `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` —

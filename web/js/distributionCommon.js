@@ -187,6 +187,41 @@ function articlesText(articles) {
     .join('\n');
 }
 
+// Numbers in order: part by part (a number is its parts joined by a slash), the parts
+// that are all digits as numbers ("9" before "10"; the same number with leading zeros
+// shortest first) and any other text as text.
+function compareIdentifiers(a, b) {
+  const pa = a.split('/');
+  const pb = b.split('/');
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    const x = pa[i];
+    const y = pb[i];
+    if (/^\d+$/.test(x) && /^\d+$/.test(y)) {
+      const diff = Number(x) - Number(y);
+      if (diff !== 0) return diff;
+      if (x.length !== y.length) return x.length - y.length;
+    } else {
+      const diff = x.localeCompare(y, 'es', { numeric: true });
+      if (diff !== 0) return diff;
+    }
+  }
+  return pa.length - pb.length;
+}
+
+function sortIdentifiers(identifiers) {
+  return [...(identifiers ?? [])].sort(compareIdentifiers);
+}
+
+// A list of numbers with nothing known of the article they belong to (a message, an
+// entry of the list of payments), sorted and in ranges, in the form they are typed
+// ("124/1-10").
+function compactNumbers(identifiers) {
+  const pseudo = {
+    identifier_fields: identifiers.some((i) => i.includes('/')) ? [{ name: '' }, { name: '' }] : [],
+  };
+  return formatIdentifiers(pseudo, identifiers, false);
+}
+
 // The numbers somebody has, as short as they can be said: consecutive ones become
 // a range ("0001-0050"), and in an article with several parts each is named
 // ("Serie 124 · Fracción 1-10"), unless named is false, which gives them in the
@@ -195,7 +230,9 @@ function formatIdentifiers(article, identifiers, named = true) {
   const fields = article?.identifier_fields ?? [];
   const parts = (id) => id.split('/');
   const runs = [];
-  for (const id of identifiers ?? []) {
+  // Sorted first, so that consecutive numbers are next to each other whatever order
+  // they come in, and join into the longest ranges there are.
+  for (const id of sortIdentifiers(identifiers)) {
     const p = parts(id);
     const last = p.at(-1);
     const run = runs.at(-1);
@@ -411,11 +448,12 @@ function numbersMentioned(err) {
 
 function apiErrorText(err, distribution = null) {
   const numbers = numbersMentioned(err);
-  if (numbers && ABOUT_NUMBERS.has(err.code)) {
-    return `${errorMessages[err.code]} (${numbers})`;
+  const shown = numbers ? compactNumbers(numbers.split(', ')) : null;
+  if (shown && ABOUT_NUMBERS.has(err.code)) {
+    return `${errorMessages[err.code]} (${shown})`;
   }
-  if (numbers && err.code === 'already_paid') return `Ya estaban pagados: ${numbers}.`;
-  if (numbers && err.code === 'already_picked_up') return `Ya estaban entregados: ${numbers}.`;
+  if (shown && err.code === 'already_paid') return `Ya estaban pagados: ${shown}.`;
+  if (shown && err.code === 'already_picked_up') return `Ya estaban entregados: ${shown}.`;
   if (err.code === 'already_registered' && hasArticles(distribution ?? {})) {
     return 'Esa persona ya ha pedido ese artículo: cambia la cantidad en «Tus pedidos».';
   }
@@ -457,6 +495,8 @@ export {
   unitLabel,
   parseArticles,
   formatIdentifiers,
+  sortIdentifiers,
+  compactNumbers,
   syncArticleFields,
   audienceLabels,
   statusBadge,

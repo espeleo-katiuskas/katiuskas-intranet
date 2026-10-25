@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatCurrency, showError } from './api.js';
 import { initPage } from './layout.js';
-import { formatDateTime, formatIdentifiers } from './distributionCommon.js';
+import { compactNumbers, formatDateTime } from './distributionCommon.js';
 
 // Every payment marked in one distribution, newest first, with what it had collected
 // after each one. Admin and board: it says who paid.
@@ -29,14 +29,7 @@ function what(e) {
   const taken = e.quantity < 0;
   const count = Math.abs(e.quantity);
   const text = `${count} × ${e.description}`;
-  const pseudo = {
-    identifier_fields: e.identifiers.some((i) => i.includes('/'))
-      ? [{ name: '' }, { name: '' }]
-      : [],
-  };
-  const numbers = e.identifiers.length
-    ? ` (${escapeHtml(formatIdentifiers(pseudo, e.identifiers, false))})`
-    : '';
+  const numbers = e.identifiers.length ? ` (${escapeHtml(compactNumbers(e.identifiers))})` : '';
   return `${escapeHtml(text)}${numbers}${taken ? ' <span class="badge">pago retirado</span>' : ''}`;
 }
 

@@ -16,6 +16,7 @@ import {
   choicesText,
   formatDateTime,
   formatIdentifiers,
+  sortIdentifiers,
   hasArticles,
   isUnchosen,
   loadPeople,
@@ -52,9 +53,9 @@ const canEditOrder = () => distribution?.status === 'open';
 
 // How a row stands. For a numbered article each item is paid or delivered by
 // itself, and only those with a number can be; elsewhere it is counted.
-const assigned = (u) => u.identifiers ?? [];
-const paidIds = (u) => u.paid_identifiers ?? [];
-const deliveredIds = (u) => u.delivered_identifiers ?? [];
+const assigned = (u) => sortIdentifiers(u.identifiers);
+const paidIds = (u) => sortIdentifiers(u.paid_identifiers);
+const deliveredIds = (u) => sortIdentifiers(u.delivered_identifiers);
 const unpaidAssigned = (u) => assigned(u).filter((i) => !paidIds(u).includes(i));
 const returnableIds = (u) => deliveredIds(u).filter((i) => !paidIds(u).includes(i));
 
