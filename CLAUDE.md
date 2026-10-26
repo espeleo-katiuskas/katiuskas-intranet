@@ -90,11 +90,14 @@ the club's host, each with its own database, directory and Telegram bot, sharing
 `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Production deploys without Docker
 (`docs/deployment-no-docker.md`).
 
-- **The host pulls**: within a minute of `main` changing it builds and installs it in testing, and
-  within a minute of a new semver tag appearing it does the same for production
-  (`scripts/deploy.sh` run by a systemd timer, `deploy/systemd/`; nothing is pushed to the host).
-  So merging into `main` is a live deploy, and migrations run against a copy of real data. `ci.yml`
-  only tests. Roll production back by tagging a new, higher version.
+- **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
+  each environment should run — the tip of `main` for testing, the highest semver tag for production —
+  and updates what differs. `scripts/kick-deploy.sh`, which goes through `scripts/run-queued.sh` (a
+  request that arrives while a deployment runs is queued, several merge into one rerun), is run by a
+  webhook receiver within seconds of a push and, as a safety net, by a timer every 15 minutes;
+  **nothing in the request decides what is deployed** (the receiver only checks GitHub's signature). So merging into `main` is a live
+  deploy, and migrations run against a copy of real data. `ci.yml` only tests. Roll production back by
+  tagging a new, higher version.
 - Testing's database is a copy of production's, refreshed on every production deploy
   (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real personal data and anything done there is overwritten.
 - Because the directories are shared, don't grant admin/board in testing (it would open every member's

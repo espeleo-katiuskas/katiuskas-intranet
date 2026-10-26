@@ -23,10 +23,11 @@ what is specific to having those two on one machine.
 
 - **Local:** by hand, with `docker compose up --build` (and `docker compose build api && docker
   compose up -d api` to rebuild only the API).
-- **Testing follows `main`.** The host looks at the repository every minute, and when the tip of
-  `main` is not what testing runs, it builds that commit and installs it. So reaching `main`
-  is a deployment, not just a way of publishing commits: whatever gets there is running on
-  `testing.katiuskas.es` a minute or two later.
+- **Testing follows `main`.** When the tip of `main` is not what testing runs, the host builds that
+  commit and installs it. So reaching `main` is a deployment, not just a way of publishing commits:
+  whatever gets there is running on `testing.katiuskas.es` as soon as the build finishes (GitHub's
+  webhook wakes the host up within seconds of the push; if that fails, a timer finds it within 15
+  minutes).
 - **Production follows the highest tag whose name is a semantic version (`MAJOR.MINOR.PATCH`,
   with an optional leading `v`)**, and runs the commit that tag points at. Nothing else changes
   production: `main` never reaches it. To roll back, tag a new, higher version.
@@ -46,18 +47,32 @@ procedure in the deployment guide remains the reference for what an update invol
 
 ## Pull-based deployment
 
-[`scripts/deploy.sh`](../scripts/deploy.sh) updates testing and production from the repository,
-and a single systemd timer ([`deploy/systemd/`](../deploy/systemd/)) runs it every minute. There
-is no webhook to authenticate and no CI runner with access to the host, which matters because the
-repository is public: the host only makes outgoing, read-only requests to the repository's fixed
-URL (`git ls-remote`, `git fetch`), and nothing that reaches it from the network can make it deploy
-anything.
+[`scripts/deploy.sh`](../scripts/deploy.sh) updates testing and production from the repository.
+Two things ask for it, and both run the same command, `scripts/kick-deploy.sh`: a systemd timer
+every 15 minutes, which is the safety net, and a small webhook receiver whenever GitHub reports a
+push, which is what makes an update start within seconds.
 
-Each run asks the repository, once, for the tip of `main` and the tags, works out what each
-environment should run (the tip of `main` for testing, the highest version tag for production) and
-compares it with what it last deployed (`STATE_DIR/<environment>/deployed`). If both are the same,
-that was all: one `git ls-remote`. Otherwise it fetches once and updates, one after the other,
-the environments that need it, testing first. For each one it:
+The repository is public, so what matters is that **the webhook does not decide anything**. The
+script never uses what the request says: it asks the repository by itself (`git ls-remote`, `git
+fetch`, read-only, to its fixed URL) what each environment should run. A forged request can at most
+start a run that finds nothing new, which costs one `git ls-remote`; the receiver still checks
+GitHub's signature, so that not just anybody can make the host query GitHub over and over. There
+is no CI runner with access to the host either.
+
+**Requests are queued, not lost.** `kick-deploy.sh` goes through
+[`scripts/run-queued.sh`](../scripts/run-queued.sh), which makes every request wait for the one
+that is running and merges the ones that arrive meanwhile into a single rerun: a push that lands
+while a deployment is building is deployed right after it, and ten pushes in a row cost one more
+deployment, not ten. The request that finds nothing running does the work (and gets its output and
+exit status); the others return at once. Because of that, the webhook receiver must not wait for
+the command: the first request would hold the connection for the whole build, and GitHub gives up
+after ten seconds.
+
+Each run asks the repository for the tip of `main` and the tags, works out what each environment
+should run (the tip of `main` for testing, the highest version tag for production) and compares it
+with what it last deployed (`STATE_DIR/<environment>/deployed`). If both are the same, that was
+all: one `git ls-remote`. Otherwise it fetches and updates, one after the other, the environments
+that need it, testing first. For each one it:
 
 1. checks the commit out of its own clone (for production, only if the tagged commit is in the
    history of `main`; a tag anywhere else is refused);
@@ -72,9 +87,9 @@ the environments that need it, testing first. For each one it:
 
 A failure in one environment does not stop the other: the run goes on with it and exits with an
 error at the end (so the unit shows as failed). A commit that fails is not tried again for 15
-minutes (`RETRY_AFTER`), so a broken commit does not rebuild every minute; a new commit or
+minutes (`RETRY_AFTER`), so a broken commit does not rebuild at every request; a new commit or
 `--force` tries immediately. The script says what it does in the unit's journal
-(`journalctl -u katiuskas-deploy`).
+(`journalctl -u katiuskas-deploy`; what a webhook-started run prints goes to the receiver's).
 
 **Setting it up** (once, on the club's host, as root):
 
@@ -83,17 +98,18 @@ minutes (`RETRY_AFTER`), so a broken commit does not rebuild every minute; a new
 # least the version go.mod asks for). The build and the Go caches take a few hundred MB;
 # `STATE_DIR/cache` can be deleted whenever disk is needed (`chmod -R u+w` it first: Go makes
 # its module cache read-only), and the next run rebuilds it.
-sudo mkdir -p /opt/katiuskas-deploy /var/lib/katiuskas-deploy
-sudo chown katiuskas:katiuskas /var/lib/katiuskas-deploy
+sudo mkdir -p /opt/katiuskas-deploy /var/lib/katiuskas-deploy/queue
+sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-deploy
 
-# Root-owned copies, so that what the timer runs is not something the unprivileged user
-# (or the code it builds) can change. Install them again when these files change.
-sudo install -m 0755 scripts/deploy.sh /opt/katiuskas-deploy/deploy.sh
-sudo install -m 0755 scripts/copy-prod-to-testing.sh /opt/katiuskas-deploy/copy-prod-to-testing.sh
+# Root-owned copies, so that what the timer and the webhook run is not something the
+# unprivileged user (or the code it builds) can change. Install them again when these files change.
+sudo install -m 0755 scripts/deploy.sh scripts/run-queued.sh scripts/kick-deploy.sh \
+  scripts/copy-prod-to-testing.sh /opt/katiuskas-deploy/
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
   /opt/katiuskas-deploy/after-production.sh
 
-# The settings: copy the example and edit REPO_URL, the directories and the units.
+# The settings: copy the example and edit REPO_URL, the directories and the units. deploy.sh
+# sources the file, so it is root's, and the katiuskas user can only read it.
 sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
   /etc/katiuskas-deploy.env
 
@@ -104,22 +120,22 @@ sudo systemctl daemon-reload
 
 The only privileged things are restarting the APIs' units and, for the copy of production's data
 into testing, stopping and starting testing's. A sudoers rule (`sudo visudo -f
-/etc/sudoers.d/katiuskas-deploy`) allows exactly that and nothing else:
+/etc/sudoers.d/katiuskas-deploy`) allows exactly that and nothing else. The webhook receiver runs
+as another user, `katiuskas-webhook`, which owns nothing of the installations and may only run
+`kick-deploy.sh` as `katiuskas`:
 
 ```
 katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-api, \
   /usr/bin/systemctl restart katiuskas-api-testing, \
   /usr/bin/systemctl stop katiuskas-api-testing, /usr/bin/systemctl start katiuskas-api-testing
+katiuskas-webhook ALL=(katiuskas) NOPASSWD: /opt/katiuskas-deploy/kick-deploy.sh
 ```
 
 Before starting the timer, say what each environment is running now, so that the first run does
 not deploy it again (and, for production, run the copy of its data into testing):
 
 ```sh
-run() {
-  sudo -u katiuskas bash -c \
-    "set -a; . /etc/katiuskas-deploy.env; set +a; /opt/katiuskas-deploy/deploy.sh $*"
-}
+run() { sudo -u katiuskas /opt/katiuskas-deploy/deploy.sh --config /etc/katiuskas-deploy.env "$@"; }
 run --dry-run      # says what it would deploy to each environment
 run --adopt        # "both are already running that"
 sudo systemctl enable --now katiuskas-deploy.timer
@@ -129,6 +145,124 @@ sudo systemctl enable --now katiuskas-deploy.timer
 really run that; to adopt only one of them, give its name (`run --adopt production`). If an
 environment runs something else, skip it for that one and let the first run deploy it. A host with
 only one of the environments just leaves the other's `..._INSTALL_DIR` out of the settings.
+
+**The webhook receiver.** It is a small program of the administrator's, outside this repository
+(the host already has one for its other projects), that listens on a local port behind the
+site's reverse proxy over TLS. What it has to do is little, and nothing in the request may end up
+in the command:
+
+- accept `POST`s of GitHub's push events at a path of its own, for example
+  `/hooks/katiuskas-deploy`;
+- check the signature: the `X-Hub-Signature-256` header is `sha256=` followed by the HMAC-SHA256
+  of the raw body with the webhook's secret, compared in constant time; if it does not match,
+  refuse and do nothing;
+- ignore what is not worth a run: events other than `push` (GitHub sends a `ping` when the webhook
+  is created) and refs other than `main` and the tags;
+- start `sudo -n -u katiuskas /opt/katiuskas-deploy/kick-deploy.sh` and answer right away,
+  without waiting for it to finish.
+
+In GitHub, the repository's webhook is: payload URL `https://<the host's
+domain>/hooks/katiuskas-deploy`, content type `application/json` (the other one wraps the payload in
+a form field), a long random secret, SSL verification on, and only the push event. The secret is
+kept out of the program: it reads it from the environment, from a file only the receiver can read.
+
+Two receivers that do exactly this follow, and both have been tried against signed and forged
+requests, other events and other branches. The first needs no code; the second is the same logic as
+a Go program, for adapting to the host's own receiver.
+
+*With [adnanh/webhook](https://github.com/adnanh/webhook)*, using
+[`deploy/webhook/hooks.json.example`](../deploy/webhook/hooks.json.example) as `hooks.json`. It runs
+`sudo` with fixed arguments, checks the signature, the event and the ref, answers 403 when the
+rules are not met, and answers at once whatever the command takes. `-template` is what makes
+`getenv` work in the file (`| js` escapes the secret):
+
+```sh
+KATIUSKAS_WEBHOOK_SECRET=<the secret> \
+  webhook -hooks /etc/webhook/hooks.json -template -ip 127.0.0.1 -port 9000
+```
+
+and the reverse proxy sends that one path to it (for Caddy):
+
+```
+handle /hooks/katiuskas-deploy {
+	reverse_proxy 127.0.0.1:9000
+}
+```
+
+*As a Go program*, the whole receiver is:
+
+```go
+// Command kickdeploy receives GitHub's push webhook and asks for a deployment. Nothing
+// from the request goes into the command: deploy.sh looks at the repository by itself
+// and decides what to deploy, so the worst a forged request can do (and the signature
+// stops it) is make it look for nothing.
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+func main() {
+	secret := []byte(os.Getenv("KATIUSKAS_WEBHOOK_SECRET"))
+	if len(secret) == 0 {
+		log.Fatal("set KATIUSKAS_WEBHOOK_SECRET to the webhook's secret")
+	}
+	http.HandleFunc("POST /hooks/katiuskas-deploy", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			http.Error(w, "unreadable body", http.StatusBadRequest)
+			return
+		}
+		mac := hmac.New(sha256.New, secret)
+		mac.Write(body)
+		want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+		if !hmac.Equal([]byte(want), []byte(r.Header.Get("X-Hub-Signature-256"))) {
+			http.Error(w, "bad signature", http.StatusForbidden)
+			return
+		}
+		if r.Header.Get("X-GitHub-Event") != "push" { // "ping" when the webhook is created
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var push struct {
+			Ref string `json:"ref"`
+		}
+		if err := json.Unmarshal(body, &push); err != nil {
+			http.Error(w, "not a push payload", http.StatusBadRequest)
+			return
+		}
+		if push.Ref != "refs/heads/main" && !strings.HasPrefix(push.Ref, "refs/tags/") {
+			w.WriteHeader(http.StatusNoContent) // a feature branch: nothing to deploy
+			return
+		}
+		// The first request that finds nothing running does the whole deployment, which
+		// takes much longer than GitHub waits for an answer: start it and don't wait.
+		cmd := exec.Command("sudo", "-n", "-u", "katiuskas", "/opt/katiuskas-deploy/kick-deploy.sh")
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Start(); err != nil {
+			log.Printf("starting the deployment: %v", err)
+			http.Error(w, "could not start the deployment", http.StatusInternalServerError)
+			return
+		}
+		go func() {
+			if err := cmd.Wait(); err != nil {
+				log.Printf("the deployment: %v", err)
+			}
+		}()
+		w.WriteHeader(http.StatusAccepted)
+	})
+	log.Fatal(http.ListenAndServe("127.0.0.1:9000", nil))
+}
+```
 
 What to protect on the repository's side, because it is now what decides what runs:
 

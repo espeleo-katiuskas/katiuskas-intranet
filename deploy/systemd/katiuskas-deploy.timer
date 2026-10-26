@@ -1,13 +1,16 @@
-# Looks for something new to deploy every minute. When there is nothing new, a run
-# is a single `git ls-remote`.
+# Looks for something new to deploy every 15 minutes. It is the safety net: normally
+# the webhook receiver asks for a deployment within seconds of a push
+# (docs/environments.md, "Pull-based deployment"), and this only matters if a webhook
+# is lost or the host was down. When there is nothing new, a run is a single
+# `git ls-remote`.
 [Unit]
 Description=Katiuskas intranet: look for updates of testing and production
 
 [Timer]
 OnBootSec=2min
-OnUnitInactiveSec=1min
+OnUnitInactiveSec=15min
 AccuracySec=10s
-RandomizedDelaySec=10s
+RandomizedDelaySec=30s
 
 [Install]
 WantedBy=timers.target

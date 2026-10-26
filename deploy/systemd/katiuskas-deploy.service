@@ -1,6 +1,7 @@
 # Updates testing and production from the repository, once: each one only if what
-# it should be running has changed. Started every minute by katiuskas-deploy.timer.
-# See docs/environments.md ("Pull-based deployment") for how to install it.
+# it should be running has changed. Started by katiuskas-deploy.timer every 15
+# minutes; the webhook receiver runs the same command whenever GitHub reports a
+# push. See docs/environments.md ("Pull-based deployment") for how to install it.
 #
 # It runs as the owner of the installations, not as root; the only privileged thing
 # it does, restarting the APIs' units, goes through sudo (the sudoers rule is in
@@ -14,12 +15,12 @@ Wants=network-online.target
 Type=oneshot
 User=katiuskas
 Group=katiuskas
-# REPO_URL, STATE_DIR, the directories and units of each environment and the rest
-# of deploy.sh's settings; see deploy/systemd/deploy.env.example.
-EnvironmentFile=/etc/katiuskas-deploy.env
-# A root-owned copy of scripts/deploy.sh, so that what the timer runs is not
-# something the unprivileged user (or the code it builds) can change.
-ExecStart=/opt/katiuskas-deploy/deploy.sh
+# A root-owned script (installed from scripts/kick-deploy.sh), so that what the timer
+# runs is not something the unprivileged user (or the code it builds) can change. It
+# goes through run-queued.sh, so a run that overlaps with one started by the webhook
+# waits for it instead of running at the same time. The settings are in
+# /etc/katiuskas-deploy.env (see deploy/systemd/deploy.env.example).
+ExecStart=/opt/katiuskas-deploy/kick-deploy.sh
 # Building from scratch and migrating can take a while on a small machine.
 TimeoutStartSec=30min
 Nice=10

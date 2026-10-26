@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 #
 # Pull-based deployment of the testing and production environments from the
-# public repository, meant to be run on the club's host by a single systemd
-# timer (deploy/systemd/).
+# public repository, meant to be run on the club's host through
+# scripts/kick-deploy.sh: by a timer every few minutes and by the webhook receiver
+# whenever GitHub reports a push, so that an update does not wait for the timer.
+# Running it more often than needed costs nothing, because what it does never
+# depends on who ran it; and scripts/run-queued.sh, which kick-deploy.sh goes
+# through, makes a request that arrives while it is running wait for it to finish,
+# and merges several into one.
 #
-# Nothing is ever pushed to the host: there is no webhook to authenticate and no
-# CI runner with access to it. The host looks at the repository by itself
+# Nothing is ever pushed to the host: the webhook only asks the host to look, and
+# there is no CI runner with access to it. The host looks at the repository by itself
 # (`git ls-remote`, read-only, no credentials), decides what each environment
 # should be running, and, if that is not what it runs now, builds it and installs
 # it. Whatever the network says only matters as the name of a commit to fetch
@@ -18,21 +23,25 @@
 #               The tagged commit must be in the history of `main` (a tag on some
 #               other branch is refused; see REQUIRE_ON_MAIN).
 #
-# One run asks the repository once, compares the answer with what each environment
+# One run asks the repository, compares the answer with what each environment
 # last deployed, and returns right away if there is nothing new. Otherwise it
-# fetches once and updates, one after the other, the environments that need it,
+# fetches and updates, one after the other, the environments that need it,
 # testing first. For each: check the commit out of the local clone; build the API
 # (and seed-admin) with Go; apply the migrations with goose; swap in the binaries,
 # `web/` and the migrations; restart the service and wait for its health check. If
 # the service does not come back, the previous binary is put back (migrations are
 # forward-only and stay applied). A failure in one environment does not stop the
 # other one, but makes the run exit with an error. A commit that fails is not
-# retried for RETRY_AFTER seconds, so a broken commit does not rebuild every minute.
+# retried for RETRY_AFTER seconds, so a broken commit does not rebuild at every start.
 #
 # Usage, as the owner of the installations (not root):
-#   scripts/deploy.sh [--dry-run] [--force] [--adopt] [testing] [production]
+#   scripts/deploy.sh [--config FILE] [--dry-run] [--force] [--adopt] [testing] [production]
 # With no environment, every configured one.
 #
+# --config   reads the settings below from FILE (KEY=VALUE lines, like a systemd
+#            EnvironmentFile) instead of from the environment. The shell sources it,
+#            so it has to be trusted: it is refused if the user running the script
+#            can write to it (keep it owned by root, readable by that user).
 # --dry-run  says what it would deploy and exits without touching anything.
 # --force    deploys even if that commit is what is already deployed, or failed
 #            recently.
@@ -80,8 +89,14 @@ log() { echo "==> $*"; }
 dry_run=0
 force=0
 adopt=0
+config=
 while [[ ${1:-} == --* ]]; do
   case $1 in
+    --config)
+      shift
+      config=${1:-}
+      [[ -n $config ]] || die "--config needs a file"
+      ;;
     --dry-run) dry_run=1 ;;
     --force) force=1 ;;
     --adopt) adopt=1 ;;
@@ -90,6 +105,15 @@ while [[ ${1:-} == --* ]]; do
   shift
 done
 ((EUID != 0)) || die "run as the owner of the installations, not as root"
+
+if [[ -n $config ]]; then
+  [[ -r $config ]] || die "cannot read $config"
+  [[ ! -w $config ]] || die "$config is writable by $(id -un), and it is sourced as shell code: make it owned by root"
+  set -a
+  # shellcheck source=/dev/null
+  . "$config"
+  set +a
+fi
 
 : "${REPO_URL:?set REPO_URL to the repository to follow}"
 : "${STATE_DIR:?set STATE_DIR to the working directory of this script}"
@@ -155,80 +179,7 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# ---- what should be running -------------------------------------------------
-# One question to the repository for both: the tip of main and every tag. An
-# annotated tag appears as the tag object and, on a second line ending in ^{},
-# the commit it points at; the commit is what counts.
-refs=$(git ls-remote "$REPO_URL" 'refs/heads/main' 'refs/tags/*')
-main_sha=$(awk '$2 == "refs/heads/main" { print $1 }' <<<"$refs")
-latest_tag=$(awk '
-  $2 ~ /^refs\/tags\// { name = $2; sub("^refs/tags/", "", name)
-    if (name ~ /\^\{\}$/) { sub(/\^\{\}$/, "", name); peeled[name] = $1 } else plain[name] = $1 }
-  END { for (n in plain) print n, (n in peeled ? peeled[n] : plain[n]) }' <<<"$refs" |
-  grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+ ' | sort -V -k1,1 | tail -n1) || true
-
-declare -A target_ref target_sha
-for e in "${configured[@]}"; do
-  if [[ $e == testing ]]; then
-    [[ -n $main_sha ]] || die "$REPO_URL has no branch main"
-    target_ref[$e]=main
-    target_sha[$e]=$main_sha
-  else
-    [[ -n $latest_tag ]] || die "$REPO_URL has no semantic-version tag"
-    target_ref[$e]=${latest_tag% *}
-    target_sha[$e]=${latest_tag#* }
-  fi
-done
-
-# Which of them need an update (or --adopt, or just a message)?
-pending=()
-for e in "${configured[@]}"; do
-  ref=${target_ref[$e]}
-  sha=${target_sha[$e]}
-  state=$STATE_DIR/$e
-  mkdir -p "$state"
-  if ((adopt)); then
-    printf '%s %s\n' "$ref" "$sha" >"$state/deployed"
-    rm -f "$state/failed"
-    log "recorded $ref ($sha) as deployed to $e"
-    continue
-  fi
-  if ((!force)); then
-    if [[ -r $state/deployed && $(<"$state/deployed") == "$ref $sha" ]]; then
-      log "$e is already at $ref ($sha)"
-      continue
-    fi
-    if [[ -r $state/failed ]]; then
-      read -r failed_ref failed_sha failed_at <"$state/failed" || true
-      if [[ ${failed_ref:-} == "$ref" && ${failed_sha:-} == "$sha" ]] && (($(date +%s) - ${failed_at:-0} < RETRY_AFTER)); then
-        log "$e: $ref ($sha) failed recently; not trying again until $RETRY_AFTER s have passed"
-        continue
-      fi
-    fi
-  fi
-  if ((dry_run)); then
-    log "would deploy $ref ($sha) to $e; now: $(cat "$state/deployed" 2>/dev/null || echo nothing)"
-    continue
-  fi
-  pending+=("$e")
-done
-((${#pending[@]} > 0)) || exit 0
-
-# ---- fetch (once) -----------------------------------------------------------
 src=$STATE_DIR/src
-if [[ -d $src/.git ]]; then
-  git -C "$src" remote set-url origin "$REPO_URL"
-  git -C "$src" fetch --quiet --tags --force --prune origin '+refs/heads/main:refs/remotes/origin/main'
-else
-  rm -rf "$src"
-  git clone --quiet "$REPO_URL" "$src"
-fi
-
-mkdir -p "$STATE_DIR/cache" "$STATE_DIR/bin"
-export GOCACHE=$STATE_DIR/cache/go-build GOMODCACHE=$STATE_DIR/cache/mod GOTOOLCHAIN=local GOFLAGS=-mod=readonly
-export CGO_ENABLED=0 GOOS=linux
-GOARCH=$("$GO" env GOARCH)
-export GOARCH
 
 # deploy_env <environment>: updates it to its target commit, or dies trying.
 deploy_env() {
@@ -335,6 +286,80 @@ deploy_env() {
   rm -f "$state/failed"
   log "$e is now at $ref ($sha)"
 }
+
+# ---- what should be running -------------------------------------------------
+# One question to the repository for both: the tip of main and every tag. An
+# annotated tag appears as the tag object and, on a second line ending in ^{},
+# the commit it points at; the commit is what counts.
+refs=$(git ls-remote "$REPO_URL" 'refs/heads/main' 'refs/tags/*')
+main_sha=$(awk '$2 == "refs/heads/main" { print $1 }' <<<"$refs")
+latest_tag=$(awk '
+  $2 ~ /^refs\/tags\// { name = $2; sub("^refs/tags/", "", name)
+    if (name ~ /\^\{\}$/) { sub(/\^\{\}$/, "", name); peeled[name] = $1 } else plain[name] = $1 }
+  END { for (n in plain) print n, (n in peeled ? peeled[n] : plain[n]) }' <<<"$refs" |
+  grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+ ' | sort -V -k1,1 | tail -n1) || true
+
+declare -A target_ref target_sha
+for e in "${configured[@]}"; do
+  if [[ $e == testing ]]; then
+    [[ -n $main_sha ]] || die "$REPO_URL has no branch main"
+    target_ref[$e]=main
+    target_sha[$e]=$main_sha
+  else
+    [[ -n $latest_tag ]] || die "$REPO_URL has no semantic-version tag"
+    target_ref[$e]=${latest_tag% *}
+    target_sha[$e]=${latest_tag#* }
+  fi
+done
+
+# Which of them need an update (or --adopt, or just a message)?
+pending=()
+for e in "${configured[@]}"; do
+  ref=${target_ref[$e]}
+  sha=${target_sha[$e]}
+  state=$STATE_DIR/$e
+  mkdir -p "$state"
+  if ((adopt)); then
+    printf '%s %s\n' "$ref" "$sha" >"$state/deployed"
+    rm -f "$state/failed"
+    log "recorded $ref ($sha) as deployed to $e"
+    continue
+  fi
+  if ((!force)); then
+    if [[ -r $state/deployed && $(<"$state/deployed") == "$ref $sha" ]]; then
+      log "$e is already at $ref ($sha)"
+      continue
+    fi
+    if [[ -r $state/failed ]]; then
+      read -r failed_ref failed_sha failed_at <"$state/failed" || true
+      if [[ ${failed_ref:-} == "$ref" && ${failed_sha:-} == "$sha" ]] && (($(date +%s) - ${failed_at:-0} < RETRY_AFTER)); then
+        log "$e: $ref ($sha) failed recently; not trying again until $RETRY_AFTER s have passed"
+        continue
+      fi
+    fi
+  fi
+  if ((dry_run)); then
+    log "would deploy $ref ($sha) to $e; now: $(cat "$state/deployed" 2>/dev/null || echo nothing)"
+    continue
+  fi
+  pending+=("$e")
+done
+((${#pending[@]} > 0)) || exit 0
+
+# ---- fetch -----------------------------------------------------------------
+mkdir -p "$STATE_DIR/cache" "$STATE_DIR/bin"
+export GOCACHE=$STATE_DIR/cache/go-build GOMODCACHE=$STATE_DIR/cache/mod GOTOOLCHAIN=local GOFLAGS=-mod=readonly
+export CGO_ENABLED=0 GOOS=linux
+GOARCH=$("$GO" env GOARCH)
+export GOARCH
+
+if [[ -d $src/.git ]]; then
+  git -C "$src" remote set-url origin "$REPO_URL"
+  git -C "$src" fetch --quiet --tags --force --prune origin '+refs/heads/main:refs/remotes/origin/main'
+else
+  rm -rf "$src"
+  git clone --quiet "$REPO_URL" "$src"
+fi
 
 # ---- update, testing first --------------------------------------------------
 # Testing first, so that if production's update refreshes testing's data from

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "katiuskas-deploy",
+    "execute-command": "/usr/bin/sudo",
+    "command-working-directory": "/",
+    "pass-arguments-to-command": [
+      { "source": "string", "name": "-n" },
+      { "source": "string", "name": "-u" },
+      { "source": "string", "name": "katiuskas" },
+      { "source": "string", "name": "/opt/katiuskas-deploy/kick-deploy.sh" }
+    ],
+    "trigger-rule-mismatch-http-response-code": 403,
+    "trigger-rule": {
+      "and": [
+        {
+          "match": {
+            "type": "payload-hmac-sha256",
+            "secret": "{{ getenv "KATIUSKAS_WEBHOOK_SECRET" | js }}",
+            "parameter": { "source": "header", "name": "X-Hub-Signature-256" }
+          }
+        },
+        {
+          "match": {
+            "type": "value",
+            "value": "push",
+            "parameter": { "source": "header", "name": "X-GitHub-Event" }
+          }
+        },
+        {
+          "match": {
+            "type": "regex",
+            "regex": "^refs/(heads/main|tags/.+)$",
+            "parameter": { "source": "payload", "name": "ref" }
+          }
+        }
+      ]
+    }
+  }
+]
