@@ -2,11 +2,12 @@
 #
 # Pull-based deployment of the testing and production environments from the
 # public repository, meant to be run on the club's host through
-# scripts/kick-deploy.sh: by a timer every few minutes and by the webhook receiver
-# whenever GitHub reports a push, so that an update does not wait for the timer.
-# Running it more often than needed costs nothing, because what it does never
-# depends on who ran it; and kick-deploy.sh makes a request that arrives while it
-# is running wait for it to finish, and merges several into one.
+# katiuskas-intranet-deploy.service: started by a timer every few minutes and, whenever
+# GitHub reports a push, by a path unit that the webhook receiver triggers by creating
+# a file, so that an update does not wait for the timer. Running it more often than
+# needed costs nothing, because what it does never depends on who ran it; a request
+# that arrives while it is running is remembered (the file) and makes it run once more
+# when it ends, several merging into one. What it prints goes to the unit's journal.
 #
 # Nothing is ever pushed to the host: the webhook only asks the host to look, and
 # there is no CI runner with access to it. The host looks at the repository by itself

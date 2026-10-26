@@ -55,9 +55,12 @@ procedure in the deployment guide remains the reference for what an update invol
 ## Pull-based deployment
 
 [`scripts/deploy.sh`](../scripts/deploy.sh) updates testing and production from the repository.
-Two things ask for it, and both run the same command, `scripts/kick-deploy.sh`: a systemd timer
-every 15 minutes, which is the safety net, and a small webhook receiver whenever GitHub reports a
-push, which is what makes an update start within seconds.
+Two things start it, and both start the same systemd unit, `katiuskas-intranet-deploy.service`: a
+timer every 15 minutes, which is the safety net, and a small webhook receiver whenever GitHub
+reports a push, which is what makes an update start within seconds. Because it is always that unit
+that runs it, everything the script prints is in one place, the unit's journal (`journalctl -u
+katiuskas-intranet-deploy`), whoever asked for the run, which is where to look when a deployment
+fails.
 
 The repository is public, so what matters is that **the webhook does not decide anything**. The
 script never uses what the request says: it asks the repository by itself (`git ls-remote`, `git
@@ -66,14 +69,14 @@ start a run that finds nothing new, which costs one `git ls-remote`; the receive
 GitHub's signature, so that not just anybody can make the host query GitHub over and over. There
 is no CI runner with access to the host either.
 
-**Requests are queued, not lost.** [`scripts/kick-deploy.sh`](../scripts/kick-deploy.sh) makes
-every request wait for the deployment that is running and merges the ones that arrive meanwhile
-into a single rerun: a push that lands
-while a deployment is building is deployed right after it, and ten pushes in a row cost one more
-deployment, not ten. The request that finds nothing running does the work (and gets its output and
-exit status); the others return at once. Because of that, the webhook receiver must not wait for
-the command: the first request would hold the connection for the whole build, and GitHub gives up
-after ten seconds.
+**Requests are queued, not lost.** The receiver does not run anything: it creates an empty file,
+`queue/pending` under `STATE_DIR`, and a systemd path unit
+([`katiuskas-intranet-deploy.path`](../deploy/systemd/katiuskas-intranet-deploy.path)) starts the
+service whenever that file exists. The service removes the file as it starts, so a push that lands
+while a deployment is building creates it again and the unit is started once more right after the
+run, and ten pushes in a row cost one more deployment, not ten. The receiver needs no `sudo` and has
+nothing to wait for (GitHub gives up after ten seconds): creating the file is all it does. The
+timer starts the same unit; if one is already running, that start does nothing.
 
 Each run asks the repository for the tip of `main` and the tags, works out what each environment
 should run (the tip of `main` for testing, the highest version tag for production) and compares it
@@ -96,7 +99,7 @@ A failure in one environment does not stop the other: the run goes on with it an
 error at the end (so the unit shows as failed). A commit that fails is not tried again for 15
 minutes (`RETRY_AFTER`), so a broken commit does not rebuild at every request; a new commit or
 `--force` tries immediately. The script says what it does in the unit's journal (`journalctl -u
-katiuskas-intranet-deploy`; what a webhook-started run prints goes to the receiver's).
+katiuskas-intranet-deploy`, however the run was started).
 
 **Setting it up** (once, on the club's host, as root):
 
@@ -107,10 +110,15 @@ katiuskas-intranet-deploy`; what a webhook-started run prints goes to the receiv
 # its module cache read-only), and the next run rebuilds it.
 sudo mkdir -p /opt/katiuskas-intranet-deploy /var/lib/katiuskas-intranet-deploy/queue
 sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-intranet-deploy
+# The webhook receiver's user owns nothing and only has to be able to create a file in
+# the queue directory.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin katiuskas-intranet-webhook
+sudo chgrp katiuskas-intranet-webhook /var/lib/katiuskas-intranet-deploy/queue
+sudo chmod 0770 /var/lib/katiuskas-intranet-deploy/queue
 
-# Root-owned copies, so that what the timer and the webhook run is not something the
+# Root-owned copies, so that what the timer and the webhook make run is not something the
 # unprivileged user (or the code it builds) can change. Install them again when these files change.
-sudo install -m 0755 scripts/deploy.sh scripts/kick-deploy.sh scripts/copy-prod-to-testing.sh \
+sudo install -m 0755 scripts/deploy.sh scripts/copy-prod-to-testing.sh \
   /opt/katiuskas-intranet-deploy/
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
   /opt/katiuskas-intranet-deploy/after-production.sh
@@ -123,7 +131,8 @@ sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
   /opt/katiuskas-intranet-deploy/deploy.env
 
 sudo install -m 0644 deploy/systemd/katiuskas-intranet-deploy.service \
-  deploy/systemd/katiuskas-intranet-deploy.timer /etc/systemd/system/
+  deploy/systemd/katiuskas-intranet-deploy.timer deploy/systemd/katiuskas-intranet-deploy.path \
+  /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
@@ -131,14 +140,13 @@ The only privileged things are restarting the APIs' units and, for the copy of p
 into testing, stopping and starting testing's. A sudoers rule (`sudo visudo -f
 /etc/sudoers.d/katiuskas-intranet-deploy`) allows exactly that and nothing else. The webhook
 receiver runs as another user, `katiuskas-intranet-webhook`, which owns nothing of the installations
-and may only run `kick-deploy.sh` as `katiuskas`:
+and needs no `sudo` at all (it only creates a file):
 
 ```
 katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-intranet-stable.service, \
   /usr/bin/systemctl restart katiuskas-intranet-testing.service, \
   /usr/bin/systemctl stop katiuskas-intranet-testing.service, \
   /usr/bin/systemctl start katiuskas-intranet-testing.service
-katiuskas-intranet-webhook ALL=(katiuskas) NOPASSWD: /opt/katiuskas-intranet-deploy/kick-deploy.sh
 ```
 
 Before starting the timer, say what each environment is running now, so that the first run does
@@ -151,7 +159,7 @@ run() {
 }
 run --dry-run      # says what it would deploy to each environment
 run --adopt        # "both are already running that"
-sudo systemctl enable --now katiuskas-intranet-deploy.timer
+sudo systemctl enable --now katiuskas-intranet-deploy.timer katiuskas-intranet-deploy.path
 ```
 
 `--adopt` records the repository's current answer as deployed, so use it only if the environments
@@ -172,8 +180,8 @@ in the command:
 - answer success to the `ping` that GitHub sends when the webhook is created or tested (so the test
   shows green), and ignore what is not worth a run: other events, and pushes to refs other than
   `main` and the tags;
-- start `sudo -n -u katiuskas /opt/katiuskas-intranet-deploy/kick-deploy.sh` and answer right away,
-  without waiting for it to finish.
+- create the file `/var/lib/katiuskas-intranet-deploy/queue/pending` (empty; it may already
+  exist) and answer right away. That is all: the path unit does the rest.
 
 In GitHub, the repository's webhook is: payload URL `https://<the host's
 domain>/hooks/katiuskas-intranet-deploy`, content type `application/json` (the other one wraps the
@@ -187,7 +195,7 @@ a Go program, for adapting to the host's own receiver.
 
 *With [adnanh/webhook](https://github.com/adnanh/webhook)*, using
 [`deploy/webhook/hooks.json.example`](../deploy/webhook/hooks.json.example) as `hooks.json`. It runs
-`sudo` with fixed arguments, checks the signature, the event and the ref, answers 403 when the
+`touch` with a fixed argument, checks the signature, the event and the ref, answers 403 when the
 rules are not met, and answers at once whatever the command takes. It runs the command for the
 `ping` too (one deployment check that finds nothing new), which is what lets GitHub's test show
 green: a rule cannot answer success without running the command. The unit
@@ -197,7 +205,6 @@ is what makes `getenv` work in `hooks.json` (`| js` escapes the secret), and the
 from an environment file that only that user can read:
 
 ```sh
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin katiuskas-intranet-webhook
 sudo mkdir /etc/katiuskas-intranet-webhook
 sudo install -m 0644 deploy/webhook/hooks.json.example /etc/katiuskas-intranet-webhook/hooks.json
 sudo install -m 0640 -g katiuskas-intranet-webhook deploy/webhook/webhook.env.example \
@@ -208,7 +215,7 @@ sudo systemctl enable --now katiuskas-intranet-webhook.service
 ```
 
 (The unit expects the binary at `/usr/bin/webhook`, where the Debian package puts it; change
-`ExecStart` otherwise. It does not set `NoNewPrivileges`, because the hook runs `sudo`.)
+`ExecStart` otherwise.)
 
 The reverse proxy then sends that one path to it (for Caddy):
 
@@ -221,10 +228,10 @@ handle /hooks/katiuskas-intranet-deploy {
 *As a Go program*, the whole receiver is:
 
 ```go
-// Command kickdeploy receives GitHub's push webhook and asks for a deployment. Nothing
-// from the request goes into the command: deploy.sh looks at the repository by itself
-// and decides what to deploy, so the worst a forged request can do (and the signature
-// stops it) is make it look for nothing.
+// Command kickdeploy receives GitHub's push webhook and asks for a deployment by
+// creating a file. Nothing from the request goes into it: deploy.sh looks at the
+// repository by itself and decides what to deploy, so the worst a forged request can do
+// (and the signature stops it) is make it look for nothing.
 package main
 
 import (
@@ -236,7 +243,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -274,21 +280,14 @@ func main() {
 			w.WriteHeader(http.StatusNoContent) // a feature branch: nothing to deploy
 			return
 		}
-		// The first request that finds nothing running does the whole deployment, which
-		// takes much longer than GitHub waits for an answer: start it and don't wait.
-		cmd := exec.Command("sudo", "-n", "-u", "katiuskas",
-			"/opt/katiuskas-intranet-deploy/kick-deploy.sh")
-		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-		if err := cmd.Start(); err != nil {
-			log.Printf("starting the deployment: %v", err)
-			http.Error(w, "could not start the deployment", http.StatusInternalServerError)
+		// The path unit starts the deployment when this file exists, and the service removes
+		// it as it starts: a request that arrives during a run starts another one after it.
+		const pending = "/var/lib/katiuskas-intranet-deploy/queue/pending"
+		if err := os.WriteFile(pending, nil, 0o660); err != nil {
+			log.Printf("requesting the deployment: %v", err)
+			http.Error(w, "could not request the deployment", http.StatusInternalServerError)
 			return
 		}
-		go func() {
-			if err := cmd.Wait(); err != nil {
-				log.Printf("the deployment: %v", err)
-			}
-		}()
 		w.WriteHeader(http.StatusAccepted)
 	})
 	log.Fatal(http.ListenAndServe("127.0.0.1:9000", nil))
@@ -300,7 +299,8 @@ receiver answered, and *Redeliver* sends it again. What the answers mean, with t
 
 - `200` (`202` with the Go program, which answers `204` to a `ping` and to refs it ignores):
   accepted. A push to `main` or to a tag starts a deployment (`journalctl -u
-  katiuskas-intranet-deploy`, or the receiver's journal for what a run started by it prints).
+  katiuskas-intranet-deploy`; `systemctl status katiuskas-intranet-deploy.path` says whether the
+  path unit is waiting).
 - `403 Hook rules were not satisfied.`: the signature is right, but the event or the ref is not one
   that is acted on (another event, a branch other than `main`). If it happens for a real push to
   `main`, the webhook's content type is probably not `application/json`, so the receiver cannot

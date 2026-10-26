@@ -3,9 +3,10 @@
 # listens on the local port; the site's reverse proxy sends /hooks/katiuskas-intranet-deploy
 # to it over TLS. See docs/environments.md ("Pull-based deployment") for how to install it.
 #
-# It runs as a user of its own that owns nothing of the installations: the hook runs
-# `sudo -n -u katiuskas /opt/katiuskas-intranet-deploy/kick-deploy.sh`, and the sudoers rule
-# allows only that. sudo is setuid, so NoNewPrivileges must not be set here.
+# It runs as a user of its own that owns nothing of the installations and needs no
+# privileges: the hook only creates the file
+# /var/lib/katiuskas-intranet-deploy/queue/pending (the directory is group-writable for this
+# user), which makes katiuskas-intranet-deploy.path start the deployment.
 [Unit]
 Description=Katiuskas intranet: webhook receiver (asks for a deployment on a push)
 After=network.target
@@ -24,6 +25,7 @@ RestartSec=5
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

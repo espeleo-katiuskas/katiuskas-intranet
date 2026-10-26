@@ -94,9 +94,9 @@ sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Product
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
   each environment should run — the tip of `main` for testing, the highest semver tag for production —
-  and updates what differs. `scripts/kick-deploy.sh` (a request that
-  arrives while a deployment runs is queued, several merge into one rerun) is run by a
-  webhook receiver within seconds of a push and, as a safety net, by a timer every 15 minutes;
+  and updates what differs. it is started within seconds of a push (the webhook receiver creates a file that a systemd path unit
+  watches; a request that arrives while a deployment runs is queued, several merge into one rerun)
+  and, as a safety net, by a timer every 15 minutes; its output is in the unit's journal;
   **nothing in the request decides what is deployed** (the receiver only checks GitHub's signature). So merging into `main` is a live
   deploy, and migrations run against a copy of real data. `ci.yml` only tests. Roll production back by
   tagging a new, higher version.

@@ -1,0 +1,15 @@
+# Starts katiuskas-intranet-deploy.service whenever the file `pending` exists. The webhook
+# receiver creates it when GitHub reports a push; the service removes it as it starts.
+# If a push arrives while the service runs, the file exists again when it ends and
+# systemd starts it once more, so requests are queued (several are one rerun) and never
+# lost. The receiver needs no sudo and does not wait for anything: it only creates a
+# file. See docs/environments.md ("Pull-based deployment").
+[Unit]
+Description=Katiuskas intranet: a deployment has been requested
+
+[Path]
+PathExists=/var/lib/katiuskas-intranet-deploy/queue/pending
+Unit=katiuskas-intranet-deploy.service
+
+[Install]
+WantedBy=multi-user.target

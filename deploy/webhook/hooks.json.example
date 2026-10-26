@@ -1,13 +1,10 @@
 [
   {
     "id": "katiuskas-intranet-deploy",
-    "execute-command": "/usr/bin/sudo",
+    "execute-command": "/usr/bin/touch",
     "command-working-directory": "/",
     "pass-arguments-to-command": [
-      { "source": "string", "name": "-n" },
-      { "source": "string", "name": "-u" },
-      { "source": "string", "name": "katiuskas" },
-      { "source": "string", "name": "/opt/katiuskas-intranet-deploy/kick-deploy.sh" }
+      { "source": "string", "name": "/var/lib/katiuskas-intranet-deploy/queue/pending" }
     ],
     "trigger-rule-mismatch-http-response-code": 403,
     "trigger-rule": {
