@@ -39,8 +39,9 @@
 #
 # --config   reads the settings below from FILE (KEY=VALUE lines, like a systemd
 #            EnvironmentFile) instead of from the environment. The shell sources it,
-#            so it has to be trusted: it is refused if the user running the script
-#            can write to it (keep it owned by root, readable by that user).
+#            so it has to be trusted: it is refused unless the file and its directory
+#            are owned by root and not writable by group or others (readable by the
+#            user running the script is all it needs).
 # --dry-run  says what it would deploy and exits without touching anything.
 # --force    deploys even if that commit is what is already deployed, or failed
 #            recently.
@@ -105,9 +106,20 @@ while [[ ${1:-} == --* ]]; do
 done
 ((EUID != 0)) || die "run as the owner of the installations, not as root"
 
+# root_only <path>: owned by root and not writable by group or others.
+root_only() {
+  local owner mode
+  read -r owner mode < <(stat -c '%u %a' "$1")
+  [[ $owner == 0 ]] && (((8#$mode & 8#022) == 0))
+}
+
 if [[ -n $config ]]; then
   [[ -r $config ]] || die "cannot read $config"
-  [[ ! -w $config ]] || die "$config is writable by $(id -un), and it is sourced as shell code: make it owned by root"
+  config=$(readlink -f "$config") # a symlink is judged by where it ends up
+  # It is sourced as shell code: whoever can write the file, or replace it by writing to its
+  # directory, can run commands as this user.
+  root_only "$config" && root_only "$(dirname "$config")" ||
+    die "$config and its directory must be owned by root and not writable by group or others: it is sourced as shell code"
   set -a
   # shellcheck source=/dev/null
   . "$config"

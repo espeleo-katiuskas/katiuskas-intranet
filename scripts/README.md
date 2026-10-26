@@ -23,5 +23,5 @@ TESTING_SERVICE=<testing systemd unit> \
 
 scripts/generate-license-thumbnails.sh --dry-run
 
-scripts/deploy.sh --config /etc/katiuskas-deploy.env --dry-run
+scripts/deploy.sh --config /opt/katiuskas-deploy/deploy.env --dry-run
 ```

@@ -108,10 +108,12 @@ sudo install -m 0755 scripts/deploy.sh scripts/kick-deploy.sh scripts/copy-prod-
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
   /opt/katiuskas-deploy/after-production.sh
 
-# The settings: copy the example and edit REPO_URL, the directories and the units. deploy.sh
-# sources the file, so it is root's, and the katiuskas user can only read it.
+# The settings, next to the scripts: copy the example and edit REPO_URL, the directories and
+# the units. deploy.sh sources the file, so it and /opt/katiuskas-deploy are root's and the
+# katiuskas user can only read it (deploy.sh refuses it otherwise). It has no secrets: those
+# stay in each environment's api.env.
 sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
-  /etc/katiuskas-deploy.env
+  /opt/katiuskas-deploy/deploy.env
 
 sudo install -m 0644 deploy/systemd/katiuskas-deploy.service \
   deploy/systemd/katiuskas-deploy.timer /etc/systemd/system/
@@ -135,7 +137,9 @@ Before starting the timer, say what each environment is running now, so that the
 not deploy it again (and, for production, run the copy of its data into testing):
 
 ```sh
-run() { sudo -u katiuskas /opt/katiuskas-deploy/deploy.sh --config /etc/katiuskas-deploy.env "$@"; }
+run() {
+  sudo -u katiuskas /opt/katiuskas-deploy/deploy.sh --config /opt/katiuskas-deploy/deploy.env "$@"
+}
 run --dry-run      # says what it would deploy to each environment
 run --adopt        # "both are already running that"
 sudo systemctl enable --now katiuskas-deploy.timer
