@@ -1,0 +1,29 @@
+# The webhook receiver that asks for a deployment when GitHub reports a push: adnanh/webhook
+# (https://github.com/adnanh/webhook) running the one hook of hooks.json.example. It only
+# listens on the local port; the site's reverse proxy sends /hooks/katiuskas-intranet-deploy
+# to it over TLS. See docs/environments.md ("Pull-based deployment") for how to install it.
+#
+# It runs as a user of its own that owns nothing of the installations: the hook runs
+# `sudo -n -u katiuskas /opt/katiuskas-intranet-deploy/kick-deploy.sh`, and the sudoers rule
+# allows only that. sudo is setuid, so NoNewPrivileges must not be set here.
+[Unit]
+Description=Katiuskas intranet: webhook receiver (asks for a deployment on a push)
+After=network.target
+
+[Service]
+User=katiuskas-intranet-webhook
+Group=katiuskas-intranet-webhook
+# KATIUSKAS_INTRANET_WEBHOOK_SECRET, the webhook's secret (deploy/webhook/webhook.env.example).
+EnvironmentFile=/etc/katiuskas-intranet-webhook/webhook.env
+# -template is what lets hooks.json read the secret from the environment. Change the path of
+# the binary if webhook is not installed as /usr/bin/webhook (the Debian package puts it there).
+ExecStart=/usr/bin/webhook -hooks /etc/katiuskas-intranet-webhook/hooks.json -template \
+  -ip 127.0.0.1 -port 9000 -http-methods POST
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

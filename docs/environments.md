@@ -187,15 +187,27 @@ a Go program, for adapting to the host's own receiver.
 *With [adnanh/webhook](https://github.com/adnanh/webhook)*, using
 [`deploy/webhook/hooks.json.example`](../deploy/webhook/hooks.json.example) as `hooks.json`. It runs
 `sudo` with fixed arguments, checks the signature, the event and the ref, answers 403 when the
-rules are not met, and answers at once whatever the command takes. `-template` is what makes
-`getenv` work in the file (`| js` escapes the secret):
+rules are not met, and answers at once whatever the command takes. The unit
+[`katiuskas-intranet-webhook.service`](../deploy/webhook/katiuskas-intranet-webhook.service) runs
+it as the receiver's user, listening on `127.0.0.1:9000` and accepting only `POST`; `-template`
+is what makes `getenv` work in `hooks.json` (`| js` escapes the secret), and the secret comes
+from an environment file that only that user can read:
 
 ```sh
-KATIUSKAS_INTRANET_WEBHOOK_SECRET=<the secret> \
-  webhook -hooks /etc/webhook/hooks.json -template -ip 127.0.0.1 -port 9000
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin katiuskas-intranet-webhook
+sudo mkdir /etc/katiuskas-intranet-webhook
+sudo install -m 0644 deploy/webhook/hooks.json.example /etc/katiuskas-intranet-webhook/hooks.json
+sudo install -m 0640 -g katiuskas-intranet-webhook deploy/webhook/webhook.env.example \
+  /etc/katiuskas-intranet-webhook/webhook.env      # then put a long random secret in it
+sudo install -m 0644 deploy/webhook/katiuskas-intranet-webhook.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now katiuskas-intranet-webhook.service
 ```
 
-and the reverse proxy sends that one path to it (for Caddy):
+(The unit expects the binary at `/usr/bin/webhook`, where the Debian package puts it; change
+`ExecStart` otherwise. It does not set `NoNewPrivileges`, because the hook runs `sudo`.)
+
+The reverse proxy then sends that one path to it (for Caddy):
 
 ```
 handle /hooks/katiuskas-intranet-deploy {
