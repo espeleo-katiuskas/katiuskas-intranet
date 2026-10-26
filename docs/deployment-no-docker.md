@@ -22,7 +22,10 @@ own at `127.0.0.1:64710` — the same entry point the Docker guide uses.
 > and production side by side on one machine, each updated automatically (the host pulls `main`, and
 > semver tags, respectively). To install a second environment, repeat this guide with its own
 > directory, unit, database and ports — see [`environments.md`](environments.md) for what must be
-> different and what is shared.
+> different and what is shared. (On the club's host those are `/opt/katiuskas-intranet-stable` and
+> `/opt/katiuskas-intranet-testing`, with the units `katiuskas-intranet-stable.service` and
+> `katiuskas-intranet-testing.service`; this guide's `/opt/katiuskas-intranet` and `katiuskas-api`
+> are just generic names.)
 
 ## Overview of the target machine
 

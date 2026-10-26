@@ -14,6 +14,13 @@ The project runs in three environments:
 | Telegram bot | optional | its own | its own |
 | `LIBRARY_ROOT`, `USER_FILES_ROOT`, `ACTIVITY_RESOURCES_ROOT` | its own | shared with production | shared with testing |
 
+On the club's host the two environments are installed in `/opt/katiuskas-intranet-testing` and
+`/opt/katiuskas-intranet-stable` (the production one is called "stable" there), run as the
+systemd units `katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`, and
+the tool that updates them lives in `/opt/katiuskas-intranet-deploy` (the machine also has other
+things of the club, hence the names). The examples in this page use those names; the deployment
+guide uses generic ones (`/opt/katiuskas-intranet`, `katiuskas-api`).
+
 The local environment shares nothing with the other two; it is brought up as explained in the
 "Quick start" section of the [`README.md`](../README.md). Testing and production are installed
 following [`deployment-no-docker.md`](deployment-no-docker.md); the rest of this page covers
@@ -88,8 +95,8 @@ that need it, testing first. For each one it:
 A failure in one environment does not stop the other: the run goes on with it and exits with an
 error at the end (so the unit shows as failed). A commit that fails is not tried again for 15
 minutes (`RETRY_AFTER`), so a broken commit does not rebuild at every request; a new commit or
-`--force` tries immediately. The script says what it does in the unit's journal
-(`journalctl -u katiuskas-deploy`; what a webhook-started run prints goes to the receiver's).
+`--force` tries immediately. The script says what it does in the unit's journal (`journalctl -u
+katiuskas-intranet-deploy`; what a webhook-started run prints goes to the receiver's).
 
 **Setting it up** (once, on the club's host, as root):
 
@@ -98,39 +105,40 @@ minutes (`RETRY_AFTER`), so a broken commit does not rebuild at every request; a
 # least the version go.mod asks for). The build and the Go caches take a few hundred MB;
 # `STATE_DIR/cache` can be deleted whenever disk is needed (`chmod -R u+w` it first: Go makes
 # its module cache read-only), and the next run rebuilds it.
-sudo mkdir -p /opt/katiuskas-deploy /var/lib/katiuskas-deploy/queue
-sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-deploy
+sudo mkdir -p /opt/katiuskas-intranet-deploy /var/lib/katiuskas-intranet-deploy/queue
+sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-intranet-deploy
 
 # Root-owned copies, so that what the timer and the webhook run is not something the
 # unprivileged user (or the code it builds) can change. Install them again when these files change.
 sudo install -m 0755 scripts/deploy.sh scripts/kick-deploy.sh scripts/copy-prod-to-testing.sh \
-  /opt/katiuskas-deploy/
+  /opt/katiuskas-intranet-deploy/
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
-  /opt/katiuskas-deploy/after-production.sh
+  /opt/katiuskas-intranet-deploy/after-production.sh
 
 # The settings, next to the scripts: copy the example and edit REPO_URL, the directories and
-# the units. deploy.sh sources the file, so it and /opt/katiuskas-deploy are root's and the
+# the units. deploy.sh sources the file, so it and /opt/katiuskas-intranet-deploy are root's and the
 # katiuskas user can only read it (deploy.sh refuses it otherwise). It has no secrets: those
 # stay in each environment's api.env.
 sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
-  /opt/katiuskas-deploy/deploy.env
+  /opt/katiuskas-intranet-deploy/deploy.env
 
-sudo install -m 0644 deploy/systemd/katiuskas-deploy.service \
-  deploy/systemd/katiuskas-deploy.timer /etc/systemd/system/
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-deploy.service \
+  deploy/systemd/katiuskas-intranet-deploy.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
 The only privileged things are restarting the APIs' units and, for the copy of production's data
 into testing, stopping and starting testing's. A sudoers rule (`sudo visudo -f
-/etc/sudoers.d/katiuskas-deploy`) allows exactly that and nothing else. The webhook receiver runs
-as another user, `katiuskas-webhook`, which owns nothing of the installations and may only run
-`kick-deploy.sh` as `katiuskas`:
+/etc/sudoers.d/katiuskas-intranet-deploy`) allows exactly that and nothing else. The webhook
+receiver runs as another user, `katiuskas-intranet-webhook`, which owns nothing of the installations
+and may only run `kick-deploy.sh` as `katiuskas`:
 
 ```
-katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-api, \
-  /usr/bin/systemctl restart katiuskas-api-testing, \
-  /usr/bin/systemctl stop katiuskas-api-testing, /usr/bin/systemctl start katiuskas-api-testing
-katiuskas-webhook ALL=(katiuskas) NOPASSWD: /opt/katiuskas-deploy/kick-deploy.sh
+katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-intranet-stable.service, \
+  /usr/bin/systemctl restart katiuskas-intranet-testing.service, \
+  /usr/bin/systemctl stop katiuskas-intranet-testing.service, \
+  /usr/bin/systemctl start katiuskas-intranet-testing.service
+katiuskas-intranet-webhook ALL=(katiuskas) NOPASSWD: /opt/katiuskas-intranet-deploy/kick-deploy.sh
 ```
 
 Before starting the timer, say what each environment is running now, so that the first run does
@@ -138,11 +146,12 @@ not deploy it again (and, for production, run the copy of its data into testing)
 
 ```sh
 run() {
-  sudo -u katiuskas /opt/katiuskas-deploy/deploy.sh --config /opt/katiuskas-deploy/deploy.env "$@"
+  sudo -u katiuskas /opt/katiuskas-intranet-deploy/deploy.sh \
+    --config /opt/katiuskas-intranet-deploy/deploy.env "$@"
 }
 run --dry-run      # says what it would deploy to each environment
 run --adopt        # "both are already running that"
-sudo systemctl enable --now katiuskas-deploy.timer
+sudo systemctl enable --now katiuskas-intranet-deploy.timer
 ```
 
 `--adopt` records the repository's current answer as deployed, so use it only if the environments
@@ -156,19 +165,20 @@ site's reverse proxy over TLS. What it has to do is little, and nothing in the r
 in the command:
 
 - accept `POST`s of GitHub's push events at a path of its own, for example
-  `/hooks/katiuskas-deploy`;
+  `/hooks/katiuskas-intranet-deploy`;
 - check the signature: the `X-Hub-Signature-256` header is `sha256=` followed by the HMAC-SHA256
   of the raw body with the webhook's secret, compared in constant time; if it does not match,
   refuse and do nothing;
 - ignore what is not worth a run: events other than `push` (GitHub sends a `ping` when the webhook
   is created) and refs other than `main` and the tags;
-- start `sudo -n -u katiuskas /opt/katiuskas-deploy/kick-deploy.sh` and answer right away,
+- start `sudo -n -u katiuskas /opt/katiuskas-intranet-deploy/kick-deploy.sh` and answer right away,
   without waiting for it to finish.
 
 In GitHub, the repository's webhook is: payload URL `https://<the host's
-domain>/hooks/katiuskas-deploy`, content type `application/json` (the other one wraps the payload in
-a form field), a long random secret, SSL verification on, and only the push event. The secret is
-kept out of the program: it reads it from the environment, from a file only the receiver can read.
+domain>/hooks/katiuskas-intranet-deploy`, content type `application/json` (the other one wraps the
+payload in a form field), a long random secret, SSL verification on, and only the push event. The
+secret is kept out of the program: it reads it from the environment, from a file only the receiver
+can read.
 
 Two receivers that do exactly this follow, and both have been tried against signed and forged
 requests, other events and other branches. The first needs no code; the second is the same logic as
@@ -181,14 +191,14 @@ rules are not met, and answers at once whatever the command takes. `-template` i
 `getenv` work in the file (`| js` escapes the secret):
 
 ```sh
-KATIUSKAS_WEBHOOK_SECRET=<the secret> \
+KATIUSKAS_INTRANET_WEBHOOK_SECRET=<the secret> \
   webhook -hooks /etc/webhook/hooks.json -template -ip 127.0.0.1 -port 9000
 ```
 
 and the reverse proxy sends that one path to it (for Caddy):
 
 ```
-handle /hooks/katiuskas-deploy {
+handle /hooks/katiuskas-intranet-deploy {
 	reverse_proxy 127.0.0.1:9000
 }
 ```
@@ -216,11 +226,12 @@ import (
 )
 
 func main() {
-	secret := []byte(os.Getenv("KATIUSKAS_WEBHOOK_SECRET"))
+	secret := []byte(os.Getenv("KATIUSKAS_INTRANET_WEBHOOK_SECRET"))
 	if len(secret) == 0 {
-		log.Fatal("set KATIUSKAS_WEBHOOK_SECRET to the webhook's secret")
+		log.Fatal("set KATIUSKAS_INTRANET_WEBHOOK_SECRET to the webhook's secret")
 	}
-	http.HandleFunc("POST /hooks/katiuskas-deploy", func(w http.ResponseWriter, r *http.Request) {
+	const path = "POST /hooks/katiuskas-intranet-deploy"
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err != nil {
 			http.Error(w, "unreadable body", http.StatusBadRequest)
@@ -250,7 +261,8 @@ func main() {
 		}
 		// The first request that finds nothing running does the whole deployment, which
 		// takes much longer than GitHub waits for an answer: start it and don't wait.
-		cmd := exec.Command("sudo", "-n", "-u", "katiuskas", "/opt/katiuskas-deploy/kick-deploy.sh")
+		cmd := exec.Command("sudo", "-n", "-u", "katiuskas",
+			"/opt/katiuskas-intranet-deploy/kick-deploy.sh")
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Start(); err != nil {
 			log.Printf("starting the deployment: %v", err)

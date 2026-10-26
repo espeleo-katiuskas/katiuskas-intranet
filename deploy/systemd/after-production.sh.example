@@ -1,11 +1,11 @@
 #!/bin/sh
-# /opt/katiuskas-deploy/after-production.sh — called by deploy.sh after it updates
+# /opt/katiuskas-intranet-deploy/after-production.sh — called by deploy.sh after it updates
 # an environment, with the environment, the commit and the ref as arguments.
 # Production's update refreshes testing's data from production's.
 [ "$1" = production ] || exit 0
 
 # The copy script stops and starts testing's unit with sudo (see the sudoers
 # rule in docs/environments.md); --yes because nobody is there to confirm it.
-SYSTEMCTL="sudo -n systemctl" TESTING_SERVICE=katiuskas-api-testing \
-  exec /opt/katiuskas-deploy/copy-prod-to-testing.sh --yes \
-    /opt/katiuskas-intranet/api.env /opt/katiuskas-intranet-testing/api.env
+SYSTEMCTL="sudo -n systemctl" TESTING_SERVICE=katiuskas-intranet-testing.service \
+  exec /opt/katiuskas-intranet-deploy/copy-prod-to-testing.sh --yes \
+    /opt/katiuskas-intranet-stable/api.env /opt/katiuskas-intranet-testing/api.env

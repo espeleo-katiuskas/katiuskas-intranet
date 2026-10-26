@@ -1,13 +1,13 @@
 [
   {
-    "id": "katiuskas-deploy",
+    "id": "katiuskas-intranet-deploy",
     "execute-command": "/usr/bin/sudo",
     "command-working-directory": "/",
     "pass-arguments-to-command": [
       { "source": "string", "name": "-n" },
       { "source": "string", "name": "-u" },
       { "source": "string", "name": "katiuskas" },
-      { "source": "string", "name": "/opt/katiuskas-deploy/kick-deploy.sh" }
+      { "source": "string", "name": "/opt/katiuskas-intranet-deploy/kick-deploy.sh" }
     ],
     "trigger-rule-mismatch-http-response-code": 403,
     "trigger-rule": {
@@ -15,7 +15,7 @@
         {
           "match": {
             "type": "payload-hmac-sha256",
-            "secret": "{{ getenv "KATIUSKAS_WEBHOOK_SECRET" | js }}",
+            "secret": "{{ getenv "KATIUSKAS_INTRANET_WEBHOOK_SECRET" | js }}",
             "parameter": { "source": "header", "name": "X-Hub-Signature-256" }
           }
         },

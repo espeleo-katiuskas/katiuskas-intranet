@@ -22,15 +22,15 @@
 # Meant to be installed, owned by root and not writable by anybody else, next to deploy.sh
 # (docs/environments.md). The paths can be changed with these variables, mostly for trying
 # it out:
-#   DEPLOY_DIR     where deploy.sh is (default: /opt/katiuskas-deploy)
-#   DEPLOY_CONFIG  deploy.sh's settings file (default: /opt/katiuskas-deploy/deploy.env)
+#   DEPLOY_DIR     where deploy.sh is (default: /opt/katiuskas-intranet-deploy)
+#   DEPLOY_CONFIG  deploy.sh's settings file (default: /opt/katiuskas-intranet-deploy/deploy.env)
 #   QUEUE_DIR      where the lock and the flag are kept, writable by every user that may
-#                  make a request (default: /var/lib/katiuskas-deploy/queue)
+#                  make a request (default: /var/lib/katiuskas-intranet-deploy/queue)
 set -u
 
-DEPLOY_DIR=${DEPLOY_DIR:-/opt/katiuskas-deploy}
+DEPLOY_DIR=${DEPLOY_DIR:-/opt/katiuskas-intranet-deploy}
 DEPLOY_CONFIG=${DEPLOY_CONFIG:-$DEPLOY_DIR/deploy.env}
-QUEUE_DIR=${QUEUE_DIR:-/var/lib/katiuskas-deploy/queue}
+QUEUE_DIR=${QUEUE_DIR:-/var/lib/katiuskas-intranet-deploy/queue}
 job=("$DEPLOY_DIR/deploy.sh" --config "$DEPLOY_CONFIG")
 
 lock_file=$QUEUE_DIR/run.lock

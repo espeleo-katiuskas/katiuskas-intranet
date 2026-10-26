@@ -86,8 +86,10 @@ Dropping files in (no rebuild or restart; both directories are gitignored): club
 
 Local Docker stack (where changes are tried first), **testing** (`testing.katiuskas.es`) and
 **production** (`intranet.katiuskas.es`): the last two are systemd installations side by side on
-the club's host, each with its own database, directory and Telegram bot, sharing `LIBRARY_ROOT`,
-`USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Production deploys without Docker
+the club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stable`, units
+`katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool
+is in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
+sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Production deploys without Docker
 (`docs/deployment-no-docker.md`).
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
