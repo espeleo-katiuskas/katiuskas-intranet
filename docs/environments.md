@@ -169,8 +169,9 @@ in the command:
 - check the signature: the `X-Hub-Signature-256` header is `sha256=` followed by the HMAC-SHA256
   of the raw body with the webhook's secret, compared in constant time; if it does not match,
   refuse and do nothing;
-- ignore what is not worth a run: events other than `push` (GitHub sends a `ping` when the webhook
-  is created) and refs other than `main` and the tags;
+- answer success to the `ping` that GitHub sends when the webhook is created or tested (so the test
+  shows green), and ignore what is not worth a run: other events, and pushes to refs other than
+  `main` and the tags;
 - start `sudo -n -u katiuskas /opt/katiuskas-intranet-deploy/kick-deploy.sh` and answer right away,
   without waiting for it to finish.
 
@@ -187,7 +188,9 @@ a Go program, for adapting to the host's own receiver.
 *With [adnanh/webhook](https://github.com/adnanh/webhook)*, using
 [`deploy/webhook/hooks.json.example`](../deploy/webhook/hooks.json.example) as `hooks.json`. It runs
 `sudo` with fixed arguments, checks the signature, the event and the ref, answers 403 when the
-rules are not met, and answers at once whatever the command takes. The unit
+rules are not met, and answers at once whatever the command takes. It runs the command for the
+`ping` too (one deployment check that finds nothing new), which is what lets GitHub's test show
+green: a rule cannot answer success without running the command. The unit
 [`katiuskas-intranet-webhook.service`](../deploy/webhook/katiuskas-intranet-webhook.service) runs
 it as the receiver's user, listening on `127.0.0.1:9000` and accepting only `POST`; `-template`
 is what makes `getenv` work in `hooks.json` (`| js` escapes the secret), and the secret comes
@@ -291,6 +294,20 @@ func main() {
 	log.Fatal(http.ListenAndServe("127.0.0.1:9000", nil))
 }
 ```
+
+**Trying it.** In GitHub, the webhook's *Recent Deliveries* tab shows each delivery and what the
+receiver answered, and *Redeliver* sends it again. What the answers mean, with the adnanh receiver:
+
+- `200` (`202` with the Go program, which answers `204` to a `ping` and to refs it ignores):
+  accepted. A push to `main` or to a tag starts a deployment (`journalctl -u
+  katiuskas-intranet-deploy`, or the receiver's journal for what a run started by it prints).
+- `403 Hook rules were not satisfied.`: the signature is right, but the event or the ref is not one
+  that is acted on (another event, a branch other than `main`). If it happens for a real push to
+  `main`, the webhook's content type is probably not `application/json`, so the receiver cannot
+  find the `ref` in the payload.
+- `500 Error occurred while evaluating hook rules.`: the signature does not match: the secret in
+  GitHub is not the one in `webhook.env` (the journal says `invalid payload signatures`), or the
+  environment file was not read.
 
 What to protect on the repository's side, because it is now what decides what runs:
 

@@ -20,18 +20,33 @@
           }
         },
         {
-          "match": {
-            "type": "value",
-            "value": "push",
-            "parameter": { "source": "header", "name": "X-GitHub-Event" }
-          }
-        },
-        {
-          "match": {
-            "type": "regex",
-            "regex": "^refs/(heads/main|tags/.+)$",
-            "parameter": { "source": "payload", "name": "ref" }
-          }
+          "or": [
+            {
+              "match": {
+                "type": "value",
+                "value": "ping",
+                "parameter": { "source": "header", "name": "X-GitHub-Event" }
+              }
+            },
+            {
+              "and": [
+                {
+                  "match": {
+                    "type": "value",
+                    "value": "push",
+                    "parameter": { "source": "header", "name": "X-GitHub-Event" }
+                  }
+                },
+                {
+                  "match": {
+                    "type": "regex",
+                    "regex": "^refs/(heads/main|tags/.+)$",
+                    "parameter": { "source": "payload", "name": "ref" }
+                  }
+                }
+              ]
+            }
+          ]
         }
       ]
     }
