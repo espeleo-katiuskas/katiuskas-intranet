@@ -59,9 +59,9 @@ start a run that finds nothing new, which costs one `git ls-remote`; the receive
 GitHub's signature, so that not just anybody can make the host query GitHub over and over. There
 is no CI runner with access to the host either.
 
-**Requests are queued, not lost.** `kick-deploy.sh` goes through
-[`scripts/run-queued.sh`](../scripts/run-queued.sh), which makes every request wait for the one
-that is running and merges the ones that arrive meanwhile into a single rerun: a push that lands
+**Requests are queued, not lost.** [`scripts/kick-deploy.sh`](../scripts/kick-deploy.sh) makes
+every request wait for the deployment that is running and merges the ones that arrive meanwhile
+into a single rerun: a push that lands
 while a deployment is building is deployed right after it, and ten pushes in a row cost one more
 deployment, not ten. The request that finds nothing running does the work (and gets its output and
 exit status); the others return at once. Because of that, the webhook receiver must not wait for
@@ -103,8 +103,8 @@ sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-deploy
 
 # Root-owned copies, so that what the timer and the webhook run is not something the
 # unprivileged user (or the code it builds) can change. Install them again when these files change.
-sudo install -m 0755 scripts/deploy.sh scripts/run-queued.sh scripts/kick-deploy.sh \
-  scripts/copy-prod-to-testing.sh /opt/katiuskas-deploy/
+sudo install -m 0755 scripts/deploy.sh scripts/kick-deploy.sh scripts/copy-prod-to-testing.sh \
+  /opt/katiuskas-deploy/
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
   /opt/katiuskas-deploy/after-production.sh
 

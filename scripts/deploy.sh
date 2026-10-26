@@ -5,9 +5,8 @@
 # scripts/kick-deploy.sh: by a timer every few minutes and by the webhook receiver
 # whenever GitHub reports a push, so that an update does not wait for the timer.
 # Running it more often than needed costs nothing, because what it does never
-# depends on who ran it; and scripts/run-queued.sh, which kick-deploy.sh goes
-# through, makes a request that arrives while it is running wait for it to finish,
-# and merges several into one.
+# depends on who ran it; and kick-deploy.sh makes a request that arrives while it
+# is running wait for it to finish, and merges several into one.
 #
 # Nothing is ever pushed to the host: the webhook only asks the host to look, and
 # there is no CI runner with access to it. The host looks at the repository by itself
