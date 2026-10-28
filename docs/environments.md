@@ -181,11 +181,11 @@ It runs the command for a push to any branch, not just `main` and the tags: a pu
 feature branch makes one deployment check that finds nothing new (one `git ls-remote`), which is
 harmless.
 
-The program is built on the host, from a commit that has been read (`go install` needs the Go
-that the host already has for `deploy.sh`; `go.mod` of pushhook asks for a recent one):
+The program is built on the host, from a release that has been read (`v0.0.1`; `go install` needs
+the Go that the host already has for `deploy.sh`; `go.mod` of pushhook asks for a recent one):
 
 ```sh
-GOBIN="$HOME/pushhook-build" go install github.com/cespedes/pushhook@<commit>
+GOBIN="$HOME/pushhook-build" go install github.com/cespedes/pushhook@v0.0.1
 sudo install -m 0755 "$HOME/pushhook-build/pushhook" /usr/local/bin/pushhook
 ```
 
