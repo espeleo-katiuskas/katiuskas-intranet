@@ -1,0 +1,18 @@
+# /etc/katiuskas-intranet-webhook/pushhook.conf — the configuration of pushhook
+# (github.com/cespedes/pushhook), the webhook receiver. It holds the webhook's secret, so it
+# is owned by root and readable only by the receiver's user:
+#   sudo install -m 0640 -g katiuskas-intranet-webhook pushhook.conf.example \
+#     /etc/katiuskas-intranet-webhook/pushhook.conf
+# and then edit it: put a long random secret (for example
+# `openssl rand -hex 32`) that is also put in the webhook's settings in GitHub.
+#
+# Only the loopback address: the site's reverse proxy forwards the webhook's path to it.
+listen 127.0.0.1:9000
+
+# github OWNER/NAME SECRET COMMAND [ARGS...]
+#
+# On a push whose signature is valid for this repository, pushhook runs the command (no shell,
+# arguments split on spaces) and answers 202 right away. The command only creates the file
+# that makes katiuskas-intranet-deploy.path start a deployment; deploy.sh looks at the
+# repository by itself, so nothing from the request ends up in it.
+github espeleo-katiuskas/katiuskas-intranet replace-me-with-a-long-random-hex-string /usr/bin/touch /var/lib/katiuskas-intranet-deploy/queue/pending

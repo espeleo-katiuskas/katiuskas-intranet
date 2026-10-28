@@ -123,7 +123,7 @@ sudo install -m 0755 scripts/deploy.sh scripts/copy-prod-to-testing.sh \
 sudo install -m 0755 deploy/systemd/after-production.sh.example \
   /opt/katiuskas-intranet-deploy/after-production.sh
 
-# The settings, next to the scripts: copy the example and edit REPO_URL, the directories and
+# The settings, next to the scripts: copy the example and check REPO_URL, the directories and
 # the units. deploy.sh sources the file, so it and /opt/katiuskas-intranet-deploy are root's and the
 # katiuskas user can only read it (deploy.sh refuses it otherwise). It has no secrets: those
 # stay in each environment's api.env.
@@ -167,57 +167,49 @@ really run that; to adopt only one of them, give its name (`run --adopt producti
 environment runs something else, skip it for that one and let the first run deploy it. A host with
 only one of the environments just leaves the other's `..._INSTALL_DIR` out of the settings.
 
-**The webhook receiver.** It is a small program of the administrator's, outside this repository
-(the host already has one for its other projects), that listens on a local port behind the
-site's reverse proxy over TLS. What it has to do is little, and nothing in the request may end up
-in the command:
+**The webhook receiver.** It is [pushhook](https://github.com/cespedes/pushhook), a small program
+(Go standard library only, about 900 lines with its tests) that listens on a local port behind the
+site's reverse proxy, which terminates TLS. It verifies GitHub's HMAC signature with the secret
+of each configured repository, so a request signed for another repository is refused, and runs
+that repository's command, directly (no shell), only for a push; a `ping` is answered `200 pong`
+without running anything, so GitHub's test shows green. It answers `202` at once and runs the
+command in the background, one run at a time per repository, and logs one line per request, with
+the reason when it rejects one. Its command here only creates the file `queue/pending`
+(see above), so nothing in the request ends up in anything that runs.
 
-- accept `POST`s of GitHub's push events at a path of its own, for example
-  `/hooks/katiuskas-intranet-deploy`;
-- check the signature: the `X-Hub-Signature-256` header is `sha256=` followed by the HMAC-SHA256
-  of the raw body with the webhook's secret, compared in constant time; if it does not match,
-  refuse and do nothing;
-- answer success to the `ping` that GitHub sends when the webhook is created or tested (so the test
-  shows green), and ignore what is not worth a run: other events, and pushes to refs other than
-  `main` and the tags;
-- create the file `/var/lib/katiuskas-intranet-deploy/queue/pending` (empty; it may already
-  exist) and answer right away. That is all: the path unit does the rest.
+It runs the command for a push to any branch, not just `main` and the tags: a push to a
+feature branch makes one deployment check that finds nothing new (one `git ls-remote`), which is
+harmless.
 
-In GitHub, the repository's webhook is: payload URL `https://<the host's
-domain>/hooks/katiuskas-intranet-deploy`, content type `application/json` (the other one wraps the
-payload in a form field), a long random secret, SSL verification on, and only the push event. The
-secret is kept out of the program: it reads it from the environment, from a file only the receiver
-can read.
+The program is built on the host, from a commit that has been read (`go install` needs the Go
+that the host already has for `deploy.sh`; `go.mod` of pushhook asks for a recent one):
 
-Two receivers that do exactly this follow, and both have been tried against signed and forged
-requests, other events and other branches. The first needs no code; the second is the same logic as
-a Go program, for adapting to the host's own receiver.
+```sh
+GOBIN="$HOME/pushhook-build" go install github.com/cespedes/pushhook@<commit>
+sudo install -m 0755 "$HOME/pushhook-build/pushhook" /usr/local/bin/pushhook
+```
 
-*With [adnanh/webhook](https://github.com/adnanh/webhook)*, using
-[`deploy/webhook/hooks.json.example`](../deploy/webhook/hooks.json.example) as `hooks.json`. It runs
-`touch` with a fixed argument, checks the signature, the event and the ref, answers 403 when the
-rules are not met, and answers at once whatever the command takes. It runs the command for the
-`ping` too (one deployment check that finds nothing new), which is what lets GitHub's test show
-green: a rule cannot answer success without running the command. The unit
+Its configuration is
+[`deploy/webhook/pushhook.conf.example`](../deploy/webhook/pushhook.conf.example): the address
+to listen on, and one line with the GitHub repository's name, the webhook's secret and the command,
+`/usr/bin/touch /var/lib/katiuskas-intranet-deploy/queue/pending`. The file holds the secret, so
+only the receiver's user can read it. The unit
 [`katiuskas-intranet-webhook.service`](../deploy/webhook/katiuskas-intranet-webhook.service) runs
-it as the receiver's user, listening on `127.0.0.1:9000` and accepting only `POST`; `-template`
-is what makes `getenv` work in `hooks.json` (`| js` escapes the secret), and the secret comes
-from an environment file that only that user can read:
+it as that user, with nothing writable but the queue directory:
 
 ```sh
 sudo mkdir /etc/katiuskas-intranet-webhook
-sudo install -m 0644 deploy/webhook/hooks.json.example /etc/katiuskas-intranet-webhook/hooks.json
-sudo install -m 0640 -g katiuskas-intranet-webhook deploy/webhook/webhook.env.example \
-  /etc/katiuskas-intranet-webhook/webhook.env      # then put a long random secret in it
+sudo install -m 0640 -g katiuskas-intranet-webhook deploy/webhook/pushhook.conf.example \
+  /etc/katiuskas-intranet-webhook/pushhook.conf     # then put a secret in it
 sudo install -m 0644 deploy/webhook/katiuskas-intranet-webhook.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now katiuskas-intranet-webhook.service
 ```
 
-(The unit expects the binary at `/usr/bin/webhook`, where the Debian package puts it; change
-`ExecStart` otherwise.)
-
-The reverse proxy then sends that one path to it (for Caddy):
+(The user `katiuskas-intranet-webhook` is the one created in the setup above, for the queue
+directory.) The reverse
+proxy then sends that one path to it (for Caddy, which adds the `X-Forwarded-For` header that
+pushhook logs the client's address from):
 
 ```
 handle /hooks/katiuskas-intranet-deploy {
@@ -225,89 +217,43 @@ handle /hooks/katiuskas-intranet-deploy {
 }
 ```
 
-*As a Go program*, the whole receiver is:
+In GitHub, the repository's webhook is: payload URL `https://<the host's
+domain>/hooks/katiuskas-intranet-deploy`, content type `application/json`, the same secret as in
+`pushhook.conf`, SSL verification on, and only the push event. Use a long random secret, which
+only the receiver's user and GitHub know.
 
-```go
-// Command kickdeploy receives GitHub's push webhook and asks for a deployment by
-// creating a file. Nothing from the request goes into it: deploy.sh looks at the
-// repository by itself and decides what to deploy, so the worst a forged request can do
-// (and the signature stops it) is make it look for nothing.
-package main
+*Other receivers.* pushhook is what the club's host runs, but nothing depends on it: what the
+deployment needs from a receiver is only to
 
-import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-)
+- accept `POST`s of GitHub's push events and check the signature: the `X-Hub-Signature-256`
+  header is `sha256=` followed by the HMAC-SHA256 of the raw body with the webhook's secret,
+  compared in constant time; if it does not match, refuse and do nothing;
+- answer success to GitHub's `ping`, and optionally ignore what is not worth a run (other events,
+  refs other than `main` and the tags);
+- create the empty file `/var/lib/katiuskas-intranet-deploy/queue/pending`, as a user that can
+  write in that directory, and answer right away without waiting for anything.
 
-func main() {
-	secret := []byte(os.Getenv("KATIUSKAS_INTRANET_WEBHOOK_SECRET"))
-	if len(secret) == 0 {
-		log.Fatal("set KATIUSKAS_INTRANET_WEBHOOK_SECRET to the webhook's secret")
-	}
-	const path = "POST /hooks/katiuskas-intranet-deploy"
-	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-		if err != nil {
-			http.Error(w, "unreadable body", http.StatusBadRequest)
-			return
-		}
-		mac := hmac.New(sha256.New, secret)
-		mac.Write(body)
-		want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-		if !hmac.Equal([]byte(want), []byte(r.Header.Get("X-Hub-Signature-256"))) {
-			http.Error(w, "bad signature", http.StatusForbidden)
-			return
-		}
-		if r.Header.Get("X-GitHub-Event") != "push" { // "ping" when the webhook is created
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		var push struct {
-			Ref string `json:"ref"`
-		}
-		if err := json.Unmarshal(body, &push); err != nil {
-			http.Error(w, "not a push payload", http.StatusBadRequest)
-			return
-		}
-		if push.Ref != "refs/heads/main" && !strings.HasPrefix(push.Ref, "refs/tags/") {
-			w.WriteHeader(http.StatusNoContent) // a feature branch: nothing to deploy
-			return
-		}
-		// The path unit starts the deployment when this file exists, and the service removes
-		// it as it starts: a request that arrives during a run starts another one after it.
-		const pending = "/var/lib/katiuskas-intranet-deploy/queue/pending"
-		if err := os.WriteFile(pending, nil, 0o660); err != nil {
-			log.Printf("requesting the deployment: %v", err)
-			http.Error(w, "could not request the deployment", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-	})
-	log.Fatal(http.ListenAndServe("127.0.0.1:9000", nil))
-}
-```
+[adnanh/webhook](https://github.com/adnanh/webhook) can do that with one hook whose command is
+`/usr/bin/touch` with that path as its only argument, and trigger rules that match the
+`payload-hmac-sha256` of the header above, the event (`ping`, or `push` with a `ref` that matches
+`^refs/(heads/main|tags/.+)$`), reading the secret from the environment with `-template`
+and answering `403` for a request that does not match the rules (a rule cannot answer success to a
+`ping` without running the command, which here only costs one deployment check). A receiver of
+one's own is about forty lines in any language: verify the HMAC, create the file.
 
 **Trying it.** In GitHub, the webhook's *Recent Deliveries* tab shows each delivery and what the
-receiver answered, and *Redeliver* sends it again. What the answers mean, with the adnanh receiver:
+receiver answered, and *Redeliver* sends it again. What the answers mean, with pushhook (the
+journal of the receiver, `journalctl -u katiuskas-intranet-webhook`, has one line for each one,
+with the reason when it was refused):
 
-- `200` (`202` with the Go program, which answers `204` to a `ping` and to refs it ignores):
-  accepted. A push to `main` or to a tag starts a deployment (`journalctl -u
-  katiuskas-intranet-deploy`; `systemctl status katiuskas-intranet-deploy.path` says whether the
-  path unit is waiting).
-- `403 Hook rules were not satisfied.`: the signature is right, but the event or the ref is not one
-  that is acted on (another event, a branch other than `main`). If it happens for a real push to
-  `main`, the webhook's content type is probably not `application/json`, so the receiver cannot
-  find the `ref` in the payload.
-- `500 Error occurred while evaluating hook rules.`: the signature does not match: the secret in
-  GitHub is not the one in `webhook.env` (the journal says `invalid payload signatures`), or the
-  environment file was not read.
+- `200 pong`: the answer to GitHub's `ping`; the signature is right and nothing was run.
+- `202 accepted`: a push, with a valid signature, to the configured repository. The file was
+  created and the deployment starts (`journalctl -u katiuskas-intranet-deploy`;
+  `systemctl status katiuskas-intranet-deploy.path` says whether the path unit is waiting).
+- `200 ignored`: a validly signed event that is not a push.
+- `401 invalid signature`: the secret in GitHub is not the one in `pushhook.conf`, the
+  repository's name is not the configured one (`unconfigured github repo "..."` in the journal),
+  or the content type is not `application/json`.
 
 What to protect on the repository's side, because it is now what decides what runs:
 
