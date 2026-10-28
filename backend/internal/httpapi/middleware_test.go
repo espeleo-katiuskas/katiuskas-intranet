@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestRequestLoggerPassesThroughStatusAndSetsRequestID(t *testing.T) {
+func TestRequestLoggerPassesThroughStatus(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
@@ -20,9 +20,6 @@ func TestRequestLoggerPassesThroughStatusAndSetsRequestID(t *testing.T) {
 
 	if rec.Code != http.StatusTeapot {
 		t.Errorf("expected the wrapped handler's status to pass through, got %d", rec.Code)
-	}
-	if rec.Header().Get("X-Request-Id") == "" {
-		t.Errorf("expected an X-Request-Id header to be set")
 	}
 }
 
@@ -112,7 +109,7 @@ func TestRecovererLeavesNormalResponsesAlone(t *testing.T) {
 // TestRequestLoggerStillLogsAPanickingRequest covers NewRouter's own
 // middleware order (RequestLogger(Recoverer(mux)), see server.go):
 // Recoverer has to sit *inside* RequestLogger for a panic to still
-// produce RequestLogger's full method/path/status/duration/request_id
+// produce RequestLogger's full method/path/status/duration
 // line — the other way around, the panic would unwind straight past
 // the code that logs it, leaving only Recoverer's own bare "panic
 // recovered" line with none of that request context at all.

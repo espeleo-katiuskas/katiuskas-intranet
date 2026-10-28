@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,8 +46,6 @@ func SetRequestUserID(ctx context.Context, userID int64) {
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		requestID := newRequestID()
-		w.Header().Set("X-Request-Id", requestID)
 
 		fields := &requestLogFields{}
 		r = r.WithContext(context.WithValue(r.Context(), logFieldsKey{}, fields))
@@ -57,7 +53,7 @@ func RequestLogger(next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 
-		attrs := []any{"request_id", requestID}
+		var attrs []any
 		if fields.UserID != nil {
 			attrs = append(attrs, "user_id", *fields.UserID)
 		}
@@ -78,10 +74,4 @@ func Recoverer(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
-}
-
-func newRequestID() string {
-	buf := make([]byte, 8)
-	_, _ = rand.Read(buf)
-	return hex.EncodeToString(buf)
 }

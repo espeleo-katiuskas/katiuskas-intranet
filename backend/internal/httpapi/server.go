@@ -51,7 +51,7 @@ func NewRouter(routes Routes) http.Handler {
 	// outer one: RequestLogger's own next.ServeHTTP call has no
 	// defer/recover of its own, so a panic reaching it from further in
 	// unwinds straight past the code that would otherwise log the
-	// method/path/status/duration/request_id line — Recoverer(next)
+	// method/path/status/duration line — Recoverer(next)
 	// wrapping RequestLogger(mux) meant a panic never gave RequestLogger
 	// a chance to log anything at all, leaving only Recoverer's own bare
 	// "panic recovered" line (message and stack, nothing else). With

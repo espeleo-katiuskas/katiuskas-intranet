@@ -117,7 +117,7 @@ commands use, one line per record, `2026-10-28 16:10:32 INFO  message key=value 
 with spaces is quoted, and one that spans several lines, such as a panic's stack or the body of
 the email that is logged when no SMTP is configured, is written below the line, indented, under
 its key). Under systemd (`JOURNAL_STREAM` set) the time is left out, since the journal stamps
-every line. The request line reads `GET /api/v1/users 200 12ms request_id=... user_id=3`.
+every line. The request line reads `GET /api/v1/users 200 12ms user_id=3`.
 
 `httpapi.RequestLogger`'s per-request log line includes `user_id` once `auth.RequireAuth`
 resolves one. That takes a small mutable box placed in the request context before

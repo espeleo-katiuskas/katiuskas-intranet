@@ -79,12 +79,12 @@ func TestLogHandlerWithAttrsCarriesAttrsIntoForwardedMessages(t *testing.T) {
 	var out bytes.Buffer
 	sender := &fakeSender{}
 	handler := NewLogHandler(slog.NewTextHandler(&out, nil), sender, slog.LevelError)
-	logger := slog.New(handler).With("request_id", "abc123")
+	logger := slog.New(handler).With("component", "abc123")
 
 	logger.Error("boom")
 
 	msg := sender.waitForMessage(t)
-	if !strings.Contains(msg, "request_id: abc123") {
+	if !strings.Contains(msg, "component: abc123") {
 		t.Errorf("forwarded message missing attrs from With(): %q", msg)
 	}
 }
