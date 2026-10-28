@@ -22,11 +22,13 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 func main() {
+	slog.SetDefault(logging.New())
 	ctx := context.Background()
 
 	databaseURL := os.Getenv("DATABASE_URL")

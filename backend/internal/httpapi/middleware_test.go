@@ -132,10 +132,7 @@ func TestRequestLoggerStillLogsAPanickingRequest(t *testing.T) {
 	if !strings.Contains(logOutput, `msg="panic recovered"`) {
 		t.Errorf("expected Recoverer's own panic log line, got %q", logOutput)
 	}
-	if !strings.Contains(logOutput, `msg=request`) {
-		t.Errorf("expected RequestLogger's own request line to still be logged despite the panic, got %q", logOutput)
-	}
-	if !strings.Contains(logOutput, "path=/boom") || !strings.Contains(logOutput, "status=500") {
-		t.Errorf("expected the request line to carry the real path and the 500 status, got %q", logOutput)
+	if !strings.Contains(logOutput, `msg="GET /boom 500 `) {
+		t.Errorf("expected RequestLogger's own line, with the real path and the 500 status, to still be logged despite the panic, got %q", logOutput)
 	}
 }

@@ -111,6 +111,14 @@ behaves the same way whether someone signs in from the web or from Telegram. Who
 linked their Telegram account (see **Telegram** below) gets the same link and code by DM
 too, alongside — never instead of — the email.
 
+**Logs** are for a person to read, not for a tool to parse (nothing in the club ever will, and
+they are looked at by hand now and then): `internal/platform/logging` has the `slog.Handler` both
+commands use, one line per record, `2026-10-28 16:10:32 INFO  message key=value ...` (a value
+with spaces is quoted, and one that spans several lines, such as a panic's stack or the body of
+the email that is logged when no SMTP is configured, is written below the line, indented, under
+its key). Under systemd (`JOURNAL_STREAM` set) the time is left out, since the journal stamps
+every line. The request line reads `GET /api/v1/users 200 12ms request_id=... user_id=3`.
+
 `httpapi.RequestLogger`'s per-request log line includes `user_id` once `auth.RequireAuth`
 resolves one. That takes a small mutable box placed in the request context before
 dispatch (`httpapi.SetRequestUserID`) rather than just reading it back from context after

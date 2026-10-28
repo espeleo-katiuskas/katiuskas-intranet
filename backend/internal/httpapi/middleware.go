@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -56,17 +57,12 @@ func RequestLogger(next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 
-		attrs := []any{
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"request_id", requestID,
-		}
+		attrs := []any{"request_id", requestID}
 		if fields.UserID != nil {
 			attrs = append(attrs, "user_id", *fields.UserID)
 		}
-		slog.Info("request", attrs...)
+		slog.Info(fmt.Sprintf("%s %s %d %dms", r.Method, r.URL.Path, rec.status,
+			time.Since(start).Milliseconds()), attrs...)
 	})
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegrambot"
@@ -53,7 +54,7 @@ func startupMessage(build adminstatus.Build) string {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := logging.New()
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load()
