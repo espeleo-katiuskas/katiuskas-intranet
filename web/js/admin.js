@@ -475,12 +475,17 @@ function renderStatus(status) {
       ]),
     ),
     statusGroup(
-      'Discos',
-      (status.disks ?? []).map((disk, i, disks) => [
-        // The label is escaped by statusGroup; the value is HTML.
-        disks.length > 1 ? `Disco ${i + 1}` : 'Disco',
-        `${disk.used_percent} % usado, quedan ${formatSize(disk.free_bytes)} de ${formatSize(disk.total_bytes)}<br>${disk.paths.map((path) => `<code>${escapeHtml(path)}</code>`).join(', ')}`,
-      ]),
+      'Espacio en disco',
+      (status.disks ?? []).map((disk) => {
+        // The paths are listed under "Ficheros"; here a disk is named by what is on it.
+        const names = status.storage
+          .filter((dir) => disk.paths.includes(dir.path))
+          .map((dir) => storageLabels[dir.name] ?? dir.name);
+        return [
+          names.length === status.storage.length ? 'Todos los ficheros' : names.join(', '),
+          `${disk.used_percent} % usado (quedan ${formatSize(disk.free_bytes)} de ${formatSize(disk.total_bytes)})`,
+        ];
+      }),
     ),
   ].join('');
 }
