@@ -476,9 +476,10 @@ function renderStatus(status) {
     ),
     statusGroup(
       'Discos',
-      (status.disks ?? []).map((disk) => [
-        disk.paths.map((path) => `<code>${escapeHtml(path)}</code>`).join(', '),
-        `${disk.used_percent} % usado, quedan ${formatSize(disk.free_bytes)} de ${formatSize(disk.total_bytes)}`,
+      (status.disks ?? []).map((disk, i, disks) => [
+        // The label is escaped by statusGroup; the value is HTML.
+        disks.length > 1 ? `Disco ${i + 1}` : 'Disco',
+        `${disk.used_percent} % usado, quedan ${formatSize(disk.free_bytes)} de ${formatSize(disk.total_bytes)}<br>${disk.paths.map((path) => `<code>${escapeHtml(path)}</code>`).join(', ')}`,
       ]),
     ),
   ].join('');

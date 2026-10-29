@@ -109,7 +109,7 @@ katiuskas-intranet-deploy`, however the run was started).
 # `STATE_DIR/cache` can be deleted whenever disk is needed (`chmod -R u+w` it first: Go makes
 # its module cache read-only), and the next run rebuilds it.
 sudo mkdir -p /opt/katiuskas-intranet-deploy /var/lib/katiuskas-intranet-deploy/queue
-sudo chown -R katiuskas:katiuskas /var/lib/katiuskas-intranet-deploy
+sudo chown -R intranet:intranet /var/lib/katiuskas-intranet-deploy
 # The webhook receiver's user owns nothing and only has to be able to create a file in
 # the queue directory.
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin katiuskas-intranet-webhook
@@ -125,9 +125,9 @@ sudo install -m 0755 deploy/systemd/after-production.sh.example \
 
 # The settings, next to the scripts: copy the example and check REPO_URL, the directories and
 # the units. deploy.sh sources the file, so it and /opt/katiuskas-intranet-deploy are root's and the
-# katiuskas user can only read it (deploy.sh refuses it otherwise). It has no secrets: those
+# intranet user can only read it (deploy.sh refuses it otherwise). It has no secrets: those
 # stay in each environment's api.env.
-sudo install -m 0640 -g katiuskas deploy/systemd/deploy.env.example \
+sudo install -m 0640 -g intranet deploy/systemd/deploy.env.example \
   /opt/katiuskas-intranet-deploy/deploy.env
 
 sudo install -m 0644 deploy/systemd/katiuskas-intranet-deploy.service \
@@ -143,7 +143,7 @@ receiver runs as another user, `katiuskas-intranet-webhook`, which owns nothing 
 and needs no `sudo` at all (it only creates a file):
 
 ```
-katiuskas ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-intranet-stable.service, \
+intranet ALL=(root) NOPASSWD: /usr/bin/systemctl restart katiuskas-intranet-stable.service, \
   /usr/bin/systemctl restart katiuskas-intranet-testing.service, \
   /usr/bin/systemctl stop katiuskas-intranet-testing.service, \
   /usr/bin/systemctl start katiuskas-intranet-testing.service
@@ -154,7 +154,7 @@ not deploy it again (and, for production, run the copy of its data into testing)
 
 ```sh
 run() {
-  sudo -u katiuskas /opt/katiuskas-intranet-deploy/deploy.sh \
+  sudo -u intranet /opt/katiuskas-intranet-deploy/deploy.sh \
     --config /opt/katiuskas-intranet-deploy/deploy.env "$@"
 }
 run --dry-run      # says what it would deploy to each environment
@@ -286,8 +286,8 @@ TESTING_SERVICE=<testing unit> \
 If that user does it with `sudo`, `SYSTEMCTL="sudo systemctl"` (it accepts arguments, for
 example `"sudo -n systemctl"`) makes it stop and start the unit with it. That is the only
 thing that uses `sudo`: the rest needs no privileges, but does need to be able to read both
-`api.env` files (the deployment guide leaves them with `chmod 600`, owned by `katiuskas`) and,
-for the files step, to be the owner of production's files (`katiuskas`) or root.
+`api.env` files (the deployment guide leaves them with `chmod 600`, owned by `intranet`) and,
+for the files step, to be the owner of production's files (`intranet`) or root.
 
 It reads `DATABASE_URL` and `ACTIVITY_RESOURCES_ROOT` from the two `api.env` files (without
 executing them) and needs `psql` and `pg_dump` (package `postgresql-client`, with a `pg_dump`
@@ -385,7 +385,7 @@ needed.
    Conditions:
    - the two directories have to be on the same filesystem (`stat -c %d` gives the same number
      for both);
-   - the copy has to be made by the user who owns the files (`katiuskas`) or root: with
+   - the copy has to be made by the user who owns the files (`intranet`) or root: with
      `fs.protected_hardlinks=1`, which is the usual setting, Linux does not allow creating a
      hard link to somebody else's file;
    - testing has to have its own `ACTIVITY_RESOURCES_ROOT`, different from production's;
@@ -469,7 +469,7 @@ readable only by its user, because the files include people's documents.
 `pg_dump` and `pg_restore`, at least as new as the server):
 
 ```sh
-sudo install -d -o katiuskas -g katiuskas -m 0700 /var/backups/katiuskas-intranet
+sudo install -d -o intranet -g intranet -m 0700 /var/backups/katiuskas-intranet
 sudo install -m 0755 scripts/backup.sh /opt/katiuskas-intranet-deploy/
 sudo install -m 0644 deploy/systemd/backup.env.example /opt/katiuskas-intranet-deploy/backup.env
 sudo install -m 0644 deploy/systemd/katiuskas-intranet-backup.service \
@@ -543,17 +543,17 @@ sudo install -m 0644 deploy/systemd/katiuskas-intranet-notify-failure@.service \
   deploy/systemd/katiuskas-intranet-deploy.service deploy/systemd/katiuskas-intranet-backup.service \
   /etc/systemd/system/
 sudo mkdir -p /var/lib/katiuskas-intranet-deploy/notified
-sudo chown katiuskas:katiuskas /var/lib/katiuskas-intranet-deploy/notified
+sudo chown intranet:intranet /var/lib/katiuskas-intranet-deploy/notified
 sudo systemctl daemon-reload
 ```
 
 It needs `curl` and Telegram configured in production's `api.env` (`TELEGRAM_BOT_TOKEN` and
-`TELEGRAM_LOG_CHAT_ID`). For the message to include the journal's last lines, the `katiuskas`
-user has to be able to read it (`sudo usermod -aG systemd-journal katiuskas`); without that it
+`TELEGRAM_LOG_CHAT_ID`). For the message to include the journal's last lines, the `intranet`
+user has to be able to read it (`sudo usermod -aG systemd-journal intranet`); without that it
 only names the unit. To try it, make the unit fail on purpose and look at the chat:
 
 ```sh
-sudo systemd-run --unit=try-failure --property=User=katiuskas \
+sudo systemd-run --unit=try-failure --property=User=intranet \
   --property=OnFailure=katiuskas-intranet-notify-failure@try-failure.service /bin/false
 ```
 

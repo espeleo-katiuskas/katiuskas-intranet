@@ -48,9 +48,9 @@ Everything owned by a dedicated system user, with no login shell:
 
 ```sh
 sudo useradd --system --create-home --home-dir /opt/katiuskas-intranet \
-  --shell /usr/sbin/nologin katiuskas
+  --shell /usr/sbin/nologin intranet
 sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/library,data/user-files,data/activity-resources}
-sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
+sudo chown -R intranet:intranet /opt/katiuskas-intranet
 ```
 
 ## 1. PostgreSQL
@@ -105,10 +105,10 @@ Copy them, together with the frontend and the migrations, to the server:
 scp katiuskas-api seed-admin goose user@server:/opt/katiuskas-intranet/bin/
 scp -r ../web/. user@server:/opt/katiuskas-intranet/web/
 scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
-ssh user@server sudo chown -R katiuskas:katiuskas /opt/katiuskas-intranet
+ssh user@server sudo chown -R intranet:intranet /opt/katiuskas-intranet
 ```
 
-Since `/opt/katiuskas-intranet` is owned by `katiuskas`, the user you `scp` as needs write
+Since `/opt/katiuskas-intranet` is owned by `intranet`, the user you `scp` as needs write
 permission there (for example, a common group with `g+w` permissions on those directories);
 otherwise, copy the files to their own `$HOME` and move them afterwards with `sudo`.
 
@@ -120,10 +120,10 @@ outside — it is not the case here, so do it on the server itself):
 ```sh
 export DATABASE_URL="postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable"
 
-sudo -u katiuskas \
+sudo -u intranet \
   /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "$DATABASE_URL" up
 
-sudo -u katiuskas env DATABASE_URL="$DATABASE_URL" \
+sudo -u intranet env DATABASE_URL="$DATABASE_URL" \
   SEED_ADMIN_EMAIL=your-real-email@yourdomain.org SEED_ADMIN_PHONE=600111222 \
   /opt/katiuskas-intranet/bin/seed-admin
 ```
@@ -134,7 +134,7 @@ email already exists, it does nothing.
 
 ## 4. systemd service for the API
 
-`/opt/katiuskas-intranet/api.env` (readable only by `katiuskas`: `chmod 600`):
+`/opt/katiuskas-intranet/api.env` (readable only by `intranet`: `chmod 600`):
 
 ```sh
 sudo tee /opt/katiuskas-intranet/api.env >/dev/null <<'EOF'
@@ -176,7 +176,7 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 # that; 90 if left out, 0 turns that one warning off.
 #DISK_ALERT_PERCENT=90
 EOF
-sudo chown katiuskas:katiuskas /opt/katiuskas-intranet/api.env
+sudo chown intranet:intranet /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env
 ```
 
@@ -194,8 +194,8 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=katiuskas
-Group=katiuskas
+User=intranet
+Group=intranet
 WorkingDirectory=/opt/katiuskas-intranet
 EnvironmentFile=/opt/katiuskas-intranet/api.env
 ExecStart=/opt/katiuskas-intranet/bin/katiuskas-api
@@ -275,8 +275,8 @@ without redirecting: the address bar keeps what was typed. That is why `root` go
 `handle`, at site level: `handle_errors` would not see the one inside. The API's responses
 (`/api/*`) do not go through here and remain its own.
 
-If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (owned by `katiuskas`),
-give it read access, for example by adding that user to the `katiuskas` group, or with `o+rX`
+If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (owned by `intranet`),
+give it read access, for example by adding that user to the `intranet` group, or with `o+rX`
 permissions on `/opt/katiuskas-intranet/web`.
 
 ### If the existing reverse proxy is not Caddy (nginx, Traefik...)
@@ -349,9 +349,9 @@ On the server:
 
 ```sh
 scp katiuskas-api user@server:/opt/katiuskas-intranet/bin/katiuskas-api.new
-ssh user@server 'sudo -u katiuskas mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
+ssh user@server 'sudo -u intranet mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
 scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
-ssh user@server 'sudo -u katiuskas /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" up'
+ssh user@server 'sudo -u intranet /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" up'
 ssh user@server 'sudo systemctl restart katiuskas-api'
 ```
 
@@ -381,7 +381,7 @@ ones (and renew those older than their file), run the repository's script, as th
 files and pointing at the production directory:
 
 ```sh
-sudo -u katiuskas scripts/generate-license-thumbnails.sh --root /opt/katiuskas-intranet/data/user-files
+sudo -u intranet scripts/generate-license-thumbnails.sh --root /opt/katiuskas-intranet/data/user-files
 ```
 
 It needs `pdftoppm` (package `poppler-utils`) for PDFs and ImageMagick (`imagemagick`) for images;
@@ -392,7 +392,7 @@ many times as needed: whatever is already up to date is skipped.
 
 - Change `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` before the first deployment, as in
   `docs/deployment.md`.
-- `api.env` contains the PostgreSQL password — `chmod 600`, owned by `katiuskas`, never in the
+- `api.env` contains the PostgreSQL password — `chmod 600`, owned by `intranet`, never in the
   repository.
 - Neither PostgreSQL nor the API listens on any external interface: PostgreSQL only accepts local
   connections and `HTTP_ADDR` is fixed to `127.0.0.1:64711` — all external traffic goes first

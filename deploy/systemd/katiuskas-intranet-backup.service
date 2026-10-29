@@ -13,8 +13,8 @@ OnFailure=katiuskas-intranet-notify-failure@%n.service
 
 [Service]
 Type=oneshot
-User=katiuskas
-Group=katiuskas
+User=intranet
+Group=intranet
 # BACKUP_DIR, KEEP_DAILY, KEEP_WEEKLY and AFTER_BACKUP (deploy/systemd/backup.env.example).
 EnvironmentFile=/opt/katiuskas-intranet-deploy/backup.env
 # A root-owned script (installed from scripts/backup.sh), like deploy.sh.

@@ -7,8 +7,8 @@ Description=Katiuskas intranet: tell by Telegram that %i failed
 
 [Service]
 Type=oneshot
-User=katiuskas
-Group=katiuskas
+User=intranet
+Group=intranet
 ExecStart=/opt/katiuskas-intranet-deploy/notify-failure.sh /opt/katiuskas-intranet-stable/api.env %i
 PrivateTmp=true
 NoNewPrivileges=true

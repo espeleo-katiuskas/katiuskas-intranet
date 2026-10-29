@@ -20,8 +20,8 @@ OnFailure=katiuskas-intranet-notify-failure@%n.service
 
 [Service]
 Type=oneshot
-User=katiuskas
-Group=katiuskas
+User=intranet
+Group=intranet
 # The request is taken before the run starts, so that one that arrives while it runs
 # puts it back and the path unit starts the unit again right after this run. A request
 # that arrives during this unit's run is therefore never lost, and several of them are
