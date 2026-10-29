@@ -8,6 +8,8 @@
 [Unit]
 Description=Katiuskas intranet: back up production's database and files
 After=postgresql.service
+# A failed run is told by Telegram (katiuskas-intranet-notify-failure@.service).
+OnFailure=katiuskas-intranet-notify-failure@%n.service
 
 [Service]
 Type=oneshot
@@ -17,6 +19,7 @@ Group=katiuskas
 EnvironmentFile=/opt/katiuskas-intranet-deploy/backup.env
 # A root-owned script (installed from scripts/backup.sh), like deploy.sh.
 ExecStart=/opt/katiuskas-intranet-deploy/backup.sh /opt/katiuskas-intranet-stable/api.env
+ExecStartPost=-/bin/rm -f /var/lib/katiuskas-intranet-deploy/notified/%n
 TimeoutStartSec=2h
 # Do not get in the way of the API: this is a background job.
 Nice=10

@@ -41,6 +41,10 @@ type Info struct {
 	LibraryRoot           string
 	UserFilesRoot         string
 	ActivityResourcesRoot string
+
+	// DiskAlertPercent is how full a filesystem holding one of the three
+	// directories may be before it counts as a problem (see Problems).
+	DiskAlertPercent int
 }
 
 type Handler struct {
@@ -103,12 +107,37 @@ type statusResponse struct {
 	Telegram telegramStatus  `json:"telegram"`
 	Settings settingsStatus  `json:"settings"`
 	Storage  []storageStatus `json:"storage"`
+	Disks    []diskStatus    `json:"disks"`
+	// Problems says, in words, what is wrong right now (the same list the
+	// monitor warns about); empty when everything is fine.
+	Problems []string `json:"problems"`
 }
 
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
-	httpapi.WriteJSON(w, http.StatusOK, statusResponse{
+	httpapi.WriteJSON(w, http.StatusOK, h.build(r.Context()))
+}
+
+// build looks at everything that can change while the process runs.
+func (h *Handler) build(ctx context.Context) statusResponse {
+	resp := h.collect(ctx)
+	for _, p := range problemsOf(resp, h.info.DiskAlertPercent) {
+		resp.Problems = append(resp.Problems, p.Text)
+	}
+	if resp.Problems == nil {
+		resp.Problems = []string{}
+	}
+	return resp
+}
+
+func (h *Handler) collect(ctx context.Context) statusResponse {
+	storage := []storageStatus{
+		directory("library", h.info.LibraryRoot),
+		directory("user_files", h.info.UserFilesRoot),
+		directory("activity_resources", h.info.ActivityResourcesRoot),
+	}
+	return statusResponse{
 		App:      h.appStatus(),
-		Database: h.databaseStatus(r.Context()),
+		Database: h.databaseStatus(ctx),
 		Mail:     map[string]bool{"smtp_configured": h.info.SMTPConfigured},
 		Telegram: telegramStatus{
 			LogChannelConfigured: h.info.TelegramLogConfigured,
@@ -123,12 +152,9 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 			ImpersonationTTLSeconds:  int64(h.info.ImpersonationTTL.Seconds()),
 			BotDMLinkTTLSeconds:      int64(h.info.TelegramBotDMLinkTTL.Seconds()),
 		},
-		Storage: []storageStatus{
-			directory("library", h.info.LibraryRoot),
-			directory("user_files", h.info.UserFilesRoot),
-			directory("activity_resources", h.info.ActivityResourcesRoot),
-		},
-	})
+		Storage: storage,
+		Disks:   disksOf(storage),
+	}
 }
 
 // appStatus adds what the Go toolchain recorded in the binary (the commit it

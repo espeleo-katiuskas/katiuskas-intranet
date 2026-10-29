@@ -93,7 +93,7 @@ func main() {
 		telegramClient = botClient
 	}
 
-	router, authHandler, usersService, err := buildRouter(cfg, pool, pool, telegramSender, telegramClient)
+	router, authHandler, usersService, adminStatus, err := buildRouter(cfg, pool, pool, telegramSender, telegramClient)
 	if err != nil {
 		// buildRouter already logged the specific step that failed.
 		os.Exit(1)
@@ -106,6 +106,10 @@ func main() {
 		bot := telegrambot.New(botClient, usersService, telegramSender, authHandler)
 		go bot.Run(ctx)
 	}
+
+	// Warns through the same channel as the error logs; with Telegram unconfigured
+	// the notices only reach the log, like every other notification.
+	go adminstatus.NewMonitor(adminStatus, telegramSender).Run(ctx)
 
 	// Unconditional, same as the login/error-log notifications — this
 	// only fires once per process start (not once per request, unlike
@@ -149,7 +153,7 @@ type pinger interface {
 // other package's tests already use for isolation) while giving health
 // a trivial stub — pgx.Tx has no Ping method of its own to satisfy
 // pinger.
-func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSender telegram.Sender, telegramClient authapi.TelegramMessenger) (router http.Handler, authHandler *authapi.Handler, usersService *users.Service, err error) {
+func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSender telegram.Sender, telegramClient authapi.TelegramMessenger) (router http.Handler, authHandler *authapi.Handler, usersService *users.Service, adminStatus *adminstatus.Handler, err error) {
 	rolesRepo := roles.NewRepository(repoPool)
 	rolesService := roles.NewService(rolesRepo)
 
@@ -182,19 +186,19 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	libraryService, err := library.NewService(cfg.LibraryRoot)
 	if err != nil {
 		slog.Error("set up document library", "error", err, "root", cfg.LibraryRoot)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	userFilesService, err := userfiles.NewService(cfg.UserFilesRoot)
 	if err != nil {
 		slog.Error("set up user files", "error", err, "root", cfg.UserFilesRoot)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	activityResourcesStorage, err := activityresources.NewStorage(cfg.ActivityResourcesRoot)
 	if err != nil {
 		slog.Error("set up activity resources storage", "error", err, "root", cfg.ActivityResourcesRoot)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	activityResourcesRepo := activityresources.NewRepository(repoPool)
 	activityResourcesService := activityresources.NewService(activityResourcesRepo, activityResourcesStorage)
@@ -223,6 +227,26 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		MagicLinkIPRateWindow: cfg.MagicLinkIPRateWindow,
 	})
 
+	adminStatus = adminstatus.NewHandler(repoPool, authenticator, adminstatus.Info{
+		StartedAt:             time.Now(),
+		PublicBaseURL:         cfg.PublicBaseURL,
+		SessionTTL:            cfg.TokenTTL,
+		MagicLinkTTL:          cfg.MagicLinkTTL,
+		MagicLinkCooldown:     cfg.MagicLinkCooldown,
+		ImpersonationTTL:      cfg.ImpersonationTokenTTL,
+		TelegramBotDMLinkTTL:  cfg.TelegramBotDMLinkTTL,
+		SMTPConfigured:        cfg.SMTPHost != "",
+		TelegramLogConfigured: cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "",
+		// The bot runs exactly when Telegram is fully configured, which is
+		// also when main() hands buildRouter a telegramClient at all.
+		TelegramBotRunning:    telegramClient != nil,
+		TelegramBotUsername:   cfg.TelegramBotUsername,
+		LibraryRoot:           cfg.LibraryRoot,
+		UserFilesRoot:         cfg.UserFilesRoot,
+		ActivityResourcesRoot: cfg.ActivityResourcesRoot,
+		DiskAlertPercent:      cfg.DiskAlertPercent,
+	})
+
 	router = httpapi.NewRouter(httpapi.Routes{
 		Health:            httpapi.NewHealthHandler(health),
 		Auth:              authHandler,
@@ -239,25 +263,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
 		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
-		AdminStatus: adminstatus.NewHandler(repoPool, authenticator, adminstatus.Info{
-			StartedAt:             time.Now(),
-			PublicBaseURL:         cfg.PublicBaseURL,
-			SessionTTL:            cfg.TokenTTL,
-			MagicLinkTTL:          cfg.MagicLinkTTL,
-			MagicLinkCooldown:     cfg.MagicLinkCooldown,
-			ImpersonationTTL:      cfg.ImpersonationTokenTTL,
-			TelegramBotDMLinkTTL:  cfg.TelegramBotDMLinkTTL,
-			SMTPConfigured:        cfg.SMTPHost != "",
-			TelegramLogConfigured: cfg.TelegramBotToken != "" && cfg.TelegramLogChatID != "",
-			// The bot runs exactly when Telegram is fully configured, which is
-			// also when main() hands buildRouter a telegramClient at all.
-			TelegramBotRunning:    telegramClient != nil,
-			TelegramBotUsername:   cfg.TelegramBotUsername,
-			LibraryRoot:           cfg.LibraryRoot,
-			UserFilesRoot:         cfg.UserFilesRoot,
-			ActivityResourcesRoot: cfg.ActivityResourcesRoot,
-		}),
+		AdminStatus:       adminStatus,
 	})
 
-	return router, authHandler, usersService, nil
+	return router, authHandler, usersService, adminStatus, nil
 }

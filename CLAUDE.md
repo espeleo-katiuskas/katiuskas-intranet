@@ -102,6 +102,8 @@ sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Product
   tagging a new, higher version.
 - Production is backed up every night (`scripts/backup.sh`, a timer; database and files, with a retention and an optional hook
   to copy them off the host: `docs/environments.md`, "Backups").
+- Failures are told by Telegram: the API watches its own status (database, directories, disks: `adminstatus.Monitor`)
+  and a failed deployment or backup runs `scripts/notify-failure.sh` (`docs/environments.md`, "Alerts when something fails").
 - Testing's database is a copy of production's, refreshed on every production deploy
   (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real personal data and anything done there is overwritten.
 - Because the directories are shared, don't grant admin/board in testing (it would open every member's

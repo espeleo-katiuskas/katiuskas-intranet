@@ -1,0 +1,14 @@
+# Tells, by Telegram, that the unit named after the @ has failed (scripts/notify-failure.sh).
+# The deployment and backup units start it with OnFailure=katiuskas-intranet-notify-failure@%n.service.
+# The message goes to production's log channel: its api.env has the bot token and the chat.
+# See docs/environments.md ("Alerts when something fails") for how to install it.
+[Unit]
+Description=Katiuskas intranet: tell by Telegram that %i failed
+
+[Service]
+Type=oneshot
+User=katiuskas
+Group=katiuskas
+ExecStart=/opt/katiuskas-intranet-deploy/notify-failure.sh /opt/katiuskas-intranet-stable/api.env %i
+PrivateTmp=true
+NoNewPrivileges=true

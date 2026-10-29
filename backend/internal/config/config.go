@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -84,6 +85,11 @@ type Config struct {
 	// drop-in-by-hand tree), so it's backed by a named Docker volume
 	// rather than a host bind mount (see docker-compose.yml).
 	ActivityResourcesRoot string
+	// DiskAlertPercent is the share of a filesystem holding LibraryRoot,
+	// UserFilesRoot or ActivityResourcesRoot that may be used before the
+	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
+	// that warning off. Set with DISK_ALERT_PERCENT, 90 by default.
+	DiskAlertPercent int
 }
 
 func Load() (Config, error) {
@@ -113,6 +119,11 @@ func Load() (Config, error) {
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")
 	}
+	percent, err := strconv.Atoi(getEnv("DISK_ALERT_PERCENT", "90"))
+	if err != nil || percent < 0 || percent > 100 {
+		return cfg, fmt.Errorf("DISK_ALERT_PERCENT must be a number from 0 to 100")
+	}
+	cfg.DiskAlertPercent = percent
 	return cfg, nil
 }
 

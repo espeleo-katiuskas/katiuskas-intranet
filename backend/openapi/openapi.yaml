@@ -583,7 +583,8 @@ paths:
         database answers (and how fast) and the latest goose migration
         applied, whether email (SMTP) and Telegram (the log channel, and the
         bot) are configured and running, the timeouts in force, and whether
-        each storage directory exists. A database that doesn't answer is
+        each storage directory exists, how full the filesystems holding them are
+        and, in `problems`, what is wrong right now. A database that doesn't answer is
         reported in the body (database.ok false), not as an error status.
         Never includes a secret: no tokens, passwords or connection strings.
       security: [{ bearerAuth: [] }]
@@ -3328,6 +3329,25 @@ components:
               name: { type: string, enum: [library, user_files, activity_resources] }
               path: { type: string }
               exists: { type: boolean }
+        disks:
+          type: array
+          description: >
+            The filesystems that hold the storage directories that exist; directories on the
+            same one are a single entry.
+          items:
+            type: object
+            properties:
+              paths: { type: array, items: { type: string } }
+              total_bytes: { type: integer, format: int64 }
+              free_bytes: { type: integer, format: int64, description: What a normal user can still use. }
+              used_percent: { type: integer, description: What df shows (rounded up). }
+        problems:
+          type: array
+          description: >
+            What is wrong right now, in Spanish and in words: the database not answering, a
+            storage directory that does not exist, a disk at or above DISK_ALERT_PERCENT. Empty
+            when all is well. The same list the monitor warns about through Telegram.
+          items: { type: string }
 
     Token:
       type: object

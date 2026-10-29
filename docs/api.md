@@ -90,8 +90,9 @@ if the person has linked Telegram, by Telegram too.
   token for the admin who started it.
   - returns: 200 `JSON`
   - errors: 409 `not_impersonating`
-- **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts and
-  directories of the running process. Never includes secrets.
+- **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts,
+  directories and how full their disks are, and what is wrong right now, of the running process.
+  Never includes secrets.
   - returns: 200 `AdminStatus`
 
 ## People
@@ -595,6 +596,8 @@ Nested fields:
 | `telegram` | object |
 | `settings` | object |
 | `storage` | [object] |
+| `disks` | [object] |
+| `problems` | [text] |
 
 Nested fields:
 
@@ -605,6 +608,10 @@ Nested fields:
 - `settings`: `{public_base_url, session_ttl_seconds, magic_link_ttl_seconds,
   magic_link_cooldown_seconds, impersonation_ttl_seconds, bot_dm_link_ttl_seconds}`
 - `storage`: `[{name, path, exists}]`
+- `disks`: `[{paths, total_bytes, free_bytes, used_percent}]`, one per filesystem that holds some of
+  the storage directories
+- `problems` is a list of sentences in Spanish saying what is wrong (database not answering, a
+  missing directory, a disk at `DISK_ALERT_PERCENT` or more); empty when all is well
 
 ### `Token`
 

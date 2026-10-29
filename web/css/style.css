@@ -802,6 +802,15 @@ form.form-panel button {
   margin-top: 14px;
 }
 
+.status-problems {
+  background: #f6e9e8;
+  color: var(--danger);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+.status-problems ul { margin: 6px 0 0; padding-left: 20px; }
+
 .success-message {
   background: #e8f0e9;
   color: var(--success);

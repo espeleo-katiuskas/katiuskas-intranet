@@ -9,6 +9,7 @@ import {
   showFeedback,
   showError,
 } from './api.js';
+import { formatSize } from './fileBrowser.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 
@@ -412,7 +413,12 @@ function renderStatus(status) {
     activity_resources: 'Memorias de actividades',
   };
 
+  const problems = (status.problems ?? []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');
+
   statusContainer.innerHTML = [
+    problems
+      ? `<div class="status-problems"><strong>Hay problemas:</strong><ul>${problems}</ul></div>`
+      : '<p class="success-message">No se ha detectado ningún problema.</p>',
     statusGroup('Aplicación', [
       [
         'Versión',
@@ -466,6 +472,13 @@ function renderStatus(status) {
       status.storage.map((dir) => [
         storageLabels[dir.name] ?? dir.name,
         `<code>${escapeHtml(dir.path)}</code> — ${dir.exists ? 'existe' : '<strong>no existe</strong>'}`,
+      ]),
+    ),
+    statusGroup(
+      'Discos',
+      (status.disks ?? []).map((disk) => [
+        disk.paths.map((path) => `<code>${escapeHtml(path)}</code>`).join(', '),
+        `${disk.used_percent} % usado, quedan ${formatSize(disk.free_bytes)} de ${formatSize(disk.total_bytes)}`,
       ]),
     ),
   ].join('');

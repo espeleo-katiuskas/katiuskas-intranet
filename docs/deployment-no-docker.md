@@ -170,6 +170,11 @@ ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 # with Telegram" with a direct link. It only makes sense if you also fill
 # in TELEGRAM_BOT_TOKEN above.
 #TELEGRAM_BOT_USERNAME=
+# With Telegram configured, the API also warns there when the database stops
+# answering, a directory goes missing or a disk is almost full. This is how
+# full (in percent) a disk holding the three directories above may be before
+# that; 90 if left out, 0 turns that one warning off.
+#DISK_ALERT_PERCENT=90
 EOF
 sudo chown katiuskas:katiuskas /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env

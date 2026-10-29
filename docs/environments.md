@@ -509,3 +509,55 @@ done
 `--clean` drops each object before recreating it, so the target database may be empty or hold the
 current (damaged) data. Start the API again afterwards; migrations newer than the dump's, if the
 code is ahead of it, are applied by the next deployment (or with `goose up`).
+
+## Alerts when something fails
+
+Nobody is going to read the journal every day, so the things that can go wrong without anyone
+noticing are told by Telegram, to the log channel of production's bot (the one the API already
+writes its errors and the sign-in notices to). Two mechanisms, for two kinds of failure:
+
+- **What the API itself can see**, which the `/admin` page shows as "Hay problemas" (the
+  `problems` of `GET /admin/status`, see "Admin status" in `docs/backend-internals.md`): the
+  database not answering, a storage directory that does not exist, and a disk almost full
+  (`DISK_ALERT_PERCENT` in `api.env`: how full, in percent, a filesystem holding `LIBRARY_ROOT`,
+  `USER_FILES_ROOT` or `ACTIVITY_RESOURCES_ROOT` may be, 90 by default, 0 to turn it off). The API
+  looks every 5 minutes and speaks when the set of problems changes ("⚠️ intranet.katiuskas.es: •
+  Disco casi lleno (93 % usado, quedan 2.1 GB): /srv/…", then "✅ … ya no hay ningún problema"),
+  and again once a day while one remains. Each API (testing's and production's) does it through
+  its own bot, so there is nothing to install: it works as soon as Telegram is configured.
+- **A deployment or a backup that fails**: both units name
+  [`katiuskas-intranet-notify-failure@.service`](../deploy/systemd/katiuskas-intranet-notify-failure@.service)
+  in `OnFailure=`, which runs [`scripts/notify-failure.sh`](../scripts/notify-failure.sh): it sends
+  "⚠️ Ha fallado katiuskas-intranet-backup.service en <host>" with the last lines of that unit's
+  journal. A unit that keeps failing (a broken commit is tried again every 15 minutes) is told once,
+  and again after 6 hours (`NOTIFY_EVERY`) if it has not recovered; a run that succeeds clears that,
+  so the next failure is told at once. A deployment is a failure whenever it exits with an error,
+  including the update of one environment failing while the other works.
+
+Setting up the second one, on the club's host, as root (the units of the deployment and of the
+backup have to be installed again, since they now name it):
+
+```sh
+sudo install -m 0755 scripts/notify-failure.sh /opt/katiuskas-intranet-deploy/
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-notify-failure@.service \
+  deploy/systemd/katiuskas-intranet-deploy.service deploy/systemd/katiuskas-intranet-backup.service \
+  /etc/systemd/system/
+sudo mkdir -p /var/lib/katiuskas-intranet-deploy/notified
+sudo chown katiuskas:katiuskas /var/lib/katiuskas-intranet-deploy/notified
+sudo systemctl daemon-reload
+```
+
+It needs `curl` and Telegram configured in production's `api.env` (`TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_LOG_CHAT_ID`). For the message to include the journal's last lines, the `katiuskas`
+user has to be able to read it (`sudo usermod -aG systemd-journal katiuskas`); without that it
+only names the unit. To try it, make the unit fail on purpose and look at the chat:
+
+```sh
+sudo systemd-run --unit=try-failure --property=User=katiuskas \
+  --property=OnFailure=katiuskas-intranet-notify-failure@try-failure.service /bin/false
+```
+
+What this does not cover, because it needs something that is not running to say it: the API being
+down (or the whole host), and the webhook receiver not working (the 15-minute timer is what
+makes a deployment happen anyway). A check from outside the host, such as an uptime monitor that
+asks for `https://intranet.katiuskas.es/api/v1/health`, is the way to cover those.

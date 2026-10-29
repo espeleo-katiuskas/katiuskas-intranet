@@ -15,6 +15,8 @@ Wants=network-online.target
 # Requests can come one after another (the path unit starts it again while a request
 # is waiting): do not let systemd's default limit of 5 starts in 10 seconds stop that.
 StartLimitIntervalSec=0
+# A failed run is told by Telegram (katiuskas-intranet-notify-failure@.service).
+OnFailure=katiuskas-intranet-notify-failure@%n.service
 
 [Service]
 Type=oneshot
@@ -30,6 +32,9 @@ ExecStartPre=-/bin/rm -f /var/lib/katiuskas-intranet-deploy/queue/pending
 # change. The settings are in /opt/katiuskas-intranet-deploy/deploy.env (see
 # deploy/systemd/deploy.env.example).
 ExecStart=/opt/katiuskas-intranet-deploy/deploy.sh --config /opt/katiuskas-intranet-deploy/deploy.env
+# After a successful run the next failure is told at once (notify-failure.sh tells a unit that
+# keeps failing only once in a while). Runs only when the one above succeeded.
+ExecStartPost=-/bin/rm -f /var/lib/katiuskas-intranet-deploy/notified/%n
 # Building from scratch and migrating can take a while on a small machine.
 TimeoutStartSec=30min
 Nice=10

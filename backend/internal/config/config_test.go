@@ -66,3 +66,22 @@ func TestLoadHonorsOverrides(t *testing.T) {
 		t.Errorf("expected overridden LibraryRoot, got %q", cfg.LibraryRoot)
 	}
 }
+
+func TestLoadDiskAlertPercent(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+
+	t.Setenv("DISK_ALERT_PERCENT", "")
+	if cfg, err := Load(); err != nil || cfg.DiskAlertPercent != 90 {
+		t.Errorf("expected a default of 90, got %d (%v)", cfg.DiskAlertPercent, err)
+	}
+	t.Setenv("DISK_ALERT_PERCENT", "0")
+	if cfg, err := Load(); err != nil || cfg.DiskAlertPercent != 0 {
+		t.Errorf("expected 0 (off) to be accepted, got %d (%v)", cfg.DiskAlertPercent, err)
+	}
+	for _, bad := range []string{"abc", "101", "-1"} {
+		t.Setenv("DISK_ALERT_PERCENT", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("expected %q to be refused", bad)
+		}
+	}
+}

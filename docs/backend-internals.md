@@ -671,6 +671,19 @@ whether each storage directory exists. A database that doesn't answer is reporte
 body, not as an error status. It never includes a secret: no tokens, passwords or
 connection strings.
 
+It also says how full the disks are (`disks`: one entry per filesystem that holds some of the
+three storage directories that exist, with the percentage `df` shows, taken from `statfs`) and
+what is wrong right now (`problems`, sentences in Spanish): the database not answering, a
+storage directory that does not exist, a disk at `DISK_ALERT_PERCENT` (90 by default, 0 turns
+that check off) or more. `Monitor` (`monitor.go`, started from `cmd/api` with the same
+Telegram sender as the error logs) looks at that same status every 5 minutes, the first time a
+minute after starting, and warns when the *set* of problems changes — a new one ("⚠️
+intranet.katiuskas.es: …", one line each), or all gone ("✅ … ya no hay ningún problema") —
+and again once a day while one remains, not at every look. A problem is identified by a key
+that leaves out the details in its text (a disk going from 91 % to 92 % is the same problem).
+It can only warn while the API is running: that the API itself, a backup or a deployment fails
+is told by systemd (`docs/environments.md`, "Alerts when something fails").
+
 ## Telegram
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API

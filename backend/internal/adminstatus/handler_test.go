@@ -147,3 +147,42 @@ func TestStatusWithoutAGooseTable(t *testing.T) {
 		t.Errorf("expected no migration_version without a goose table, got %v", got.Database)
 	}
 }
+
+func TestStatusListsProblemsAndDisks(t *testing.T) {
+	existing := t.TempDir()
+	mux, resolver, _ := newServer(t, adminstatus.Info{
+		LibraryRoot:           existing,
+		UserFilesRoot:         existing + "/missing",
+		ActivityResourcesRoot: existing,
+		DiskAlertPercent:      1, // any real filesystem is at least that full
+	})
+	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+	var got struct {
+		Problems []string `json:"problems"`
+		Disks    []struct {
+			Paths       []string `json:"paths"`
+			UsedPercent int      `json:"used_percent"`
+			TotalBytes  uint64   `json:"total_bytes"`
+		} `json:"disks"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil {
+		t.Fatalf("expected 200 and JSON, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(got.Disks) != 1 || len(got.Disks[0].Paths) != 2 || got.Disks[0].TotalBytes == 0 {
+		t.Errorf("expected one filesystem with the two directories that exist, got %+v", got.Disks)
+	}
+	if len(got.Problems) != 2 {
+		t.Errorf("expected the missing directory and the full disk as problems, got %q", got.Problems)
+	}
+}
+
+func TestStatusHasNoProblemsWhenAllIsWell(t *testing.T) {
+	existing := t.TempDir()
+	mux, resolver, _ := newServer(t, adminstatus.Info{
+		LibraryRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing,
+	})
+	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+	if !strings.Contains(rec.Body.String(), `"problems":[]`) {
+		t.Errorf("expected an empty list of problems (not null), got %s", rec.Body.String())
+	}
+}

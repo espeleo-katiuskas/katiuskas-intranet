@@ -50,7 +50,7 @@ func TestBuildRouterAssemblesAndAnswers(t *testing.T) {
 	cfg := testConfig(t)
 	telegramSender := telegram.NewSenderFromConfig("", "")
 
-	router, authHandler, usersService, err := buildRouter(cfg, tx, alwaysHealthyPinger{}, telegramSender, nil)
+	router, authHandler, usersService, _, err := buildRouter(cfg, tx, alwaysHealthyPinger{}, telegramSender, nil)
 	if err != nil {
 		t.Fatalf("buildRouter: %v", err)
 	}
