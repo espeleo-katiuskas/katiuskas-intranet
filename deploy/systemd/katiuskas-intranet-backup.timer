@@ -1,0 +1,12 @@
+# Backs up production every night (katiuskas-intranet-backup.service). Persistent: if the host
+# was off at that time, the backup is made when it starts again.
+[Unit]
+Description=Katiuskas intranet: nightly backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

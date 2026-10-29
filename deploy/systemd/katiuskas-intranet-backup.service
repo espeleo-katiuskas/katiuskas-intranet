@@ -1,0 +1,25 @@
+# Backs up production's database and files (scripts/backup.sh), once. Started every day by
+# katiuskas-intranet-backup.timer; what it prints is in this unit's journal
+# (journalctl -u katiuskas-intranet-backup). See docs/environments.md ("Backups") for how to
+# install it.
+#
+# It runs as the owner of the installation, which can read production's api.env (the database
+# password) and the three directories of files, and writes only to BACKUP_DIR.
+[Unit]
+Description=Katiuskas intranet: back up production's database and files
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=katiuskas
+Group=katiuskas
+# BACKUP_DIR, KEEP_DAILY, KEEP_WEEKLY and AFTER_BACKUP (deploy/systemd/backup.env.example).
+EnvironmentFile=/opt/katiuskas-intranet-deploy/backup.env
+# A root-owned script (installed from scripts/backup.sh), like deploy.sh.
+ExecStart=/opt/katiuskas-intranet-deploy/backup.sh /opt/katiuskas-intranet-stable/api.env
+TimeoutStartSec=2h
+# Do not get in the way of the API: this is a background job.
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true

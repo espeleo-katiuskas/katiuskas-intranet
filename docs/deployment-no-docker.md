@@ -356,7 +356,9 @@ directly from disk (with the one-hour cache described in step 5).
 
 ## Backups
 
-The same as in `docs/deployment.md`, but over real disk paths instead of Docker volumes:
+The club's host backs up production every night with `scripts/backup.sh`, from a systemd timer
+(see [`environments.md`](environments.md), "Backups", which also says how to restore). By hand,
+the same as in `docs/deployment.md` but over real disk paths instead of Docker volumes:
 
 ```sh
 sudo -u postgres pg_dump intranet > backup-$(date +%Y%m%d).sql

@@ -442,6 +442,70 @@ the same place in both; see the previous section for what that implies.
 
 ## Backups
 
-The backup that matters is production's database (see the "Backups" section of the deployment
-guide): testing's is filled with that same data on every production deployment. The three
-shared directories only need to be backed up once.
+The backup that matters is production's: testing's database is filled with that same data on every
+production deployment, and the three shared directories (`LIBRARY_ROOT`, `USER_FILES_ROOT`,
+`ACTIVITY_RESOURCES_ROOT`) only need to be backed up once.
+[`scripts/backup.sh`](../scripts/backup.sh) does it, every night, from a systemd timer
+([`katiuskas-intranet-backup.timer`](../deploy/systemd/katiuskas-intranet-backup.timer)).
+
+Each run makes a directory `BACKUP_DIR/<yyyymmdd-hhmmss>/` with:
+
+- `database.dump`: `pg_dump --format=custom` of production's database, goose's version table
+  included, which is restored with `pg_restore`;
+- `files/library`, `files/user-files` and `files/activity-resources`: the three directories, copied
+  with `rsync` and hard-linking whatever has not changed since the previous backup. Every backup
+  is therefore a complete tree, and yet a night without changes costs almost no disk (the files
+  are mostly photos and PDFs that are never modified); deleting an old backup does not affect the
+  others.
+
+The files are copied before the dump, so that a memoria row in the dump never points at a file the
+backup lacks. A backup is built in a `.partial` directory, renamed only when complete and when
+`pg_restore` can read the dump back, and a run that fails removes it and exits with an error (the
+unit shows as failed). Afterwards the old ones are pruned: the newest 14 are kept (`KEEP_DAILY`),
+and of the older ones the newest of each of the last 8 weeks (`KEEP_WEEKLY`). Everything is created
+readable only by its user, because the files include people's documents.
+
+**Setting it up** (once, on the club's host, as root; it needs `rsync` and the PostgreSQL client,
+`pg_dump` and `pg_restore`, at least as new as the server):
+
+```sh
+sudo install -d -o katiuskas -g katiuskas -m 0700 /var/backups/katiuskas-intranet
+sudo install -m 0755 scripts/backup.sh /opt/katiuskas-intranet-deploy/
+sudo install -m 0644 deploy/systemd/backup.env.example /opt/katiuskas-intranet-deploy/backup.env
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-backup.service \
+  deploy/systemd/katiuskas-intranet-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start katiuskas-intranet-backup.service     # the first one, to see it work
+journalctl -u katiuskas-intranet-backup
+sudo systemctl enable --now katiuskas-intranet-backup.timer
+```
+
+Edit `backup.env` for another place to keep them (better another disk than the data's) or another
+retention.
+
+**A copy off the host.** Backups on the same machine do not survive losing it, so it is worth
+copying them elsewhere. `AFTER_BACKUP` in `backup.env` is an executable that is called, as the
+same user, with the finished backup's directory as its argument; if it fails, the run fails (the
+backup itself stays). For example, to mirror the whole backup directory, hard links and pruning
+included, to another machine over `ssh` (with a key that user has, and that can only do this):
+
+```sh
+#!/bin/sh
+# /opt/katiuskas-intranet-deploy/after-backup.sh
+exec rsync -aH --delete --exclude .lock "$BACKUP_DIR/" backup@other-host:katiuskas-intranet/
+```
+
+**Restoring** (to a new machine, or after losing data). Try it first on a scratch database. With
+the API stopped:
+
+```sh
+B=/var/backups/katiuskas-intranet/<the backup's directory>
+pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" "$B/database.dump"
+for d in library user-files activity-resources; do
+  rsync -a --delete "$B/files/$d/" "<the environment's directory for $d>/"
+done
+```
+
+`--clean` drops each object before recreating it, so the target database may be empty or hold the
+current (damaged) data. Start the API again afterwards; migrations newer than the dump's, if the
+code is ahead of it, are applied by the next deployment (or with `goose up`).
