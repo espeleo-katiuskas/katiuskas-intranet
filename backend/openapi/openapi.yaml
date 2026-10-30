@@ -2828,7 +2828,7 @@ paths:
           description: >
             Slash-separated, root-relative file path — a wildcard
             capturing every remaining URL segment (e.g.
-            actas/2026-02-01.pdf), not a single path parameter; each
+            Actas/2026-02-01.pdf), not a single path parameter; each
             segment must be percent-encoded on its own, the slashes
             between them left literal.
         - name: download

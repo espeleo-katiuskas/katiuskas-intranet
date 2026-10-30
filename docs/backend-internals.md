@@ -631,7 +631,7 @@ files in](#dropping-files-into-the-library-and-the-per-person-directories) — n
 except for what the directory's own optional `.order.json` — a JSON array of names — puts first, in
 its order; dotfiles never listed, that one included, though it can be fetched by its path); `GET
 /library/file/{path...}` streams a file's raw bytes (the path is the rest of the URL, slashes
-included — e.g. `/library/file/actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
+included — e.g. `/library/file/Actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
 default or as an attachment with `?download=1`, with HTTP Range support via `http.ServeContent`.
 Both are open to any baseline role and read-only — nothing here lets a caller upload, rename, or
 delete anything.
@@ -1199,6 +1199,9 @@ this), add a `.order.json` to that directory, a JSON array of names such as
 `["estatutos.pdf", "reglamento.pdf"]`: those come first, in that order, and the rest follow
 alphabetically. A name that is not there is skipped, and a file that is not a valid array is
 ignored (the API logs a warning). Editing it takes effect on the next request.
+The home page's three lists read three fixed directories, named exactly like this (the file system
+is case-sensitive): `./library/Documentos`, `./library/Actas` (files named `yyyy-mm-dd.pdf`, or
+`yyyy-mm-dd-suffix.pdf` when there are several that day) and `./library/Memorias`.
 
 Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`:
 drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,

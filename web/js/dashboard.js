@@ -91,8 +91,8 @@ if (isAdmin) {
 }
 
 // Documentos/Actas asambleas/Memorias de actividades all read straight
-// from a fixed /library folder (library/documentos, library/actas,
-// library/memorias — see index.html) rather than from any club-specific
+// from a fixed /library folder (library/Documentos, library/Actas,
+// library/Memorias — see index.html) rather than from any club-specific
 // endpoint, so admins can add or remove a PDF just by dropping it in, no
 // deploy needed. The order is the API's own: alphabetical, unless the
 // folder has a .order.json naming which files go first
@@ -152,10 +152,10 @@ function actaYear(name) {
 async function loadDocumentos() {
   const list = document.getElementById('documentos-list');
   try {
-    const files = await listFiles('documentos');
+    const files = await listFiles('Documentos');
     list.innerHTML = files.length
       ? files
-          .map((f) => `<li>${fileLink('documentos', f.name, stripExtension(f.name))}</li>`)
+          .map((f) => `<li>${fileLink('Documentos', f.name, stripExtension(f.name))}</li>`)
           .join('')
       : '<li>No hay documentos disponibles.</li>';
   } catch {
@@ -175,7 +175,7 @@ async function loadActas() {
   const yearSelect = document.getElementById('actas-year');
   const list = document.getElementById('actas-list');
   try {
-    const files = (await listFiles('actas')).filter((f) => actaYear(f.name) !== null);
+    const files = (await listFiles('Actas')).filter((f) => actaYear(f.name) !== null);
     const years = [...new Set(files.map((f) => actaYear(f.name)))].sort();
     if (!years.length) {
       yearSelect.innerHTML = '';
@@ -202,7 +202,7 @@ async function loadActas() {
           return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
         });
       list.innerHTML = yearFiles
-        .map((f) => `<li>${fileLink('actas', f.name, formatActaDate(f.name))}</li>`)
+        .map((f) => `<li>${fileLink('Actas', f.name, formatActaDate(f.name))}</li>`)
         .join('');
     };
     yearSelect.addEventListener('change', renderSelectedYear);
@@ -216,9 +216,9 @@ async function loadActas() {
 async function loadMemorias() {
   const container = document.getElementById('memorias-list');
   try {
-    const files = await listFiles('memorias');
+    const files = await listFiles('Memorias');
     container.innerHTML = files.length
-      ? files.map((f) => fileLink('memorias', f.name, stripExtension(f.name))).join(' · ')
+      ? files.map((f) => fileLink('Memorias', f.name, stripExtension(f.name))).join(' · ')
       : 'No hay memorias disponibles.';
   } catch {
     container.innerHTML = 'No se pudieron cargar las memorias.';

@@ -32,8 +32,8 @@ func NewHandler(service *Service, authenticator *auth.Authenticator) *Handler {
 // own path is a URL path segment, not a ?path= query parameter — the
 // {path...} wildcard (Go 1.22+ ServeMux) matches every remaining
 // segment, slashes included, so a nested file's URL reads as a real
-// path (/library/file/actas/2026-02-01.pdf) rather than
-// /library/file?path=actas%2F2026-02-01.pdf.
+// path (/library/file/Actas/2026-02-01.pdf) rather than
+// /library/file?path=Actas%2F2026-02-01.pdf.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/library", h.authenticator.Protect(h.list))
 	mux.Handle("GET /api/v1/library/file/{path...}", h.authenticator.ProtectAllowingCookie(h.file))
