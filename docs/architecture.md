@@ -743,14 +743,15 @@ the API but not write it, except for asking for units and editing their own).
   the periods in `memberships`). `price` is that of the own unit (0 if it is free); the presence
   of `extra_price` is what makes extra units possible, and `max_extra` limits them per person
   and requires `extra_price`. `closes_at` is the deadline for members to choose.
-- **Status** (`status`): `draft` (in preparation: it can be edited and only admin and board see
-  it), `open` (members ask for units and choose the options), `closed` (nothing can be asked for
-  or changed any more) and `done` (finished). In the interface: "Borrador", "Abierto", "Cerrado"
-  and "Terminado" (Draft, Open, Closed, Finished). It moves only one step at a time, forward or
-  back. Handing out (recording collections and numbers) is possible with the distribution in any
-  status except `draft` (`Status.Deliverable`), because the order usually arrives before the
-  requests have been closed and whoever has not come for their share can do so once it is
-  finished; in `draft` it is not (409 `not_deliverable`).
+- **Status** (`status`): `draft` (in preparation: it can be edited and only admin and board see it),
+  `open` (members ask for units and choose the options), `closed` (members can no longer ask for or
+  change anything; staff — admin, board and material — still can, see "Who can order") and `done`
+  (finished). In the interface: "Borrador", "Abierto", "Cerrado" and "Terminado" (Draft, Open,
+  Closed, Finished). It moves only one step at a time, forward or back. Handing out (recording
+  collections and numbers) is possible with the distribution in any status except `draft`
+  (`Status.Deliverable`), because the order usually arrives before the requests have been closed and
+  whoever has not come for their share can do so once it is finished; in `draft` it is not (409
+  `not_deliverable`).
 - **Options** (`distribution_options`): what has to be chosen, with its possible values
   ("Talla": S, M, L). A distribution has as many as it needs, or none. They can be changed as
   long as nobody has asked for anything; afterwards, a `PATCH` that resends them identical does
@@ -861,17 +862,18 @@ the API but not write it, except for asking for units and editing their own).
   others. Without `cutoff_date`, a `signup` distribution is for today's members
   (`Service.IsEligible`).
 - **Who can order**. Any member, for themselves or for others (`beneficiary_login`), while the
-  distribution is open and `closes_at` has not passed; admin and board also after the date, but
-  only with the distribution open: once it is closed nothing changes, not even for them, and for
-  a late addition it is opened again. Both the beneficiary and whoever enters it have to be
-  eligible, that is, members on `cutoff_date` (409 `not_eligible`); admin and board, who enter
-  on behalf of anybody, do not need to be. Extras belong to whoever asks for them (or to the
-  member in whose name they are entered): who ends up with them is not said. Changing or
-  removing a unit can be done by the person it is for, whoever entered it and
-  admin/board/material (all three for anybody, and also after the deadline and with something
-  paid; only admin/board mark payments); what has been handed out is not taken away from the
-  owner (409 `unit_locked`), and a unit that is not an article row, once handed out, is touched
-  by nobody; a paid one is touched only by admin/board/material (409 `unit_locked`).
+  distribution is open and `closes_at` has not passed; admin, board and material (who put the order
+  together, hand it out and fix orders) at any time but in a draft, so also after the date and while
+  it is closed or done (409 `not_open` for the rest). Both the beneficiary and whoever enters it
+  have to be eligible, that is, members on `cutoff_date` (409 `not_eligible`); admin, board and
+  material, who enter on behalf of anybody, do not need to be (the beneficiary does). Extras belong
+  to whoever asks for them (or to the member in whose name they are entered): who ends up with them
+  is not said. Changing or removing a unit can be done by the person it is for, whoever entered it
+  and admin/board/material (all three for anybody, and also after the deadline and with something
+  paid; only admin/board mark payments), under the same rule of when; what has been handed out is
+  not taken away from the owner (409 `unit_locked`), and a unit that is not an article row, once
+  handed out, is touched by nobody; a paid one is touched only by admin/board/material (409
+  `unit_locked`).
 - **Units with and without a number**: in an article with numbers (`has_identifiers`) an order
   is a quantity (`quantity`, which can be increased or reduced), and some of those units can
   have a specific number (an identifier) assigned; the ones that do not are "any" units.

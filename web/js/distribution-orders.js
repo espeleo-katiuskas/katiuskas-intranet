@@ -49,7 +49,8 @@ const articleOf = (u) => distribution?.articles?.find((a) => a.id === u.article_
 const isNumbered = (u) => Boolean(articleOf(u)?.has_identifiers);
 const isDescribed = (u) => (articleOf(u)?.identifier_fields ?? []).length > 0;
 const canDeliver = () => distribution?.status !== 'draft';
-const canEditOrder = () => distribution?.status === 'open';
+// Staff (this whole page) changes orders at any time but in a draft, as the API does.
+const canEditOrder = () => distribution?.status !== 'draft';
 
 // How a row stands. For a numbered article each item is paid or delivered by
 // itself, and only those with a number can be; elsewhere it is counted.

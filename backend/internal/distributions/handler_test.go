@@ -512,15 +512,67 @@ func TestRegisterChecksChoicesEligibilityAndState(t *testing.T) {
 	expect(t, register(e, id, late, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}, "is_extra": true}), http.StatusConflict, "not_eligible")
 
 	setStatus(t, e, admin, id, "closed")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	material := e.newPerson(t, "", "material", "member")
 	expect(t, register(e, id, member, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
-	// Once it is closed nothing changes, not even for staff: a late addition
-	// means opening it again.
-	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
-	setStatus(t, e, admin, id, "open")
+	// Once it is closed members cannot ask, but staff (admin, board, material) can: orders are
+	// often fixed once the asking is over.
 	mustStatus(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
-	setStatus(t, e, admin, id, "closed")
 	setStatus(t, e, admin, id, "done")
-	expect(t, register(e, id, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusConflict, "not_open")
+	expect(t, register(e, id, member, map[string]any{"choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusConflict, "not_open")
+	mustStatus(t, register(e, id, material, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusCreated)
+	mustStatus(t, register(e, id, board, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "S"}, "is_extra": true}), http.StatusCreated)
+	// Still not for somebody who is not eligible: that is about the person, not the state.
+	expect(t, register(e, id, material, map[string]any{"beneficiary_login": late.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_eligible")
+}
+
+// Staff (admin, board and material) can change and remove orders whatever the state of the
+// distribution (but a draft); members only while it is open.
+func TestStaffChangeOrdersWhateverTheState(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	member := e.newPerson(t, "2020-01-01", "member")
+	other := e.newPerson(t, "2020-01-01", "member")
+	d := newOpenShirt(t, e, admin)
+
+	unit := decode[distributions.Unit](t, mustStatus(t, register(e, d.ID, member, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusCreated))
+	// Everybody's own unit is there already and cannot be removed; extras can.
+	extra := func(by person) distributions.Unit {
+		return decode[distributions.Unit](t, mustStatus(t, register(e, d.ID, by, map[string]any{"is_extra": true, "choices": map[string]string{"Talla": "S"}}), http.StatusCreated))
+	}
+	memberExtra, otherExtra := extra(member), extra(other)
+	path := func(u distributions.Unit) string { return fmt.Sprintf("%s/%d", unitsPath(d.ID), u.ID) }
+	choose := func(by person, u distributions.Unit, size string) *httptest.ResponseRecorder {
+		return e.do("PATCH", path(u), by.token, map[string]any{"choices": map[string]string{"Talla": size}})
+	}
+
+	for _, status := range []string{"closed", "done"} {
+		setStatus(t, e, admin, d.ID, status)
+		expect(t, choose(member, unit, "L"), http.StatusConflict, "not_open")
+		mustStatus(t, choose(board, unit, "L"), http.StatusOK)
+		mustStatus(t, choose(material, unit, "L"), http.StatusOK)
+		mustStatus(t, choose(admin, unit, "S"), http.StatusOK)
+		setStatus(t, e, admin, d.ID, "closed")
+	}
+
+	setStatus(t, e, admin, d.ID, "done")
+	expect(t, e.do("DELETE", path(otherExtra), member.token, nil), http.StatusForbidden, "forbidden")
+	expect(t, e.do("DELETE", path(memberExtra), member.token, nil), http.StatusConflict, "not_open")
+	mustStatus(t, e.do("DELETE", path(memberExtra), material.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("DELETE", path(otherExtra), board.token, nil), http.StatusNoContent)
+
+	// What was handed out stays final even for them, in any state.
+	setStatus(t, e, admin, d.ID, "closed")
+	setStatus(t, e, admin, d.ID, "open")
+	again := extra(member)
+	mustStatus(t, e.do("POST", fmt.Sprintf("/api/v1/distributions/%d/pickups", d.ID), material.token,
+		map[string]any{"unit_ids": []int64{again.ID}, "picked_up_by_login": member.Login}), http.StatusNoContent)
+	setStatus(t, e, admin, d.ID, "closed")
+	expect(t, choose(material, again, "L"), http.StatusConflict, "unit_locked")
+	expect(t, choose(board, again, "L"), http.StatusConflict, "unit_locked")
+	expect(t, choose(admin, again, "L"), http.StatusConflict, "unit_locked")
 }
 
 func TestDeadlineStopsMembersButNotStaff(t *testing.T) {

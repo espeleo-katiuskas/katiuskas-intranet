@@ -209,52 +209,55 @@ loaded only once it leaves the draft), a "Pedir" form (an "A nombre de" picker o
 in a distribution for all members with no options, where the own order is already there and only
 extras are left: no checkbox, the request always goes as an extra, the button says "Pedido extra"
 (`extrasOnly`) and the subtitle gives the price, "Puedes pedir también extras a 8,00 €" —;
-`canOrderNow` repeats the API's own open/deadline rule only to decide whether to show it) and "Tus
-pedidos" — the units where the signed-in person is the beneficiary or entered them, since `GET
-.../units` returns everything to admin/board/material — with who entered each when that isn't the
-person it is for. In a distribution for all members the member's own unit is already in that table
-("Automático", "Sin elegir" with a primary "Elegir" button until somebody chooses, no "Quitar" since
-the API refuses it), and the whole "Pedir" section (`#order-section`, not just the form, so not even
-a "no longer admitting orders") is out when there is neither an option nor extras to ask for,
-`nothingToAsk`. The table's columns (`unitColumns`) are only the ones that mean something: "Elegido"
-only with options, "Tipo" (own or extra) only when extras exist, and nothing about payment for now —
-the state is "Recogido" or "No recogido"; the price (the unit's own, frozen) is shown in a "Precio"
-column, but nothing about paying (no state, no amount owed): the intranet doesn't keep that.
-Admin/board move the status one step at a time (`bodyFrom` rebuilds the whole body, as `PATCH`
-replaces every field) and edit, and only admin deletes (`DELETE` is admin-only in the API, and the
-button is `data-roles="admin"`); every control restricted by `data-roles` is *removed* from the page
-for anybody else, so each script reaches those through a null-safe lookup (a bare
-`getElementById(...).addEventListener` on one of them would throw before the rest of the page ran).
-`/reparto-pedidos` (`requireAnyRole` admin/board/material; the old summary and collection pages are
-this one) is everything about the orders in one place: on top `GET .../order` (what has to be
-bought), below it a list with one line per order (searchable by member or number; the ones with
-everything paid and handed out are hidden unless asked for) and a summary: what, how many are handed
-out and paid, what it costs. "Más información" unfolds its detail (`detail`, kept in `unfolded`):
-for an article with numbers (`isNumbered`) how many are without one (with "Asignar los siguientes
-libres" or typed numbers) and the list of its numbered items, each with its paid / delivered state,
-to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid
-or take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,
-"Entregado a", prefilled with the member the order is for; only members are offered), undo a
-delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same. Paying
-and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the
-non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped
-when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution
-have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in
-its first option). Everything goes through the single `perform(act, unit)`, confirming before
-handing over unpaid units, undoing, returning or taking numbers off. Wherever the frontend lists
-numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and joined into ranges
-(`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an error message or an
-entry of the list of payments names). The Telegram messages about numbers say them the same way
-(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
-the same order and ranges; each message says what it changed — numbers added, taken off or newly
-assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers
-("A nombre de", "Entregado a") offer only members, never everybody on file: `loadPeople(id,
-purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
-cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
-shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
-`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` now
-puts the API's error `code` on the thrown `Error`, which `distributionCommon.js`'s `apiErrorText`
-maps to Spanish messages (falling back to the API's own text).
+`canOrderNow` repeats the API's own rule of when (open and before the deadline; admin, board and
+material at any time but in a draft, with a note saying that the distribution is not open) only to
+decide whether to show it) and "Tus pedidos" — the units where the signed-in person is the
+beneficiary or entered them, since `GET .../units` returns everything to admin/board/material — with
+who entered each when that isn't the person it is for. In a distribution for all members the
+member's own unit is already in that table ("Automático", "Sin elegir" with a primary "Elegir"
+button until somebody chooses, no "Quitar" since the API refuses it), and the whole "Pedir" section
+(`#order-section`, not just the form, so not even a "no longer admitting orders") is out when there
+is neither an option nor extras to ask for, `nothingToAsk`. The table's columns (`unitColumns`) are
+only the ones that mean something: "Elegido" only with options, "Tipo" (own or extra) only when
+extras exist, and nothing about payment for now — the state is "Recogido" or "No recogido"; the
+price (the unit's own, frozen) is shown in a "Precio" column, but nothing about paying (no state, no
+amount owed): the intranet doesn't keep that. Admin/board move the status one step at a time
+(`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field) and edit, and only admin
+deletes (`DELETE` is admin-only in the API, and the button is `data-roles="admin"`); every control
+restricted by `data-roles` is *removed* from the page for anybody else, so each script reaches those
+through a null-safe lookup (a bare `getElementById(...).addEventListener` on one of them would throw
+before the rest of the page ran). `/reparto-pedidos` (`requireAnyRole` admin/board/material; the old
+summary and collection pages are this one) is everything about the orders in one place: on top `GET
+.../order` (what has to be bought), below it a list with one line per order (searchable by member or
+number; the ones with everything paid and handed out are hidden unless asked for) and a summary:
+what, how many are handed out and paid, what it costs. "Más información" unfolds its detail
+(`detail`, kept in `unfolded`): for an article with numbers (`isNumbered`) how many are without one
+(with "Asignar los siguientes libres" or typed numbers) and the list of its numbered items, each
+with its paid / delivered state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by
+state, `pick`) and act on — mark paid or take the payment off (admin/board), hand out to the person
+asked in a dialog (`deliver-dialog`, "Entregado a", prefilled with the member the order is for; only
+members are offered), undo a delivery, return, take the numbers off; elsewhere a count field
+(`quantityOf`) does the same. Paying and taking a payment off first ask, in `pay-dialog`, for the
+asset account (`withAccount`: the non-hidden `asset` ones of `GET /accounts`, the last chosen
+remembered in `localStorage`; skipped when the order costs nothing) and send it as `account_id`. The
+create/edit dialogs of a distribution have a "Cuenta de los pagos" select (`loadAccountOptions`;
+empty is the default account, named in its first option). Changing or removing an order
+(`canEditOrder`) is offered at any time but in a draft, as the API allows. Everything goes through
+the single `perform(act, unit)`, confirming before handing over unpaid units, undoing, returning or
+taking numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by
+part, digits as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare
+list such as the numbers an error message or an entry of the list of payments names). The Telegram
+messages about numbers say them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a
+Go copy of those two that must keep giving the same order and ranges; each message says what it
+changed — numbers added, taken off or newly assigned — not what was typed). What is unfolded, ticked
+and typed survives redrawing. Both pickers ("A nombre de", "Entregado a") offer only members, never
+everybody on file: `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people`
+— `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`, also
+today's members — and only the names shown for who did what come from `/users/directory`. The API
+enforces the same (`not_eligible`, `invalid_collector`), the pickers just don't offer what would be
+refused. `api.js`'s `apiFetch` now puts the API's error `code` on the thrown `Error`, which
+`distributionCommon.js`'s `apiErrorText` maps to Spanish messages (falling back to the API's own
+text).
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,

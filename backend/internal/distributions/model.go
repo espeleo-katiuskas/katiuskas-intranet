@@ -253,8 +253,9 @@ type UpdateInput struct {
 }
 
 // RegisterInput is one unit being asked for. RegisteredByID is whoever is
-// really doing it. Staff (admin/board) may keep entering units after the
-// deadline, and while the distribution is closed.
+// really doing it. Staff (admin, board and material: who put the order together
+// and hand it out) may enter units after the deadline and while the
+// distribution is closed or done, though never in a draft.
 type RegisterInput struct {
 	DistributionID int64
 	BeneficiaryID  int64

@@ -285,16 +285,21 @@ func (s *Service) People(ctx context.Context, d Distribution, forPickup bool) ([
 	return s.repo.ListMembers(ctx, d.CutoffDate == nil, d.CutoffDate)
 }
 
-// checkOpen says whether choices can be entered or changed now: only while the
-// distribution is open — once it is closed nothing changes, for anybody, and
-// reopening it is how a late addition is made. Members can also only before the
-// deadline; staff (admin/board) can keep going after it for as long as it is
-// open.
+// checkOpen says whether choices can be entered or changed now. Never in a draft. A
+// member only while the distribution is open and before its deadline; staff (admin,
+// board and material) at any other time too — after the deadline and while it is
+// closed or done — since orders are often fixed once the asking is over.
 func (s *Service) checkOpen(d Distribution, staff bool) error {
+	if d.Status == StatusDraft {
+		return ErrNotOpen
+	}
+	if staff {
+		return nil
+	}
 	if d.Status != StatusOpen {
 		return ErrNotOpen
 	}
-	if !staff && d.ClosesAt != nil && !s.now().Before(*d.ClosesAt) {
+	if d.ClosesAt != nil && !s.now().Before(*d.ClosesAt) {
 		return ErrNotOpen
 	}
 	return nil

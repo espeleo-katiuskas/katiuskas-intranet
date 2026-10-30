@@ -415,7 +415,8 @@ account it was made (`account_id`) and record a transaction in the distribution'
   Orders of the distribution.
   - returns: 200 `[DistributionUnit]`
 - **POST** `/distributions/{id}/units` — *Any baseline role*. Orders a unit (or a quantity of an
-  article), for oneself or for another member.
+  article), for oneself or for another member. Members only while the distribution is open and
+  before its deadline; admin, board and material at any time but in a draft.
   - body: `beneficiary_login`, `is_extra`, `article_id`, `quantity`, `choices`
   - returns: 201 `DistributionUnit`
   - errors: 400 `invalid_choices`; 409 `not_open`

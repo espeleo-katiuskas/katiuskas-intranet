@@ -35,7 +35,9 @@ import {
 
 await initPage();
 const me = currentUser();
-const isStaff = hasAnyRole(me, ['admin', 'board']);
+// Who the API treats as staff for orders: they ask for others without being eligible, go past the
+// deadline, act while it is closed or done, and change what is paid.
+const isStaff = hasAnyRole(me, ['admin', 'board', 'material']);
 
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 const base = `/distributions/${id}`;
@@ -82,11 +84,13 @@ function describe(d) {
 }
 
 // Whether the signed-in person can ask for units now — the same rule the API
-// applies: only while it is open, and for a member also before the deadline
-// (admin/board can go on after it).
+// applies: never in a draft; staff (admin, board, material) otherwise always; a member
+// only while it is open and before the deadline.
 function canOrderNow() {
+  if (distribution.status === 'draft') return false;
+  if (isStaff) return true;
   const beforeDeadline = !distribution.closes_at || new Date() < new Date(distribution.closes_at);
-  return distribution.status === 'open' && (isStaff || beforeDeadline);
+  return distribution.status === 'open' && beforeDeadline;
 }
 
 function renderHeader() {
@@ -372,6 +376,9 @@ function renderOrderForm() {
       : distribution.audience === 'signup'
         ? 'Es para quien se apunte: pídelo para ti o para otro socio.'
         : allMembersHint();
+  }
+  if (open && eligible && isStaff && distribution.status !== 'open') {
+    status.textContent = `El reparto no está abierto, pero tú puedes pedir y cambiar pedidos igualmente. ${status.textContent}`;
   }
   if (orderForm.hidden) return;
   const articles = hasArticles(distribution);

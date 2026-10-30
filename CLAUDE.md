@@ -153,7 +153,8 @@ phone), not by a constraint.
 and inventory. `member` gets `MemberListing` (not `User`) from `GET /users` — never the birth date,
 roles, DNI or contact — and may edit only its own contact fields (anything else is 403
 `restricted_fields`). `GET /users` is unpaginated on purpose. Accounting writes: admin or `money`;
-inventory movements: admin, board or `material`.
+inventory movements: admin, board or `material`. **Whatever `material` can do, `board`
+can do too**: a route or check that names `material` always names `board` with it.
 
 **Activities.** Mandatory `leader_id`; only the organizer, admin and board edit or cancel; naming or
 changing the organizer is admin/board only. `caving`/`canyoning` need a current federative license

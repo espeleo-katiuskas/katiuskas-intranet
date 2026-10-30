@@ -157,8 +157,8 @@ func parseID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) 
 
 func isStaff(u auth.AuthenticatedUser) bool { return u.HasAnyRole("admin", "board") }
 
-// canSeeEveryone is who can read every unit of a distribution: the people who
-// manage it and whoever hands it out.
+// canSeeEveryone is who can read every unit of a distribution, and who is staff for
+// changing orders: the people who manage it and whoever hands it out.
 func canSeeEveryone(u auth.AuthenticatedUser) bool { return u.HasAnyRole("admin", "board", "material") }
 
 type optionBody struct {
@@ -454,7 +454,7 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 	unit, err := h.service.RegisterUnit(r.Context(), RegisterInput{
 		DistributionID: id, BeneficiaryID: beneficiaryID, RegisteredByID: current.ID,
 		IsExtra: body.IsExtra, Choices: body.Choices, ArticleID: body.ArticleID, Quantity: body.Quantity,
-		Staff: isStaff(current),
+		Staff: canSeeEveryone(current),
 	})
 	if err != nil {
 		writeError(w, err, "could not register unit")
@@ -477,8 +477,9 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 
 // ownUnit fetches a unit and checks the caller may change it: the person it
 // is for, whoever entered it, or admin/board/material (who hand things out and
-// fix orders for whoever they are), who also go past the deadline and change
-// a paid unit: for changing orders they count as staff (Service's `staff`).
+// fix orders for whoever they are), who also go past the deadline, change a paid
+// unit and act while it is closed or done: for changing orders they count as
+// staff (Service's `staff`).
 func (h *Handler) ownUnit(w http.ResponseWriter, r *http.Request) (Distribution, Unit, bool) {
 	id, ok := parseID(w, r, "id")
 	if !ok {

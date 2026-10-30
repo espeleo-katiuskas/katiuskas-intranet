@@ -1841,7 +1841,7 @@ paths:
         cap_below_requested), and the numbers can grow (another series) but
         not leave out one somebody has (409 number_in_use). `status`
         moves one step at a time along draft, open (members ask for units),
-        closed (nothing can be asked for or changed any more) and done —
+        closed (members can no longer ask for or change anything; admin, board and material still can) and done —
         forward or back, one step at a time. Units can be handed out
         (collections recorded, numbers written down) in any state but draft,
         since the order often arrives before the asking has ended.
@@ -1985,10 +1985,9 @@ paths:
         every row the person has of it, is 409 article_person_limit. No extras,
         no choices.
         Members can only do it while the distribution is
-        `open` and before `closes_at`; admin/board can go on after the
-        deadline, but also only while it is `open` (409 not_open otherwise): a
-        closed distribution changes for nobody, and is reopened for a late
-        addition.
+        `open` and before `closes_at`; admin, board and material can do it at
+        any time but in a draft, so also after the deadline and while it is
+        closed or done (409 not_open otherwise, and always in a draft).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2177,7 +2176,7 @@ paths:
         (409 article_exhausted, article_person_limit). Allowed to
         the person it is for, whoever entered it, and admin/board/material, under the
         same open rules as asking for it (admin/board/material also after the
-        deadline). What is handed out can't be taken from under its owner
+        deadline, and while it is closed or done). What is handed out can't be taken from under its owner
         (409 unit_locked, also in any unit that isn't a row of an article);
         in a row of an article admin/board/material can change it but not below
         what was handed out (409 quantity_below_delivered), nor below the numbers
