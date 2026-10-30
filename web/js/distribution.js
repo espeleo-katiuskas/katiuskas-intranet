@@ -122,13 +122,6 @@ function renderHeader() {
     numbersLink.href = `/reparto-numeros?id=${id}`;
     numbersLink.hidden = !distribution.articles.some((a) => a.identifier_fields.length > 0);
   }
-  // The actions bar only holds things for admin/board/material.
-  document.getElementById('distribution-actions').hidden = !hasAnyRole(me, [
-    'admin',
-    'board',
-    'material',
-  ]);
-
   const steps = STATUS_ORDER;
   const index = steps.indexOf(distribution.status);
   const back = document.getElementById('step-back');
@@ -160,6 +153,14 @@ async function setStatus(status) {
 function onClick(elementId, handler) {
   document.getElementById(elementId)?.addEventListener('click', handler);
 }
+
+// Everything to manage the distribution is hidden until the "Gestionar" button, which only
+// admin/board/material have, is pressed.
+onClick('manage-toggle', () => {
+  const panel = document.getElementById('distribution-actions');
+  panel.hidden = !panel.hidden;
+  document.getElementById('manage-toggle').setAttribute('aria-expanded', String(!panel.hidden));
+});
 
 onClick('step-back', () => {
   const steps = STATUS_ORDER;

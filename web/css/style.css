@@ -1067,6 +1067,17 @@ input[readonly] { background: var(--surface-muted); }
   background: var(--field-dirty-bg);
 }
 
+/* The controls for whoever manages something (a distribution), kept behind a button. */
+.manage-panel {
+  margin-top: 10px;
+  padding: 10px 14px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+.manage-panel .hint { margin: 0; }
+.manage-panel .panel-actions { margin-top: 10px; }
+
 .panel-actions {
   display: flex;
   flex-wrap: wrap;

@@ -20,14 +20,22 @@
 
   <p id="feedback" class="success-message" hidden></p>
 
-  <div class="panel-actions" id="distribution-actions" hidden>
-    <a id="link-orders" class="btn btn-secondary btn-small" data-roles="admin,board,material">Pedidos</a>
-    <a id="link-payments" class="btn btn-secondary btn-small" data-roles="admin,board" hidden>Pagos</a>
-    <a id="link-numbers" class="btn btn-secondary btn-small" data-roles="admin,board,material" hidden>Números</a>
-    <button id="step-back" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" hidden></button>
-    <button id="step-forward" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden></button>
-    <button id="open-edit" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">Editar</button>
-    <button id="delete-distribution" type="button" class="btn btn-danger btn-small" data-roles="admin">Borrar</button>
+  <!-- Everything to manage the distribution is behind one button that only the people who manage it
+       have, so nobody else sees controls that are not for them. -->
+  <div id="manage" data-roles="admin,board,material">
+    <button id="manage-toggle" type="button" class="btn btn-secondary btn-small" aria-expanded="false" aria-controls="distribution-actions">⚙ Gestionar este reparto</button>
+    <div class="manage-panel" id="distribution-actions" hidden>
+      <p class="hint">Esto solo lo ve quien gestiona los repartos (administración, Junta directiva y material); los socios no.</p>
+      <div class="panel-actions">
+        <a id="link-orders" class="btn btn-secondary btn-small" data-roles="admin,board,material">Pedidos</a>
+        <a id="link-payments" class="btn btn-secondary btn-small" data-roles="admin,board" hidden>Pagos</a>
+        <a id="link-numbers" class="btn btn-secondary btn-small" data-roles="admin,board,material" hidden>Números</a>
+        <button id="step-back" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" hidden></button>
+        <button id="step-forward" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden></button>
+        <button id="open-edit" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">Editar</button>
+        <button id="delete-distribution" type="button" class="btn btn-danger btn-small" data-roles="admin">Borrar</button>
+      </div>
+    </div>
   </div>
 
   <dialog id="edit-distribution-dialog" class="panel modal">
