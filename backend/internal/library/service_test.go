@@ -221,3 +221,107 @@ func TestSymlinkEscapingRootIsRejected(t *testing.T) {
 		t.Errorf("expected ErrInvalidPath for a symlink escaping root, got %v", err)
 	}
 }
+
+// listNames lists a directory and returns just the names, in the order given.
+func listNames(t *testing.T, svc *library.Service, dir string) []string {
+	t.Helper()
+	listing, err := svc.ListDirectory(dir)
+	if err != nil {
+		t.Fatalf("list %q: %v", dir, err)
+	}
+	names := make([]string, len(listing.Entries))
+	for i, e := range listing.Entries {
+		names[i] = e.Name
+	}
+	return names
+}
+
+func serviceWithFiles(t *testing.T, order string, names ...string) (*library.Service, string) {
+	t.Helper()
+	root := t.TempDir()
+	for _, name := range names {
+		write(t, filepath.Join(root, name), "x")
+	}
+	if order != "" {
+		write(t, filepath.Join(root, ".order.json"), order)
+	}
+	svc, err := library.NewService(root)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	return svc, root
+}
+
+func equal(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestListDirectoryFollowsTheOrderFile(t *testing.T) {
+	svc, _ := serviceWithFiles(t, `["c.pdf", "a.pdf", "gone.pdf", "c.pdf"]`, "a.pdf", "b.pdf", "c.pdf", "d.pdf")
+	// Named ones first, in the file's order (a missing one skipped, a repeated one counted once),
+	// then the rest alphabetically; the order file itself is never listed.
+	if got, want := listNames(t, svc, ""), []string{"c.pdf", "a.pdf", "b.pdf", "d.pdf"}; !equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestOrderFileKeepsDirectoriesFirst(t *testing.T) {
+	svc, root := serviceWithFiles(t, `["z.pdf", "Sub2", "Sub1"]`, "a.pdf", "z.pdf")
+	for _, d := range []string{"Sub1", "Sub2", "Another"} {
+		if err := os.Mkdir(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"Sub2", "Sub1", "Another", "z.pdf", "a.pdf"}
+	if got := listNames(t, svc, ""); !equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestOrderFileOnlyAppliesToItsOwnDirectory(t *testing.T) {
+	svc, root := serviceWithFiles(t, `["b.pdf"]`, "a.pdf", "b.pdf")
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, "sub", "a.pdf"), "x")
+	write(t, filepath.Join(root, "sub", "b.pdf"), "x")
+	if got, want := listNames(t, svc, "sub"), []string{"a.pdf", "b.pdf"}; !equal(got, want) {
+		t.Errorf("the parent's order file must not apply: got %v, want %v", got, want)
+	}
+}
+
+func TestUnusableOrderFileIsIgnored(t *testing.T) {
+	for name, content := range map[string]string{
+		"not json":     `{`,
+		"not an array": `{"a": 1}`,
+		"not of names": `[1, 2]`,
+		"only blanks":  `  `,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := serviceWithFiles(t, content, "b.pdf", "a.pdf")
+			if got, want := listNames(t, svc, ""), []string{"a.pdf", "b.pdf"}; !equal(got, want) {
+				t.Errorf("got %v, want the alphabetical order %v", got, want)
+			}
+		})
+	}
+}
+
+func TestOrderFileThatIsASymlinkOutsideTheRootIsIgnored(t *testing.T) {
+	svc, root := serviceWithFiles(t, "", "a.pdf", "b.pdf")
+	outside := filepath.Join(t.TempDir(), "order.json")
+	write(t, outside, `["b.pdf"]`)
+	if err := os.Symlink(outside, filepath.Join(root, ".order.json")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	if got, want := listNames(t, svc, ""), []string{"a.pdf", "b.pdf"}; !equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

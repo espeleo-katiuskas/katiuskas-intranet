@@ -17,8 +17,9 @@ import { fileKind } from './fileBrowser.js';
 // prefixed subdirectory, so it's invisible to the plain "licencias"
 // listing this module itself reads (userfiles.Service.ListDirectory
 // skips any entry, file or directory, starting with "."), the same
-// "invisible companion file, fetched by exact path" trick
-// dashboard.js's own .order.json already relies on. Nothing in this
+// "invisible companion file, fetched by exact path" trick (the
+// library's own .order.json is a dotfile too, though the API reads that
+// one itself). Nothing in this
 // app generates one — whoever drops a license's own file in is
 // expected to drop its thumbnail in alongside it, at 280px on its
 // longest side (twice LICENSE_THUMBNAIL_DISPLAY_SIZE in style.css's

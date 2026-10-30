@@ -627,12 +627,14 @@ removes the whole term, not just clears a field back to open.
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos, actas...)
 read-only from a plain directory tree bind-mounted from `./library` on the host — see [Dropping
 files in](#dropping-files-into-the-library-and-the-per-person-directories) — not the database. `GET
-/library?path=...` lists a directory (subdirectories first, then files, both alphabetical; dotfiles
-never listed); `GET /library/file/{path...}` streams a file's raw bytes (the path is the rest of the
-URL, slashes included — e.g. `/library/file/actas/2026-02-01.pdf` — not a `?path=` query parameter),
-inline by default or as an attachment with `?download=1`, with HTTP Range support via
-`http.ServeContent`. Both are open to any baseline role and read-only — nothing here lets a caller
-upload, rename, or delete anything.
+/library?path=...` lists a directory (subdirectories first, then files, each group alphabetical
+except for what the directory's own optional `.order.json` — a JSON array of names — puts first, in
+its order; dotfiles never listed, that one included, though it can be fetched by its path); `GET
+/library/file/{path...}` streams a file's raw bytes (the path is the rest of the URL, slashes
+included — e.g. `/library/file/actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
+default or as an attachment with `?download=1`, with HTTP Range support via `http.ServeContent`.
+Both are open to any baseline role and read-only — nothing here lets a caller upload, rename, or
+delete anything.
 
 ## Per-person files
 
@@ -1191,7 +1193,12 @@ role/self checks their routes enforce.
 
 Club documents (estatutos, actas...) shown at `/archivo`: drop files into `./library/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no
-rebuild, no restart, nothing through the API itself. That directory is gitignored.
+rebuild, no restart, nothing through the API itself. That directory is gitignored. The listing is
+alphabetical; to put some files first (the home page's Documentos, Actas and Memorias lists use
+this), add a `.order.json` to that directory, a JSON array of names such as
+`["estatutos.pdf", "reglamento.pdf"]`: those come first, in that order, and the rest follow
+alphabetically. A name that is not there is skipped, and a file that is not a valid array is
+ignored (the API logs a warning). Editing it takes effect on the next request.
 
 Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`:
 drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,

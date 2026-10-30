@@ -490,7 +490,8 @@ account it was made (`account_id`) and record a transaction in the distribution'
 
 Directory trees on disk, read-only: none of this is in the database.
 
-- **GET** `/library` — *Any baseline role*. Lists a directory of the club's archive (`?path=`).
+- **GET** `/library` — *Any baseline role*. Lists a directory of the club's archive (`?path=`), in
+  the order of its optional `.order.json` when it has one, else alphabetically.
   - query: `path`
   - returns: 200 `LibraryListing`
   - errors: 400 `invalid_path`, `not_a_directory`

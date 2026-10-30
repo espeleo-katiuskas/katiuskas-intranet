@@ -30,7 +30,9 @@ type Entry struct {
 }
 
 // Listing is a directory's contents, subdirectories first then files,
-// both alphabetical — the shape GET /library returns.
+// each group alphabetical or in the order of the directory's own
+// .order.json (see Service.ListDirectory) — the shape GET /library
+// returns.
 type Listing struct {
 	// Path is the same slash-separated, root-relative path that was
 	// requested, normalized (see cleanRelPath) — echoed back so the

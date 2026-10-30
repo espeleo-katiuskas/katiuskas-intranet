@@ -1,9 +1,11 @@
 package library
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"os"
 	"path"
@@ -108,10 +110,22 @@ func (s *Service) resolve(relPath string) (string, error) {
 	return resolved, nil
 }
 
-// ListDirectory lists relPath's immediate contents, directories first
-// then files, both alphabetical (case-insensitive) — dotfiles (.git,
-// .DS_Store, an editor's swap file) are never listed, since nothing
-// under the library root should need one.
+// orderFileName is the optional file in a directory that decides the order its entries are
+// listed in (see ListDirectory). It starts with a dot, so it never shows up in a listing, but
+// can still be fetched by its exact path.
+const orderFileName = ".order.json"
+
+// maxOrderFileSize bounds how much of an order file is read: it is a list of names.
+const maxOrderFileSize = 1 << 20
+
+// ListDirectory lists relPath's immediate contents, directories first then files — dotfiles
+// (.git, .DS_Store, an editor's swap file) are never listed, since nothing under the library
+// root should need one. Within each group the order is alphabetical (case-insensitive), except
+// for what the directory's own optional .order.json names: a plain JSON array of entry names,
+// which come first, in that order, followed by everything it does not name in alphabetical
+// order. Reordering is then just editing that one file inside the library, and every caller
+// (the home page's lists, /archivo) sees the same order. A name in it that does not exist is
+// skipped; a file that cannot be read or is not an array of strings is ignored (and logged).
 func (s *Service) ListDirectory(relPath string) (Listing, error) {
 	full, err := s.resolve(relPath)
 	if err != nil {
@@ -151,14 +165,51 @@ func (s *Service) ListDirectory(relPath string) (Listing, error) {
 		}
 		entries = append(entries, e)
 	}
+	rank := s.readOrder(relPath)
 	sort.Slice(entries, func(i, j int) bool {
-		if (entries[i].Type == EntryDir) != (entries[j].Type == EntryDir) {
-			return entries[i].Type == EntryDir
+		a, b := entries[i], entries[j]
+		if (a.Type == EntryDir) != (b.Type == EntryDir) {
+			return a.Type == EntryDir
 		}
-		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+		ra, listedA := rank[a.Name]
+		rb, listedB := rank[b.Name]
+		if listedA != listedB {
+			return listedA
+		}
+		if listedA {
+			return ra < rb
+		}
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	})
 
 	return Listing{Path: cleanRelPath(relPath), Entries: entries}, nil
+}
+
+// readOrder reads the directory's .order.json into the position of each name it lists (the first
+// time a name appears is the one that counts). Nil when there is none or it is not usable.
+func (s *Service) readOrder(relPath string) map[string]int {
+	full, err := s.resolve(path.Join(cleanRelPath(relPath), orderFileName))
+	if err != nil {
+		return nil // no such file, or a symlink out of the tree: no order
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var names []string
+	if err := json.NewDecoder(io.LimitReader(f, maxOrderFileSize)).Decode(&names); err != nil {
+		slog.Warn("library: ignoring an unreadable "+orderFileName,
+			"directory", cleanRelPath(relPath), "error", err)
+		return nil
+	}
+	rank := make(map[string]int, len(names))
+	for i, name := range names {
+		if _, seen := rank[name]; !seen {
+			rank[name] = i
+		}
+	}
+	return rank
 }
 
 // File is an open document ready to be streamed to a response, along

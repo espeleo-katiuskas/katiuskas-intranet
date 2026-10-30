@@ -93,40 +93,14 @@ if (isAdmin) {
 // Documentos/Actas asambleas/Memorias de actividades all read straight
 // from a fixed /library folder (library/documentos, library/actas,
 // library/memorias — see index.html) rather than from any club-specific
-// endpoint, so admins can add or remove a PDF just by dropping it in,
-// no deploy needed. A folder's own optional .order.json — a plain JSON
-// array of file names, invisible in /archivo's own listing since it
-// starts with a dot but still fetchable by exact path (Service.OpenFile
-// applies no such filter) — decides which files show first and in what
-// order; anything present in the folder but not listed there follows
-// afterward, in the alphabetical order /archivo's own listing already
-// returns everything in. Reordering is then just editing that one file
-// inside ./library.
-async function loadOrderedFiles(dirPath) {
+// endpoint, so admins can add or remove a PDF just by dropping it in, no
+// deploy needed. The order is the API's own: alphabetical, unless the
+// folder has a .order.json naming which files go first
+// (Service.ListDirectory), so /archivo shows the same order and there is
+// nothing to fetch or sort here.
+async function listFiles(dirPath) {
   const listing = await apiFetch(`/library?path=${encodeURIComponent(dirPath)}`);
-  const files = listing.entries.filter((entry) => entry.type === 'file');
-
-  let order = [];
-  try {
-    const manifest = await apiFetch(`/library/file/${encodeFilePath(`${dirPath}/.order.json`)}`);
-    if (Array.isArray(manifest)) order = manifest;
-  } catch {
-    // No .order.json (or it failed to load) — alphabetical order below covers everything.
-  }
-
-  const remaining = new Map(files.map((f) => [f.name, f]));
-  const ordered = [];
-  for (const name of order) {
-    const file = remaining.get(name);
-    if (file) {
-      ordered.push(file);
-      remaining.delete(name);
-    }
-  }
-  for (const file of files) {
-    if (remaining.has(file.name)) ordered.push(file);
-  }
-  return ordered;
+  return listing.entries.filter((entry) => entry.type === 'file');
 }
 
 function stripExtension(name) {
@@ -178,7 +152,7 @@ function actaYear(name) {
 async function loadDocumentos() {
   const list = document.getElementById('documentos-list');
   try {
-    const files = await loadOrderedFiles('documentos');
+    const files = await listFiles('documentos');
     list.innerHTML = files.length
       ? files
           .map((f) => `<li>${fileLink('documentos', f.name, stripExtension(f.name))}</li>`)
@@ -194,14 +168,14 @@ async function loadDocumentos() {
 // rather than all listed together. The year <select> is built from
 // whatever years actually have a file (ascending, most recent selected
 // by default) instead of a fixed range, so a year with no assembly
-// never shows up as an empty option, and .order.json (see
-// loadOrderedFiles) still decides the order actas appear in *within* a
-// year, in case that's ever needed.
+// never shows up as an empty option, and the API's order (see
+// listFiles) is kept *within* a year, in case a .order.json
+// ever sets one.
 async function loadActas() {
   const yearSelect = document.getElementById('actas-year');
   const list = document.getElementById('actas-list');
   try {
-    const files = (await loadOrderedFiles('actas')).filter((f) => actaYear(f.name) !== null);
+    const files = (await listFiles('actas')).filter((f) => actaYear(f.name) !== null);
     const years = [...new Set(files.map((f) => actaYear(f.name)))].sort();
     if (!years.length) {
       yearSelect.innerHTML = '';
@@ -214,7 +188,7 @@ async function loadActas() {
 
     const renderSelectedYear = () => {
       // Sorted by (month, day, suffix) rather than trusting the raw
-      // filename string or loadOrderedFiles' own listing order: a plain
+      // filename string or listFiles' own listing order: a plain
       // "2024-01-23.pdf" sorts after "2024-01-23-2.pdf" as bare strings
       // ("-" is before "." in ASCII), which would wrongly put a
       // single-acta file after a same-day suffixed one.
@@ -242,7 +216,7 @@ async function loadActas() {
 async function loadMemorias() {
   const container = document.getElementById('memorias-list');
   try {
-    const files = await loadOrderedFiles('memorias');
+    const files = await listFiles('memorias');
     container.innerHTML = files.length
       ? files.map((f) => fileLink('memorias', f.name, stripExtension(f.name))).join(' · ')
       : 'No hay memorias disponibles.';

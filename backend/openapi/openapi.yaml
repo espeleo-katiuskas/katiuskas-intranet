@@ -4218,7 +4218,10 @@ components:
         entries:
           type: array
           items: { $ref: "#/components/schemas/LibraryEntry" }
-          description: Subdirectories first, then files, both alphabetical. Dotfiles never appear.
+          description: >
+            Subdirectories first, then files, each group alphabetical, except that the names
+            listed in the directory's own optional .order.json (a JSON array of names) come
+            first, in that order. Dotfiles never appear (.order.json included).
 
     UserFileEntry:
       type: object

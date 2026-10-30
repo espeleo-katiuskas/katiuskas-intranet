@@ -164,7 +164,8 @@ The thumbnail itself is a companion file at
 PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing this
 module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
 starting with "."), the same "invisible companion file, fetched by exact path" trick
-`dashboard.js`'s own `.order.json` already relies on. Nothing in the running app generates
+(the library's own `.order.json` is a dotfile too, though the API reads that one itself).
+Nothing in the running app generates
 one; `scripts/generate-license-thumbnails.sh` does, on demand, for every license copy that
 lacks one (see **Commands**); one dropped in by hand next to the license's own file works
 the same. It is meant to be 280px on its longest side — twice `.license-thumbnail`'s own
