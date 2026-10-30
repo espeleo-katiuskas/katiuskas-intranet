@@ -264,6 +264,14 @@ What to protect on the repository's side, because it is now what decides what ru
   production. A tag whose commit is not in `main` is refused by the script anyway, but it does
   not stop one that is.
 - **Actions** (if the repository is public): require approval for runs from outside collaborators.
+  The ones the workflow uses are pinned to a commit, not a tag, which can be moved afterwards.
+- **Dependencies**: Dependabot (`.github/dependabot.yml`) opens a pull request every week for what
+  has a newer version: the Go modules (all in one), the actions (it updates the commit and the
+  version in the comment), the base images of the API's Dockerfile and the images of the compose
+  files. A major version of PostgreSQL is left out on purpose: it does not read the previous one's
+  data, so moving to it is a dump and restore done by hand. Merging one of these pull requests is a
+  deploy to testing like any other (see above), so wait for CI to pass and look at what changes
+  first.
 
 ## Testing's data is a copy of production's
 
