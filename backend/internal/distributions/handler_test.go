@@ -1204,3 +1204,143 @@ func TestEditNotificationListsWhatChanged(t *testing.T) {
 		t.Errorf("an unchanged edit should say nothing, got %v", e.notifier.sent)
 	}
 }
+
+// A distribution's visibility keeps whoever is below the level it names from seeing it, and so
+// from doing anything with it: every route answers as if it did not exist.
+func TestVisibilityRestrictsWhoSeesAndActs(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	member := e.newPerson(t, "2020-01-01", "member")
+	people := map[string]person{"admin": admin, "board": board, "material": material, "member": member}
+
+	// Who sees what: each level includes the ones above it.
+	cases := []struct {
+		visibility string
+		sees       []string
+	}{
+		{"all", []string{"admin", "board", "material", "member"}},
+		{"material", []string{"admin", "board", "material"}},
+		{"board", []string{"admin", "board"}},
+		{"admin", []string{"admin"}},
+	}
+	for _, c := range cases {
+		body := shirt()
+		body["visibility"] = c.visibility
+		d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+		if string(d.Visibility) != c.visibility {
+			t.Errorf("created with %s, came back as %s", c.visibility, d.Visibility)
+		}
+		setStatus(t, e, admin, d.ID, "open")
+		path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+		for name, p := range people {
+			sees := false
+			for _, s := range c.sees {
+				sees = sees || s == name
+			}
+			status := http.StatusNotFound
+			if sees {
+				status = http.StatusOK
+			}
+			label := c.visibility + "/" + name
+			if rec := e.do("GET", path, p.token, nil); rec.Code != status {
+				t.Errorf("%s: GET distribution expected %d, got %d", label, status, rec.Code)
+			}
+			if rec := e.do("GET", unitsPath(d.ID), p.token, nil); rec.Code != status {
+				t.Errorf("%s: GET units expected %d, got %d", label, status, rec.Code)
+			}
+			if rec := e.do("GET", path+"/people?for=order", p.token, nil); rec.Code != status {
+				t.Errorf("%s: GET people expected %d, got %d", label, status, rec.Code)
+			}
+			listed := false
+			for _, item := range decode[[]distributions.Distribution](t, mustStatus(t, e.do("GET", "/api/v1/distributions", p.token, nil), http.StatusOK)) {
+				listed = listed || item.ID == d.ID
+			}
+			if listed != sees {
+				t.Errorf("%s: listed=%v, expected %v", label, listed, sees)
+			}
+			// The routes of those who hand things out are the same: a 403 for the role, then a 404.
+			if name != "member" {
+				if rec := e.do("GET", path+"/order", p.token, nil); rec.Code != status {
+					t.Errorf("%s: GET order expected %d, got %d", label, status, rec.Code)
+				}
+			}
+		}
+		// Acting on it is as much "not there" as looking at it.
+		if !(c.visibility == "all") {
+			expect(t, register(e, d.ID, member, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusNotFound, "not_found")
+		}
+		mustStatus(t, register(e, d.ID, admin, map[string]any{"beneficiary_login": member.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
+	}
+}
+
+func TestVisibilityDefaultsToAllAndOnlyAdminChangesIt(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	board := e.newPerson(t, "2020-01-01", "member", "board")
+	path := func(d distributions.Distribution) string { return fmt.Sprintf("/api/v1/distributions/%d", d.ID) }
+
+	// Left out, it is "all"; board can create one, but not set anything else.
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", board.token, shirt()), http.StatusCreated))
+	if d.Visibility != distributions.VisibilityAll {
+		t.Errorf("expected the default all, got %q", d.Visibility)
+	}
+	body := shirt()
+	body["visibility"] = "all"
+	mustStatus(t, e.do("POST", "/api/v1/distributions", board.token, body), http.StatusCreated)
+	body["visibility"] = "board"
+	expect(t, e.do("POST", "/api/v1/distributions", board.token, body), http.StatusForbidden, "forbidden")
+	body["visibility"] = "secret"
+	expect(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusBadRequest, "invalid_visibility")
+
+	// Editing: a form that sends back what it is is fine, anything else needs admin.
+	same := shirt()
+	same["visibility"] = "all"
+	mustStatus(t, e.do("PATCH", path(d), board.token, same), http.StatusOK)
+	mustStatus(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusOK) // left out: kept
+	changed := shirt()
+	changed["visibility"] = "material"
+	expect(t, e.do("PATCH", path(d), board.token, changed), http.StatusForbidden, "forbidden")
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK))
+	if got.Visibility != distributions.VisibilityMaterial {
+		t.Errorf("admin should change it, got %q", got.Visibility)
+	}
+	// Of the notifications of everything done above, the one for admin's edit names the change.
+	found := false
+	for i := 0; i < 20 && !found; i++ {
+		msg := e.notifier.waitForMessage(t)
+		found = strings.Contains(msg, "Visibility") && strings.Contains(msg, "material")
+	}
+	if !found {
+		t.Error("the notification should say that the visibility changed")
+	}
+	// Left out in a later edit, it stays.
+	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path(d), admin.token, shirt()), http.StatusOK))
+	if got.Visibility != distributions.VisibilityMaterial {
+		t.Errorf("leaving it out should keep it, got %q", got.Visibility)
+	}
+	changed["visibility"] = "secret"
+	expect(t, e.do("PATCH", path(d), admin.token, changed), http.StatusBadRequest, "invalid_visibility")
+
+	// Board can see one for board and edit everything but who sees it; not one for admin.
+	changed["visibility"] = "board"
+	mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK)
+	mustStatus(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusOK)
+	changed["visibility"] = "admin"
+	mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK)
+	expect(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusNotFound, "not_found")
+}
+
+// Visibility does not make a draft visible: drafts are for admin and board whatever it says.
+func TestVisibilityDoesNotOpenUpADraft(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	material := e.newPerson(t, "2020-01-01", "member", "material")
+	body := shirt()
+	body["visibility"] = "material"
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+	expect(t, e.do("GET", fmt.Sprintf("/api/v1/distributions/%d", d.ID), material.token, nil), http.StatusNotFound, "not_found")
+	setStatus(t, e, admin, d.ID, "open")
+	mustStatus(t, e.do("GET", fmt.Sprintf("/api/v1/distributions/%d", d.ID), material.token, nil), http.StatusOK)
+}

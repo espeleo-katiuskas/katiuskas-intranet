@@ -56,6 +56,15 @@
             <option value="signup">Quien se apunte</option>
           </select>
         </div>
+        <div class="field" data-roles="admin">
+          <label for="ed-visibility">Quién lo ve</label>
+          <select id="ed-visibility" name="visibility">
+            <option value="all">Todo el mundo</option>
+            <option value="material">Material, Junta directiva y administración</option>
+            <option value="board">Junta directiva y administración</option>
+            <option value="admin">Solo administración</option>
+          </select>
+        </div>
         <div class="field">
           <label for="ed-cutoff">Socios a fecha de <span class="optional" id="ed-cutoff-hint"></span></label>
           <input id="ed-cutoff" name="cutoff_date" type="date">

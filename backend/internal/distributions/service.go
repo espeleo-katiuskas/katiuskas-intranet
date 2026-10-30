@@ -10,13 +10,14 @@ import (
 )
 
 var (
-	ErrInvalidName     = errors.New("name is required")
-	ErrInvalidAudience = errors.New("audience must be all_members or signup")
-	ErrCutoffRequired  = errors.New("a distribution for all members needs a cutoff_date")
-	ErrInvalidPrice    = errors.New("prices can't be negative")
-	ErrInvalidMaxExtra = errors.New("max_extra needs an extra_price and can't be negative")
-	ErrInvalidOptions  = errors.New("each option needs a name and at least one value, and names and values can't repeat")
-	ErrInvalidStatus   = errors.New("status must be draft, open, closed or done")
+	ErrInvalidName       = errors.New("name is required")
+	ErrInvalidAudience   = errors.New("audience must be all_members or signup")
+	ErrInvalidVisibility = errors.New("visibility must be all, material, board or admin")
+	ErrCutoffRequired    = errors.New("a distribution for all members needs a cutoff_date")
+	ErrInvalidPrice      = errors.New("prices can't be negative")
+	ErrInvalidMaxExtra   = errors.New("max_extra needs an extra_price and can't be negative")
+	ErrInvalidOptions    = errors.New("each option needs a name and at least one value, and names and values can't repeat")
+	ErrInvalidStatus     = errors.New("status must be draft, open, closed or done")
 	// ErrInvalidArticles means an article with no name or a negative price, a
 	// limit below 1, or two with the same name.
 	ErrInvalidArticles = errors.New("each article needs a distinct name, a price of at least 0 and, if it has a limit, one of at least 1")
@@ -179,6 +180,12 @@ func validateArticleKind(f fields, articles, options int) error {
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (Distribution, error) {
 	in.Name = strings.TrimSpace(in.Name)
+	if in.Visibility == "" {
+		in.Visibility = VisibilityAll
+	}
+	if !in.Visibility.Valid() {
+		return Distribution{}, ErrInvalidVisibility
+	}
 	if err := validateFields(fields{in.Name, in.Audience, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra}); err != nil {
 		return Distribution{}, err
 	}
@@ -208,6 +215,9 @@ func (s *Service) List(ctx context.Context, includeDrafts bool) ([]Distribution,
 
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distribution, error) {
 	in.Name = strings.TrimSpace(in.Name)
+	if in.Visibility != nil && !in.Visibility.Valid() {
+		return Distribution{}, ErrInvalidVisibility
+	}
 	if err := validateFields(fields{in.Name, in.Audience, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra}); err != nil {
 		return Distribution{}, err
 	}

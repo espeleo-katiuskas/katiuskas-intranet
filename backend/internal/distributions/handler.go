@@ -36,7 +36,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // auditableFields are the Distribution fields update's notification diffs —
 // every one UpdateInput can change.
 var auditableFields = []string{
-	"Name", "Description", "Audience", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options", "Articles", "AccountName",
+	"Name", "Description", "Audience", "Visibility", "Status", "ClosesAt", "CutoffDate", "Price", "ExtraPrice", "MaxExtra", "Options", "Articles", "AccountName",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -86,6 +86,7 @@ func writeError(w http.ResponseWriter, err error, internalMessage string) {
 		{ErrUnitNotFound, http.StatusNotFound, "not_found"},
 		{ErrInvalidName, http.StatusBadRequest, "invalid_name"},
 		{ErrInvalidAudience, http.StatusBadRequest, "invalid_audience"},
+		{ErrInvalidVisibility, http.StatusBadRequest, "invalid_visibility"},
 		{ErrCutoffRequired, http.StatusBadRequest, "cutoff_required"},
 		{ErrInvalidPrice, http.StatusBadRequest, "invalid_price"},
 		{ErrInvalidMaxExtra, http.StatusBadRequest, "invalid_max_extra"},
@@ -195,6 +196,7 @@ type distributionBody struct {
 	Name        string         `json:"name"`
 	Description *string        `json:"description"`
 	Audience    Audience       `json:"audience"`
+	Visibility  *Visibility    `json:"visibility"`
 	ClosesAt    *time.Time     `json:"closes_at"`
 	CutoffDate  *string        `json:"cutoff_date"`
 	Price       float64        `json:"price"`
@@ -236,6 +238,13 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not list distributions")
 		return
 	}
+	visibleList := list[:0]
+	for _, d := range list {
+		if canSee(current, d) {
+			visibleList = append(visibleList, d)
+		}
+	}
+	list = visibleList
 	for i := range list {
 		if err := h.fillEligible(r.Context(), &list[i], current.ID); err != nil {
 			writeError(w, err, "could not check eligibility")
@@ -254,12 +263,52 @@ func (h *Handler) fillEligible(ctx context.Context, d *Distribution, userID int6
 	return nil
 }
 
-// visible fetches a distribution for a caller: drafts exist only for whoever
-// manages them, and are a 404 for everybody else.
+// canSee says whether a caller may see a distribution, and so act on it at all:
+// drafts exist only for admin and board, and its visibility keeps it from anybody
+// below the level it names (each level includes the ones above it).
+func canSee(u auth.AuthenticatedUser, d Distribution) bool {
+	if d.Status == StatusDraft && !isStaff(u) {
+		return false
+	}
+	return visibleTo(u, d)
+}
+
+// visibleTo is the part of canSee that comes from the distribution's visibility.
+func visibleTo(u auth.AuthenticatedUser, d Distribution) bool {
+	switch d.Visibility {
+	case VisibilityMaterial:
+		return u.HasAnyRole("admin", "board", "material")
+	case VisibilityBoard:
+		return u.HasAnyRole("admin", "board")
+	case VisibilityAdmin:
+		return u.HasAnyRole("admin")
+	default:
+		return true
+	}
+}
+
+// visible fetches a distribution for a caller: one the caller cannot see (see
+// canSee) is a 404, as if it did not exist, for every route about it.
 func (h *Handler) visible(w http.ResponseWriter, r *http.Request, id int64) (Distribution, bool) {
 	current, _ := auth.UserFromContext(r.Context())
 	d, err := h.service.Get(r.Context(), id)
-	if err == nil && d.Status == StatusDraft && !isStaff(current) {
+	if err == nil && !canSee(current, d) {
+		err = ErrNotFound
+	}
+	if err != nil {
+		writeError(w, err, "could not fetch distribution")
+		return Distribution{}, false
+	}
+	return d, true
+}
+
+// accessible is visible without the rule about drafts, for the routes of the people who put an
+// order together and hand it out, which have always worked on a draft too (and answer for it
+// themselves: nothing can be handed out of one).
+func (h *Handler) accessible(w http.ResponseWriter, r *http.Request, id int64) (Distribution, bool) {
+	current, _ := auth.UserFromContext(r.Context())
+	d, err := h.service.Get(r.Context(), id)
+	if err == nil && !visibleTo(current, d) {
 		err = ErrNotFound
 	}
 	if err != nil {
@@ -297,6 +346,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		CutoffDate: cutoff, Price: body.Price, ExtraPrice: body.ExtraPrice, MaxExtra: body.MaxExtra,
 		AccountID: body.AccountID, CreatedBy: current.ID,
 	}
+	if body.Visibility != nil {
+		// Only admin sets who can see a distribution: anybody else can only leave it at the default.
+		if *body.Visibility != VisibilityAll && !current.HasAnyRole("admin") {
+			writeVisibilityForbidden(w)
+			return
+		}
+		in.Visibility = *body.Visibility
+	}
 	if body.Options != nil {
 		in.Options = optionInputs(*body.Options)
 	}
@@ -321,11 +378,23 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	before, beforeErr := h.service.Get(r.Context(), id)
+	before, ok := h.visible(w, r, id)
+	if !ok {
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
 	in := UpdateInput{
 		Name: body.Name, Description: body.Description, Audience: body.Audience, ClosesAt: body.ClosesAt,
 		CutoffDate: cutoff, Price: body.Price, ExtraPrice: body.ExtraPrice, MaxExtra: body.MaxExtra,
 		AccountID: body.AccountID, Status: body.Status,
+	}
+	// Only admin changes who can see it; sending back what it already is, as a form does, is fine.
+	if body.Visibility != nil && *body.Visibility != before.Visibility {
+		if !current.HasAnyRole("admin") {
+			writeVisibilityForbidden(w)
+			return
+		}
+		in.Visibility = body.Visibility
 	}
 	if body.Options != nil {
 		options := optionInputs(*body.Options)
@@ -340,13 +409,15 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not update distribution")
 		return
 	}
-	if beforeErr == nil {
-		if diff := httpapi.DiffFields(before, d, auditableFields...); len(diff) > 0 {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el reparto «%s»:\n%s",
-				h.actorLogin(r.Context()), d.Name, strings.Join(diff, "\n")))
-		}
+	if diff := httpapi.DiffFields(before, d, auditableFields...); len(diff) > 0 {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el reparto «%s»:\n%s",
+			h.actorLogin(r.Context()), d.Name, strings.Join(diff, "\n")))
 	}
 	httpapi.WriteJSON(w, http.StatusOK, d)
+}
+
+func writeVisibilityForbidden(w http.ResponseWriter) {
+	httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only admin can change who can see a distribution")
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -489,7 +560,7 @@ func (h *Handler) ownUnit(w http.ResponseWriter, r *http.Request) (Distribution,
 	if !ok {
 		return Distribution{}, Unit{}, false
 	}
-	d, ok := h.visible(w, r, id)
+	d, ok := h.accessible(w, r, id)
 	if !ok {
 		return Distribution{}, Unit{}, false
 	}
@@ -567,6 +638,9 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if _, ok := h.accessible(w, r, id); !ok {
+		return
+	}
 	order, err := h.service.Order(r.Context(), id)
 	if err != nil {
 		writeError(w, err, "could not summarize the order")
@@ -601,9 +675,8 @@ func (h *Handler) markPickedUp(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
 		return
 	}
-	d, err := h.service.Get(r.Context(), id)
-	if err != nil {
-		writeError(w, err, "could not fetch distribution")
+	d, ok := h.accessible(w, r, id)
+	if !ok {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
@@ -722,6 +795,9 @@ func (h *Handler) numbers(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if _, ok := h.accessible(w, r, id); !ok {
+		return
+	}
 	numbers, err := h.service.Numbers(r.Context(), id, articleID)
 	if err != nil {
 		writeError(w, err, "could not list the numbers")
@@ -798,8 +874,7 @@ func (h *Handler) listPayments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.service.Get(r.Context(), id); err != nil {
-		writeError(w, err, "could not fetch distribution")
+	if _, ok := h.accessible(w, r, id); !ok {
 		return
 	}
 	q := r.URL.Query()
@@ -860,9 +935,8 @@ func (h *Handler) markPaid(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	d, err := h.service.Get(r.Context(), id)
-	if err != nil {
-		writeError(w, err, "could not fetch distribution")
+	d, ok := h.accessible(w, r, id)
+	if !ok {
 		return
 	}
 	var payments []Payment
@@ -937,9 +1011,8 @@ func (h *Handler) unitForStaff(w http.ResponseWriter, r *http.Request) (Distribu
 	if !ok {
 		return Distribution{}, Unit{}, false
 	}
-	d, err := h.service.Get(r.Context(), id)
-	if err != nil {
-		writeError(w, err, "could not fetch distribution")
+	d, ok := h.accessible(w, r, id)
+	if !ok {
 		return Distribution{}, Unit{}, false
 	}
 	unit, err := h.service.GetUnit(r.Context(), id, unitID)

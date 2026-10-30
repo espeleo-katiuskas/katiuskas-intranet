@@ -61,6 +61,14 @@ const audienceLabels = {
   signup: 'Quien se apunte',
 };
 
+// Who can see a distribution at all (its `visibility`); each includes the ones below.
+const visibilityLabels = {
+  all: 'Todo el mundo',
+  material: 'Material, Junta directiva y administración',
+  board: 'Junta directiva y administración',
+  admin: 'Solo administración',
+};
+
 function statusBadge(status) {
   return `<span class="badge" title="${escapeHtml(distributionStatusHints[status] ?? '')}">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
 }
@@ -298,6 +306,9 @@ function readDistributionForm(form) {
     closes_at: text('closes_at') ? new Date(text('closes_at')).toISOString() : null,
     account_id: text('account_id') ? Number(text('account_id')) : null,
     articles,
+    // Only an administrator has the field (the page removes it for anybody else); left out, the
+    // API keeps what a distribution has, or "all" for a new one.
+    ...(form.elements.visibility ? { visibility: text('visibility') } : {}),
   };
   // The fields of a distribution with articles are disabled, so they aren't in
   // the form data; what the API wants for it is spelled out here.
@@ -349,6 +360,7 @@ function fillDistributionForm(form, d) {
   set('name', d.name);
   set('description', d.description);
   set('audience', d.audience);
+  if (form.elements.visibility) set('visibility', d.visibility);
   set('cutoff_date', d.cutoff_date ? d.cutoff_date.slice(0, 10) : '');
   set('closes_at', d.closes_at ? toLocalInputValue(d.closes_at) : '');
   set('account_id', d.account_id);
@@ -535,6 +547,7 @@ export {
   compactNumbers,
   syncArticleFields,
   audienceLabels,
+  visibilityLabels,
   statusBadge,
   formatDateTime,
   choicesText,

@@ -85,6 +85,7 @@ transactions ──< membership_dues, licenses, distribution_payments
   member_at_large
 - `distribution_audience` (`distributions.audience`): all_members, signup
 - `distribution_status` (`distributions.status`): draft, open, closed, done
+- `distribution_visibility` (`distributions.visibility`): all, material, board, admin
 - `gender` (`users.gender`): male, female
 - `item_material_type` (`inventory_items.item_type`): rope, bag, gear
 - `item_status` (`inventory_items.status`): available, on_loan, rented, sold, lost, abandoned,
@@ -708,8 +709,11 @@ available now) and `outstanding_loan_quantity` (what is lent and not returned), 
 A distribution is something the club hands out to its members (shirts, buffs, lottery...).
 `audience` says who is entitled: `all_members` (everyone who was a member on `cutoff_date`) or
 `signup` (whoever signs up). `status` advances one step at a time: `draft` → `open` → `closed` →
-`done`. `account_id` is the income account where its payments are recorded; if empty, the one marked
-`distribution_default` is used.
+`done`. `visibility` says who can see it, and so act on it: `all` (the default), `material`
+(material, board and admin), `board` (board and admin) or `admin` (admin alone); only admin changes
+it, and a draft is only for admin and board whatever it says (migration `00035`). `account_id` is
+the income account where its payments are recorded; if empty, the one marked `distribution_default`
+is used.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -717,6 +721,7 @@ A distribution is something the club hands out to its members (shirts, buffs, lo
 | `name` | text | no |  |
 | `description` | text | yes |  |
 | `audience` | distribution_audience | no | 'all_members' |
+| `visibility` | distribution_visibility | no | 'all' |
 | `status` | distribution_status | no | 'draft' |
 | `closes_at` | timestamptz | yes |  |
 | `cutoff_date` | date | yes |  |

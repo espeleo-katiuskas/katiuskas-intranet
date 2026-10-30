@@ -104,7 +104,7 @@ func NewRepository(pool db.PGX) *Repository {
 }
 
 const distributionSelect = `
-	SELECT d.id, d.name, d.description, d.audience, d.status, d.closes_at, d.cutoff_date,
+	SELECT d.id, d.name, d.description, d.audience, d.visibility, d.status, d.closes_at, d.cutoff_date,
 	       d.price::float8, d.extra_price::float8, d.max_extra, d.created_at, u.login, d.account_id, ac.name,
 	       (SELECT COALESCE(sum(x.quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id),
 	       (SELECT COALESCE(sum(x.picked_up_quantity), 0) FROM distribution_units x WHERE x.distribution_id = d.id)
@@ -113,7 +113,7 @@ const distributionSelect = `
 	LEFT JOIN accounts ac ON ac.id = d.account_id`
 
 func scanDistribution(row pgx.Row, d *Distribution) error {
-	return row.Scan(&d.ID, &d.Name, &d.Description, &d.Audience, &d.Status, &d.ClosesAt, &d.CutoffDate,
+	return row.Scan(&d.ID, &d.Name, &d.Description, &d.Audience, &d.Visibility, &d.Status, &d.ClosesAt, &d.CutoffDate,
 		&d.Price, &d.ExtraPrice, &d.MaxExtra, &d.CreatedAt, &d.CreatedByLogin, &d.AccountID, &d.AccountName, &d.UnitCount, &d.PickedUpCount)
 }
 
@@ -256,10 +256,10 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Distribution, 
 	}
 	var id int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO distributions (name, description, audience, closes_at, cutoff_date, price, extra_price, max_extra, created_by, account_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO distributions (name, description, audience, visibility, closes_at, cutoff_date, price, extra_price, max_extra, created_by, account_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id
-	`, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.CreatedBy, in.AccountID).Scan(&id)
+	`, in.Name, in.Description, in.Audience, in.Visibility, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.CreatedBy, in.AccountID).Scan(&id)
 	if isForeignKeyViolation(err) {
 		return Distribution{}, ErrUnknownAccount
 	}
@@ -381,9 +381,9 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 		UPDATE distributions SET
 			name = $2, description = $3, audience = $4, closes_at = $5, cutoff_date = $6,
 			price = $7, extra_price = $8, max_extra = $9,
-			status = COALESCE($10, status), account_id = $11
+			status = COALESCE($10, status), account_id = $11, visibility = COALESCE($12, visibility)
 		WHERE id = $1
-	`, id, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.Status, in.AccountID)
+	`, id, in.Name, in.Description, in.Audience, in.ClosesAt, in.CutoffDate, in.Price, in.ExtraPrice, in.MaxExtra, in.Status, in.AccountID, in.Visibility)
 	if isForeignKeyViolation(err) {
 		return Distribution{}, ErrUnknownAccount
 	}

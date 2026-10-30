@@ -386,21 +386,32 @@ A distribution is something the club hands out to its members (shirts, lottery..
 `draft`, `open`, `closed`, `done`. Paying and taking off a payment require saying in which `asset`
 account it was made (`account_id`) and record a transaction in the distribution's account.
 
+**Visibility.** A distribution's `visibility` says who can see it, and so do anything about it:
+`all` (the default, as it always was), `material` (material, board and admin), `board` (board and
+admin) or `admin`. For anybody below that level every route about the distribution — the list, the
+distribution, its units, orders, payments, numbers — answers as if it did not exist (404
+`not_found`). A draft is only for admin and board whatever its `visibility` says. Only admin sets or
+changes it.
+
 - **GET** `/distributions` — *Any baseline role*. Distributions, with `eligible` for the caller. A
-  draft is only seen by admin and board.
+  draft is only seen by admin and board, and one whose `visibility` is above the caller's role is
+  left out (see below).
   - returns: 200 `[Distribution]`
 - **POST** `/distributions` — *Admin or board*. Creates a distribution, as a draft.
-  - body: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
-    `extra_price`, `max_extra`, `options`, `articles`, `status`
+  - body: `name*`, `description`, `audience`, `visibility`, `closes_at`, `cutoff_date`,
+    `account_id`, `price`, `extra_price`, `max_extra`, `options`, `articles`, `status`
   - returns: 201 `Distribution`
-  - errors: 400 `invalid_name`
+  - errors: 400 `invalid_name`, `invalid_visibility`; 403 `forbidden` (board setting a `visibility`
+    other than `all`)
 - **GET** `/distributions/{id}` — *Any baseline role*. One distribution (a draft is 404 for everyone
-  else).
+  but admin and board, and so is one the caller's role is below its `visibility`).
   - returns: 200 `Distribution`
-- **PATCH** `/distributions/{id}` — *Admin or board*. Replaces all the fields; it also serves to
-  change the status one step.
-  - body: `name*`, `description`, `audience`, `closes_at`, `cutoff_date`, `account_id`, `price`,
-    `extra_price`, `max_extra`, `options`, `articles`, `status`
+- **PATCH** `/distributions/{id}` — *Admin or board*. Replaces all the fields (`options`,
+  `articles`, `status` and `visibility` are left as they are when not sent); it also serves to
+  change the status one step. Only admin changes `visibility` (403 `forbidden` for board; sending
+  back the current one is fine).
+  - body: `name*`, `description`, `audience`, `visibility`, `closes_at`, `cutoff_date`,
+    `account_id`, `price`, `extra_price`, `max_extra`, `options`, `articles`, `status`
   - returns: 200 `Distribution`
   - errors: 409 `invalid_status_transition`
 - **DELETE** `/distributions/{id}` — *Admin*. Deletes the distribution with its orders, unless one
@@ -859,6 +870,7 @@ Nested fields:
 | `name` | text |
 | `description` | text |
 | `audience` | all_members/signup |
+| `visibility` | all/material/board/admin |
 | `status` | draft/open/closed/done |
 | `closes_at` | datetime |
 | `cutoff_date` | date |

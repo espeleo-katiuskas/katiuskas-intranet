@@ -51,6 +51,23 @@ const (
 
 func (a Audience) Valid() bool { return a == AudienceAllMembers || a == AudienceSignup }
 
+// Visibility says who can see a distribution, and so act on it at all: everybody
+// (the default), or only material, board and admin; board and admin; or admin
+// alone. Each level includes the ones above it (admin can do anything board can,
+// and board anything material can). Only admin changes it.
+type Visibility string
+
+const (
+	VisibilityAll      Visibility = "all"
+	VisibilityMaterial Visibility = "material"
+	VisibilityBoard    Visibility = "board"
+	VisibilityAdmin    Visibility = "admin"
+)
+
+func (v Visibility) Valid() bool {
+	return v == VisibilityAll || v == VisibilityMaterial || v == VisibilityBoard || v == VisibilityAdmin
+}
+
 // Option is something to choose when asking for the article — "Talla", with
 // the values it can take.
 type Option struct {
@@ -115,6 +132,7 @@ type Distribution struct {
 	Name           string     `json:"name"`
 	Description    *string    `json:"description,omitempty"`
 	Audience       Audience   `json:"audience"`
+	Visibility     Visibility `json:"visibility"`
 	Status         Status     `json:"status"`
 	ClosesAt       *time.Time `json:"closes_at,omitempty"`
 	CutoffDate     *time.Time `json:"cutoff_date,omitempty"`
@@ -217,20 +235,22 @@ type CreateInput struct {
 	Name        string
 	Description *string
 	Audience    Audience
-	ClosesAt    *time.Time
-	CutoffDate  *time.Time
-	Price       float64
-	ExtraPrice  *float64
-	MaxExtra    *int
-	Options     []OptionInput
-	Articles    []ArticleInput
-	AccountID   *int64
-	CreatedBy   int64
+	// Visibility defaults to all when empty.
+	Visibility Visibility
+	ClosesAt   *time.Time
+	CutoffDate *time.Time
+	Price      float64
+	ExtraPrice *float64
+	MaxExtra   *int
+	Options    []OptionInput
+	Articles   []ArticleInput
+	AccountID  *int64
+	CreatedBy  int64
 }
 
 // UpdateInput replaces every field of CreateInput (except who created it)
 // wholesale, like accounting's own updates do, so a field left out is turned
-// off. Options and Status are the exceptions: nil leaves them as they are.
+// off. Options, Visibility and Status are the exceptions: nil leaves them as they are.
 // The options can only be replaced while nobody has asked for anything yet,
 // since each unit's choices are values of them; sending back what is already
 // there is not a replacement. Articles work the same way (nil leaves them), and
@@ -241,15 +261,17 @@ type UpdateInput struct {
 	Name        string
 	Description *string
 	Audience    Audience
-	ClosesAt    *time.Time
-	CutoffDate  *time.Time
-	Price       float64
-	ExtraPrice  *float64
-	MaxExtra    *int
-	Options     *[]OptionInput
-	Articles    *[]ArticleInput
-	AccountID   *int64
-	Status      *Status
+	// Visibility nil leaves it as it is.
+	Visibility *Visibility
+	ClosesAt   *time.Time
+	CutoffDate *time.Time
+	Price      float64
+	ExtraPrice *float64
+	MaxExtra   *int
+	Options    *[]OptionInput
+	Articles   *[]ArticleInput
+	AccountID  *int64
+	Status     *Status
 }
 
 // RegisterInput is one unit being asked for. RegisteredByID is whoever is

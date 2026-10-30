@@ -322,52 +322,57 @@ come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a single article — two
 things to handle separately are two distributions — with a `status` (`draft` → `open` → `closed` →
 `done`, one step at a time, forward or back; a draft is editable and exists only for admin/board,
-members ask for units only while `open`, `closed` freezes what members can ask for (staff can still
-enter and change orders, see below), and units can be handed out — collections recorded, numbers
-written down — in any state but `draft` (`Status.Deliverable`, `ErrNotDeliverable`, 409
-`not_deliverable`), since the order often arrives before the asking has ended; migration `00023`
-replaced the former `ordered`/`received` by `closed`/`delivering` and `00025` removed `delivering`
-(mapped to `closed`), as handing out doesn't depend on closing), an `audience` (`all_members`,
-everyone who was a member on `cutoff_date`, which is then required; or `signup`, where `cutoff_date`
-is optional and, when set, limits who can sign up to those members — `Repository.WasMemberOn`, a SQL
-check against `memberships.period`; with no cutoff date it is for today's members,
-`WasMemberNowOrOn`), a `price` (0 = free), an optional `extra_price` (its presence is what makes
-extras possible) and `max_extra` per person (which needs `extra_price`), a `closes_at` deadline, and
-`distribution_options` (a name with its possible values, e.g. "Talla": S/M/L; replaceable only while
-no unit exists, `ErrHasUnits`, and `Repository.sameOptions` makes sending back the same set a no-op
-so a form can resend everything). What people ask for are `distribution_units`, one row per unit
-(two extra shirts can have two sizes): `beneficiary_id` is who it is for,
-`registered_by_id`/`registered_at` who actually entered it — somebody else when a parent signs a
-child up or a friend adds extras for another, and never overwritten by editing the choices
-(`UpdateChoices` touches `choices` only) — and `price` is frozen when entered, so changing the
-distribution's price later doesn't change what somebody agreed to. A person has at most one own
-(non-extra) unit (partial unique index, `ErrAlreadyRegistered`) and extras up to `max_extra` counted
-by beneficiary whoever entered them: `CreateUnit` locks the distribution row (`FOR UPDATE`) while
-counting so two concurrent requests can't both slip under the cap. Anyone can ask for a unit for
-themselves or, with `beneficiary_login`, for somebody else, while the distribution is `open` and
-before `closes_at`; staff (admin, board and material, `canSeeEveryone`) at any time but in a draft,
-so also after the deadline and while it is `closed` or `done` — orders are often fixed once the
-asking is over (a draft has no orders, for anybody: `ErrNotOpen`; `Service.checkOpen`). Both the
-beneficiary and, unless staff, whoever enters it have to be eligible (`ErrNotEligible`); an extra
-belongs to whoever it is entered for, with no notion of who ends up with the item. Changing/removing
-a unit is for its beneficiary, whoever entered it and admin/board/material (`Handler.ownUnit`; they
-all go past the deadline and change a paid unit, though only admin/board mark payments, and while it
-is closed or done), under the same rules; what was handed out is locked for the owner (a unit that
-isn't a row of an article is final once handed out, even for staff; in a row of an article staff can
-still resize it but not below `picked_up_quantity`, `ErrBelowDelivered`) and a paid one only changes
-through admin/board/material (`ErrUnitLocked`). Every payment mark is also written into
-`distribution_payments` (migration `00030`, the list of payments: `logPayment`, called by `MarkPaid`
-and `ClearPaid` in the same transaction; negative entries for what is taken off, `unit_id` null if
-its order is gone since — an order with something paid can't be deleted, `ErrUnitPaid`, 409
-`unit_paid`: the payment is taken off first), which `GET /distributions/{id}/payments` (admin/board,
-one distribution at a time) serves newest first with `total_after`, a window `SUM` per distribution
-over its whole history so it doesn't restart at a filter or page edge — the same idea as the
-accounting ledger's `balance_after`. The person who paid is the order's beneficiary; there is no
-separate payer. Payment is per row and can be partial (migration `00027`): `paid_quantity` of its
-`quantity` are paid, with `paid_at`/`paid_marked_by_id` as when and by whom the last payment was
-marked, set exactly when something is paid (`CHECK`s). Admin/board only: `POST .../payments` adds
-payments, all-or-nothing (`Repository.MarkPaid`: `payments` of `quantity` units of a row, all that
-is pending when 0, plus `unit_ids` for whole rows; more than pending is `ErrAlreadyPaid`), `DELETE
+members ask for units only while `open`, `visibility` (`all`, `material`, `board`, `admin`,
+migration `00035`) keeps whoever is below the level it names from seeing it at all
+(`canSee`/`visibleTo` and `Handler.visible`/`accessible`: every route about the distribution answers
+404, the list leaves it out; a draft stays for admin/board whatever it says; only admin sets it,
+board sending anything but the current value gets 403, and leaving it out of a PATCH keeps it),
+`closed` freezes what members can ask for (staff can still enter and change orders, see below), and
+units can be handed out — collections recorded, numbers written down — in any state but `draft`
+(`Status.Deliverable`, `ErrNotDeliverable`, 409 `not_deliverable`), since the order often arrives
+before the asking has ended; migration `00023` replaced the former `ordered`/`received` by
+`closed`/`delivering` and `00025` removed `delivering` (mapped to `closed`), as handing out doesn't
+depend on closing), an `audience` (`all_members`, everyone who was a member on `cutoff_date`, which
+is then required; or `signup`, where `cutoff_date` is optional and, when set, limits who can sign up
+to those members — `Repository.WasMemberOn`, a SQL check against `memberships.period`; with no
+cutoff date it is for today's members, `WasMemberNowOrOn`), a `price` (0 = free), an optional
+`extra_price` (its presence is what makes extras possible) and `max_extra` per person (which needs
+`extra_price`), a `closes_at` deadline, and `distribution_options` (a name with its possible values,
+e.g. "Talla": S/M/L; replaceable only while no unit exists, `ErrHasUnits`, and
+`Repository.sameOptions` makes sending back the same set a no-op so a form can resend everything).
+What people ask for are `distribution_units`, one row per unit (two extra shirts can have two
+sizes): `beneficiary_id` is who it is for, `registered_by_id`/`registered_at` who actually entered
+it — somebody else when a parent signs a child up or a friend adds extras for another, and never
+overwritten by editing the choices (`UpdateChoices` touches `choices` only) — and `price` is frozen
+when entered, so changing the distribution's price later doesn't change what somebody agreed to. A
+person has at most one own (non-extra) unit (partial unique index, `ErrAlreadyRegistered`) and
+extras up to `max_extra` counted by beneficiary whoever entered them: `CreateUnit` locks the
+distribution row (`FOR UPDATE`) while counting so two concurrent requests can't both slip under the
+cap. Anyone can ask for a unit for themselves or, with `beneficiary_login`, for somebody else, while
+the distribution is `open` and before `closes_at`; staff (admin, board and material,
+`canSeeEveryone`) at any time but in a draft, so also after the deadline and while it is `closed` or
+`done` — orders are often fixed once the asking is over (a draft has no orders, for anybody:
+`ErrNotOpen`; `Service.checkOpen`). Both the beneficiary and, unless staff, whoever enters it have
+to be eligible (`ErrNotEligible`); an extra belongs to whoever it is entered for, with no notion of
+who ends up with the item. Changing/removing a unit is for its beneficiary, whoever entered it and
+admin/board/material (`Handler.ownUnit`; they all go past the deadline and change a paid unit,
+though only admin/board mark payments, and while it is closed or done), under the same rules; what
+was handed out is locked for the owner (a unit that isn't a row of an article is final once handed
+out, even for staff; in a row of an article staff can still resize it but not below
+`picked_up_quantity`, `ErrBelowDelivered`) and a paid one only changes through admin/board/material
+(`ErrUnitLocked`). Every payment mark is also written into `distribution_payments` (migration
+`00030`, the list of payments: `logPayment`, called by `MarkPaid` and `ClearPaid` in the same
+transaction; negative entries for what is taken off, `unit_id` null if its order is gone since — an
+order with something paid can't be deleted, `ErrUnitPaid`, 409 `unit_paid`: the payment is taken off
+first), which `GET /distributions/{id}/payments` (admin/board, one distribution at a time) serves
+newest first with `total_after`, a window `SUM` per distribution over its whole history so it
+doesn't restart at a filter or page edge — the same idea as the accounting ledger's `balance_after`.
+The person who paid is the order's beneficiary; there is no separate payer. Payment is per row and
+can be partial (migration `00027`): `paid_quantity` of its `quantity` are paid, with
+`paid_at`/`paid_marked_by_id` as when and by whom the last payment was marked, set exactly when
+something is paid (`CHECK`s). Admin/board only: `POST .../payments` adds payments, all-or-nothing
+(`Repository.MarkPaid`: `payments` of `quantity` units of a row, all that is pending when 0, plus
+`unit_ids` for whole rows; more than pending is `ErrAlreadyPaid`), `DELETE
 .../units/{id}/payment[?quantity=N]` takes units off (`ClearPaid`). Asking for more of something
 paid leaves the added units unpaid, and `UpdateQuantity` refuses to go below what is paid
 (`ErrBelowPaid`); a row with anything paid is "paid" for `checkEditable`. Pickups still mark a whole

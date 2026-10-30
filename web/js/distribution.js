@@ -20,6 +20,7 @@ import {
   STATUS_ORDER,
   apiErrorText,
   audienceLabels,
+  visibilityLabels,
   bodyFrom,
   choicesText,
   distributionStatusLabels,
@@ -63,6 +64,9 @@ function articleText(a) {
 // What this distribution is, in a line.
 function describe(d) {
   const parts = [statusBadge(d.status), escapeHtml(audienceLabels[d.audience])];
+  if (d.visibility && d.visibility !== 'all') {
+    parts.push(`lo ven: ${escapeHtml(visibilityLabels[d.visibility])}`);
+  }
   if (d.cutoff_date) {
     parts.push(
       d.audience === 'signup'

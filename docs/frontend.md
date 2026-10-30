@@ -209,6 +209,10 @@ loaded only once it leaves the draft), a "Pedir" form (an "A nombre de" picker o
 in a distribution for all members with no options, where the own order is already there and only
 extras are left: no checkbox, the request always goes as an extra, the button says "Pedido extra"
 (`extrasOnly`) and the subtitle gives the price, "Puedes pedir también extras a 8,00 €" —;
+`/repartos`' list marks a distribution only some people can see with a "Restringido" badge, and the
+page's description line says who ("lo ven: …"); the create and edit dialogs have a "Quién lo ve"
+select (`visibility`) that carries `data-roles="admin"`, so only an administrator has it, and
+`readDistributionForm` sends it only when it is there;
 `canOrderNow` repeats the API's own rule of when (open and before the deadline; admin, board and
 material at any time but in a draft, with a note saying that the distribution is not open) only to
 decide whether to show it) and "Tus pedidos" — the units where the signed-in person is the

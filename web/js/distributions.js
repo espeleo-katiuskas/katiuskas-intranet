@@ -6,6 +6,7 @@ import {
   loadAccountOptions,
   readDistributionForm,
   statusBadge,
+  visibilityLabels,
   syncArticleFields,
   formatDateTime,
 } from './distributionCommon.js';
@@ -24,6 +25,12 @@ function priceText(d) {
   return d.extra_price != null ? `${own} (extra: ${formatCurrency(d.extra_price)})` : own;
 }
 
+// A badge for a distribution only some people can see.
+function restricted(d) {
+  if (!d.visibility || d.visibility === 'all') return '';
+  return ` <span class="badge" title="${escapeHtml(`Lo ven: ${visibilityLabels[d.visibility]}`)}">Restringido</span>`;
+}
+
 function renderRow(d) {
   // Drafts are only listed for the people who manage them; for anyone else
   // "eligible" says whether it is for them.
@@ -33,7 +40,7 @@ function renderRow(d) {
       : '';
   return `
     <tr data-distribution-id="${d.id}">
-      <td>${escapeHtml(d.name)}</td>
+      <td>${escapeHtml(d.name)}${restricted(d)}</td>
       <td>${statusBadge(d.status)}</td>
       <td>${escapeHtml(priceText(d))}</td>
       <td>${d.closes_at ? formatDateTime(d.closes_at) : '—'}</td>

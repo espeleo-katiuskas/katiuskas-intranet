@@ -861,6 +861,14 @@ the API but not write it, except for asking for units and editing their own).
   material), also today's members, because somebody who became a member later can collect for
   others. Without `cutoff_date`, a `signup` distribution is for today's members
   (`Service.IsEligible`).
+- **Visibility** (`visibility`): who can see a distribution at all, and so act on it. `all` (the
+  default: everything works as described here), `material` (material, board and admin), `board`
+  (board and admin) or `admin` (admin alone); each level includes the ones above it, in line with
+  "whatever material can do, board can do". Below that level, every route about it — the list, the
+  distribution, its units, the order, the payments, the numbers — answers 404, as if it did not
+  exist. A draft is for admin and board whatever it says. Only admin sets or changes it. The
+  accounting ledger is a separate matter: a payment's transaction names the article in its
+  description, and the ledger is open to whoever can read accounting.
 - **Who can order**. Any member, for themselves or for others (`beneficiary_login`), while the
   distribution is open and `closes_at` has not passed; admin, board and material (who put the order
   together, hand it out and fix orders) at any time but in a draft, so also after the date and while

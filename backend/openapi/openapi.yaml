@@ -1757,7 +1757,8 @@ paths:
         A distribution ("reparto") is one article the club hands out to its
         members — shirts, buffs, a rope, mugs — with what it costs and what
         has to be chosen (a size...). Open to any baseline role, newest
-        first; a draft is only listed for admin/board. Each one carries
+        first; a draft is only listed for admin/board, and one whose
+        `visibility` is above the caller's role is left out. Each one carries
         `eligible`: whether the caller may have it (they were a member on
         its `cutoff_date`, or it has none).
       security: [{ bearerAuth: [] }]
@@ -1809,13 +1810,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
-        "400": { description: invalid_name, invalid_audience, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra, invalid_options, invalid_articles or articles_conflict. }
+        "400": { description: invalid_name, invalid_audience, invalid_visibility, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra, invalid_options, invalid_articles or articles_conflict. }
         "403": { description: Neither admin nor board. }
 
   /distributions/{id}:
     get:
       summary: Get a distribution
-      description: Open to any baseline role; a draft is a 404 for anyone but admin/board.
+      description: >
+        Open to any baseline role; a draft is a 404 for anyone but admin/board, and so is a
+        distribution whose `visibility` is above the caller's role (every route about a
+        distribution works that way).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3853,6 +3857,12 @@ components:
         name: { type: string }
         description: { type: string }
         audience: { type: string, enum: [all_members, signup] }
+        visibility:
+          type: string
+          enum: [all, material, board, admin]
+          description: >
+            Who can see it, and so act on it: everybody, material (and board and admin), board (and
+            admin) or admin alone. For anybody below that level every route about it answers 404.
         status: { type: string, enum: [draft, open, closed, done] }
         closes_at: { type: string, format: date-time, description: Deadline for members to choose; absent = none. }
         cutoff_date: { type: string, format: date, description: Only people who were members this day can have it; required for all_members. }
@@ -3903,6 +3913,14 @@ components:
         name: { type: string }
         description: { type: string }
         audience: { type: string, enum: [all_members, signup], default: all_members }
+        visibility:
+          type: string
+          enum: [all, material, board, admin]
+          default: all
+          description: >
+            Who can see it. Only admin sets or changes it (403 forbidden for board, unless it is
+            what the distribution already has); invalid_visibility otherwise. Left out, it is
+            "all" on creation and stays as it is on update.
         closes_at: { type: string, format: date-time }
         cutoff_date: { type: string, format: date }
         account_id: { type: integer, nullable: true, description: The account its payments are recorded in; null = the default one. 400 unknown_account if it doesn't exist, account_not_income if it isn't of type income. }
