@@ -7,7 +7,7 @@ RUN go mod download
 COPY backend ./backend
 RUN CGO_ENABLED=0 go build -o /out/api ./backend/cmd/api
 
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/api /usr/local/bin/api
 EXPOSE 64711
