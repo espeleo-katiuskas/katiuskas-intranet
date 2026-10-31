@@ -19,7 +19,7 @@ import (
 // lives in the tokens package and has its own tests.
 type stubResolver map[string]AuthenticatedUser
 
-func (s stubResolver) Authenticate(_ context.Context, rawToken, _ string) (AuthenticatedUser, error) {
+func (s stubResolver) Authenticate(_ context.Context, rawToken, _, _ string) (AuthenticatedUser, error) {
 	user, ok := s[rawToken]
 	if !ok {
 		return AuthenticatedUser{}, ErrInvalidToken
@@ -314,4 +314,33 @@ func TestProtectComposesAuthenticationBeforeAuthorization(t *testing.T) {
 			t.Errorf("expected 403: holding \"material\" alone isn't enough without admin/board/member too, got %d", rec.Code)
 		}
 	})
+}
+
+// recordingResolver keeps what the middleware told the resolver about the request: the address and
+// the User-Agent that end up in the session's last-use record.
+type recordingResolver struct {
+	ip, userAgent string
+}
+
+func (r *recordingResolver) Authenticate(_ context.Context, _, ip, userAgent string) (AuthenticatedUser, error) {
+	r.ip, r.userAgent = ip, userAgent
+	return AuthenticatedUser{ID: 1, Roles: []string{"member"}}, nil
+}
+
+func TestTheMiddlewareTellsTheResolverTheAddressAndUserAgent(t *testing.T) {
+	for name, wrap := range map[string]func(*Authenticator, http.Handler) http.Handler{
+		"RequireAuth":                   func(a *Authenticator, h http.Handler) http.Handler { return a.RequireAuth(h) },
+		"RequireAuthFromHeaderOrCookie": func(a *Authenticator, h http.Handler) http.Handler { return a.RequireAuthFromHeaderOrCookie(h) },
+	} {
+		resolver := &recordingResolver{}
+		handler := wrap(NewAuthenticator(resolver), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer abc")
+		req.Header.Set("User-Agent", "TestBrowser/1.0")
+		req.RemoteAddr = "203.0.113.7:4321"
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		if resolver.userAgent != "TestBrowser/1.0" || resolver.ip == "" {
+			t.Errorf("%s: expected the address and the user agent to reach the resolver, got %+v", name, resolver)
+		}
+	}
 }

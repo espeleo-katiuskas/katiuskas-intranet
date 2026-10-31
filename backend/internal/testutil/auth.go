@@ -15,7 +15,7 @@ import (
 // goroutines, same as the rest of this package's helpers.
 type FakeResolver map[string]auth.AuthenticatedUser
 
-func (f FakeResolver) Authenticate(_ context.Context, rawToken, _ string) (auth.AuthenticatedUser, error) {
+func (f FakeResolver) Authenticate(_ context.Context, rawToken, _, _ string) (auth.AuthenticatedUser, error) {
 	user, ok := f[rawToken]
 	if !ok {
 		return auth.AuthenticatedUser{}, auth.ErrInvalidToken

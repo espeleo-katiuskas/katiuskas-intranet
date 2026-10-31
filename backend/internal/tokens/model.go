@@ -20,6 +20,12 @@ type Token struct {
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	LastUsedIP *string    `json:"last_used_ip,omitempty"`
+	// LastUsedUserAgent is the User-Agent of the last request made with the token, as sent
+	// (cut to a sane length); Browser and OS are worked out from it when a token is read
+	// (DetectClientFromUA), never stored.
+	LastUsedUserAgent *string `json:"last_used_user_agent,omitempty"`
+	Browser           string  `json:"browser,omitempty"`
+	OS                string  `json:"os,omitempty"`
 	// ImpersonatedBy/ImpersonatedByLogin are set only for a token minted
 	// by POST /users/{login}/impersonate: the admin who started it, not
 	// UserID/UserLogin (whose session this actually is).

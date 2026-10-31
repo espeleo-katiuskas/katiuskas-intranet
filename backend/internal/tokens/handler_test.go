@@ -157,7 +157,7 @@ func TestHandlerImpersonateSucceedsAndTheTokenWorksAsTheTarget(t *testing.T) {
 		t.Fatal("expected a non-empty token")
 	}
 
-	resolved, err := service.Authenticate(ctx, body.Token, "")
+	resolved, err := service.Authenticate(ctx, body.Token, "", "")
 	if err != nil {
 		t.Fatalf("authenticate with the impersonation token: %v", err)
 	}
@@ -591,5 +591,58 @@ func TestHandlerListAllMarksTheCallersOwnSession(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `"current":false`) {
 		t.Errorf("expected current to be left out unless true, got %s", rec.Body.String())
+	}
+}
+
+// The list of sessions carries the browser and system worked out from the last user agent, and
+// the user agent itself.
+func TestHandlerListAllShowsTheBrowserAndSystemOfEachSession(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
+
+	person := testutil.InsertUser(t, tx, "")
+	raw, err := service.Issue(ctx, person.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	const ua = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+	if _, err := service.Authenticate(ctx, raw, "203.0.113.5", ua); err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	never, err := service.Issue(ctx, testutil.InsertUser(t, tx, "").ID, time.Hour) // never used
+	if err != nil || never == "" {
+		t.Fatalf("issue: %v", err)
+	}
+
+	rec := doRequest(mux, http.MethodGet, "/api/v1/tokens", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []tokens.Token
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var used, unused int
+	for _, tok := range list {
+		switch {
+		case tok.UserLogin == person.Login:
+			used++
+			if tok.Browser != "Firefox 120" || tok.OS != "Linux" || tok.LastUsedUserAgent == nil || *tok.LastUsedUserAgent != ua {
+				t.Errorf("unexpected client for the used session: %+v", tok)
+			}
+		case tok.LastUsedUserAgent == nil:
+			unused++
+			if tok.Browser != "" || tok.OS != "" {
+				t.Errorf("a session never used has no client: %+v", tok)
+			}
+		}
+	}
+	if used != 1 || unused < 1 {
+		t.Errorf("expected the used session and an unused one in the list, got %d and %d", used, unused)
+	}
+	if strings.Contains(rec.Body.String(), `"browser":""`) {
+		t.Errorf("an unknown browser should be left out, got %s", rec.Body.String())
 	}
 }

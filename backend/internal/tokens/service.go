@@ -51,8 +51,8 @@ func (s *Service) Issue(ctx context.Context, userID int64, ttl time.Duration) (r
 // than trusting anything baked into the token itself), so a role change
 // takes effect on the very next request instead of waiting for the
 // token to be reissued.
-func (s *Service) Authenticate(ctx context.Context, rawToken, ip string) (auth.AuthenticatedUser, error) {
-	userID, impersonatedBy, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip)
+func (s *Service) Authenticate(ctx context.Context, rawToken, ip, userAgent string) (auth.AuthenticatedUser, error) {
+	userID, impersonatedBy, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip, userAgent)
 	if errors.Is(err, ErrNotFound) {
 		return auth.AuthenticatedUser{}, auth.ErrInvalidToken
 	}

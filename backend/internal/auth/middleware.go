@@ -48,7 +48,7 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return
 		}
-		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r))
+		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r), r.UserAgent())
 		if err != nil {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid, expired, or revoked token")
 			return
@@ -80,7 +80,7 @@ func (a *Authenticator) RequireAuthFromHeaderOrCookie(next http.Handler) http.Ha
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token or session cookie")
 			return
 		}
-		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r))
+		user, err := a.resolver.Authenticate(r.Context(), token, httpapi.ClientIP(r), r.UserAgent())
 		if err != nil {
 			httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid, expired, or revoked token")
 			return

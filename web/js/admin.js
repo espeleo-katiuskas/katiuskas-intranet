@@ -221,6 +221,16 @@ function sessionStatus(session) {
   return 'Activa';
 }
 
+// "Chrome 118 · Windows" from what the API worked out of the last request's User-Agent; the whole
+// header is the tooltip. "—" when the session was never used (or the request sent none), and a
+// "no reconocido" with the header when it is something the API can't place.
+function clientCell(session) {
+  const ua = session.last_used_user_agent;
+  if (!ua) return '—';
+  const parts = [session.browser, session.os].filter(Boolean);
+  return `<span title="${escapeHtml(ua)}">${parts.length ? escapeHtml(parts.join(' · ')) : 'No reconocido'}</span>`;
+}
+
 function renderSessionRow(session) {
   const status = sessionStatus(session);
   const name = namesByLogin[session.user_login];
@@ -243,6 +253,7 @@ function renderSessionRow(session) {
       <td>${person}${own}${impersonation}</td>
       <td>${session.last_used_at ? formatDateTime(session.last_used_at) : 'Nunca'}</td>
       <td>${session.last_used_ip ? escapeHtml(session.last_used_ip) : '—'}</td>
+      <td>${clientCell(session)}</td>
       <td>${formatDateTime(session.created_at)}</td>
       <td>${formatDateTime(session.expires_at)}</td>
       <td>${status}</td>
@@ -254,7 +265,7 @@ function renderSessionRow(session) {
 function renderSessions() {
   sessionsBody.innerHTML = sessionsShown.length
     ? sessionsShown.map(renderSessionRow).join('')
-    : '<tr><td colspan="7">No hay sesiones.</td></tr>';
+    : '<tr><td colspan="8">No hay sesiones.</td></tr>';
 }
 
 async function loadSessions({ append = false } = {}) {
@@ -270,7 +281,7 @@ async function loadSessions({ append = false } = {}) {
     sessionsLoadMore.hidden = fetched.length <= SESSIONS_PAGE_SIZE;
   } catch (err) {
     sessionsLoadMore.hidden = true;
-    sessionsBody.innerHTML = '<tr><td colspan="7">No se pudieron cargar las sesiones.</td></tr>';
+    sessionsBody.innerHTML = '<tr><td colspan="8">No se pudieron cargar las sesiones.</td></tr>';
     showError(err.message);
   } finally {
     sessionsLoadMore.disabled = false;

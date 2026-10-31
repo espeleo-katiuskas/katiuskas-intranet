@@ -16,10 +16,14 @@ var ErrNotFound = errors.New("token not found")
 // of the row just written — no JOIN available — so it leaves UserLogin
 // and ImpersonatedByLogin blank. That's fine: Create and
 // CreateImpersonation's callers only ever check the returned error.
-const tokenColumns = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip, impersonated_by`
+const tokenColumns = `id, user_id, created_at, expires_at, revoked_at, last_used_at, last_used_ip, last_used_user_agent, impersonated_by`
 
 func scanToken(row interface{ Scan(dest ...any) error }, t *Token) error {
-	return row.Scan(&t.ID, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP, &t.ImpersonatedBy)
+	if err := row.Scan(&t.ID, &t.UserID, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP, &t.LastUsedUserAgent, &t.ImpersonatedBy); err != nil {
+		return err
+	}
+	t.fillClient()
+	return nil
 }
 
 // tokenSelectJoined is for reads that actually get serialized back over
@@ -27,15 +31,26 @@ func scanToken(row interface{ Scan(dest ...any) error }, t *Token) error {
 // impersonating admin's — the only two identifiers this package's JSON
 // is allowed to expose for a person (see Token.UserLogin).
 const tokenSelectJoined = `
-	t.id, t.user_id, u.login, t.created_at, t.expires_at, t.revoked_at, t.last_used_at, t.last_used_ip,
+	t.id, t.user_id, u.login, t.created_at, t.expires_at, t.revoked_at, t.last_used_at, t.last_used_ip, t.last_used_user_agent,
 	t.impersonated_by, ib.login
 	FROM tokens t
 	JOIN users u ON u.id = t.user_id
 	LEFT JOIN users ib ON ib.id = t.impersonated_by`
 
 func scanTokenJoined(row interface{ Scan(dest ...any) error }, t *Token) error {
-	return row.Scan(&t.ID, &t.UserID, &t.UserLogin, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP,
-		&t.ImpersonatedBy, &t.ImpersonatedByLogin)
+	if err := row.Scan(&t.ID, &t.UserID, &t.UserLogin, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &t.LastUsedIP,
+		&t.LastUsedUserAgent, &t.ImpersonatedBy, &t.ImpersonatedByLogin); err != nil {
+		return err
+	}
+	t.fillClient()
+	return nil
+}
+
+// fillClient works out the browser and operating system from the stored User-Agent.
+func (t *Token) fillClient() {
+	if t.LastUsedUserAgent != nil {
+		t.Browser, t.OS = DetectClientFromUA(*t.LastUsedUserAgent)
+	}
 }
 
 type Repository struct {
@@ -66,19 +81,23 @@ func (r *Repository) CreateImpersonation(ctx context.Context, targetUserID, impe
 }
 
 // Authenticate validates a token hash and, in the same statement, records
-// that it was just used — so a session's last_used_at/last_used_ip always
-// reflects the request that's checking it, not a separate follow-up
-// write.
-func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip string) (userID int64, impersonatedBy *int64, err error) {
-	var ipArg any
+// that it was just used — so a session's last_used_at/last_used_ip/
+// last_used_user_agent always reflect the request that's checking it, not a
+// separate follow-up write. The browser is the *last* one, like the address
+// it goes with: they describe the same request, so they can be read together.
+func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent string) (userID int64, impersonatedBy *int64, err error) {
+	var ipArg, userAgentArg any
 	if ip != "" {
 		ipArg = ip
 	}
+	if userAgent != "" {
+		userAgentArg = truncateUserAgent(userAgent)
+	}
 	err = r.pool.QueryRow(ctx, `
-		UPDATE tokens SET last_used_at = now(), last_used_ip = $2
+		UPDATE tokens SET last_used_at = now(), last_used_ip = $2, last_used_user_agent = $3
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 		RETURNING user_id, impersonated_by
-	`, tokenHash, ipArg).Scan(&userID, &impersonatedBy)
+	`, tokenHash, ipArg, userAgentArg).Scan(&userID, &impersonatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil, ErrNotFound
 	}

@@ -662,6 +662,9 @@ Nested fields:
 | `revoked_at` | datetime |
 | `last_used_at` | datetime |
 | `last_used_ip` | text |
+| `last_used_user_agent` | text |
+| `browser` | text |
+| `os` | text |
 | `current` | boolean |
 | `impersonated_by_login` | text |
 

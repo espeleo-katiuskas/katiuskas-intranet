@@ -36,7 +36,7 @@ func TestIssueThenAuthenticate(t *testing.T) {
 		t.Fatalf("expected a non-empty raw token")
 	}
 
-	got, err := svc.Authenticate(ctx, raw, "198.51.100.7")
+	got, err := svc.Authenticate(ctx, raw, "198.51.100.7", "")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestAuthenticateRejectsUnknownToken(t *testing.T) {
 	tx := testutil.NewTx(t)
 	svc := tokens.NewService(tokens.NewRepository(tx), roles.NewService(roles.NewRepository(tx)))
 
-	if _, err := svc.Authenticate(context.Background(), "never-issued", ""); !errors.Is(err, auth.ErrInvalidToken) {
+	if _, err := svc.Authenticate(context.Background(), "never-issued", "", ""); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("expected auth.ErrInvalidToken, got %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestImpersonateSucceedsAndResolvesTargetsRoles(t *testing.T) {
 		t.Fatalf("impersonate: %v", err)
 	}
 
-	resolved, err := svc.Authenticate(ctx, raw, "")
+	resolved, err := svc.Authenticate(ctx, raw, "", "")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
@@ -147,11 +147,11 @@ func TestExitImpersonationRevokesAndIssuesFreshAdminToken(t *testing.T) {
 		t.Error("expected a brand-new token, not the same impersonation one")
 	}
 
-	if _, err := svc.Authenticate(ctx, impersonationToken, ""); !errors.Is(err, auth.ErrInvalidToken) {
+	if _, err := svc.Authenticate(ctx, impersonationToken, "", ""); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("expected the impersonation token to be revoked, got %v", err)
 	}
 
-	resolved, err := svc.Authenticate(ctx, newAdminToken, "")
+	resolved, err := svc.Authenticate(ctx, newAdminToken, "", "")
 	if err != nil {
 		t.Fatalf("authenticate with the new token: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestRevokeRejectsTokenBelongingToAnotherUser(t *testing.T) {
 
 	// The token must still work — revoking under the wrong user id must
 	// not have silently succeeded.
-	if _, err := svc.Authenticate(ctx, raw, ""); err != nil {
+	if _, err := svc.Authenticate(ctx, raw, "", ""); err != nil {
 		t.Errorf("expected the token to still authenticate, got %v", err)
 	}
 }

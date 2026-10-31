@@ -19,7 +19,7 @@ var ErrInvalidToken = errors.New("invalid, expired, or revoked token")
 // one); this interface exists so this package doesn't need to depend on
 // that one.
 type SessionResolver interface {
-	Authenticate(ctx context.Context, rawToken, ip string) (AuthenticatedUser, error)
+	Authenticate(ctx context.Context, rawToken, ip, userAgent string) (AuthenticatedUser, error)
 }
 
 type Authenticator struct {

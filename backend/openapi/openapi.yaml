@@ -3472,6 +3472,22 @@ components:
             X-Forwarded-For if present (the production deploy sits behind
             a reverse proxy), otherwise the raw connection address.
             Purely informational.
+        last_used_user_agent:
+          type: string
+          nullable: true
+          description: >
+            The User-Agent header of the last request made with the token, as sent (cut to 512
+            characters); absent until it is first used. It is the last one, like last_used_ip.
+        browser:
+          type: string
+          description: >
+            The browser and its major version ("Firefox 120"), worked out from the User-Agent on
+            every read (never stored); absent when it is not recognized.
+        os:
+          type: string
+          description: >
+            The operating system family ("Windows", "macOS", "Linux", "Android", "iOS",
+            "ChromeOS"), worked out the same way; absent when it is not recognized.
         current:
           type: boolean
           description: >

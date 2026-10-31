@@ -213,12 +213,19 @@ opened it.
 | `revoked_at` | timestamptz | yes |  |
 | `last_used_at` | timestamptz | yes |  |
 | `last_used_ip` | text | yes |  |
+| `last_used_user_agent` | text | yes |  |
 | `impersonated_by` | bigint | yes |  |
 
 Notes on the columns:
 
 - `last_used_at`: Updated on every request made with the token.
 - `last_used_ip`: Source of the last request.
+- `last_used_user_agent`: The `User-Agent` header of the last request (migration `00037`), whole but
+  cut to 512 characters, set in the same statement as `last_used_ip`: the *last* one, not the first,
+  because it describes the same request as the address next to it, and a session lasts weeks, in
+  which a browser updates and, if the token is copied elsewhere, a different one shows. The browser
+  and operating system are not stored: they are worked out from it when a token is read
+  (`tokens.DetectClientFromUA`), so a better parser improves the old rows too.
 
 Constraints:
 
@@ -1194,3 +1201,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00034_accounts_effective_type.sql`: `account_effective_type`
 - `00035_distribution_visibility.sql`: `distribution_visibility` and `distributions.visibility`
 - `00036_club_info.sql`: `club_info_items` (empty: the data is entered from `/admin`)
+- `00037_tokens_last_used_user_agent.sql`: `tokens.last_used_user_agent`

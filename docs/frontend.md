@@ -402,23 +402,24 @@ unfolds who holds it, taken from `GET /users` — admin sees everybody with thei
 per person (`DELETE /users/{login}/roles/{id}`) and a name picker with "Dar este rol" (`POST
 /users/{login}/roles`); the automatic roles only list their holders, and the admin's own admin role
 has no "×", as on `/socio`; the unfolded roles survive the re-render in `expandedRoles`) and a
-"Sesiones" one: every session from `GET /tokens` (a person's name from the directory, last use and
-address, creation and expiry, "Activa"/"Caducada"/"Revocada", a badge on an impersonation's and on
-the admin's own "Esta sesión"), 50 at a time with "Ver más" and a checkbox for the expired and
-revoked ones, where an active one can be revoked (a different warning for one's own, which signs
-out) or have its expiry changed, through `/users/{login}/tokens/{id}`, and a "Festivos" one: the
-club holidays the activities calendar tints, a year at a time with ‹ › (`GET /holidays?year=`), each
-with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo" dialog (`POST /holidays`; a date that
-already has one is the API's 409 `duplicate_holiday`) and "Copiar del año anterior", which POSTs
-last year's holidays on the same day and month except where the year already has one (movable ones
-such as Semana Santa are fixed by hand; there is no edit) and a "Datos de interés" one: the labelled
-values the home page shows (`GET`/`POST /club-info`, `PATCH`/`DELETE /club-info/{id}`, `PUT
-/club-info/order`), in a table with "Editar" and "Borrar", ↑ ↓ to put them in order (each sends the
-whole new order) and a "+ Nuevo dato" dialog shared by creating and editing (a label, a value and,
-optionally, a text for a copy button and the button's own text). The home page (`dashboard.js`,
-`loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by one listener on
-the list since they are drawn after load: the data is not written in `index.html`, so an
-administrator changes it without a deploy and a private one (the Bizum number) is not in the
+"Sesiones" one: every session from `GET /tokens` (a person's name from the directory, last use,
+address, browser and system ("Chrome 118 · Windows", from `browser`/`os`, with the whole User-Agent
+as the tooltip; "—" if never used), creation and expiry, "Activa"/"Caducada"/"Revocada", a badge on
+an impersonation's and on the admin's own "Esta sesión"), 50 at a time with "Ver más" and a checkbox
+for the expired and revoked ones, where an active one can be revoked (a different warning for one's
+own, which signs out) or have its expiry changed, through `/users/{login}/tokens/{id}`, and a
+"Festivos" one: the club holidays the activities calendar tints, a year at a time with ‹ › (`GET
+/holidays?year=`), each with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo" dialog (`POST
+/holidays`; a date that already has one is the API's 409 `duplicate_holiday`) and "Copiar del año
+anterior", which POSTs last year's holidays on the same day and month except where the year already
+has one (movable ones such as Semana Santa are fixed by hand; there is no edit) and a "Datos de
+interés" one: the labelled values the home page shows (`GET`/`POST /club-info`, `PATCH`/`DELETE
+/club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑ ↓ to put them in
+order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by creating and editing (a
+label, a value and, optionally, a text for a copy button and the button's own text). The home page
+(`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by
+one listener on the list since they are drawn after load: the data is not written in `index.html`,
+so an administrator changes it without a deploy and a private one (the Bizum number) is not in the
 repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
 `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see **Permission
 tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the

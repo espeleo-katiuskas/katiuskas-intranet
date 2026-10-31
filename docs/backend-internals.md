@@ -53,64 +53,59 @@ that gets rolled back — the repository code never knows the difference.
 
 ## Authentication and sessions
 
-**Auth is a single opaque, revocable, database-backed session token** — no JWT, no
-separate access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,
-`Authenticator.Protect`/`RequireAuth`/`RequireRole`, and a `SessionResolver` interface; it
-has no database dependency. `internal/tokens` is the real resolver: it hashes the raw
-token, validates and touches `last_used_at`/`last_used_ip` in one query, then resolves
-roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes
-admin-only endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`, and
-`GET /tokens` listing everyone's — the active ones by default, `?status=all` for the
-history, paged by `limit`/`offset` — which marks the caller's own session `current`, found
-by the hash of its bearer token) to audit, re-expire, or revoke any token, plus
-`POST /users/{login}/impersonate` (admin-only, issues a short-lived token —
-`config.ImpersonationTokenTTL` — that resolves as the target person in every way except
-`AuthenticatedUser.ImpersonatedBy`, which names the admin) and
-`POST /auth/impersonate/exit` to end one and get a fresh normal token back. The same
-session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
-(`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is
-issued or refreshed (sign-in, impersonation start/exit) — every ordinary route still only
-ever looks at the bearer header (`auth.Protect`/`RequireAuth`), so this cookie existing
-changes nothing about them. It exists purely for
+**Auth is a single opaque, revocable, database-backed session token** — no JWT, no separate
+access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,
+`Authenticator.Protect`/`RequireAuth`/`RequireRole`, and a `SessionResolver` interface; it has no
+database dependency. `internal/tokens` is the real resolver: it hashes the raw token, validates and
+touches `last_used_at`/`last_used_ip`/`last_used_user_agent` (the address and `User-Agent` the
+middleware passes, `Authenticator` → `SessionResolver.Authenticate`) in one query, then resolves
+roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes admin-only
+endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`, and `GET /tokens` listing
+everyone's — the active ones by default, `?status=all` for the history, paged by `limit`/`offset` —
+which marks the caller's own session `current`, found by the hash of its bearer token) to audit,
+re-expire, or revoke any token, plus `POST /users/{login}/impersonate` (admin-only, issues a
+short-lived token — `config.ImpersonationTokenTTL` — that resolves as the target person in every way
+except `AuthenticatedUser.ImpersonatedBy`, which names the admin) and `POST /auth/impersonate/exit`
+to end one and get a fresh normal token back. The same session token is also mirrored into an
+`HttpOnly`/`Secure`/`SameSite=Lax` cookie (`auth.SetSessionCookie`, name `katiuskas_session`, scoped
+to `/api/v1`) whenever one is issued or refreshed (sign-in, impersonation start/exit) — every
+ordinary route still only ever looks at the bearer header (`auth.Protect`/`RequireAuth`), so this
+cookie existing changes nothing about them. It exists purely for
 `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/library` and
-`internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere
-else) so a document/file can be a plain, browser-navigable `<a href>` link — opened
-directly in a new tab, or saved by the browser's own "Save As" with the real filename —
-instead of needing `apiFetchBlob`'s fetch-then-`Blob` dance the way `library.js` otherwise
-uses for everything else; `web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean
-on exactly this to stay plain links. `ClearSessionCookie` removes it on logout, so a
-signed-out browser can't open a file link straight from history or a bookmark anymore.
-`internal/authapi` glues magic-link request/consume/logout and `GET /auth/me`
-(identity+roles resolved from context, one light query for the login and name — the
-frontend calls this once per page load since an opaque token has nothing to decode; the
-name is there so the topbar's greeting and the impersonation banner don't need a second
-request for the person's record, which every page used to wait behind). The magic-link token
-itself (`auth.NewMagicLinkToken`, 128 bits/16 bytes) is deliberately smaller than a
-session or impersonation token (`auth.NewOpaqueToken`, 256 bits/32 bytes) — it's the one
-opaque token in this app that ends up in a URL rather than only ever sent as a header, so
-its length actually matters, and it only needs to resist guessing within `MagicLinkTTL`'s
-own short window rather than staying a valid bearer credential for weeks; 128 bits is
-still the OWASP-recommended *minimum* for a session identifier, astronomically out of
-reach for brute-forcing in that window given `POST /auth/magic-link/consume` has no rate
-limit of its own (unlike the login code below, capped by a per-row attempt counter) —
-token entropy alone is what carries this endpoint's security. A magic-link email also
-carries a 6-digit login code — hashed alongside the link's token in the same
-`magic_link_tokens` row, so consuming either one consumes both — for signing in on a
-device other than the one the email was read on; `POST /auth/magic-link/consume-code`
-identifies the caller by email+phone (the code alone is too short to look someone up by)
-and a per-row attempt counter bounds brute-forcing it without affecting the link itself.
-That lookup runs before the attempt counter is ever reached, though, so — unlike
-`/auth/magic-link/consume` above, which needs none — this route shares the same
-per-calling-address `httpapi.IPRateLimiter` as the initial `POST /auth/magic-link` request
-(`authapi.Handler`'s own `ipLimiter`, one limiter/budget covering both routes): without
-it, an address could scan through many different email/phone guesses here with nothing to
-slow it down, the same gap the initial request's own throttle exists to close. Both this
-and the initial `POST /auth/magic-link` request resolve email+phone through the same
-`users.Repository.FindActiveByEmailAndPhone`, whose email side matches case-insensitively
-— the same as `internal/telegrambot`'s own `emailMatchesUser` check, so the same address
-behaves the same way whether someone signs in from the web or from Telegram. Whoever's
-linked their Telegram account (see **Telegram** below) gets the same link and code by DM
-too, alongside — never instead of — the email.
+`internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere else) so a
+document/file can be a plain, browser-navigable `<a href>` link — opened directly in a new tab, or
+saved by the browser's own "Save As" with the real filename — instead of needing `apiFetchBlob`'s
+fetch-then-`Blob` dance the way `library.js` otherwise uses for everything else;
+`web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
+links. `ClearSessionCookie` removes it on logout, so a signed-out browser can't open a file link
+straight from history or a bookmark anymore. `internal/authapi` glues magic-link
+request/consume/logout and `GET /auth/me` (identity+roles resolved from context, one light query for
+the login and name — the frontend calls this once per page load since an opaque token has nothing to
+decode; the name is there so the topbar's greeting and the impersonation banner don't need a second
+request for the person's record, which every page used to wait behind). The magic-link token itself
+(`auth.NewMagicLinkToken`, 128 bits/16 bytes) is deliberately smaller than a session or
+impersonation token (`auth.NewOpaqueToken`, 256 bits/32 bytes) — it's the one opaque token in this
+app that ends up in a URL rather than only ever sent as a header, so its length actually matters,
+and it only needs to resist guessing within `MagicLinkTTL`'s own short window rather than staying a
+valid bearer credential for weeks; 128 bits is still the OWASP-recommended *minimum* for a session
+identifier, astronomically out of reach for brute-forcing in that window given `POST
+/auth/magic-link/consume` has no rate limit of its own (unlike the login code below, capped by a
+per-row attempt counter) — token entropy alone is what carries this endpoint's security. A
+magic-link email also carries a 6-digit login code — hashed alongside the link's token in the same
+`magic_link_tokens` row, so consuming either one consumes both — for signing in on a device other
+than the one the email was read on; `POST /auth/magic-link/consume-code` identifies the caller by
+email+phone (the code alone is too short to look someone up by) and a per-row attempt counter bounds
+brute-forcing it without affecting the link itself. That lookup runs before the attempt counter is
+ever reached, though, so — unlike `/auth/magic-link/consume` above, which needs none — this route
+shares the same per-calling-address `httpapi.IPRateLimiter` as the initial `POST /auth/magic-link`
+request (`authapi.Handler`'s own `ipLimiter`, one limiter/budget covering both routes): without it,
+an address could scan through many different email/phone guesses here with nothing to slow it down,
+the same gap the initial request's own throttle exists to close. Both this and the initial `POST
+/auth/magic-link` request resolve email+phone through the same
+`users.Repository.FindActiveByEmailAndPhone`, whose email side matches case-insensitively — the same
+as `internal/telegrambot`'s own `emailMatchesUser` check, so the same address behaves the same way
+whether someone signs in from the web or from Telegram. Whoever's linked their Telegram account (see
+**Telegram** below) gets the same link and code by DM too, alongside — never instead of — the email.
 
 **Logs** are for a person to read, not for a tool to parse (nothing in the club ever will, and
 they are looked at by hand now and then): `internal/platform/logging` has the `slog.Handler` both
