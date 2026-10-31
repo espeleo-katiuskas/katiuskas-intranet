@@ -59,9 +59,11 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/tokens", h.authenticator.Protect(h.listAll, "admin"))
-	mux.Handle("GET /api/v1/users/{login}/tokens", h.authenticator.Protect(h.list, "admin"))
+	// A person sees and revokes their own sessions; an admin, anybody's (see sessionOwner). Changing
+	// a session's expiry stays admin only.
+	mux.Handle("GET /api/v1/users/{login}/tokens", h.authenticator.Protect(h.list))
 	mux.Handle("PATCH /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.updateExpiry, "admin"))
-	mux.Handle("DELETE /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.revoke, "admin"))
+	mux.Handle("DELETE /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.revoke))
 	mux.Handle("POST /api/v1/users/{login}/impersonate", h.authenticator.Protect(h.impersonate, "admin"))
 }
 
@@ -141,21 +143,61 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list tokens")
 		return
 	}
-	// Mark the caller's own session, if it's on this page. Not finding it
-	// (a miss, or a lookup that fails) only means nothing is marked.
-	if raw, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); raw != "" {
-		if currentID, err := h.service.IDForRawToken(r.Context(), raw); err == nil {
-			for i := range list {
-				list[i].Current = list[i].ID == currentID
-			}
-		}
-	}
+	h.markCurrent(r, list)
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
+// sessionOwner is resolveUserLogin for the routes a person may use on their own sessions: an admin
+// may name anybody (404 for a login nobody has); anybody else only themselves, and a request for
+// another's — or for a login nobody has, so that this cannot be used to check which exist — is a
+// 403. A session started by impersonating someone is not that person acting for themselves, so it
+// cannot see or end their sessions either.
+func (h *Handler) sessionOwner(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	current, _ := auth.UserFromContext(r.Context())
+	userID, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if current.HasAnyRole("admin") {
+		if err != nil {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+			return 0, false
+		}
+		return userID, true
+	}
+	if err != nil || userID != current.ID || current.ImpersonatedBy != nil {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "you can only see and end your own sessions")
+		return 0, false
+	}
+	return userID, true
+}
+
+// markCurrent flags, in list, the session the request is made with — if it is there; not finding
+// it (a miss, or a lookup that fails) only means nothing is marked.
+func (h *Handler) markCurrent(r *http.Request, list []Token) {
+	raw, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if raw == "" {
+		return
+	}
+	if currentID, err := h.service.IDForRawToken(r.Context(), raw); err == nil {
+		for i := range list {
+			list[i].Current = list[i].ID == currentID
+		}
+	}
+}
+
+// list is a person's sessions, newest first, with the one in use marked `current`. Everything by
+// default (the audit view an admin gets); ?status=active leaves out the expired and revoked ones,
+// which is what a person sees of their own.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.resolveUserLogin(w, r)
+	userID, ok := h.sessionOwner(w, r)
 	if !ok {
+		return
+	}
+	activeOnly := false
+	switch r.URL.Query().Get("status") {
+	case "", "all":
+	case "active":
+		activeOnly = true
+	default:
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", "status must be active or all")
 		return
 	}
 	list, err := h.service.ListForUser(r.Context(), userID)
@@ -163,6 +205,17 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list tokens")
 		return
 	}
+	if activeOnly {
+		now := time.Now()
+		active := list[:0]
+		for _, t := range list {
+			if t.RevokedAt == nil && t.ExpiresAt.After(now) {
+				active = append(active, t)
+			}
+		}
+		list = active
+	}
+	h.markCurrent(r, list)
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
@@ -207,7 +260,11 @@ func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	userID, tokenID, ok := h.pathIDs(w, r)
+	userID, ok := h.sessionOwner(w, r)
+	if !ok {
+		return
+	}
+	tokenID, ok := h.tokenID(w, r)
 	if !ok {
 		return
 	}
@@ -225,8 +282,12 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if targetErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha revocado un token de %s.",
-			h.actorLogin(r.Context()), target.UserLogin))
+		if current, _ := auth.UserFromContext(r.Context()); current.ID == userID {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha cerrado una de sus sesiones.", target.UserLogin))
+		} else {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha revocado un token de %s.",
+				h.actorLogin(r.Context()), target.UserLogin))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
@@ -236,10 +297,15 @@ func (h *Handler) pathIDs(w http.ResponseWriter, r *http.Request) (userID, token
 	if !ok {
 		return 0, 0, false
 	}
+	tokenID, ok = h.tokenID(w, r)
+	return userID, tokenID, ok
+}
+
+func (h *Handler) tokenID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	tokenID, err := strconv.ParseInt(r.PathValue("tokenID"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "token id must be numeric")
-		return 0, 0, false
+		return 0, false
 	}
-	return userID, tokenID, true
+	return tokenID, true
 }

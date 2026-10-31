@@ -3,6 +3,7 @@ import {
   currentUser,
   escapeHtml,
   formatDate,
+  formatDateTime,
   pickerLabel,
   resolvePickerId,
   roleLabel,
@@ -208,12 +209,6 @@ const sessionsShowAll = document.getElementById('sessions-show-all');
 const sessionsLoadMore = document.getElementById('sessions-load-more');
 let sessionsShown = [];
 let namesByLogin = {};
-
-function formatDateTime(iso) {
-  const date = new Date(iso);
-  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  return `${formatDate(iso)} ${time}`;
-}
 
 function sessionStatus(session) {
   if (session.revoked_at) return 'Revocada';

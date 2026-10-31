@@ -4,7 +4,7 @@
 // searchable people picker. The server (internal/distributions) is the
 // authority on every rule; nothing here decides who may do what beyond hiding
 // controls.
-import { apiFetch, escapeHtml, formatDate, pickerLabel, resolvePickerId } from './api.js';
+import { apiFetch, escapeHtml, formatDateTime, pickerLabel, resolvePickerId } from './api.js';
 
 const distributionStatusLabels = {
   draft: 'Borrador',
@@ -71,12 +71,6 @@ const visibilityLabels = {
 
 function statusBadge(status) {
   return `<span class="badge" title="${escapeHtml(distributionStatusHints[status] ?? '')}">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
-}
-
-function formatDateTime(iso) {
-  const date = new Date(iso);
-  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  return `${formatDate(iso)} ${time}`;
 }
 
 // "Talla: M" — what was chosen for a unit. With nothing chosen it is "Sin

@@ -183,17 +183,24 @@ positions and are not assigned by hand.
   - query: `status`, `limit`, `offset`
   - returns: 200 `[Token]`
   - errors: 400 `invalid_status`
-- **GET** `/users/{login}/tokens` — *Admin*. All the sessions a person has had, without the token
-  value.
+- **GET** `/users/{login}/tokens` — *That person, or admin*. The sessions a person has had, newest
+  first, without the token value, with the one making the request marked `current`: all of them by
+  default (the audit view), or only the ones not expired or revoked with `?status=active` (what a
+  person sees of their own). Anybody else gets 403, also for a login nobody has, so it cannot be
+  used to check which exist (admin gets 404); a session started by impersonating the person doesn't
+  count as them.
   - returns: 200 `[Token]`
+  - errors: 400 `invalid_status`; 403 `forbidden`; 404 `not_found` (admin)
 - **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session.
   - body: `expires_at*`
   - returns: 204
   - errors: 400 `invalid_body`
-- **DELETE** `/users/{login}/tokens/{tokenID}` — *Admin*. Revokes a session; the next request with
-  it gets 401.
+- **DELETE** `/users/{login}/tokens/{tokenID}` — *That person, or admin*. Revokes a session; the
+  next request with it gets 401. A person closes their own sessions this way, the one in use
+  included (that is signing out); not another's, and not through a session started by impersonating
+  them.
   - returns: 204
-  - errors: 400 `invalid_id`
+  - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`
 - **POST** `/users/{login}/impersonate` — *Admin*. Opens a short session (1 hour) that acts as that
   person.
   - returns: 201 `JSON`

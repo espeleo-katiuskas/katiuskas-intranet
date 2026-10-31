@@ -415,6 +415,13 @@ function formatDate(isoDate) {
   return `${day}-${month}-${date.getFullYear()}`;
 }
 
+// "21-10-2026 18:05": the date and the time (the viewer's own), for what has a moment.
+function formatDateTime(iso) {
+  const date = new Date(iso);
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return `${formatDate(iso)} ${time}`;
+}
+
 // The club's own money (internal/accounting) is always euros — shared by
 // accounting.js's chart-of-accounts balances and, later, its own
 // transactions page.
@@ -488,6 +495,7 @@ export {
   showFeedback,
   showError,
   formatDate,
+  formatDateTime,
   formatCurrency,
   pickerLabel,
   renderPickerOptions,

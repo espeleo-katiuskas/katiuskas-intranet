@@ -1,4 +1,12 @@
-import { hasAnyRole, apiFetch, showFeedback, showError } from './api.js';
+import {
+  hasAnyRole,
+  apiFetch,
+  escapeHtml,
+  formatDateTime,
+  logout,
+  showFeedback,
+  showError,
+} from './api.js';
 import { initPage } from './layout.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
@@ -165,8 +173,73 @@ editForm.addEventListener('submit', async (event) => {
   }
 });
 
+// "Mis sesiones": where the person is signed in (GET /users/{login}/tokens?status=active, the
+// ones not expired or revoked), each of which they can close (DELETE .../tokens/{id}). Closing the
+// one in use is signing out, so that one signs out of this browser too.
+const sessionsBody = document.getElementById('sessions-list');
+let sessions = [];
+
+function sessionRow(session) {
+  const parts = [session.browser, session.os].filter(Boolean);
+  const client = session.last_used_user_agent
+    ? `<span title="${escapeHtml(session.last_used_user_agent)}">${parts.length ? escapeHtml(parts.join(' · ')) : 'Navegador desconocido'}</span>`
+    : '—';
+  const own = session.current ? ' <span class="badge">Esta sesión</span>' : '';
+  const byAdmin = session.impersonated_by_login
+    ? ` <span class="badge" title="Un administrador entró como tú, por ejemplo para ayudarte">Abierta por ${escapeHtml(session.impersonated_by_login)}</span>`
+    : '';
+  return `
+    <tr>
+      <td>${client}${own}${byAdmin}</td>
+      <td>${session.last_used_at ? formatDateTime(session.last_used_at) : 'Nunca'}</td>
+      <td>${session.last_used_ip ? escapeHtml(session.last_used_ip) : '—'}</td>
+      <td>${formatDateTime(session.created_at)}</td>
+      <td>${formatDateTime(session.expires_at)}</td>
+      <td><button type="button" class="btn btn-danger btn-small" data-close-session="${session.id}">${session.current ? 'Cerrar esta sesión' : 'Cerrar'}</button></td>
+    </tr>`;
+}
+
+async function loadSessions() {
+  try {
+    sessions = await apiFetch(`/users/${encodeURIComponent(user.login)}/tokens?status=active`);
+    sessionsBody.innerHTML = sessions.length
+      ? sessions.map(sessionRow).join('')
+      : '<tr><td colspan="6">No tienes ninguna sesión abierta.</td></tr>';
+  } catch (err) {
+    sessionsBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar las sesiones.</td></tr>';
+    showError(err.message);
+  }
+}
+
+sessionsBody.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-close-session]');
+  if (!button) return;
+  const session = sessions.find((s) => s.id === Number(button.dataset.closeSession));
+  if (!session) return;
+  const question = session.current
+    ? 'Es la sesión que estás usando ahora: si la cierras saldrás de la intranet y tendrás que volver a entrar. ¿Cerrarla?'
+    : '¿Cerrar esta sesión? Ese dispositivo tendrá que volver a pedir un enlace para entrar.';
+  if (!confirm(question)) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/users/${encodeURIComponent(user.login)}/tokens/${session.id}`, {
+      method: 'DELETE',
+    });
+    if (session.current) {
+      logout();
+      return;
+    }
+    showFeedback('Sesión cerrada.');
+    await loadSessions();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
 loadProfile();
 if (user) {
+  loadSessions();
   initLicenseFiles(user.login, { hideWhenEmpty: true });
   initUserFilesBrowser(user.login, { hideWhenEmpty: true });
 }

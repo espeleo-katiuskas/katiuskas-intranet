@@ -646,3 +646,137 @@ func TestHandlerListAllShowsTheBrowserAndSystemOfEachSession(t *testing.T) {
 		t.Errorf("an unknown browser should be left out, got %s", rec.Body.String())
 	}
 }
+
+// Everybody sees and ends their own sessions; admin, anybody's; nobody else's.
+func TestHandlerAPersonSeesAndRevokesTheirOwnSessions(t *testing.T) {
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, nil)
+	ctx := context.Background()
+	me := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+
+	// Two sessions of mine (one expired, one revoked besides) and one of somebody else's.
+	activeRaw, _ := service.Issue(ctx, me.ID, time.Hour)
+	if _, err := service.Issue(ctx, other.ID, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, 'expired', now() - interval '1 hour')`, me.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, expires_at, revoked_at) VALUES ($1, 'revoked', now() + interval '1 hour', now())`, me.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The one I am calling with is a real row too, so it can be marked.
+	myToken := testutil.TokenFor(resolver, me.ID, "member")
+	if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')`, me.ID, auth.HashToken(myToken)); err != nil {
+		t.Fatal(err)
+	}
+
+	own := fmt.Sprintf("/api/v1/users/%s/tokens", me.Login)
+	var all, active []tokens.Token
+	rec := doRequest(mux, http.MethodGet, own, myToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a person to list their own sessions, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &all)
+	rec = doRequest(mux, http.MethodGet, own+"?status=active", myToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &active)
+	if len(all) != 4 || len(active) != 2 {
+		t.Fatalf("expected 4 sessions of which 2 active, got %d and %d", len(all), len(active))
+	}
+	currents := 0
+	for _, tok := range active {
+		if tok.UserLogin != me.Login {
+			t.Errorf("only my own sessions, got %+v", tok)
+		}
+		if tok.Current {
+			currents++
+		}
+	}
+	if currents != 1 {
+		t.Errorf("expected the session in use to be marked, got %d marked", currents)
+	}
+	expectCode := func(rec *httptest.ResponseRecorder, status int) {
+		t.Helper()
+		if rec.Code != status {
+			t.Errorf("expected %d, got %d: %s", status, rec.Code, rec.Body.String())
+		}
+	}
+	expectCode(doRequest(mux, http.MethodGet, own+"?status=nope", myToken, nil), http.StatusBadRequest)
+
+	// Not anybody else's, and not even to find out whether a login exists.
+	expectCode(doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", other.Login), myToken, nil), http.StatusForbidden)
+	expectCode(doRequest(mux, http.MethodGet, "/api/v1/users/nobody.at.all/tokens", myToken, nil), http.StatusForbidden)
+
+	// Ending one of mine; not one of somebody else's; nor changing when one expires.
+	var mine tokens.Token
+	for _, tok := range active {
+		if !tok.Current {
+			mine = tok
+		}
+	}
+	otherList, _ := service.ListForUser(ctx, other.ID)
+	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", other.Login, otherList[0].ID), myToken, nil), http.StatusForbidden)
+	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, otherList[0].ID), myToken, nil), http.StatusNotFound)
+	expectCode(doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, mine.ID), myToken,
+		map[string]string{"expires_at": time.Now().Add(48 * time.Hour).Format(time.RFC3339)}), http.StatusForbidden)
+	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, mine.ID), myToken, nil), http.StatusNoContent)
+	if _, err := service.Authenticate(ctx, activeRaw, "", ""); err == nil {
+		t.Errorf("the session I revoked should no longer work")
+	}
+	rec = doRequest(mux, http.MethodGet, own+"?status=active", myToken, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &active)
+	if len(active) != 1 || !active[0].Current {
+		t.Errorf("expected only the session in use to remain, got %+v", active)
+	}
+
+	// An admin, anybody's — and a login nobody has is a 404 for them.
+	adminToken := testutil.TokenFor(resolver, 999999, "admin")
+	expectCode(doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", other.Login), adminToken, nil), http.StatusOK)
+	expectCode(doRequest(mux, http.MethodGet, "/api/v1/users/nobody.at.all/tokens", adminToken, nil), http.StatusNotFound)
+}
+
+// Somebody impersonating a person is not that person acting for themselves: they can't see or end
+// the person's sessions through it, unless the person is an admin too.
+func TestHandlerAnImpersonationSessionCannotManageThePersonsSessions(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	person := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(ctx, person.ID, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	impersonated := testutil.TokenFor(resolver, person.ID, "member")
+	resolver[impersonated] = auth.AuthenticatedUser{ID: person.ID, Roles: []string{"member"}, ImpersonatedBy: &admin.ID}
+
+	path := fmt.Sprintf("/api/v1/users/%s/tokens", person.Login)
+	if rec := doRequest(mux, http.MethodGet, path, impersonated, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for an impersonation session, got %d", rec.Code)
+	}
+	list, _ := service.ListForUser(ctx, person.ID)
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("%s/%d", path, list[0].ID), impersonated, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 revoking through an impersonation session, got %d", rec.Code)
+	}
+}
+
+// Ending one's own session says so in the log channel, in its own words.
+func TestHandlerRevokingYourOwnSessionNotifiesInItsOwnWords(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, notifier)
+	ctx := context.Background()
+	me := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(ctx, me.ID, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := service.ListForUser(ctx, me.ID)
+	myToken := testutil.TokenFor(resolver, me.ID, "member")
+	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, list[0].ID), myToken, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if msg := notifier.waitForMessage(t); !strings.Contains(msg, me.Login) || !strings.Contains(msg, "ha cerrado una de sus sesiones") {
+		t.Errorf("unexpected notification: %q", msg)
+	}
+}

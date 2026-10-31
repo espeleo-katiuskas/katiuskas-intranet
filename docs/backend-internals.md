@@ -59,24 +59,29 @@ access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,
 database dependency. `internal/tokens` is the real resolver: it hashes the raw token, validates and
 touches `last_used_at`/`last_used_ip`/`last_used_user_agent` (the address and `User-Agent` the
 middleware passes, `Authenticator` → `SessionResolver.Authenticate`) in one query, then resolves
-roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes admin-only
-endpoints (`GET`/`PATCH`/`DELETE /users/{login}/tokens[/{tokenID}]`, and `GET /tokens` listing
-everyone's — the active ones by default, `?status=all` for the history, paged by `limit`/`offset` —
-which marks the caller's own session `current`, found by the hash of its bearer token) to audit,
-re-expire, or revoke any token, plus `POST /users/{login}/impersonate` (admin-only, issues a
-short-lived token — `config.ImpersonationTokenTTL` — that resolves as the target person in every way
-except `AuthenticatedUser.ImpersonatedBy`, which names the admin) and `POST /auth/impersonate/exit`
-to end one and get a fresh normal token back. The same session token is also mirrored into an
-`HttpOnly`/`Secure`/`SameSite=Lax` cookie (`auth.SetSessionCookie`, name `katiuskas_session`, scoped
-to `/api/v1`) whenever one is issued or refreshed (sign-in, impersonation start/exit) — every
-ordinary route still only ever looks at the bearer header (`auth.Protect`/`RequireAuth`), so this
-cookie existing changes nothing about them. It exists purely for
-`auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/library` and
-`internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere else) so a
-document/file can be a plain, browser-navigable `<a href>` link — opened directly in a new tab, or
-saved by the browser's own "Save As" with the real filename — instead of needing `apiFetchBlob`'s
-fetch-then-`Blob` dance the way `library.js` otherwise uses for everything else;
-`web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
+roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes endpoints to
+audit and end sessions: `GET` and `DELETE /users/{login}/tokens[/{tokenID}]` are for that person
+themselves (who sees and closes their own sessions from `/perfil`, `?status=active`) or admin
+(`sessionOwner`: anybody else, or a login nobody has, is a 403 so it can't be used to check which
+exist; a session started by impersonating the person is not them acting for themselves, so it can't
+see or end their sessions; closing one's own says "ha cerrado una de sus sesiones" in the log
+channel), while `PATCH` (the expiry), `GET /tokens` and `POST /users/{login}/impersonate` are
+admin-only; `GET /tokens` lists everyone's — the active ones by default, `?status=all` for the
+history, paged by `limit`/`offset` — which marks the caller's own session `current`, found by the
+hash of its bearer token) to audit, re-expire, or revoke any token, plus `POST
+/users/{login}/impersonate` (admin-only, issues a short-lived token — `config.ImpersonationTokenTTL`
+— that resolves as the target person in every way except `AuthenticatedUser.ImpersonatedBy`, which
+names the admin) and `POST /auth/impersonate/exit` to end one and get a fresh normal token back. The
+same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
+(`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or
+refreshed (sign-in, impersonation start/exit) — every ordinary route still only ever looks at the
+bearer header (`auth.Protect`/`RequireAuth`), so this cookie existing changes nothing about them. It
+exists purely for `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which
+`internal/library` and `internal/userfiles` use on their own file-serving `GET` routes specifically
+(nowhere else) so a document/file can be a plain, browser-navigable `<a href>` link — opened
+directly in a new tab, or saved by the browser's own "Save As" with the real filename — instead of
+needing `apiFetchBlob`'s fetch-then-`Blob` dance the way `library.js` otherwise uses for everything
+else; `web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
 links. `ClearSessionCookie` removes it on logout, so a signed-out browser can't open a file link
 straight from history or a bookmark anymore. `internal/authapi` glues magic-link
 request/consume/logout and `GET /auth/me` (identity+roles resolved from context, one light query for

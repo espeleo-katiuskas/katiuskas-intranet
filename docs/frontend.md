@@ -136,10 +136,15 @@ document-relative link resolver, `downloadBlob`) both import, rather than each c
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
-`perfil.html`/`socio.html` each also render a "Licencias federativas" section — a year `<select>`,
-mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small clickable thumbnails rather
-than a plain list of text links — instead of pointing at that person's `licencias/` subdirectory
-(see [Dropping files
+`/perfil` also has a "Mis sesiones" section (`profile.js`, `loadSessions`): the person's sessions
+not expired or revoked (`GET /users/{login}/tokens?status=active`), each with its browser and
+system, last use and address, when it was opened and when it expires, "Esta sesión" on the one in
+use and, if an administrator entered as them, who; each has a "Cerrar" button (`DELETE
+.../tokens/{id}`, after a confirmation), and closing the one in use is signing out, so it also
+clears the token and goes to `/login`. `perfil.html`/`socio.html` each also render a "Licencias
+federativas" section — a year `<select>`, mirroring `dashboard.js`'s own Actas asambleas, plus a
+grid of small clickable thumbnails rather than a plain list of text links — instead of pointing at
+that person's `licencias/` subdirectory (see [Dropping files
 in](backend-internals.md#dropping-files-into-the-library-and-the-per-person-directories)) through
 `userFiles.js`'s generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches
 that one directory's listing (`GET /users/{login}/files?path=licencias`), builds the `<select>` from

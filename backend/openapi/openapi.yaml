@@ -633,15 +633,22 @@ paths:
     get:
       summary: List a person's session tokens
       description: >
-        Admin-only audit view of every session token ever issued to this
-        person, newest first, including expired and revoked ones. Never
+        Open to that person themselves and to admin. Every session token
+        ever issued to this person, newest first, including expired and
+        revoked ones (the audit view), or with status=active only the ones
+        not expired or revoked (what a person sees of their own, in /perfil).
+        The one making the request is marked `current`. Never
         exposes the token value itself (only its hash is stored, and
         even that isn't returned) — just when it was created, when it
-        expires, whether and when it was revoked, and when and from
-        where it was last used.
+        expires, whether and when it was revoked, and when, from
+        where and with which browser it was last used. Anybody else gets
+        403 — also for a login nobody has, so this can't check which exist
+        (an admin gets 404) — and a session started by impersonating the
+        person doesn't count as the person.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [all, active], default: all } }
       responses:
         "200":
           description: This person's tokens
@@ -709,9 +716,11 @@ paths:
     delete:
       summary: Revoke a token
       description: >
-        Admin-only. Idempotent: revoking an already-revoked token still
-        returns 204. Immediately ends that session — the next request
-        made with it gets 401.
+        Open to that person themselves (to close one of their own sessions,
+        the one in use included, which is signing out) and to admin; not
+        through a session started by impersonating the person. Idempotent:
+        revoking an already-revoked token still returns 204. Immediately
+        ends that session — the next request made with it gets 401.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -719,6 +728,7 @@ paths:
       responses:
         "204": { description: Revoked }
         "400": { description: invalid_id — tokenID isn't numeric. }
+        "403": { description: Neither that person nor admin (or an impersonation session). }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/memberships:
