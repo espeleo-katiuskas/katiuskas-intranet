@@ -864,6 +864,12 @@ button.link-button {
   font-size: 0.88rem;
 }
 
+/* What opens a card (a list, a paragraph) already has the card's padding above it: its own top
+   margin would only add to it. */
+.info-card > :first-child {
+  margin-top: 0;
+}
+
 .link-list {
   list-style: none;
   margin: 12px 0 0;

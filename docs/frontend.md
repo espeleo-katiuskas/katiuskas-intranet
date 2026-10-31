@@ -180,18 +180,18 @@ rather than the browser's own broken-image icon, so the grid stays visually cons
 whether or not every license has a real thumbnail yet.
 
 A missing `licencias/` subdirectory 404s the same as any other unknown one
-(`userfiles.Service.ListDirectory`), caught and shown as "no hay copias" rather than an
-error — nobody's dropped a license copy in yet is the common case, not a real failure.
-`profile.js` passes `hideWhenEmpty: true` (mirroring `initUserFilesBrowser`'s own option)
-so "Mi perfil" doesn't show an empty section for the common case of no license on file
-yet; `member.js` leaves it on by default (always shown) so admin/board reviewing someone
-else's page can tell "no license copies yet" apart from a page that failed to load
-anything at all. `.info-card`/`.info-card label`/`.year-select` (the
-bordered-card-with-a-year-filter look Actas asambleas already had) live in the shared
-`style.css` rather than the page-specific `dashboard.css` precisely because these two
-pages need them too now; `.license-thumbnail-grid`/`.license-thumbnail-card`/
-`.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are
-this section's own, `style.css` as well since `dashboard.css` stays index.html-specific.
+(`userfiles.Service.ListDirectory`), caught and shown as "no hay copias" rather than an error —
+nobody's dropped a license copy in yet is the common case, not a real failure. `profile.js` passes
+`hideWhenEmpty: true` (mirroring `initUserFilesBrowser`'s own option) so "Mi perfil" doesn't show an
+empty section for the common case of no license on file yet; `member.js` leaves it on by default
+(always shown) so admin/board reviewing someone else's page can tell "no license copies yet" apart
+from a page that failed to load anything at all. `.info-card`/`.info-card label`/`.year-select` (the
+bordered-card-with-a-year-filter look Actas asambleas already had) live in the shared `style.css`
+rather than the page-specific `dashboard.css` precisely because these two pages need them too now
+(what opens a card, a list or a paragraph, has no top margin of its own, since the card's padding is
+already there: `.info-card > :first-child`); `.license-thumbnail-grid`/`.license-thumbnail-card`/
+`.license-thumbnail`/`.license-thumbnail-placeholder`/`.license-thumbnail-label` are this section's
+own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
 `/repartos`, `/reparto?id=…`, `/reparto-pedidos?id=…` and `/reparto-pagos?id=…` (`distributions.js`,
 `distribution.js`, `distribution-orders.js`, `distribution-payments.js` — the list of one
