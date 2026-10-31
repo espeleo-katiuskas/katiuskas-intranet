@@ -62,10 +62,11 @@ if the person has linked Telegram, by Telegram too.
 - **GET** `/health` — *Public*. Checks that the process is alive and reaches PostgreSQL. 200 or 503.
   - returns: 200 `JSON`
 - **POST** `/auth/magic-link` — *Public*. Asks for a sign-in link with the person's email and phone.
-  The response is always the same, whether anyone matches or not. Limited by origin address.
+  If the pair matches nobody who can sign in (or the person has no role that gives access) it says
+  so, so that whoever mistyped knows to check it or to ask the board. Limited by origin address.
   - body: `email*`, `phone*`
   - returns: 200 `JSON`
-  - errors: 400 `invalid_body`, `missing_fields`; 429 `rate_limited`
+  - errors: 400 `invalid_body`, `missing_fields`; 404 `unknown_details`; 429 `rate_limited`
 - **POST** `/auth/magic-link/consume` — *Public*. Exchanges the link's token for a session token.
   - body: `token*`
   - returns: 200 `JSON`

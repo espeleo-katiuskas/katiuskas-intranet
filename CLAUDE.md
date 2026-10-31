@@ -135,7 +135,7 @@ admin, board or member on top of the roles a route lists, so someone holding onl
 is refused everywhere. The token is mirrored in the `katiuskas_session` cookie only for
 `ProtectAllowingCookie`, used by the file-serving routes of library and userfiles (and nowhere else).
 Magic-link token 128 bits (it travels in a URL), 6-digit code bounded by `code_attempts`; the request and
-code-consume routes share one `IPRateLimiter`; the answers don't reveal who has access. Impersonation is
+code-consume routes share one `IPRateLimiter`; the request says when email+phone match nobody with access (404 `unknown_details`, a deliberate choice), the code route does not. Impersonation is
 admin-only, short-lived (`ImpersonationTokenTTL`) and `POST /auth/impersonate/exit` needs only `RequireAuth`.
 
 **Roles.** `admin`, `board`, `member`, `former_member` are system roles; `board`, `member`, `former_member`

@@ -756,8 +756,9 @@ the send of a bot-flow magic-link DM.
   values, trimmed and on one line by `logSafe`, plus the caller's address) or a person with
   no role that gives access (their login), and "⚠️ Código de acceso rechazado" for a code
   that is wrong or expired (the person's login) or typed with details nobody has. The
-  caller is told nothing different — the answers stay the same so as not to reveal who has
-  access — and a successful request, or one held back by the cooldown, reports nothing.
+  caller is told as well, with a 404 `unknown_details` for both (the club accepts that this
+  says who has access: it helps members who mistyped, and the per-address limit keeps it from
+  being scanned) — and a successful request, or one held back by the cooldown, reports nothing.
   `RequestMagicLink` learns which case it was from `sendMagicLinkIfEligible`'s
   `magicLinkOutcome`; the send is fire-and-forget like `notifyLogin`'s.
 - `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has linked

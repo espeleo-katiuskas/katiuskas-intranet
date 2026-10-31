@@ -969,28 +969,39 @@ func TestRequestMagicLinkSkipsSomeoneWithNoBaselineRole(t *testing.T) {
 	user := testutil.InsertUser(t, s.tx, "611222333")
 
 	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 even though no link is sent, got %d", rec.Code)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 unknown_details, as for details nobody has, got %d", rec.Code)
 	}
 	if s.mailer.sent != 0 {
 		t.Errorf("expected no email for someone with no admin/board/member role, got %d sent", s.mailer.sent)
 	}
 }
 
-func TestRequestMagicLinkResponseIsIdenticalWhetherOrNotItMatches(t *testing.T) {
+// Details that match nobody who can sign in are told so (404 unknown_details), the same for
+// a pair nobody has and for a person with no role that gives access; a match is a 200.
+func TestRequestMagicLinkSaysWhenTheDetailsMatchNobody(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")
+	noAccess := testutil.InsertUser(t, s.tx, "644555666")
 
 	match := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
-	wrongPhone := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": "000000000"})
-	unknownEmail := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": "nobody@example.com", "phone": "000000000"})
-
-	if match.Code != http.StatusOK || wrongPhone.Code != http.StatusOK || unknownEmail.Code != http.StatusOK {
-		t.Fatalf("expected 200 in all three cases, got %d / %d / %d", match.Code, wrongPhone.Code, unknownEmail.Code)
+	if match.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a match, got %d: %s", match.Code, match.Body.String())
 	}
-	if match.Body.String() != wrongPhone.Body.String() || match.Body.String() != unknownEmail.Body.String() {
-		t.Errorf("expected an identical response body regardless of whether the details matched:\n%q\n%q\n%q",
-			match.Body.String(), wrongPhone.Body.String(), unknownEmail.Body.String())
+	for name, body := range map[string]map[string]string{
+		"right email, wrong phone": {"email": user.Email, "phone": "000000000"},
+		"unknown email":            {"email": "nobody@example.com", "phone": "000000000"},
+		"phone of someone else":    {"email": user.Email, "phone": noAccess.Phone},
+		"person with no access":    {"email": noAccess.Email, "phone": noAccess.Phone},
+	} {
+		rec := s.post(t, "/api/v1/auth/magic-link", body)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: expected 404, got %d: %s", name, rec.Code, rec.Body.String())
+			continue
+		}
+		if code := errorCode(t, rec); code != "unknown_details" {
+			t.Errorf("%s: expected unknown_details, got %q", name, code)
+		}
 	}
 	if s.mailer.sent != 1 {
 		t.Errorf("expected exactly 1 email sent (only for the real match), got %d", s.mailer.sent)
@@ -1067,8 +1078,9 @@ func TestRequestMagicLinkIsRateLimitedPerIPAddress(t *testing.T) {
 		return rec
 	}
 
-	if rec := postFrom("203.0.113.9:1111"); rec.Code != http.StatusOK {
-		t.Fatalf("expected 1st request to pass through with 200, got %d", rec.Code)
+	// These details match nobody, so a request that gets past the throttle is a 404 unknown_details.
+	if rec := postFrom("203.0.113.9:1111"); rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 1st request to pass through (404 unknown_details), got %d", rec.Code)
 	}
 	rec := postFrom("203.0.113.9:1111")
 	if rec.Code != http.StatusTooManyRequests {
@@ -1078,7 +1090,7 @@ func TestRequestMagicLinkIsRateLimitedPerIPAddress(t *testing.T) {
 		t.Errorf("expected error code rate_limited, got %q", code)
 	}
 
-	if rec := postFrom("203.0.113.10:2222"); rec.Code != http.StatusOK {
+	if rec := postFrom("203.0.113.10:2222"); rec.Code != http.StatusNotFound {
 		t.Fatalf("expected a different address's own 1st request to still pass through, got %d", rec.Code)
 	}
 }
@@ -1174,8 +1186,8 @@ func TestMagicLinkRequestAndConsumeCodeShareOneIPRateLimitBudget(t *testing.T) {
 	linkReq.RemoteAddr = remoteAddr
 	linkRec := httptest.NewRecorder()
 	mux.ServeHTTP(linkRec, linkReq)
-	if linkRec.Code != http.StatusOK {
-		t.Fatalf("expected the 1st request (to /magic-link) to pass through with 200, got %d", linkRec.Code)
+	if linkRec.Code != http.StatusNotFound {
+		t.Fatalf("expected the 1st request (to /magic-link) to pass through (404 unknown_details), got %d", linkRec.Code)
 	}
 
 	codeBody, err := json.Marshal(map[string]string{"email": "nobody@example.com", "phone": "600000000", "code": "000000"})
@@ -1710,15 +1722,14 @@ func TestAnUnreachableTelegramChatIsForgotten(t *testing.T) {
 }
 
 // Someone typing details that don't work must be visible to an admin, in
-// the log channel — while the caller is told exactly what anyone else is
-// (the answer doesn't reveal whether the details were right). A request
+// the log channel, as well as being told so themselves. A request
 // that works, or one held back only by the cooldown, logs nothing.
 func TestFailedAccessAttemptsAreReportedToTheLogChannel(t *testing.T) {
 	t.Run("details nobody has", func(t *testing.T) {
 		s := newTestServer(t)
 		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": "nadie@example.org\nfalsa linea", "phone": "600999888"})
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected the usual 200, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 unknown_details, got %d: %s", rec.Code, rec.Body.String())
 		}
 		msg := s.notifier.waitForMessage(t)
 		for _, want := range []string{"Acceso fallido", "nadie@example.org falsa linea", "600999888"} {
@@ -1738,8 +1749,8 @@ func TestFailedAccessAttemptsAreReportedToTheLogChannel(t *testing.T) {
 		s := newTestServer(t)
 		user := testutil.InsertUser(t, s.tx, "611222333")
 		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected the usual 200, got %d", rec.Code)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 unknown_details, got %d", rec.Code)
 		}
 		msg := s.notifier.waitForMessage(t)
 		if !strings.Contains(msg, "Acceso fallido") || !strings.Contains(msg, user.Login) {

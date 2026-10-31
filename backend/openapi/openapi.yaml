@@ -87,15 +87,20 @@ paths:
         gets an email at all — signing in would leave them unable to
         call anything anyway.
 
-        The response is identical in every case — no match, a match with
-        no usable role, or an email actually sent (a recent one might
-        already be on its way) — telling those cases apart would let
-        this endpoint enumerate who's in the system, or spam someone's
-        inbox. (The first two are reported to the administrators' log
-        channel instead, with what was typed, so that someone who can't
-        sign in can be helped.) The phone is compared by its digits, and a
+        When the pair matches nobody who can sign in — no one has that
+        email and phone together, or the person holds none of the roles
+        above — it answers 404 unknown_details, the same in both cases, so
+        that a member who mistyped something knows to check it, or to ask
+        the board. That lets the endpoint be used to check who has access,
+        which the club accepts (the per-address throttle below is what
+        keeps it from being scanned); both cases are also reported to the
+        administrators' log channel, with what was typed. A match is a 200
+        whether or not an email was actually sent (a recent one might
+        already be on its way), so the endpoint cannot be used to spam
+        someone's inbox. The phone is compared by its digits, and a
         leading "+34" typed in front of it is ignored; the same goes for
-        POST /auth/magic-link/consume-code.
+        POST /auth/magic-link/consume-code (which still answers the same
+        401 whatever is wrong).
 
         Also throttled per calling address (a coarser backstop above
         the per-person cooldown above, which alone does nothing to slow
@@ -114,7 +119,7 @@ paths:
                 phone: { type: string, description: "Matched against any one of the person's registered phones." }
       responses:
         "200":
-          description: Always returned, regardless of whether a link was actually sent.
+          description: The details match someone who can sign in. Returned whether or not a link was actually sent (the cooldown may hold it back).
           content:
             application/json:
               schema:
@@ -123,6 +128,8 @@ paths:
                   message: { type: string, description: A fixed, generic confirmation text. }
         "400":
           description: invalid_body (malformed JSON) or missing_fields (email and phone are both required).
+        "404":
+          description: unknown_details — no one with access has that email and phone together (no match, or a match with no role that gives access).
         "429":
           description: rate_limited — too many requests from this address recently; try again later.
 

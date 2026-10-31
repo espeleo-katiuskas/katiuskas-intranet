@@ -286,9 +286,12 @@ URL.
   has at least one of the roles `admin`, `board` or `member` (`auth.BaselineRoles`, see
   "Permissions"): signing in would be of no use to someone who has none, so
   nothing is sent to them.
-- The response of `/auth/magic-link` is identical in the three cases (nobody matches,
-  someone without a role matches, the email is really sent), so it cannot be used to find out
-  who is in the system, or who has access, or to send unwanted email.
+- `/auth/magic-link` says so when the pair matches nobody who can sign in (404 `unknown_details`,
+  the same whether nobody has that email and phone or the person has no role that gives access), so
+  that a member who mistyped knows to check it, or to ask the Junta Directiva: the club accepts that
+  this tells who has access, which is no secret within it and helps far more than it exposes, and
+  the per-address limit keeps it from being scanned. For a match it is a 200 whether or not the
+  email was really sent (the cooldown), so it cannot be used to send unwanted email.
 - `POST /auth/magic-link/consume-code` identifies the person by email+phone just like
   the request itself (the code alone is too short to serve as a lookup key) and always
   answers with the same generic 401, also so as not to distinguish cases from the
@@ -1206,7 +1209,7 @@ trimmed by `.dockerignore`.
 | --- | --- |
 | Error-level logs | Every record of error level or above, in addition to being logged normally. |
 | Login | One notice for each login (`authapi.Handler.notifyLogin`). |
-| Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told nothing different, and a request that works does not notify. |
+| Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told too (404 `unknown_details`), and a request that works does not notify. |
 | Magic link by DM | The same link (and, depending on the case, the code; see "Permissions") by DM to whoever has their account linked (`authapi.Handler.notifyMagicLinkViaTelegram`). |
 | Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, equipment, board position, resource of an activity's memoria, token, account or transaction. |
 | Startup | `cmd/api/main.go` sends "🚀 API started" right before starting the server, with the version and the date of the last commit if they are known — "🚀 API started (version v0.3.6, commit del 17-10-2026)"; only one of the two, or neither, if that is all there is — (`startupMessage`, from `adminstatus.ReadBuild`: the same information Go records in the binary and `/admin` shows). It is the synchronous exception (same 10 s limit): a single call at startup competes with no request, so blocking on it costs nothing noticeable. |

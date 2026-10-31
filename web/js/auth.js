@@ -166,6 +166,14 @@ async function handleRequestSubmit(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, phone }),
     });
+    if (response.status === 404) {
+      // unknown_details: nobody with access has that email and phone together. Said as it is,
+      // since a typo is by far the likeliest cause and the person can fix it, or ask the board.
+      errorBox.textContent =
+        'Ese correo y ese teléfono no corresponden a nadie con acceso a la Intranet. Comprueba que los has escrito bien; si lo están, ponte en contacto con la Junta Directiva.';
+      errorBox.hidden = false;
+      return;
+    }
     if (!response.ok) {
       throw new Error('request failed');
     }

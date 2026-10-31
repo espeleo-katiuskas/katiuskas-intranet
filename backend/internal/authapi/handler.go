@@ -153,12 +153,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/auth/impersonate/exit", h.authenticator.RequireAuth(http.HandlerFunc(h.ExitImpersonation)))
 }
 
-// RequestMagicLink always answers the same way regardless of whether
-// email+phone matched anyone, whether that person holds a role that
-// could actually use the API (see auth.BaselineRoles), or whether a
-// link was actually sent (a recent one might already be on its way) —
-// telling those cases apart would let this endpoint be used to check
-// who's in the system, or to spam a real person's inbox.
+// RequestMagicLink says so when email+phone match nobody who can sign in
+// (404 unknown_details: no one has that pair, or the person holds no role that
+// could use the API, see auth.BaselineRoles), so that a member who mistyped
+// something knows to check it, or to ask the board. That lets the endpoint be
+// used to check who's in the system, which the club accepts: it is public
+// information within the club and the answer helps people far more than it
+// exposes them; the per-address rate limit (ipLimiter) is what keeps it from
+// being scanned. For a match it answers 200 whether or not a link was actually
+// sent (a recent one might already be on its way, the cooldown), so the
+// endpoint can't be used to spam a real person's inbox.
 func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email string `json:"email"`
@@ -177,9 +181,8 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("magic link request failed", "error", err)
 	}
-	// The caller is told nothing different (see the answer below), but an
-	// admin should be able to see that someone is typing details that don't
-	// work — a typo, or a person who really should have access.
+	// An admin should be able to see that someone is typing details that
+	// don't work — a typo, or a person who really should have access.
 	switch outcome {
 	case outcomeUnknownDetails:
 		h.notifyAccessProblem(fmt.Sprintf("⚠️ Acceso fallido: ningún usuario coincide con el correo «%s» y el teléfono «%s» (%s).",
@@ -187,6 +190,12 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 	case outcomeNoAccess:
 		h.notifyAccessProblem(fmt.Sprintf("⚠️ Acceso fallido: %s (%s) ha pedido un enlace, pero no tiene ningún rol que dé acceso (admin, board o member).",
 			user.Login, httpapi.ClientIP(r)))
+	}
+	if outcome == outcomeUnknownDetails || outcome == outcomeNoAccess {
+		// The same answer for both: that no one with access has that email and phone together.
+		httpapi.WriteError(w, http.StatusNotFound, "unknown_details",
+			"no one with access has that email and phone together")
+		return
 	}
 
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{
@@ -225,8 +234,8 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	return outcomeIssued, user, h.issueMagicLink(ctx, user, false)
 }
 
-// magicLinkOutcome says how a web request for a link went, for what is
-// logged about it — never for the answer, which is the same in every case.
+// magicLinkOutcome says how a web request for a link went: what is logged
+// about it, and whether the caller is told that the details match nobody.
 type magicLinkOutcome int
 
 const (

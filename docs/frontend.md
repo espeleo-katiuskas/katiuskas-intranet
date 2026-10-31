@@ -88,38 +88,35 @@ anyone who isn't a real admin — board can still see a person's full data this 
 not submit any change to it, the same read-only-but-visible treatment `profile.js` already
 gives a plain member's own name/DNI/birth date/gender.
 
-`js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the
-session token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page
-load to validate the token and populate `currentUser()`. `applyRoleVisibility()` removes
-any `data-roles="admin,board"` element the current user's roles don't satisfy —
-client-side UI hiding only; the API is the actual authority. A permission that depends on
-data loaded asynchronously for one specific record (e.g. "is the viewer this activity's
-organizer?") can't be a static `data-roles` attribute, since `applyRoleVisibility()` only
-runs once at page load — that case computes a plain JS boolean after the data arrives and
-toggles `.hidden` directly instead (see `activity.js`'s
+`js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the session
+token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate the
+token and populate `currentUser()`. `applyRoleVisibility()` removes any `data-roles="admin,board"`
+element the current user's roles don't satisfy — client-side UI hiding only; the API is the actual
+authority. A permission that depends on data loaded asynchronously for one specific record (e.g. "is
+the viewer this activity's organizer?") can't be a static `data-roles` attribute, since
+`applyRoleVisibility()` only runs once at page load — that case computes a plain JS boolean after
+the data arrives and toggles `.hidden` directly instead (see `activity.js`'s
 `canManage`/`canJoinSelf`/`canAddOthers`). Detail pages read a login from the query string
-(`/socio?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern
-`login.html` uses for the magic-link token from an emailed URL. Its login code has no URL
-of its own to arrive in — `login.html`'s second panel gets it typed in by hand — so the
-email/phone from the first step are instead remembered in a plain JS variable across that
-two-step flow. That second panel appears whatever was typed, since the API answers the
-same way for details it doesn't know (so as not to reveal who has access), and so it never
-claims anything was sent: it says an email with a link and a code *will* arrive if the
-details are right. The link from that email is usually opened in another window or tab,
-which signs in there while this one keeps asking: `auth.js`'s `watchForSignInElsewhere`
-therefore listens for the `storage` event on the `token` key (and for the tab becoming
-visible again, for a browser that doesn't deliver it) and, when a stored token really is
-valid (`GET /auth/me`, as at load), sends this window to `/` already signed in — a stale
-or invalid one changes nothing. `login.html` also offers Telegram as a second way in,
-alongside (never instead of) the email/phone form: on load, `auth.js`'s
-`loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
-(`authapi.Handler.TelegramBotInfo`, backed by
+(`/socio?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern `login.html`
+uses for the magic-link token from an emailed URL. Its login code has no URL of its own to arrive in
+— `login.html`'s second panel gets it typed in by hand — so the email/phone from the first step are
+instead remembered in a plain JS variable across that two-step flow. That second panel appears only
+when the API accepts the details; for a pair that matches nobody who can sign in it answers 404
+`unknown_details`, and the first panel says so ("Ese correo y ese teléfono no corresponden a nadie
+con acceso…") and asks to check them and, if they are right, to contact the Junta Directiva. The
+panel says an email with a link and a code will arrive. The link from that email is usually opened
+in another window or tab, which signs in there while this one keeps asking: `auth.js`'s
+`watchForSignInElsewhere` therefore listens for the `storage` event on the `token` key (and for the
+tab becoming visible again, for a browser that doesn't deliver it) and, when a stored token really
+is valid (`GET /auth/me`, as at load), sends this window to `/` already signed in — a stale or
+invalid one changes nothing. `login.html` also offers Telegram as a second way in, alongside (never
+instead of) the email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the
+unauthenticated `GET /auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
 `config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since
-it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes
-back non-empty, un-hides a note linking straight to the bot's chat — left hidden by
-default so there's no dead link (or flash of one) when Telegram isn't configured at all,
-or the request itself fails.
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since it's only
+the public "@name" a `t.me/<username>` link needs) and, only if a username comes back non-empty,
+un-hides a note linking straight to the bot's chat — left hidden by default so there's no dead link
+(or flash of one) when Telegram isn't configured at all, or the request itself fails.
 
 `library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
 own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
