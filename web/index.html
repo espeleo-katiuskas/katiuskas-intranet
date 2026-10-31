@@ -16,32 +16,11 @@
     <main class="content">
       <div class="columns">
         <div class="col-main">
+          <!-- Los datos (nombre, NIF, dirección, cuentas…) vienen de la base de datos (GET /club-info) y los edita
+               un administrador desde /admin: no están escritos aquí. -->
           <h2>Datos de interés</h2>
           <div class="info-card">
-            <dl class="info-list">
-              <div class="info-row">
-                <dt>Nombre</dt>
-                <dd>Club Deportivo Elemental de Espeleología Katiuskas</dd>
-              </div>
-              <div class="info-row">
-                <dt>NIF</dt>
-                <dd>
-                  G-81622987
-                  <button type="button" class="link-pill link-pill-small" data-copy="G81622987">Copiar NIF</button>
-                </dd>
-              </div>
-              <div class="info-row">
-                <dt>Dirección</dt>
-                <dd>Polideportivo Los Rosales sala 2. C/ Lilas, s/n</dd>
-              </div>
-              <div class="info-row">
-                <dt>Cuenta bancaria</dt>
-                <dd>
-                  IBAN: ES75-0073-0100-5305-0580-2942 (Openbank)
-                  <button type="button" class="link-pill link-pill-small" data-copy="ES7500730100530505802942">Copiar IBAN</button>
-                </dd>
-              </div>
-            </dl>
+            <dl class="info-list" id="club-info-list"><div class="info-row"><dt>Cargando…</dt></div></dl>
           </div>
 
           <h2>Junta directiva</h2>

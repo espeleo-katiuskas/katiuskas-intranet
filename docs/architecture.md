@@ -1121,8 +1121,8 @@ resource's `handler.go` is the only layer that knows HTTP exists.
 - `internal/telegram` and `internal/telegrambot`: client of the Telegram bot API and the bot
   that receives messages (see the "Telegram" subsection).
 - One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
-  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory` and
-  `accounting`.
+  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
+  `accounting` and `clubinfo` (the home page's "datos de interés", editable from `/admin`).
   Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
 - `adminstatus` (`GET /admin/status`) is not a domain resource: it only reads, and has a single
   `handler.go` (see "Estado del sistema" in the `/admin` page).
@@ -1373,7 +1373,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 
 | Page | What it shows | Who can access | Key behaviors |
 | --- | --- | --- | --- |
-| `/` (`index.html`/`dashboard.js`) | Junta Directiva (`GET /board-members`) and links to Documentos, Actas and Memorias. | Any baseline role. | The links are normal links thanks to the session cookie. |
+| `/` (`index.html`/`dashboard.js`) | "Datos de interés" of the club (`GET /club-info`, edited from `/admin`: nothing is written in the page), Junta Directiva (`GET /board-members`) and links to Documentos, Actas and Memorias. | Any baseline role. | The links are normal links thanks to the session cookie. |
 | `/socios` | List of people. | Sidebar: admin, board and member. | For a member it reduces columns and filters to `MemberListing` and its rows are not clickable; for admin and board, each row leads to `/socio?login=<login>`. |
 | `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. |
 | `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |

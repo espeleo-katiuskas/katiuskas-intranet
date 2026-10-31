@@ -655,6 +655,134 @@ document.getElementById('holidays-copy').addEventListener('click', async () => {
   }
 });
 
+// "Datos de interés": the labelled values the home page shows (GET /club-info) — name, tax id,
+// address, bank account, the Bizum number... Stored in the database so they can change, and so a
+// private one is not in the repository. Each has a place in the list (moved with ↑ ↓, which sends
+// the whole new order, PUT /club-info/order) and optionally a button that copies a text of its own.
+const clubInfoBody = document.getElementById('club-info-table-body');
+const clubInfoDialog = document.getElementById('club-info-dialog');
+const clubInfoForm = document.getElementById('club-info-form');
+let clubInfoItems = [];
+let editingClubInfoId = null; // null: the dialog is creating one
+initModal(clubInfoDialog, clubInfoForm);
+
+function renderClubInfo() {
+  clubInfoBody.innerHTML = clubInfoItems.length
+    ? clubInfoItems
+        .map(
+          (item, i) => `
+        <tr>
+          <td>${escapeHtml(item.label)}</td>
+          <td>${escapeHtml(item.value)}</td>
+          <td>${item.copy_value ? `${escapeHtml(item.copy_label ?? 'Copiar')}: <code>${escapeHtml(item.copy_value)}</code>` : '—'}</td>
+          <td class="nowrap">
+            <button type="button" class="btn btn-secondary btn-small" data-move-club-info="${item.id}" data-direction="-1" aria-label="Subir" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="btn btn-secondary btn-small" data-move-club-info="${item.id}" data-direction="1" aria-label="Bajar" ${i === clubInfoItems.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" class="btn btn-secondary btn-small" data-edit-club-info="${item.id}">Editar</button>
+            <button type="button" class="btn btn-danger btn-small" data-delete-club-info="${item.id}">Borrar</button>
+          </td>
+        </tr>`,
+        )
+        .join('')
+    : '<tr><td colspan="4">Todavía no hay datos.</td></tr>';
+}
+
+async function loadClubInfo() {
+  try {
+    clubInfoItems = await apiFetch('/club-info');
+    renderClubInfo();
+  } catch (err) {
+    clubInfoBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los datos.</td></tr>';
+    showError(err.message);
+  }
+}
+
+function openClubInfoDialog(item) {
+  editingClubInfoId = item?.id ?? null;
+  document.getElementById('club-info-dialog-title').textContent = item
+    ? `Editar «${item.label}»`
+    : 'Nuevo dato';
+  const set = (name, value) => {
+    clubInfoForm.elements[name].value = value ?? '';
+  };
+  set('label', item?.label);
+  set('value', item?.value);
+  set('copy_value', item?.copy_value);
+  set('copy_label', item?.copy_label);
+  openModal(clubInfoDialog);
+}
+
+document
+  .getElementById('toggle-new-club-info')
+  .addEventListener('click', () => openClubInfoDialog(null));
+
+clubInfoForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = new FormData(clubInfoForm);
+  const text = (name) => data.get(name)?.toString().trim() ?? '';
+  const submitButton = clubInfoForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  const editing = editingClubInfoId != null;
+  try {
+    await apiFetch(editing ? `/club-info/${editingClubInfoId}` : '/club-info', {
+      method: editing ? 'PATCH' : 'POST',
+      body: JSON.stringify({
+        label: text('label'),
+        value: text('value'),
+        copy_value: text('copy_value') || null,
+        copy_label: text('copy_label') || null,
+      }),
+    });
+    clubInfoDialog.close();
+    showFeedback(editing ? 'Dato guardado.' : 'Dato añadido.');
+    await loadClubInfo();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+clubInfoBody.addEventListener('click', async (event) => {
+  const edit = event.target.closest('button[data-edit-club-info]');
+  if (edit) {
+    openClubInfoDialog(clubInfoItems.find((i) => i.id === Number(edit.dataset.editClubInfo)));
+    return;
+  }
+  const move = event.target.closest('button[data-move-club-info]');
+  if (move) {
+    const index = clubInfoItems.findIndex((i) => i.id === Number(move.dataset.moveClubInfo));
+    const target = index + Number(move.dataset.direction);
+    if (index < 0 || target < 0 || target >= clubInfoItems.length) return;
+    const ids = clubInfoItems.map((i) => i.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    try {
+      clubInfoItems = await apiFetch('/club-info/order', {
+        method: 'PUT',
+        body: JSON.stringify({ item_ids: ids }),
+      });
+      renderClubInfo();
+    } catch (err) {
+      showError(err.message);
+      await loadClubInfo();
+    }
+    return;
+  }
+  const del = event.target.closest('button[data-delete-club-info]');
+  if (!del) return;
+  const item = clubInfoItems.find((i) => i.id === Number(del.dataset.deleteClubInfo));
+  if (!item || !confirm(`¿Quitar «${item.label}» de los datos de interés?`)) return;
+  del.disabled = true;
+  try {
+    await apiFetch(`/club-info/${item.id}`, { method: 'DELETE' });
+    showFeedback('Dato quitado.');
+    await loadClubInfo();
+  } catch (err) {
+    del.disabled = false;
+    showError(err.message);
+  }
+});
+
 // Every section asks for its own data and none needs another's, so all of it
 // goes out at once — seven requests one after another were most of this page's
 // wait. The sessions show names from the directory, so if the directory
@@ -667,4 +795,5 @@ await Promise.all([
   loadStatus(),
   loadSessions(),
   loadHolidays(),
+  loadClubInfo(),
 ]);

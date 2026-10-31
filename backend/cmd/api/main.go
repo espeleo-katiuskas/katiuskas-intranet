@@ -18,6 +18,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/clubinfo"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
@@ -163,6 +164,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	boardRepo := board.NewRepository(repoPool)
 	boardService := board.NewService(boardRepo)
 
+	clubInfoService := clubinfo.NewService(clubinfo.NewRepository(repoPool))
+
 	licensesRepo := licenses.NewRepository(repoPool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
 
@@ -264,6 +267,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
 		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
 		AdminStatus:       adminStatus,
+		ClubInfo:          clubinfo.NewHandler(clubInfoService, authenticator, usersService, telegramSender),
 	})
 
 	return router, authHandler, usersService, adminStatus, nil

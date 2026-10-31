@@ -414,22 +414,30 @@ club holidays the activities calendar tints, a year at a time with ‹ › (`GET
 with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo" dialog (`POST /holidays`; a date that
 already has one is the API's 409 `duplicate_holiday`) and "Copiar del año anterior", which POSTs
 last year's holidays on the same day and month except where the year already has one (movable ones
-such as Semana Santa are fixed by hand; there is no edit). Admin/board get `FULL_COLUMNS` and
-`FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what
-`users.MemberListing` carries (see **Permission tiers**). Row filters ("Género", "Tipo de socio",
-"Categoría", "Cuota anual", "Federación") and the column toggles sit behind a "Filtros…" button, and
-above it a "Buscar persona" box (`matchesSearch`: every word typed has to appear, in any order and
-ignoring accents and case, in the name, membership number, login and — admin/board only, as that is
-all their listing carries — email, phone and DNI; it narrows what the filters leave and isn't
-persisted). Every filter starts with every option checked except "Tipo de socio", which starts with
-only "Activo" and "Baja temporal", so the default view is the current membership. "Cuota anual"
-splits people on whether `last_due_year` is the current year ("A corriente de pago"), and
-"Federación" on whether `license_type` is present — `GET /users` only reports a license for the
-current year, so having one *is* being federated. Filters, visible columns and sort order persist in
-`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page
-lands on the same view, and a counter shows how many people the current filters leave. With nothing
-saved, the columns shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia"
-(each column's `default` flag); the rest are optional in the "Filtros…" panel.
+such as Semana Santa are fixed by hand; there is no edit) and a "Datos de interés" one: the labelled
+values the home page shows (`GET`/`POST /club-info`, `PATCH`/`DELETE /club-info/{id}`, `PUT
+/club-info/order`), in a table with "Editar" and "Borrar", ↑ ↓ to put them in order (each sends the
+whole new order) and a "+ Nuevo dato" dialog shared by creating and editing (a label, a value and,
+optionally, a text for a copy button and the button's own text). The home page (`dashboard.js`,
+`loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by one listener on
+the list since they are drawn after load: the data is not written in `index.html`, so an
+administrator changes it without a deploy and a private one (the Bizum number) is not in the
+repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
+`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see **Permission
+tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the
+column toggles sit behind a "Filtros…" button, and above it a "Buscar persona" box (`matchesSearch`:
+every word typed has to appear, in any order and ignoring accents and case, in the name, membership
+number, login and — admin/board only, as that is all their listing carries — email, phone and DNI;
+it narrows what the filters leave and isn't persisted). Every filter starts with every option
+checked except "Tipo de socio", which starts with only "Activo" and "Baja temporal", so the default
+view is the current membership. "Cuota anual" splits people on whether `last_due_year` is the
+current year ("A corriente de pago"), and "Federación" on whether `license_type` is present — `GET
+/users` only reports a license for the current year, so having one *is* being federated. Filters,
+visible columns and sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so
+"Volver a socios" from a person's page lands on the same view, and a counter shows how many people
+the current filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre",
+"Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag); the rest are
+optional in the "Filtros…" panel.
 
 A page's requests that don't depend on each other go out together, not one after another
 (each wait in a row costs a full round trip, which is most of what a page load takes once

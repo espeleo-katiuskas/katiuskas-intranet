@@ -19,6 +19,7 @@ Contents:
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
 - [Accounting](#accounting): `accounts`, `transactions`, `transaction_entries`
+- [Club information](#club-information): `club_info_items`
 - [Functions, triggers and extensions](#functions-triggers-and-extensions)
 - [Seeded data](#seeded-data)
 - [Migrations](#migrations)
@@ -1085,6 +1086,33 @@ Rules outside the database:
   `transaction_entries_balance`, deferred until `COMMIT`; the repositories force it immediate inside
   their own transaction, because under the tests the real `COMMIT` never arrives.
 
+## Club information
+
+### `club_info_items`
+
+The "datos de interés" of the home page: the club's name, tax id, address, bank account, the Bizum
+number... as labelled values that an administrator edits from `/admin`, so they are not fixed in the
+frontend and a private one is not in the repository (migration `00036`). An item may offer a button
+that copies another text (the tax id without its dash, the IBAN without spaces).
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `position` | integer | no |  |
+| `label` | text | no |  |
+| `value` | text | no |  |
+| `copy_value` | text | yes |  |
+| `copy_label` | text | yes |  |
+
+Constraints:
+
+- primary key (id)
+- `label` and `value` are not blank, nor `copy_value` or `copy_label` when present
+- `club_info_copy_label_needs_value`: `copy_label` only with a `copy_value`
+
+`position` is the order of the list (a new item goes last; `PUT /club-info/order` rewrites them
+all).
+
 ## Functions, triggers and extensions
 
 - **Extension `btree_gist`** (migration 00001): makes possible the `EXCLUDE USING gist` constraint
@@ -1114,8 +1142,9 @@ Besides the schema, the migrations leave this data:
   plus ZERO, ASEDEB, FAE, FERM, FMM and "Otra").
 - `material_categories`: Mosquetones, Spits, Placas, Maillones and Iluminación.
 - `holidays`: the holidays of 2026.
-- Nothing else is seeded: no people, no accounting accounts, no distributions. The first admin is
-  created with `make seed-admin`.
+- Nothing else is seeded: no people, no accounting accounts, no distributions, and no
+  `club_info_items` (the club's data is entered from `/admin`, so none of it is in the repository:
+  the home page shows nothing until then). The first admin is created with `make seed-admin`.
 
 ## Migrations
 
@@ -1163,3 +1192,5 @@ at the end; that database has to be recreated when a new migration appears.
   `distribution_payments.transaction_id`
 - `00033_accounts_leaf_or_group.sql`: an account groups or has transactions, never both
 - `00034_accounts_effective_type.sql`: `account_effective_type`
+- `00035_distribution_visibility.sql`: `distribution_visibility` and `distributions.visibility`
+- `00036_club_info.sql`: `club_info_items` (empty: the data is entered from `/admin`)

@@ -95,6 +95,30 @@ if the person has linked Telegram, by Telegram too.
   Never includes secrets.
   - returns: 200 `AdminStatus`
 
+## Club information
+
+The "datos de interés" of the home page, as labelled values in the database. Readable by anybody who
+can sign in; only admin changes them.
+
+- **GET** `/club-info` — *Any baseline role*. The items, in their order.
+  - returns: 200 `[ClubInfoItem]`
+- **POST** `/club-info` — *Admin*. Adds an item, at the end.
+  - body: `label*`, `value*`, `copy_value`, `copy_label`
+  - returns: 201 `ClubInfoItem`
+  - errors: 400 `invalid_label`, `invalid_value`, `invalid_copy`
+- **PATCH** `/club-info/{id}` — *Admin*. Replaces the item's fields (a `copy_value` or `copy_label`
+  left out turns the button off); it keeps its place.
+  - body: the same as creating
+  - returns: 200 `ClubInfoItem`
+  - errors: 400 as above; 404 `not_found`
+- **DELETE** `/club-info/{id}` — *Admin*.
+  - returns: 204; errors: 404 `not_found`
+- **PUT** `/club-info/order` — *Admin*. Puts the items in the order of the ids given, which have to
+  be all of them, each once.
+  - body: `item_ids*`
+  - returns: 200 `[ClubInfoItem]`
+  - errors: 409 `reorder_mismatch`
+
 ## People
 
 A person is always identified by their `login`, never by a numeric id.
@@ -981,6 +1005,20 @@ Nested fields:
 Nested fields:
 
 - `lines`: `[{article_id, article_name, choices, count}]`
+
+### `ClubInfoItem`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `position` | integer |
+| `label` | text |
+| `value` | text |
+| `copy_value` | text |
+| `copy_label` | text |
+
+`copy_value` is the text a button next to the value copies, and `copy_label` the button's text
+(it needs a `copy_value`); both are left out when the item has no button.
 
 ### `Holiday`
 

@@ -147,6 +147,51 @@
       </div>
     </form>
   </dialog>
+
+  <div class="section-header">
+    <div>
+      <h2>Datos de interés</h2>
+      <p class="subtitle">Lo que se ve en la portada: nombre del club, NIF, dirección, cuentas, teléfono de Bizum… Se guardan en la base de datos, no en el código.</p>
+    </div>
+    <button id="toggle-new-club-info" type="button" class="btn btn-secondary btn-small">+ Nuevo dato</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Dato</th><th>Valor</th><th>Botón de copiar</th><th></th></tr>
+      </thead>
+      <tbody id="club-info-table-body"></tbody>
+    </table>
+  </div>
+  <dialog id="club-info-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="club-info-dialog-title">Nuevo dato</h3>
+    <form id="club-info-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="ci-label">Dato</label>
+          <input id="ci-label" name="label" type="text" maxlength="100" required placeholder="Teléfono para Bizum">
+        </div>
+        <div class="field span-2">
+          <label for="ci-value">Valor</label>
+          <input id="ci-value" name="value" type="text" maxlength="500" required>
+        </div>
+        <div class="field">
+          <label for="ci-copy-value">Texto que copia el botón <span class="optional">(opcional)</span></label>
+          <input id="ci-copy-value" name="copy_value" type="text" maxlength="500">
+        </div>
+        <div class="field">
+          <label for="ci-copy-label">Texto del botón <span class="optional">(opcional)</span></label>
+          <input id="ci-copy-label" name="copy_label" type="text" maxlength="100" placeholder="Copiar">
+        </div>
+      </div>
+      <p class="hint">Si pones un texto para copiar, aparece un botón junto al valor que lo copia (por ejemplo el IBAN sin espacios). Sin él, solo se ve el valor.</p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
     </main>
   </div>
 </div>

@@ -24,6 +24,7 @@ Contents:
 - [Temporary leaves](#temporary-leaves)
 - [Document library](#document-library)
 - [Per-person files](#per-person-files)
+- [Club information](#club-information)
 - [Admin status](#admin-status)
 - [Telegram](#telegram)
 - [Accounting](#accounting)
@@ -34,8 +35,8 @@ Contents:
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
 panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
 `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`distributions`, `inventory`, `tokens`, `accounting`; `adminstatus` is the odd one out,
-see below), each split into `model.go` / `repository.go` (pgx) / `service.go` /
+`distributions`, `inventory`, `tokens`, `accounting`, `clubinfo`; `adminstatus` is the odd one
+out, see below), each split into `model.go` / `repository.go` (pgx) / `service.go` /
 `handler.go`. The domain layer never imports `net/http`; only `handler.go` knows HTTP
 exists. Each resource package owns and registers its own routes via `RegisterRoutes(mux)`,
 wired together in `cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**,
@@ -658,6 +659,24 @@ self-or-privileged pattern
 may see a specific person's files isn't a fixed role list the way `/library`'s is. A login
 with no subdirectory of its own yet — most people, until someone drops a file in for them
 — gets an empty listing at their own root rather than a 404.
+
+## Club information
+
+**Club information** (`internal/clubinfo`): the "datos de interés" of the home page (the club's
+name, tax id, address, bank account, the Bizum number...) as rows of `club_info_items` (migration
+`00036`), instead of text fixed in `index.html`: they do change now and then, and the Bizum number
+is not meant to be in the repository. Each is a `label`, a `value` and, optionally, a button that
+copies another text (`copy_value`, `copy_label`: the tax id without its dash, the IBAN without
+spaces). `GET /club-info` is open to any baseline role (it is what the home page draws); `POST`,
+`PATCH`, `DELETE` and `PUT /club-info/order` are admin only. An update replaces every field, so a
+`copy_value` left out turns the button off, and keeps the item's place; a new one goes last, and the
+order is replaced as a whole from every id (`Repository.Reorder`, `409 reorder_mismatch` for
+anything else), like the memoria's. Blank texts are trimmed away and a blank copy text means no
+button (`normalize`). The Telegram notices say what changes, values included, like those of any
+other resource (an edit lists each field with its old and new value, through `httpapi.DiffFields`
+over `auditableFields`): the channel is private and already carries personal data. The migration
+seeds nothing, so no datum is in the repository: the home page shows nothing until they are entered
+from `/admin`.
 
 ## Admin status
 

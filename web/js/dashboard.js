@@ -229,18 +229,44 @@ loadDocumentos();
 loadActas();
 loadMemorias();
 
-// "Copiar NIF"/"Copiar IBAN".
-document.querySelectorAll('[data-copy]').forEach((button) => {
-  const originalLabel = button.textContent;
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(button.dataset.copy);
-      button.textContent = '¡Copiado!';
-    } catch {
-      button.textContent = 'No se pudo copiar';
-    }
-    setTimeout(() => {
-      button.textContent = originalLabel;
-    }, 1500);
-  });
+// "Datos de interés": the club's name, tax id, address, bank account, Bizum number... come from
+// the database (GET /club-info), where an administrator edits them from /admin, so none of it is
+// written in this repository. An item may have a button that copies a text of its own ("Copiar NIF").
+const clubInfoList = document.getElementById('club-info-list');
+
+function renderClubInfoItem(item) {
+  const copy = item.copy_value
+    ? ` <button type="button" class="link-pill link-pill-small" data-copy="${escapeHtml(item.copy_value)}">${escapeHtml(item.copy_label ?? 'Copiar')}</button>`
+    : '';
+  return `<div class="info-row"><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}${copy}</dd></div>`;
+}
+
+async function loadClubInfo() {
+  try {
+    const items = await apiFetch('/club-info');
+    clubInfoList.innerHTML = items.length
+      ? items.map(renderClubInfoItem).join('')
+      : '<div class="info-row"><dt>Todavía no hay datos.</dt></div>';
+  } catch {
+    clubInfoList.innerHTML =
+      '<div class="info-row"><dt>No se pudieron cargar los datos.</dt></div>';
+  }
+}
+loadClubInfo();
+
+// The copy buttons are drawn after the page loads, so one listener on the list serves them all.
+clubInfoList.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-copy]');
+  if (!button) return;
+  const originalLabel = button.dataset.label ?? button.textContent;
+  button.dataset.label = originalLabel;
+  try {
+    await navigator.clipboard.writeText(button.dataset.copy);
+    button.textContent = '¡Copiado!';
+  } catch {
+    button.textContent = 'No se pudo copiar';
+  }
+  setTimeout(() => {
+    button.textContent = originalLabel;
+  }, 1500);
 });

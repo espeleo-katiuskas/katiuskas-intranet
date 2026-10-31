@@ -1693,6 +1693,100 @@ paths:
                 items: { $ref: "#/components/schemas/Activity" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /club-info:
+    get:
+      summary: The club's "datos de interés"
+      description: >
+        What the home page shows — the club's name, tax id, address, bank account, the Bizum
+        number... — as labelled values, in order. Open to any baseline role.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClubInfoItem" }
+    post:
+      summary: Add an item
+      description: Admin only. It goes last. Blank texts are trimmed; a blank `copy_value` or `copy_label` means no button.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClubInfoInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClubInfoItem" }
+        "400": { description: invalid_body, invalid_label, invalid_value or invalid_copy (a copy_label with no copy_value, or a text too long). }
+        "403": { description: Requires admin. }
+
+  /club-info/order:
+    put:
+      summary: Put the items in order
+      description: >
+        Admin only. The ids of every item, in the order wanted; anything short of exactly all of
+        them, each once, is a 409 reorder_mismatch and changes nothing. Answers with the list.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_ids]
+              properties:
+                item_ids: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          description: The items in their new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClubInfoItem" }
+        "403": { description: Requires admin. }
+        "409": { description: reorder_mismatch. }
+
+  /club-info/{id}:
+    patch:
+      summary: Change an item
+      description: >
+        Admin only. Replaces the label, value and copy button (a copy_value or copy_label left out
+        turns the button off); the item keeps its place.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClubInfoInput" }
+      responses:
+        "200":
+          description: The item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClubInfoItem" }
+        "400": { description: invalid_id, invalid_body, invalid_label, invalid_value or invalid_copy. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Remove an item
+      description: Admin only.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Removed }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /holidays:
     get:
       summary: List club holidays
@@ -4022,6 +4116,25 @@ components:
         total_units: { type: integer }
         total_amount: { type: number }
         provisional: { type: boolean, description: "true for a distribution for all members still in draft: the own unit of everybody who qualifies is counted although it isn't made yet." }
+
+    ClubInfoItem:
+      type: object
+      properties:
+        id: { type: integer }
+        position: { type: integer, description: Its place in the list. }
+        label: { type: string }
+        value: { type: string }
+        copy_value: { type: string, description: What a button next to the value copies; absent = no button. }
+        copy_label: { type: string, description: The button's text; absent = "Copiar". Needs a copy_value. }
+
+    ClubInfoInput:
+      type: object
+      required: [label, value]
+      properties:
+        label: { type: string, maxLength: 100 }
+        value: { type: string, maxLength: 500 }
+        copy_value: { type: string, nullable: true, maxLength: 500 }
+        copy_label: { type: string, nullable: true, maxLength: 100 }
 
     Holiday:
       type: object
