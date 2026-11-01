@@ -17,7 +17,8 @@ type diskStatus struct {
 
 // disksOf measures the filesystem of each storage directory that exists.
 func disksOf(storage []storageStatus) []diskStatus {
-	var disks []diskStatus
+	// Never nil: with no directory to measure the JSON has an empty list, not null.
+	disks := []diskStatus{}
 	byDevice := map[uint64]int{}
 	for _, dir := range storage {
 		if !dir.Exists {

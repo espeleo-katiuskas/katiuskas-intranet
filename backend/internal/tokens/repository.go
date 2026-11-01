@@ -177,7 +177,8 @@ func (r *Repository) ListForUser(ctx context.Context, userID int64) ([]Token, er
 	}
 	defer rows.Close()
 
-	var list []Token
+	// Never nil: a person with no sessions is an empty list in the JSON, not null.
+	list := []Token{}
 	for rows.Next() {
 		var t Token
 		if err := scanTokenJoined(rows, &t); err != nil {

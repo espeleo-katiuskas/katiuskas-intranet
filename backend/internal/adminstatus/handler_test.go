@@ -190,3 +190,17 @@ func TestStatusHasNoProblemsWhenAllIsWell(t *testing.T) {
 		t.Errorf("expected an empty list of problems (not null), got %s", rec.Body.String())
 	}
 }
+
+// With no storage directory at all there is nothing to measure: the lists are empty, never null.
+func TestStatusListsAreNeverNull(t *testing.T) {
+	mux, resolver, _ := newServer(t, adminstatus.Info{})
+	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, field := range []string{`"disks":[]`, `"problems":[`} {
+		if !strings.Contains(rec.Body.String(), field) {
+			t.Errorf("expected %s in %s", field, rec.Body.String())
+		}
+	}
+}

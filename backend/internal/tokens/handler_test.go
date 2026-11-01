@@ -974,3 +974,16 @@ func TestHandlerNestedImpersonationNamesTheOriginalAdmin(t *testing.T) {
 		t.Errorf("a first-level impersonation should name the admin who started it")
 	}
 }
+
+// A person who has no sessions gets an empty list, not null: the frontend reads it as an array.
+func TestHandlerListForAPersonWithoutSessionsIsAnEmptyArray(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, target.ID+1001, "admin")
+	for _, query := range []string{"", "?status=active"} {
+		rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens%s", target.Login, query), adminToken, nil)
+		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+			t.Errorf("query %q: expected 200 and [], got %d %q", query, rec.Code, rec.Body.String())
+		}
+	}
+}

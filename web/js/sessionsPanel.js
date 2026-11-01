@@ -59,7 +59,7 @@ function initSessionsPanel({ login, own, impersonating = false }) {
 
   async function load() {
     try {
-      sessions = await apiFetch(`/users/${encodeURIComponent(login)}/tokens?status=active`);
+      sessions = (await apiFetch(`/users/${encodeURIComponent(login)}/tokens?status=active`)) ?? [];
       render();
     } catch (err) {
       body.innerHTML = '<tr><td colspan="6">No se pudieron cargar las sesiones.</td></tr>';
