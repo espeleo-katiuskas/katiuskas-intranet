@@ -1950,3 +1950,41 @@ func TestTheEmailLinkFollowsOnlyTheLocalFormOfThePublicAddress(t *testing.T) {
 		t.Errorf("a forged header must not decide the link, the email says:\n%s", s.mailer.lastBody)
 	}
 }
+
+// The session expires a while after its last use, and the cookie that mirrors it (for the file links)
+// is renewed with it, once per page load, by /auth/me: it lasts as long as the session has left.
+func TestMeRenewsTheSessionAndItsCookie(t *testing.T) {
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	token := s.requestAndExtractToken(t, user.Email, user.Phone)
+	rec := s.post(t, "/api/v1/auth/magic-link/consume", map[string]string{"token": token})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var session struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	// Inside one transaction now() does not advance, so "ten idle minutes later" is the expiry pulled in.
+	if _, err := s.tx.Exec(context.Background(), `UPDATE tokens SET expires_at = now() + interval '10 minutes' WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	me := s.getWithToken(t, "/api/v1/auth/me", session.Token)
+	if me.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", me.Code, me.Body.String())
+	}
+	list, err := s.tokens.ListForUser(context.Background(), user.ID)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("expected one session, got %d (%v)", len(list), err)
+	}
+	if left := time.Until(list[0].ExpiresAt); left < 59*time.Minute || left > time.Hour {
+		t.Errorf("a use should renew the session to the usual hour, got %v", left)
+	}
+	cookies := me.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Value != session.Token || cookies[0].MaxAge < 59*60 || cookies[0].MaxAge > 3600 {
+		t.Errorf("expected the cookie renewed for the hour the session has left, got %+v", cookies)
+	}
+}

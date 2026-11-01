@@ -34,13 +34,18 @@ func NewService(repo *Repository, rolesService *roles.Service) *Service {
 }
 
 // Issue mints a new opaque token for userID and returns the raw value —
-// the only time it's ever available, since only its hash is stored.
+// the only time it's ever available, since only its hash is stored. The
+// session lasts ttl after its last use: every use renews it (see
+// Repository.CreateSliding).
 func (s *Service) Issue(ctx context.Context, userID int64, ttl time.Duration) (raw string, err error) {
+	if ttl <= 0 {
+		return "", ErrInvalidLifetime
+	}
 	raw, err = auth.NewOpaqueToken()
 	if err != nil {
 		return "", err
 	}
-	if _, err := s.repo.Create(ctx, userID, auth.HashToken(raw), time.Now().Add(ttl)); err != nil {
+	if _, err := s.repo.CreateSliding(ctx, userID, auth.HashToken(raw), ttl); err != nil {
 		return "", err
 	}
 	return raw, nil
@@ -110,7 +115,7 @@ func (s *Service) ExitImpersonation(ctx context.Context, rawToken string, impers
 	if err != nil {
 		return "", err
 	}
-	if _, err := s.repo.Create(ctx, impersonatorID, auth.HashToken(raw), time.Now().Add(ttl)); err != nil {
+	if _, err := s.repo.CreateSliding(ctx, impersonatorID, auth.HashToken(raw), ttl); err != nil {
 		return "", err
 	}
 	return raw, nil
@@ -118,6 +123,12 @@ func (s *Service) ExitImpersonation(ctx context.Context, rawToken string, impers
 
 func (s *Service) RevokeByHash(ctx context.Context, rawToken string) error {
 	return s.repo.RevokeByHash(ctx, auth.HashToken(rawToken))
+}
+
+// ExpiresAtForRawToken is when the session a raw bearer token belongs to expires, or
+// ErrNotFound — for the cookie that mirrors it, which has to last as long as it does.
+func (s *Service) ExpiresAtForRawToken(ctx context.Context, rawToken string) (time.Time, error) {
+	return s.repo.ExpiresAtByHash(ctx, auth.HashToken(rawToken))
 }
 
 // IDForRawToken is the id of the session a raw bearer token belongs to, or

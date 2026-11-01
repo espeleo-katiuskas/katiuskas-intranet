@@ -54,16 +54,16 @@ that gets rolled back — the repository code never knows the difference.
 ## Authentication and sessions
 
 A sign-in finished through an address whose first component is `local`
-(`local.intranet.katiuskas.es`, the club's shared tablet) gets a session of `config.LocalTokenTTL`
-(3 hours, cookie included) instead of `TokenTTL` (30 days): `Handler.sessionTTL` picks it from
-`requestHost` (the first `X-Forwarded-Host`, else `Host`, without port, lower case; `isLocalHost`),
-and it can only shorten (none configured, or a longer one, leaves the usual). It is the address that
-decides, not a device: nothing is stored about one, and a request cannot ask for a longer session;
-the same for the session an admin gets back on leaving an impersonation. The link in the email
-follows the address too (`Handler.linkBase`): for a request made through exactly
-`local.<PUBLIC_BASE_URL's host>` it points there, else to `PUBLIC_BASE_URL` whatever the `Host`
-says, so that nobody can forge where an email to somebody else points. See "Short sessions" in
-`docs/architecture.md`.
+(`local.intranet.katiuskas.es`, the club's shared tablet) gets a session that expires
+`config.LocalTokenTTL` (3 hours, cookie included) after its last use instead of `TokenTTL` (30
+days): `Handler.sessionTTL` picks it from `requestHost` (the first `X-Forwarded-Host`, else `Host`,
+without port, lower case; `isLocalHost`), and it can only shorten (none configured, or a longer one,
+leaves the usual). It is the address that decides, not a device: nothing is stored about one, and a
+request cannot ask for a longer session; the same for the session an admin gets back on leaving an
+impersonation. The link in the email follows the address too (`Handler.linkBase`): for a request
+made through exactly `local.<PUBLIC_BASE_URL's host>` it points there, else to `PUBLIC_BASE_URL`
+whatever the `Host` says, so that nobody can forge where an email to somebody else points. See
+"Short sessions" in `docs/architecture.md`.
 
 **Auth is a single opaque, revocable, database-backed session token** — no JWT, no separate
 access/refresh pair. `internal/auth` only defines `AuthenticatedUser`,

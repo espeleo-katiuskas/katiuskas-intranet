@@ -487,8 +487,8 @@ func TestHandlerListAllShowsActiveSessionsOfEveryone(t *testing.T) {
 	if _, err := service.Issue(ctx, ana.ID, time.Hour); err != nil { // to be revoked
 		t.Fatalf("issue: %v", err)
 	}
-	if _, err := service.Issue(ctx, beto.ID, -time.Hour); err != nil { // already expired
-		t.Fatalf("issue: %v", err)
+	if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, 'already-expired', now() - interval '1 hour')`, beto.ID); err != nil {
+		t.Fatalf("insert an expired token: %v", err) // already expired
 	}
 	anaTokens, err := service.ListForUser(ctx, ana.ID)
 	if err != nil || len(anaTokens) != 2 {

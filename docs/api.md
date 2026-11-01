@@ -29,10 +29,10 @@ Contents:
   are the raw bytes, and the creation of a memoria resource, which is `multipart/form-data`.
 - **Session**: there are no passwords. `POST /auth/magic-link` sends a link with a code; it is
   exchanged for an opaque token with `POST /auth/magic-link/consume` (or `…/consume-code`) and that
-  token goes in every request: `Authorization: Bearer <token>`. The token expires after 30 days and
-  can be revoked. The file routes (`/library/file/…`, `/users/{login}/files/file/…`) also accept
-  the `katiuskas_session` cookie, which the API sets on sign-in, so that a document can be an
-  ordinary browser link.
+  token goes in every request: `Authorization: Bearer <token>`. The token expires 30 days after its
+  last use (every use renews it) and can be revoked. The file routes (`/library/file/…`,
+  `/users/{login}/files/file/…`) also accept the `katiuskas_session` cookie, which the API sets on
+  sign-in, so that a document can be an ordinary browser link.
 - **Baseline role**: almost every route with a session also requires being `admin`, `board` or
   `member` (a member with an active joining). Someone who only has another role, such as `material`
   or `money`, gets 403 everywhere. In the lists below, "Any baseline role" means exactly that.
@@ -69,8 +69,9 @@ if the person has linked Telegram, by Telegram too.
   - errors: 400 `invalid_body`, `missing_fields`; 404 `unknown_details`; 429 `rate_limited`
 - **POST** `/auth/magic-link/consume` — *Public*. Exchanges the link's token for a session token.
   - body: `token*`
-  - The session lasts 3 hours instead of 30 days when the request is made through an address whose
-    first label is `local` (`local.intranet.katiuskas.es`: the club's shared tablet)
+  - The session expires 3 hours after its last use instead of 30 days when the request is made
+    through an address whose first label is `local` (`local.intranet.katiuskas.es`: the club's
+    shared tablet)
   - returns: 200 `JSON`
   - errors: 400 `invalid_body`; 401 `invalid_token`
 - **POST** `/auth/magic-link/consume-code` — *Public*. Exchanges the 6-digit code (plus email and
@@ -88,7 +89,8 @@ if the person has linked Telegram, by Telegram too.
   second way to sign in. Empty if not configured.
   - returns: 200 `JSON`
 - **GET** `/auth/me` — *Any baseline role*. Who owns the token and which roles they have now.
-  Carries `impersonated_by` in an impersonation session.
+  Carries `impersonated_by` in an impersonation session. It also renews the session cookie for as
+  long as the session has left (the frontend calls it on every page load).
   - returns: 200 `JSON`
 - **POST** `/auth/impersonate/exit` — *Any valid session*. Ends an impersonation and returns a new
   token for the admin who started it.
@@ -194,7 +196,9 @@ positions and are not assigned by hand.
   count as them.
   - returns: 200 `[Token]`
   - errors: 400 `invalid_status`; 403 `forbidden`; 404 `not_found` (admin)
-- **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session.
+- **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session. Since a
+  session expires after its last use, this also sets how long it lasts from now on (from now to that
+  moment), so a later use does not undo it; a moment in the past ends it.
   - body: `expires_at*`
   - returns: 204
   - errors: 400 `invalid_body`

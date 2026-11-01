@@ -572,13 +572,13 @@ asks for `https://intranet.katiuskas.es/api/v1/health`, is the way to cover thos
 
 ## The shared tablet: an address for short sessions
 
-The club has a tablet that anyone uses, and a session left open on it should not last 30 days. The
-login page is the same everywhere and nothing marks the tablet as special; what changes is the
-address it is given: a session opened through an address whose first component, up to the first `.`,
-is `local` lasts 3 hours (`config.LocalTokenTTL`) instead of 30 days. So the tablet uses `local.`
-followed by the usual address — `local.intranet.katiuskas.es` for production,
-`local.testing.katiuskas.es` for testing. The rule is in `docs/architecture.md`, "Short sessions".
-What has to be set up, once per environment:
+The club has a tablet that anyone uses, and a session left open on it should not stay valid for 30
+days. The login page is the same everywhere and nothing marks the tablet as special; what changes is
+the address it is given: a session opened through an address whose first component, up to the first
+`.`, is `local` expires 3 hours (`config.LocalTokenTTL`) after its last use instead of 30 days. So
+the tablet uses `local.` followed by the usual address — `local.intranet.katiuskas.es` for
+production, `local.testing.katiuskas.es` for testing. The rule is in `docs/architecture.md`, "Short
+sessions". What has to be set up, once per environment:
 
 1. **A DNS record** for `local.intranet.katiuskas.es`, the same as for `intranet.katiuskas.es`.
 2. **The same site in the reverse proxy**, with both addresses. In the club's Caddy (see
@@ -596,7 +596,7 @@ What has to be set up, once per environment:
    original.
 3. **On the tablet**, `https://local.intranet.katiuskas.es/` as the browser's bookmark or start
    page. Nothing else: every person signs in as always, and the login page shows a "Sesión local"
-   notice there, saying that the session will last only a few hours.
+   notice there, saying that the session will close by itself in a few hours.
 
 `PUBLIC_BASE_URL` stays the main address. The link in the sign-in email follows the address the
 request was made through only when it is exactly `local.` plus the public address (so it is opened
@@ -607,4 +607,4 @@ Things to know. The tablet's address is another site for the browser, with its o
 signed in there and on the main address are separate. Anybody can use that address, on any device,
 and all it does is give them a shorter session. The sessions are listed in `/admin` and in each
 person's "Mis sesiones", with their expiry; those opened on the tablet before this was set up last
-their 30 days until closed there.
+their 30 days of lifetime (renewed with use) until closed there.

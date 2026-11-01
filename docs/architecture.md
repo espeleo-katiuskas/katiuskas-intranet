@@ -416,12 +416,12 @@ more specific rule and does not depend on how many other admins exist.
 
 ### `tokens`
 
-Each person's session token: opaque (its SHA-256 hash is stored, never the plain value),
-revocable and with an expiry (30 days by default, 3 hours when it was opened through a `local.…`
-address, see "Short sessions" below). Its fields are in [`database.md`](database.md)
-and "Authentication and sessions", further down, explains how each request is resolved. An admin
-can see, re-expire or revoke any person's sessions and list everybody's (see [`api.md`](api.md));
-they never see the value of a token, only its metadata.
+Each person's session token: opaque (its SHA-256 hash is stored, never the plain value), revocable
+and with an expiry that moves with use: it expires 30 days after its last use (3 hours when it was
+opened through a `local.…` address, see "Short sessions" below), every request renewing it. Its
+fields are in [`database.md`](database.md) and "Authentication and sessions", further down, explains
+how each request is resolved. An admin can see, re-expire or revoke any person's sessions and list
+everybody's (see [`api.md`](api.md)); they never see the value of a token, only its metadata.
 
 #### Short sessions
 
@@ -429,23 +429,24 @@ The club has a tablet that anyone uses, and a session left open on it should not
 given its own address, `local.` followed by the public one (`local.intranet.katiuskas.es`: the same
 site, another name for it), and the rule is about the address, not about the device: a session whose
 sign-in is finished (the link opened or the code typed) through an address whose first component, up
-to the first `.`, is `local`, lasts `config.LocalTokenTTL` (3 hours) instead of 30 days, the cookie
-too (`authapi.Handler.sessionTTL`; the address is the `X-Forwarded-Host` the reverse proxy adds,
-else `Host`). The login page is the same on every address except that on a `local.…` one it opens
-with a prominent "Sesión local" notice saying that the session will last only a few hours, and
-nothing marks or remembers a device on the server: what is the tablet's is only its bookmark, and
-anybody may use that address, which can only give them a shorter session. Because it is another
-address it is also another site for the browser — its own storage and cookie, so being signed in on
-the tablet and on the main address are two separate things.
+to the first `.`, is `local`, expires `config.LocalTokenTTL` (3 hours) after its last use instead of
+30 days, the cookie too (`authapi.Handler.sessionTTL`; the address is the `X-Forwarded-Host` the
+reverse proxy adds, else `Host`). The login page is the same on every address except that on a
+`local.…` one it opens with a prominent "Sesión local" notice saying that the session will close by
+itself in a few hours, and nothing marks or remembers a device on the server:
+what is the tablet's is only its bookmark, and anybody may use that address, which can only give
+them a shorter session. Because it is another address it is also another site for the browser — its
+own storage and cookie, so being signed in on the tablet and on the main address are two separate
+things.
 
 The link in the sign-in email has to lead to the same address, or the person who asked for it on the
-tablet and opens it there would finish at the main one and get 30 days: for a request made through
-exactly `local.<the public address>` (built from `PUBLIC_BASE_URL`) the link points there
-(`Handler.linkBase`); for any other, whatever the `Host` says, it points to the public address. That
-matters because the `Host` of a request for somebody else's link is whatever an attacker sends, and
-it must never decide where an email to a victim points. Impersonation sessions keep their own,
-shorter lifetime; the one an admin gets back on leaving an impersonation follows the same rule as
-any other. Setting it up (DNS and the reverse proxy's site for `local.…`) is in
+tablet and opens it there would finish at the main one and get the 30-day lifetime: for a request
+made through exactly `local.<the public address>` (built from `PUBLIC_BASE_URL`) the link points
+there (`Handler.linkBase`); for any other, whatever the `Host` says, it points to the public
+address. That matters because the `Host` of a request for somebody else's link is whatever an
+attacker sends, and it must never decide where an email to a victim points. Impersonation sessions
+keep their own, shorter lifetime; the one an admin gets back on leaving an impersonation follows the
+same rule as any other. Setting it up (DNS and the reverse proxy's site for `local.…`) is in
 `docs/environments.md`. The session's expiry is in "Mis sesiones".
 
 #### Impersonation

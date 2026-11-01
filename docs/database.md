@@ -215,9 +215,18 @@ opened it.
 | `last_used_ip` | text | yes |  |
 | `last_used_user_agent` | text | yes |  |
 | `impersonated_by` | bigint | yes |  |
+| `lifetime` | interval | yes |  |
 
 Notes on the columns:
 
+- `expires_at` and `lifetime` (migration `00038`): a session expires a while after its *last* use,
+  not after it was created. `lifetime` is how long that while is, per token (30 days for an ordinary
+  one, 3 hours for one opened through a `local.…` address), and every request made with the token
+  sets `expires_at` to `now() + lifetime` in the same statement that records the use. A `NULL`
+  lifetime is a fixed expiry that uses do not move: impersonation sessions, which are meant to end
+  on their own. An expired or revoked token matches nothing, so a use cannot bring one back. When an
+  admin sets the expiry of a session by hand, its lifetime becomes the time from then to that moment
+  (so the next use does not undo the change); one in the past ends it and leaves the lifetime alone.
 - `last_used_at`: Updated on every request made with the token.
 - `last_used_ip`: Source of the last request.
 - `last_used_user_agent`: The `User-Agent` header of the last request (migration `00037`), whole but
@@ -1202,3 +1211,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00035_distribution_visibility.sql`: `distribution_visibility` and `distributions.visibility`
 - `00036_club_info.sql`: `club_info_items` (empty: the data is entered from `/admin`)
 - `00037_tokens_last_used_user_agent.sql`: `tokens.last_used_user_agent`
+- `00038_tokens_sliding_expiry.sql`: `tokens.lifetime`, so a session expires after its last use

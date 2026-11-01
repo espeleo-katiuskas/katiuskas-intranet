@@ -12,6 +12,9 @@ import (
 
 var ErrNotFound = errors.New("token not found")
 
+// ErrInvalidLifetime means a session was asked for with a lifetime that is not positive.
+var ErrInvalidLifetime = errors.New("a session needs a positive lifetime")
+
 // tokenColumns is for INSERT ... RETURNING, which can only return columns
 // of the row just written — no JOIN available — so it leaves UserLogin
 // and ImpersonatedByLogin blank. That's fine: Create and
@@ -69,6 +72,18 @@ func (r *Repository) Create(ctx context.Context, userID int64, tokenHash string,
 	return t, err
 }
 
+// CreateSliding creates a token that expires lifetime after its last use: expires_at starts at now()
+// plus lifetime, and every use (Authenticate) moves it to now() plus lifetime again. Create, by
+// contrast, makes one with a fixed expiry that uses never move.
+func (r *Repository) CreateSliding(ctx context.Context, userID int64, tokenHash string, lifetime time.Duration) (Token, error) {
+	var t Token
+	err := scanToken(r.pool.QueryRow(ctx, `
+		INSERT INTO tokens (user_id, token_hash, expires_at, lifetime)
+		VALUES ($1, $2, now() + make_interval(secs => $3::float8), make_interval(secs => $3::float8))
+		RETURNING `+tokenColumns, userID, tokenHash, lifetime.Seconds()), &t)
+	return t, err
+}
+
 // CreateImpersonation is Create plus impersonatorID recorded alongside —
 // the only difference between an impersonation session and a normal one
 // at the database level.
@@ -83,7 +98,10 @@ func (r *Repository) CreateImpersonation(ctx context.Context, targetUserID, impe
 // Authenticate validates a token hash and, in the same statement, records
 // that it was just used — so a session's last_used_at/last_used_ip/
 // last_used_user_agent always reflect the request that's checking it, not a
-// separate follow-up write. The browser is the *last* one, like the address
+// separate follow-up write. A token with a lifetime (see CreateSliding) also gets
+// its expiry moved to now() plus that lifetime, in the same statement; one without
+// keeps the expiry it had. An expired or revoked token matches nothing, so a use can
+// never bring one back. The browser is the *last* one, like the address
 // it goes with: they describe the same request, so they can be read together.
 func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent string) (userID int64, impersonatedBy *int64, err error) {
 	var ipArg, userAgentArg any
@@ -94,7 +112,8 @@ func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent 
 		userAgentArg = truncateUserAgent(userAgent)
 	}
 	err = r.pool.QueryRow(ctx, `
-		UPDATE tokens SET last_used_at = now(), last_used_ip = $2, last_used_user_agent = $3
+		UPDATE tokens SET last_used_at = now(), last_used_ip = $2, last_used_user_agent = $3,
+			expires_at = CASE WHEN lifetime IS NULL THEN expires_at ELSE now() + lifetime END
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 		RETURNING user_id, impersonated_by
 	`, tokenHash, ipArg, userAgentArg).Scan(&userID, &impersonatedBy)
@@ -146,6 +165,16 @@ func (r *Repository) ListForUser(ctx context.Context, userID int64) ([]Token, er
 	return list, rows.Err()
 }
 
+// ExpiresAtByHash is when the token with that hash expires, or ErrNotFound.
+func (r *Repository) ExpiresAtByHash(ctx context.Context, tokenHash string) (time.Time, error) {
+	var at time.Time
+	err := r.pool.QueryRow(ctx, `SELECT expires_at FROM tokens WHERE token_hash = $1`, tokenHash).Scan(&at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, ErrNotFound
+	}
+	return at, err
+}
+
 // IDByHash is the id of the token with that hash, or ErrNotFound.
 func (r *Repository) IDByHash(ctx context.Context, tokenHash string) (int64, error) {
 	var id int64
@@ -183,7 +212,15 @@ func (r *Repository) ListAll(ctx context.Context, activeOnly bool, limit, offset
 }
 
 func (r *Repository) UpdateExpiry(ctx context.Context, id int64, expiresAt time.Time) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE tokens SET expires_at = $2 WHERE id = $1`, id, expiresAt)
+	// An admin who sets when a session ends is also setting how long it lasts from now on: its
+	// lifetime becomes the time from now to that moment, so that the next use does not undo the
+	// change (which would make shortening a session in use impossible). A moment already past
+	// leaves the lifetime alone — the session is over either way — and so does a token with a
+	// fixed expiry, which has none.
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE tokens SET expires_at = $2,
+			lifetime = CASE WHEN lifetime IS NOT NULL AND $2 > now() THEN $2 - now() ELSE lifetime END
+		WHERE id = $1`, id, expiresAt)
 	if err != nil {
 		return err
 	}

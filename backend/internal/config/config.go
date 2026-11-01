@@ -9,8 +9,9 @@ import (
 )
 
 type Config struct {
-	HTTPAddr          string
-	DatabaseURL       string
+	HTTPAddr    string
+	DatabaseURL string
+	// TokenTTL is how long a session lasts after its LAST use (30 days): every use renews it.
 	TokenTTL          time.Duration
 	MagicLinkTTL      time.Duration
 	MagicLinkCooldown time.Duration
@@ -36,15 +37,17 @@ type Config struct {
 	// (the email, and a DM merely riding along a web request) still
 	// states, and is bound by, the real MagicLinkTTL.
 	TelegramBotDMLinkTTL time.Duration
-	// LocalTokenTTL is how long a session lasts when it is opened through an address
-	// whose first label is "local" (local.intranet.katiuskas.es, the one the club's
-	// shared tablet uses), instead of TokenTTL. See authapi.Handler.sessionTTL.
+	// LocalTokenTTL is how long a session lasts after its last use when it is opened
+	// through an address whose first label is "local" (local.intranet.katiuskas.es, the
+	// one the club's shared tablet uses), instead of TokenTTL. See
+	// authapi.Handler.sessionTTL.
 	LocalTokenTTL time.Duration
 	// ImpersonationTokenTTL is deliberately much shorter than TokenTTL —
 	// a session acting as someone else is a bigger blast radius than a
 	// normal one, so it expires on its own well before a normal session
 	// would, rather than lingering for the full 30 days if someone
-	// forgets to exit.
+	// forgets to exit. It is also the one kind of session that does not
+	// slide: its expiry is fixed, and using it does not move it.
 	ImpersonationTokenTTL time.Duration
 	// PublicBaseURL is where the frontend is served, used to build the
 	// magic-link URL a sign-in email points to (e.g. https://intranet.club).

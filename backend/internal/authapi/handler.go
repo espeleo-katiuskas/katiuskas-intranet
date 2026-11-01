@@ -821,6 +821,15 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	// The name rides along so a page can greet the person (and, when
 	// impersonating, say who they are acting as) without another request.
+	// A session now expires a while after its last use, so the cookie that mirrors it (for the
+	// file links, see auth.SetSessionCookie) is renewed with it: set again here, once per page
+	// load, for as long as the session has left. Without it the cookie would die at the time the
+	// session was opened plus its lifetime, however much it was used.
+	if raw, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); raw != "" {
+		if expires, err := h.tokens.ExpiresAtForRawToken(r.Context(), raw); err == nil {
+			auth.SetSessionCookie(w, raw, h.opts.PublicBaseURL, time.Until(expires))
+		}
+	}
 	response := map[string]any{"login": who.Login, "first_name": who.FirstName, "last_name": who.LastName, "roles": user.Roles}
 	if user.ImpersonatedBy != nil {
 		response["impersonated_by"] = h.impersonatorSummary(r.Context(), *user.ImpersonatedBy)

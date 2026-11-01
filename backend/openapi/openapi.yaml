@@ -153,10 +153,11 @@ paths:
         by an admin, see DELETE /users/{login}/tokens/{tokenID}) or it
         expires.
 
-        The session lasts 30 days, or 3 hours when the request is made
-        through an address whose first label (up to the first ".") is
-        "local" — the X-Forwarded-Host the reverse proxy adds, else Host —
-        such as local.intranet.katiuskas.es, the one the club's shared
+        The session expires 30 days after its last use — every request made
+        with the token renews it — or 3 hours after its last use when the
+        request is made through an address whose first label (up to the first
+        ".") is "local" — the X-Forwarded-Host the reverse proxy adds, else
+        Host — such as local.intranet.katiuskas.es, the one the club's shared
         tablet uses. It is the address that decides, not a device, and it
         can only shorten a session.
       requestBody:
@@ -278,7 +279,11 @@ paths:
         resolved by the same lookup that authenticated the request.
         impersonated_by is present only for a session started by
         POST /users/{login}/impersonate: login/roles above are the
-        impersonated person's, not the admin's.
+        impersonated person's, not the admin's. The frontend calls it once
+        per page load, and it also sets the session cookie again, lasting as
+        long as the session has left: a session that expires after its last
+        use needs the cookie that mirrors it (for the file links) renewed
+        with it.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -711,7 +716,13 @@ paths:
   /users/{login}/tokens/{tokenID}:
     patch:
       summary: Change a token's expiry
-      description: Admin-only. Lets a token be extended or shortened without revoking it.
+      description: >
+        Admin-only. Lets a token be extended or shortened without revoking it.
+        A session expires a while after its last use, so setting when it ends
+        also sets how long it lasts from now on (the time from now to that
+        moment), which each later use renews: the change is not undone by
+        using the session. A moment already past ends it. A session with a
+        fixed expiry (an impersonation one) keeps the expiry given.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -3489,7 +3500,13 @@ components:
         id: { type: integer }
         user_login: { type: string }
         created_at: { type: string, format: date-time }
-        expires_at: { type: string, format: date-time }
+        expires_at:
+          type: string
+          format: date-time
+          description: >
+            When the session ends if it is not used again: it moves forward with every use,
+            to the time of the use plus the session's lifetime (30 days; 3 hours through a
+            local.* address). Fixed for an impersonation session.
         revoked_at: { type: string, format: date-time, nullable: true }
         last_used_at: { type: string, format: date-time, nullable: true }
         last_used_ip:
