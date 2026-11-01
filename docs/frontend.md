@@ -369,10 +369,11 @@ lists the transaction's files, each with a "Quitar" that deletes it at once (aft
 and the same input; the files chosen are uploaded one by one once the transaction is saved
 (`uploadTransactionFiles` in `js/transactionFiles.js`, which the pages share), and one that fails is
 reported with the rest of what could not be registered. Deleting a transaction that still has files
-says so (`transaction_has_files`). `/justificantes` (`transactionFilesPage.js`, sidebar for admin,
-board and money) is the overview: every file from `GET /transaction-files` with its transaction's
-date, description, amount and accounts (each with its sign, linking to the account's ledger), a year
-filter and "Ver más".
+says so (`transaction_has_files`). `/justificantes` (`transactionFilesPage.js`, for admin, board and
+money, reached with the "Justificantes" button in the header of `/contabilidad`, not from the
+sidebar, where it counts as part of Contabilidad for the highlighting) is the overview: every file
+from `GET /transaction-files` with its transaction's date, description, amount and accounts (each
+with its sign, linking to the account's ledger), a year filter and "Ver más".
 
 `/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
 selector (the years that have a budget from `GET /budgets`, plus this year and the next; "Otro año"
