@@ -627,6 +627,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "transaction not found")
 	case errors.Is(err, ErrTransactionHasLicenses):
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_licenses", err.Error())
+	case errors.Is(err, ErrTransactionHasFiles):
+		httpapi.WriteError(w, http.StatusConflict, "transaction_has_files", err.Error())
 	case errors.Is(err, ErrTransactionHasDistributionPayments):
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_distribution_payments", err.Error())
 	case errors.Is(err, ErrTooFewEntries):

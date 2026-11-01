@@ -12,7 +12,8 @@ The project runs in three environments:
 | Database | its own, disposable | its own | its own |
 | Data | whatever is created locally | a copy of production's | the real data |
 | Telegram bot | optional | its own | its own |
-| `LIBRARY_ROOT`, `USER_FILES_ROOT`, `ACTIVITY_RESOURCES_ROOT` | its own | shared with production | shared with testing |
+| `LIBRARY_ROOT`, `USER_FILES_ROOT` | its own | shared with production | shared with testing |
+| `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT` | its own | its own (production's files, hard-linked by the copy) | its own |
 
 On the club's host the two environments are installed in `/opt/katiuskas-intranet-testing` and
 `/opt/katiuskas-intranet-stable` (the production one is called "stable" there), run as the
@@ -282,8 +283,9 @@ reaches testing before production. It is run by the `AFTER_DEPLOY` hook of the p
 [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh): it empties testing's
 database, restores into it a full dump of production's (schema, data, sequence values and goose's
 version table) and applies with `goose` the migrations testing is ahead by. In addition, unless
-`--no-files` is given, it replaces the files in testing's `ACTIVITY_RESOURCES_ROOT` with hard links
-to production's (see the section "Options for `ACTIVITY_RESOURCES_ROOT`"). Production is only read.
+`--no-files` is given, it replaces the files in testing's `ACTIVITY_RESOURCES_ROOT` and
+`TRANSACTION_FILES_ROOT` with hard links to production's (see "Files the API writes: each
+environment has its own"). Production is only read.
 It is run as root or as a user who can stop and start testing's unit:
 
 ```sh
@@ -297,15 +299,16 @@ thing that uses `sudo`: the rest needs no privileges, but does need to be able t
 `api.env` files (the deployment guide leaves them with `chmod 600`, owned by `intranet`) and,
 for the files step, to be the owner of production's files (`intranet`) or root.
 
-It reads `DATABASE_URL` and `ACTIVITY_RESOURCES_ROOT` from the two `api.env` files (without
-executing them) and needs `psql` and `pg_dump` (package `postgresql-client`, with a `pg_dump`
-at least as new as production's server) and the `goose` binary, which by default it looks for
-in `bin/goose` next to testing's `api.env`, with the migrations in `db/migrations/` (as in the
-deployment guide; `GOOSE_BIN` and `MIGRATIONS_DIR` change that); it asks you to type the name
-of testing's database before dropping it (`--yes` skips that, for automation); it refuses to
-continue if the two URLs point at the same database, if testing's role is not the owner of the
-`public` schema, or if production has a migration that testing's code does not know; and, if
-something fails once the unit is stopped, it leaves it stopped. Consequences of the copy:
+It reads `DATABASE_URL`, `ACTIVITY_RESOURCES_ROOT` and `TRANSACTION_FILES_ROOT` from the two
+`api.env` files (without executing them) and needs `psql` and `pg_dump` (package
+`postgresql-client`, with a `pg_dump` at least as new as production's server) and the `goose`
+binary, which by default it looks for in `bin/goose` next to testing's `api.env`, with the
+migrations in `db/migrations/` (as in the deployment guide; `GOOSE_BIN` and `MIGRATIONS_DIR` change
+that); it asks you to type the name of testing's database before dropping it (`--yes` skips that,
+for automation); it refuses to continue if the two URLs point at the same database, if testing's
+role is not the owner of the `public` schema, or if production has a migration that testing's code
+does not know; and, if something fails once the unit is stopped, it leaves it stopped. Consequences
+of the copy:
 
 - **Whatever is done in testing is lost at the next production deployment.** Joinings,
   edits, roles, Telegram links... Between two deployments testing diverges from production,
@@ -335,10 +338,8 @@ testing's bot can only write to someone who has previously started a conversatio
 
 ## What testing and production share
 
-`LIBRARY_ROOT` (club documents), `USER_FILES_ROOT` (each person's documents) and
-`ACTIVITY_RESOURCES_ROOT` (files attached to the activity memorias) point at the same
-directories in both environments. Both services must be able to read them and to write where
-needed.
+`LIBRARY_ROOT` (club documents) and `USER_FILES_ROOT` (each person's documents) point at the same
+directories in both environments. Both services must be able to read them.
 
 - **`LIBRARY_ROOT` and `USER_FILES_ROOT`: no write conflicts.** The API only reads these trees
   (nothing is uploaded, renamed or deleted through it), so a file left in either directory is
@@ -350,88 +351,69 @@ needed.
   consequence is that **giving admin or board to someone in testing (to try something, for
   example) gives them read access to the real personal documents of all the members** (a
   scanned DNI, a signed waiver...), because the directory is the same as production's.
-- **`ACTIVITY_RESOURCES_ROOT` is written to from the API, and that makes it delicate.** Each
-  file is stored as `<activity id>/<resource id>`; the API creates it when a file-type
-  resource is uploaded (and refuses, with an error, to overwrite one that already exists) and
-  removes it from disk when that resource is deleted. Since testing's database is a copy of
-  production's, its resources have the same ids and, therefore, the same paths. As long as the
-  directory is the same:
-  - **deleting a file-type resource in testing deletes the real file**, which production still
-    references;
-  - **uploading a file in testing occupies a path that production may need later**: each
-    database assigns resource ids from its own sequence, and testing's and production's may
-    coincide. Whoever uploads second gets an error (500), whether testing or production;
-    without that refusal to overwrite, the second would have silently overwritten the first's
-    file.
+## Files the API writes: each environment has its own
 
-  Until this directory stops being shared, uploading or deleting memoria files in testing is
-  not safe; the text of a memoria, which lives only in the database, can be touched without
-  risk. The options for ceasing to share it are in the next section.
+`ACTIVITY_RESOURCES_ROOT` (the files attached to the activity memorias) and
+`TRANSACTION_FILES_ROOT` (the tickets and invoices attached to transactions) are different: the API
+creates and deletes files in them, and testing's database is a copy of production's, so its rows
+have the same ids and therefore the same paths (`<activity id>/<resource id>` and
+`<transaction id>/<file id>`). In a shared directory:
 
-## Options for `ACTIVITY_RESOURCES_ROOT`
+- **deleting a file in testing would delete the real file**, which production still references;
+- **uploading in testing would occupy a path production may need later**: each database assigns ids
+  from its own sequence, and testing's and production's may coincide. Whoever uploads second gets an
+  error (500), because the API refuses to overwrite an existing file.
 
-1. **Shared (the current situation).** There is no copy and no extra space, but both risks
-   above apply: it is only safe if no memoria files are uploaded or deleted in testing.
-2. **A directory of testing's own, with a normal copy of production's.** Each production
-   deployment copies the directory again, always from production to testing (for example with
-   `rsync -a --delete`). It isolates the two environments completely; the cost is the space
-   and copy time, because they are photos and PDFs.
-3. **A directory of testing's own, copied with hard links.** The files are not duplicated:
-   each one is the same inode with an entry in each tree, so testing takes no extra space
-   (apart from the directories and whatever is uploaded in testing). After the copy, uploading
-   a file in testing creates a new one only in testing, and deleting a resource in testing
-   leaves production's file intact. It is safe because the API never modifies a file that is
-   already stored:
-   - when creating, `Storage.Save` opens the file with `O_EXCL`, so it never truncates an
-     existing one, which is the only thing that would change the content in both trees at
-     once;
-   - when deleting, `os.Remove` removes only that tree's entry, and the file stays in the
-     other;
-   - no operation rewrites a resource's bytes (to change them you have to delete the resource
-     and create another).
+So each environment has a directory of its own for each of the two (set in its `api.env`, on the
+same filesystem), and the copy of production's data into testing fills testing's with **hard links**
+to production's files. Nothing is duplicated: each file is the same inode with an entry in each
+tree, so testing takes no extra space (apart from the directories and whatever is uploaded in
+testing). After the copy, uploading in testing creates a file only in testing, and deleting in
+testing leaves production's file intact. It is safe because the API never modifies a file that is
+already stored:
 
-   Conditions:
-   - the two directories have to be on the same filesystem (`stat -c %d` gives the same number
-     for both);
-   - the copy has to be made by the user who owns the files (`intranet`) or root: with
-     `fs.protected_hardlinks=1`, which is the usual setting, Linux does not allow creating a
-     hard link to somebody else's file;
-   - testing has to have its own `ACTIVITY_RESOURCES_ROOT`, different from production's;
-   - the testing service has to run as the same user as production's: the activity
-     directories are created with the same owner and mode as production's (`cp -a`), so
-     another user could read the files but not upload or delete in them.
+- when creating, `Storage.Save` opens the file with `O_EXCL`, so it never truncates an existing
+  one, which is the only thing that would change the content in both trees at once;
+- when deleting, `os.Remove` removes only that tree's entry, and the file stays in the other;
+- no operation rewrites a file's bytes (to change one you delete it and create another).
 
-   This is what `scripts/copy-prod-to-testing.sh` does (except with `--no-files`): with
-   testing stopped and before the database dump, it empties the contents of testing's
-   directory, without deleting the directory itself, and fills it with `cp -al` from
-   production's. Before stopping anything it checks that testing has a directory of its own
-   (not the same as production's, nor one inside the other), that it is not at the root of the
-   filesystem, that it contains only numeric activity directories (if there is anything else,
-   it refuses to empty it), that both are on the same filesystem and that a hard link can be
-   created. While the two environments still share a directory, the script refuses to run this
-   step: change testing's `ACTIVITY_RESOURCES_ROOT` first, or use `--no-files` to copy only the
-   database.
+Conditions:
 
-   Limitation: it depends on no future code modifying a stored file in place (thumbnails,
-   image resizing...), because it would do so in production too without warning.
-   `Storage.Save` notes this in its comment.
+- the two directories of each kind have to be on the same filesystem (`stat -c %d` gives the same
+  number for both);
+- the copy has to be made by the user who owns the files (`intranet`) or root: with
+  `fs.protected_hardlinks=1`, which is the usual setting, Linux does not allow creating a hard link
+  to somebody else's file;
+- testing has to have its own directory, different from production's (and not inside it);
+- the testing service has to run as the same user as production's: the directories are created
+  with the same owner and mode as production's (`cp -a`), so another user could read the files but
+  not upload or delete in them.
 
-**Sequences and copy order (options 2 and 3).** Each resource id comes from a PostgreSQL
-sequence (`bigserial`), and an upload in testing can only collide with a file that already
-exists in its tree if testing's sequence reaches an id that tree already has. That cannot be
-guaranteed by copying in one order or another: it depends on how the database is copied and
-which ids exist on each side. What can be done is reduce the probability:
+This is what `scripts/copy-prod-to-testing.sh` does (except with `--no-files`): with testing stopped
+and before the database dump, it empties the contents of each of testing's two directories, without
+deleting the directories themselves, and fills them with `cp -al` from production's. Before stopping
+anything it checks, for each, that testing has a directory of its own (not the same as production's,
+nor one inside the other, and the two of testing different from each other), that it is not at the
+root of the filesystem, that it contains only numeric directories (if there is anything else, it
+refuses to empty it), that both are on the same filesystem and that a hard link can be created. If
+an environment still shares a directory with the other, the script refuses to run this step: give
+testing its own directory first, or use `--no-files` to copy only the database. Both variables have
+to be set in both `api.env` files (the API creates a missing directory when it starts, and the copy
+and the backup stop with an error if one is missing).
 
-- if the database is copied whole (`pg_dump` and restore, which carry the sequence values),
-  copy the files *before* the dump, so that production cannot have created any between one and
-  the other and left in the tree an id ahead of the sequence;
-- if only the rows are copied, testing's sequence has to be adjusted afterwards with `setval`,
-  at least above the highest id in the file tree.
+Limitation: it depends on no future code modifying a stored file in place (thumbnails, image
+resizing...), because it would do so in production too without warning. Each `Storage.Save` notes
+this in its comment.
 
-Even so, neither the order nor the state of the sequences can corrupt anything: `Save` never
-overwrites an existing file, so the worst that can happen is that one particular upload in
-testing fails with an error (a new id that lands on a file that already exists, for example an
-orphan from production), which in testing is acceptable.
+**Sequences and copy order.** Each id comes from a PostgreSQL sequence, and an upload in testing can
+only collide with a file that already exists in its tree if testing's sequence reaches an id that
+tree already has. That cannot be guaranteed by copying in one order or another, but it can be made
+unlikely: the database is copied whole (`pg_dump` and restore carry the sequence values) and the
+files are linked *before* the dump, so production cannot have created any between one and the other
+and left in the tree an id ahead of the sequence. Even so, nothing can be corrupted: `Save` never
+overwrites an existing file, so the worst that can happen is that one particular upload in testing
+fails with an error (a new id that lands on a file that already exists, for example an orphan from
+production), which in testing is acceptable.
 
 ## Setting up the second environment from the deployment guide
 
@@ -445,14 +427,16 @@ have to repeat it changing:
 - the domain, both in the reverse proxy and in `PUBLIC_BASE_URL`;
 - the Telegram variables, with a second bot.
 
-`LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT` are the only paths pointed at
-the same place in both; see the previous section for what that implies.
+`LIBRARY_ROOT` and `USER_FILES_ROOT` are the only paths pointed at the same place in both; the two
+directories the API writes to (`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`) are different in
+each: see the previous sections for what that implies.
 
 ## Backups
 
 The backup that matters is production's: testing's database is filled with that same data on every
-production deployment, and the three shared directories (`LIBRARY_ROOT`, `USER_FILES_ROOT`,
-`ACTIVITY_RESOURCES_ROOT`) only need to be backed up once.
+production deployment, and the two shared directories (`LIBRARY_ROOT`, `USER_FILES_ROOT`) only
+need to be backed up once. Production's backup holds the database and **every file the API creates
+or reads**: those two and the ones it writes (`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`).
 [`scripts/backup.sh`](../scripts/backup.sh) does it, every night, from a systemd timer
 ([`katiuskas-intranet-backup.timer`](../deploy/systemd/katiuskas-intranet-backup.timer)).
 
@@ -460,14 +444,15 @@ Each run makes a directory `BACKUP_DIR/<yyyymmdd-hhmmss>/` with:
 
 - `database.dump`: `pg_dump --format=custom` of production's database, goose's version table
   included, which is restored with `pg_restore`;
-- `files/library`, `files/user-files` and `files/activity-resources`: the three directories, copied
+- `files/library`, `files/user-files`, `files/activity-resources` and `files/transaction-files`: the
+  four directories (the last two are the files the API itself writes), copied
   with `rsync` and hard-linking whatever has not changed since the previous backup. Every backup
   is therefore a complete tree, and yet a night without changes costs almost no disk (the files
   are mostly photos and PDFs that are never modified); deleting an old backup does not affect the
   others.
 
-The files are copied before the dump, so that a memoria row in the dump never points at a file the
-backup lacks. A backup is built in a `.partial` directory, renamed only when complete and when
+The files are copied before the dump, so that a row in the dump rarely points at a file the backup
+lacks. A backup is built in a `.partial` directory, renamed only when complete and when
 `pg_restore` can read the dump back, and a run that fails removes it and exits with an error (the
 unit shows as failed). Afterwards the old ones are pruned: the newest 14 are kept (`KEEP_DAILY`),
 and of the older ones the newest of each of the last 8 weeks (`KEEP_WEEKLY`). Everything is created
@@ -509,7 +494,7 @@ the API stopped:
 ```sh
 B=/var/backups/katiuskas-intranet/<the backup's directory>
 pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" "$B/database.dump"
-for d in library user-files activity-resources; do
+for d in library user-files activity-resources transaction-files; do
   rsync -a --delete "$B/files/$d/" "<the environment's directory for $d>/"
 done
 ```
@@ -564,7 +549,8 @@ writes its errors and the sign-in notices to). Two mechanisms, for two kinds of 
   `problems` of `GET /admin/status`, see "Admin status" in `docs/backend-internals.md`): the
   database not answering, a storage directory that does not exist, and a disk almost full
   (`DISK_ALERT_PERCENT` in `api.env`: how full, in percent, a filesystem holding `LIBRARY_ROOT`,
-  `USER_FILES_ROOT` or `ACTIVITY_RESOURCES_ROOT` may be, 90 by default, 0 to turn it off). The API
+  `USER_FILES_ROOT`, `ACTIVITY_RESOURCES_ROOT` or `TRANSACTION_FILES_ROOT` may be, 90 by default, 0
+  to turn it off). The API
   looks every 5 minutes and speaks when the set of problems changes ("⚠️ intranet.katiuskas.es: •
   Disco casi lleno (93 % usado, quedan 2.1 GB): /srv/…", then "✅ … ya no hay ningún problema"),
   and again once a day while one remains. Each API (testing's and production's) does it through

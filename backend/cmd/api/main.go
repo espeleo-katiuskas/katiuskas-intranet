@@ -34,6 +34,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegrambot"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/transactionfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/userfiles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
@@ -167,6 +168,12 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 
 	clubInfoService := clubinfo.NewService(clubinfo.NewRepository(repoPool))
 	budgetsService := budgets.NewService(budgets.NewRepository(repoPool))
+	transactionFilesStorage, err := transactionfiles.NewStorage(cfg.TransactionFilesRoot)
+	if err != nil {
+		slog.Error("set up transaction files storage", "error", err, "root", cfg.TransactionFilesRoot)
+		return nil, nil, nil, nil, err
+	}
+	transactionFilesService := transactionfiles.NewService(transactionfiles.NewRepository(repoPool), transactionFilesStorage)
 
 	licensesRepo := licenses.NewRepository(repoPool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
@@ -251,6 +258,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		LibraryRoot:           cfg.LibraryRoot,
 		UserFilesRoot:         cfg.UserFilesRoot,
 		ActivityResourcesRoot: cfg.ActivityResourcesRoot,
+		TransactionFilesRoot:  cfg.TransactionFilesRoot,
 		DiskAlertPercent:      cfg.DiskAlertPercent,
 	})
 
@@ -273,6 +281,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		AdminStatus:       adminStatus,
 		ClubInfo:          clubinfo.NewHandler(clubInfoService, authenticator, usersService, telegramSender),
 		Budgets:           budgets.NewHandler(budgetsService, authenticator, usersService, telegramSender),
+		TransactionFiles:  transactionfiles.NewHandler(transactionFilesService, authenticator, usersService, telegramSender),
 	})
 
 	return router, authHandler, usersService, adminStatus, nil

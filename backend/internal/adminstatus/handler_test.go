@@ -64,7 +64,7 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 		TelegramBotUsername:   "KatiuskasBot",
 		LibraryRoot:           existing,
 		UserFilesRoot:         existing + "/missing",
-		ActivityResourcesRoot: existing,
+		ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
 	})
 	// The test database is migrated without goose; give it the table goose
 	// keeps, so the migration number can be read back.
@@ -157,8 +157,8 @@ func TestStatusListsProblemsAndDisks(t *testing.T) {
 	mux, resolver, _ := newServer(t, adminstatus.Info{
 		LibraryRoot:           existing,
 		UserFilesRoot:         existing + "/missing",
-		ActivityResourcesRoot: existing,
-		DiskAlertPercent:      1, // any real filesystem is at least that full
+		ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
+		DiskAlertPercent: 1, // any real filesystem is at least that full
 	})
 	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
 	var got struct {
@@ -172,8 +172,8 @@ func TestStatusListsProblemsAndDisks(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil {
 		t.Fatalf("expected 200 and JSON, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(got.Disks) != 1 || len(got.Disks[0].Paths) != 2 || got.Disks[0].TotalBytes == 0 {
-		t.Errorf("expected one filesystem with the two directories that exist, got %+v", got.Disks)
+	if len(got.Disks) != 1 || len(got.Disks[0].Paths) != 3 || got.Disks[0].TotalBytes == 0 {
+		t.Errorf("expected one filesystem with the three directories that exist, got %+v", got.Disks)
 	}
 	if len(got.Problems) != 2 {
 		t.Errorf("expected the missing directory and the full disk as problems, got %q", got.Problems)
@@ -183,7 +183,7 @@ func TestStatusListsProblemsAndDisks(t *testing.T) {
 func TestStatusHasNoProblemsWhenAllIsWell(t *testing.T) {
 	existing := t.TempDir()
 	mux, resolver, _ := newServer(t, adminstatus.Info{
-		LibraryRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing,
+		LibraryRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
 	})
 	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
 	if !strings.Contains(rec.Body.String(), `"problems":[]`) {

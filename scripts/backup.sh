@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 #
 # Backs up an environment's data into a directory of its own: the database (a custom-format
-# pg_dump, restorable with pg_restore) and the three directories of files (the club's documents,
-# the per-person files and the activities' memoria files). Meant to be run once a day on the
+# pg_dump, restorable with pg_restore) and the four directories of files (the club's documents,
+# the per-person files, the activities' memoria files and the documents attached to transactions:
+# everything the API reads or writes outside the database). Meant to be run once a day on the
 # club's host by katiuskas-intranet-backup.timer (docs/environments.md, "Backups"), for
-# production: testing's data is a copy of production's, and the three directories are shared.
+# production: testing's data is a copy of production's, and the first three directories are shared.
 #
 # Usage:
 #   BACKUP_DIR=<where to keep the backups> scripts/backup.sh <env-file>
 #
 # <env-file> is the environment's api.env (the systemd EnvironmentFile); DATABASE_URL,
-# LIBRARY_ROOT, USER_FILES_ROOT and ACTIVITY_RESOURCES_ROOT are read from it, parsed, never
-# sourced. Each run makes a directory BACKUP_DIR/<yyyymmdd-hhmmss>/ with
+# LIBRARY_ROOT, USER_FILES_ROOT, ACTIVITY_RESOURCES_ROOT and TRANSACTION_FILES_ROOT are read from
+# it, parsed, never sourced. Each run makes a directory BACKUP_DIR/<yyyymmdd-hhmmss>/ with
 #   database.dump   pg_dump --format=custom (it includes goose's version table)
-#   files/<name>/   library, user-files and activity-resources, as they were
+#   files/<name>/   library, user-files, activity-resources and transaction-files, as they were
 # The files are copied with rsync, hard-linking whatever has not changed since the previous
 # backup (--link-dest), so every backup is a complete tree that can be browsed or restored on its
 # own and yet a day without changes costs almost no disk. Deleting an old backup never affects
 # the others.
 #
-# The files are copied BEFORE the dump: a memoria file is stored before its row exists and
-# removed after the row is deleted, so a dump taken after the copy never points at a file that
-# the backup lacks (the reverse can leave an unreferenced file, which does no harm).
+# The files are copied BEFORE the dump, so that a dump taken after the copy rarely points at a file
+# that the backup lacks (the reverse can leave an unreferenced file, which does no harm).
 #
 # A backup is built in <timestamp>.partial and renamed when complete and checked (pg_restore can
 # read the dump); a run that fails removes it and exits with an error, so the unit shows as
@@ -99,6 +99,7 @@ declare -A sources=(
   [library]=$(env_value "$env_file" LIBRARY_ROOT)
   [user-files]=$(env_value "$env_file" USER_FILES_ROOT)
   [activity-resources]=$(env_value "$env_file" ACTIVITY_RESOURCES_ROOT)
+  [transaction-files]=$(env_value "$env_file" TRANSACTION_FILES_ROOT)
 )
 for name in "${!sources[@]}"; do
   [[ -n ${sources[$name]} ]] || die "no value for the $name directory in $env_file"
@@ -123,7 +124,7 @@ final=$BACKUP_DIR/$stamp
 trap 'rm -rf "$partial"' EXIT
 mkdir "$partial"
 
-for name in library user-files activity-resources; do
+for name in library user-files activity-resources transaction-files; do
   log "copying $name from ${sources[$name]}"
   link=()
   if [[ -n $previous && -d $previous/files/$name ]]; then

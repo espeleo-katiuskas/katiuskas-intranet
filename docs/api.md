@@ -631,7 +631,36 @@ case and accents).
   of a distribution, it undoes it.
   - returns: 204
   - errors: 400 `invalid_id`; 409 `transaction_has_licenses`,
-    `transaction_has_distribution_payments`
+    `transaction_has_distribution_payments`, `transaction_has_files` (remove its files first)
+
+### Files attached to transactions
+
+Documents (tickets, invoices) attached to a transaction, up to 10 MiB each, stored on disk
+(`TRANSACTION_FILES_ROOT`). Everybody who can sign in sees that a transaction has files
+(`file_count` in `Transaction` and in `AccountEntry`); reading them is for admin, board and money;
+attaching and removing, for admin and money.
+
+- **GET** `/transactions/{id}/files` — *Admin, board or money*. The files of a transaction.
+  - returns: 200 `[TransactionFile]`
+  - errors: 400 `invalid_id`; 404 `transaction_not_found`
+- **POST** `/transactions/{id}/files` — *Admin or money*. Attaches one file (`multipart/form-data`,
+  field `file`). The type is decided from the file's bytes: a PDF or an image can be shown, anything
+  else is only downloaded.
+  - returns: 201 `TransactionFile`
+  - errors: 400 `invalid_id`, `invalid_body`, `file_required` (missing or empty); 404
+    `transaction_not_found`; 413 `file_too_large`
+- **GET** `/transactions/{id}/files/{fileId}/file` — *Admin, board or money*; the session cookie is
+  accepted too, so a link opens it. The bytes: `inline` for a PDF or an image (`?download=1`
+  forces a download), a download for anything else.
+  - errors: 400 `invalid_id`; 404 `not_found` (also if it belongs to another transaction)
+- **DELETE** `/transactions/{id}/files/{fileId}` — *Admin or money*.
+  - returns: 204; errors: 400 `invalid_id`; 404 `not_found`
+- **GET** `/transaction-files` — *Admin, board or money*. Every file with the details of its
+  transaction (description, date, amount, entries with account names), the transaction most recent
+  first.
+  - query: `year` (1900–2200), `limit` (1–200, default 50), `offset`
+  - returns: 200 `[TransactionFileListing]`
+  - errors: 400 `invalid_year`, `invalid_limit`, `invalid_offset`
 
 ## Budgets
 
@@ -1235,6 +1264,7 @@ Nested fields:
 | `description` | text |
 | `amount` | number |
 | `balance_after` | number |
+| `file_count` | integer |
 
 ### `Entry`
 
@@ -1260,6 +1290,24 @@ Nested fields:
 | `occurred_at` | datetime |
 | `created_at` | datetime |
 | `entries` | [Entry] |
+| `file_count` | integer |
+
+### `TransactionFile`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `transaction_id` | integer |
+| `file_name` | text |
+| `content_type` | text |
+| `file_size` | integer |
+| `uploaded_by` | text (a login; absent if the person was deleted) |
+| `created_at` | datetime |
+
+### `TransactionFileListing`
+
+A `TransactionFile` plus `transaction`: `id`, `description`, `occurred_at`, `amount` (what the
+transaction moved) and `entries` (`account_id`, `account_name`, `amount`).
 
 ### Enumerations
 

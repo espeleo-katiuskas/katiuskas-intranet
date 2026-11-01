@@ -89,7 +89,8 @@ Local Docker stack (where changes are tried first), **testing** (`testing.katius
 the club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stable`, units
 `katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool
 is in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
-sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Production deploys without Docker
+sharing `LIBRARY_ROOT` and `USER_FILES_ROOT` (the directories the API writes to, `ACTIVITY_RESOURCES_ROOT` and
+`TRANSACTION_FILES_ROOT`, are separate in each, and testing gets production's files hard-linked). Production deploys without Docker
 (`docs/deployment-no-docker.md`).
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
@@ -106,8 +107,9 @@ sharing `LIBRARY_ROOT`, `USER_FILES_ROOT` and `ACTIVITY_RESOURCES_ROOT`. Product
   and a failed deployment or backup runs `scripts/notify-failure.sh` (`docs/environments.md`, "Alerts when something fails").
 - Testing's database is a copy of production's, refreshed on every production deploy
   (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real personal data and anything done there is overwritten.
-- Because the directories are shared, don't grant admin/board in testing (it would open every member's
-  personal documents) and don't delete or upload memoria files there (they carry production's ids).
+- Because the library and the per-person files are shared, don't grant admin/board in testing (it would
+  open every member's personal documents). Memoria and transaction files can be uploaded and deleted there:
+  testing has its own directories, hard-linked from production's at each copy.
 - `web/` is served by Caddy with `Cache-Control: max-age=3600`, so a browser may keep an old script up to
   an hour after a deploy.
 
@@ -117,7 +119,7 @@ Each point is the short version; the reasons and the edge cases are in `docs/bac
 
 **Layers.** `backend/internal/httpapi` (router, request logging, `WriteJSON`/`WriteError`) → one package
 per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`distributions`, `inventory`, `tokens`, `accounting`, `budgets`), each `model.go` / `repository.go` (pgx) /
+`distributions`, `inventory`, `tokens`, `accounting`, `budgets`, `transactionfiles`), each `model.go` / `repository.go` (pgx) /
 `service.go` / `handler.go`; only `handler.go` knows HTTP. Each package registers its routes with
 `RegisterRoutes(mux)`, wired in `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a
 read-only directory tree from disk (no repository; every caller path goes through `Service.resolve`) and
@@ -188,6 +190,12 @@ constraint trigger (see `db.PGX` above). An account has child accounts **or** tr
 accounts and the default stay `income`, and that `allows_dues`/`allows_licenses` accounts are `income`.
 `GET /accounts` rolls balances and last movement up through the tree; the ledger of a group lists its
 descendants with a combined running balance.
+
+**Transaction files.** Tickets and invoices attached to a transaction (10 MiB each): metadata in Postgres, bytes
+on disk in `TRANSACTION_FILES_ROOT` keyed by row id, created once and **never rewritten** (like the memoria's;
+the prod→testing copy hard-links them, and `backup.sh` includes the directory). Everybody sees `file_count`;
+admin, board and money read; admin and money attach and remove; a transaction with files cannot be deleted. The
+type is decided from the bytes and only PDFs and images are served inline.
 
 **Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over one or
 more leaf accounts of that type; both parts must add up to the same and every non-hidden income/expense

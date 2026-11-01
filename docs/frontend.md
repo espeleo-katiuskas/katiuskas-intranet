@@ -342,6 +342,19 @@ itself, which opens *reading* the chart to every baseline role the same as `GET 
 admin/money can already write here too, so nothing on the page needs a narrower check than that one
 gate.
 
+**Files attached to transactions.** On `/cuenta` a transaction that has files shows a 📎 (with the
+number when there are several) after its description (`file_count` of the ledger listing); opening a
+row also lists them, as links to `/api/v1/transactions/{id}/files/{fileId}/file` (the session cookie
+makes a plain link work). The new-transaction dialog has a multiple file input, and the edit one
+lists the transaction's files, each with a "Quitar" that deletes it at once (after a confirmation),
+and the same input; the files chosen are uploaded one by one once the transaction is saved
+(`uploadTransactionFiles` in `js/transactionFiles.js`, which the pages share), and one that fails is
+reported with the rest of what could not be registered. Deleting a transaction that still has files
+says so (`transaction_has_files`). `/justificantes` (`transactionFilesPage.js`, sidebar for admin,
+board and money) is the overview: every file from `GET /transaction-files` with its transaction's
+date, description, amount and accounts (each with its sign; links to the account's ledger only for
+admin and money, as board cannot open `/cuenta`), a year filter and "Ver más".
+
 `/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
 selector (the years that have a budget from `GET /budgets`, plus this year and the next; "Otro año"
 (admin and money only) opens any year from 1900 to 2200, to look at it or to create its budget)

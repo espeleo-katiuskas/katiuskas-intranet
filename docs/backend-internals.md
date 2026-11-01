@@ -29,6 +29,7 @@ Contents:
 - [Telegram](#telegram)
 - [Accounting](#accounting)
 - [Budgets](#budgets)
+- [Transaction files](#transaction-files)
 - [Testing helpers](#testing-helpers)
 
 ## Layers and packages
@@ -36,10 +37,10 @@ Contents:
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging, panic
 recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`, `roles`,
 `memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
-`tokens`, `accounting`, `clubinfo`, `budgets`; `adminstatus` is the odd one out, see below), each
-split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain layer never
-imports `net/http`; only `handler.go` knows HTTP exists. Each resource package owns and registers
-its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
+`tokens`, `accounting`, `clubinfo`, `budgets`, `transactionfiles`; `adminstatus` is the odd one out,
+see below), each split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The
+domain layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
+owns and registers its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
 **`internal/library`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
 it serves a read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
 `repository.go` — `service.go` works directly against the filesystem, resolving and validating every
@@ -1232,6 +1233,40 @@ was saved is not in it: `GET` lists it in `unassigned_accounts` with what it mov
 `PUT` has to include it. An account that appears in a budget cannot be deleted (foreign key). The
 Telegram notices (`describeChanges`) say that a budget was created, deleted or changed (items
 added or removed, amounts and accounts changed), values included.
+
+## Transaction files
+
+**Transaction files** (`internal/transactionfiles`, migration `00040`): tickets, invoices and the
+like attached to an accounting transaction. The metadata is in `transaction_files`
+and **the bytes are on disk** in `TRANSACTION_FILES_ROOT` (at most 10 MiB each, `MaxFileSize`), the
+way an activity's memoria keeps its files (`Storage`: `<transaction id>/<row id>`, created with
+`O_EXCL` and **never rewritten**, because testing shares production's files by hard link, see
+`docs/environments.md`). The row is created first and the bytes saved after it (the path is keyed by
+the row's id); if saving fails the row is removed again, and deleting removes the row first and the
+bytes after (a failure there only leaves an unreferenced file, logged); a row whose bytes are
+missing answers 404. `scripts/backup.sh` copies the directory and `scripts/copy-prod-to-testing.sh`
+hard-links it into testing's own. Every route is under `/transactions/{id}/files`, plus
+`GET /transaction-files` (the overview). Admin, board and money read (they can hold personal or
+bank details, so not every member); admin and money attach and remove. Everybody who can sign in
+only gets to know that a transaction has files: `file_count` is in accounting's `Transaction`
+(`GetTransaction`, `ListTransactions`, `UpdateTransaction`) and in `AccountEntry`, counted by a
+subquery.
+
+An upload (`multipart/form-data`, field `file`) is read whole, refused with 413 `file_too_large`
+past the limit and with 400 `file_required` when empty; the name keeps only its base (no path), and
+**the type is decided from the bytes** (`detectType`: a PDF or an image by content, anything else
+by the extension, never one of those): the file is sent `inline` only when it is a PDF or an image
+(`Viewable`), otherwise as an attachment with a sandboxing `Content-Security-Policy`, always with
+`X-Content-Type-Options: nosniff`, so a file can never run as part of the intranet. The file route
+also accepts the session cookie (`ProtectAllowingCookie`) so that a link opens it in a tab. A file
+is addressed with its transaction (`/transactions/{id}/files/{fileId}/...` is 404 if it belongs to
+another one).
+
+`transaction_files.transaction_id` has no delete action, so **a transaction that still has files
+cannot be deleted** (`accounting.ErrTransactionHasFiles`, 409 `transaction_has_files`): the files
+are removed first. The overview (`Repository.List`) joins the transaction and its entries with the
+account names, ordered by the transaction's date, and takes `year`, `limit` and `offset`. The
+Telegram notices say that a file was attached or removed and from which transaction.
 
 ## Testing helpers
 

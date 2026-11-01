@@ -19,6 +19,11 @@ import {
   accountLabel,
 } from './accountTree.js';
 import { initModal, openModal } from './modal.js';
+import {
+  fileCountBadge,
+  transactionFileItems,
+  uploadTransactionFiles,
+} from './transactionFiles.js';
 
 // Reached only from /contabilidad's own account tree — same admin/money
 // gate as that page (see accounting.js's own doc comment for why this
@@ -669,10 +674,10 @@ function renderEntryRow(entry) {
     ? ''
     : `<button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>`;
   return `
-    <tr class="entry-row" data-entry-row="${entry.transaction_id}" data-entry-account="${entry.account_id}" tabindex="0" aria-expanded="false">
+    <tr class="entry-row" data-entry-row="${entry.transaction_id}" data-file-count="${entry.file_count ?? 0}" data-entry-account="${entry.account_id}" tabindex="0" aria-expanded="false">
       <td class="nowrap">${formatDate(entry.occurred_at)}</td>
       ${accountCell}
-      <td>${escapeHtml(entry.description)}</td>
+      <td>${escapeHtml(entry.description)}${fileCountBadge(entry.file_count)}</td>
       <td class="balance-cell">${formatCurrency(entry.amount)}</td>
       <td class="balance-cell">${formatCurrency(entry.balance_after)}</td>
       <td>
@@ -773,7 +778,7 @@ document.getElementById('entries-filter-clear').addEventListener('click', () => 
 // AccountEntry's doc comment), so the full transaction is fetched the
 // first time a row is opened; account names come from allAccounts,
 // which this page already has.
-function renderEntryDetail(transaction, entryAccountId) {
+function renderEntryDetail(transaction, entryAccountId, files = []) {
   const others = transaction.entries.filter((e) => e.account_id !== entryAccountId);
   let html = '';
   if (others.length) {
@@ -809,7 +814,18 @@ function renderEntryDetail(transaction, entryAccountId) {
       )
       .join('')}</ul>`;
   }
+  if (files.length) {
+    html += `<div class="entry-detail-title">Ficheros adjuntos</div><ul class="entry-detail-list">${transactionFileItems(files)}</ul>`;
+  }
   return html;
+}
+
+// The files attached to a transaction, none without asking if it has none (the ledger row already
+// says how many there are).
+async function transactionFilesOf(transactionId) {
+  const row = document.querySelector(`tr.entry-row[data-entry-row="${transactionId}"]`);
+  if (row && row.dataset.fileCount === '0') return [];
+  return apiFetch(`/transactions/${transactionId}/files`);
 }
 
 // Expands (or collapses) the row right below the clicked one. The detail
@@ -832,10 +848,14 @@ async function toggleEntryDetail(row) {
   row.after(detail);
   row.setAttribute('aria-expanded', 'true');
   try {
-    const transaction = await apiFetch(`/transactions/${row.dataset.entryRow}`);
+    const [transaction, files] = await Promise.all([
+      apiFetch(`/transactions/${row.dataset.entryRow}`),
+      transactionFilesOf(row.dataset.entryRow),
+    ]);
     detail.lastElementChild.innerHTML = renderEntryDetail(
       transaction,
       Number(row.dataset.entryAccount),
+      files,
     );
   } catch {
     detail.lastElementChild.textContent = 'No se pudo cargar el detalle de esta transacción.';
@@ -859,6 +879,31 @@ if (editTransactionDuesLicenses) {
 // cuenta"); a transaction with more than one entry on THIS account (only
 // possible by calling the API directly) is reported instead of silently
 // merged into one, and the dialog never opens for it.
+// The files of the transaction being edited, each with a "Quitar" that deletes it at once.
+async function showEditFiles(transactionId) {
+  document.getElementById('et-files-input').value = '';
+  const files = await apiFetch(`/transactions/${transactionId}/files`);
+  document.getElementById('et-files-list').innerHTML = transactionFileItems(files, {
+    removable: true,
+  });
+}
+
+document.getElementById('et-files-list').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-remove-file]');
+  if (!button) return;
+  if (!confirm('¿Quitar este fichero de la transacción?')) return;
+  try {
+    await apiFetch(`/transactions/${editingTransactionId}/files/${button.dataset.removeFile}`, {
+      method: 'DELETE',
+    });
+    await showEditFiles(editingTransactionId);
+    showFeedback('Fichero quitado.');
+    await loadEntries();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
 async function openEditTransactionDialog(transactionId) {
   try {
     const transaction = await apiFetch(`/transactions/${transactionId}`);
@@ -886,6 +931,7 @@ async function openEditTransactionDialog(transactionId) {
       dues: transaction.dues ?? [],
       licenses: transaction.licenses ?? [],
     });
+    await showEditFiles(transactionId);
     openModal(editTransactionDialog);
     document.getElementById('et-description').focus();
   } catch (err) {
@@ -914,6 +960,12 @@ editTransactionForm.addEventListener('submit', async (event) => {
     const pendingErrors = editTransactionDuesLicenses
       ? await editTransactionDuesLicenses.submitPending(editingTransactionId, dateValue)
       : [];
+    pendingErrors.push(
+      ...(await uploadTransactionFiles(
+        editingTransactionId,
+        document.getElementById('et-files-input').files,
+      )),
+    );
     // Closed first: while a dialog is open, showError writes into it (see
     // api.js), and this message has to outlive it.
     editTransactionDialog.close();
@@ -947,7 +999,9 @@ async function deleteTransaction(transactionId) {
     showError(
       err.code === 'transaction_has_distribution_payments'
         ? 'Esta transacción es el pago de un reparto y ya no se puede deshacer porque los pedidos han cambiado: quita el pago en el reparto.'
-        : err.message,
+        : err.code === 'transaction_has_files'
+          ? 'Esta transacción tiene ficheros adjuntos: quítalos primero, desde «Editar».'
+          : err.message,
     );
   }
 }
@@ -1000,6 +1054,7 @@ document.getElementById('toggle-new-transaction').addEventListener('click', () =
   document.getElementById('nt-date').value = todayAsInputValue();
   newTransactionDuesLicenses?.syncYears();
   transactionLines.nt.setLines([]);
+  document.getElementById('nt-files-input').value = '';
   refreshDuesLicensesSections('nt');
   openModal(newTransactionDialog);
   document.getElementById('nt-date').focus();
@@ -1039,6 +1094,12 @@ newTransactionForm.addEventListener('submit', async (event) => {
     const pendingErrors = newTransactionDuesLicenses
       ? await newTransactionDuesLicenses.submitPending(transaction.id, dateValue)
       : [];
+    pendingErrors.push(
+      ...(await uploadTransactionFiles(
+        transaction.id,
+        document.getElementById('nt-files-input').files,
+      )),
+    );
     // Closed first: see the same note in the edit handler above.
     newTransactionDialog.close();
     if (pendingErrors.length) {

@@ -427,6 +427,7 @@ function renderStatus(status) {
     library: 'Archivo',
     user_files: 'Ficheros de las personas',
     activity_resources: 'Memorias de actividades',
+    transaction_files: 'Ficheros de transacciones',
   };
 
   const problems = (status.problems ?? []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');

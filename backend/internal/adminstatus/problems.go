@@ -77,6 +77,7 @@ var storageLabels = map[string]string{
 	"library":            "el archivo",
 	"user_files":         "los ficheros de las personas",
 	"activity_resources": "las memorias de actividades",
+	"transaction_files":  "los ficheros de las transacciones",
 }
 
 // problemsOf lists what in a status is wrong: the database not answering, a directory that does

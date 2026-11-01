@@ -58,6 +58,12 @@ const NAV_ITEMS = [
     icon: '<circle cx="12" cy="12" r="8.5"/><path d="M14.5 8.5a4 4 0 1 0 0 7"/><line x1="7" y1="10.5" x2="12.5" y2="10.5"/><line x1="7" y1="13.5" x2="12" y2="13.5"/>',
   },
   {
+    href: '/justificantes',
+    label: 'Justificantes',
+    roles: ['admin', 'board', 'money'],
+    icon: '<path d="M7 3.5h7.5L19 8v12.5H7z"/><path d="M14.5 3.5V8H19"/><line x1="10" y1="12" x2="16" y2="12"/><line x1="10" y1="15.5" x2="16" y2="15.5"/>',
+  },
+  {
     href: '/presupuestos',
     label: 'Presupuestos',
     icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><line x1="8" y1="16" x2="8" y2="12"/><line x1="12" y1="16" x2="12" y2="8"/><line x1="16" y1="16" x2="16" y2="10.5"/>',

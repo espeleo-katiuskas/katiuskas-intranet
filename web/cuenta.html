@@ -47,6 +47,11 @@
           <div id="nt-lines" class="entry-lines"></div>
           <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
         </div>
+        <div class="field span-2">
+          <label for="nt-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
+          <input id="nt-files-input" type="file" multiple>
+          <p class="hint">Hasta 10 MB cada uno. Se adjuntan al guardar la transacción.</p>
+        </div>
         <div class="field span-2" data-roles="admin" id="nt-flags-hint">
           <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
         </div>
@@ -106,6 +111,12 @@
         <div class="field span-2">
           <div id="et-lines" class="entry-lines"></div>
           <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
+        </div>
+        <div class="field span-2">
+          <label for="et-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
+          <ul id="et-files-list" class="entry-detail-list"></ul>
+          <input id="et-files-input" type="file" multiple>
+          <p class="hint">«Quitar» borra el fichero en el acto. Los que elijas aquí, hasta 10 MB cada uno, se adjuntan al guardar.</p>
         </div>
         <div class="field span-2" data-roles="admin" id="et-flags-hint">
           <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>

@@ -143,12 +143,14 @@ docker compose -f docker-compose.production.yml exec postgres \
 ```
 
 Files: `./library` and `./user-files` are ordinary directories on the host (back them up like
-any other file); the content of the activity memorias lives in the named volume
-`activity_resources_data`, for example:
+any other file); the content of the activity memorias and the documents attached to transactions
+live in the named volumes `activity_resources_data` and `transaction_files_data`, for example:
 
 ```sh
 docker run --rm -v katiuskas-intranet_activity_resources_data:/data -v "$(pwd)":/backup \
   alpine tar czf /backup/activity-resources-$(date +%Y%m%d).tar.gz -C /data .
+docker run --rm -v katiuskas-intranet_transaction_files_data:/data -v "$(pwd)":/backup \
+  alpine tar czf /backup/transaction-files-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
 (the `katiuskas-intranet_` prefix in the volume name depends on the name of the project

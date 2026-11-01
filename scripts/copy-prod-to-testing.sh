@@ -2,7 +2,7 @@
 #
 # Replaces the testing database with a copy of production's data, then
 # migrates it up to the schema testing's own code expects, and replaces
-# testing's activity resource files with hard links to production's.
+# testing's activity resource files and transaction files with hard links to production's.
 #
 # Why a full drop-and-restore rather than copying rows: testing runs `main`,
 # which can carry migrations production hasn't received yet, so the two
@@ -14,16 +14,16 @@
 # Production is only read (pg_dump takes a consistent snapshot without
 # blocking writers). Everything in the testing database is lost.
 #
-# ACTIVITY_RESOURCES_ROOT holds the files the database's activity_resources
-# rows point at, so it has to follow the database. Its files are hard-linked,
-# not copied: the API never modifies a stored file (Storage.Save refuses to
+# ACTIVITY_RESOURCES_ROOT and TRANSACTION_FILES_ROOT hold the files the database's
+# activity_resources and transaction_files rows point at, so they have to follow the database.
+# Their files are hard-linked, not copied: the API never modifies a stored file (Storage.Save refuses to
 # overwrite one and deleting is a plain unlink), so testing shares production's
 # files without using more disk, and a write or delete in one tree can't change
 # the other's. They are linked before the database is dumped, which keeps
 # testing's id sequence from starting behind a file already in its tree (if it
 # ever lands on one, Save refuses to overwrite it and that one upload fails).
-# This needs testing to have its own ACTIVITY_RESOURCES_ROOT, different from
-# production's, on the same filesystem, and a user allowed to link production's
+# This needs testing to have its own ACTIVITY_RESOURCES_ROOT and TRANSACTION_FILES_ROOT, different
+# from production's, on the same filesystem, and a user allowed to link production's
 # files (root, or their owner: see fs.protected_hardlinks). Pass --no-files to
 # leave the files alone and only copy the database.
 #
@@ -32,7 +32,7 @@
 #     scripts/copy-prod-to-testing.sh [--yes] [--no-files] <prod-env-file> <testing-env-file>
 #
 # The two env files are the systemd EnvironmentFile (api.env) of each
-# environment. Only DATABASE_URL, ACTIVITY_RESOURCES_ROOT (and PUBLIC_BASE_URL,
+# environment. Only DATABASE_URL, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT (and PUBLIC_BASE_URL,
 # to label the prompt) are read from them; they are parsed, never sourced.
 # --yes skips the confirmation prompt, for running from automation.
 #
@@ -161,56 +161,75 @@ latest_migration=$(ls "$MIGRATIONS_DIR" | sed -n 's/^0*\([0-9][0-9]*\)_.*\.sql$/
 ((prod_version <= latest_migration)) \
   || die "production is at migration $prod_version but testing's migrations only go up to $latest_migration"
 
-if ((copy_files)); then
-  # config.go's default when ACTIVITY_RESOURCES_ROOT is unset.
-  prod_files=$(env_value "$prod_env" ACTIVITY_RESOURCES_ROOT)
-  testing_files=$(env_value "$testing_env" ACTIVITY_RESOURCES_ROOT)
-  prod_files=$(realpath -m -- "${prod_files:-/data/activity-resources}")
-  testing_files=$(realpath -m -- "${testing_files:-/data/activity-resources}")
+# The two directories the API writes to, which follow the database: for each, the variable that
+# names it in api.env and config.go's default for when it is unset.
+file_vars=(ACTIVITY_RESOURCES_ROOT TRANSACTION_FILES_ROOT)
+declare -A file_defaults=(
+  [ACTIVITY_RESOURCES_ROOT]=/data/activity-resources
+  [TRANSACTION_FILES_ROOT]=/data/transaction-files
+)
+declare -A prod_files testing_files
 
-  [[ -d $prod_files ]] || die "production's ACTIVITY_RESOURCES_ROOT ($prod_files) is not a directory"
-  [[ $prod_files != "$testing_files" ]] \
-    || die "production and testing share the same ACTIVITY_RESOURCES_ROOT ($prod_files); give testing its own directory first (see docs/environments.md), or pass --no-files"
-  case "$prod_files/" in "$testing_files"/*) die "production's ACTIVITY_RESOURCES_ROOT is inside testing's ($testing_files)" ;; esac
-  case "$testing_files/" in "$prod_files"/*) die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) is inside production's" ;; esac
-  # The contents of testing's directory are about to be deleted, so refuse
-  # anything that isn't clearly an activity resources tree: a top-level
-  # directory, or one holding anything but numeric activity-id directories.
-  [[ $testing_files =~ ^/[^/]+(/[^/]+)+$ ]] \
-    || die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) is too close to the filesystem root to empty safely"
-  if [[ -d $testing_files ]]; then
-    stray=$(find "$testing_files" -regextype posix-extended -mindepth 1 -maxdepth 1 \( ! -type d -o ! -regex '.*/[0-9]+' \) -print -quit)
-    [[ -z $stray ]] \
-      || die "testing's ACTIVITY_RESOURCES_ROOT ($testing_files) contains $stray, which is not an activity directory; refusing to empty it"
-    probe_dir=$testing_files
-  else
-    probe_dir=$(dirname "$testing_files")
-    [[ -d $probe_dir ]] || die "the parent of testing's ACTIVITY_RESOURCES_ROOT ($probe_dir) does not exist"
-  fi
-  [[ $(stat -c %d "$prod_files") == "$(stat -c %d "$probe_dir")" ]] \
-    || die "$prod_files and $probe_dir are on different filesystems, so hard links between them are impossible"
-  sample=$(find "$prod_files" -type f -print -quit)
-  if [[ -n $sample ]]; then
-    probe="$probe_dir/.link-probe.$$"
-    ln -- "$sample" "$probe" 2>/dev/null \
-      || die "cannot hard-link production's files from here (fs.protected_hardlinks only lets a user link files they own, other than root)"
-    rm -f -- "$probe"
-  fi
+if ((copy_files)); then
+  for var in "${file_vars[@]}"; do
+    prod_dir=$(env_value "$prod_env" "$var")
+    testing_dir=$(env_value "$testing_env" "$var")
+    prod_dir=$(realpath -m -- "${prod_dir:-${file_defaults[$var]}}")
+    testing_dir=$(realpath -m -- "${testing_dir:-${file_defaults[$var]}}")
+    prod_files[$var]=$prod_dir
+    testing_files[$var]=$testing_dir
+
+    [[ -d $prod_dir ]] || die "production's $var ($prod_dir) is not a directory"
+    [[ $prod_dir != "$testing_dir" ]] \
+      || die "production and testing share the same $var ($prod_dir); give testing its own directory first (see docs/environments.md), or pass --no-files"
+    case "$prod_dir/" in "$testing_dir"/*) die "production's $var is inside testing's ($testing_dir)" ;; esac
+    case "$testing_dir/" in "$prod_dir"/*) die "testing's $var ($testing_dir) is inside production's" ;; esac
+    # The contents of testing's directory are about to be deleted, so refuse
+    # anything that isn't clearly one of these trees: a top-level
+    # directory, or one holding anything but numeric id directories.
+    [[ $testing_dir =~ ^/[^/]+(/[^/]+)+$ ]] \
+      || die "testing's $var ($testing_dir) is too close to the filesystem root to empty safely"
+    if [[ -d $testing_dir ]]; then
+      stray=$(find "$testing_dir" -regextype posix-extended -mindepth 1 -maxdepth 1 \( ! -type d -o ! -regex '.*/[0-9]+' \) -print -quit)
+      [[ -z $stray ]] \
+        || die "testing's $var ($testing_dir) contains $stray, which is not a numeric id directory; refusing to empty it"
+      probe_dir=$testing_dir
+    else
+      probe_dir=$(dirname "$testing_dir")
+      [[ -d $probe_dir ]] || die "the parent of testing's $var ($probe_dir) does not exist"
+    fi
+    [[ $(stat -c %d "$prod_dir") == "$(stat -c %d "$probe_dir")" ]] \
+      || die "$prod_dir and $probe_dir are on different filesystems, so hard links between them are impossible"
+    sample=$(find "$prod_dir" -type f -print -quit)
+    if [[ -n $sample ]]; then
+      probe="$probe_dir/.link-probe.$$"
+      ln -- "$sample" "$probe" 2>/dev/null \
+        || die "cannot hard-link production's files from here (fs.protected_hardlinks only lets a user link files they own, other than root)"
+      rm -f -- "$probe"
+    fi
+  done
+  # The two trees must not overlap each other either.
+  [[ ${testing_files[ACTIVITY_RESOURCES_ROOT]} != "${testing_files[TRANSACTION_FILES_ROOT]}" ]] \
+    || die "testing's ACTIVITY_RESOURCES_ROOT and TRANSACTION_FILES_ROOT are the same directory"
 fi
 
 label() { [[ -z $1 ]] || printf ' (%s)' "$1"; }
 if ((copy_files)); then
-  files_line="activity files:      $testing_files emptied, then hard-linked from $prod_files"
-  lost="the testing database and its activity files"
+  files_line=""
+  for var in "${file_vars[@]}"; do
+    files_line+="  $var: ${testing_files[$var]} emptied, then hard-linked from ${prod_files[$var]}"$'\n'
+  done
+  files_line=${files_line%$'\n'}
+  lost="the testing database and its activity and transaction files"
 else
-  files_line="activity files:      left alone (--no-files)"
+  files_line="  files:               left alone (--no-files)"
   lost="the testing database"
 fi
 cat <<EOF
 About to REPLACE the testing database with a copy of production's data:
   production (source): ${conn[src.db]} on ${conn[src.host]:-local}:${conn[src.port]}$(label "$(env_value "$prod_env" PUBLIC_BASE_URL)"), migration $prod_version
   testing    (target): ${conn[tgt.db]} on ${conn[tgt.host]:-local}:${conn[tgt.port]}$(label "$(env_value "$testing_env" PUBLIC_BASE_URL)")
-  $files_line
+$files_line
   testing service:     $TESTING_SERVICE (stopped during the copy)
 Everything currently in $lost will be lost.
 EOF
@@ -227,11 +246,13 @@ trap 'echo "error: the copy failed; $TESTING_SERVICE was left stopped" >&2' ERR
 if ((copy_files)); then
   # Before dumping the database, so no file in testing's tree can be newer than
   # the database snapshot (see the note at the top).
-  log "replacing testing's activity files with hard links to production's"
-  mkdir -p -- "$testing_files"
-  find "$testing_files" -mindepth 1 -delete
-  cp -al -- "$prod_files"/. "$testing_files"/
-  log "linked $(find "$testing_files" -type f | wc -l) files"
+  for var in "${file_vars[@]}"; do
+    log "replacing testing's $var with hard links to production's"
+    mkdir -p -- "${testing_files[$var]}"
+    find "${testing_files[$var]}" -mindepth 1 -delete
+    cp -al -- "${prod_files[$var]}"/. "${testing_files[$var]}"/
+    log "linked $(find "${testing_files[$var]}" -type f | wc -l) files"
+  done
 fi
 
 log "emptying the testing database"

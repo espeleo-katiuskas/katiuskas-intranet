@@ -64,10 +64,12 @@ services:
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
+      TRANSACTION_FILES_ROOT: "/data/transaction-files"
     volumes:
       - ./library:/data/library
       - ./user-files:/data/user-files
       - activity_resources_data:/data/activity-resources
+      - transaction_files_data:/data/transaction-files
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,3 +146,4 @@ services:
 volumes:
   postgres_data:
   activity_resources_data:
+  transaction_files_data:

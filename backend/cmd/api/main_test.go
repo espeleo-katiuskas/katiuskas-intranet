@@ -33,6 +33,7 @@ func testConfig(t *testing.T) config.Config {
 		LibraryRoot:           t.TempDir(),
 		UserFilesRoot:         t.TempDir(),
 		ActivityResourcesRoot: t.TempDir(),
+		TransactionFilesRoot:  t.TempDir(),
 	}
 }
 

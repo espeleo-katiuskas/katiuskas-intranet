@@ -53,6 +53,9 @@ var (
 	// undoes those payments, but the orders have changed since and no longer allow
 	// it (or, with no such hook, the payment is still there). The payment has to be
 	// taken off in the distribution instead.
+	// ErrTransactionHasFiles means documents (tickets, invoices) are still attached to the
+	// transaction: they have to be removed first.
+	ErrTransactionHasFiles                = errors.New("transaction still has attached files: remove them first")
 	ErrTransactionHasDistributionPayments = errors.New("transaction recorded payments of a distribution that can't be undone any more: take them off there")
 	// ErrCircularParent means the given parent_id is this account
 	// itself, or one of its own descendants — setting it would make
@@ -377,9 +380,10 @@ func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, fi
 			UNION ALL
 			SELECT a.id FROM accounts a JOIN subtree s ON a.parent_id = s.id
 		)
-		SELECT transaction_id, account_id, account_name, occurred_at, description, amount, balance_after FROM (
+		SELECT transaction_id, account_id, account_name, occurred_at, description, amount, balance_after, file_count FROM (
 			SELECT t.id AS transaction_id, te.id AS entry_id, te.account_id, a.name AS account_name,
 				t.occurred_at, t.description, te.amount::float8 AS amount,
+				(SELECT COUNT(*) FROM transaction_files f WHERE f.transaction_id = t.id)::int AS file_count,
 				(SUM(te.amount) OVER (ORDER BY t.occurred_at, t.id, te.id))::float8 AS balance_after
 			FROM transaction_entries te
 			JOIN transactions t ON t.id = te.transaction_id
@@ -400,7 +404,7 @@ func (r *Repository) ListAccountEntries(ctx context.Context, accountID int64, fi
 	list := []AccountEntry{}
 	for rows.Next() {
 		var e AccountEntry
-		if err := rows.Scan(&e.TransactionID, &e.AccountID, &e.AccountName, &e.OccurredAt, &e.Description, &e.Amount, &e.BalanceAfter); err != nil {
+		if err := rows.Scan(&e.TransactionID, &e.AccountID, &e.AccountName, &e.OccurredAt, &e.Description, &e.Amount, &e.BalanceAfter, &e.FileCount); err != nil {
 			return nil, err
 		}
 		list = append(list, e)
@@ -664,8 +668,10 @@ func (r *Repository) CreateTransaction(ctx context.Context, in CreateTransaction
 func (r *Repository) GetTransaction(ctx context.Context, id int64) (Transaction, error) {
 	var t Transaction
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, description, occurred_at, created_at FROM transactions WHERE id = $1
-	`, id).Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt)
+		SELECT id, description, occurred_at, created_at,
+			(SELECT COUNT(*) FROM transaction_files WHERE transaction_id = transactions.id)::int
+		FROM transactions WHERE id = $1
+	`, id).Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt, &t.FileCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Transaction{}, ErrTransactionNotFound
 	}
@@ -687,7 +693,9 @@ func (r *Repository) GetTransaction(ctx context.Context, id int64) (Transaction,
 // two round trips regardless of how many transactions are returned.
 func (r *Repository) ListTransactions(ctx context.Context, filter ListFilter) ([]Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, description, occurred_at, created_at FROM transactions
+		SELECT id, description, occurred_at, created_at,
+			(SELECT COUNT(*) FROM transaction_files WHERE transaction_id = transactions.id)::int
+		FROM transactions
 		WHERE ($1::timestamptz IS NULL OR occurred_at >= $1)
 		  AND ($2::timestamptz IS NULL OR occurred_at < $2::timestamptz + interval '1 day')
 		  AND `+descriptionHasWords("description", "$5")+`
@@ -700,7 +708,7 @@ func (r *Repository) ListTransactions(ctx context.Context, filter ListFilter) ([
 	ids := make([]int64, 0)
 	for rows.Next() {
 		var t Transaction
-		if err := rows.Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt, &t.FileCount); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -762,8 +770,9 @@ func (r *Repository) UpdateTransaction(ctx context.Context, id int64, in UpdateT
 	err = tx.QueryRow(ctx, `
 		UPDATE transactions SET description = $1, occurred_at = $2
 		WHERE id = $3
-		RETURNING id, description, occurred_at, created_at
-	`, in.Description, in.OccurredAt, id).Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt)
+		RETURNING id, description, occurred_at, created_at,
+			(SELECT COUNT(*) FROM transaction_files WHERE transaction_id = transactions.id)::int
+	`, in.Description, in.OccurredAt, id).Scan(&t.ID, &t.Description, &t.OccurredAt, &t.CreatedAt, &t.FileCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Transaction{}, ErrTransactionNotFound
 	}
@@ -803,10 +812,13 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
 	if pgErrCode(err) == foreignKeyViolationCode {
-		// Which thing still points at it: a license, or a payment of a distribution.
+		// Which thing still points at it: a license, a payment of a distribution or a file.
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && strings.Contains(pgErr.TableName, "distribution_payments") {
 			return ErrTransactionHasDistributionPayments
+		}
+		if errors.As(err, &pgErr) && pgErr.TableName == "transaction_files" {
+			return ErrTransactionHasFiles
 		}
 		return ErrTransactionHasLicenses
 	}

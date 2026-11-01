@@ -39,6 +39,7 @@ services:
       LIBRARY_ROOT: "/data/library"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
+      TRANSACTION_FILES_ROOT: "/data/transaction-files"
     volumes:
       # Club documents (estatutos, actas...) for every socio to browse —
       # drop files straight into ./library on the host, no rebuild or
@@ -54,6 +55,9 @@ services:
       # is a better fit than a host bind mount: nobody needs host-side
       # access to browse or drop files into it directly.
       - activity_resources_data:/data/activity-resources
+      # The tickets and invoices attached to transactions: they also arrive only through the API
+      # (POST /transactions/{id}/files), so a named volume as well.
+      - transaction_files_data:/data/transaction-files
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,3 +98,4 @@ services:
 volumes:
   postgres_data:
   activity_resources_data:
+  transaction_files_data:

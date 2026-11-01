@@ -20,6 +20,7 @@ Contents:
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
 - [Accounting](#accounting): `accounts`, `transactions`, `transaction_entries`
 - [Club information](#club-information): `club_info_items`
+- [Transaction files](#transaction-files): `transaction_files`
 - [Budgets](#budgets): `budgets`, `budget_items`, `budget_item_accounts`
 - [Functions, triggers and extensions](#functions-triggers-and-extensions)
 - [Seeded data](#seeded-data)
@@ -46,8 +47,9 @@ Contents:
   simulating it. What depends on several rows or on other tables and does not fit in a constraint is
   checked by the Go service, and is stated in each table (section "Rules outside the database").
 - **Files outside PostgreSQL**: the document archive (`LIBRARY_ROOT`), each person's files
-  (`USER_FILES_ROOT`) and the files of an activity's memoria (`ACTIVITY_RESOURCES_ROOT`) are on
-  disk; in the database only the metadata of the latter remains (`activity_resources`).
+  (`USER_FILES_ROOT`), the files of an activity's memoria (`ACTIVITY_RESOURCES_ROOT`) and the
+  documents attached to transactions (`TRANSACTION_FILES_ROOT`) are on disk; in the database only
+  the metadata of the last two remains (`activity_resources`, `transaction_files`).
 
 ## Map of relationships
 
@@ -1103,6 +1105,37 @@ Rules outside the database:
   `transaction_entries_balance`, deferred until `COMMIT`; the repositories force it immediate inside
   their own transaction, because under the tests the real `COMMIT` never arrives.
 
+## Transaction files
+
+### `transaction_files`
+
+Documents (tickets, invoices) attached to a transaction (migration `00040`). This table only holds
+the metadata; a file's bytes live on disk (`TRANSACTION_FILES_ROOT`), one file per row at
+`<transaction id>/<row id>`, created once and never rewritten (so that the copy of production's
+files into testing can share them by hard link).
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `transaction_id` | bigint | no |  |
+| `file_name` | text | no |  |
+| `content_type` | text | no |  |
+| `file_size` | integer | no |  |
+| `uploaded_by` | bigint | yes |  |
+| `created_at` | timestamptz | no | `now()` |
+
+Constraints:
+
+- primary key (id)
+- `transaction_id` references `transactions` with no delete action: a transaction that still has
+  files cannot be deleted (the API answers 409 `transaction_has_files`)
+- `uploaded_by` references `users` (`ON DELETE SET NULL`)
+- `file_name` and `content_type` are not blank; `file_size > 0`
+- `idx_transaction_files_transaction_id` on `(transaction_id)`
+
+Rules outside the database: at most 10 MiB per file (the API), and the type is decided from the
+bytes.
+
 ## Club information
 
 ### `club_info_items`
@@ -1261,3 +1294,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00037_tokens_last_used_user_agent.sql`: `tokens.last_used_user_agent`
 - `00038_tokens_sliding_expiry.sql`: `tokens.lifetime`, so a session expires after its last use
 - `00039_budgets.sql`: `budget_kind`, `budgets`, `budget_items`, `budget_item_accounts`
+- `00040_transaction_files.sql`: `transaction_files`

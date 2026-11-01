@@ -1119,6 +1119,11 @@ replaces the flags: leaving one out turns it off.
   that went through it.
 - Correcting a transaction (`PATCH`) replaces its description, its date and the whole set of
   entries at once; there is no editing of a single entry.
+- Documents (tickets, invoices) can be attached to a transaction, up to 10 MiB each: the metadata in
+  the database (`transaction_files`), the bytes on disk (`TRANSACTION_FILES_ROOT`). Everybody who
+  can sign in sees that a transaction has files, admin, board and money read them, admin and money
+  attach and remove. A transaction that still has files cannot be deleted (409
+  `transaction_has_files`).
 - Deleting a transaction takes its entries with it and, by cascade, the dues it paid. If any
   license names it as its payment it cannot be deleted (409 `transaction_has_licenses`), because
   `licenses.transaction_id` is `ON DELETE RESTRICT`: a license is valid even if the trace of how
@@ -1191,7 +1196,7 @@ resource's `handler.go` is the only layer that knows HTTP exists.
 - One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
   `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
   `accounting`, `clubinfo` (the home page's "datos de interés", editable from `/admin`) and
-  `budgets` (the yearly budgets).
+  `budgets` (the yearly budgets) and `transactionfiles` (documents attached to transactions).
   Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
 - `adminstatus` (`GET /admin/status`) is not a domain resource: it only reads, and has a single
   `handler.go` (see "Estado del sistema" in the `/admin` page).
@@ -1459,6 +1464,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | `/presupuestos` (`presupuestos.html`/`budgets.js`) | The budget of a year (selector): income and expenses tables with each line item's accounts, budgeted amount, what was really received or spent and the percentage reached (with a bar), the totals of both parts, and a notice for accounts the budget does not cover. | Sidebar: any baseline role. Editing: admin and money. | Admin and money get "Editar presupuesto", "Borrar presupuesto" and, for a year without one, "Crear presupuesto" (it starts from the closest earlier year's items); the editor adds accounts one at a time or a whole group's, and shows both sums and the accounts still without an item as it is edited. |
 | `/admin` (`admin.html`/`admin.js`) | What only interests administrators; for now, the list of roles with create and delete (`GET`/`POST`/`DELETE /roles`), and, unfoldable under each one, which people have it (from `GET /users`), with "×" to remove it and a search with "Dar este rol" to assign it (`POST`/`DELETE /users/{login}/roles`); the automatic roles only show who has them, and one is not offered to remove one's own admin role; and the open sessions (`GET /tokens`): who, when and from where, with "Revocar" and "Caducidad" for the active ones (and a different warning if one's own is revoked); and the system status (`GET /admin/status`): version, database and migration, email, Telegram, timeouts and directories. Also the holidays of the activities calendar, year by year (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): with "Nuevo festivo", "Borrar" and "Copiar del año anterior" (same day and month, except where there is one already; the movable ones, such as Semana Santa, are corrected by hand). | Only admin: the "Admin" entry of the menu is seen only by them and anyone else is sent to the home page. | It is meant to grow with more administration sections. |
 | `/cuenta?id=…` | Ledger of an account. | Only admin and `money` role. | Creating and correcting transactions and, from their dialogs, recording dues and licenses against the transaction. |
+| `/justificantes` (`justificantes.html`/`transactionFilesPage.js`) | Every file attached to a transaction, with the transaction's date, description, amount and accounts (each entry with its sign), a year filter and "Ver más". | Sidebar: admin, board and money. | A file opens in a tab (a PDF or an image is shown, anything else downloads). The accounts link to their ledger only for admin and money. |
 | `login.html` | Sign-in by email and phone, with Telegram as a second way. | No session. | It is the only page without a sidebar or `initPage()`. If a session is started in another window (the link in the email is usually opened in another one), this one moves to `/` by itself: `auth.js` watches the `token` in `localStorage` and checks it with `GET /auth/me`. |
 
 ### A person's page (`/socio`)

@@ -92,8 +92,12 @@ type Config struct {
 	// drop-in-by-hand tree), so it's backed by a named Docker volume
 	// rather than a host bind mount (see docker-compose.yml).
 	ActivityResourcesRoot string
+	// TransactionFilesRoot is the directory internal/transactionfiles saves the documents
+	// (tickets, invoices) attached to transactions to, one subdirectory per transaction. Like
+	// ActivityResourcesRoot it is written to by the API, so it is backed by a named volume.
+	TransactionFilesRoot string
 	// DiskAlertPercent is the share of a filesystem holding LibraryRoot,
-	// UserFilesRoot or ActivityResourcesRoot that may be used before the
+	// UserFilesRoot, ActivityResourcesRoot or TransactionFilesRoot that may be used before the
 	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
 	// that warning off. Set with DISK_ALERT_PERCENT, 90 by default.
 	DiskAlertPercent int
@@ -123,6 +127,7 @@ func Load() (Config, error) {
 		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
 		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
 		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
+		TransactionFilesRoot:  getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")

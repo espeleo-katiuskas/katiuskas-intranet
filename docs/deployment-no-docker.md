@@ -40,7 +40,8 @@ own at `127.0.0.1:64710` — the same entry point the Docker guide uses.
 ├── data/
 │   ├── library/           # LIBRARY_ROOT
 │   ├── user-files/        # USER_FILES_ROOT
-│   └── activity-resources/ # ACTIVITY_RESOURCES_ROOT
+│   ├── activity-resources/ # ACTIVITY_RESOURCES_ROOT
+│   └── transaction-files/  # TRANSACTION_FILES_ROOT
 └── api.env                # environment variables of the systemd service, not readable by others
 ```
 
@@ -49,7 +50,7 @@ Everything owned by a dedicated system user, with no login shell:
 ```sh
 sudo useradd --system --create-home --home-dir /opt/katiuskas-intranet \
   --shell /usr/sbin/nologin intranet
-sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/library,data/user-files,data/activity-resources}
+sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/library,data/user-files,data/activity-resources,data/transaction-files}
 sudo chown -R intranet:intranet /opt/katiuskas-intranet
 ```
 
@@ -144,6 +145,7 @@ PUBLIC_BASE_URL=https://intranet.tudominio.org
 LIBRARY_ROOT=/opt/katiuskas-intranet/data/library
 USER_FILES_ROOT=/opt/katiuskas-intranet/data/user-files
 ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
+TRANSACTION_FILES_ROOT=/opt/katiuskas-intranet/data/transaction-files
 # Leave the four SMTP_* commented out to send no real email: the magic
 # sign-in links are then logged in `journalctl -u katiuskas-api`.
 #SMTP_HOST=smtp.tudominio.org
@@ -372,6 +374,7 @@ the same as in `docs/deployment.md` but over real disk paths instead of Docker v
 ```sh
 sudo -u postgres pg_dump intranet > backup-$(date +%Y%m%d).sql
 tar czf activity-resources-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data activity-resources
+tar czf transaction-files-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data transaction-files
 ```
 
 `/opt/katiuskas-intranet/data/library` and `/opt/katiuskas-intranet/data/user-files` are ordinary

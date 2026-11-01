@@ -177,6 +177,8 @@ type AccountEntry struct {
 	Description   string    `json:"description"`
 	Amount        float64   `json:"amount"`
 	BalanceAfter  float64   `json:"balance_after"`
+	// FileCount is how many documents (tickets, invoices) are attached to the transaction.
+	FileCount int `json:"file_count"`
 }
 
 // EntryInput is one entry to write as part of CreateTransactionInput or
@@ -196,6 +198,8 @@ type Transaction struct {
 	OccurredAt  time.Time `json:"occurred_at"`
 	CreatedAt   time.Time `json:"created_at"`
 	Entries     []Entry   `json:"entries"`
+	// FileCount is how many documents (tickets, invoices) are attached to it.
+	FileCount int `json:"file_count"`
 }
 
 type CreateTransactionInput struct {

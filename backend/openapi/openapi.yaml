@@ -1755,6 +1755,102 @@ paths:
                 items: { $ref: "#/components/schemas/Activity" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /transactions/{id}/files:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The files attached to a transaction
+      description: Admin, board or money.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TransactionFile" }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin, board or money. }
+        "404": { description: transaction_not_found. }
+    post:
+      summary: Attach a file to a transaction
+      description: >
+        Admin or money. One file (a ticket, an invoice), at most 10 MiB, in the multipart field
+        `file`. Its type is decided from its bytes: a PDF or an image can be shown in the browser,
+        anything else is only downloaded.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransactionFile" }
+        "400": { description: invalid_id, invalid_body or file_required (missing or empty). }
+        "403": { description: Requires admin or money. }
+        "404": { description: transaction_not_found. }
+        "413": { description: file_too_large. }
+
+  /transactions/{id}/files/{fileId}/file:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: fileId, in: path, required: true, schema: { type: integer } }
+      - { name: download, in: query, required: false, schema: { type: string, enum: ["1"] }, description: "1 forces a download of a PDF or an image." }
+    get:
+      summary: The bytes of a file
+      description: >
+        Admin, board or money; the session cookie is accepted too, so a link can open it. A PDF or an
+        image is sent inline, anything else as an attachment (and sandboxed).
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "200": { description: The file }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin, board or money. }
+        "404": { description: not_found (also if the file belongs to another transaction). }
+
+  /transactions/{id}/files/{fileId}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: fileId, in: path, required: true, schema: { type: integer } }
+    delete:
+      summary: Remove a file from a transaction
+      description: Admin or money.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Removed }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin or money. }
+        "404": { description: not_found. }
+
+  /transaction-files:
+    get:
+      summary: Every file attached to a transaction, with the transaction's details
+      description: Admin, board or money. The transaction most recent first.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: year, in: query, required: false, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TransactionFileListing" }
+        "400": { description: invalid_year, invalid_limit or invalid_offset. }
+        "403": { description: Requires admin, board or money. }
+
   /budgets:
     get:
       summary: The years that have a budget
@@ -3458,7 +3554,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — or transaction_has_distribution_payments — its payments in a distribution can no longer be undone. }
+        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — transaction_has_distribution_payments — its payments in a distribution can no longer be undone — or transaction_has_files — files are still attached to it. }
 
 components:
   securitySchemes:
@@ -4266,6 +4362,38 @@ components:
         total_amount: { type: number }
         provisional: { type: boolean, description: "true for a distribution for all members still in draft: the own unit of everybody who qualifies is counted although it isn't made yet." }
 
+    TransactionFile:
+      type: object
+      properties:
+        id: { type: integer }
+        transaction_id: { type: integer }
+        file_name: { type: string }
+        content_type: { type: string }
+        file_size: { type: integer }
+        uploaded_by: { type: string, description: "A login; absent if the person was deleted." }
+        created_at: { type: string, format: date-time }
+
+    TransactionFileListing:
+      allOf:
+        - { $ref: "#/components/schemas/TransactionFile" }
+        - type: object
+          properties:
+            transaction:
+              type: object
+              properties:
+                id: { type: integer }
+                description: { type: string }
+                occurred_at: { type: string, format: date-time }
+                amount: { type: number, description: What the transaction moved (the positive side of its entries). }
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      account_id: { type: integer }
+                      account_name: { type: string }
+                      amount: { type: number }
+
     BudgetAccount:
       type: object
       properties:
@@ -4666,6 +4794,7 @@ components:
           type: number
           format: double
           description: This account's own running balance immediately after this entry, computed in occurred_at order.
+        file_count: { type: integer, description: How many files (tickets, invoices) are attached to the transaction. }
 
     Entry:
       type: object
@@ -4696,3 +4825,4 @@ components:
         entries:
           type: array
           items: { $ref: "#/components/schemas/Entry" }
+        file_count: { type: integer, description: How many files (tickets, invoices) are attached. }

@@ -1568,3 +1568,9 @@ a.btn {
   gap: 8px;
   margin-left: 16px;
 }
+
+.file-badge {
+  white-space: nowrap;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
