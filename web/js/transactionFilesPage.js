@@ -1,11 +1,9 @@
-import { apiFetch, escapeHtml, formatCurrency, formatDate, hasAnyRole, showError } from './api.js';
+import { apiFetch, escapeHtml, formatCurrency, formatDate, showError } from './api.js';
 import { initPage } from './layout.js';
 import { transactionFileLink } from './transactionFiles.js';
 
 // The sidebar and the API both limit this page to admin, board and money; the API is the authority.
-const user = await initPage({ requireAnyRole: ['admin', 'board', 'money'] });
-// An account's page is only open to admin and money, so for board the accounts are plain text.
-const canOpenAccounts = hasAnyRole(user, ['admin', 'money']);
+await initPage({ requireAnyRole: ['admin', 'board', 'money'] });
 
 const PAGE_SIZE = 50;
 const yearFilter = document.getElementById('year-filter');
@@ -17,9 +15,7 @@ let loaded = 0;
 function accountsCell(entries) {
   return entries
     .map((e) => {
-      const name = canOpenAccounts
-        ? `<a href="/cuenta?id=${e.account_id}">${escapeHtml(e.account_name)}</a>`
-        : escapeHtml(e.account_name);
+      const name = `<a href="/cuenta?id=${e.account_id}">${escapeHtml(e.account_name)}</a>`;
       const sign = e.amount > 0 ? '+' : '';
       return `${name} <span class="hint nowrap">${sign}${formatCurrency(e.amount)}</span>`;
     })

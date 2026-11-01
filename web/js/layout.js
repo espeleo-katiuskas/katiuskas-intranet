@@ -54,7 +54,7 @@ const NAV_ITEMS = [
   {
     href: '/contabilidad',
     label: 'Contabilidad',
-    roles: ['admin', 'money'],
+    roles: ['admin', 'board', 'money'],
     icon: '<circle cx="12" cy="12" r="8.5"/><path d="M14.5 8.5a4 4 0 1 0 0 7"/><line x1="7" y1="10.5" x2="12.5" y2="10.5"/><line x1="7" y1="13.5" x2="12" y2="13.5"/>',
   },
   {

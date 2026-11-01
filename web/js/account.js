@@ -25,11 +25,13 @@ import {
   uploadTransactionFiles,
 } from './transactionFiles.js';
 
-// Reached only from /contabilidad's own account tree — same admin/money
-// gate as that page (see accounting.js's own doc comment for why this
-// is tighter than the API itself, which opens reading to every
-// baseline role).
-const viewer = await initPage({ requireAnyRole: ['admin', 'money'] });
+// Reached only from /contabilidad's own account tree — same admin/board/money gate as that page
+// (see accounting.js's own doc comment for why this is tighter than the API itself, which opens
+// reading to every baseline role). Board only reads: only admin and money get the buttons that
+// create, edit or delete a transaction (and the files attached to them).
+const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'money'] });
+const canWrite = hasAnyRole(viewer, ['admin', 'money']);
+if (!canWrite) document.getElementById('toggle-new-transaction').hidden = true;
 
 // Attaching a due or a brand-new license to a transaction (see
 // setupDuesAndLicensesSection below) hits POST /users/{login}/dues and
@@ -618,7 +620,7 @@ async function loadAccount() {
     }
     renderHeader(account);
     // An account that groups others has no transactions of its own.
-    document.getElementById('toggle-new-transaction').hidden = isGroupView();
+    document.getElementById('toggle-new-transaction').hidden = isGroupView() || !canWrite;
     document.getElementById('entries-account-head').hidden = !isGroupView();
     transactionLines.nt.setLines([]);
     refreshDuesLicensesSections('nt');
@@ -670,9 +672,13 @@ function renderEntryRow(entry) {
   const accountCell = group
     ? `<td><a href="/cuenta?id=${entry.account_id}">${escapeHtml(entry.account_name)}</a></td>`
     : '';
-  const editButton = group
-    ? ''
-    : `<button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>`;
+  const editButton =
+    group || !canWrite
+      ? ''
+      : `<button type="button" class="btn btn-secondary btn-small" data-edit-entry="${entry.transaction_id}">Editar</button>`;
+  const deleteButton = canWrite
+    ? `<button type="button" class="btn btn-danger btn-small" data-delete-entry="${entry.transaction_id}">Borrar</button>`
+    : '';
   return `
     <tr class="entry-row" data-entry-row="${entry.transaction_id}" data-file-count="${entry.file_count ?? 0}" data-entry-account="${entry.account_id}" tabindex="0" aria-expanded="false">
       <td class="nowrap">${formatDate(entry.occurred_at)}</td>
@@ -683,7 +689,7 @@ function renderEntryRow(entry) {
       <td>
         <div class="table-actions">
           ${editButton}
-          <button type="button" class="btn btn-danger btn-small" data-delete-entry="${entry.transaction_id}">Borrar</button>
+          ${deleteButton}
         </div>
       </td>
     </tr>

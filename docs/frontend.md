@@ -25,7 +25,7 @@ and, on a wide screen, can be hidden with the "×" at the top of it: `api.js`'s
 brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match
 the media query). Its own `requireAnyRole` option additionally redirects home
 if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
-(admin/board), of `accounting.js`/`account.js` (admin/money) and of `admin.js` (admin),
+(admin/board), of `accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin),
 tighter than the ordinary
 baseline check every API route already enforces. Which sidebar link reads as "active" is
 computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad`
@@ -335,12 +335,13 @@ but count only shown siblings, and a move repeats once per hidden sibling it has
 endpoint swaps with the very next one, which would otherwise look like nothing happened). A hidden
 account stays offered as the parent picker's choice when it is the current parent — dropping it
 would move the account to the top level on save. A `move`'s own response (the whole reordered list)
-re-renders directly from `applyAccountsList` rather than triggering a follow-up `GET`. Only admin
-and the optional "money" role ever see `/contabilidad` in the sidebar at all, or can even land on
-the page (`hasAnyRole(user, ['admin', 'money'])`, else redirected to `/`) — tighter than the API
-itself, which opens *reading* the chart to every baseline role the same as `GET /transactions`;
-admin/money can already write here too, so nothing on the page needs a narrower check than that one
-gate.
+re-renders directly from `applyAccountsList` rather than triggering a follow-up `GET`. Only admin,
+board and the optional "money" role ever see `/contabilidad` in the sidebar at all, or can even land
+on the page (`requireAnyRole`, else redirected to `/`) — tighter than the API itself, which opens
+*reading* the chart to every baseline role the same as `GET /transactions`. Of those, only admin and
+money write (`canWrite`, `hasAnyRole(user, ['admin', 'money'])`): board reads everything, but the
+page leaves out "+ Nueva cuenta" and each row's ↑ ↓ and "Editar" for it (the API is the authority
+and would refuse them anyway).
 
 **Files attached to transactions.** On `/cuenta` a transaction that has files shows a 📎 (with the
 number when there are several) after its description (`file_count` of the ledger listing); opening a
@@ -352,8 +353,8 @@ and the same input; the files chosen are uploaded one by one once the transactio
 reported with the rest of what could not be registered. Deleting a transaction that still has files
 says so (`transaction_has_files`). `/justificantes` (`transactionFilesPage.js`, sidebar for admin,
 board and money) is the overview: every file from `GET /transaction-files` with its transaction's
-date, description, amount and accounts (each with its sign; links to the account's ledger only for
-admin and money, as board cannot open `/cuenta`), a year filter and "Ver más".
+date, description, amount and accounts (each with its sign, linking to the account's ledger), a year
+filter and "Ver más".
 
 `/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
 selector (the years that have a budget from `GET /budgets`, plus this year and the next; "Otro año"
@@ -378,88 +379,90 @@ page, where the transaction is corrected — no Editar, no new transactions, a h
 like in `/contabilidad`, is the sum of all its descendants' (it comes rolled up from `GET
 /accounts`) — and a row's detail lists the other accounts relative to the account the row is on) —
 reached only by clicking an account's name on `/contabilidad`, never linked from the sidebar itself,
-so it shares that same admin/money gate (and `js/layout.js`'s `ACTIVE_ALIASES` maps it back to
-`/contabilidad` for the sidebar's own highlighting, the same `/actividad`→`/actividades`/
-`/socio`→`/socios` treatment every other detail-off-a-listing page gets). Renders `GET
-/accounts/{id}/transactions` (see [Accounting](backend-internals.md#accounting)) as a table — date,
-description, this account's own entry amount, its running balance after, and per-row Editar/Borrar
-(a row also opens on a click anywhere but those buttons, or Enter/Space when focused — see below).
-The listing is paginated (`loadEntries`): the newest 50 (`ENTRIES_PAGE_SIZE`) first, "Ver más" for
-the next ones, and above it a "Buscar en la descripción" box with a Desde/Hasta filter (the
-`limit`/`offset`/`from`/`to`/`q` query parameters of that route, applied with "Filtrar"; it asks for
-one entry more than a page just to know whether to show "Ver más"). A "+ Nueva transacción" dialog,
-deliberately narrower than the full `POST /transactions` shape, creates transactions: a date, a
-description, and a growing list of *lines* (`setupEntryLines`), each an amount "en esta cuenta" plus
-the "otra cuenta" it comes from or goes to. As soon as the last line has both fields a new empty one
-appears below it; a line with neither is ignored, one with only one is an error, the same account
-can't be on two lines, and the account picker starts on a "— Elige una cuenta —" placeholder
-precisely so "filled" means something. On save (`entriesBody`, shared by creating a new transaction
-and correcting an existing one) this account gets one entry for the *sum* of every line's amount,
-added up in whole cents so floating point never shows up in the result, and each other account gets
-the exact negative of its own line — so the entries sum to zero without whoever is typing having to
-think about the balancing side. Amounts that cancel out (this account would get a zero entry) are
-refused. A read-only "Total en esta cuenta" next to the date (`updateTotal`) shows that sum live, on
-every keystroke, so it counts a line whose account isn't picked yet and ignores an empty or
-non-numeric amount. A row's own "Editar" fetches that one transaction fresh (`GET
-/transactions/{id}`, never kept in memory alongside the ledger listing, which only ever carries this
-account's own side of each one) and turns each of its *other* entries into a line (amount negated
-back); if it doesn't have exactly one entry on this account, or has no other entry (only possible by
-calling the API directly), editing is refused with an explanation instead of silently merging them.
-The dues/licenses sections follow every account picked on any line (`sectionsFor`), not just one.
-"Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete buttons use) removes the whole
-transaction, every entry included. Clicking a ledger row (`tr.entry-row`, `toggleEntryDetail`)
-expands a detail row right below it — starting under "Descripción" (an empty first cell), with no
-line between the two and the same background, so it reads as the continuation of the row above
-rather than as another row — listing the transaction's *other* accounts — each name (just the name,
-no code — the code only appears in the page's own header) linking to that account's own ledger, with
-the amount it gained (`+`) or lost (`−`; `signedCurrency`) — fetched with `GET /transactions/{id}`
-the first time (the listing only ever carries this account's own side, see `AccountEntry`) and
-resolved to names from `allAccounts`, which the page already has; it works for transactions of any
-number of entries. Under them it also lists the cuotas anuales and licencias the transaction paid
-for — each as the person's name (from `GET /users/directory`, which the page loads for everyone who
-can reach it, not just for the admin pickers) linking to `/socio`, plus year (and license type) —
-from the `dues`/`licenses` that same response carries for admin/board only, so they simply don't
-appear for anyone else. Clicking the row again collapses it, a click on Editar/Borrar or on a link
-never toggles it, and any reload of the list starts every row collapsed. Pressing "n" anywhere on
-the page opens the new-transaction dialog (ignored while typing in a field, with a modifier held, or
-with a dialog already open), which puts focus on the date; the edit dialog puts it on the
-description. The date input only ever collects a plain date, but `occurred_at` is a real timestamp —
-sent as that date at noon UTC (not midnight) specifically so `formatDate`'s own local-timezone
-getters can never roll it back to the previous day for anyone viewing from behind UTC; editing an
-existing transaction collapses whatever time of day it actually had down to this same convention.
-Both dialogs also carry, for a real admin only (`data-roles="admin"`; POST dues/licenses is
-admin-only), a "Cuotas anuales a registrar" and a "Licencias nuevas a registrar" section
-(`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a list of pending chips sent as `POST
-/users/{login}/dues`/`licenses` once the transaction itself is saved. Each section is hidden
-(`hidden`) until it could actually succeed: `sectionsFor` shows dues if this account or any account
-picked on a line has `allows_dues`, licenses if any has `allows_licenses`, re-evaluated whenever a
-line's picker changes and whenever a dialog opens, and a section that gets hidden also drops its
-pending chips — otherwise one added while a qualifying account was selected would still be sent, and
-only rejected by the API after the transaction was already saved. Separately from that, the edit
-dialog lists what earlier saves already registered against the transaction, read-only (no ×: nothing
-removes a due) from the `dues`/`licenses` its own `GET /transactions/{id}` already returns
-(`setExisting`): a section stays visible for as long as it has something to list even when no
-account qualifies any more (the flag was since turned off, or the accounts changed) — a record of
-what was paid, not something about to be sent — while its add controls follow the qualifying rule
-above. When neither section applies, a hint explains that an account has to be marked for it, in
-Contabilidad, instead of showing nothing. The "+ Nueva transacción" dialog opens with today's date
-(`todayAsInputValue`, built from local getters: `toISOString()` would be UTC's date, already
-tomorrow's for part of the evening east of it), and each section's "Año" input starts from the
-transaction's date — that date's own year, or the next one in December, since a payment that late is
-almost always for the following year (`suggestedYear`). The inputs keep following the date until the
-person types in one, which is then left alone until the dialog is next opened (`editedYearInputs`,
-cleared by `reset`/`syncYears`); adding a chip puts that input back on the suggestion, and the edit
-dialog does the same from its own date. Each line's "otra cuenta" picker (the same list in the
-create and edit dialogs) leaves hidden accounts out — except those the transaction being edited
-already uses, which stay choosable (`otherAccountOptions`'s `keepHidden`) — and lists every other
-account by name only, no code (indented the same way `accounting.js`'s own pickers are, via
-`flattenAccountTree`) — excluding only this account itself, not its ordinary parent/children the way
-`accounting.js`'s own "cuenta superior" picker excludes descendants: there's no circular
-relationship to guard against here, any two distinct accounts can be on the two sides of a
-transaction. The page's own header (name, code, current balance) and that picker both come from one
-`GET /accounts` call — that listing already carries every account's own balance, so there's no need
-for a second, single-account fetch just for the header (`GET /accounts/{id}` alone never populates
-it — see [Accounting](backend-internals.md#accounting)).
+so it shares that same admin/board/money gate, and board gets no "+ Nueva transacción", "Editar" or
+"Borrar" there (it can open a row's detail and the files attached) (and `js/layout.js`'s
+`ACTIVE_ALIASES` maps it back to `/contabilidad` for the sidebar's own highlighting, the same
+`/actividad`→`/actividades`/ `/socio`→`/socios` treatment every other detail-off-a-listing page
+gets). Renders `GET /accounts/{id}/transactions` (see [Accounting](backend-internals.md#accounting))
+as a table — date, description, this account's own entry amount, its running balance after, and
+per-row Editar/Borrar (a row also opens on a click anywhere but those buttons, or Enter/Space when
+focused — see below). The listing is paginated (`loadEntries`): the newest 50 (`ENTRIES_PAGE_SIZE`)
+first, "Ver más" for the next ones, and above it a "Buscar en la descripción" box with a Desde/Hasta
+filter (the `limit`/`offset`/`from`/`to`/`q` query parameters of that route, applied with "Filtrar";
+it asks for one entry more than a page just to know whether to show "Ver más"). A "+ Nueva
+transacción" dialog, deliberately narrower than the full `POST /transactions` shape, creates
+transactions: a date, a description, and a growing list of *lines* (`setupEntryLines`), each an
+amount "en esta cuenta" plus the "otra cuenta" it comes from or goes to. As soon as the last line
+has both fields a new empty one appears below it; a line with neither is ignored, one with only one
+is an error, the same account can't be on two lines, and the account picker starts on a "— Elige una
+cuenta —" placeholder precisely so "filled" means something. On save (`entriesBody`, shared by
+creating a new transaction and correcting an existing one) this account gets one entry for the *sum*
+of every line's amount, added up in whole cents so floating point never shows up in the result, and
+each other account gets the exact negative of its own line — so the entries sum to zero without
+whoever is typing having to think about the balancing side. Amounts that cancel out (this account
+would get a zero entry) are refused. A read-only "Total en esta cuenta" next to the date
+(`updateTotal`) shows that sum live, on every keystroke, so it counts a line whose account isn't
+picked yet and ignores an empty or non-numeric amount. A row's own "Editar" fetches that one
+transaction fresh (`GET /transactions/{id}`, never kept in memory alongside the ledger listing,
+which only ever carries this account's own side of each one) and turns each of its *other* entries
+into a line (amount negated back); if it doesn't have exactly one entry on this account, or has no
+other entry (only possible by calling the API directly), editing is refused with an explanation
+instead of silently merging them. The dues/licenses sections follow every account picked on any line
+(`sectionsFor`), not just one. "Borrar" (`confirm`-gated, the same pattern `member.js`'s own delete
+buttons use) removes the whole transaction, every entry included. Clicking a ledger row
+(`tr.entry-row`, `toggleEntryDetail`) expands a detail row right below it — starting under
+"Descripción" (an empty first cell), with no line between the two and the same background, so it
+reads as the continuation of the row above rather than as another row — listing the transaction's
+*other* accounts — each name (just the name, no code — the code only appears in the page's own
+header) linking to that account's own ledger, with the amount it gained (`+`) or lost (`−`;
+`signedCurrency`) — fetched with `GET /transactions/{id}` the first time (the listing only ever
+carries this account's own side, see `AccountEntry`) and resolved to names from `allAccounts`, which
+the page already has; it works for transactions of any number of entries. Under them it also lists
+the cuotas anuales and licencias the transaction paid for — each as the person's name (from `GET
+/users/directory`, which the page loads for everyone who can reach it, not just for the admin
+pickers) linking to `/socio`, plus year (and license type) — from the `dues`/`licenses` that same
+response carries for admin/board only, so they simply don't appear for anyone else. Clicking the row
+again collapses it, a click on Editar/Borrar or on a link never toggles it, and any reload of the
+list starts every row collapsed. Pressing "n" anywhere on the page opens the new-transaction dialog
+(ignored while typing in a field, with a modifier held, or with a dialog already open), which puts
+focus on the date; the edit dialog puts it on the description. The date input only ever collects a
+plain date, but `occurred_at` is a real timestamp — sent as that date at noon UTC (not midnight)
+specifically so `formatDate`'s own local-timezone getters can never roll it back to the previous day
+for anyone viewing from behind UTC; editing an existing transaction collapses whatever time of day
+it actually had down to this same convention. Both dialogs also carry, for a real admin only
+(`data-roles="admin"`; POST dues/licenses is admin-only), a "Cuotas anuales a registrar" and a
+"Licencias nuevas a registrar" section (`setupDuesAndLicensesSection`, prefix `nt`/`et`), each a
+list of pending chips sent as `POST /users/{login}/dues`/`licenses` once the transaction itself is
+saved. Each section is hidden (`hidden`) until it could actually succeed: `sectionsFor` shows dues
+if this account or any account picked on a line has `allows_dues`, licenses if any has
+`allows_licenses`, re-evaluated whenever a line's picker changes and whenever a dialog opens, and a
+section that gets hidden also drops its pending chips — otherwise one added while a qualifying
+account was selected would still be sent, and only rejected by the API after the transaction was
+already saved. Separately from that, the edit dialog lists what earlier saves already registered
+against the transaction, read-only (no ×: nothing removes a due) from the `dues`/`licenses` its own
+`GET /transactions/{id}` already returns (`setExisting`): a section stays visible for as long as it
+has something to list even when no account qualifies any more (the flag was since turned off, or the
+accounts changed) — a record of what was paid, not something about to be sent — while its add
+controls follow the qualifying rule above. When neither section applies, a hint explains that an
+account has to be marked for it, in Contabilidad, instead of showing nothing. The "+ Nueva
+transacción" dialog opens with today's date (`todayAsInputValue`, built from local getters:
+`toISOString()` would be UTC's date, already tomorrow's for part of the evening east of it), and
+each section's "Año" input starts from the transaction's date — that date's own year, or the next
+one in December, since a payment that late is almost always for the following year
+(`suggestedYear`). The inputs keep following the date until the person types in one, which is then
+left alone until the dialog is next opened (`editedYearInputs`, cleared by `reset`/`syncYears`);
+adding a chip puts that input back on the suggestion, and the edit dialog does the same from its own
+date. Each line's "otra cuenta" picker (the same list in the create and edit dialogs) leaves hidden
+accounts out — except those the transaction being edited already uses, which stay choosable
+(`otherAccountOptions`'s `keepHidden`) — and lists every other account by name only, no code
+(indented the same way `accounting.js`'s own pickers are, via `flattenAccountTree`) — excluding only
+this account itself, not its ordinary parent/children the way `accounting.js`'s own "cuenta
+superior" picker excludes descendants: there's no circular relationship to guard against here, any
+two distinct accounts can be on the two sides of a transaction. The page's own header (name, code,
+current balance) and that picker both come from one `GET /accounts` call — that listing already
+carries every account's own balance, so there's no need for a second, single-account fetch just for
+the header (`GET /accounts/{id}` alone never populates it — see
+[Accounting](backend-internals.md#accounting)).
 
 `/socios` (`members.js`) is a read-only, sortable table of people; every action about a person lives
 on their own `/socio?login=<login>` page, which a row opens for admin/board only. "+ Nueva persona"

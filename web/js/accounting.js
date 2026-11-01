@@ -3,6 +3,7 @@ import {
   escapeHtml,
   formatDate,
   formatCurrency,
+  hasAnyRole,
   showFeedback,
   showError,
 } from './api.js';
@@ -16,15 +17,14 @@ import {
 } from './accountTree.js';
 import { initModal, openModal } from './modal.js';
 
-// This whole page is restricted to admin/money, tighter than the API
-// itself (GET /accounts is open to every baseline role — see
-// docs/architecture.md's own accounts section) — reading the club's
-// finances is fine for any socio, but managing the chart of accounts
-// itself isn't something to even show as a destination in the nav for
-// anyone else. Both roles can also write here (POST/PATCH/move all
-// accept "admin" or "money"), so nothing on this page needs a narrower
-// check than this one gate.
-await initPage({ requireAnyRole: ['admin', 'money'] });
+// This whole page is restricted to admin, board and money, tighter than the API itself
+// (GET /accounts is open to every baseline role — see docs/architecture.md's own accounts
+// section): reading the club's finances is for the people who run it, and the nav only offers it
+// to them. Of those, admin and money can also write here (POST/PATCH/move all accept "admin" or
+// "money"); board only reads, so it gets none of the buttons that change something.
+const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'money'] });
+const canWrite = hasAnyRole(viewer, ['admin', 'money']);
+if (!canWrite) document.getElementById('toggle-new-account').remove();
 
 let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see accountTree.js
 let allAccounts = []; // every account, hidden ones included, exactly as GET /accounts answered
@@ -104,11 +104,15 @@ function renderAccountRow({ account, depth, isFirst, isLast }) {
       <td class="balance-cell">${formatCurrency(account.balance ?? 0)}</td>
       <td class="nowrap">${account.last_transaction_at ? formatDate(account.last_transaction_at) : '—'}</td>
       <td>
-        <div class="table-actions">
+        ${
+          canWrite
+            ? `<div class="table-actions">
           ${isFirst ? '' : `<button type="button" class="btn btn-secondary btn-small" data-account-move-up="${account.id}">↑</button>`}
           ${isLast ? '' : `<button type="button" class="btn btn-secondary btn-small" data-account-move-down="${account.id}">↓</button>`}
           <button type="button" class="btn btn-secondary btn-small" data-edit-account="${account.id}">Editar</button>
-        </div>
+        </div>`
+            : ''
+        }
       </td>
     </tr>
   `;
@@ -285,7 +289,7 @@ const newAccountForm = document.getElementById('new-account-form');
 initModal(newAccountDialog, newAccountForm);
 document.getElementById('na-type').innerHTML = accountTypeOptions();
 
-document.getElementById('toggle-new-account').addEventListener('click', () => {
+document.getElementById('toggle-new-account')?.addEventListener('click', () => {
   openModal(newAccountDialog);
 });
 
