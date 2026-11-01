@@ -170,9 +170,11 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 // sessionOwner is resolveUserLogin for the routes a person may use on their own sessions: an admin
 // may name anybody (404 for a login nobody has); anybody else only themselves, and a request for
 // another's — or for a login nobody has, so that this cannot be used to check which exist — is a
-// 403. A session started by impersonating someone is not that person acting for themselves, so it
-// cannot see or end their sessions either.
-func (h *Handler) sessionOwner(w http.ResponseWriter, r *http.Request) (int64, bool) {
+// 403. Somebody impersonating that person sees their sessions as the person would (it is what they
+// would see as themselves), but cannot end them (ending = true): a session started by impersonating
+// someone is not that person acting for themselves, and ending sessions is not something to do
+// in their name. The admin who wants to leaves the impersonation first.
+func (h *Handler) sessionOwner(w http.ResponseWriter, r *http.Request, ending bool) (int64, bool) {
 	current, _ := auth.UserFromContext(r.Context())
 	userID, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
 	if current.HasAnyRole("admin") {
@@ -182,8 +184,12 @@ func (h *Handler) sessionOwner(w http.ResponseWriter, r *http.Request) (int64, b
 		}
 		return userID, true
 	}
-	if err != nil || userID != current.ID || current.ImpersonatedBy != nil {
+	if err != nil || userID != current.ID {
 		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "you can only see and end your own sessions")
+		return 0, false
+	}
+	if ending && current.ImpersonatedBy != nil {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "sessions can't be ended through an impersonation: leave it first")
 		return 0, false
 	}
 	return userID, true
@@ -207,7 +213,7 @@ func (h *Handler) markCurrent(r *http.Request, list []Token) {
 // default (the audit view an admin gets); ?status=active leaves out the expired and revoked ones,
 // which is what a person sees of their own.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.sessionOwner(w, r)
+	userID, ok := h.sessionOwner(w, r, false)
 	if !ok {
 		return
 	}
@@ -280,7 +286,7 @@ func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.sessionOwner(w, r)
+	userID, ok := h.sessionOwner(w, r, true)
 	if !ok {
 		return
 	}

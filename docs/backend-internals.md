@@ -75,8 +75,9 @@ roles *live* (not baked into the token) via `roles.Service`. `tokens` also expos
 audit and end sessions: `GET` and `DELETE /users/{login}/tokens[/{tokenID}]` are for that person
 themselves (who sees and closes their own sessions from `/perfil`, `?status=active`) or admin
 (`sessionOwner`: anybody else, or a login nobody has, is a 403 so it can't be used to check which
-exist; a session started by impersonating the person is not them acting for themselves, so it can't
-see or end their sessions; closing one's own says "ha cerrado una de sus sesiones" in the log
+exist; somebody impersonating the person sees their sessions, as the person would in their profile,
+but is not them acting for themselves, so can't end them — the admin leaves the impersonation first
+(`sessionOwner`'s `ending`); closing one's own says "ha cerrado una de sus sesiones" in the log
 channel), while `PATCH` (the expiry), `GET /tokens` and `POST /users/{login}/impersonate` are
 admin-only; `GET /tokens` lists everyone's — the active ones by default, `?status=all` for the
 history, paged by `limit`/`offset` — which marks the caller's own session `current`, found by the

@@ -738,9 +738,9 @@ func TestHandlerAPersonSeesAndRevokesTheirOwnSessions(t *testing.T) {
 	expectCode(doRequest(mux, http.MethodGet, "/api/v1/users/nobody.at.all/tokens", adminToken, nil), http.StatusNotFound)
 }
 
-// Somebody impersonating a person is not that person acting for themselves: they can't see or end
-// the person's sessions through it, unless the person is an admin too.
-func TestHandlerAnImpersonationSessionCannotManageThePersonsSessions(t *testing.T) {
+// Somebody impersonating a person sees that person's sessions, as the person would see them in their profile
+// — but is not them acting for themselves, so cannot end them: the admin leaves the impersonation first.
+func TestHandlerAnImpersonationSessionSeesButCannotEndThePersonsSessions(t *testing.T) {
 	mux, resolver, service, tx := newHandlerTestServer(t)
 	ctx := context.Background()
 	person := testutil.InsertUser(t, tx, "")
@@ -752,12 +752,25 @@ func TestHandlerAnImpersonationSessionCannotManageThePersonsSessions(t *testing.
 	resolver[impersonated] = auth.AuthenticatedUser{ID: person.ID, Roles: []string{"member"}, ImpersonatedBy: &admin.ID}
 
 	path := fmt.Sprintf("/api/v1/users/%s/tokens", person.Login)
-	if rec := doRequest(mux, http.MethodGet, path, impersonated, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for an impersonation session, got %d", rec.Code)
+	rec := doRequest(mux, http.MethodGet, path+"?status=active", impersonated, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected the person's sessions to be visible through an impersonation, got %d: %s", rec.Code, rec.Body.String())
 	}
-	list, _ := service.ListForUser(ctx, person.ID)
+	var list []tokens.Token
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 1 || list[0].UserLogin != person.Login {
+		t.Errorf("expected the person's one session, got %v (%v)", list, err)
+	}
+	// Still not somebody else's.
+	other := testutil.InsertUser(t, tx, "")
+	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", other.Login), impersonated, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for another person's sessions, got %d", rec.Code)
+	}
 	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("%s/%d", path, list[0].ID), impersonated, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403 revoking through an impersonation session, got %d", rec.Code)
+		t.Errorf("expected 403 ending a session through an impersonation, got %d", rec.Code)
+	}
+	again, _ := service.ListForUser(ctx, person.ID)
+	if len(again) != 1 || again[0].RevokedAt != nil {
+		t.Errorf("the session must still be there: %+v", again)
 	}
 }
 

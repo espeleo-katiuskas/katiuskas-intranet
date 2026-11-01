@@ -179,6 +179,10 @@ editForm.addEventListener('submit', async (event) => {
 // one in use is signing out, so that one signs out of this browser too.
 const sessionsBody = document.getElementById('sessions-list');
 let sessions = [];
+// Impersonating this person, an admin sees their sessions — as the person would — but the API doesn't
+// let sessions be ended through an impersonation, so the buttons are not offered, and a note says why.
+const impersonating = Boolean(user?.impersonatedBy);
+document.getElementById('sessions-impersonating').hidden = !impersonating;
 // Sorted here (they are all loaded): by last use, when it was opened and when it expires, either way. A
 // session never used counts as the oldest use. Starts with the most recently used first.
 const sessionsSort = { key: 'last_used', desc: true };
@@ -217,7 +221,7 @@ function sessionRow(session) {
       <td>${session.last_used_ip ? escapeHtml(session.last_used_ip) : '—'}</td>
       <td>${formatDateTime(session.created_at)}</td>
       <td>${formatDateTime(session.expires_at)}</td>
-      <td><button type="button" class="btn btn-danger btn-small" data-close-session="${session.id}">${session.current ? 'Cerrar esta sesión' : 'Cerrar'}</button></td>
+      <td>${impersonating ? '' : `<button type="button" class="btn btn-danger btn-small" data-close-session="${session.id}">${session.current ? 'Cerrar esta sesión' : 'Cerrar'}</button>`}</td>
     </tr>`;
 }
 

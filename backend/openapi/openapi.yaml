@@ -676,8 +676,8 @@ paths:
         expires, whether and when it was revoked, and when, from
         where and with which browser it was last used. Anybody else gets
         403 — also for a login nobody has, so this can't check which exist
-        (an admin gets 404) — and a session started by impersonating the
-        person doesn't count as the person.
+        (an admin gets 404). A session started by impersonating the person
+        does see theirs, as the person would in their profile.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -757,7 +757,8 @@ paths:
       description: >
         Open to that person themselves (to close one of their own sessions,
         the one in use included, which is signing out) and to admin; not
-        through a session started by impersonating the person. Idempotent:
+        through a session started by impersonating the person (403: it can
+        see the person's sessions but not end them). Idempotent:
         revoking an already-revoked token still returns 204. Immediately
         ends that session — the next request made with it gets 401.
       security: [{ bearerAuth: [] }]

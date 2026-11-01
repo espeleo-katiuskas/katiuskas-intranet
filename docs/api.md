@@ -198,8 +198,8 @@ positions and are not assigned by hand.
   first, without the token value, with the one making the request marked `current`: all of them by
   default (the audit view), or only the ones not expired or revoked with `?status=active` (what a
   person sees of their own). Anybody else gets 403, also for a login nobody has, so it cannot be
-  used to check which exist (admin gets 404); a session started by impersonating the person doesn't
-  count as them.
+  used to check which exist (admin gets 404). A session started by impersonating the person does see
+  theirs, as the person would in their profile.
   - returns: 200 `[Token]`
   - errors: 400 `invalid_status`; 403 `forbidden`; 404 `not_found` (admin)
 - **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session. Since a
@@ -211,7 +211,8 @@ positions and are not assigned by hand.
 - **DELETE** `/users/{login}/tokens/{tokenID}` — *That person, or admin*. Revokes a session; the
   next request with it gets 401. A person closes their own sessions this way, the one in use
   included (that is signing out); not another's, and not through a session started by impersonating
-  them.
+  them (403): it can see the person's sessions but not end them, the admin leaves the impersonation
+  first.
   - returns: 204
   - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`
 - **POST** `/users/{login}/impersonate` — *Admin*. Opens a short session (1 hour) that acts as that

@@ -165,7 +165,9 @@ its own near-identical copy; `activity.js`'s own memoria-resource downloads impo
 `/perfil` also has a "Mis sesiones" section (`profile.js`, `loadSessions`): the person's sessions
 not expired or revoked (`GET /users/{login}/tokens?status=active`), each with its browser and
 system, last use and address, when it was opened and when it expires, "Esta sesión" on the one in
-use and, if an administrator entered as them, who; its Último uso, Abierta and Caduca headers sort
+use and, if an administrator entered as them, who (and for an administrator impersonating the person
+the section shows the person's sessions with a note, and no "Cerrar" buttons, since the API doesn't
+let sessions be ended through an impersonation); its Último uso, Abierta and Caduca headers sort
 them (the same helper, here in the page itself since they are all loaded; a session never used
 counts as the oldest use), most recently used first to begin with; each has a "Cerrar" button
 (`DELETE .../tokens/{id}`, after a confirmation), and closing the one in use is signing out, so it
