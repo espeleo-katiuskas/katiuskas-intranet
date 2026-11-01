@@ -20,6 +20,7 @@ Contents:
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
 - [Accounting](#accounting): `accounts`, `transactions`, `transaction_entries`
 - [Club information](#club-information): `club_info_items`
+- [Budgets](#budgets): `budgets`, `budget_items`, `budget_item_accounts`
 - [Functions, triggers and extensions](#functions-triggers-and-extensions)
 - [Seeded data](#seeded-data)
 - [Migrations](#migrations)
@@ -1129,6 +1130,53 @@ Constraints:
 `position` is the order of the list (a new item goes last; `PUT /club-info/order` rewrites them
 all).
 
+## Budgets
+
+Migration `00039`. The rules that span rows are checked by the API when it saves a budget, not by
+the database (see [Budgets](backend-internals.md#budgets)).
+
+### `budgets`
+
+One per calendar year.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `year` | integer | no |  |
+
+Constraints: primary key (id); `year` unique and between 1900 and 2200.
+
+### `budget_items`
+
+A line item ("partida") of one part of a budget. The enum `budget_kind` is `income` or `expense`.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `budget_id` | bigint | no |  |
+| `kind` | budget_kind | no |  |
+| `name` | text | no |  |
+| `amount` | numeric(14,2) | no |  |
+| `position` | integer | no |  |
+
+Constraints: primary key (id); `budget_id` references `budgets` (delete cascades); `name` not
+blank; `amount >= 0`; unique `(id, budget_id)`. `position` is the order within the part.
+
+### `budget_item_accounts`
+
+The accounts a line item stands for.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `item_id` | bigint | no |  |
+| `budget_id` | bigint | no |  |
+| `account_id` | bigint | no |  |
+
+Constraints: primary key `(item_id, account_id)`; `(item_id, budget_id)` references
+`budget_items(id, budget_id)` (delete cascades); `account_id` references `accounts` (no delete: an
+account in a budget cannot be deleted); unique `(budget_id, account_id)`, so an account is in one
+item per budget.
+
 ## Functions, triggers and extensions
 
 - **Extension `btree_gist`** (migration 00001): makes possible the `EXCLUDE USING gist` constraint
@@ -1212,3 +1260,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00036_club_info.sql`: `club_info_items` (empty: the data is entered from `/admin`)
 - `00037_tokens_last_used_user_agent.sql`: `tokens.last_used_user_agent`
 - `00038_tokens_sliding_expiry.sql`: `tokens.lifetime`, so a session expires after its last use
+- `00039_budgets.sql`: `budget_kind`, `budgets`, `budget_items`, `budget_item_accounts`

@@ -28,22 +28,22 @@ Contents:
 - [Admin status](#admin-status)
 - [Telegram](#telegram)
 - [Accounting](#accounting)
+- [Budgets](#budgets)
 - [Testing helpers](#testing-helpers)
 
 ## Layers and packages
 
-**Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging,
-panic recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`,
-`roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`distributions`, `inventory`, `tokens`, `accounting`, `clubinfo`; `adminstatus` is the odd one
-out, see below), each split into `model.go` / `repository.go` (pgx) / `service.go` /
-`handler.go`. The domain layer never imports `net/http`; only `handler.go` knows HTTP
-exists. Each resource package owns and registers its own routes via `RegisterRoutes(mux)`,
-wired together in `cmd/api/main.go`. **`internal/library`** (and **`internal/userfiles`**,
-see below) is the one exception to this shape: it serves a read-only document tree from
-disk (`config.LibraryRoot`), not Postgres, so it has no `repository.go` — `service.go`
-works directly against the filesystem, resolving and validating every caller-given path
-against root before touching disk (`Service.resolve`), since there's no database
+**Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging, panic
+recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`, `roles`,
+`memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
+`tokens`, `accounting`, `clubinfo`, `budgets`; `adminstatus` is the odd one out, see below), each
+split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain layer never
+imports `net/http`; only `handler.go` knows HTTP exists. Each resource package owns and registers
+its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
+**`internal/library`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
+it serves a read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
+`repository.go` — `service.go` works directly against the filesystem, resolving and validating every
+caller-given path against root before touching disk (`Service.resolve`), since there's no database
 constraint to lean on for that instead.
 
 **`db.PGX` interface** (`internal/platform/db`): the subset of `*pgxpool.Pool` a
@@ -1205,6 +1205,33 @@ restarts from zero at the edge of a window. Open to any baseline role, same as e
 this package; `Handler.listAccountEntries` checks the account actually exists first (404, not just
 an empty list) since `ListAccountEntries` alone can't tell "no such account" apart from "a real
 account nobody's ever posted against."
+
+## Budgets
+
+**Budgets** (`internal/budgets`, migration `00039`): the budget of a calendar year has two parts,
+income and expenses, each made of line items ("partidas") with an estimated `amount`, and each item
+stands for one or more accounts. `GET /budgets` and `GET /budgets/{year}` are open to any baseline
+role; `PUT` and `DELETE` need admin or `money` (and, like everywhere, a baseline role on top).
+`PUT` creates the year's budget or replaces it whole in one transaction (`Repository.replace`), so
+there is no per-item endpoint. `Service.Save` checks, in Go (they span rows, and an account's type
+can change later): the name is not blank and unique in its part (case-insensitively); the amount is
+zero or more with at most two decimals (it travels as a JSON number and is turned into cents); the
+item has at least one account; every account exists, is a leaf (a group is
+`account_not_budgetable`), has the part's effective type (`account_effective_type`: income in
+`income`, expense in `expenses`) and is in only one item; **every leaf account of effective type
+income or expense that is not hidden is in some item** (`accounts_missing`, naming them; hidden
+accounts may be left out or put in); and the two parts add up to the same (`unbalanced`, with both
+totals). The database only keeps what a row says by itself: one budget per year, `amount >= 0`, and
+an account in one item per budget.
+
+What was really received or spent is computed on read from the entries of the accounts, by the
+transaction's `occurred_at` inside the calendar year (UTC): an income account's actual is minus the
+sum of its entries, an expense account's is the sum. An item's percentage is `actual / amount`
+(`null` when the amount is zero) and the parts have their own. An account created after the budget
+was saved is not in it: `GET` lists it in `unassigned_accounts` with what it moved, and the next
+`PUT` has to include it. An account that appears in a budget cannot be deleted (foreign key). The
+Telegram notices (`describeChanges`) say that a budget was created, deleted or changed (items
+added or removed, amounts and accounts changed), values included.
 
 ## Testing helpers
 

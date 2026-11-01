@@ -1476,3 +1476,84 @@ a.btn {
 .role-detail td {
   background: var(--surface-muted);
 }
+
+/* Presupuestos (budgets.js) */
+.budget-totals {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0 0;
+}
+
+.budget-totals > div {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 14rem;
+}
+
+.budget-totals strong {
+  display: block;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-warning {
+  background: var(--field-dirty-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.budget-bar {
+  display: inline-block;
+  vertical-align: middle;
+  width: 90px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.budget-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+
+.budget-bar.over > span {
+  background: var(--danger);
+}
+
+.budget-dialog {
+  width: min(60rem, 96vw);
+}
+
+.budget-item {
+  display: grid;
+  grid-template-columns: minmax(10rem, 2fr) 9rem 3fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 700px) {
+  .budget-item {
+    grid-template-columns: 1fr;
+  }
+}
+
+.budget-item .badge {
+  margin: 0 4px 4px 0;
+}
+
+.budget-balance {
+  font-weight: 600;
+}
+
+.budget-balance.bad {
+  color: var(--danger);
+}

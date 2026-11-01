@@ -1152,6 +1152,27 @@ for) only for admin and board, because who paid what is private to that person.
 
 ## Backend (`backend/`)
 
+### Budgets (`budgets`, `budget_items`, `budget_item_accounts`)
+
+The club's plan for money, one budget per calendar year (1 January to 31 December), so that it can
+be compared with what really happened. The routes are in [`api.md`](api.md), the columns in
+[`database.md`](database.md) and the details in
+[`backend-internals.md`](backend-internals.md#budgets).
+
+- A budget has two parts, **income** and **expenses**, each made of line items ("partidas") with an
+  estimated amount. Each item stands for one or more accounts of the part's type (an account's
+  effective type, see Chart of accounts), and an account is in one item only. The items can change
+  from one year to the next: a new year's budget is a new one, which the page starts from the
+  closest earlier year's.
+- **The two parts of a year add up to the same amount**, and **a year's budget covers every income
+  and expense account** of the ledger (leaf accounts: a group is covered through its children;
+  hidden accounts are optional). Both are checked when a budget is saved. An account created
+  afterwards is not in the saved budget; the page shows it as not covered, and the next save has to
+  include it.
+- Everybody who can sign in reads budgets; only admin and `money` change them.
+- Consulting a year shows, per item and per part, the amount budgeted, what was really received
+  (income) or spent (expenses) in the year by the accounts of the item, and the percentage reached.
+
 ### Layers and packages
 
 The backend is separated into layers by package. The domain does not depend on `net/http`: each
@@ -1169,7 +1190,8 @@ resource's `handler.go` is the only layer that knows HTTP exists.
   that receives messages (see the "Telegram" subsection).
 - One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
   `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
-  `accounting` and `clubinfo` (the home page's "datos de interés", editable from `/admin`).
+  `accounting`, `clubinfo` (the home page's "datos de interés", editable from `/admin`) and
+  `budgets` (the yearly budgets).
   Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
 - `adminstatus` (`GET /admin/status`) is not a domain resource: it only reads, and has a single
   `handler.go` (see "Estado del sistema" in the `/admin` page).
@@ -1434,6 +1456,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | `/reparto-numeros?id=…` | Numbers: for each article with described numbers, all that exist with who has each one and how many are left free, filterable by free or assigned and by number or name. | Admin, board and material. | `requireAnyRole`; the link appears in the distribution only if some article has described numbers. |
 | `/404` (`404.html`) | The page Caddy shows, with status 404 and without changing the address, for any address that is not a page (`handle_errors` in `deploy/Caddyfile`). With a session it is a normal page, with the menu to go to another one; without it, a plain panel with a link to `/login`. | Anyone. | It uses absolute paths, because it is served at the address that was asked for, however deep. |
 | `/contabilidad` | Chart of accounts in a tree, with balance, hidden accounts on request and reordering. | Only admin and `money` role (sidebar and page). | Narrower than the API, which opens reading to any baseline role. |
+| `/presupuestos` (`presupuestos.html`/`budgets.js`) | The budget of a year (selector): income and expenses tables with each line item's accounts, budgeted amount, what was really received or spent and the percentage reached (with a bar), the totals of both parts, and a notice for accounts the budget does not cover. | Sidebar: any baseline role. Editing: admin and money. | Admin and money get "Editar presupuesto", "Borrar presupuesto" and, for a year without one, "Crear presupuesto" (it starts from the closest earlier year's items); the editor adds accounts one at a time or a whole group's, and shows both sums and the accounts still without an item as it is edited. |
 | `/admin` (`admin.html`/`admin.js`) | What only interests administrators; for now, the list of roles with create and delete (`GET`/`POST`/`DELETE /roles`), and, unfoldable under each one, which people have it (from `GET /users`), with "×" to remove it and a search with "Dar este rol" to assign it (`POST`/`DELETE /users/{login}/roles`); the automatic roles only show who has them, and one is not offered to remove one's own admin role; and the open sessions (`GET /tokens`): who, when and from where, with "Revocar" and "Caducidad" for the active ones (and a different warning if one's own is revoked); and the system status (`GET /admin/status`): version, database and migration, email, Telegram, timeouts and directories. Also the holidays of the activities calendar, year by year (`GET`/`POST /holidays`, `DELETE /holidays/{id}`): with "Nuevo festivo", "Borrar" and "Copiar del año anterior" (same day and month, except where there is one already; the movable ones, such as Semana Santa, are corrected by hand). | Only admin: the "Admin" entry of the menu is seen only by them and anyone else is sent to the home page. | It is meant to grow with more administration sections. |
 | `/cuenta?id=…` | Ledger of an account. | Only admin and `money` role. | Creating and correcting transactions and, from their dialogs, recording dues and licenses against the transaction. |
 | `login.html` | Sign-in by email and phone, with Telegram as a second way. | No session. | It is the only page without a sidebar or `initPage()`. If a session is started in another window (the link in the email is usually opened in another one), this one moves to `/` by itself: `auth.js` watches the `token` in `localStorage` and checks it with `GET /auth/me`. |

@@ -117,7 +117,7 @@ Each point is the short version; the reasons and the edge cases are in `docs/bac
 
 **Layers.** `backend/internal/httpapi` (router, request logging, `WriteJSON`/`WriteError`) → one package
 per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`distributions`, `inventory`, `tokens`, `accounting`), each `model.go` / `repository.go` (pgx) /
+`distributions`, `inventory`, `tokens`, `accounting`, `budgets`), each `model.go` / `repository.go` (pgx) /
 `service.go` / `handler.go`; only `handler.go` knows HTTP. Each package registers its routes with
 `RegisterRoutes(mux)`, wired in `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a
 read-only directory tree from disk (no repository; every caller path goes through `Service.resolve`) and
@@ -188,6 +188,11 @@ constraint trigger (see `db.PGX` above). An account has child accounts **or** tr
 accounts and the default stay `income`, and that `allows_dues`/`allows_licenses` accounts are `income`.
 `GET /accounts` rolls balances and last movement up through the tree; the ledger of a group lists its
 descendants with a combined running balance.
+
+**Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over one or
+more leaf accounts of that type; both parts must add up to the same and every non-hidden income/expense
+account must be in some item (checked in Go on `PUT /budgets/{year}`, which replaces the whole budget).
+Anybody signed in reads (with the real amounts and the percentage); writes are admin or `money`.
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK. Notifications
 are fire-and-forget (own goroutine, bounded timeout, detached context), with two exceptions: the startup

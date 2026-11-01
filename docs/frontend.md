@@ -333,6 +333,22 @@ itself, which opens *reading* the chart to every baseline role the same as `GET 
 admin/money can already write here too, so nothing on the page needs a narrower check than that one
 gate.
 
+`/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
+selector (the years that have a budget from `GET /budgets`, plus this year and the next) loads `GET
+/budgets/{year}` and draws, for income and for expenses, a table with each line item's name and
+accounts, the amount budgeted, what was really received or spent, and the percentage reached (a bar
+and the figure, red beyond 100 %), with the totals of both parts also as two cards at the top;
+accounts the saved budget does not cover are named in a notice. A year without a budget says so.
+Only admin and money (the API is the authority) get the buttons: "Editar presupuesto" and "Borrar
+presupuesto" (`DELETE`, after a confirmation), and, for a year without one, "Crear presupuesto",
+which opens the same dialog starting from the closest earlier year's items (or the later one's). The
+dialog keeps a working copy of both parts: each item has a name, an amount and its accounts as
+removable chips, and a picker that adds one account (leaves of the part's type not yet used in the
+budget) or "Todas las de «group»"; it shows both sums, the difference when they do not match, and
+the accounts still without an item as it is edited, and saves everything with one `PUT
+/budgets/{year}`, whose error messages (`accounts_missing`, `unbalanced`...) come from the API in a
+modal.
+
 `/cuenta?id=…` (`account.js`) is one account's own ledger (for a group, `isGroupView`: its
 descendants' entries with a "Cuenta" column between Fecha and Descripción linking to each one's
 page, where the transaction is corrected — no Editar, no new transactions, a header balance that,

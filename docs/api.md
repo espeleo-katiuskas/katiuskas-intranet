@@ -20,6 +20,7 @@ Contents:
 - [Distributions](#distributions)
 - [Document archive and per-person files](#document-archive-and-per-person-files)
 - [Accounting](#accounting)
+- [Budgets](#budgets)
 - [Objects](#objects)
 
 ## Conventions
@@ -631,6 +632,34 @@ case and accents).
   - returns: 204
   - errors: 400 `invalid_id`; 409 `transaction_has_licenses`,
     `transaction_has_distribution_payments`
+
+## Budgets
+
+The budget of a calendar year (1 January to 31 December): an `income` part and an `expenses` part,
+each made of line items ("partidas") with an estimated amount, each item standing for one or more
+accounts. Everybody who can sign in reads them, with what was really received or spent; only admin
+and money change them. The year in the path is 1900 to 2200 (400 `invalid_year` otherwise).
+
+- **GET** `/budgets` — *Any baseline role*. The years that have a budget, newest first, with their
+  totals.
+  - returns: 200 `[BudgetSummary]`
+- **GET** `/budgets/{year}` — *Any baseline role*. The line items with what each one reached (an
+  income account counts what came in, an expense account what went out, by the date of the
+  transaction) and the totals of both parts. `unassigned_accounts` lists the accounts the saved
+  budget does not cover (created after it) with what they moved.
+  - returns: 200 `Budget`
+  - errors: 400 `invalid_year`; 404 `not_found` (the year has no budget)
+- **PUT** `/budgets/{year}` — *Admin or money*. Creates the budget of the year or replaces it whole.
+  - body: `income*`, `expenses*`, each a list of `{name*, amount*, account_ids*}`
+  - returns: 200 `Budget`
+  - errors: 400 `invalid_body`, `invalid_year`, `invalid_item` (blank name, negative amount or more
+    than two decimals), `duplicate_item` (a name twice in a part), `item_without_accounts`,
+    `unknown_account`, `account_not_budgetable` (a group), `account_type_mismatch` (not income in
+    `income`, not expense in `expenses`), `duplicate_account`; 409 `accounts_missing` (an account
+    of the ledger that is not hidden is in no item; the message names them), `unbalanced` (the two
+    parts do not add up to the same; the message carries both totals)
+- **DELETE** `/budgets/{year}` — *Admin or money*.
+  - returns: 204; errors: 400 `invalid_year`; 404 `not_found`
 
 ## Objects
 

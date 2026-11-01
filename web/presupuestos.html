@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presupuestos — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <div class="section-header">
+    <div>
+      <h1>Presupuestos</h1>
+      <p class="subtitle">Lo que el club prevé ingresar y gastar cada año natural, y cuánto va.</p>
+    </div>
+    <div class="table-actions">
+      <button id="edit-budget" type="button" class="btn btn-secondary btn-small" data-roles="admin,money" hidden>Editar presupuesto</button>
+      <button id="delete-budget" type="button" class="btn btn-secondary btn-small" data-roles="admin,money" hidden>Borrar presupuesto</button>
+    </div>
+  </div>
+
+  <p class="filter-bar">
+    <label for="year-select">Año</label>
+    <select id="year-select"></select>
+  </p>
+
+  <p id="feedback" class="success-message" hidden></p>
+
+  <div id="no-budget" class="panel" hidden>
+    <p id="no-budget-text"></p>
+    <button id="create-budget" type="button" class="btn btn-primary" data-roles="admin,money" hidden>Crear presupuesto</button>
+  </div>
+
+  <div id="budget-view" hidden>
+    <p id="unassigned-warning" class="budget-warning" hidden></p>
+    <div class="budget-totals" id="budget-totals"></div>
+    <h2>Ingresos</h2>
+    <div class="table-wrap"><table id="income-table"></table></div>
+    <h2>Gastos</h2>
+    <div class="table-wrap"><table id="expenses-table"></table></div>
+  </div>
+
+  <dialog id="budget-dialog" class="panel modal budget-dialog">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="budget-dialog-title">Presupuesto</h3>
+    <p class="hint">Cada partida reúne una o más cuentas del mismo tipo, y todas las cuentas de ingresos y de gastos tienen que estar en alguna partida (las ocultas, solo si quieres). Los ingresos y los gastos tienen que sumar lo mismo.</p>
+    <form id="budget-form">
+      <h4>Ingresos</h4>
+      <div id="income-editor"></div>
+      <button type="button" class="btn btn-secondary btn-small" data-add-item="income">+ Partida de ingresos</button>
+      <h4>Gastos</h4>
+      <div id="expenses-editor"></div>
+      <button type="button" class="btn btn-secondary btn-small" data-add-item="expenses">+ Partida de gastos</button>
+      <p id="budget-balance" class="budget-balance"></p>
+      <p id="budget-missing" class="budget-warning" hidden></p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/budgets.js"></script>
+</body>
+</html>

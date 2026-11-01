@@ -1755,6 +1755,70 @@ paths:
                 items: { $ref: "#/components/schemas/Activity" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /budgets:
+    get:
+      summary: The years that have a budget
+      description: Newest first, with the totals of each. Open to any baseline role.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The years
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BudgetSummary" }
+
+  /budgets/{year}:
+    parameters:
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+    get:
+      summary: The budget of a calendar year
+      description: >
+        Line items of income and expenses with the amount budgeted, what was really received (income)
+        or spent (expenses) in the year by their accounts and the percentage reached, and the totals of
+        both parts. `unassigned_accounts` are the accounts the saved budget does not cover. Open to any
+        baseline role.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The budget
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "400": { description: invalid_year. }
+        "404": { description: The year has no budget. }
+    put:
+      summary: Create or replace the budget of a year
+      description: >
+        Admin or money. Replaces the whole budget in one transaction. Every leaf account of income or
+        expense type that is not hidden has to be in an item, an account is in one item only, and the
+        two parts have to add up to the same.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BudgetInput" }
+      responses:
+        "200":
+          description: The budget as saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "400": { description: invalid_body, invalid_year, invalid_item, duplicate_item, item_without_accounts, unknown_account, account_not_budgetable, account_type_mismatch or duplicate_account. }
+        "403": { description: Requires admin or money. }
+        "409": { description: accounts_missing (the message names them) or unbalanced (the message carries both totals). }
+    delete:
+      summary: Delete the budget of a year
+      description: Admin or money.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_year. }
+        "403": { description: Requires admin or money. }
+        "404": { description: The year has no budget. }
+
   /club-info:
     get:
       summary: The club's "datos de interés"
@@ -4201,6 +4265,73 @@ components:
         total_units: { type: integer }
         total_amount: { type: number }
         provisional: { type: boolean, description: "true for a distribution for all members still in draft: the own unit of everybody who qualifies is counted although it isn't made yet." }
+
+    BudgetAccount:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        code: { type: string }
+        hidden: { type: boolean }
+
+    BudgetItem:
+      type: object
+      properties:
+        name: { type: string }
+        amount: { type: number, description: Budgeted. }
+        actual: { type: number, description: What the item's accounts really received (income) or spent (expenses) in the year. }
+        percent: { type: number, nullable: true, description: actual / amount, null when the amount is zero. }
+        accounts: { type: array, items: { $ref: "#/components/schemas/BudgetAccount" } }
+
+    BudgetPart:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BudgetItem" } }
+        amount: { type: number }
+        actual: { type: number }
+        percent: { type: number, nullable: true }
+
+    Budget:
+      type: object
+      properties:
+        year: { type: integer }
+        income: { $ref: "#/components/schemas/BudgetPart" }
+        expenses: { $ref: "#/components/schemas/BudgetPart" }
+        unassigned_accounts:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/BudgetAccount" }
+              - type: object
+                properties:
+                  kind: { type: string, enum: [income, expense] }
+                  actual: { type: number }
+
+    BudgetSummary:
+      type: object
+      properties:
+        year: { type: integer }
+        income_amount: { type: number }
+        income_actual: { type: number }
+        income_percent: { type: number, nullable: true }
+        expenses_amount: { type: number }
+        expenses_actual: { type: number }
+        expenses_percent: { type: number, nullable: true }
+
+    BudgetItemInput:
+      type: object
+      required: [name, amount, account_ids]
+      properties:
+        name: { type: string }
+        amount: { type: number, minimum: 0, description: At most two decimals. }
+        account_ids: { type: array, minItems: 1, items: { type: integer } }
+
+    BudgetInput:
+      type: object
+      required: [income, expenses]
+      properties:
+        income: { type: array, items: { $ref: "#/components/schemas/BudgetItemInput" } }
+        expenses: { type: array, items: { $ref: "#/components/schemas/BudgetItemInput" } }
 
     ClubInfoItem:
       type: object
