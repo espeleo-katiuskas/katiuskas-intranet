@@ -184,7 +184,8 @@ document-relative link resolver, `downloadBlob`) both import, rather than each c
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
-`/perfil` also has a "Mis sesiones" section (`profile.js`, `loadSessions`): the person's sessions
+`/perfil` also has a "Mis sesiones" section (`initSessionsPanel` in `js/sessionsPanel.js`, which
+`/socio` shares, see below): the person's sessions
 not expired or revoked (`GET /users/{login}/tokens?status=active`), each with its browser and
 system, last use and address, when it was opened and when it expires, "Esta sesión" on the one in
 use and, if an administrator entered as them, who (and for an administrator impersonating the person
@@ -193,7 +194,11 @@ let sessions be ended through an impersonation); its Último uso, Abierta and Ca
 them (the same helper, here in the page itself since they are all loaded; a session never used
 counts as the oldest use), most recently used first to begin with; each has a "Cerrar" button
 (`DELETE .../tokens/{id}`, after a confirmation), and closing the one in use is signing out, so it
-also clears the token and goes to `/login`. `perfil.html`/`socio.html` each also render a "Licencias
+also clears the token and goes to `/login`. `/socio` has the same panel as "Sesiones" for an admin
+only (the section carries `data-roles="admin"`, as the API gives anybody's sessions to nobody else):
+the sessions of the person whose page it is, with the same columns, sorting and "Cerrar" buttons
+(an admin can end anybody's), worded for a third person, and on their own page, the admin's own.
+`perfil.html`/`socio.html` each also render a "Licencias
 federativas" section — a year `<select>`, mirroring `dashboard.js`'s own Actas asambleas, plus a
 grid of small clickable thumbnails rather than a plain list of text links — instead of pointing at
 that person's `licencias/` subdirectory (see [Dropping files

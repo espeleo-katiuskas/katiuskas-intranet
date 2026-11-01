@@ -289,6 +289,20 @@
     <div id="uf-file-preview"></div>
   </div>
 
+  <div id="sessions-section" data-roles="admin">
+    <h2>Sesiones</h2>
+    <p class="subtitle">Los dispositivos en los que esta persona tiene la sesión abierta. Cerrar una la obliga a volver a pedir un enlace para entrar.</p>
+    <p class="hint" id="sessions-impersonating" hidden></p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="sessions-head"><th>Navegador</th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th data-sort-key="created">Abierta<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th></th></tr>
+        </thead>
+        <tbody id="sessions-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
     </main>
   </div>
 </div>

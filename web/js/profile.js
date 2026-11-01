@@ -1,14 +1,6 @@
-import {
-  hasAnyRole,
-  apiFetch,
-  escapeHtml,
-  formatDateTime,
-  logout,
-  showFeedback,
-  showError,
-} from './api.js';
+import { hasAnyRole, apiFetch, showFeedback, showError } from './api.js';
 import { initPage } from './layout.js';
-import { initSortableHeaders } from './sortableHeaders.js';
+import { initSessionsPanel } from './sessionsPanel.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
@@ -174,102 +166,9 @@ editForm.addEventListener('submit', async (event) => {
   }
 });
 
-// "Mis sesiones": where the person is signed in (GET /users/{login}/tokens?status=active, the
-// ones not expired or revoked), each of which they can close (DELETE .../tokens/{id}). Closing the
-// one in use is signing out, so that one signs out of this browser too.
-const sessionsBody = document.getElementById('sessions-list');
-let sessions = [];
-// Impersonating this person, an admin sees their sessions — as the person would — but the API doesn't
-// let sessions be ended through an impersonation, so the buttons are not offered, and a note says why.
-const impersonating = Boolean(user?.impersonatedBy);
-document.getElementById('sessions-impersonating').hidden = !impersonating;
-// Sorted here (they are all loaded): by last use, when it was opened and when it expires, either way. A
-// session never used counts as the oldest use. Starts with the most recently used first.
-const sessionsSort = { key: 'last_used', desc: true };
-const sessionDate = {
-  last_used: (s) => s.last_used_at ?? '',
-  created: (s) => s.created_at,
-  expires: (s) => s.expires_at,
-};
-
-function renderSessions() {
-  const sorted = sessions.slice().sort((a, b) => {
-    const [x, y] = [sessionDate[sessionsSort.key](a), sessionDate[sessionsSort.key](b)];
-    // ISO timestamps compare as text; the id breaks a tie the same way for both directions, so the
-    // order is stable.
-    const byDate = x < y ? -1 : x > y ? 1 : 0;
-    return (sessionsSort.desc ? -byDate : byDate) || b.id - a.id;
-  });
-  sessionsBody.innerHTML = sorted.length
-    ? sorted.map(sessionRow).join('')
-    : '<tr><td colspan="6">No tienes ninguna sesión abierta.</td></tr>';
-}
-
-function sessionRow(session) {
-  const parts = [session.browser, session.os].filter(Boolean);
-  const client = session.last_used_user_agent
-    ? `<span title="${escapeHtml(session.last_used_user_agent)}">${parts.length ? escapeHtml(parts.join(' · ')) : 'Navegador desconocido'}</span>`
-    : '—';
-  const own = session.current ? ' <span class="badge">Esta sesión</span>' : '';
-  const byAdmin = session.impersonated_by_login
-    ? ` <span class="badge" title="Un administrador entró como tú, por ejemplo para ayudarte">Abierta por ${escapeHtml(session.impersonated_by_login)}</span>`
-    : '';
-  return `
-    <tr>
-      <td>${client}${own}${byAdmin}</td>
-      <td>${session.last_used_at ? formatDateTime(session.last_used_at) : 'Nunca'}</td>
-      <td>${session.last_used_ip ? escapeHtml(session.last_used_ip) : '—'}</td>
-      <td>${formatDateTime(session.created_at)}</td>
-      <td>${formatDateTime(session.expires_at)}</td>
-      <td>${impersonating ? '' : `<button type="button" class="btn btn-danger btn-small" data-close-session="${session.id}">${session.current ? 'Cerrar esta sesión' : 'Cerrar'}</button>`}</td>
-    </tr>`;
-}
-
-async function loadSessions() {
-  try {
-    sessions = await apiFetch(`/users/${encodeURIComponent(user.login)}/tokens?status=active`);
-    renderSessions();
-  } catch (err) {
-    sessionsBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar las sesiones.</td></tr>';
-    showError(err.message);
-  }
-}
-
-initSortableHeaders(document.getElementById('sessions-head'), {
-  sort: sessionsSort,
-  defaultDesc: () => true,
-  onChange: renderSessions,
-});
-
-sessionsBody.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-close-session]');
-  if (!button) return;
-  const session = sessions.find((s) => s.id === Number(button.dataset.closeSession));
-  if (!session) return;
-  const question = session.current
-    ? 'Es la sesión que estás usando ahora: si la cierras saldrás de la intranet y tendrás que volver a entrar. ¿Cerrarla?'
-    : '¿Cerrar esta sesión? Ese dispositivo tendrá que volver a pedir un enlace para entrar.';
-  if (!confirm(question)) return;
-  button.disabled = true;
-  try {
-    await apiFetch(`/users/${encodeURIComponent(user.login)}/tokens/${session.id}`, {
-      method: 'DELETE',
-    });
-    if (session.current) {
-      logout();
-      return;
-    }
-    showFeedback('Sesión cerrada.');
-    await loadSessions();
-  } catch (err) {
-    button.disabled = false;
-    showError(err.message);
-  }
-});
-
 loadProfile();
 if (user) {
-  loadSessions();
+  initSessionsPanel({ login: user.login, own: true, impersonating: Boolean(user.impersonatedBy) });
   initLicenseFiles(user.login, { hideWhenEmpty: true });
   initUserFilesBrowser(user.login, { hideWhenEmpty: true });
 }

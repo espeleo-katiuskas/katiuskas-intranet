@@ -13,6 +13,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { initSessionsPanel } from './sessionsPanel.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
@@ -1264,3 +1265,8 @@ loadActivities();
 loadMovements();
 initLicenseFiles(memberLogin);
 initUserFilesBrowser(memberLogin);
+// An admin sees anybody's sessions (the API gives them to nobody else, and the section is removed
+// for the rest); on their own page they are their own.
+if (document.getElementById('sessions-list')) {
+  initSessionsPanel({ login: memberLogin, own: memberLogin === viewer.login });
+}

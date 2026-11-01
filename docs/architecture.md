@@ -1456,7 +1456,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | --- | --- | --- | --- |
 | `/` (`index.html`/`dashboard.js`) | "Datos de interés" of the club (`GET /club-info`, edited from `/admin`: nothing is written in the page), Junta Directiva (`GET /board-members`) and links to Documentos, Actas and Memorias. | Any baseline role. | The links are normal links thanks to the session cookie. |
 | `/socios` | List of people. | Sidebar: admin, board and member. | For a member it reduces columns and filters to `MemberListing` and its rows are not clickable; for admin and board, each row leads to `/socio?login=<login>`. |
-| `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. |
+| `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. Admin also sees and can close the person's sessions. |
 | `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses, "Mis sesiones" (the sessions not expired or revoked, each of which can be closed) and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |
 | `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent equipment and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
 | `/material` | Equipment catalog and its movements. | Any baseline role. | "Nuevo material" only for admin and board; the movements (loan, rental, sale), for admin, board and the `material` role. |
