@@ -100,10 +100,10 @@ const texts = {
   invalid_activity_id: 'La actividad indicada no es válida.',
 
   // Material
-  invalid_item_type: 'El tipo de material tiene que ser cuerda, saco o equipo.',
+  invalid_item_type: 'El tipo de material tiene que ser cuerda, saca o equipo.',
   duplicate_item_code: 'Ya hay otro material con ese código.',
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
-  single_unit_item: 'Las cuerdas y los sacos son siempre una sola unidad.',
+  single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
   unknown_category: 'La categoría de material no existe.',
   insufficient_stock: 'No queda cantidad suficiente disponible.',
   activity_required: 'Los préstamos y las devoluciones tienen que ir asociados a una actividad.',
