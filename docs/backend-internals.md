@@ -95,8 +95,9 @@ answers with those of the override as `AuthenticatedUser.Roles` while it has not
 `RealRoles` for `admin` themselves, because under the override the roles in force may not include
 it; an impersonation session is refused (409 `impersonating`); the roles must exist and include
 `admin`, `board` or `member` (`no_baseline_role`: with none nothing could be used). `GET /auth/me`
-adds `real_roles` and `role_override_seconds_left` while one is in force. The Telegram notice names
-the admin and the roles. The
+adds `real_roles` and `role_override_seconds_left` while one is in force. Neither changing the roles
+nor putting them back is announced on Telegram (an admin does it often and it only adds noise,
+unlike an impersonation, which is). The
 same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
 (`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or
 refreshed (sign-in, impersonation start/exit) — every ordinary route still only ever looks at the

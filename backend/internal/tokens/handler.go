@@ -140,7 +140,8 @@ func (h *Handler) setRoleOverride(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not change the roles")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ve la intranet con los roles: %s.", h.actorLogin(r.Context()), strings.Join(roles, ", ")))
+	// Not announced on Telegram: an admin changes roles often, to see what others see, and it only
+	// adds noise (unlike impersonating somebody, which does say).
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"roles":        roles,
 		"seconds_left": int(time.Until(until).Seconds()),
@@ -161,9 +162,6 @@ func (h *Handler) clearRoleOverride(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.ClearRoleOverride(r.Context(), raw); err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not put the roles back")
 		return
-	}
-	if user.RoleOverrideUntil != nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha vuelto a sus roles.", h.actorLogin(r.Context())))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

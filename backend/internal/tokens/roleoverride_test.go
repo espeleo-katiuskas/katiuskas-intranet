@@ -87,8 +87,13 @@ func TestRoleOverrideActsWithOtherRolesAndPutsThemBack(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"roles":["member","money"]`) {
 		t.Fatalf("set: %d %s", rec.Code, rec.Body.String())
 	}
-	if msg := e.notifier.waitForMessage(t); !strings.Contains(msg, "member, money") {
-		t.Fatalf("notice: %s", msg)
+	// Acting with other roles is not announced on Telegram.
+	time.Sleep(20 * time.Millisecond)
+	e.notifier.mu.Lock()
+	sent := len(e.notifier.sent)
+	e.notifier.mu.Unlock()
+	if sent != 0 {
+		t.Fatalf("expected no notice, got %d", sent)
 	}
 	// Acting as member + money: no admin routes, the ordinary ones work, and the real roles are kept.
 	if got := e.status("GET", "/probe/admin", e.adminTok, nil); got != http.StatusForbidden {
