@@ -716,6 +716,11 @@ th.sortable:focus-visible {
   color: #3e6e8e;
 }
 
+.badge.status-ongoing {
+  background: #fbf1da;
+  color: #8a6420;
+}
+
 .badge.status-completed {
   background: #e8f0e9;
   color: #4c7a52;

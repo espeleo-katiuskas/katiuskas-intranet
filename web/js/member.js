@@ -7,7 +7,8 @@ import {
   roleLabel,
   positionLabels,
   typeLabels,
-  statusLabels,
+  activityState,
+  activityStateLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -1063,7 +1064,7 @@ function renderActivityRow(activity) {
       <td>${formatDate(activity.end_date)}</td>
       <td><a href="/actividad?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
-      <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
+      <td><span class="badge status-${activityState(activity)}">${activityStateLabels[activityState(activity)]}</span></td>
       <td>${role}</td>
     </tr>
   `;

@@ -724,9 +724,13 @@ decides who can add participants, not only who can sign up. `Handler.join` queri
 
 **Listing and holidays**
 
-`GET /activities?status=active` leaves only what still needs attention: what is neither completed
-nor canceled, and what is completed with some loan not yet returned. Holidays (`holidays`) are
-managed by the same `activities` package and are used only by the frontend's calendar view.
+`GET /activities?active=true` leaves only what still needs attention: what is not cancelled and has
+not ended (its `end_date` is today or later), and any activity, over or cancelled, with some loan or
+rental of material not yet returned. An activity's state is not stored: only `cancelled` is (set
+with `cancelled` on `POST`/`PATCH`, which also reactivates it with `false`); whether it is still to
+come (*Planificada*), going on (*En curso*), over (*Realizada*) is worked out from its dates by the
+frontend (`activityState` in `api.js`). Holidays (`holidays`) are managed by the same `activities`
+package and are used only by the frontend's calendar view.
 
 ### `activity_resources`
 

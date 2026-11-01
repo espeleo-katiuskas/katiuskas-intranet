@@ -24,6 +24,8 @@
     <button id="join-activity" type="button" class="btn btn-secondary btn-small" hidden>Apuntarme</button>
     <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
     <button id="open-edit-activity" type="button" class="btn btn-secondary btn-small" hidden>Editar actividad</button>
+    <button id="cancel-activity" type="button" class="btn btn-danger btn-small" hidden>Cancelar actividad</button>
+    <button id="reactivate-activity" type="button" class="btn btn-secondary btn-small" hidden>Reactivar actividad</button>
   </div>
 
   <dialog id="edit-activity-dialog" class="panel modal">
@@ -52,14 +54,6 @@
         <div class="field">
           <label for="ea-end-date">Fecha de fin</label>
           <input id="ea-end-date" name="end_date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="ea-status">Estado</label>
-          <select id="ea-status" name="status">
-            <option value="planned">Planificada</option>
-            <option value="completed">Realizada</option>
-            <option value="cancelled">Cancelada</option>
-          </select>
         </div>
         <div class="field">
           <label for="ea-visibility">Visibilidad</label>

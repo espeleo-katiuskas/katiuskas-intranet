@@ -61,7 +61,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // nothing this endpoint can't actually touch shows up as a spurious
 // "change".
 var auditableFields = []string{
-	"Title", "Type", "StartDate", "EndDate", "Description", "Status", "Visibility", "LeaderLogin",
+	"Title", "Type", "StartDate", "EndDate", "Description", "Cancelled", "Visibility", "LeaderLogin",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -96,7 +96,7 @@ func (h *Handler) resolveUserLogin(w http.ResponseWriter, r *http.Request) (int6
 }
 
 // list defaults to every activity (paginated), matching how it always
-// worked; passing ?status=active switches to only the ones still needing
+// worked; passing ?active=true switches to only the ones still needing
 // attention (see Repository.ListActive) — with years of history piling
 // up, that's what most callers actually want day to day. ?order=asc
 // sorts oldest-first instead of the newest-first default.
@@ -109,7 +109,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		list []Activity
 		err  error
 	)
-	if r.URL.Query().Get("status") == "active" {
+	if r.URL.Query().Get("active") == "true" {
 		list, err = h.service.ListActive(r.Context(), limit, offset, ascending)
 	} else {
 		list, err = h.service.List(r.Context(), limit, offset, ascending)
@@ -184,10 +184,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	})
 	if errors.Is(err, ErrInvalidType) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
-		return
-	}
-	if errors.Is(err, ErrInvalidStatus) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", err.Error())
 		return
 	}
 	if errors.Is(err, ErrInvalidVisibility) {
@@ -267,7 +263,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		StartDate   *string     `json:"start_date"`
 		EndDate     *string     `json:"end_date"`
 		Description *string     `json:"description"`
-		Status      *Status     `json:"status"`
+		Cancelled   *bool       `json:"cancelled"`
 		Visibility  *Visibility `json:"visibility"`
 		LeaderLogin *string     `json:"leader_login"`
 	}
@@ -277,7 +273,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	in := UpdateInput{
 		Title: body.Title, Type: body.Type, Description: body.Description,
-		Status: body.Status, Visibility: body.Visibility,
+		Cancelled: body.Cancelled, Visibility: body.Visibility,
 	}
 	// Reassigning the organizer is admin/board only — unlike every other
 	// field here, the current leader can't do this for their own
@@ -321,10 +317,6 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	a, err := h.service.Update(r.Context(), id, in)
 	if errors.Is(err, ErrInvalidType) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
-		return
-	}
-	if errors.Is(err, ErrInvalidStatus) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", err.Error())
 		return
 	}
 	if errors.Is(err, ErrInvalidVisibility) {

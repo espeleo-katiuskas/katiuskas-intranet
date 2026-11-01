@@ -22,10 +22,9 @@ var (
 	// ErrDuplicateHoliday means a holiday already exists on that date —
 	// see the holidays.date UNIQUE constraint.
 	ErrDuplicateHoliday = errors.New("a holiday already exists on that date")
-	// ErrInvalidType, ErrInvalidStatus and ErrInvalidVisibility mean the
+	// ErrInvalidType and ErrInvalidVisibility mean the
 	// given value isn't one of that enum's values (see Type.Valid).
 	ErrInvalidType       = errors.New("type must be caving, canyoning, training, social or other")
-	ErrInvalidStatus     = errors.New("status must be planned, completed or cancelled")
 	ErrInvalidVisibility = errors.New("visibility must be public or private")
 	// ErrInvalidDateRange means end_date is earlier than start_date — the
 	// end_not_before_start CHECK would reject it too, but as a 500.
@@ -42,7 +41,7 @@ const uniqueViolationCode = "23505"
 // joined in rather than resolved one at a time.
 const activitySelect = `
 	a.id, a.title, a.type, a.start_date, a.end_date, a.description,
-	a.status, a.leader_id, ul.login, a.visibility
+	a.cancelled, a.leader_id, ul.login, a.visibility
 	FROM activities a
 	JOIN users ul ON ul.id = a.leader_id`
 
@@ -59,7 +58,7 @@ func sortDirection(ascending bool) string {
 
 func scanActivity(row interface{ Scan(dest ...any) error }, a *Activity) error {
 	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description,
-		&a.Status, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
+		&a.Cancelled, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
 }
 
 type Repository struct {
@@ -87,9 +86,9 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 	err = tx.QueryRow(ctx, `
 		INSERT INTO activities (title, type, start_date, end_date, description, leader_id, visibility)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
-		RETURNING id, title, type, start_date, end_date, description, status, leader_id, visibility
+		RETURNING id, title, type, start_date, end_date, description, cancelled, leader_id, visibility
 	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Description, in.LeaderID, in.Visibility,
-	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Status, &a.LeaderID, &a.Visibility)
+	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Cancelled, &a.LeaderID, &a.Visibility)
 	if err != nil {
 		return Activity{}, err
 	}
@@ -131,9 +130,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool
 	return list, rows.Err()
 }
 
-// ListActive returns activities that still need attention: anything not
-// yet completed or cancelled, plus anything (even completed) that still
-// has a rental linked to it that hasn't been returned, or a loan whose
+// ListActive returns activities that still need attention: any that is not cancelled and
+// has not ended yet (it ends on its end_date, included), plus anything (even over or
+// cancelled) that still has a rental linked to it that hasn't been returned, or a loan whose
 // activity still has some of that item outstanding (every loan minus
 // every return, summed per item — a loan's own status is always
 // 'completed' the moment it's recorded, so it can't be checked the same
@@ -144,7 +143,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int, ascendin
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN item_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
-		WHERE a.status = 'planned' OR t.id IS NOT NULL OR EXISTS (
+		WHERE (NOT a.cancelled AND a.end_date >= CURRENT_DATE) OR t.id IS NOT NULL OR EXISTS (
 			SELECT 1 FROM item_movements m
 			WHERE m.activity_id = a.id AND m.type IN ('loan', 'return')
 			GROUP BY m.item_id
@@ -226,8 +225,8 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.Description != nil {
 		a.Description = in.Description
 	}
-	if in.Status != nil {
-		a.Status = *in.Status
+	if in.Cancelled != nil {
+		a.Cancelled = *in.Cancelled
 	}
 	if in.Visibility != nil {
 		a.Visibility = *in.Visibility
@@ -240,8 +239,8 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 		return a, ErrInvalidDateRange
 	}
 	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, status=$6, visibility=$7, leader_id=$8 WHERE id=$9
-	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Status, a.Visibility, a.LeaderID, id)
+		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, cancelled=$6, visibility=$7, leader_id=$8 WHERE id=$9
+	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Cancelled, a.Visibility, a.LeaderID, id)
 	if err != nil {
 		return a, err
 	}
@@ -256,7 +255,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 }
 
 func (r *Repository) Cancel(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE activities SET status = 'cancelled' WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `UPDATE activities SET cancelled = true WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}

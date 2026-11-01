@@ -30,8 +30,8 @@ func TestCreateAndGetActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if created.Status != activities.StatusPlanned {
-		t.Errorf("expected default status %q, got %q", activities.StatusPlanned, created.Status)
+	if created.Cancelled {
+		t.Error("expected a new activity not to be cancelled")
 	}
 	if created.LeaderID != leader.ID {
 		t.Errorf("expected leader_id %d, got %d", leader.ID, created.LeaderID)
@@ -107,33 +107,44 @@ func TestListSortOrder(t *testing.T) {
 	}
 }
 
+// day is today plus n days (UTC, as the database's CURRENT_DATE is), as a date without a time.
+func day(n int) time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day()+n, 0, 0, 0, 0, time.UTC)
+}
+
 func TestListActive(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := activities.NewRepository(tx)
 	ctx := context.Background()
 	leader := testutil.InsertUser(t, tx, "")
 
-	planned, err := repo.Create(ctx, activities.CreateInput{Title: "Planned", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create planned: %v", err)
+	create := func(title string, start, end time.Time) activities.Activity {
+		t.Helper()
+		a, err := repo.Create(ctx, activities.CreateInput{Title: title, Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: start, EndDate: end, LeaderID: leader.ID})
+		if err != nil {
+			t.Fatalf("create %q: %v", title, err)
+		}
+		return a
+	}
+	cancel := func(a activities.Activity) {
+		t.Helper()
+		if err := repo.Cancel(ctx, a.ID); err != nil {
+			t.Fatalf("cancel: %v", err)
+		}
 	}
 
-	completedNoMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, nothing pending", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create completed: %v", err)
-	}
-	completed := activities.StatusCompleted
-	if _, err := repo.Update(ctx, completedNoMaterial.ID, activities.UpdateInput{Status: &completed}); err != nil {
-		t.Fatalf("mark completed: %v", err)
-	}
+	upcoming := create("Still to come", day(10), day(11))
+	ongoing := create("Going on", day(-1), day(1))
+	endsToday := create("Ends today", day(-2), day(0))
+	over := create("Over, nothing pending", day(-30), day(-29))
+	overWithMaterial := create("Over, material still out", day(-30), day(-29))
+	overFullyReturned := create("Over, loan fully returned", day(-30), day(-29))
+	cancelledUpcoming := create("Cancelled, still to come", day(10), day(11))
+	cancel(cancelledUpcoming)
+	cancelledWithMaterial := create("Cancelled, material still out", day(10), day(11))
+	cancel(cancelledWithMaterial)
 
-	completedWithMaterial, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, material still out", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create completed with material: %v", err)
-	}
-	if _, err := repo.Update(ctx, completedWithMaterial.ID, activities.UpdateInput{Status: &completed}); err != nil {
-		t.Fatalf("mark completed: %v", err)
-	}
 	user := testutil.InsertUser(t, tx, "")
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	var itemID int64
@@ -142,42 +153,25 @@ func TestListActive(t *testing.T) {
 	`, categoryID).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
 	}
-	// A loan is always 'completed' the moment it's recorded — what
-	// makes it "still out" is that nothing has returned it yet, not its
-	// own status (see Repository.ListActive).
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
-		VALUES ($1, $2, 'loan', $3, 'completed')
-	`, itemID, user.ID, completedWithMaterial.ID); err != nil {
-		t.Fatalf("insert movement: %v", err)
+	// A loan is always 'completed' the moment it's recorded — what makes it "still out" is that
+	// nothing has returned it yet, not its own status (see Repository.ListActive).
+	loan := func(a activities.Activity) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
+			VALUES ($1, $2, 'loan', $3, 'completed')
+		`, itemID, user.ID, a.ID); err != nil {
+			t.Fatalf("insert loan: %v", err)
+		}
 	}
-
-	completedFullyReturned, err := repo.Create(ctx, activities.CreateInput{Title: "Completed, loan fully returned", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create completed with returned loan: %v", err)
-	}
-	if _, err := repo.Update(ctx, completedFullyReturned.ID, activities.UpdateInput{Status: &completed}); err != nil {
-		t.Fatalf("mark completed: %v", err)
-	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
-		VALUES ($1, $2, 'loan', $3, 'completed')
-	`, itemID, user.ID, completedFullyReturned.ID); err != nil {
-		t.Fatalf("insert loan: %v", err)
-	}
+	loan(overWithMaterial)
+	loan(cancelledWithMaterial)
+	loan(overFullyReturned)
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO item_movements (item_id, type, quantity, activity_id, status)
 		VALUES ($1, 'return', 1, $2, 'completed')
-	`, itemID, completedFullyReturned.ID); err != nil {
+	`, itemID, overFullyReturned.ID); err != nil {
 		t.Fatalf("insert return: %v", err)
-	}
-
-	cancelled, err := repo.Create(ctx, activities.CreateInput{Title: "Cancelled", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2020-01-01"), EndDate: date("2020-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create cancelled: %v", err)
-	}
-	if err := repo.Cancel(ctx, cancelled.ID); err != nil {
-		t.Fatalf("cancel: %v", err)
 	}
 
 	list, err := repo.ListActive(ctx, 50, 0, false)
@@ -188,20 +182,22 @@ func TestListActive(t *testing.T) {
 	for _, a := range list {
 		got[a.ID] = true
 	}
-	if !got[planned.ID] {
-		t.Error("expected a planned activity to be active")
+	for name, a := range map[string]activities.Activity{
+		"one still to come": upcoming, "one going on": ongoing, "one that ends today": endsToday,
+		"an over one with an unreturned loan":     overWithMaterial,
+		"a cancelled one with an unreturned loan": cancelledWithMaterial,
+	} {
+		if !got[a.ID] {
+			t.Errorf("expected %s to be active", name)
+		}
 	}
-	if !got[completedWithMaterial.ID] {
-		t.Error("expected a completed activity with an unreturned loan to still be active")
-	}
-	if got[completedNoMaterial.ID] {
-		t.Error("expected a completed activity with nothing pending to not be active")
-	}
-	if got[completedFullyReturned.ID] {
-		t.Error("expected a completed activity whose loan was fully returned to not be active")
-	}
-	if got[cancelled.ID] {
-		t.Error("expected a cancelled activity to not be active")
+	for name, a := range map[string]activities.Activity{
+		"an over one with nothing pending": over, "an over one whose loan was fully returned": overFullyReturned,
+		"a cancelled one with nothing pending": cancelledUpcoming,
+	} {
+		if got[a.ID] {
+			t.Errorf("expected %s to not be active", name)
+		}
 	}
 }
 
@@ -234,17 +230,22 @@ func TestUpdate(t *testing.T) {
 	}
 
 	newTitle := "New title"
-	completed := activities.StatusCompleted
+	cancelled := true
 	newType := activities.TypeSocial
-	updated, err := repo.Update(ctx, created.ID, activities.UpdateInput{Title: &newTitle, Status: &completed, Type: &newType})
+	updated, err := repo.Update(ctx, created.ID, activities.UpdateInput{Title: &newTitle, Cancelled: &cancelled, Type: &newType})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	if updated.Title != newTitle {
 		t.Errorf("expected updated title, got %q", updated.Title)
 	}
-	if updated.Status != completed {
-		t.Errorf("expected updated status, got %q", updated.Status)
+	if !updated.Cancelled {
+		t.Error("expected the activity to be cancelled")
+	}
+	// And a cancelled one can be reactivated.
+	notCancelled := false
+	if reactivated, err := repo.Update(ctx, created.ID, activities.UpdateInput{Cancelled: &notCancelled}); err != nil || reactivated.Cancelled {
+		t.Errorf("expected cancelled=false to reactivate it, got %+v, %v", reactivated, err)
 	}
 	if updated.Type != newType {
 		t.Errorf("expected updated type, got %q", updated.Type)
@@ -309,8 +310,8 @@ func TestCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get by id: %v", err)
 	}
-	if found.Status != activities.StatusCancelled {
-		t.Errorf("expected status cancelled, got %q", found.Status)
+	if !found.Cancelled {
+		t.Error("expected the activity to be cancelled")
 	}
 }
 

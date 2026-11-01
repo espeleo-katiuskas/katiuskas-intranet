@@ -89,9 +89,6 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activit
 	if in.Type != nil && !in.Type.Valid() {
 		return Activity{}, ErrInvalidType
 	}
-	if in.Status != nil && !in.Status.Valid() {
-		return Activity{}, ErrInvalidStatus
-	}
 	if in.Visibility != nil && !in.Visibility.Valid() {
 		return Activity{}, ErrInvalidVisibility
 	}

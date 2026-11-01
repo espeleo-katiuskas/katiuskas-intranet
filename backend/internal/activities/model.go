@@ -16,8 +16,8 @@ const (
 
 // Valid reports whether t is one of the activity_type enum's values.
 // Checked in Go (Service.Create/Update) so a misspelled one is a 400 rather
-// than the 500 Postgres' own enum error would become; Status.Valid and
-// Visibility.Valid below do the same for theirs.
+// than the 500 Postgres' own enum error would become; Visibility.Valid below does the
+// same for its.
 func (t Type) Valid() bool {
 	switch t {
 	case TypeCaving, TypeCanyoning, TypeTraining, TypeSocial, TypeOther:
@@ -32,18 +32,6 @@ func (t Type) Valid() bool {
 // terrain a federation covers people for; the others don't.
 func (t Type) RequiresFederation() bool {
 	return t == TypeCaving || t == TypeCanyoning
-}
-
-type Status string
-
-const (
-	StatusPlanned   Status = "planned"
-	StatusCompleted Status = "completed"
-	StatusCancelled Status = "cancelled"
-)
-
-func (s Status) Valid() bool {
-	return s == StatusPlanned || s == StatusCompleted || s == StatusCancelled
 }
 
 type Visibility string
@@ -64,7 +52,10 @@ type Activity struct {
 	StartDate   time.Time `json:"start_date"`
 	EndDate     time.Time `json:"end_date"`
 	Description *string   `json:"description,omitempty"`
-	Status      Status    `json:"status"`
+	// Cancelled is the only state that is stored. Whether the activity is still to come, going on
+	// or over follows from its dates, so nothing has to be kept right by hand (migration
+	// 00042_activities_cancelled.sql).
+	Cancelled bool `json:"cancelled"`
 	// LeaderID/LeaderLogin are the organizer: always set, defaulting to
 	// whoever creates the activity — admin/board can instead name
 	// someone else at creation time, or reassign it afterward (see
@@ -100,7 +91,7 @@ type UpdateInput struct {
 	StartDate   *time.Time
 	EndDate     *time.Time
 	Description *string
-	Status      *Status
+	Cancelled   *bool
 	Visibility  *Visibility
 	// LeaderID reassigns the organizer — admin/board only, see
 	// Handler.update.

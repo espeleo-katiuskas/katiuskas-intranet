@@ -1396,16 +1396,18 @@ paths:
       description: >
         Defaults to every activity (paginated, newest first by start_date;
         limit defaults to 50). Pass
-        status=active to instead get only the ones still needing
-        attention: not yet completed/cancelled, or completed but still
+        active=true to instead get only the ones still needing
+        attention: not cancelled and not yet ended (end_date today or
+        later), or (even over or cancelled) still
         with a loan/rental linked to it that hasn't been returned — the
         practical "what matters right now" view once years of history
         pile up. Pass order=asc to sort oldest-first instead.
       security: [{ bearerAuth: [] }]
       parameters:
-        - name: status
+        - name: active
           in: query
-          schema: { type: string, enum: [active] }
+          schema: { type: boolean }
+          description: "true: only the activities that still need attention (see above)."
         - name: order
           in: query
           schema: { type: string, enum: [asc, desc], default: desc }
@@ -4160,7 +4162,7 @@ components:
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
         description: { type: string, nullable: true }
-        status: { type: string, enum: [planned, completed, cancelled] }
+        cancelled: { type: boolean, description: "The only state that is stored; whether an activity is still to come, going on or over follows from its dates." }
         leader_login:
           type: string
           description: >
@@ -4217,7 +4219,7 @@ components:
           format: date
           description: Must not be earlier than start_date (or the resulting start_date, if both are sent together).
         description: { type: string, nullable: true }
-        status: { type: string, enum: [planned, completed, cancelled] }
+        cancelled: { type: boolean, description: "true cancels the activity, false reactivates it." }
         visibility: { type: string, enum: [public, private] }
         leader_login:
           type: string

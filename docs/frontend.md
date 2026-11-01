@@ -42,6 +42,17 @@ one it shows a plain panel linking to `/login`. Everything it loads is by absolu
 since it is served at whatever address was asked for, however deep — which is also why
 `layout.js`'s topbar logo is `/images/…` and not relative.
 
+**An activity's state.** The API only says whether an activity is `cancelled`; whether it is still
+to come, going on or over is worked out from its dates by `activityState` (`api.js`): *Cancelada* if
+cancelled, *Realizada* if its `end_date` is before today, *Planificada* if its `start_date` is after
+today, *En curso* otherwise (`activityStateLabels` has the texts; the badge's CSS class is
+`status-<state>`). `activities.js` (list, with its "active only" filter `?active=true`, and the
+calendar, which leaves cancelled ones out), `activity.js` (the header, and, for whoever can manage
+the activity, a "Cancelar actividad" button next to "Editar actividad", after a confirmation —
+`DELETE /activities/{id}` — which becomes "Reactivar actividad" while it is cancelled — `PATCH` with
+`cancelled: false`; the edit dialog has no state field) and `member.js` use it, and `inventory.js`
+asks for `?active=true` for its activity picker.
+
 **Going back to the page that was asked for.** When `initSession()` finds no session (no token, or
 `GET /auth/me` rejects it), it keeps the address asked for (path and query, except `/` and
 `/login`) in `localStorage` under `katiuskas:return-to`, with the time, and sends the person to

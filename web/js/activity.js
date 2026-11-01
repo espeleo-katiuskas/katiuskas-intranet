@@ -9,7 +9,8 @@ import {
   renderPickerOptions,
   resolvePickerId,
   typeLabels,
-  statusLabels,
+  activityState,
+  activityStateLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -26,6 +27,8 @@ const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 // since it depends on data loaded asynchronously for this specific
 // activity.
 let canManage = isAdmin;
+let activityTitle = '';
+let activityCancelled = false;
 // Who may add a participant depends on visibility too, not just on
 // canManage: a public activity works as it always has (anyone can join
 // themselves; only admin/board can add someone else — the organizer
@@ -63,14 +66,15 @@ document
   .getElementById('open-edit-activity')
   .addEventListener('click', () => openModal(editActivityDialog));
 
-// Toggles every management-only control ("Editar actividad", "+
-// Participante" row) according to canManage — mirrors what
-// data-roles/applyRoleVisibility does for static, role-only elements,
-// but for something only knowable after this specific activity loads.
-// Cancelling is just editing and setting status to "cancelada" (see
-// the edit form's Estado field) — no separate action for it.
+// Toggles every management-only control ("Editar actividad", "Cancelar actividad" or "Reactivar
+// actividad" according to whether it is cancelled, "+ Participante" row) according to canManage —
+// mirrors what data-roles/applyRoleVisibility does for static, role-only elements, but for something
+// only knowable after this specific activity loads. Cancelling is a button of its own, not part of
+// the edit form.
 function applyManagementVisibility() {
   document.getElementById('open-edit-activity').hidden = !canManage;
+  document.getElementById('cancel-activity').hidden = !canManage || activityCancelled;
+  document.getElementById('reactivate-activity').hidden = !canManage || !activityCancelled;
   document.getElementById('add-participant-row').hidden = !canAddOthers;
 }
 
@@ -89,9 +93,11 @@ async function loadActivity(ready = Promise.resolve()) {
     document.getElementById('activity-title').textContent = activity.title;
     document.getElementById('activity-meta').textContent =
       `${dateRangeLabel(activity)} · ${typeLabels[activity.type] ?? activity.type} · ` +
-      `${statusLabels[activity.status] ?? activity.status} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
+      `${activityStateLabels[activityState(activity)]} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
     document.getElementById('activity-description').textContent = activity.description ?? '';
 
+    activityTitle = activity.title;
+    activityCancelled = activity.cancelled;
     canManage = isAdmin || viewer?.login === activity.leader_login;
     const isPrivate = activity.visibility === 'private';
     canJoinSelf = isPrivate ? canManage : true;
@@ -105,7 +111,6 @@ async function loadActivity(ready = Promise.resolve()) {
       editForm.type.value = activity.type;
       editForm.start_date.value = activity.start_date.slice(0, 10);
       editForm.end_date.value = activity.end_date.slice(0, 10);
-      editForm.status.value = activity.status;
       editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
       const leaderInput = document.getElementById('ea-leader');
@@ -121,6 +126,37 @@ async function loadActivity(ready = Promise.resolve()) {
   }
 }
 
+// Cancelling keeps the activity (with its participants and everything else), marked as cancelled, and
+// reactivating undoes it: both are confirmed first, as they are announced to the club's channel.
+document.getElementById('cancel-activity').addEventListener('click', async () => {
+  if (
+    !confirm(
+      `¿Cancelar la actividad «${activityTitle}»? Seguirá en la lista, marcada como cancelada, y se podrá reactivar.`,
+    )
+  )
+    return;
+  try {
+    await apiFetch(`/activities/${activityId}`, { method: 'DELETE' });
+    showFeedback('Actividad cancelada.');
+    await loadActivity();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+document.getElementById('reactivate-activity').addEventListener('click', async () => {
+  try {
+    await apiFetch(`/activities/${activityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cancelled: false }),
+    });
+    showFeedback('Actividad reactivada.');
+    await loadActivity();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
 editForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(editForm);
@@ -129,7 +165,6 @@ editForm?.addEventListener('submit', async (event) => {
     type: formData.get('type'),
     start_date: formData.get('start_date'),
     end_date: formData.get('end_date'),
-    status: formData.get('status'),
     visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,
   };

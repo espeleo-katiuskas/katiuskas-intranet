@@ -6,7 +6,8 @@ import {
   renderPickerOptions,
   resolvePickerId,
   typeLabels,
-  statusLabels,
+  activityState,
+  activityStateLabels,
   showFeedback,
   showError,
 } from './api.js';
@@ -52,7 +53,7 @@ function renderActivity(activity) {
       <td>${escapeHtml(activity.title)}</td>
       <td>${typeLabels[activity.type] ?? activity.type}</td>
       <td>${escapeHtml(leaderLabel(activity))}</td>
-      <td><span class="badge status-${activity.status}">${statusLabels[activity.status] ?? activity.status}</span></td>
+      <td><span class="badge status-${activityState(activity)}">${activityStateLabels[activityState(activity)]}</span></td>
     </tr>
   `;
 }
@@ -73,7 +74,7 @@ function activityQuery() {
     order: 'asc',
   });
   if (showingActive) {
-    params.set('status', 'active');
+    params.set('active', 'true');
   }
   return `/activities?${params.toString()}`;
 }
@@ -260,7 +261,7 @@ function buildCalendarDayInfo(activityList, holidays) {
     dayFor(holiday.date.slice(0, 10)).holidayName = holiday.name;
   }
   for (const activity of activityList) {
-    if (activity.status === 'cancelled') continue;
+    if (activity.cancelled) continue;
     let cursor = new Date(`${activity.start_date.slice(0, 10)}T00:00:00`);
     const end = new Date(`${activity.end_date.slice(0, 10)}T00:00:00`);
     while (cursor <= end) {

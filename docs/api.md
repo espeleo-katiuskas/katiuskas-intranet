@@ -318,9 +318,10 @@ Directiva).
 
 ## Activities
 
-- **GET** `/activities` — *Any baseline role*. Paged list, most recent first. `status=active` leaves
-  only the ones that still need attention.
-  - query: `status`, `order`, `limit`, `offset`
+- **GET** `/activities` — *Any baseline role*. Paged list, most recent first. `active=true` leaves
+  only the ones that still need attention: those not cancelled whose `end_date` is today or later, and
+  any (even over or cancelled) with a loan or rental of material not yet returned.
+  - query: `active`, `order`, `limit`, `offset`
   - returns: 200 `[Activity]`
 - **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if
   wanted). The organizer is whoever creates it, unless admin or board name someone else.
@@ -946,7 +947,7 @@ Nested fields:
 | `start_date` | date |
 | `end_date` | date |
 | `description` | text |
-| `status` | planned/completed/cancelled |
+| `cancelled` | boolean |
 | `leader_login` | text |
 | `visibility` | public/private |
 
@@ -972,7 +973,7 @@ Nested fields:
 | `start_date` | date |
 | `end_date` | date |
 | `description` | text |
-| `status` | planned/completed/cancelled |
+| `cancelled` | boolean |
 | `visibility` | public/private |
 | `leader_login` | text |
 

@@ -81,7 +81,6 @@ transactions ──< membership_dues, licenses, distribution_payments
 
 - `account_type` (`accounts.type`): asset, income, expense
 - `activity_resource_type` (`activity_resources.type`): text, file
-- `activity_status` (`activities.status`): planned, completed, cancelled
 - `activity_type` (`activities.type`): caving, canyoning, training, social, other
 - `activity_visibility` (`activities.visibility`): public, private
 - `bag_type` (`inventory_items.bag_type`): caving, canyoning, quick, special
@@ -499,7 +498,7 @@ it.
 | `start_date` | date | no |  |
 | `end_date` | date | no |  |
 | `description` | text | yes |  |
-| `status` | activity_status | no | 'planned' |
+| `cancelled` | boolean | no | false |
 | `leader_id` | bigint | no |  |
 | `visibility` | activity_visibility | no | 'public' |
 | `created_at` | timestamptz | no | now() |
@@ -1303,3 +1302,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00039_budgets.sql`: `budget_kind`, `budgets`, `budget_items`, `budget_item_accounts`
 - `00040_transaction_files.sql`: `transaction_files`
 - `00041_tokens_role_override.sql`: `tokens.role_override`, `tokens.role_override_until`
+- `00042_activities_cancelled.sql`: `activities.cancelled` instead of `activities.status`

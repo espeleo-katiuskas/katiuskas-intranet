@@ -197,52 +197,69 @@ func TestHandlerGetNotFound(t *testing.T) {
 	}
 }
 
-func TestHandlerListActiveFiltersOutCompletedActivities(t *testing.T) {
+func TestHandlerListActiveLeavesOutWhatIsOverOrCancelled(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	member := testutil.InsertUser(t, tx, "")
 	admin := testutil.InsertUser(t, tx, "")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
+	soon := time.Now().UTC().AddDate(0, 0, 5).Format("2006-01-02")
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
-		"title": "Planned", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"title": "To come", "type": "social", "start_date": soon, "end_date": soon,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
 	}
+	rec = doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
+		"title": "Over", "type": "social", "start_date": "2020-01-01", "end_date": "2020-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create the old one: %d: %s", rec.Code, rec.Body.String())
+	}
 
-	rec = doRequest(mux, http.MethodGet, "/api/v1/activities?status=active", memberToken, nil)
+	listActive := func() []activities.Activity {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/activities?active=true", memberToken, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list active: %d: %s", rec.Code, rec.Body.String())
+		}
+		var list []activities.Activity
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return list
+	}
+	active := listActive()
+	if len(active) != 1 || active[0].Title != "To come" || active[0].Cancelled {
+		t.Fatalf("expected only the activity still to come, got %+v", active)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d", active[0].ID)
+
+	// Cancelling it takes it out of the active ones, and cancelled=false brings it back.
+	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"cancelled": true})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"cancelled":true`) {
+		t.Fatalf("cancel: %d: %s", rec.Code, rec.Body.String())
+	}
+	if active := listActive(); len(active) != 0 {
+		t.Errorf("expected the cancelled activity to drop out of ?active=true, got %+v", active)
+	}
+	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"cancelled": false})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("list active: %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("reactivate: %d: %s", rec.Code, rec.Body.String())
 	}
-	var active []activities.Activity
-	if err := json.Unmarshal(rec.Body.Bytes(), &active); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(active) != 1 {
-		t.Fatalf("expected 1 active activity, got %d: %+v", len(active), active)
+	if active := listActive(); len(active) != 1 {
+		t.Errorf("expected the reactivated activity back in ?active=true, got %+v", active)
 	}
 
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d", active[0].ID), adminToken, map[string]any{"status": "completed"})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("complete: %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec = doRequest(mux, http.MethodGet, "/api/v1/activities?status=active", memberToken, nil)
-	if err := json.Unmarshal(rec.Body.Bytes(), &active); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(active) != 0 {
-		t.Errorf("expected the now-completed activity to drop out of ?status=active, got %+v", active)
-	}
-
+	// The unfiltered list has everything, whatever the dates and the cancellation.
 	rec = doRequest(mux, http.MethodGet, "/api/v1/activities", memberToken, nil)
 	var all []activities.Activity
 	if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(all) != 1 {
-		t.Errorf("expected the unfiltered list to still include it, got %+v", all)
+	if len(all) != 2 {
+		t.Errorf("expected the unfiltered list to include both, got %+v", all)
 	}
 }
 
@@ -1241,7 +1258,7 @@ func TestHandlerDeleteHolidayNotifiesTelegram(t *testing.T) {
 	}
 }
 
-// A bad type, visibility, status or date range is the caller's mistake: a
+// A bad type, visibility or date range is the caller's mistake: a
 // 400 with its own code, not the 500 the database's enum/CHECK errors used
 // to become.
 func TestHandlerRejectsInvalidActivityFields(t *testing.T) {
@@ -1290,7 +1307,6 @@ func TestHandlerRejectsInvalidActivityFields(t *testing.T) {
 	}{
 		{"unknown type", map[string]any{"type": "escalada"}, "invalid_type"},
 		{"unknown visibility", map[string]any{"visibility": "secret"}, "invalid_visibility"},
-		{"unknown status", map[string]any{"status": "done"}, "invalid_status"},
 		// Either date can be sent alone: it's compared with the stored other one.
 		{"end before the stored start", map[string]any{"end_date": "2026-03-09"}, "invalid_date_range"},
 		{"start after the stored end", map[string]any{"start_date": "2026-03-13"}, "invalid_date_range"},

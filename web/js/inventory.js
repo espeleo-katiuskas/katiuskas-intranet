@@ -612,7 +612,7 @@ if (canManageMovements) {
     })
     .catch(() => showError('No se pudo cargar la lista de socios.'));
 
-  apiFetch('/activities?status=active')
+  apiFetch('/activities?active=true')
     .then((activities) => {
       activityEntries = activities.map((activity) => ({
         id: activity.id,

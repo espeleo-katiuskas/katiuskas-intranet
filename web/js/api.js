@@ -561,7 +561,25 @@ const typeLabels = {
   social: 'Social',
   other: 'Otro',
 };
-const statusLabels = { planned: 'Planificada', completed: 'Realizada', cancelled: 'Cancelada' };
+
+// Where an activity is, worked out from what the API sends: only `cancelled` is stored, and whether it
+// is still to come, going on or over follows from its dates and today's. The result is also the suffix of
+// the badge's CSS class (`.badge.status-<state>`).
+const activityStateLabels = {
+  planned: 'Planificada',
+  ongoing: 'En curso',
+  completed: 'Realizada',
+  cancelled: 'Cancelada',
+};
+function activityState(activity) {
+  if (activity.cancelled) return 'cancelled';
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  if (activity.end_date.slice(0, 10) < today) return 'completed';
+  if (activity.start_date.slice(0, 10) > today) return 'planned';
+  return 'ongoing';
+}
 
 // The success banner every page provides via its own #feedback <p> (see
 // e.g. socios.html) — previously copy-pasted verbatim into every page script
@@ -706,7 +724,8 @@ export {
   roleLabel,
   positionLabels,
   typeLabels,
-  statusLabels,
+  activityState,
+  activityStateLabels,
   showFeedback,
   showError,
   formatDate,

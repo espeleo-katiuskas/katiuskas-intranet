@@ -91,7 +91,7 @@ const texts = {
   invalid_visibility: 'La visibilidad no es válida.',
   duplicate_holiday: 'Ya hay un festivo en esa fecha.',
   not_federated:
-    'Solo un socio con la licencia federativa en vigor puede apuntarse a una actividad de espeleología o barrancos.',
+    'Solo un socio con la licencia federativa en vigor puede apuntarse a una actividad de espeleología o cañones.',
   unknown_participant: 'Alguno de los participantes no existe.',
   title_required: 'Hace falta un título.',
   description_required: 'Un recurso de texto necesita una descripción.',
