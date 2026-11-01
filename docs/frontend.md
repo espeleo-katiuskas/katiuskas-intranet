@@ -42,6 +42,15 @@ one it shows a plain panel linking to `/login`. Everything it loads is by absolu
 since it is served at whatever address was asked for, however deep — which is also why
 `layout.js`'s topbar logo is `/images/…` and not relative.
 
+**Going back to the page that was asked for.** When `initSession()` finds no session (no token, or
+`GET /auth/me` rejects it), it keeps the address asked for (path and query, except `/` and
+`/login`) in `localStorage` under `katiuskas:return-to`, with the time, and sends the person to
+`/login`; `auth.js` calls `goAfterLogin()` (`api.js`) wherever a sign-in ends, which goes there
+instead of `/` and forgets it. It is localStorage and not sessionStorage because the magic link
+may open in another tab. The saved address is used only if it is less than an hour old and is a
+path of this site (it starts with a single `/`, never `//` or `/\`, and is not `/login`), so it
+cannot take anybody elsewhere. Signing out on purpose forgets it.
+
 Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
 it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
 rules only add what a plain `.panel` never needed: the dimmed `::backdrop`, a max-width,

@@ -15,9 +15,52 @@ const ORIGINAL_TOKEN_KEY = 'katiuskas:original-token';
 // A message for the next page, across the navigation that follows (sessionStorage, so it dies with the tab).
 const FLASH_KEY = 'katiuskas:flash';
 
+// The page somebody asked for when they had no session, kept (in localStorage, so it survives the
+// trip through the magic link, which may open in another tab) to take them back to it after signing
+// in. It expires, so an old one does not surprise somebody who signs in much later.
+const RETURN_TO_KEY = 'katiuskas:return-to';
+const RETURN_TO_MAX_AGE_MS = 60 * 60 * 1000;
+
+function redirectToLogin() {
+  const { pathname, search } = window.location;
+  if (pathname !== '/' && pathname !== '/login') {
+    try {
+      localStorage.setItem(
+        RETURN_TO_KEY,
+        JSON.stringify({ path: pathname + search, at: Date.now() }),
+      );
+    } catch {
+      // Without storage the person just lands on the home page after signing in.
+    }
+  }
+  window.location.href = '/login';
+}
+
+// Where to go after signing in: the page that was asked for, if one is remembered and is a path of
+// this site (never an address that would take the person elsewhere), else the home page.
+function goAfterLogin() {
+  let target = '/';
+  try {
+    const saved = JSON.parse(localStorage.getItem(RETURN_TO_KEY) ?? 'null');
+    localStorage.removeItem(RETURN_TO_KEY);
+    if (
+      saved &&
+      typeof saved.path === 'string' &&
+      Date.now() - saved.at < RETURN_TO_MAX_AGE_MS &&
+      /^\/(?![/\\])/.test(saved.path) &&
+      !saved.path.startsWith('/login')
+    ) {
+      target = saved.path;
+    }
+  } catch {
+    // Malformed or unreadable: the home page.
+  }
+  window.location.href = target;
+}
+
 async function initSession() {
   if (!token) {
-    window.location.href = '/login';
+    redirectToLogin();
     return false;
   }
   try {
@@ -42,7 +85,7 @@ async function initSession() {
   } catch {
     localStorage.removeItem('token');
     token = null;
-    window.location.href = '/login';
+    redirectToLogin();
     return false;
   }
 }
@@ -242,6 +285,8 @@ function logout() {
   const sessions = [token, localStorage.getItem(ORIGINAL_TOKEN_KEY)].filter(Boolean);
   localStorage.removeItem('token');
   localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+  // Signing out on purpose is not a request for the page that was open.
+  localStorage.removeItem(RETURN_TO_KEY);
   token = null;
   cachedUser = null;
   for (const session of sessions) {
@@ -573,6 +618,7 @@ function resolvePickerId(entries, typedValue) {
 
 export {
   API_BASE,
+  goAfterLogin,
   normalizeForSearch,
   apiFetch,
   apiFetchBlob,

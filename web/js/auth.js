@@ -1,4 +1,4 @@
-import { setToken } from './api.js';
+import { goAfterLogin, setToken } from './api.js';
 
 const API_BASE = '/api/v1';
 
@@ -65,7 +65,7 @@ function watchForSignInElsewhere() {
       });
       if (response.ok) {
         redirecting = true;
-        window.location.href = '/';
+        goAfterLogin();
       }
     } catch {
       // Network hiccup: stay on the form; the next event checks again.
@@ -99,7 +99,7 @@ async function redirectIfAlreadySignedIn() {
       headers: { Authorization: `Bearer ${existing}` },
     });
     if (response.ok) {
-      window.location.href = '/';
+      goAfterLogin();
       return;
     }
   } catch {
@@ -143,7 +143,7 @@ async function consumeMagicLink(rawToken) {
     }
     const data = await response.json();
     setToken(data.token);
-    window.location.href = '/';
+    goAfterLogin();
   } catch {
     // consumingMessage lives inside #consuming-panel, which gets hidden
     // right below — setting the error there was a bug, never actually
@@ -218,7 +218,7 @@ async function handleCodeSubmit(event) {
     }
     const data = await response.json();
     setToken(data.token);
-    window.location.href = '/';
+    goAfterLogin();
   } catch {
     codeErrorBox.textContent = 'Código incorrecto o caducado.';
     codeErrorBox.hidden = false;
