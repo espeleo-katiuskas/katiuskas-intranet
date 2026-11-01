@@ -385,10 +385,11 @@ function itemPickerText(item) {
 
 let itemsById = {};
 let itemEntries = [];
+// Units of each item (by id) still out on loan for this activity — what can be returned to it.
+let outstandingByItem = new Map();
 
 async function loadItems() {
   if (!canManageMovements) return;
-  const optionsEl = document.getElementById('loan-item-options');
   try {
     const items = await apiFetch('/items');
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
@@ -396,7 +397,7 @@ async function loadItems() {
       id: item.id,
       label: pickerLabel(itemPickerText(item), item.id),
     }));
-    if (optionsEl) optionsEl.innerHTML = renderPickerOptions(itemEntries);
+    refreshLoanChoices();
   } catch {
     showError('No se pudo cargar la lista de material.');
   }
@@ -443,7 +444,12 @@ async function loadActivityLoans(ready = Promise.resolve()) {
   try {
     const movements = await apiFetch(`/movements?activity_id=${activityId}`);
     await ready; // the rows name the items, which loadItems fetches
-    const byItem = [...aggregateActivityLoans(movements)].filter(([, totals]) => totals.loaned > 0);
+    const totalsByItem = aggregateActivityLoans(movements);
+    outstandingByItem = new Map(
+      [...totalsByItem].map(([itemId, totals]) => [itemId, totals.loaned - totals.returned]),
+    );
+    refreshLoanChoices();
+    const byItem = [...totalsByItem].filter(([, totals]) => totals.loaned > 0);
     tableBody.innerHTML = byItem.length
       ? byItem.map(([itemId, totals]) => renderActivityLoanRow(itemId, totals)).join('')
       : '<tr><td colspan="4">No hay material prestado para esta actividad.</td></tr>';
@@ -460,8 +466,54 @@ const loanQuantityField = document.getElementById('loan-quantity-field');
 const loanQuantityInput = document.getElementById('loan-quantity');
 const loanSubmitButton = document.getElementById('loan-submit');
 
+// What can be picked depends on what is being registered: a loan is of an item that can be loaned
+// and has a unit available; a return, of one that is out on loan for this activity (the API checks it
+// against what this activity still has outstanding of that item).
+function loanItemEntriesFor(type) {
+  return itemEntries.filter(({ id }) =>
+    type === 'return'
+      ? (outstandingByItem.get(id) ?? 0) > 0
+      : itemsById[id].loanable && itemsById[id].available_quantity > 0,
+  );
+}
+
+// The items offered for the type chosen now; an item picked before that no longer fits is cleared.
+function refreshLoanItemOptions() {
+  if (!loanItemInput) return;
+  const entries = loanItemEntriesFor(loanTypeSelect ? loanTypeSelect.value : 'loan');
+  document.getElementById('loan-item-options').innerHTML = renderPickerOptions(entries);
+  if (loanItemInput.value && resolvePickerId(entries, loanItemInput.value) == null) {
+    loanItemInput.value = '';
+  }
+  updateLoanQuantityVisibility();
+}
+
+// Only the types that have something to pick are offered, and with none the button is off.
+function refreshLoanChoices() {
+  if (!loanTypeSelect) return;
+  const chosen = loanTypeSelect.value;
+  const types = [
+    ['loan', 'Préstamo'],
+    ['return', 'Devolución'],
+  ].filter(([type]) => loanItemEntriesFor(type).length > 0);
+  loanTypeSelect.innerHTML = types
+    .map(
+      ([type, label]) =>
+        `<option value="${type}"${type === chosen ? ' selected' : ''}>${label}</option>`,
+    )
+    .join('');
+  const toggle = document.getElementById('toggle-new-loan');
+  if (toggle) {
+    toggle.disabled = types.length === 0;
+    toggle.title = types.length === 0 ? 'No hay material que prestar ni que devolver.' : '';
+  }
+  updateLoanSubmitLabel();
+  refreshLoanItemOptions();
+}
+
 // rope/bag are individually tracked (always exactly one unit), so
-// there's no quantity to choose once one of those is picked.
+// there's no quantity to choose once one of those is picked; for the rest the most that can be
+// asked is what there is to lend, or what is out to return.
 function updateLoanQuantityVisibility() {
   if (!loanItemInput) return;
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
@@ -469,6 +521,13 @@ function updateLoanQuantityVisibility() {
   const isSingleUnit = item?.item_type === 'rope' || item?.item_type === 'bag';
   loanQuantityField.hidden = isSingleUnit;
   if (isSingleUnit) loanQuantityInput.value = '1';
+  const max = !item
+    ? null
+    : loanTypeSelect?.value === 'return'
+      ? outstandingByItem.get(item.id)
+      : item.available_quantity;
+  if (max) loanQuantityInput.max = String(max);
+  else loanQuantityInput.removeAttribute('max');
 }
 loanItemInput?.addEventListener('input', updateLoanQuantityVisibility);
 
@@ -477,7 +536,10 @@ function updateLoanSubmitLabel() {
   loanSubmitButton.textContent =
     loanTypeSelect.value === 'return' ? 'Registrar devolución' : 'Registrar préstamo';
 }
-loanTypeSelect?.addEventListener('change', updateLoanSubmitLabel);
+loanTypeSelect?.addEventListener('change', () => {
+  updateLoanSubmitLabel();
+  refreshLoanItemOptions();
+});
 
 if (newLoanDialog) {
   initModal(newLoanDialog, newLoanForm);
@@ -486,8 +548,8 @@ if (newLoanDialog) {
   // recompute what those two other bits of UI imply right after,
   // regardless of how the dialog closed.
   newLoanDialog.addEventListener('close', () => {
-    updateLoanQuantityVisibility();
     updateLoanSubmitLabel();
+    refreshLoanItemOptions();
   });
   document
     .getElementById('toggle-new-loan')
@@ -508,6 +570,7 @@ document.getElementById('activity-loans-table-body')?.addEventListener('click', 
   openModal(newLoanDialog);
   if (loanTypeSelect) loanTypeSelect.value = 'return';
   updateLoanSubmitLabel();
+  refreshLoanItemOptions();
   loanItemInput.value = entry.label;
   updateLoanQuantityVisibility();
   loanQuantityInput?.focus();

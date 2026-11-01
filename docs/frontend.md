@@ -58,6 +58,13 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
+**Loans and returns on `/actividad`.** The "+ Préstamo/devolución" dialog (`activity.js`) offers, as
+the material to pick, only what fits the type chosen (`loanItemEntriesFor`): for a *Préstamo*, items
+that can be loaned and have a unit available; for a *Devolución*, those still out on loan for this
+activity (what its loans minus its returns say, `outstandingByItem`). The types themselves are only
+offered if something fits (and with neither, the button is off), changing the type clears a pick
+that no longer fits, and the quantity's `max` is what is available or what is out.
+
 **An activity's state.** The API only says whether an activity is `cancelled`; whether it is still
 to come, going on or over is worked out from its dates by `activityState` (`api.js`): *Cancelada* if
 cancelled, *Realizada* if its `end_date` is before today, *Planificada* if its `start_date` is after
