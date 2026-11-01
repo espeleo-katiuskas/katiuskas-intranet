@@ -50,6 +50,14 @@ and the form is filled with the item; it sends `PATCH /items/{id}`, which replac
 for a gear item, whose form has no brand, model or code, the ones it already has are sent back as
 they are.
 
+**Movement types on `/material`.** "+ Movimiento" only offers what can be done with that item right
+now (`movementTypeOptionsFor` in `inventory.js`; the API would refuse the rest): *Alquiler* if it
+has a rental price and a unit available, *Venta* if it has a sale price and a unit available,
+*Adquisición* only for general material (ropes and bags are a single unit), *Pérdida*, *Abandono*
+and *Retirada* if a unit is available, and *Devolución* only if some of it is out on loan (a rental
+is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
+button.
+
 **An activity's state.** The API only says whether an activity is `cancelled`; whether it is still
 to come, going on or over is worked out from its dates by `activityState` (`api.js`): *Cancelada* if
 cancelled, *Realizada* if its `end_date` is before today, *Planificada* if its `start_date` is after

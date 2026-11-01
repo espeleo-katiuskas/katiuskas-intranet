@@ -59,6 +59,25 @@ const typeLabels = {
 // (30 mosquetones lent for a trip might return 10 one day, 20 the
 // next), each its own call against the same item and activity.
 const movementTypeOptions = Object.entries(typeLabels).filter(([type]) => type !== 'loan');
+
+// The movements this form offers for an item: only what can be done with it right now, as the API
+// would otherwise refuse the rest. A rental needs a rental price and a unit available; a sale, a sale
+// price and a unit available; ropes and bags are a single unit, so nothing can be acquired of them; a
+// loss, abandonment or retirement takes units out of what is available; and a return only makes sense
+// for material that is out on loan (a rental is closed with its own "Devolver" button instead).
+function movementTypeOptionsFor(item) {
+  const available = item.available_quantity > 0;
+  const allowed = {
+    rental: item.rentable && available,
+    sale: item.sellable && available,
+    acquisition: item.item_type === 'gear',
+    loss: available,
+    abandonment: available,
+    retirement: available,
+    return: item.outstanding_loan_quantity > 0,
+  };
+  return movementTypeOptions.filter(([type]) => allowed[type]);
+}
 // Rental always needs a socio; loan, sale and return's are optional;
 // acquisition, loss, abandonment and retirement never get one at all —
 // the "Socio" field is hidden outright for those, not just left empty.
@@ -170,7 +189,7 @@ function renderItemRow(item) {
       <td>
         <div class="table-actions">
           <button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button>
-          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
+          ${canManageMovements && movementTypeOptionsFor(item).length ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
           ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-edit-item="${item.id}">Editar</button>` : ''}
         </div>
       </td>
@@ -259,12 +278,13 @@ function updateMovementFormVisibility() {
 document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
 
 function openNewMovementDialog(itemId) {
-  movementItemId = itemId;
   const item = itemsById[itemId];
-  document.getElementById('new-movement-item-label').innerHTML = item ? itemLabel(item) : '';
-  const isSingleUnit = !!item && (item.item_type === 'rope' || item.item_type === 'bag');
+  if (!item) return;
+  movementItemId = itemId;
+  document.getElementById('new-movement-item-label').innerHTML = itemLabel(item);
+  const isSingleUnit = item.item_type === 'rope' || item.item_type === 'bag';
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
-  document.getElementById('mv-type').innerHTML = movementTypeOptions
+  document.getElementById('mv-type').innerHTML = movementTypeOptionsFor(item)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
     .join('');
   updateMovementFormVisibility();
