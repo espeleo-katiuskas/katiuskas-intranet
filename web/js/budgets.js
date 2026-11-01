@@ -327,8 +327,9 @@ document.getElementById('delete-budget')?.addEventListener('click', async () => 
 
 yearSelect.addEventListener('change', () => loadYear(Number(yearSelect.value)));
 
-// Any year can be opened (and, with a year that has no budget, created): the selector only lists
-// the years that have one plus this year and the next.
+// Admin and money can open any year (and, with one that has no budget, create it): the selector only
+// lists the years that have one plus this year and the next. The field does not exist for anybody
+// else (applyRoleVisibility removes it).
 async function goToOtherYear() {
   const input = document.getElementById('year-other');
   const year = Number(input.value);
@@ -340,8 +341,8 @@ async function goToOtherYear() {
   fillYearSelect(year);
   await loadYear(year);
 }
-document.getElementById('year-go').addEventListener('click', goToOtherYear);
-document.getElementById('year-other').addEventListener('keydown', (event) => {
+document.getElementById('year-go')?.addEventListener('click', goToOtherYear);
+document.getElementById('year-other')?.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
     goToOtherYear();

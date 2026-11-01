@@ -1561,3 +1561,10 @@ a.btn {
 .year-other {
   width: 6rem;
 }
+
+.year-other-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+}
