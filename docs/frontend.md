@@ -322,9 +322,16 @@ assigned — not what was typed). What is unfolded, ticked and typed survives re
 purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
 cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
 shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
-`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` now
-puts the API's error `code` on the thrown `Error`, which `distributionCommon.js`'s `apiErrorText`
-maps to Spanish messages (falling back to the API's own text).
+`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` puts
+the API's error `code` on the thrown `Error`, and sets its message to the Spanish text for that code
+from `js/errorTexts.js` (the one catalog of every code the API can answer with; a function for the
+few whose message carries something to show, such as the names of the accounts a budget is missing,
+or the two totals that do not match), falling back to the API's own text for a code it does not
+know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that never reaches the server
+says so in Spanish instead of the browser's "Failed to fetch". A page that wants something more
+specific for a code still reads `err.code` (`distributionCommon.js`'s `apiErrorText`,
+`accountTree.js`'s `accountingErrorText`). A new error code in the API needs its entry in that
+catalog.
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,

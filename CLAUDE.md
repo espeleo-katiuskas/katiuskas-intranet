@@ -226,7 +226,9 @@ reloads its data. One `<page>.html` + `js/<page>.js` per view.
 - Every create/edit form is a `<dialog class="panel modal">` set up with `initModal(dialog, form?)` and
   opened with `openModal(dialog)` (`js/modal.js`, which keeps the page's scroll position).
 - Errors: `showError(message)` opens a modal over everything that has to be closed, and `showFeedback` is
-  the sticky success banner. There is no `#error` element.
+  the sticky success banner. There is no `#error` element. What a user sees must be Spanish: the API's
+  messages are English, so `apiFetch` swaps them for the Spanish text of the error `code` in
+  `js/errorTexts.js` — **a new error code needs its entry there**.
 - `js/api.js` keeps the token in `localStorage` (`token`), `apiFetch` puts the API's error `code` on the
   thrown `Error`, and the page's independent requests go out together, drawing waiting on a `ready`
   promise only where needed.

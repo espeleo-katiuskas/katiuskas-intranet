@@ -3,6 +3,8 @@
 // nothing needs restoring after a page navigation) and re-fetches the
 // signed-in identity from /auth/me on every page load, since an opaque
 // token has nothing a client can decode locally.
+import { errorText } from './errorTexts.js';
+
 const API_BASE = '/api/v1';
 
 let token = localStorage.getItem('token');
@@ -243,6 +245,32 @@ async function exitImpersonation() {
   }
 }
 
+// fetch, but a request that never reached the server (no network, the server down) fails with a
+// message in Spanish instead of the browser's own ("Failed to fetch").
+async function fetchOrExplain(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch {
+    throw new Error(
+      'No se ha podido conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.',
+    );
+  }
+}
+
+// The Error for a failed response: its message in Spanish when the API's error code is known (see
+// errorTexts.js), else the API's own. The code rides along on the error, for a page that wants to say
+// it in its own words instead.
+async function errorOf(response) {
+  const body = await response.json().catch(() => null);
+  const error = new Error(
+    errorText(body?.error?.code, body?.error?.message) ||
+      body?.error?.message ||
+      'Ha ocurrido un error inesperado.',
+  );
+  error.code = body?.error?.code;
+  return error;
+}
+
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
@@ -250,7 +278,7 @@ async function apiFetch(path, options = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const response = await fetchOrExplain(`${API_BASE}${path}`, { ...options, headers });
 
   // An impersonation session that ended (it lasts an hour) or was revoked: back to the admin's own
   // session, with a note saying so, instead of an error — the page is reloaded as the admin.
@@ -261,12 +289,7 @@ async function apiFetch(path, options = {}) {
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    // The API's own code rides along on the error, for a page that wants to
-    // say it in its own words instead of showing the (English) message.
-    const error = new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
-    error.code = body?.error?.code;
-    throw error;
+    throw await errorOf(response);
   }
   if (response.status === 204) {
     return null;
@@ -283,14 +306,13 @@ async function apiFetchForm(path, formData, options = {}) {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchOrExplain(`${API_BASE}${path}`, {
     method: options.method || 'POST',
     headers,
     body: formData,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+    throw await errorOf(response);
   }
   if (response.status === 204) {
     return null;
@@ -310,8 +332,7 @@ async function apiFetchBlob(path) {
   }
   const response = await fetch(`${API_BASE}${path}`, { headers });
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message || 'Ha ocurrido un error inesperado.');
+    throw await errorOf(response);
   }
   return response.blob();
 }
