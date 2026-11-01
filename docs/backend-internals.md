@@ -1244,15 +1244,16 @@ The home page's three lists read three fixed directories, named exactly like thi
 is case-sensitive): `./library/Documentos`, `./library/Actas` (files named `yyyy-mm-dd.pdf`, or
 `yyyy-mm-dd-suffix.pdf` when there are several that day) and `./library/Memorias`.
 
-Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`:
-drop files into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount,
-auto-create, gitignored, no rebuild/restart story as `./library` above), one subdirectory
-per login. A copy of each federative license goes in that same person's `licencias/`
-subdirectory, named `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optional
-thumbnail for one goes in `licencias/.thumbnails/`, named after that same original
-filename plus `.jpg` (e.g. `licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see
-[`frontend.md`](frontend.md) for how `/perfil` and `/socio` read both conventions back out.
-`scripts/generate-license-thumbnails.sh` makes every missing (or out-of-date) thumbnail
-from the license copies — first page of a PDF, or a smaller version of an image, 280px on
-the longest side — and only needs `pdftoppm`/ImageMagick on the machine running it
-(`--help` for the options: `--root`, `--force`, `--dry-run`, or just some logins).
+Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`: drop files
+into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount, auto-create, gitignored,
+no rebuild/restart story as `./library` above), one subdirectory per login. A copy of each
+federative license goes in that same person's `licencias/` subdirectory, named
+`yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optional thumbnail for one goes in
+`licencias/.thumbnails/`, named after that same original filename plus `.jpg` (e.g.
+`licencias/.thumbnails/2025-03-15-federativa.pdf.jpg`) — see [`frontend.md`](frontend.md) for how
+`/perfil` and `/socio` read both conventions back out. `scripts/generate-license-thumbnails.sh`
+makes every missing (or out-of-date) thumbnail from the license copies — first page of a PDF, or a
+smaller version of an image, 280px on the longest side — and only needs `pdftoppm`/ImageMagick on
+the machine running it (`--help` for the options: `--root`, `--force`, `--dry-run`, or just some
+logins). On the club's host a systemd timer runs it every 15 minutes (`docs/environments.md`,
+"License thumbnails").

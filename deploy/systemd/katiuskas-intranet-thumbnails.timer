@@ -1,0 +1,15 @@
+# Makes the thumbnails of the license copies every 15 minutes
+# (katiuskas-intranet-thumbnails.service). The script only does what is missing, so a run with
+# nothing new is a look at the directories. Persistent: if the host was off, one runs when it starts.
+[Unit]
+Description=Katiuskas intranet: look for license copies without a thumbnail
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=15min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

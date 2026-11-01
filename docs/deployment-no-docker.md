@@ -390,7 +390,9 @@ sudo -u intranet scripts/generate-license-thumbnails.sh --root /opt/katiuskas-in
 
 It needs `pdftoppm` (package `poppler-utils`) for PDFs and ImageMagick (`imagemagick`) for images;
 `--help` lists the other options (`--dry-run`, `--force`, or just some logins). It is safe to run as
-many times as needed: whatever is already up to date is skipped.
+many times as needed: whatever is already up to date is skipped. The club's host does not run it by
+hand: a systemd timer does, every 15 minutes (see [`environments.md`](environments.md), "License
+thumbnails").
 
 ## Security notes
 

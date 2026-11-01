@@ -80,7 +80,7 @@ Sign in there with `localStorage.setItem('token', '<token from get-token.sh>')` 
 Dropping files in (no rebuild or restart; both directories are gitignored): club documents into
 `./library/`, per-person files into `./user-files/<login>/`, a license copy into that person's
 `licencias/` as `yyyy-mm-dd-tipo_de_licencia.ext` (thumbnails with
-`scripts/generate-license-thumbnails.sh`). See `docs/backend-internals.md`.
+`scripts/generate-license-thumbnails.sh`; on the club's host a timer runs it every 15 minutes). See `docs/backend-internals.md`.
 
 ### Environments (`docs/environments.md`)
 

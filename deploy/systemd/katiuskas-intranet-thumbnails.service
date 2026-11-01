@@ -1,0 +1,35 @@
+# Makes the thumbnails of the federative license copies in the people's own files
+# (scripts/generate-license-thumbnails.sh), once: the missing ones, and those older than their file.
+# Started every 15 minutes by katiuskas-intranet-thumbnails.timer, so a license copy dropped in shows a
+# thumbnail in /perfil and /socio within minutes; when there is nothing to do it only looks at the
+# directories. What it prints is in this unit's journal (journalctl -u katiuskas-intranet-thumbnails).
+# See docs/environments.md ("License thumbnails") for how to install it.
+#
+# It runs as the owner of the files, so the thumbnails belong to the same user. The files are
+# people's uploads and the tools that read them (poppler, ImageMagick, Ghostscript) have a history of
+# security problems, so it gets only what it needs: no network, no secrets (USER_FILES_ROOT is the
+# only thing in its environment file; production's api.env, with the database password, is
+# deliberately not used), no new privileges.
+[Unit]
+Description=Katiuskas intranet: make the thumbnails of the license copies
+# A failed run is told by Telegram (katiuskas-intranet-notify-failure@.service), once in a while
+# if it keeps failing (a missing tool, say).
+OnFailure=katiuskas-intranet-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=intranet
+Group=intranet
+# USER_FILES_ROOT (deploy/systemd/thumbnails.env.example).
+EnvironmentFile=/opt/katiuskas-intranet-deploy/thumbnails.env
+# A root-owned script (installed from scripts/generate-license-thumbnails.sh), like deploy.sh.
+ExecStart=/opt/katiuskas-intranet-deploy/generate-license-thumbnails.sh
+ExecStartPost=-/bin/rm -f /var/lib/katiuskas-intranet-deploy/notified/%n
+TimeoutStartSec=30min
+# A background job: do not get in the way of the API.
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+PrivateNetwork=true
+ProtectHome=true
+NoNewPrivileges=true

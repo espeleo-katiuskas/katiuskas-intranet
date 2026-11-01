@@ -518,6 +518,42 @@ done
 current (damaged) data. Start the API again afterwards; migrations newer than the dump's, if the
 code is ahead of it, are applied by the next deployment (or with `goose up`).
 
+## License thumbnails
+
+The copies of the federative licenses in each person's files (`USER_FILES_ROOT/<login>/licencias/`)
+are shown in `/perfil` and `/socio` with a thumbnail that the application does not generate by
+itself (see "Dropping files into the library and the per-person directories" in
+`docs/backend-internals.md`).
+[`scripts/generate-license-thumbnails.sh`](../scripts/generate-license-thumbnails.sh) makes the
+missing ones, and renews those older than their file, and a systemd timer
+([`katiuskas-intranet-thumbnails.timer`](../deploy/systemd/katiuskas-intranet-thumbnails.timer))
+runs it every 15 minutes, so a license copy dropped in has its thumbnail within minutes. The script
+only does what is missing, so a run with nothing new is just a look at the directories.
+
+The service runs as `intranet` (the owner of the files, so the thumbnails are theirs too) and gets
+only what it needs, because the tools that read the people's uploads (poppler, ImageMagick,
+Ghostscript) have a history of security problems: no network, no new privileges, no `/home`, and no
+secrets — its only setting is `USER_FILES_ROOT`, in a file of its own, not production's `api.env`.
+Setting it up, on the club's host, as root (the tools are packages: `apt install poppler-utils
+imagemagick`):
+
+```sh
+sudo install -m 0755 scripts/generate-license-thumbnails.sh /opt/katiuskas-intranet-deploy/
+sudo install -m 0644 deploy/systemd/thumbnails.env.example /opt/katiuskas-intranet-deploy/thumbnails.env
+sudoedit /opt/katiuskas-intranet-deploy/thumbnails.env       # USER_FILES_ROOT, as in production's api.env
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-thumbnails.service \
+  deploy/systemd/katiuskas-intranet-thumbnails.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start katiuskas-intranet-thumbnails.service     # the first one, to see it work
+journalctl -u katiuskas-intranet-thumbnails
+sudo systemctl enable --now katiuskas-intranet-thumbnails.timer
+```
+
+It is one run for the whole `USER_FILES_ROOT`, which testing and production share, so it is
+installed once, for production. A run that fails (a missing tool, a directory that is not there) is
+told by Telegram like a failed backup (see "Alerts when something fails"). To make every thumbnail
+again, run the script by hand with `--force` as `intranet`.
+
 ## Alerts when something fails
 
 Nobody is going to read the journal every day, so the things that can go wrong without anyone
@@ -533,7 +569,7 @@ writes its errors and the sign-in notices to). Two mechanisms, for two kinds of 
   Disco casi lleno (93 % usado, quedan 2.1 GB): /srv/…", then "✅ … ya no hay ningún problema"),
   and again once a day while one remains. Each API (testing's and production's) does it through
   its own bot, so there is nothing to install: it works as soon as Telegram is configured.
-- **A deployment or a backup that fails**: both units name
+- **A deployment, a backup or a run of the thumbnails that fails**: those units name
   [`katiuskas-intranet-notify-failure@.service`](../deploy/systemd/katiuskas-intranet-notify-failure@.service)
   in `OnFailure=`, which runs [`scripts/notify-failure.sh`](../scripts/notify-failure.sh): it sends
   "⚠️ Ha fallado katiuskas-intranet-backup.service en <host>" with the last lines of that unit's
