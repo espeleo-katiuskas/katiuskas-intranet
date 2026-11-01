@@ -2948,7 +2948,7 @@ paths:
                 items: { $ref: "#/components/schemas/Item" }
     post:
       summary: Add an item to the catalog
-      description: Requires the admin or board role.
+      description: Requires the admin, board or material role.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -2978,7 +2978,7 @@ paths:
     get:
       summary: List the gear category catalog
       description: >
-        Requires the admin or board role, matching POST /items: the
+        Requires the admin, board or material role, matching POST /items: the
         catalog only exists to populate the "new item" form's category
         picker for gear items.
       security: [{ bearerAuth: [] }]

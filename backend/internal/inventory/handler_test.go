@@ -155,21 +155,31 @@ func gearItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
 	}
 }
 
-func TestHandlerCreateItemRequiresAdminOrBoard(t *testing.T) {
+// Adding equipment to the catalog (and the categories its form needs) is for admin, board and the
+// material role — which, like everything on the API, also needs one of admin/board/member.
+func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
-	materialToken := tokenFor(t, authn, 2, "material")
+	materialAloneToken := tokenFor(t, authn, 2, "material")
 	boardToken := tokenFor(t, authn, 3, "board")
+	materialMemberToken := tokenFor(t, authn, 4, "material", "member")
 
 	body := gearItemBody(t, tx, 1)
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", memberToken, body); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member to be forbidden from creating an item, got %d", rec.Code)
+	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/items", token, body); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from creating an item, got %d", name, rec.Code)
+		}
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", token, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from listing the categories, got %d", name, rec.Code)
+		}
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", materialToken, body); rec.Code != http.StatusForbidden {
-		t.Errorf("expected the material role alone to be forbidden from creating an item, got %d", rec.Code)
-	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, body); rec.Code != http.StatusCreated {
-		t.Errorf("expected board to create an item, got %d: %s", rec.Code, rec.Body.String())
+	for name, token := range map[string]string{"board": boardToken, "material (and member)": materialMemberToken} {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/items", token, body); rec.Code != http.StatusCreated {
+			t.Errorf("expected %s to create an item, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", token, nil); rec.Code != http.StatusOK {
+			t.Errorf("expected %s to list the categories, got %d", name, rec.Code)
+		}
 	}
 }
 

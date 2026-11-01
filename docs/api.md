@@ -412,14 +412,14 @@ files (up to 25 MiB).
 
 - **GET** `/items` — *Any baseline role*. Catalog of equipment.
   - returns: 200 `[Item]`
-- **POST** `/items` — *Admin or board*. Adds an item (rope, bag or generic equipment).
+- **POST** `/items` — *Admin, board or material*. Adds an item (rope, bag or generic equipment).
   - body: `item_type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
     `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
     `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `category_id`
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
     `single_unit_item`, `invalid_item_fields`
-- **GET** `/material-categories` — *Admin or board*. Categories of generic equipment.
+- **GET** `/material-categories` — *Admin, board or material*. Categories of generic equipment.
   - returns: 200 `[MaterialCategory]`
 - **GET** `/items/{id}/movements` — *Any baseline role*. Movement history of an item.
   - returns: 200 `[Movement]`

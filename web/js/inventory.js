@@ -14,11 +14,9 @@ import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 
 const user = await initPage();
-const isAdmin = hasAnyRole(user, ['admin', 'board']);
-// Managing material movements (loans, rentals, sales, acquisitions,
-// losses, abandonments, retirements, returns) is open to admin/board
-// plus the optional "material" role — item CRUD stays admin/board-only,
-// so this is deliberately a separate check from isAdmin.
+// Managing the material — adding equipment to the catalog, and its movements (loans, rentals,
+// sales, acquisitions, losses, abandonments, retirements, returns) — is for admin and board plus the
+// optional "material" role.
 const canManageMovements = hasAnyRole(user, ['admin', 'board', 'material']);
 
 const itemStatusLabels = {
@@ -480,7 +478,7 @@ document.getElementById('loaned-material-table-body')?.addEventListener('click',
   row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
-if (isAdmin) {
+if (canManageMovements) {
   const newItemDialog = document.getElementById('new-item-dialog');
   const newItemForm = document.getElementById('new-item-form');
   const itemTypeSelect = document.getElementById('ni-item-type');

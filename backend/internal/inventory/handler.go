@@ -128,13 +128,12 @@ func movementVerb(t MovementType) string {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/items", h.authenticator.Protect(h.listItems))
-	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board"))
+	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
-	// material-categories is admin/board-only, matching create: the
-	// catalog only exists to populate the "new item" form's category
-	// picker for gear items.
-	mux.Handle("GET /api/v1/material-categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board"))
+	// material-categories has the same roles as create: the catalog only exists to populate the
+	// "new item" form's category picker for gear items.
+	mux.Handle("GET /api/v1/material-categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board", "material"))
 
 	mux.Handle("GET /api/v1/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
