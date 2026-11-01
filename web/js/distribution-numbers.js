@@ -1,11 +1,13 @@
-import { apiFetch, escapeHtml, showError } from './api.js';
+import { apiFetch, escapeHtml, hasAnyRole, showError } from './api.js';
 import { initPage } from './layout.js';
 import { apiErrorText, statusBadge } from './distributionCommon.js';
 
 // Every number that exists of the articles whose numbers are described, who has
 // each and how many are free: for the people who hand them out (admin, board,
 // material).
-await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
+const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
+// A person's page is only open to admin and board: for material the name is plain text.
+const canOpenPeople = hasAnyRole(viewer, ['admin', 'board']);
 
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 const base = `/distributions/${id}`;
@@ -39,7 +41,11 @@ function renderRows(articleId) {
       .map((p) => `<td>${escapeHtml(p)}</td>`)
       .join('');
     const holder = item.beneficiary_login
-      ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a> <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
+      ? `${
+          canOpenPeople
+            ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
+            : escapeHtml(item.beneficiary_name)
+        } <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
       : '<span class="hint">Libre</span>';
     return `<tr>${cells}<td>${holder}</td></tr>`;
   });

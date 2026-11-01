@@ -161,9 +161,9 @@ editForm?.addEventListener('submit', async (event) => {
   }
 });
 
-// Loaded once so participant names can link to their own /socio?login=…
-// page instead of showing a bare login, and (for admin/board) so the
-// "add participant" picker can search by name.
+// Loaded once so participant names show as names instead of bare logins (linking to their
+// /socio?login=… page only for admin/board, the only ones who can open it), and (for admin/board)
+// so the "add participant" picker can search by name.
 let directoryByLogin = {};
 let personEntries = [];
 
@@ -195,11 +195,19 @@ function personLabel(login) {
   return person ? `${person.first_name} ${person.last_name}` : login;
 }
 
+// A person's page is only open to admin and board, so anybody else gets the name alone: the link
+// would only take them back to the home page.
+function personName(login, name) {
+  return isAdmin
+    ? `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(name)}</a>`
+    : escapeHtml(name);
+}
+
 function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
-      <span><a href="/socio?login=${p.user_login}">${escapeHtml(name)}</a>${p.role === 'leader' ? ' · organizador' : ''}</span>
+      <span>${personName(p.user_login, name)}${p.role === 'leader' ? ' · organizador' : ''}</span>
       ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;

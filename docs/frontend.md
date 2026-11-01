@@ -137,15 +137,17 @@ the viewer this activity's organizer?") can't be a static `data-roles` attribute
 the data arrives and toggles `.hidden` directly instead (see `activity.js`'s
 `canManage`/`canJoinSelf`/`canAddOthers`). Detail pages read a login from the query string
 (`/socio?login=<login>`, `new URLSearchParams(window.location.search)`), same pattern `login.html`
-uses for the magic-link token from an emailed URL. Its login code has no URL of its own to arrive in
-— `login.html`'s second panel gets it typed in by hand — so the email/phone from the first step are
-instead remembered in a plain JS variable across that two-step flow. The page is the same on every
-address except one thing: on a `local.…` address (the club's tablet is given `local.` + the public
-address, and the API shortens the session there, `docs/architecture.md`, "Short sessions"),
+uses for the magic-link token from an emailed URL. A link to a person's page (`/socio`, open only to
+admin and board) is drawn only for them: anywhere a member, `material` or `money` can see a person
+(the participants of an activity, the holders of a numbered article), the name is plain text, since
+the link would only take them back to the home page. Its login code has no URL of its own to arrive
+in — `login.html`'s second panel gets it typed in by hand — so the email/phone from the first step
+are instead remembered in a plain JS variable across that two-step flow. The page is the same on
+every address except one thing: on a `local.…` address (the club's tablet is given `local.` + the
+public address, and the API shortens the session there, `docs/architecture.md`, "Short sessions"),
 `auth.js` applies the same rule to `location.hostname` and shows `#local-notice` above the panels —
 "Sesión local", in the accent color, saying that the address is for shared use and the session will
-close by itself in a few hours (no number, so it can't disagree with
-`LocalTokenTTL`). Everywhere
+close by itself in a few hours (no number, so it can't disagree with `LocalTokenTTL`). Everywhere
 else it stays hidden. That second panel appears only when the API accepts the details; for a pair
 that matches nobody who can sign in it answers 404 `unknown_details`, and the first panel says so
 ("Ese correo y ese teléfono no corresponden a nadie con acceso…") and asks to check them and, if
