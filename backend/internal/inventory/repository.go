@@ -56,7 +56,12 @@ var (
 	// message itself (built from Postgres's own ConstraintName) still
 	// says which one.
 	ErrInvalidItemFields = errors.New("item fields do not match item_type's required shape")
+	// ErrDuplicateItemCode means another item already has the code.
+	ErrDuplicateItemCode = errors.New("another item already has this code")
 )
+
+// uniqueViolationCode is the unique violation Postgres raises for an item code that another item has.
+const uniqueViolationCode = "23505"
 
 // categoryFKViolationCode is the foreign-key violation Postgres raises
 // when CreateItem is given a category_id absent from material_categories.
@@ -158,6 +163,8 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 		case checkViolationCode:
 			return Item{}, fmt.Errorf("fields do not fit item_type %q (violates %s): %w",
 				in.Type, pgErr.ConstraintName, ErrInvalidItemFields)
+		case uniqueViolationCode:
+			return Item{}, ErrDuplicateItemCode
 		}
 	}
 	if err != nil {
@@ -184,6 +191,52 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	it.AvailableQuantity = initialQuantity
 
 	return it, tx.Commit(ctx)
+}
+
+// UpdateItem replaces the editable fields of an item (see UpdateItemInput) and answers with it as
+// GetItem would. The same constraints as when it was created apply, for its own type.
+func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInput) (Item, error) {
+	// In its own (sub)transaction so a rejected update is rolled back on its own: under test, where
+	// every call shares one outer transaction, the violation would otherwise abort all of it.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Item{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var itemType ItemType
+	err = tx.QueryRow(ctx, `
+		UPDATE inventory_items SET brand=$2, model=$3, code=$4, description=$5, loanable=$6,
+			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
+			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, category_id=$15
+		WHERE id = $1
+		RETURNING item_type
+	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
+		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
+		in.BagType, in.CapacityLiters, in.CategoryID,
+	).Scan(&itemType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Item{}, ErrNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case categoryFKViolationCode:
+			return Item{}, ErrCategoryNotFound
+		case checkViolationCode:
+			return Item{}, fmt.Errorf("fields do not fit item_type %q (violates %s): %w",
+				itemType, pgErr.ConstraintName, ErrInvalidItemFields)
+		case uniqueViolationCode:
+			return Item{}, ErrDuplicateItemCode
+		}
+	}
+	if err != nil {
+		return Item{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Item{}, err
+	}
+	return r.GetItem(ctx, id)
 }
 
 // GetItem looks up a single item by id — used to name it in a mutation

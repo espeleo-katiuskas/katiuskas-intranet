@@ -42,6 +42,14 @@ one it shows a plain panel linking to `/login`. Everything it loads is by absolu
 since it is served at whatever address was asked for, however deep — which is also why
 `layout.js`'s topbar logo is `/images/…` and not relative.
 
+**Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
+dialog of "Nuevo material" is reused to edit an item (`inventory.js`, `openEditItemDialog`): the
+title and the button change, the type is fixed (the field is disabled and the item's own type is
+used), the quantity and the date of acquisition are left out (the stock is what its movements say)
+and the form is filled with the item; it sends `PATCH /items/{id}`, which replaces every field, so
+for a gear item, whose form has no brand, model or code, the ones it already has are sent back as
+they are.
+
 **An activity's state.** The API only says whether an activity is `cancelled`; whether it is still
 to come, going on or over is worked out from its dates by `activityState` (`api.js`): *Cancelada* if
 cancelled, *Realizada* if its `end_date` is before today, *Planificada* if its `start_date` is after

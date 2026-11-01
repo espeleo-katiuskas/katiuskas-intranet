@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -129,6 +130,7 @@ func movementVerb(t MovementType) string {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/items", h.authenticator.Protect(h.listItems))
 	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
+	mux.Handle("PATCH /api/v1/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
 	// material-categories has the same roles as create: the catalog only exists to populate the
@@ -224,6 +226,10 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
 		return
 	}
+	if errors.Is(err, ErrDuplicateItemCode) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create item")
 		return
@@ -231,6 +237,79 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el material «%s» (%s, x%d).",
 		h.actorLogin(r.Context()), itemLabel(item), item.Type, item.TotalQuantity))
 	httpapi.WriteJSON(w, http.StatusCreated, item)
+}
+
+// itemAuditFields are the Item fields an edit's notification diffs — those UpdateItemInput can change
+// (the category by its name, not by the numeric id).
+var itemAuditFields = []string{
+	"Brand", "Model", "Code", "Description", "Loanable", "RentalPricePerWeek", "SalePrice",
+	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters", "CategoryName",
+}
+
+// updateItem replaces every editable field of an item with the body's: the type and the quantities
+// are not among them (a different type is a different item, and the stock is what its movements
+// say).
+func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	var body struct {
+		Brand              *string   `json:"brand"`
+		Model              *string   `json:"model"`
+		Code               *string   `json:"code"`
+		Description        *string   `json:"description"`
+		Loanable           *bool     `json:"loanable"`
+		RentalPricePerWeek *float64  `json:"rental_price_per_week"`
+		SalePrice          *float64  `json:"sale_price"`
+		RopeType           *RopeType `json:"rope_type"`
+		DiameterMM         *float64  `json:"diameter_mm"`
+		ManufactureYear    *int32    `json:"manufacture_year"`
+		LengthM            *int32    `json:"length_m"`
+		BagType            *BagType  `json:"bag_type"`
+		CapacityLiters     *float64  `json:"capacity_liters"`
+		CategoryID         *int64    `json:"category_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	loanable := true
+	if body.Loanable != nil {
+		loanable = *body.Loanable
+	}
+	before, beforeErr := h.service.GetItem(r.Context(), id)
+	item, err := h.service.UpdateItem(r.Context(), id, UpdateItemInput{
+		Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
+		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
+		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
+		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
+	})
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	case errors.Is(err, ErrCategoryNotFound):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_category", err.Error())
+		return
+	case errors.Is(err, ErrInvalidItemFields):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
+		return
+	case errors.Is(err, ErrDuplicateItemCode):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update item")
+		return
+	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, item, itemAuditFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el material «%s»:\n%s",
+				h.actorLogin(r.Context()), itemLabel(before), strings.Join(diff, "\n")))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) listMaterialCategories(w http.ResponseWriter, r *http.Request) {

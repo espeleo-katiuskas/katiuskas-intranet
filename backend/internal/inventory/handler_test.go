@@ -959,3 +959,107 @@ func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 		t.Errorf("expected the notification to name the action and item, got %q", msg)
 	}
 }
+
+// Whoever can add equipment can edit it: admin, board and material (with member, like everything).
+// The type and the quantities are not editable; the rest is replaced by the body's.
+func TestHandlerUpdateItem(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
+	boardToken := tokenFor(t, authn, 3, "board")
+	materialMemberToken := tokenFor(t, authn, 4, "material", "member")
+	materialAloneToken := tokenFor(t, authn, 5, "material")
+	memberToken := tokenFor(t, authn, 6, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 4))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/items/%d", item.ID)
+	edited := map[string]any{
+		"description":           "Casco con barbuquejo",
+		"category_id":           testutil.MaterialCategoryID(t, tx, "Placas"),
+		"rental_price_per_week": 12.5,
+		"loanable":              false,
+		// What cannot be edited is ignored.
+		"item_type": "rope", "total_quantity": 99,
+	}
+
+	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
+		if rec := doRequest(mux, http.MethodPatch, path, token, edited); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from editing, got %d", name, rec.Code)
+		}
+	}
+	rec = doRequest(mux, http.MethodPatch, path, materialMemberToken, edited)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
+	}
+	var got inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != inventory.ItemTypeGear || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
+		got.CategoryName == nil || *got.CategoryName != "Placas" || got.Loanable || got.SalePrice != nil ||
+		got.RentalPricePerWeek == nil || *got.RentalPricePerWeek != 12.5 {
+		t.Fatalf("edited item: %+v", got)
+	}
+	msg := notifier.waitForNthMessage(t, 1) // the second, after the creation's
+	for _, want := range []string{"ha editado el material", "Description:", "CategoryName:", "SalePrice:"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("notice %q lacks %q", msg, want)
+		}
+	}
+
+	// The same constraints as when it was created.
+	bad := map[string]any{"description": nil, "category_id": testutil.MaterialCategoryID(t, tx, "Placas")}
+	rec = doRequest(mux, http.MethodPatch, path, boardToken, bad)
+	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
+		t.Errorf("a gear item without a description: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(mux, http.MethodPatch, path, boardToken, map[string]any{"description": "x", "category_id": 987654})
+	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "unknown_category" {
+		t.Errorf("an unknown category: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
+		t.Errorf("an item that does not exist: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
+}
+
+// A code is unique: giving an item the one another has says so, when editing and when creating.
+func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	boardToken := tokenFor(t, authn, 3, "board")
+	rope := func(code string) map[string]any {
+		return map[string]any{
+			"item_type": "rope", "brand": "Beal", "model": "Karma", "code": code, "rope_type": "caving",
+			"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
+		}
+	}
+	first := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-1"))
+	second := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-2"))
+	if first.Code != http.StatusCreated || second.Code != http.StatusCreated {
+		t.Fatalf("create: %d %d", first.Code, second.Code)
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-1")); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
+		t.Errorf("creating with a code in use: %d %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	_ = json.Unmarshal(second.Body.Bytes(), &item)
+	edit := rope("C-1")
+	delete(edit, "item_type")
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
+		t.Errorf("editing to a code in use: %d %s", rec.Code, rec.Body.String())
+	}
+	// Keeping its own code is fine.
+	own := rope("C-2")
+	delete(own, "item_type")
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
+		t.Errorf("editing with its own code: %d %s", rec.Code, rec.Body.String())
+	}
+}

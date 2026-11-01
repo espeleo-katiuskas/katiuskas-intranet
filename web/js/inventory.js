@@ -171,6 +171,7 @@ function renderItemRow(item) {
         <div class="table-actions">
           <button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button>
           ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
+          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-edit-item="${item.id}">Editar</button>` : ''}
         </div>
       </td>
     </tr>
@@ -295,6 +296,9 @@ async function loadItems() {
   }
 }
 
+// Set below, for whoever can manage the material: opens the dialog of "Nuevo material" to edit an item.
+let openEditItemDialog = null;
+
 document.getElementById('items-table-body').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-item-movements]');
   if (toggleButton) {
@@ -303,6 +307,12 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
     const opening = row.hidden;
     row.hidden = !row.hidden;
     if (opening) await expandItemMovements(itemId);
+    return;
+  }
+
+  const editItemButton = event.target.closest('button[data-edit-item]');
+  if (editItemButton) {
+    openEditItemDialog?.(Number(editItemButton.dataset.editItem));
     return;
   }
 
@@ -484,6 +494,8 @@ if (canManageMovements) {
   const itemTypeSelect = document.getElementById('ni-item-type');
   const descriptionField = document.getElementById('ni-description');
   const categorySelect = document.getElementById('ni-category');
+  // The dialog is shared: the id of the item it is editing, or null when it creates one.
+  let editingItemId = null;
 
   // Only rope/bag/gear-specific controls toggle required — the fields
   // shared by every type (acquired_at, prices, loanable) stay as they
@@ -514,6 +526,17 @@ if (canManageMovements) {
     // optional "Observaciones" for rope/bag — see the two toggled
     // label spans above the textarea.
     descriptionField.required = type === 'gear';
+    // What only makes sense when creating (the quantity and the date of acquisition: the stock is
+    // whatever the movements say) is out of an edit.
+    document.querySelectorAll('[data-create-only]').forEach((el) => {
+      if (editingItemId !== null) el.hidden = true;
+      else if (!el.dataset.itemTypeField) el.hidden = false;
+    });
+    document.getElementById('ni-title').textContent =
+      editingItemId !== null ? 'Editar material' : 'Nuevo material';
+    document.getElementById('ni-submit').textContent =
+      editingItemId !== null ? 'Guardar' : 'Crear material';
+    itemTypeSelect.disabled = editingItemId !== null;
   }
   itemTypeSelect.addEventListener('change', updateItemTypeFieldsVisibility);
   updateItemTypeFieldsVisibility();
@@ -531,7 +554,36 @@ if (canManageMovements) {
   // regardless of how it closed) reverts item_type back to its default
   // option — recompute which fields that implies right after, same as
   // the very first render below.
-  newItemDialog.addEventListener('close', updateItemTypeFieldsVisibility);
+  newItemDialog.addEventListener('close', () => {
+    editingItemId = null;
+    updateItemTypeFieldsVisibility();
+  });
+
+  openEditItemDialog = (itemId) => {
+    const item = itemsById[itemId];
+    if (!item) return;
+    editingItemId = itemId;
+    itemTypeSelect.value = item.item_type;
+    updateItemTypeFieldsVisibility();
+    const set = (name, value) => {
+      newItemForm.elements[name].value = value ?? '';
+    };
+    set('brand', item.brand);
+    set('model', item.model);
+    set('code', item.code);
+    set('rope_type', item.rope_type);
+    set('diameter_mm', item.diameter_mm);
+    set('manufacture_year', item.manufacture_year);
+    set('length_m', item.length_m);
+    set('bag_type', item.bag_type);
+    set('capacity_liters', item.capacity_liters);
+    set('category_id', item.category_id);
+    set('rental_price_per_week', item.rental_price_per_week);
+    set('sale_price', item.sale_price);
+    set('description', item.description);
+    newItemForm.elements.loanable.checked = item.loanable;
+    openModal(newItemDialog);
+  };
 
   document.getElementById('toggle-new-item').addEventListener('click', () => {
     openModal(newItemDialog);
@@ -540,14 +592,14 @@ if (canManageMovements) {
   newItemForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const formData = new FormData(newItemForm);
-    const type = formData.get('item_type');
+    const editing = editingItemId !== null ? itemsById[editingItemId] : null;
+    // A disabled field is not in the FormData: when editing, the type is the item's own.
+    const type = editing ? editing.item_type : formData.get('item_type');
     const optionalText = (key) => formData.get(key)?.toString().trim() || null;
     const optionalNumber = (key) => (formData.get(key) ? Number(formData.get(key)) : null);
 
     const body = {
-      item_type: type,
       description: optionalText('description'),
-      acquired_at: optionalText('acquired_at'),
       rental_price_per_week: optionalNumber('rental_price_per_week'),
       sale_price: optionalNumber('sale_price'),
       loanable: formData.get('loanable') === 'on',
@@ -567,14 +619,29 @@ if (canManageMovements) {
       body.capacity_liters = Number(formData.get('capacity_liters'));
     } else {
       body.category_id = Number(formData.get('category_id'));
-      body.total_quantity = Number(formData.get('total_quantity')) || 1;
+    }
+    if (editing) {
+      // An edit replaces every field, and the form has no brand, model or code for gear: keep them.
+      if (type === 'gear') {
+        body.brand = editing.brand ?? null;
+        body.model = editing.model ?? null;
+        body.code = editing.code ?? null;
+      }
+    } else {
+      body.item_type = type;
+      body.acquired_at = optionalText('acquired_at');
+      if (type === 'gear') body.total_quantity = Number(formData.get('total_quantity')) || 1;
     }
 
     const submitButton = newItemForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     try {
-      await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
-      showFeedback('Material creado.');
+      if (editing) {
+        await apiFetch(`/items/${editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      } else {
+        await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
+      }
+      showFeedback(editing ? 'Material actualizado.' : 'Material creado.');
       newItemDialog.close();
       await loadItems();
     } catch (err) {

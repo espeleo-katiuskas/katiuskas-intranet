@@ -181,6 +181,26 @@ type CreateItemInput struct {
 	CategoryID         *int64
 }
 
+// UpdateItemInput is what PATCH /items/{id} replaces: every field an item can be edited in, all at
+// once (the same "resend everything" as the other PATCHes). Not the item's type, which is what its
+// shape and required fields hang from, and not its quantities, which only movements change.
+type UpdateItemInput struct {
+	Brand              *string
+	Model              *string
+	Code               *string
+	Description        *string
+	Loanable           bool
+	RentalPricePerWeek *float64
+	SalePrice          *float64
+	RopeType           *RopeType
+	DiameterMM         *float64
+	ManufactureYear    *int32
+	LengthM            *int32
+	BagType            *BagType
+	CapacityLiters     *float64
+	CategoryID         *int64
+}
+
 type Movement struct {
 	ID     int64 `json:"id"`
 	ItemID int64 `json:"item_id"`

@@ -787,7 +787,8 @@ prevent meaningless combinations (a sale with a return date, for example).
 **Permissions**: creating or modifying a movement requires `admin`, `board` or the optional role
 `material`, which is seeded but is not a system one (a club that does not want that distinction
 can delete it and keep using `board`); adding gear to the catalog (and the categories its form
-offers) is for the same three.
+offers) and editing it (`PATCH /items/{id}`: not its type, and not its quantities, which only
+movements change) is for the same three. An item's `code` is unique (409 `duplicate_item_code`).
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,

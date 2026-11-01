@@ -418,7 +418,15 @@ files (up to 25 MiB).
     `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `category_id`
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
-    `single_unit_item`, `invalid_item_fields`
+    `single_unit_item`, `invalid_item_fields`; 409 `duplicate_item_code`
+- **PATCH** `/items/{id}` — *Admin, board or material*. Edits an item: replaces every editable field
+  with the body's (the brand, model, code, description, `loanable`, prices and the rope, bag or gear
+  fields of its type). Its type and its quantities, which only movements change, are not editable (an
+  `item_type` or `total_quantity` in the body is ignored).
+  - body: the same as creating, without `item_type`, `acquired_at` and `total_quantity`
+  - returns: 200 `Item`
+  - errors: 400 `invalid_id`, `invalid_body`, `unknown_category`, `invalid_item_fields`; 404
+    `not_found`; 409 `duplicate_item_code`
 - **GET** `/material-categories` — *Admin, board or material*. Categories of generic equipment.
   - returns: 200 `[MaterialCategory]`
 - **GET** `/items/{id}/movements` — *Any baseline role*. Movement history of an item.

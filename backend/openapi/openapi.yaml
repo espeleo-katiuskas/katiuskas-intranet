@@ -2973,6 +2973,35 @@ paths:
             a bag needs bag_type/capacity_liters, a gear item needs
             category_id/description, and none of a rope or bag's own
             fields may be set on the other two types).
+        "409": { description: duplicate_item_code — another item already has that code. }
+
+  /items/{id}:
+    patch:
+      summary: Edit an item
+      description: >
+        Requires the admin, board or material role. Replaces every editable field (brand, model, code,
+        description, loanable, the prices and the fields of its own type) with the body's; the item's
+        type and quantities are not editable (the quantities are whatever its movements say), so an
+        item_type or total_quantity in the body is ignored. The same constraints as when it was
+        created apply.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateItemInput" }
+      responses:
+        "200":
+          description: The item as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "400": { description: invalid_id, invalid_body, unknown_category or invalid_item_fields. }
+        "403": { description: Requires admin, board or material. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_item_code — another item already has that code. }
 
   /material-categories:
     get:

@@ -25,7 +25,7 @@
 
   <dialog id="new-item-dialog" class="panel modal" data-roles="admin,board,material">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nuevo material</h3>
+    <h3 id="ni-title">Nuevo material</h3>
     <form id="new-item-form">
       <div class="field-grid">
         <div class="field">
@@ -84,11 +84,11 @@
           <label for="ni-category">Categoría</label>
           <select id="ni-category" name="category_id"></select>
         </div>
-        <div class="field" data-item-type-field="gear">
+        <div class="field" data-item-type-field="gear" data-create-only>
           <label for="ni-total-quantity">Cantidad</label>
           <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
         </div>
-        <div class="field">
+        <div class="field" data-create-only>
           <label for="ni-acquired-at">Fecha de adquisición <span class="optional">(opcional)</span></label>
           <input id="ni-acquired-at" name="acquired_at" type="date">
         </div>
@@ -109,7 +109,7 @@
         </div>
       </div>
       <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Crear material</button>
+        <button id="ni-submit" type="submit" class="btn btn-primary">Crear material</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>

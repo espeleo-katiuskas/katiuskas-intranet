@@ -101,6 +101,7 @@ const texts = {
 
   // Material
   invalid_item_type: 'El tipo de material tiene que ser cuerda, saco o equipo.',
+  duplicate_item_code: 'Ya hay otro material con ese código.',
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
   single_unit_item: 'Las cuerdas y los sacos son siempre una sola unidad.',
   unknown_category: 'La categoría de material no existe.',
