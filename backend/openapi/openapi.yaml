@@ -282,7 +282,9 @@ paths:
         impersonated person's, not the admin's, and impersonation_seconds_left
         says how long the impersonation has left (a duration, not a moment, so
         a client with a wrong clock can count it down from when it got the
-        answer). The frontend calls it once
+        answer). While an admin acts with other roles (PUT /auth/role-override),
+        roles are the ones in force and real_roles and role_override_seconds_left
+        are present too. The frontend calls it once
         per page load, and it also sets the session cookie again, lasting as
         long as the session has left: a session that expires after its last
         use needs the cookie that mirrors it (for the file links) renewed
@@ -317,6 +319,49 @@ paths:
                       first_name: { type: string }
                       last_name: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/role-override:
+    put:
+      summary: Act with other roles for a while (an admin's own session)
+      description: >
+        Makes the session act, for one hour, with the given roles instead of the person's own, to see what
+        somebody with them sees. Nobody's real roles change. Requires only authentication, and then that the
+        person is an admin for real (their own roles, which may not be the ones in force) and that the session
+        is not an impersonation. Calling it again replaces the roles. GET /auth/me then carries real_roles and
+        role_override_seconds_left.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles: { type: array, minItems: 1, items: { type: string }, description: "Existing role names, at least one of admin, board or member." }
+      responses:
+        "200":
+          description: Roles in force
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles: { type: array, items: { type: string } }
+                  seconds_left: { type: integer }
+        "400": { description: invalid_body, invalid_roles (empty), unknown_role or no_baseline_role. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: The person is not an admin. }
+        "409": { description: impersonating — an impersonation session can not act with other roles. }
+    delete:
+      summary: Put the person's own roles back
+      description: Same requirements as PUT. Answers 204 also when there was no change to undo.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Own roles back }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: The person is not an admin. }
+        "409": { description: impersonating. }
 
   /auth/impersonate/exit:
     post:

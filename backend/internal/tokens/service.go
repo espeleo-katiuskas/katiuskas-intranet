@@ -3,6 +3,7 @@ package tokens
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
@@ -57,18 +58,75 @@ func (s *Service) Issue(ctx context.Context, userID int64, ttl time.Duration) (r
 // takes effect on the very next request instead of waiting for the
 // token to be reissued.
 func (s *Service) Authenticate(ctx context.Context, rawToken, ip, userAgent string) (auth.AuthenticatedUser, error) {
-	userID, impersonatedBy, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip, userAgent)
+	session, err := s.repo.Authenticate(ctx, auth.HashToken(rawToken), ip, userAgent)
 	if errors.Is(err, ErrNotFound) {
 		return auth.AuthenticatedUser{}, auth.ErrInvalidToken
 	}
 	if err != nil {
 		return auth.AuthenticatedUser{}, err
 	}
-	roleNames, err := s.roles.ListNamesForUser(ctx, userID)
+	roleNames, err := s.roles.ListNamesForUser(ctx, session.UserID)
 	if err != nil {
 		return auth.AuthenticatedUser{}, err
 	}
-	return auth.AuthenticatedUser{ID: userID, Roles: roleNames, ImpersonatedBy: impersonatedBy}, nil
+	user := auth.AuthenticatedUser{ID: session.UserID, Roles: roleNames, RealRoles: roleNames, ImpersonatedBy: session.ImpersonatedBy}
+	// An admin who asked to see the intranet with other roles acts with those while it lasts.
+	if len(session.RoleOverride) > 0 {
+		user.Roles = session.RoleOverride
+		user.RoleOverrideUntil = session.RoleOverrideUntil
+	}
+	return user, nil
+}
+
+var (
+	// ErrUnknownRole means a role that does not exist was asked for.
+	ErrUnknownRole = errors.New("unknown role")
+	// ErrNoBaselineRole means none of the roles asked for lets anybody use the API at all.
+	ErrNoBaselineRole = errors.New("at least one of admin, board or member is needed: with none of them nothing can be used")
+	// ErrNoRoles means an empty set of roles was asked for.
+	ErrNoRoles = errors.New("at least one role is needed")
+)
+
+// SetRoleOverride makes the session of rawToken act with the given roles for ttl, replacing any
+// override it already had, and answers with the roles it settled on (without repeats) and the moment
+// it ends. The roles must exist and include one that gives access to the API. Whether the caller may
+// is the handler's business: it is only for real admins.
+func (s *Service) SetRoleOverride(ctx context.Context, rawToken string, names []string, ttl time.Duration) ([]string, time.Time, error) {
+	if len(names) == 0 {
+		return nil, time.Time{}, ErrNoRoles
+	}
+	known, err := s.roles.List(ctx)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	exists := map[string]bool{}
+	for _, r := range known {
+		exists[r.Name] = true
+	}
+	var clean []string
+	seen := map[string]bool{}
+	for _, name := range names {
+		if !exists[name] {
+			return nil, time.Time{}, fmt.Errorf("%w: %s", ErrUnknownRole, name)
+		}
+		if !seen[name] {
+			seen[name] = true
+			clean = append(clean, name)
+		}
+	}
+	if !auth.HasBaselineRole(clean) {
+		return nil, time.Time{}, ErrNoBaselineRole
+	}
+	until := time.Now().Add(ttl)
+	if err := s.repo.SetRoleOverride(ctx, auth.HashToken(rawToken), clean, until); err != nil {
+		return nil, time.Time{}, err
+	}
+	return clean, until, nil
+}
+
+// ClearRoleOverride puts the session of rawToken back to its person's own roles.
+func (s *Service) ClearRoleOverride(ctx context.Context, rawToken string) error {
+	return s.repo.ClearRoleOverride(ctx, auth.HashToken(rawToken))
 }
 
 // Impersonate mints a session token for targetUserID that behaves

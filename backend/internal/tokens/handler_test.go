@@ -106,12 +106,14 @@ func TestHandlerListRequiresAdmin(t *testing.T) {
 	mux, resolver, _, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
 
-	boardToken := testutil.TokenFor(resolver, 1, "board")
+	// Ids that cannot be the target's own: in a fresh database the first user inserted is id 1, and a
+	// person is always allowed to list their own sessions.
+	boardToken := testutil.TokenFor(resolver, target.ID+1000, "board")
 	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", target.Login), boardToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from listing tokens, got %d", rec.Code)
 	}
 
-	adminToken := testutil.TokenFor(resolver, 2, "admin")
+	adminToken := testutil.TokenFor(resolver, target.ID+1001, "admin")
 	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", target.Login), adminToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected admin to list tokens, got %d: %s", rec.Code, rec.Body.String())
 	}

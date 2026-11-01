@@ -19,6 +19,7 @@ import {
   currentUser,
   hasAnyRole,
 } from './api.js';
+import { initRoleOverride } from './roleOverride.js';
 
 // One entry per sidebar link, in display order. roles restricts who
 // even sees the link at all (applyRoleVisibility, via data-roles) —
@@ -119,6 +120,7 @@ const TOPBAR_HTML = `
   </div>
   <div class="topbar-user">
     <span>Hola, <strong id="topbar-user-name">…</strong></span>
+    <button id="role-override-button" type="button" class="link-button" data-roles="admin" title="Ver la intranet como alguien con otros roles">Ver como…</button>
     <button id="logout-button" type="button" class="link-button">Cerrar sesión</button>
   </div>
 `;
@@ -156,6 +158,7 @@ async function initPage({ requireAnyRole } = {}) {
   }
   applyRoleVisibility();
   document.getElementById('logout-button').addEventListener('click', logout);
+  initRoleOverride();
   initSidebarToggle();
   loadTopbarGreeting();
 

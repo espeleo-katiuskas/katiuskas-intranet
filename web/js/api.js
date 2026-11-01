@@ -72,9 +72,15 @@ async function initSession() {
       roles: me.roles ?? [],
       impersonatedBy: me.impersonated_by ?? null,
       impersonationSecondsLeft: me.impersonation_seconds_left ?? null,
+      // Set only while an admin acts with other roles (see /auth/role-override): their own roles and
+      // how long the change has left.
+      realRoles: me.real_roles ?? null,
+      roleOverrideSecondsLeft: me.role_override_seconds_left ?? null,
     };
     if (cachedUser.impersonatedBy) {
       renderImpersonationBanner(cachedUser.impersonatedBy);
+    } else if (cachedUser.realRoles) {
+      renderRoleOverrideBanner();
     }
     const flash = sessionStorage.getItem(FLASH_KEY);
     if (flash) {
@@ -110,7 +116,46 @@ function renderImpersonationBanner(impersonator) {
   document.body.prepend(banner);
   document.getElementById('exit-impersonation-button').addEventListener('click', exitImpersonation);
   if (cachedUser.impersonationSecondsLeft != null) {
-    countDownImpersonation(cachedUser.impersonationSecondsLeft);
+    countDownTimeLeft(cachedUser.impersonationSecondsLeft, 'impersonation-time-left');
+  }
+}
+
+// Shown on every page while an admin acts with other roles than their own, to see what somebody
+// with those roles sees: it says which, for how long, and has the two ways out. The dialog to choose
+// the roles lives in roleOverride.js, which listens for this event.
+function renderRoleOverrideBanner() {
+  const banner = document.createElement('div');
+  banner.className = 'impersonation-banner';
+  banner.innerHTML = `
+    <span>
+      Estás viendo la intranet con los roles: <strong>${cachedUser.roles.map((r) => escapeHtml(roleLabel(r))).join(', ')}</strong>.
+      <span id="role-override-time-left" hidden>Tiempo restante: <strong></strong>; después volverás a tus roles.</span>
+    </span>
+    <button type="button" id="change-role-override-button" class="btn btn-secondary btn-small">Cambiar roles</button>
+    <button type="button" id="exit-role-override-button" class="btn btn-secondary btn-small">Volver a mis roles</button>
+  `;
+  document.body.prepend(banner);
+  document
+    .getElementById('change-role-override-button')
+    .addEventListener('click', () =>
+      document.dispatchEvent(new CustomEvent('katiuskas:role-override')),
+    );
+  document.getElementById('exit-role-override-button').addEventListener('click', clearRoleOverride);
+  if (cachedUser.roleOverrideSecondsLeft != null) {
+    countDownTimeLeft(cachedUser.roleOverrideSecondsLeft, 'role-override-time-left');
+  }
+}
+
+// Puts the roles back to the admin's own and reloads: what the page showed was for the other ones.
+async function clearRoleOverride() {
+  const button = document.getElementById('exit-role-override-button');
+  if (button) button.disabled = true;
+  try {
+    await apiFetch('/auth/role-override', { method: 'DELETE' });
+    window.location.reload();
+  } catch (err) {
+    if (button) button.disabled = false;
+    showError(err.message);
   }
 }
 
@@ -119,14 +164,15 @@ function formatTimeLeft(ms) {
   return ms >= 60000 ? `${Math.ceil(ms / 60000)} min` : `${Math.max(0, Math.ceil(ms / 1000))} s`;
 }
 
-// An impersonation ends on its own (its expiry is fixed), and a page that stayed open would go on
-// looking like somebody else's long after it stopped being so. So the banner says how long is left,
-// counting down from when the API said it (a duration, not a moment, so a wrong clock in this browser
-// can't move it), and when it reaches zero the page reloads: the first request after the end is a 401,
-// which puts the admin back in their own session (see restoreOriginalSession).
-function countDownImpersonation(secondsLeft) {
+// An impersonation, or acting with other roles, ends on its own (its expiry is fixed), and a page that
+// stayed open would go on looking like somebody else's long after it stopped being so. So the banner
+// says how long is left, counting down from when the API said it (a duration, not a moment, so a
+// wrong clock in this browser can't move it), and when it reaches zero the page reloads: for an
+// impersonation the first request after the end is a 401, which puts the admin back in their own
+// session (see restoreOriginalSession), and for other roles the API simply answers with the own ones.
+function countDownTimeLeft(secondsLeft, holderId) {
   const receivedAt = Date.now();
-  const holder = document.getElementById('impersonation-time-left');
+  const holder = document.getElementById(holderId);
   const label = holder.querySelector('strong');
   holder.hidden = false;
   const tick = () => {
@@ -632,6 +678,7 @@ export {
   loadTopbarGreeting,
   setToken,
   startImpersonation,
+  clearRoleOverride,
   escapeHtml,
   encodeFilePath,
   knownRoleLabels,

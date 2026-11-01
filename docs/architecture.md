@@ -488,6 +488,13 @@ included, is a bigger leap than the rest of what board can already do) creates a
   somebody else's session once it is not; when it ends, or is revoked, the next request the page
   makes is a 401 and the frontend puts the admin back in their own session, with a note, instead of
   signing them out.
+- **Acting with other roles**: to see a page as somebody with other roles, an admin does not need to
+  find someone to impersonate: `PUT /auth/role-override` makes their own session act for an hour
+  with the roles they choose (any existing roles, as long as one of `admin`, `board` or `member` is
+  among them). Their real roles do not change, only what the session is allowed to do, and it ends
+  by itself or with `DELETE /auth/role-override`. Only a real admin's own session can (not an
+  impersonation), and being a real admin is what lets them change or end it even when the roles in
+  force no longer include `admin`.
 
 ### `memberships`
 

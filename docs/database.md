@@ -219,6 +219,8 @@ opened it.
 | `last_used_user_agent` | text | yes |  |
 | `impersonated_by` | bigint | yes |  |
 | `lifetime` | interval | yes |  |
+| `role_override` | text[] | yes |  |
+| `role_override_until` | timestamptz | yes |  |
 
 Notes on the columns:
 
@@ -230,6 +232,11 @@ Notes on the columns:
   on their own. An expired or revoked token matches nothing, so a use cannot bring one back. When an
   admin sets the expiry of a session by hand, its lifetime becomes the time from then to that moment
   (so the next use does not undo the change); one in the past ends it and leaves the lifetime alone.
+- `role_override` and `role_override_until` (migration `00041`): the roles an admin's session was
+  asked to act with and until when (`PUT /auth/role-override`); both set or both `NULL`, at least
+  one role. While `role_override_until` is in the future the session's roles are those, not the
+  person's own; after it, or once they are put back (both `NULL`), they are the person's own again.
+  No role of anybody is changed.
 - `last_used_at`: Updated on every request made with the token.
 - `last_used_ip`: Source of the last request.
 - `last_used_user_agent`: The `User-Agent` header of the last request (migration `00037`), whole but
@@ -1295,3 +1302,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00038_tokens_sliding_expiry.sql`: `tokens.lifetime`, so a session expires after its last use
 - `00039_budgets.sql`: `budget_kind`, `budgets`, `budget_items`, `budget_item_accounts`
 - `00040_transaction_files.sql`: `transaction_files`
+- `00041_tokens_role_override.sql`: `tokens.role_override`, `tokens.role_override_until`

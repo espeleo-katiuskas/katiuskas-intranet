@@ -28,10 +28,11 @@ func TestCreateAndAuthenticateRoundTrip(t *testing.T) {
 		t.Errorf("expected a freshly created token to have no last-use info, got %+v", created)
 	}
 
-	gotID, impersonatedBy, err := repo.Authenticate(ctx, "hash-1", "203.0.113.5", "")
+	session, err := repo.Authenticate(ctx, "hash-1", "203.0.113.5", "")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
+	gotID, impersonatedBy := session.UserID, session.ImpersonatedBy
 	if gotID != user.ID {
 		t.Errorf("expected user id %d, got %d", user.ID, gotID)
 	}
@@ -70,10 +71,11 @@ func TestCreateImpersonationRoundTrip(t *testing.T) {
 		t.Errorf("expected impersonated_by %d, got %v", admin.ID, created.ImpersonatedBy)
 	}
 
-	gotID, impersonatedBy, err := repo.Authenticate(ctx, "impersonation-hash", "", "")
+	session, err := repo.Authenticate(ctx, "impersonation-hash", "", "")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
+	gotID, impersonatedBy := session.UserID, session.ImpersonatedBy
 	if gotID != target.ID {
 		t.Errorf("expected authenticate to resolve to the target %d, got %d", target.ID, gotID)
 	}
@@ -91,7 +93,7 @@ func TestAuthenticateRejectsExpired(t *testing.T) {
 	if _, err := repo.Create(ctx, user.ID, "expired-hash", time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, _, err := repo.Authenticate(ctx, "expired-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, err := repo.Authenticate(ctx, "expired-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for an expired token, got %v", err)
 	}
 }
@@ -109,7 +111,7 @@ func TestAuthenticateRejectsRevoked(t *testing.T) {
 	if err := repo.Revoke(ctx, created.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if _, _, err := repo.Authenticate(ctx, "revoked-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, err := repo.Authenticate(ctx, "revoked-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for a revoked token, got %v", err)
 	}
 }
@@ -118,7 +120,7 @@ func TestAuthenticateRejectsUnknownHash(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := tokens.NewRepository(tx)
 
-	if _, _, err := repo.Authenticate(context.Background(), "never-issued", "", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, err := repo.Authenticate(context.Background(), "never-issued", "", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -135,7 +137,7 @@ func TestRevokeByHash(t *testing.T) {
 	if err := repo.RevokeByHash(ctx, "logout-hash"); err != nil {
 		t.Fatalf("revoke by hash: %v", err)
 	}
-	if _, _, err := repo.Authenticate(ctx, "logout-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
+	if _, err := repo.Authenticate(ctx, "logout-hash", "", ""); !errors.Is(err, tokens.ErrNotFound) {
 		t.Errorf("expected the token to no longer authenticate, got %v", err)
 	}
 }
@@ -260,7 +262,7 @@ func TestAuthenticateRecordsTheLastUserAgent(t *testing.T) {
 
 	const firefox = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
 	const safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-	if _, _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.5", firefox); err != nil {
+	if _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.5", firefox); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	got := read()
@@ -269,7 +271,7 @@ func TestAuthenticateRecordsTheLastUserAgent(t *testing.T) {
 	}
 
 	// The last one is the one kept.
-	if _, _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.6", safari); err != nil {
+	if _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.6", safari); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if got := read(); got.Browser != "Safari 17" || got.OS != "iOS" {
@@ -277,7 +279,7 @@ func TestAuthenticateRecordsTheLastUserAgent(t *testing.T) {
 	}
 
 	// A request that sends none leaves none, like the address: the row describes the last request.
-	if _, _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.6", ""); err != nil {
+	if _, err := repo.Authenticate(ctx, "hash-ua", "203.0.113.6", ""); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if got := read(); got.LastUsedUserAgent != nil || got.Browser != "" {
@@ -285,7 +287,7 @@ func TestAuthenticateRecordsTheLastUserAgent(t *testing.T) {
 	}
 
 	// What a client sends is bounded.
-	if _, _, err := repo.Authenticate(ctx, "hash-ua", "", strings.Repeat("é", 2000)); err != nil {
+	if _, err := repo.Authenticate(ctx, "hash-ua", "", strings.Repeat("é", 2000)); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if got := read(); got.LastUsedUserAgent == nil || len([]rune(*got.LastUsedUserAgent)) != 512 {

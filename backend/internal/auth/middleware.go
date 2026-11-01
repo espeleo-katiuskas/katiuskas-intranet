@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
@@ -21,6 +22,11 @@ type AuthenticatedUser struct {
 	// resolved exactly as if ID had signed in normally, so this is the
 	// only place that knows an impersonation is happening at all.
 	ImpersonatedBy *int64
+	// RealRoles are the person's own roles, resolved live. Roles is the same unless an admin has
+	// asked this session to act with other roles (RoleOverrideUntil is then set, the moment it
+	// ends): Roles are those, and RealRoles say whether the person may change or end that.
+	RealRoles         []string
+	RoleOverrideUntil *time.Time
 }
 
 // HasAnyRole reports whether the user holds at least one of the given

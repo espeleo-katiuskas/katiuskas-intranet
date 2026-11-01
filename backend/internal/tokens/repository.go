@@ -103,7 +103,7 @@ func (r *Repository) CreateImpersonation(ctx context.Context, targetUserID, impe
 // keeps the expiry it had. An expired or revoked token matches nothing, so a use can
 // never bring one back. The browser is the *last* one, like the address
 // it goes with: they describe the same request, so they can be read together.
-func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent string) (userID int64, impersonatedBy *int64, err error) {
+func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent string) (Session, error) {
 	var ipArg, userAgentArg any
 	if ip != "" {
 		ipArg = ip
@@ -111,16 +111,39 @@ func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent 
 	if userAgent != "" {
 		userAgentArg = truncateUserAgent(userAgent)
 	}
-	err = r.pool.QueryRow(ctx, `
+	var s Session
+	err := r.pool.QueryRow(ctx, `
 		UPDATE tokens SET last_used_at = now(), last_used_ip = $2, last_used_user_agent = $3,
 			expires_at = CASE WHEN lifetime IS NULL THEN expires_at ELSE now() + lifetime END
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-		RETURNING user_id, impersonated_by
-	`, tokenHash, ipArg, userAgentArg).Scan(&userID, &impersonatedBy)
+		RETURNING user_id, impersonated_by,
+			CASE WHEN role_override_until > now() THEN role_override END,
+			CASE WHEN role_override_until > now() THEN role_override_until END
+	`, tokenHash, ipArg, userAgentArg).Scan(&s.UserID, &s.ImpersonatedBy, &s.RoleOverride, &s.RoleOverrideUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil, ErrNotFound
+		return Session{}, ErrNotFound
 	}
-	return userID, impersonatedBy, err
+	return s, err
+}
+
+// SetRoleOverride makes the session with that hash act with the given roles until the given moment.
+func (r *Repository) SetRoleOverride(ctx context.Context, tokenHash string, roles []string, until time.Time) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE tokens SET role_override = $2, role_override_until = $3
+		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`, tokenHash, roles, until)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ClearRoleOverride puts the session back to its person's own roles (nothing to do if it had none).
+func (r *Repository) ClearRoleOverride(ctx context.Context, tokenHash string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE tokens SET role_override = NULL, role_override_until = NULL WHERE token_hash = $1`, tokenHash)
+	return err
 }
 
 // RevokeByHash is used by logout, which only ever has the raw token, not

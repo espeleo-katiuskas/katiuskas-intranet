@@ -843,6 +843,13 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 			response["impersonation_seconds_left"] = secondsLeft
 		}
 	}
+	// An admin acting with other roles (see tokens.Handler's role-override routes): the roles above
+	// are the ones in force, these say what they really are and how long the change lasts, as a
+	// duration for the same reason as impersonation_seconds_left.
+	if user.RoleOverrideUntil != nil {
+		response["real_roles"] = user.RealRoles
+		response["role_override_seconds_left"] = int(math.Ceil(time.Until(*user.RoleOverrideUntil).Seconds()))
+	}
 	httpapi.WriteJSON(w, http.StatusOK, response)
 }
 

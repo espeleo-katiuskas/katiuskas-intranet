@@ -254,7 +254,7 @@ func TestUseRenewsASessionButNotAFixedOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	pullIn("imp-hash")
-	if _, _, err := repo.Authenticate(ctx, "imp-hash", "", ""); err != nil {
+	if _, err := repo.Authenticate(ctx, "imp-hash", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := expiry(t, "imp-hash"); !near(got, 10*time.Minute) {
@@ -341,7 +341,7 @@ func TestSettingTheExpiryChangesTheLifetimeToo(t *testing.T) {
 	if err := svc.UpdateExpiry(ctx, user.ID, idOf("imp"), time.Now().Add(5*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := repo.Authenticate(ctx, "imp", "", ""); err != nil {
+	if _, err := repo.Authenticate(ctx, "imp", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := left("imp"); !near(got, 5*time.Hour) {

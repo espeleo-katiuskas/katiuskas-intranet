@@ -74,6 +74,98 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.updateExpiry, "admin"))
 	mux.Handle("DELETE /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.revoke))
 	mux.Handle("POST /api/v1/users/{login}/impersonate", h.authenticator.Protect(h.impersonate, "admin"))
+	// RequireAuth only, not Protect: while an admin acts with other roles (maybe none of them admin,
+	// maybe not even one that can call anything else) they have to be able to change that and to put
+	// it back; who may is checked from the person's own roles (see roleOverrideAllowed).
+	mux.Handle("PUT /api/v1/auth/role-override", h.authenticator.RequireAuth(http.HandlerFunc(h.setRoleOverride)))
+	mux.Handle("DELETE /api/v1/auth/role-override", h.authenticator.RequireAuth(http.HandlerFunc(h.clearRoleOverride)))
+}
+
+// roleOverrideAllowed says whether the session may act with other roles: only a real admin's own
+// session, never an impersonation (it is somebody else's session already).
+func roleOverrideAllowed(w http.ResponseWriter, user auth.AuthenticatedUser) bool {
+	if user.ImpersonatedBy != nil {
+		httpapi.WriteError(w, http.StatusConflict, "impersonating", "an impersonation session can not act with other roles")
+		return false
+	}
+	for _, role := range user.RealRoles {
+		if role == "admin" {
+			return true
+		}
+	}
+	httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+	return false
+}
+
+func rawBearer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || raw == "" {
+		httpapi.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+		return "", false
+	}
+	return raw, true
+}
+
+// setRoleOverride lets an admin act, for the length of an impersonation, with the roles in the body
+// instead of their own, to see what somebody with those roles sees. Nothing about anybody's real
+// roles changes.
+func (h *Handler) setRoleOverride(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.UserFromContext(r.Context())
+	if !roleOverrideAllowed(w, user) {
+		return
+	}
+	raw, ok := rawBearer(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Roles []string `json:"roles"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	roles, until, err := h.service.SetRoleOverride(r.Context(), raw, body.Roles, h.impersonationTokenTTL)
+	switch {
+	case errors.Is(err, ErrNoRoles), errors.Is(err, ErrUnknownRole), errors.Is(err, ErrNoBaselineRole):
+		code := "invalid_roles"
+		if errors.Is(err, ErrUnknownRole) {
+			code = "unknown_role"
+		} else if errors.Is(err, ErrNoBaselineRole) {
+			code = "no_baseline_role"
+		}
+		httpapi.WriteError(w, http.StatusBadRequest, code, err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not change the roles")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ve la intranet con los roles: %s.", h.actorLogin(r.Context()), strings.Join(roles, ", ")))
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
+		"roles":        roles,
+		"seconds_left": int(time.Until(until).Seconds()),
+	})
+}
+
+// clearRoleOverride puts the session back to the person's own roles. It does nothing, and says so
+// with the same 204, if there was no override.
+func (h *Handler) clearRoleOverride(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.UserFromContext(r.Context())
+	if !roleOverrideAllowed(w, user) {
+		return
+	}
+	raw, ok := rawBearer(w, r)
+	if !ok {
+		return
+	}
+	if err := h.service.ClearRoleOverride(r.Context(), raw); err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not put the roles back")
+		return
+	}
+	if user.RoleOverrideUntil != nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha vuelto a sus roles.", h.actorLogin(r.Context())))
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // resolveUserLogin looks up the numeric id behind a {login} path

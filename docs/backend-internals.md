@@ -85,7 +85,18 @@ history, paged by `limit`/`offset` — which marks the caller's own session `cur
 hash of its bearer token) to audit, re-expire, or revoke any token, plus `POST
 /users/{login}/impersonate` (admin-only, issues a short-lived token — `config.ImpersonationTokenTTL`
 — that resolves as the target person in every way except `AuthenticatedUser.ImpersonatedBy`, which
-names the admin) and `POST /auth/impersonate/exit` to end one and get a fresh normal token back. The
+names the admin) and `POST /auth/impersonate/exit` to end one and get a fresh normal token back.
+`PUT`/`DELETE /auth/role-override` let a real admin make their *own* session act for an hour with
+other roles (`tokens.role_override`, migration `00041`) to see what somebody with them sees, without
+touching anybody's real roles (which would run into the automatic roles, the last-admin rule and the
+risk of locking oneself out): `Service.Authenticate` still resolves the person's roles live, and
+answers with those of the override as `AuthenticatedUser.Roles` while it has not ended
+(`RoleOverrideUntil`), keeping the own ones in `RealRoles`. The routes use `RequireAuth` and check
+`RealRoles` for `admin` themselves, because under the override the roles in force may not include
+it; an impersonation session is refused (409 `impersonating`); the roles must exist and include
+`admin`, `board` or `member` (`no_baseline_role`: with none nothing could be used). `GET /auth/me`
+adds `real_roles` and `role_override_seconds_left` while one is in force. The Telegram notice names
+the admin and the roles. The
 same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
 (`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or
 refreshed (sign-in, impersonation start/exit) — every ordinary route still only ever looks at the

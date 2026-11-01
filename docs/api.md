@@ -91,14 +91,27 @@ if the person has linked Telegram, by Telegram too.
   - returns: 200 `JSON`
 - **GET** `/auth/me` — *Any baseline role*. Who owns the token and which roles they have now.
   Carries `impersonated_by` and `impersonation_seconds_left` (how long the impersonation has left,
-  as a duration) in an impersonation session. It also renews the session cookie for as
-  long as the session has left (the frontend calls it on every page load).
+  as a duration) in an impersonation session, and `real_roles` and `role_override_seconds_left`
+  while an admin acts with other roles (`roles` are then the ones in force). It also renews the
+  session cookie for as long as the session has left (the frontend calls it on every page load).
   - returns: 200 `JSON`
 - **POST** `/auth/impersonate/exit` — *Any valid session*. Ends an impersonation and returns a new
   token for the admin who started it. (The frontend only uses it when it no longer has the admin's
   own session to go back to.)
   - returns: 200 `JSON`
   - errors: 409 `not_impersonating`
+- **PUT** `/auth/role-override` — *A real admin's own session* (not an impersonation; only
+  authentication is checked by the route, so it also works while acting with roles that are not
+  admin). Makes the session act, for one hour (`config.ImpersonationTokenTTL`), with the given roles
+  instead of the person's own, to see what somebody with those roles sees. Nobody's real roles
+  change. Calling it again replaces the roles.
+  - body: `roles*` (names of existing roles; at least one of `admin`, `board`, `member`)
+  - returns: 200 `{roles, seconds_left}`
+  - errors: 400 `invalid_body`, `invalid_roles` (empty), `unknown_role`, `no_baseline_role`;
+    403 `forbidden` (not a real admin); 409 `impersonating`
+- **DELETE** `/auth/role-override` — *A real admin's own session*. Puts the session back to the
+  person's own roles; 204 also when there was no change to undo.
+  - errors: 403 `forbidden`; 409 `impersonating`
 - **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts,
   directories and how full their disks are, and what is wrong right now, of the running process.
   Never includes secrets.

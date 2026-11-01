@@ -7,6 +7,15 @@ package tokens
 
 import "time"
 
+// Session is what validating a token gives: whose it is, who is behind it if it is an impersonation
+// and, while one is in force, the roles it was asked to act with and until when.
+type Session struct {
+	UserID            int64
+	ImpersonatedBy    *int64
+	RoleOverride      []string
+	RoleOverrideUntil *time.Time
+}
+
 type Token struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"-"`

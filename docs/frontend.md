@@ -116,6 +116,17 @@ admin, with the note "La impersonación ha terminado y has vuelto a tu sesión."
 flash shown by `initSession`). Any other sign-in (`setToken`) forgets the kept token, so it can't be
 restored later by mistake, and signing out while impersonating ends the admin's own session too.
 
+"Ver como…" (`js/roleOverride.js`, wired by `initPage`): admins have a link in the topbar (removed
+for anybody else by `data-roles`, and for an impersonation) that opens a dialog with the roles from
+`GET /roles` as checkboxes, plus buttons for the usual combinations (Socio, Socio con material,
+Socio con money, Junta, Administrador), and sends them with `PUT /auth/role-override`; then the page
+reloads as somebody with those roles (the topbar link and the admin-only pages go away if `admin` is
+not among them). While it is in force every page shows a banner (`renderRoleOverrideBanner` in
+`api.js`, from `real_roles` in `GET /auth/me`) with the roles, the time left (counted down by the
+same `countDownTimeLeft` as an impersonation, reloading at zero) and "Cambiar roles" (the same
+dialog, through a `katiuskas:role-override` event) and "Volver a mis roles" (`DELETE
+/auth/role-override`, then reload).
+
 `js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the session
 token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate the
 token and populate `currentUser()`. `applyRoleVisibility()` removes any `data-roles="admin,board"`

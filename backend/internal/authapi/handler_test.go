@@ -2037,3 +2037,35 @@ func TestMeSaysHowLongAnImpersonationHasLeft(t *testing.T) {
 		t.Errorf("a normal session must not carry impersonation fields: %s", rec.Body.String())
 	}
 }
+
+func TestMeSaysWhichRolesAnAdminActsWithAndForHowLong(t *testing.T) {
+	s := newTestServer(t)
+	ctx := context.Background()
+	admin := s.insertUserWithRole(t, "611222334", "admin")
+	raw, err := s.tokens.Issue(ctx, admin.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nothing to say while the person acts with their own roles.
+	if rec := s.getWithToken(t, "/api/v1/auth/me", raw); strings.Contains(rec.Body.String(), "real_roles") ||
+		strings.Contains(rec.Body.String(), "role_override_seconds_left") {
+		t.Fatalf("no override, no fields: %s", rec.Body.String())
+	}
+
+	if _, _, err := s.tokens.SetRoleOverride(ctx, raw, []string{"member", "money"}, 30*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	var me struct {
+		Roles     []string `json:"roles"`
+		RealRoles []string `json:"real_roles"`
+		Left      float64  `json:"role_override_seconds_left"`
+	}
+	rec := s.getWithToken(t, "/api/v1/auth/me", raw)
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &me) != nil {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Join(me.Roles, ",") != "member,money" || strings.Join(me.RealRoles, ",") != "admin" ||
+		me.Left < 29*60 || me.Left > 30*60 {
+		t.Fatalf("me: %+v", me)
+	}
+}
