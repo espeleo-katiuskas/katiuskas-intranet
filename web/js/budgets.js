@@ -65,9 +65,14 @@ function renderBudget() {
   noBudget.hidden = budget !== null;
   view.hidden = budget === null;
   const year = Number(yearSelect.value);
-  document.getElementById('edit-budget').hidden = !(canEdit && budget);
-  document.getElementById('delete-budget').hidden = !(canEdit && budget);
-  document.getElementById('create-budget').hidden = !canEdit;
+  // Only admin and money have these buttons: applyRoleVisibility removes them from the page for
+  // everybody else, so they may not exist.
+  for (const id of ['edit-budget', 'delete-budget']) {
+    const button = document.getElementById(id);
+    if (button) button.hidden = !budget;
+  }
+  const createButton = document.getElementById('create-budget');
+  if (createButton) createButton.hidden = false;
   if (!budget) {
     document.getElementById('no-budget-text').textContent = `No hay presupuesto de ${year}.`;
     return;
@@ -301,11 +306,11 @@ async function templateFor(year) {
   return apiFetch(`/budgets/${from}`);
 }
 
-document.getElementById('edit-budget').addEventListener('click', () => openEditor(budget));
-document.getElementById('create-budget').addEventListener('click', async () => {
+document.getElementById('edit-budget')?.addEventListener('click', () => openEditor(budget));
+document.getElementById('create-budget')?.addEventListener('click', async () => {
   openEditor(await templateFor(Number(yearSelect.value)));
 });
-document.getElementById('delete-budget').addEventListener('click', async () => {
+document.getElementById('delete-budget')?.addEventListener('click', async () => {
   const year = Number(yearSelect.value);
   if (!confirm(`¿Borrar el presupuesto de ${year}?`)) return;
   try {
@@ -321,6 +326,27 @@ document.getElementById('delete-budget').addEventListener('click', async () => {
 });
 
 yearSelect.addEventListener('change', () => loadYear(Number(yearSelect.value)));
+
+// Any year can be opened (and, with a year that has no budget, created): the selector only lists
+// the years that have one plus this year and the next.
+async function goToOtherYear() {
+  const input = document.getElementById('year-other');
+  const year = Number(input.value);
+  if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+    showError('El año tiene que estar entre 1900 y 2200.');
+    return;
+  }
+  input.value = '';
+  fillYearSelect(year);
+  await loadYear(year);
+}
+document.getElementById('year-go').addEventListener('click', goToOtherYear);
+document.getElementById('year-other').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    goToOtherYear();
+  }
+});
 
 const [summaries, accountList] = await Promise.all([apiFetch('/budgets'), apiFetch('/accounts')]);
 years = summaries.map((s) => s.year);

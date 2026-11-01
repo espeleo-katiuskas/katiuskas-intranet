@@ -1557,3 +1557,7 @@ a.btn {
 .budget-balance.bad {
   color: var(--danger);
 }
+
+.year-other {
+  width: 6rem;
+}

@@ -334,7 +334,8 @@ admin/money can already write here too, so nothing on the page needs a narrower 
 gate.
 
 `/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
-selector (the years that have a budget from `GET /budgets`, plus this year and the next) loads `GET
+selector (the years that have a budget from `GET /budgets`, plus this year and the next; "Otro año"
+opens any year from 1900 to 2200, to look at it or to create its budget) loads `GET
 /budgets/{year}` and draws, for income and for expenses, a table with each line item's name and
 accounts, the amount budgeted, what was really received or spent, and the percentage reached (a bar
 and the figure, red beyond 100 %), with the totals of both parts also as two cards at the top;
