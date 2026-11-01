@@ -1328,5 +1328,6 @@ federative license goes in that same person's `licencias/` subdirectory, named
 makes every missing (or out-of-date) thumbnail from the license copies — first page of a PDF, or a
 smaller version of an image, 280px on the longest side — and only needs `pdftoppm`/ImageMagick on
 the machine running it (`--help` for the options: `--root`, `--force`, `--dry-run`, or just some
-logins). On the club's host a systemd timer runs it every 15 minutes (`docs/environments.md`,
-"License thumbnails").
+logins). It also removes from each `.thumbnails` everything that is not the thumbnail of a license
+copy still in that directory, so a deleted or renamed copy leaves nothing behind. On the club's
+host a systemd timer runs it every 15 minutes (`docs/environments.md`, "License thumbnails").

@@ -384,7 +384,8 @@ directories — copy them like any other file on the system.
 
 The copies of each person's licenses (`user-files/<login>/licencias/`) are shown in `/perfil` and
 `/socio` with a thumbnail, which the application does not generate by itself. To create the missing
-ones (and renew those older than their file), run the repository's script, as the user that owns the
+ones (and renew those older than their file, and remove what is left in `.thumbnails` of copies
+that no longer exist), run the repository's script, as the user that owns the
 files and pointing at the production directory:
 
 ```sh

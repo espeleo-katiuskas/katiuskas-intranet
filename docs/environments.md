@@ -513,7 +513,11 @@ itself (see "Dropping files into the library and the per-person directories" in
 missing ones, and renews those older than their file, and a systemd timer
 ([`katiuskas-intranet-thumbnails.timer`](../deploy/systemd/katiuskas-intranet-thumbnails.timer))
 runs it every 15 minutes, so a license copy dropped in has its thumbnail within minutes. The script
-only does what is missing, so a run with nothing new is just a look at the directories.
+only does what is missing, so a run with nothing new is just a look at the directories. It also
+tidies each `.thumbnails`: whatever is in there that is not the thumbnail (`<filename>.jpg`) of a
+license copy still in `licencias/` that the page lists (the thumbnail of a deleted or renamed copy,
+any other file, subdirectories) is removed; only a temporary file less than an hour old is left,
+in case another run is writing it, and a `.thumbnails` that is a link is not touched.
 
 The service runs as `intranet` (the owner of the files, so the thumbnails are theirs too) and gets
 only what it needs, because the tools that read the people's uploads (poppler, ImageMagick,
