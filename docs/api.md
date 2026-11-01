@@ -186,10 +186,14 @@ positions and are not assigned by hand.
 ## Sessions and impersonation
 
 - **GET** `/tokens` — *Admin*. Everyone's sessions: the active ones by default; `status=all` adds
-  the history. Marks the caller's own as `current`.
-  - query: `status`, `limit`, `offset`
+  the history. Marks the caller's own as `current`. `sort` (`last_used`, the default, `created`,
+  `expires` or `person`, by name as it is read, then login) and `order` (`asc` or `desc`; the most
+  recent first for the dates, A first for `person`) say in what order, which holds across pages:
+  ties break by id, so paging neither repeats nor skips. A session never used counts as the oldest
+  use.
+  - query: `status`, `sort`, `order`, `limit`, `offset`
   - returns: 200 `[Token]`
-  - errors: 400 `invalid_status`
+  - errors: 400 `invalid_status`, `invalid_sort`, `invalid_order`
 - **GET** `/users/{login}/tokens` — *That person, or admin*. The sessions a person has had, newest
   first, without the token value, with the one making the request marked `current`: all of them by
   default (the audit view), or only the ones not expired or revoked with `?status=active` (what a

@@ -165,9 +165,11 @@ its own near-identical copy; `activity.js`'s own memoria-resource downloads impo
 `/perfil` also has a "Mis sesiones" section (`profile.js`, `loadSessions`): the person's sessions
 not expired or revoked (`GET /users/{login}/tokens?status=active`), each with its browser and
 system, last use and address, when it was opened and when it expires, "Esta sesión" on the one in
-use and, if an administrator entered as them, who; each has a "Cerrar" button (`DELETE
-.../tokens/{id}`, after a confirmation), and closing the one in use is signing out, so it also
-clears the token and goes to `/login`. `perfil.html`/`socio.html` each also render a "Licencias
+use and, if an administrator entered as them, who; its Último uso, Abierta and Caduca headers sort
+them (the same helper, here in the page itself since they are all loaded; a session never used
+counts as the oldest use), most recently used first to begin with; each has a "Cerrar" button
+(`DELETE .../tokens/{id}`, after a confirmation), and closing the one in use is signing out, so it
+also clears the token and goes to `/login`. `perfil.html`/`socio.html` each also render a "Licencias
 federativas" section — a year `<select>`, mirroring `dashboard.js`'s own Actas asambleas, plus a
 grid of small clickable thumbnails rather than a plain list of text links — instead of pointing at
 that person's `licencias/` subdirectory (see [Dropping files
@@ -438,35 +440,39 @@ address, browser and system ("Chrome 118 · Windows", from `browser`/`os`, with 
 as the tooltip; "—" if never used), creation and expiry, "Activa"/"Caducada"/"Revocada", a badge on
 an impersonation's and on the admin's own "Esta sesión"), 50 at a time with "Ver más" and a checkbox
 for the expired and revoked ones, where an active one can be revoked (a different warning for one's
-own, which signs out) or have its expiry changed, through `/users/{login}/tokens/{id}`, and a
-"Festivos" one: the club holidays the activities calendar tints, a year at a time with ‹ › (`GET
-/holidays?year=`), each with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo" dialog (`POST
-/holidays`; a date that already has one is the API's 409 `duplicate_holiday`) and "Copiar del año
-anterior", which POSTs last year's holidays on the same day and month except where the year already
-has one (movable ones such as Semana Santa are fixed by hand; there is no edit) and a "Datos de
-interés" one: the labelled values the home page shows (`GET`/`POST /club-info`, `PATCH`/`DELETE
-/club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑ ↓ to put them in
-order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by creating and editing (a
-label, a value and, optionally, a text for a copy button and the button's own text). The home page
-(`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by
-one listener on the list since they are drawn after load: the data is not written in `index.html`,
-so an administrator changes it without a deploy and a private one (the Bizum number) is not in the
-repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
-`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see **Permission
-tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the
-column toggles sit behind a "Filtros…" button, and above it a "Buscar persona" box (`matchesSearch`:
-every word typed has to appear, in any order and ignoring accents and case, in the name, membership
-number, login and — admin/board only, as that is all their listing carries — email, phone and DNI;
-it narrows what the filters leave and isn't persisted). Every filter starts with every option
-checked except "Tipo de socio", which starts with only "Activo" and "Baja temporal", so the default
-view is the current membership. "Cuota anual" splits people on whether `last_due_year` is the
-current year ("A corriente de pago"), and "Federación" on whether `license_type` is present — `GET
-/users` only reports a license for the current year, so having one *is* being federated. Filters,
-visible columns and sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so
-"Volver a socios" from a person's page lands on the same view, and a counter shows how many people
-the current filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre",
-"Apellidos", "Categoría" and "Tipo de licencia" (each column's `default` flag); the rest are
-optional in the "Filtros…" panel.
+own, which signs out) or have its expiry changed, through `/users/{login}/tokens/{id}`; its headers
+Persona, Último uso, Creada and Caduca sort it (`initSortableHeaders`, `js/sortableHeaders.js`: a
+click or Enter on the header picks the column or turns it round, ▲/▼ and `aria-sort` say which; the
+most recent first for the dates and A first for the person to begin with, last use to begin with the
+page) by asking the API (`sort`, `order`), so that the order holds across the pages "Ver más"
+brings, and a "Festivos" one: the club holidays the activities calendar tints, a year at a time with
+‹ › (`GET /holidays?year=`), each with a "Borrar" (`DELETE /holidays/{id}`), a "+ Nuevo festivo"
+dialog (`POST /holidays`; a date that already has one is the API's 409 `duplicate_holiday`) and
+"Copiar del año anterior", which POSTs last year's holidays on the same day and month except where
+the year already has one (movable ones such as Semana Santa are fixed by hand; there is no edit) and
+a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST /club-info`,
+`PATCH`/`DELETE /club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑
+↓ to put them in order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by
+creating and editing (a label, a value and, optionally, a text for a copy button and the button's
+own text). The home page (`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the
+copy buttons handled by one listener on the list since they are drawn after load: the data is not
+written in `index.html`, so an administrator changes it without a deploy and a private one (the
+Bizum number) is not in the repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain
+member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see
+**Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual",
+"Federación") and the column toggles sit behind a "Filtros…" button, and above it a "Buscar persona"
+box (`matchesSearch`: every word typed has to appear, in any order and ignoring accents and case, in
+the name, membership number, login and — admin/board only, as that is all their listing carries —
+email, phone and DNI; it narrows what the filters leave and isn't persisted). Every filter starts
+with every option checked except "Tipo de socio", which starts with only "Activo" and "Baja
+temporal", so the default view is the current membership. "Cuota anual" splits people on whether
+`last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
+`license_type` is present — `GET /users` only reports a license for the current year, so having one
+*is* being federated. Filters, visible columns and sort order persist in `localStorage`
+(`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page lands on the same
+view, and a counter shows how many people the current filters leave. With nothing saved, the columns
+shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's
+`default` flag); the rest are optional in the "Filtros…" panel.
 
 A page's requests that don't depend on each other go out together, not one after another
 (each wait in a row costs a full round trip, which is most of what a page load takes once

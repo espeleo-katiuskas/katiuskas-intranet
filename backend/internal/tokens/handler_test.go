@@ -780,3 +780,124 @@ func TestHandlerRevokingYourOwnSessionNotifiesInItsOwnWords(t *testing.T) {
 		t.Errorf("unexpected notification: %q", msg)
 	}
 }
+
+// The list of everybody's sessions can be ordered by person, last use, creation and expiry, either way, and
+// the order holds across pages (ties break by id, so paging neither repeats nor skips).
+func TestHandlerListAllIsSortable(t *testing.T) {
+	mux, resolver, _, tx := newHandlerTestServer(t)
+	ctx := context.Background()
+	adminToken := testutil.TokenFor(resolver, testutil.InsertUser(t, tx, "").ID, "admin")
+
+	named := func(first, last string) int64 {
+		u := testutil.InsertUser(t, tx, "")
+		if _, err := tx.Exec(ctx, `UPDATE users SET first_name = $2, last_name = $3 WHERE id = $1`, u.ID, first, last); err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	// Three sessions, by three people, whose dates go in different directions. A never used.
+	ana, beto, carla := named("Ana", "Zapata"), named("Beto", "Alonso"), named("Carla", "Moreno")
+	row := func(user int64, hash, created, used, expires string) {
+		usedSQL := "NULL"
+		if used != "" {
+			usedSQL = "now() - interval '" + used + "'"
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, created_at, last_used_at, expires_at)
+			VALUES ($1, $2, now() - interval '`+created+`', `+usedSQL+`, now() + interval '`+expires+`')`, user, hash); err != nil {
+			t.Fatal(err)
+		}
+	}
+	row(ana, "s-ana", "3 days", "", "20 days")          // created 3 d ago, never used, ends in 20 d
+	row(beto, "s-beto", "2 days", "5 hours", "30 days") // created 2 d ago, used 5 h ago, ends in 30 d
+	row(carla, "s-carla", "1 day", "1 hour", "10 days") // created 1 d ago, used 1 h ago, ends in 10 d
+
+	logins := map[int64]string{}
+	for _, id := range []int64{ana, beto, carla} {
+		l, err := userLogin(tx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		logins[id] = l
+	}
+	names := map[string]string{logins[ana]: "Ana", logins[beto]: "Beto", logins[carla]: "Carla"}
+	order := func(query string) string {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/tokens?status=all&"+query, adminToken, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", query, rec.Code, rec.Body.String())
+		}
+		var list []tokens.Token
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, tok := range list {
+			if n, ok := names[tok.UserLogin]; ok {
+				out = append(out, n)
+			}
+		}
+		return strings.Join(out, ",")
+	}
+
+	for query, want := range map[string]string{
+		"":                           "Carla,Beto,Ana", // the default: last use, most recent first, never used last
+		"sort=last_used":             "Carla,Beto,Ana",
+		"sort=last_used&order=asc":   "Ana,Beto,Carla", // never used counts as the oldest
+		"sort=created":               "Carla,Beto,Ana",
+		"sort=created&order=asc":     "Ana,Beto,Carla",
+		"sort=expires":               "Beto,Ana,Carla",
+		"sort=expires&order=asc":     "Carla,Ana,Beto",
+		"sort=person":                "Ana,Beto,Carla", // by name as it is read: first name
+		"sort=person&order=desc":     "Carla,Beto,Ana",
+		"sort=created&order=desc":    "Carla,Beto,Ana",
+		"sort=person&order=asc&x=ok": "Ana,Beto,Carla",
+	} {
+		if got := order(query); got != want {
+			t.Errorf("%q: expected %s, got %s", query, want, got)
+		}
+	}
+
+	for _, bad := range []string{"sort=name", "sort=LAST_USED", "order=up", "sort=person&order="} {
+		rec := doRequest(mux, http.MethodGet, "/api/v1/tokens?"+bad, adminToken, nil)
+		wantCode := http.StatusBadRequest
+		if bad == "sort=person&order=" { // an empty order is the default, not an error
+			wantCode = http.StatusOK
+		}
+		if rec.Code != wantCode {
+			t.Errorf("%q: expected %d, got %d", bad, wantCode, rec.Code)
+		}
+	}
+
+	// Paging in a given order: every row once, none missing, even though several tie.
+	for i := 0; i < 4; i++ { // four more sessions of Ana's, all the same moment
+		row(ana, fmt.Sprintf("tie-%d", i), "1 hour", "1 hour", "1 day")
+	}
+	seen := map[int64]bool{}
+	for offset := 0; ; offset += 3 {
+		rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/tokens?status=all&sort=person&limit=3&offset=%d", offset), adminToken, nil)
+		var page []tokens.Token
+		_ = json.Unmarshal(rec.Body.Bytes(), &page)
+		if len(page) == 0 {
+			break
+		}
+		for _, tok := range page {
+			if seen[tok.ID] {
+				t.Fatalf("session %d came twice across pages", tok.ID)
+			}
+			seen[tok.ID] = true
+		}
+	}
+	var total int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM tokens`).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != total {
+		t.Errorf("paging should reach every session (%d), reached %d", total, len(seen))
+	}
+}
+
+func userLogin(tx pgx.Tx, id int64) (string, error) {
+	var login string
+	err := tx.QueryRow(context.Background(), `SELECT login FROM users WHERE id = $1`, id).Scan(&login)
+	return login, err
+}

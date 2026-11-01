@@ -139,8 +139,8 @@ func (s *Service) IDForRawToken(ctx context.Context, rawToken string) (int64, er
 
 // List is ListAll's service face: the tokens of everyone, see
 // Repository.ListAll.
-func (s *Service) List(ctx context.Context, activeOnly bool, limit, offset int) ([]Token, error) {
-	return s.repo.ListAll(ctx, activeOnly, limit, offset)
+func (s *Service) List(ctx context.Context, activeOnly bool, order ListOrder, limit, offset int) ([]Token, error) {
+	return s.repo.ListAll(ctx, activeOnly, order, limit, offset)
 }
 
 func (s *Service) ListForUser(ctx context.Context, userID int64) ([]Token, error) {

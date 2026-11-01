@@ -185,14 +185,65 @@ func (r *Repository) IDByHash(ctx context.Context, tokenHash string) (int64, err
 	return id, err
 }
 
-// ListAll lists the tokens of everyone, most recently used first (never
-// used ones last), a page at a time — the admin's view of who is signed in
-// (activeOnly: not revoked and not expired yet) or of the whole history.
-func (r *Repository) ListAll(ctx context.Context, activeOnly bool, limit, offset int) ([]Token, error) {
+// SortKey is what the list of everybody's tokens can be ordered by.
+type SortKey string
+
+const (
+	SortLastUsed SortKey = "last_used"
+	SortCreated  SortKey = "created"
+	SortExpires  SortKey = "expires"
+	// SortPerson orders by the person's name as it is read ("Nombre Apellidos"), then login, like
+	// every other listing of people.
+	SortPerson SortKey = "person"
+)
+
+func (k SortKey) Valid() bool {
+	return k == SortLastUsed || k == SortCreated || k == SortExpires || k == SortPerson
+}
+
+// DefaultDesc is the direction that suits a key when none is asked for: the most recent date first,
+// names from A.
+func (k SortKey) DefaultDesc() bool { return k != SortPerson }
+
+// ListOrder is how ListAll orders: by one key, either way.
+type ListOrder struct {
+	By   SortKey
+	Desc bool
+}
+
+// DefaultListOrder is the most recently used first, which is what the list always was.
+var DefaultListOrder = ListOrder{By: SortLastUsed, Desc: true}
+
+// orderBy is the ORDER BY of a ListOrder, built only from fixed fragments (never from what the caller
+// sent) and always ending in the id, so that paging through a list in which several rows tie (the
+// same person, never used...) neither repeats nor skips rows. A session never used counts as the
+// oldest use: first when ascending, last when descending.
+func (o ListOrder) orderBy() string {
+	dir, nulls := "ASC", "NULLS FIRST"
+	if o.Desc {
+		dir, nulls = "DESC", "NULLS LAST"
+	}
+	var key string
+	switch o.By {
+	case SortCreated:
+		key = "t.created_at " + dir
+	case SortExpires:
+		key = "t.expires_at " + dir
+	case SortPerson:
+		key = "u.first_name " + dir + ", u.last_name " + dir + ", u.login " + dir
+	default:
+		key = "t.last_used_at " + dir + " " + nulls
+	}
+	return key + ", t.id DESC"
+}
+
+// ListAll lists the tokens of everyone in the given order, a page at a time — the admin's view of who
+// is signed in (activeOnly: not revoked and not expired yet) or of the whole history.
+func (r *Repository) ListAll(ctx context.Context, activeOnly bool, order ListOrder, limit, offset int) ([]Token, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+tokenSelectJoined+`
 		WHERE (NOT $1 OR (t.revoked_at IS NULL AND t.expires_at > now()))
-		ORDER BY t.last_used_at DESC NULLS LAST, t.id DESC
+		ORDER BY `+order.orderBy()+`
 		LIMIT $2 OFFSET $3
 	`, activeOnly, limit, offset)
 	if err != nil {

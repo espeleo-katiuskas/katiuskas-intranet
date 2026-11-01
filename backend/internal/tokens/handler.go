@@ -115,8 +115,10 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 
 // listAll is the admin's overview of everyone's sessions: by default only
 // the active ones (not revoked, not expired), most recently used first;
-// ?status=all adds the history. limit (default 100, at most 200) and
-// offset page through it; an out-of-range limit or negative offset falls
+// ?status=all adds the history. sort (last_used, the default, created,
+// expires or person) and order (asc or desc: the most recent first for the
+// dates, A first for person) say in what order, and it holds across pages.
+// limit (default 100, at most 200) and offset page through it; an out-of-range limit or negative offset falls
 // back to its default, like the other listings. Revoking or re-expiring one
 // still goes through /users/{login}/tokens/{tokenID}.
 func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +132,24 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_status", "status must be active or all")
 		return
 	}
+	order := DefaultListOrder
+	if by := SortKey(q.Get("sort")); by != "" {
+		if !by.Valid() {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_sort", "sort must be last_used, created, expires or person")
+			return
+		}
+		order = ListOrder{By: by, Desc: by.DefaultDesc()}
+	}
+	switch q.Get("order") {
+	case "":
+	case "asc":
+		order.Desc = false
+	case "desc":
+		order.Desc = true
+	default:
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_order", "order must be asc or desc")
+		return
+	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	if limit <= 0 || limit > 200 {
@@ -138,7 +158,7 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	list, err := h.service.List(r.Context(), activeOnly, limit, offset)
+	list, err := h.service.List(r.Context(), activeOnly, order, limit, offset)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list tokens")
 		return

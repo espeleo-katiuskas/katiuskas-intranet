@@ -13,6 +13,7 @@ import {
 import { formatSize } from './fileBrowser.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { initSortableHeaders } from './sortableHeaders.js';
 
 // Everything here is for administrators only — the nav link is hidden from
 // anyone else and anyone else who lands here is sent home. More sections
@@ -209,6 +210,9 @@ const sessionsShowAll = document.getElementById('sessions-show-all');
 const sessionsLoadMore = document.getElementById('sessions-load-more');
 let sessionsShown = [];
 let namesByLogin = {};
+// The order is the server's, so that it holds across the pages "Ver más" brings (GET /tokens?sort=&order=).
+// Starts as the API's own: most recently used first.
+const sessionsSort = { key: 'last_used', desc: true };
 
 function sessionStatus(session) {
   if (session.revoked_at) return 'Revocada';
@@ -269,7 +273,7 @@ async function loadSessions({ append = false } = {}) {
   try {
     const status = sessionsShowAll.checked ? 'all' : 'active';
     const fetched = await apiFetch(
-      `/tokens?status=${status}&limit=${SESSIONS_PAGE_SIZE + 1}&offset=${sessionsShown.length}`,
+      `/tokens?status=${status}&sort=${sessionsSort.key}&order=${sessionsSort.desc ? 'desc' : 'asc'}&limit=${SESSIONS_PAGE_SIZE + 1}&offset=${sessionsShown.length}`,
     );
     sessionsShown = sessionsShown.concat(fetched.slice(0, SESSIONS_PAGE_SIZE));
     renderSessions();
@@ -283,6 +287,12 @@ async function loadSessions({ append = false } = {}) {
   }
 }
 
+// By person (A first), last use, creation and expiry (most recent first), either way.
+initSortableHeaders(document.getElementById('sessions-head'), {
+  sort: sessionsSort,
+  defaultDesc: (key) => key !== 'person',
+  onChange: () => loadSessions(),
+});
 sessionsShowAll.addEventListener('change', () => loadSessions());
 sessionsLoadMore.addEventListener('click', () => loadSessions({ append: true }));
 

@@ -638,13 +638,17 @@ paths:
       description: >
         Admin-only overview of who is signed in. By default only the
         active tokens (not revoked, not expired yet); status=all adds the
-        history. Most recently used first, never-used ones last. Each one
+        history. Most recently used first, never-used ones last, unless sort
+        and order say otherwise; the order holds across pages (ties break by
+        id, so paging neither repeats nor skips). Each one
         carries its owner's login, like GET /users/{login}/tokens, which
         is also where one is re-expired (PATCH) or revoked (DELETE). Never
         exposes the token value.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [active, all], default: active } }
+        - { name: sort, in: query, schema: { type: string, enum: [last_used, created, expires, person], default: last_used }, description: "person is by name as it is read (first name, last name), then login. A session never used counts as the oldest use." }
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc] }, description: "Default: desc (the most recent first) for the dates, asc for person." }
         - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 200 }, description: Page size; a value outside 1-200 falls back to 100. }
         - { name: offset, in: query, schema: { type: integer, default: 0 }, description: A negative value falls back to 0. }
       responses:
@@ -655,7 +659,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Token" }
-        "400": { description: invalid_status (not active or all). }
+        "400": { description: invalid_status (not active or all), invalid_sort or invalid_order. }
         "403": { description: Requires admin. }
 
   /users/{login}/tokens:

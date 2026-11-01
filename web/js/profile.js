@@ -8,6 +8,7 @@ import {
   showError,
 } from './api.js';
 import { initPage } from './layout.js';
+import { initSortableHeaders } from './sortableHeaders.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
 import { trackDirtyFields, markFieldsClean } from './formDirty.js';
@@ -178,6 +179,27 @@ editForm.addEventListener('submit', async (event) => {
 // one in use is signing out, so that one signs out of this browser too.
 const sessionsBody = document.getElementById('sessions-list');
 let sessions = [];
+// Sorted here (they are all loaded): by last use, when it was opened and when it expires, either way. A
+// session never used counts as the oldest use. Starts with the most recently used first.
+const sessionsSort = { key: 'last_used', desc: true };
+const sessionDate = {
+  last_used: (s) => s.last_used_at ?? '',
+  created: (s) => s.created_at,
+  expires: (s) => s.expires_at,
+};
+
+function renderSessions() {
+  const sorted = sessions.slice().sort((a, b) => {
+    const [x, y] = [sessionDate[sessionsSort.key](a), sessionDate[sessionsSort.key](b)];
+    // ISO timestamps compare as text; the id breaks a tie the same way for both directions, so the
+    // order is stable.
+    const byDate = x < y ? -1 : x > y ? 1 : 0;
+    return (sessionsSort.desc ? -byDate : byDate) || b.id - a.id;
+  });
+  sessionsBody.innerHTML = sorted.length
+    ? sorted.map(sessionRow).join('')
+    : '<tr><td colspan="6">No tienes ninguna sesión abierta.</td></tr>';
+}
 
 function sessionRow(session) {
   const parts = [session.browser, session.os].filter(Boolean);
@@ -202,14 +224,18 @@ function sessionRow(session) {
 async function loadSessions() {
   try {
     sessions = await apiFetch(`/users/${encodeURIComponent(user.login)}/tokens?status=active`);
-    sessionsBody.innerHTML = sessions.length
-      ? sessions.map(sessionRow).join('')
-      : '<tr><td colspan="6">No tienes ninguna sesión abierta.</td></tr>';
+    renderSessions();
   } catch (err) {
     sessionsBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar las sesiones.</td></tr>';
     showError(err.message);
   }
 }
+
+initSortableHeaders(document.getElementById('sessions-head'), {
+  sort: sessionsSort,
+  defaultDesc: () => true,
+  onChange: renderSessions,
+});
 
 sessionsBody.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-close-session]');
