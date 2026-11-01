@@ -363,25 +363,19 @@ document.getElementById('row-filters').addEventListener('change', (event) => {
   renderUsersTable();
 });
 
-// What the search looks into: the name as it is read, the membership number, the
-// login and, for admin/board (the only ones whose listing carries them), the
-// email, phone and DNI.
+// What the search looks into: the name as it is read and, for admin/board (the only ones whose
+// listing carries them), the phone and DNI. Not the membership number, the login nor the email.
 function searchTextOf(person) {
   return normalizeForSearch(
-    [
-      `${person.first_name} ${person.last_name}`,
-      person.membership_number,
-      person.login,
-      person.email,
-      person.phone,
-      person.national_id,
-    ]
+    [`${person.first_name} ${person.last_name}`, person.phone, person.national_id]
       .filter((part) => part != null)
       .join(' '),
   );
 }
 
 const peopleSearch = document.getElementById('people-search');
+// The page says "Nombre o apellidos"; admin and board also search the phone and DNI, so theirs says so.
+if (isAdmin) peopleSearch.placeholder = 'Nombre, apellidos, teléfono o DNI';
 
 // Every word typed has to be somewhere in the person, in any order.
 function matchesSearch(person) {

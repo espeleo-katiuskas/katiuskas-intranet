@@ -525,17 +525,18 @@ member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberList
 **Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual",
 "Federación") and the column toggles sit behind a "Filtros…" button, and above it a "Buscar persona"
 box (`matchesSearch`: every word typed has to appear, in any order and ignoring accents and case, in
-the name, membership number, login and — admin/board only, as that is all their listing carries —
-email, phone and DNI; it narrows what the filters leave and isn't persisted). Every filter starts
-with every option checked except "Tipo de socio", which starts with only "Activo" and "Baja
-temporal", so the default view is the current membership. "Cuota anual" splits people on whether
-`last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
-`license_type` is present — `GET /users` only reports a license for the current year, so having one
-*is* being federated. Filters, visible columns and sort order persist in `localStorage`
-(`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page lands on the same
-view, and a counter shows how many people the current filters leave. With nothing saved, the columns
-shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's
-`default` flag); the rest are optional in the "Filtros…" panel.
+the first name and surnames and — admin/board only, as that is all their listing carries — the phone
+and DNI; not the membership number, login or email. The placeholder says "Nombre o apellidos" (for
+admin/board, "Nombre, apellidos, teléfono o DNI"); it narrows what the filters leave and isn't
+persisted). Every filter starts with every option checked except "Tipo de socio", which starts with
+only "Activo" and "Baja temporal", so the default view is the current membership. "Cuota anual"
+splits people on whether `last_due_year` is the current year ("A corriente de pago"), and
+"Federación" on whether `license_type` is present — `GET /users` only reports a license for the
+current year, so having one *is* being federated. Filters, visible columns and sort order persist in
+`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page
+lands on the same view, and a counter shows how many people the current filters leave. With nothing
+saved, the columns shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia"
+(each column's `default` flag); the rest are optional in the "Filtros…" panel.
 
 A page's requests that don't depend on each other go out together, not one after another
 (each wait in a row costs a full round trip, which is most of what a page load takes once
