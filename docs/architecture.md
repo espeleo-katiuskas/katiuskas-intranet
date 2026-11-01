@@ -462,15 +462,21 @@ included, is a bigger leap than the rest of what board can already do) creates a
   impersonation whatever happens to the impersonated person's roles at that moment. That is why
   that endpoint only requires `RequireAuth`, not `Protect` (which would require a baseline role):
   if the person had lost it while being impersonated, the admin would be left with no way out.
-- **Leaving**: it does not reuse the token the admin had before impersonating, because the API
-  never again has the plain value of a token already issued. It revokes the impersonation session
-  and issues a new one for the admin.
+- **Leaving**: the API itself does not reuse the token the admin had before impersonating, because
+  it never again has the plain value of a token already issued: `POST /auth/impersonate/exit`
+  revokes the impersonation session and issues a new one for the admin. But the *browser* does have
+  that value: the frontend keeps the admin's own token when the impersonation starts
+  (`katiuskas:original-token`, see `docs/frontend.md`) and goes back to that session, on leaving and
+  when the impersonation ends (see "Duration"), and uses the endpoint above only when it was not
+  kept or no longer works.
 - **Restrictions**: only somebody who currently has some baseline role (`auth.BaselineRoles`) can
   be impersonated, just as a sign-in link is not sent to somebody who lacks one, and never
   oneself.
 - **Duration**: `config.ImpersonationTokenTTL`, 1 hour against the 30 days of a normal token. A
   session acting as another person is too big a risk compared with a normal one to leave it alive
-  for a month if somebody forgets to leave.
+  for a month if somebody forgets to leave. Its expiry is fixed: it ends an hour after it began, use
+  or no use. When it ends, or is revoked, the next request the page makes is a 401 and the frontend
+  puts the admin back in their own session, with a note, instead of signing them out.
 
 ### `memberships`
 

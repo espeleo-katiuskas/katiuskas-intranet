@@ -8,6 +8,13 @@ const API_BASE = '/api/v1';
 let token = localStorage.getItem('token');
 let cachedUser = null;
 
+// While an admin is impersonating somebody, their own session's token is kept here, so that they get
+// that session back: on leaving the impersonation, and when it ends on its own (it lasts an hour) or is
+// revoked. Any other sign-in forgets it (see setToken), so it can't be left behind to be restored later.
+const ORIGINAL_TOKEN_KEY = 'katiuskas:original-token';
+// A message for the next page, across the navigation that follows (sessionStorage, so it dies with the tab).
+const FLASH_KEY = 'katiuskas:flash';
+
 async function initSession() {
   if (!token) {
     window.location.href = '/login';
@@ -24,6 +31,11 @@ async function initSession() {
     };
     if (cachedUser.impersonatedBy) {
       renderImpersonationBanner(cachedUser.impersonatedBy);
+    }
+    const flash = sessionStorage.getItem(FLASH_KEY);
+    if (flash) {
+      sessionStorage.removeItem(FLASH_KEY);
+      showFeedback(flash);
     }
     return true;
   } catch {
@@ -54,9 +66,50 @@ function renderImpersonationBanner(impersonator) {
   document.getElementById('exit-impersonation-button').addEventListener('click', exitImpersonation);
 }
 
+// Starts an impersonation session in this browser: its token replaces the admin's, whose own is kept
+// (see ORIGINAL_TOKEN_KEY). One started from inside another keeps the first admin's, which is where
+// leaving, or the end, goes back to.
+function startImpersonation(impersonationToken) {
+  const original = cachedUser?.impersonatedBy ? localStorage.getItem(ORIGINAL_TOKEN_KEY) : token;
+  setToken(impersonationToken);
+  if (original) localStorage.setItem(ORIGINAL_TOKEN_KEY, original);
+}
+
+// Goes back to the admin's own session, if it was kept and still works: the impersonation session is
+// ended (best effort) and the saved token takes its place. False when there is none, or it no longer
+// works (it expired, was revoked, or the network failed): the caller falls back to what it did before.
+async function restoreOriginalSession() {
+  const original = localStorage.getItem(ORIGINAL_TOKEN_KEY);
+  if (!original) return false;
+  localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+  try {
+    // Asking who it is also renews it, and sets its cookie again in place of the impersonation's.
+    const response = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${original}` },
+    });
+    if (!response.ok) return false;
+  } catch {
+    return false;
+  }
+  const impersonation = token;
+  if (impersonation) {
+    fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: impersonation }),
+    }).catch(() => {});
+  }
+  setToken(original);
+  return true;
+}
+
 async function exitImpersonation() {
   const button = document.getElementById('exit-impersonation-button');
   button.disabled = true;
+  if (await restoreOriginalSession()) {
+    window.location.href = '/socios';
+    return;
+  }
   try {
     const result = await apiFetch('/auth/impersonate/exit', { method: 'POST' });
     setToken(result.token);
@@ -75,6 +128,14 @@ async function apiFetch(path, options = {}) {
   }
 
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  // An impersonation session that ended (it lasts an hour) or was revoked: back to the admin's own
+  // session, with a note saying so, instead of an error — the page is reloaded as the admin.
+  if (response.status === 401 && (await restoreOriginalSession())) {
+    sessionStorage.setItem(FLASH_KEY, 'La impersonación ha terminado y has vuelto a tu sesión.');
+    window.location.href = '/socios';
+    return new Promise(() => {});
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -143,15 +204,17 @@ function encodeFilePath(relPath) {
 }
 
 function logout() {
-  const current = token;
+  // Signing out while impersonating ends the admin's own session too, not only the impersonation.
+  const sessions = [token, localStorage.getItem(ORIGINAL_TOKEN_KEY)].filter(Boolean);
   localStorage.removeItem('token');
+  localStorage.removeItem(ORIGINAL_TOKEN_KEY);
   token = null;
   cachedUser = null;
-  if (current) {
+  for (const session of sessions) {
     fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: current }),
+      body: JSON.stringify({ token: session }),
     }).catch(() => {});
   }
   window.location.href = '/login';
@@ -304,6 +367,9 @@ function loadTopbarGreeting() {
 function setToken(raw) {
   token = raw;
   localStorage.setItem('token', raw);
+  // Whatever signs in forgets the admin's session kept for an impersonation (startImpersonation
+  // saves it again right after, when that is what is happening).
+  localStorage.removeItem(ORIGINAL_TOKEN_KEY);
 }
 
 // Escapes text before it's interpolated into an innerHTML template, since
@@ -485,6 +551,7 @@ export {
   initSidebarToggle,
   loadTopbarGreeting,
   setToken,
+  startImpersonation,
   escapeHtml,
   encodeFilePath,
   knownRoleLabels,

@@ -93,7 +93,8 @@ if the person has linked Telegram, by Telegram too.
   long as the session has left (the frontend calls it on every page load).
   - returns: 200 `JSON`
 - **POST** `/auth/impersonate/exit` — *Any valid session*. Ends an impersonation and returns a new
-  token for the admin who started it.
+  token for the admin who started it. (The frontend only uses it when it no longer has the admin's
+  own session to go back to.)
   - returns: 200 `JSON`
   - errors: 409 `not_impersonating`
 - **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts,

@@ -3,7 +3,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
-  setToken,
+  startImpersonation,
   roleLabel,
   positionLabels,
   typeLabels,
@@ -1044,7 +1044,7 @@ if (impersonateButton) {
       impersonateButton.disabled = true;
       try {
         const result = await apiFetch(`/users/${memberLogin}/impersonate`, { method: 'POST' });
-        setToken(result.token);
+        startImpersonation(result.token);
         window.location.href = '/';
       } catch (err) {
         impersonateButton.disabled = false;

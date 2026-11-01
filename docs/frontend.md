@@ -88,6 +88,17 @@ anyone who isn't a real admin — board can still see a person's full data this 
 not submit any change to it, the same read-only-but-visible treatment `profile.js` already
 gives a plain member's own name/DNI/birth date/gender.
 
+Impersonation (`js/api.js`): `startImpersonation` swaps the admin's token for the impersonation's
+and keeps the admin's own in `localStorage` (`katiuskas:original-token`; one started from inside
+another keeps the first admin's). `restoreOriginalSession` puts it back, if it still works (asking
+`/auth/me` with it, which also renews it and its cookie): the "Salir de la impersonación" button
+uses it — ending the impersonation session on the server, and falling back to `POST
+/auth/impersonate/exit` if there is nothing kept — and so does `apiFetch` on any 401 while one is
+kept, which is what the end of the hour (or a revocation) looks like: it reloads `/socios` as the
+admin, with the note "La impersonación ha terminado y has vuelto a tu sesión." (a `sessionStorage`
+flash shown by `initSession`). Any other sign-in (`setToken`) forgets the kept token, so it can't be
+restored later by mistake, and signing out while impersonating ends the admin's own session too.
+
 `js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the session
 token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate the
 token and populate `currentUser()`. `applyRoleVisibility()` removes any `data-roles="admin,board"`
