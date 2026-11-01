@@ -914,3 +914,61 @@ func userLogin(tx pgx.Tx, id int64) (string, error) {
 	err := tx.QueryRow(context.Background(), `SELECT login FROM users WHERE id = $1`, id).Scan(&login)
 	return login, err
 }
+
+// Impersonating from inside an impersonation (an admin impersonates an admin, who impersonates a third
+// person) records the admin who is really behind it, not the person they are acting as.
+func TestHandlerNestedImpersonationNamesTheOriginalAdmin(t *testing.T) {
+	notifier := &fakeNotifier{}
+	mux, resolver, service, tx, _ := newHandlerTestServerWithNotifier(t, notifier)
+	ctx := context.Background()
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	root := testutil.InsertUser(t, tx, "")   // the admin who really is behind it
+	middle := testutil.InsertUser(t, tx, "") // an admin too, impersonated by root
+	third := testutil.InsertUser(t, tx, "")
+	for _, u := range []int64{root.ID, middle.ID, third.ID} {
+		if err := rolesService.AssignByName(ctx, u, []string{"admin"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The session the request is made with: acting as middle, impersonated by root.
+	token := testutil.TokenFor(resolver, middle.ID, "admin")
+	resolver[token] = auth.AuthenticatedUser{ID: middle.ID, Roles: []string{"admin"}, ImpersonatedBy: &root.ID}
+	path := func(login string) string { return fmt.Sprintf("/api/v1/users/%s/impersonate", login) }
+
+	rec := doRequest(mux, http.MethodPost, path(third.Login), token, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	sessions, err := service.ListForUser(ctx, third.ID)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("expected one session for the third person, got %d (%v)", len(sessions), err)
+	}
+	if sessions[0].ImpersonatedByLogin == nil || *sessions[0].ImpersonatedByLogin != root.Login {
+		t.Errorf("expected the session to say it was started by %s, the original admin, got %v", root.Login, sessions[0].ImpersonatedByLogin)
+	}
+	if msg := notifier.waitForMessage(t); !strings.Contains(msg, root.Login) || !strings.Contains(msg, middle.Login) || !strings.Contains(msg, third.Login) {
+		t.Errorf("the notification should name the admin, the person they were acting as and the third: %q", msg)
+	}
+
+	// Not the person one already is in this session, nor the admin behind it.
+	for name, login := range map[string]string{"itself": middle.Login, "the admin behind it": root.Login} {
+		rec := doRequest(mux, http.MethodPost, path(login), token, nil)
+		if rec.Code != http.StatusConflict {
+			t.Errorf("impersonating %s: expected 409, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// A plain admin's impersonation is recorded as before: as the one who started it.
+	admin := testutil.InsertUser(t, tx, "")
+	if rec := doRequest(mux, http.MethodPost, path(third.Login), testutil.TokenFor(resolver, admin.ID, "admin"), nil); rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+	all, _ := service.ListForUser(ctx, third.ID)
+	var byAdmin bool
+	for _, s := range all {
+		byAdmin = byAdmin || (s.ImpersonatedByLogin != nil && *s.ImpersonatedByLogin == admin.Login)
+	}
+	if !byAdmin {
+		t.Errorf("a first-level impersonation should name the admin who started it")
+	}
+}

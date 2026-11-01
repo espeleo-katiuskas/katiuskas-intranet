@@ -57,6 +57,15 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 	return login
 }
 
+// loginOf is the login of a user by id, for a notification, with the same fallback as actorLogin.
+func (h *Handler) loginOf(ctx context.Context, id int64) string {
+	login, err := h.users.LoginForUserID(ctx, id)
+	if err != nil {
+		return fmt.Sprintf("user#%d", id)
+	}
+	return login
+}
+
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/tokens", h.authenticator.Protect(h.listAll, "admin"))
 	// A person sees and revokes their own sessions; an admin, anybody's (see sessionOwner). Changing
@@ -90,7 +99,21 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 	}
 	current, _ := auth.UserFromContext(r.Context())
 
-	raw, err := h.service.Impersonate(r.Context(), current.ID, userID, h.impersonationTokenTTL)
+	// Starting one from inside another (an admin impersonating an admin, who impersonates a third
+	// person) records the admin who is really behind it, not the person they are acting as: the new
+	// session is theirs, so ending it, or its end, goes back to them, and it is the one named in the
+	// session lists and the banner. The chain never gets longer than one.
+	impersonatorID := current.ID
+	if current.ImpersonatedBy != nil {
+		impersonatorID = *current.ImpersonatedBy
+	}
+	// Nor can somebody impersonate the person they already are in this session.
+	if userID == current.ID {
+		httpapi.WriteError(w, http.StatusConflict, "cannot_impersonate_self", ErrCannotImpersonateSelf.Error())
+		return
+	}
+
+	raw, err := h.service.Impersonate(r.Context(), impersonatorID, userID, h.impersonationTokenTTL)
 	if errors.Is(err, ErrCannotImpersonateSelf) {
 		httpapi.WriteError(w, http.StatusConflict, "cannot_impersonate_self", err.Error())
 		return
@@ -103,8 +126,13 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not start impersonation")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha impersonado a %s.",
-		h.actorLogin(r.Context()), r.PathValue("login")))
+	if current.ImpersonatedBy != nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha impersonado a %s, desde su impersonación de %s.",
+			h.loginOf(r.Context(), impersonatorID), r.PathValue("login"), h.actorLogin(r.Context())))
+	} else {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🎭 %s ha impersonado a %s.",
+			h.actorLogin(r.Context()), r.PathValue("login")))
+	}
 	// Also carried as a cookie (see auth.SetSessionCookie) so a file
 	// opened straight in a new tab from library/userfiles while
 	// impersonating resolves as the impersonated person too, exactly

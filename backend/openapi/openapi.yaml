@@ -707,7 +707,12 @@ paths:
         own roles. Rejected (409) for yourself, or for someone with no
         baseline role — their session couldn't call anything anyway. An
         unknown login is a 404. The token is shorter-lived
-        than a normal sign-in on purpose.
+        than a normal sign-in on purpose. Made from inside an impersonation
+        (an admin impersonating an admin, who impersonates a third person)
+        the new session is recorded as started by the original admin — the
+        one behind it — not by the person they were acting as, so the chain
+        never gets longer than one; that person, and the admin behind it,
+        are rejected as targets too (409).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -723,7 +728,7 @@ paths:
         "403": { description: Only admin can impersonate. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: cannot_impersonate_self, or not_eligible (the person has no baseline role).
+          description: cannot_impersonate_self (yourself, the person the session already acts as, or the admin behind it), or not_eligible (the person has no baseline role).
 
   /users/{login}/tokens/{tokenID}:
     patch:

@@ -216,9 +216,11 @@ positions and are not assigned by hand.
   - returns: 204
   - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`
 - **POST** `/users/{login}/impersonate` — *Admin*. Opens a short session (1 hour) that acts as that
-  person.
+  person. From inside an impersonation it is recorded as started by the original admin (the one
+  behind it), not by the person they were acting as.
   - returns: 201 `JSON`
-  - errors: 409 `cannot_impersonate_self`, `not_eligible`
+  - errors: 409 `cannot_impersonate_self` (oneself, the person the session already is, or the admin
+    behind it), `not_eligible`
 
 ## Members
 

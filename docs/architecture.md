@@ -470,9 +470,16 @@ included, is a bigger leap than the rest of what board can already do) creates a
   (`katiuskas:original-token`, see `docs/frontend.md`) and goes back to that session, on leaving and
   when the impersonation ends (see "Duration"), and uses the endpoint above only when it was not
   kept or no longer works.
-- **Restrictions**: only somebody who currently has some baseline role (`auth.BaselineRoles`) can
-  be impersonated, just as a sign-in link is not sent to somebody who lacks one, and never
-  oneself.
+- **Restrictions**: only somebody who currently has some baseline role (`auth.BaselineRoles`) can be
+  impersonated, just as a sign-in link is not sent to somebody who lacks one, and never oneself
+  (nor, from inside an impersonation, the person one already is in it, nor the admin behind it).
+- **Chains**: an admin who impersonates an admin, who impersonates a third person, is recorded for
+  who is really behind it: the third person's session says it was started by the *original* admin
+  (`impersonated_by` is the admin behind it, never the person they were acting as), so the chain
+  never gets longer than one, the banner and the session lists name the admin who is really behind
+  it, leaving goes back to that admin (`POST /auth/impersonate/exit`, like the frontend's own return
+  to the saved session), and the Telegram notice names the admin, the person they were acting as and
+  the third.
 - **Duration**: `config.ImpersonationTokenTTL`, 1 hour against the 30 days of a normal token. A
   session acting as another person is too big a risk compared with a normal one to leave it alive
   for a month if somebody forgets to leave. Its expiry is fixed: it ends an hour after it began, use
