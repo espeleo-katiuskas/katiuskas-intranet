@@ -1,169 +1,412 @@
-# Production deployment (own machine)
+# Production deployment
 
-Guide to getting the intranet running on a machine of your own (not a cloud service) that
-already has its own reverse proxy (Caddy or another) handling HTTPS for several domains. The
-intranet stack does not manage TLS or certificates: the `web` container listens in plain text
-only on `127.0.0.1:64710` (the same as in development), and it is the reverse proxy already on
-the machine that forwards it the traffic of the domain you choose. Meant for an initial trial
-with a small number of people.
+How to deploy the intranet on a self-hosted server. Everything runs as a native process managed by
+`systemd` (there is no Docker in production, which would cost the engine itself, the PostgreSQL and
+Caddy images and the Go toolchain of every build on a server with little disk): PostgreSQL installed
+from the distribution's package, and two static Go binaries (the API and `goose` for the migrations)
+built on another machine and copied over with `scp` — the server never needs the Go toolchain
+installed, not even during an update.
 
-It requires Docker on the machine. If disk space is limited and you would rather not pay the
-cost of Docker (the engine plus the PostgreSQL/Caddy/Go images), see
-[`docs/deployment-no-docker.md`](deployment-no-docker.md) instead: the same idea with native
-processes managed by `systemd`.
+Written for Debian/Ubuntu (`apt`); on another distribution the package names and the package manager
+change (`dnf`, `pacman`...), but the structure is the same.
 
-> **Note.** The club's own host does not use this guide: it runs its testing and production
-> environments as systemd units, without Docker (see
-> [`deployment-no-docker.md`](deployment-no-docker.md) and
-> [`environments.md`](environments.md)), and there updates are automatic. This guide is the
-> Docker alternative, and everything below is run by hand. The containers do restart on their
-> own if they crash or when the machine boots again (`restart: unless-stopped` in
-> `docker-compose.production.yml`).
+If the server already has its own Caddy handling HTTPS for other domains (the most common case),
+there is no need to install a new one or to start an intermediate internal proxy: just add one more
+site to that same Caddy (see step 5), which serves the frontend from disk and acts as a reverse
+proxy to the API at `127.0.0.1:64711` — the same Caddy you already use for everything else. If
+instead the existing reverse proxy is something else (nginx, Traefik...) that cannot serve static
+files and forward `/api/*` as easily, step 5 also explains the alternative of a local Caddy of its
+own at `127.0.0.1:64710`.
 
-## Prerequisites
+> **Several environments on one host.** This is the guide the club's host follows: it runs testing
+> and production side by side on one machine, each updated automatically (the host pulls `main`, and
+> semver tags, respectively). To install a second environment, repeat this guide with its own
+> directory, unit, database and ports — see [`environments.md`](environments.md) for what must be
+> different and what is shared. (On the club's host those are `/opt/katiuskas-intranet-stable` and
+> `/opt/katiuskas-intranet-testing`, with the units `katiuskas-intranet-stable.service` and
+> `katiuskas-intranet-testing.service`; this guide's `/opt/katiuskas-intranet` and `katiuskas-api`
+> are just generic names.)
 
-- Docker and the `docker compose` plugin installed on the machine (`docker compose version`).
-  You need no Go, goose, or anything else — everything else runs inside containers.
-- A reverse proxy already working on the machine (the same Caddy you use for your other
-  domains, for example) able to serve HTTPS for the domain you want to use here and forward
-  that traffic to `http://127.0.0.1:64710`. That reverse proxy is your responsibility, outside
-  this repository — here we only document which port to point it at.
-- No port of this stack needs to be opened directly to the Internet:
-  `docker-compose.production.yml` does not publish PostgreSQL or the API, and `web` (Caddy)
-  only listens on `127.0.0.1:64710`, the same as in development — nothing reaches the machine
-  from outside without going through your reverse proxy first.
+## Overview of the target machine
 
-## First deployment
-
-Clone the repository on the machine and go to its root:
-
-```sh
-git clone <repository-url> katiuskas-intranet
-cd katiuskas-intranet
+```
+/opt/katiuskas-intranet/
+├── bin/
+│   ├── katiuskas-api      # built on another machine, copied with scp
+│   ├── seed-admin         # same
+│   └── goose              # same — only needed to migrate, not on every start
+├── web/                   # static copy of the repository's web/
+├── db/migrations/         # copy of the repository's db/migrations/ (only the .sql files)
+├── data/
+│   ├── library/           # LIBRARY_ROOT
+│   ├── user-files/        # USER_FILES_ROOT
+│   ├── activity-resources/ # ACTIVITY_RESOURCES_ROOT
+│   └── transaction-files/  # TRANSACTION_FILES_ROOT
+└── api.env                # environment variables of the systemd service, not readable by others
 ```
 
-Create the configuration file from the template and fill in the real values (domain,
-PostgreSQL password, email/phone of the first admin account — see the comments on each
-variable in the template itself):
+Everything owned by a dedicated system user, with no login shell:
 
 ```sh
-cp .env.production.example .env
-$EDITOR .env
+sudo useradd --system --create-home --home-dir /opt/katiuskas-intranet \
+  --shell /usr/sbin/nologin intranet
+sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/library,data/user-files,data/activity-resources,data/transaction-files}
+sudo chown -R intranet:intranet /opt/katiuskas-intranet
 ```
 
-`.env` is already in `.gitignore`: it is never pushed to the repository.
-
-Start only PostgreSQL first, apply the migrations and create the first admin account, and then
-bring up the rest of the stack:
+## 1. PostgreSQL
 
 ```sh
-docker compose -f docker-compose.production.yml up -d postgres
-docker compose -f docker-compose.production.yml --profile tools run --rm migrate
-docker compose -f docker-compose.production.yml --profile tools run --rm seed-admin
-docker compose -f docker-compose.production.yml up -d
+sudo apt update
+sudo apt install -y postgresql
+sudo -u postgres psql -c "CREATE ROLE intranet WITH LOGIN PASSWORD '<long-random-password>';"
+sudo -u postgres psql -c "CREATE DATABASE intranet OWNER intranet;"
 ```
 
-`migrate` and `seed-admin` are one-off tasks (profile `tools`, they do not start with a plain
-`up -d`) that build the backend up to its intermediate stage with the full Go toolchain — they
-need outbound Internet access the first time, to download `goose` and the Go modules.
-`seed-admin` is idempotent: if the email already exists, it does nothing, so running it again
-by mistake has no effect.
-
-Check that everything has started and that it responds on localhost:
+The Debian/Ubuntu package already leaves PostgreSQL listening only on `localhost` and accepting
+password connections from there (`pg_hba.conf`, method `scram-sha-256`/`md5` for
+`host ... 127.0.0.1/32`) — there is no need to touch the configuration unless your installation has
+already modified it. Check it with:
 
 ```sh
-docker compose -f docker-compose.production.yml ps
-curl -I http://127.0.0.1:64710/
+psql "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" -c '\conninfo'
 ```
 
-Finally, add a site to your existing reverse proxy for the chosen domain (the same one you put
-in `DOMAIN`) that forwards to `http://127.0.0.1:64710`. For example, if that reverse proxy is
-also Caddy, a block like this would be enough:
+## 2. Building the binaries (on another machine)
+
+On any machine with Go installed — your own computer, for example — with the repository cloned:
+
+```sh
+cd backend
+
+# Server architecture: check with `uname -m` on the server.
+#   x86_64  → GOARCH=amd64
+#   aarch64 → GOARCH=arm64
+export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+
+go build -o katiuskas-api ./cmd/api
+go build -o seed-admin ./cmd/seed-admin
+# The version shown by Admin → Estado del sistema is recorded by Go itself, from
+# git (the tag, or a commit after it, and `+dirty` if there are uncommitted
+# changes): you have to build from the clone, with `git` installed.
+
+# goose is not a dependency of the module (see go.mod) — it is built separately,
+# pinned to v3.22.1 instead of `@latest`, so that building this binary always
+# gives the same goose no matter when or where it is done. There is no need to
+# install goose permanently on any machine; just build this binary once.
+GOBIN="$(pwd)" go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
+```
+
+All three are static binaries (`CGO_ENABLED=0`): they do not depend on any library of the server's
+system, only the operating system and the architecture have to match.
+
+Copy them, together with the frontend and the migrations, to the server:
+
+```sh
+scp katiuskas-api seed-admin goose user@server:/opt/katiuskas-intranet/bin/
+scp -r ../web/. user@server:/opt/katiuskas-intranet/web/
+scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
+ssh user@server sudo chown -R intranet:intranet /opt/katiuskas-intranet
+```
+
+Since `/opt/katiuskas-intranet` is owned by `intranet`, the user you `scp` as needs write
+permission there (for example, a common group with `g+w` permissions on those directories);
+otherwise, copy the files to their own `$HOME` and move them afterwards with `sudo`.
+
+## 3. Migrations and first admin account
+
+From the server (or remotely, with `DATABASE_URL` pointing at it if PostgreSQL were reachable from
+outside — it is not the case here, so do it on the server itself):
+
+```sh
+export DATABASE_URL="postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable"
+
+sudo -u intranet \
+  /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "$DATABASE_URL" up
+
+sudo -u intranet env DATABASE_URL="$DATABASE_URL" \
+  SEED_ADMIN_EMAIL=your-real-email@yourdomain.org SEED_ADMIN_PHONE=600111222 \
+  /opt/katiuskas-intranet/bin/seed-admin
+```
+
+Do not leave the default values of `cmd/seed-admin` (`admin@club.test` / `600000000`): they are far
+too well known and that account can assign all the other roles. `seed-admin` is idempotent — if the
+email already exists, it does nothing.
+
+## 4. systemd service for the API
+
+`/opt/katiuskas-intranet/api.env` (readable only by `intranet`: `chmod 600`):
+
+```sh
+sudo tee /opt/katiuskas-intranet/api.env >/dev/null <<'EOF'
+HTTP_ADDR=127.0.0.1:64711
+DATABASE_URL=postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable
+PUBLIC_BASE_URL=https://intranet.tudominio.org
+LIBRARY_ROOT=/opt/katiuskas-intranet/data/library
+USER_FILES_ROOT=/opt/katiuskas-intranet/data/user-files
+ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
+TRANSACTION_FILES_ROOT=/opt/katiuskas-intranet/data/transaction-files
+# Leave the four SMTP_* commented out to send no real email: the magic
+# sign-in links are then logged in `journalctl -u katiuskas-api`.
+#SMTP_HOST=smtp.tudominio.org
+#SMTP_PORT=587
+#SMTP_USERNAME=
+#SMTP_PASSWORD=
+#SMTP_FROM=intranet@tudominio.org
+# Leave the two TELEGRAM_* commented out to not use Telegram at all:
+# unexpected API errors are only logged in
+# `journalctl -u katiuskas-api`, as before, with no notice of
+# logins or of each creation/edit/removal, and the bot does not react to
+# anyone who writes to it. Fill them in to activate everything: a notice
+# every time the API starts, errors, a notice for each sign-in, the sign-in
+# link and code also by Telegram (in addition to the email) to whoever
+# has the account linked, a message of its own for each person/member/
+# role/activity/equipment/... that is created, edited or deleted (who did it
+# and, for an edit, what changed), and the bot asking for the contact of
+# anyone who writes to it without being linked yet, to associate their
+# Telegram account with their phone.
+#TELEGRAM_BOT_TOKEN=
+#TELEGRAM_LOG_CHAT_ID=
+# TELEGRAM_BOT_USERNAME is independent of the two above: the bot's public
+# name (without the "@"), only so that the sign-in page offers "sign in
+# with Telegram" with a direct link. It only makes sense if you also fill
+# in TELEGRAM_BOT_TOKEN above.
+#TELEGRAM_BOT_USERNAME=
+# With Telegram configured, the API also warns there when the database stops
+# answering, a directory goes missing or a disk is almost full. This is how
+# full (in percent) a disk holding the three directories above may be before
+# that; 90 if left out, 0 turns that one warning off.
+#DISK_ALERT_PERCENT=90
+EOF
+sudo chown intranet:intranet /opt/katiuskas-intranet/api.env
+sudo chmod 600 /opt/katiuskas-intranet/api.env
+```
+
+`HTTP_ADDR=127.0.0.1:64711`, unlike the `:64711` (all interfaces) of the development
+`docker-compose.yml`: here there is no isolated network separating the API from the rest of the
+machine, so it has to be restricted to localhost explicitly — only Caddy, on the same host,
+needs to talk to it.
+
+systemd unit, `/etc/systemd/system/katiuskas-api.service`:
+
+```ini
+[Unit]
+Description=Katiuskas Intranet API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=intranet
+Group=intranet
+WorkingDirectory=/opt/katiuskas-intranet
+EnvironmentFile=/opt/katiuskas-intranet/api.env
+ExecStart=/opt/katiuskas-intranet/bin/katiuskas-api
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now katiuskas-api
+sudo systemctl status katiuskas-api
+```
+
+`enable` makes it start by itself when the machine reboots; `Restart=on-failure` makes it restart by
+itself if the process dies.
+
+## 5. Caddy
+
+### You already have Caddy on the machine (the usual case)
+
+Do not install a second Caddy or an internal proxy in between: add one more site block to your
+existing `Caddyfile` (or to the file it imports, if you use `import` to separate sites), with the
+intranet's real domain. That same Caddy serves the frontend from disk, acts as a reverse proxy to
+the API, and handles this domain's HTTPS exactly as it already does for your other sites:
 
 ```
 intranet.tudominio.org {
-	reverse_proxy 127.0.0.1:64710
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy 127.0.0.1:64711
+	}
+	root * /opt/katiuskas-intranet/web
+	handle {
+		header Cache-Control "max-age=3600"
+		try_files {path} {path}.html
+		file_server
+	}
+	handle_errors {
+		@notfound `{err.status_code} == 404`
+		handle @notfound {
+			rewrite * /404
+			try_files {path} {path}.html
+			header Cache-Control "no-cache"
+			file_server
+		}
+	}
 }
 ```
 
-in the configuration of that Caddy (outside this repository), reloading its configuration
-afterwards. With that, `https://<your-domain>` should serve the frontend, and
-`https://<your-domain>/api/*` the API — the stack's own internal Caddy (`web`) already
-forwards `/api/*` to the API.
-
-## First sign-in
-
-There are no passwords: sign-in is by magic link. Go to `https://<your-domain>/login` and
-enter the email and phone you put in `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE`.
-
-If you have not configured `SMTP_*` in `.env`, the link is not sent by real email — it is
-logged in the API logs:
-
 ```sh
-docker compose -f docker-compose.production.yml logs -f api
+sudo systemctl reload caddy
 ```
 
-This is a valid option (not just a "development" one) for an initial trial with few people:
-every time someone signs in, check the logs and pass them the link. When you want to send real
-emails, fill in the `SMTP_*` variables in `.env` and restart the `api` service
-(`docker compose -f docker-compose.production.yml up -d api`).
+To give the club's shared tablet sessions that expire after 3 hours, the same block also answers to
+`local.` followed by the address (`intranet.tudominio.org, local.intranet.tudominio.org { … }`, with
+its DNS record): see [`environments.md`](environments.md), "The shared tablet".
 
-**Do not use `scripts/get-token.sh`** to generate tokens in this environment — its own header
-says it is only meant for the local development stack, never for anything resembling
-production.
+The line `header Cache-Control "max-age=3600"` is not optional. With no cache header at all,
+browsers work out for themselves how long a file is valid (a tenth of its age), so a file unchanged
+for weeks can be served stale for days after a deployment. A fixed hour is a trade-off: the
+alternative, `no-cache` (asking the server about every file, which answers with a `304` as long as
+it has not changed), made changing page take almost a second over a real connection, because each
+page drags along a chain of scripts (each one imports the next, so they load one after another) and
+each one cost a round trip. In exchange, after a deployment a browser may keep an old page or script
+for up to an hour, and mix them with new files (sections that never appear, forms that do not send
+new fields...): whoever needs to see the change at once forces a refresh (how depends on the browser
+and the device, and on a phone or a tablet there is no easy way: hence an hour and not a day). If
+another period is needed, that is the number to change.
+
+The line `encode zstd gzip` compresses what travels as text (the scripts, the styles and the API's
+JSON: `GET /users` alone goes from over 100 KB) and leaves images and PDFs as they are, since they
+are already compressed. Without it, each page downloads several times more bytes than necessary,
+which is noticeable above all on a phone.
+
+The `handle_errors` block makes any address that is not a page show `404.html` with a 404 status,
+without redirecting: the address bar keeps what was typed. That is why `root` goes outside the
+`handle`, at site level: `handle_errors` would not see the one inside. The API's responses
+(`/api/*`) do not go through here and remain its own.
+
+If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (owned by `intranet`),
+give it read access, for example by adding that user to the `intranet` group, or with `o+rX`
+permissions on `/opt/katiuskas-intranet/web`.
+
+### If the existing reverse proxy is not Caddy (nginx, Traefik...)
+
+If your reverse proxy does not serve static files and forward `/api/*` as easily, install a local
+Caddy dedicated only to this, listening on `127.0.0.1:64710`, and make your existing reverse proxy
+forward the domain's traffic to it:
+
+```sh
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install -y caddy
+```
+
+This already installs its own systemd service (`caddy.service`), reading `/etc/caddy/Caddyfile`.
+Replace it with the equivalent of the repository's `deploy/Caddyfile`, but pointing at
+`127.0.0.1:64711` instead of the Docker service name `api`, and explicitly bound to localhost only
+(`127.0.0.1:64710`, not a bare `:64710`, which would listen on all interfaces):
+
+```sh
+sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
+127.0.0.1:64710 {
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy 127.0.0.1:64711
+	}
+	root * /opt/katiuskas-intranet/web
+	handle {
+		header Cache-Control "max-age=3600"
+		try_files {path} {path}.html
+		file_server
+	}
+	handle_errors {
+		@notfound `{err.status_code} == 404`
+		handle @notfound {
+			rewrite * /404
+			try_files {path} {path}.html
+			header Cache-Control "no-cache"
+			file_server
+		}
+	}
+}
+EOF
+sudo systemctl reload caddy
+```
+
+Then, in your existing reverse proxy (outside this repository), add a site for the chosen domain
+that forwards to `http://127.0.0.1:64710`, with HTTPS (the TLS certificates and the domain are
+managed there, not by this repository).
 
 ## Updating to a new version
 
-Manual procedure: the automatic updates of the club's host (see
-[`environments.md`](environments.md)) are for the variant without Docker; with Docker it is
-done by hand. On the production machine:
+Manual procedure. On the club's host, instead, a timer pulls `main` (testing) and the semver tags
+(production) and updates them automatically — see [`environments.md`](environments.md).
+
+On the build machine:
 
 ```sh
 git pull
-docker compose -f docker-compose.production.yml build api
-docker compose -f docker-compose.production.yml --profile tools run --rm migrate
-docker compose -f docker-compose.production.yml up -d
+cd backend
+export GOOS=linux GOARCH=amd64 CGO_ENABLED=0   # adjust GOARCH if needed
+go build -o katiuskas-api ./cmd/api
 ```
 
-The frontend (`web/`) does not need rebuilding or a Caddy restart — it is served directly from
-the bind-mounted file tree, the same as in development. However, `deploy/Caddyfile` sends
-`Cache-Control: max-age=3600` with everything it serves from `web/`, so a browser may keep
-using an old page or script for up to an hour after updating.
+On the server:
+
+```sh
+scp katiuskas-api user@server:/opt/katiuskas-intranet/bin/katiuskas-api.new
+ssh user@server 'sudo -u intranet mv /opt/katiuskas-intranet/bin/katiuskas-api.new /opt/katiuskas-intranet/bin/katiuskas-api'
+scp -r ../db/migrations/. user@server:/opt/katiuskas-intranet/db/migrations/
+ssh user@server 'sudo -u intranet /opt/katiuskas-intranet/bin/goose -dir /opt/katiuskas-intranet/db/migrations postgres "postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable" up'
+ssh user@server 'sudo systemctl restart katiuskas-api'
+```
+
+The frontend (`web/`) does not need rebuilding or a Caddy restart — copy the tree again with
+`scp -r ../web/. user@server:/opt/katiuskas-intranet/web/` if it has changed; Caddy serves it
+directly from disk (with the one-hour cache described in step 5).
 
 ## Backups
 
-None of this happens automatically; do it as often as you need (for example from a `cron`
-job).
-
-Database:
-
-```sh
-docker compose -f docker-compose.production.yml exec postgres \
-  pg_dump -U intranet intranet > backup-$(date +%Y%m%d).sql
-```
-
-Files: `./library` and `./user-files` are ordinary directories on the host (back them up like
-any other file); the content of the activity memorias and the documents attached to transactions
-live in the named volumes `activity_resources_data` and `transaction_files_data`, for example:
+The club's host backs up production every night with `scripts/backup.sh`, from a systemd timer
+(see [`environments.md`](environments.md), "Backups", which also says how to restore). By hand,
+a database dump and the directories of files:
 
 ```sh
-docker run --rm -v katiuskas-intranet_activity_resources_data:/data -v "$(pwd)":/backup \
-  alpine tar czf /backup/activity-resources-$(date +%Y%m%d).tar.gz -C /data .
-docker run --rm -v katiuskas-intranet_transaction_files_data:/data -v "$(pwd)":/backup \
-  alpine tar czf /backup/transaction-files-$(date +%Y%m%d).tar.gz -C /data .
+sudo -u postgres pg_dump intranet > backup-$(date +%Y%m%d).sql
+tar czf activity-resources-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data activity-resources
+tar czf transaction-files-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data transaction-files
 ```
 
-(the `katiuskas-intranet_` prefix in the volume name depends on the name of the project
-directory — check it with `docker volume ls` if it does not match).
+`/opt/katiuskas-intranet/data/library` and `/opt/katiuskas-intranet/data/user-files` are ordinary
+directories — copy them like any other file on the system.
+
+### License thumbnails
+
+The copies of each person's licenses (`user-files/<login>/licencias/`) are shown in `/perfil` and
+`/socio` with a thumbnail, which the application does not generate by itself. To create the missing
+ones (and renew those older than their file, and remove what is left in `.thumbnails` of copies
+that no longer exist), run the repository's script, as the user that owns the
+files and pointing at the production directory:
+
+```sh
+sudo -u intranet scripts/generate-license-thumbnails.sh --root /opt/katiuskas-intranet/data/user-files
+```
+
+It needs `pdftoppm` (package `poppler-utils`) for PDFs and ImageMagick (`imagemagick`) for images;
+`--help` lists the other options (`--dry-run`, `--force`, or just some logins). It is safe to run as
+many times as needed: whatever is already up to date is skipped. The club's host does not run it by
+hand: a systemd timer does, every 15 minutes (see [`environments.md`](environments.md), "License
+thumbnails").
 
 ## Security notes
 
-- Change `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` in `.env` before the first deployment: the
-  default values of `cmd/seed-admin` (`admin@club.test` / `600000000`) are all too well known
-  and that account can assign the rest of the roles.
-- `POSTGRES_PASSWORD` does not need to be remembered or shared — only the `api` and `postgres`
-  containers use it, between themselves — so it can (and should) be a long random value.
-- Neither PostgreSQL nor the API is exposed directly to the Internet in
-  `docker-compose.production.yml`: `web` is the only service with a published port, and only
-  on `127.0.0.1:64710` — all external traffic has to go through the machine's reverse proxy
-  first.
+- Change `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PHONE` before the first deployment: the default values of
+  `cmd/seed-admin` (`admin@club.test` / `600000000`) are all too well known, and that account can
+  assign the rest of the roles.
+- `api.env` contains the PostgreSQL password — `chmod 600`, owned by `intranet`, never in the
+  repository.
+- Neither PostgreSQL nor the API listens on any external interface: PostgreSQL only accepts local
+  connections and `HTTP_ADDR` is fixed to `127.0.0.1:64711` — all external traffic goes first
+  through Caddy (your existing one, or a local one at `127.0.0.1:64710` if you use another reverse
+  proxy — see step 5).
+- **Do not use `scripts/get-token.sh`** here: besides being development-only, it depends on the
+  local `docker compose` stack, which does not exist in this deployment.

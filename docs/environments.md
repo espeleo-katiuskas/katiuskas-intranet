@@ -24,7 +24,7 @@ guide uses generic ones (`/opt/katiuskas-intranet`, `katiuskas-api`).
 
 The local environment shares nothing with the other two; it is brought up as explained in the
 "Quick start" section of the [`README.md`](../README.md). Testing and production are installed
-following [`deployment-no-docker.md`](deployment-no-docker.md); the rest of this page covers
+following [`deployment.md`](deployment.md); the rest of this page covers
 what is specific to having those two on one machine.
 
 ## How updates reach each environment
@@ -269,7 +269,7 @@ What to protect on the repository's side, because it is now what decides what ru
 - **Dependencies**: Dependabot (`.github/dependabot.yml`) opens a pull request every week for what
   has a newer version: the Go modules (all in one), the actions (it updates the commit and the
   version in the comment), the base images of the API's Dockerfile and the images of the compose
-  files. A major version of PostgreSQL is left out on purpose: it does not read the previous one's
+  file. A major version of PostgreSQL is left out on purpose: it does not read the previous one's
   data, so moving to it is a dump and restore done by hand. Merging one of these pull requests is a
   deploy to testing like any other (see above), so wait for CI to pass and look at what changes
   first.
@@ -608,7 +608,7 @@ sessions". What has to be set up, once per environment:
 
 1. **A DNS record** for `local.intranet.katiuskas.es`, the same as for `intranet.katiuskas.es`.
 2. **The same site in the reverse proxy**, with both addresses. In the club's Caddy (see
-   `docs/deployment-no-docker.md`, "Caddy") it is a second address on the site block, which then
+   `docs/deployment.md`, "Caddy") it is a second address on the site block, which then
    also gets its own certificate:
 
    ```

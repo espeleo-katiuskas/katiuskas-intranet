@@ -21,7 +21,7 @@ explanations live in `docs/`; read the one that matches the task before changing
 | `docs/backend-internals.md` | the long form, resource by resource: users/auth/roles, activities, distributions, licenses, dues, leaves, library, Telegram, accounting, test helpers |
 | `docs/frontend.md` | the conventions every page shares and each page in detail |
 | `docs/architecture.md` | overview and business rules |
-| `docs/environments.md`, `docs/deployment*.md` | local / testing / production, and how to deploy |
+| `docs/environments.md`, `docs/deployment.md` | local / testing / production, and how to deploy |
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and
 `docs/api.md`; a migration → `docs/database.md`; a rule or invariant → its section in
@@ -91,7 +91,7 @@ the club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-
 is in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
 sharing `LIBRARY_ROOT` and `USER_FILES_ROOT` (the directories the API writes to, `ACTIVITY_RESOURCES_ROOT` and
 `TRANSACTION_FILES_ROOT`, are separate in each, and testing gets production's files hard-linked). Production deploys without Docker
-(`docs/deployment-no-docker.md`).
+(`docs/deployment.md`).
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
   each environment should run — the tip of `main` for testing, the highest semver tag for production —

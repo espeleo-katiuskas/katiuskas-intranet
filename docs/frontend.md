@@ -574,7 +574,7 @@ files come from `/api/*`, which Caddy leaves to the API. The same Caddyfile comp
 whatever travels as text (`encode zstd gzip`: the scripts and styles are about a third of
 their size, and the API's JSON — `GET /users` is over 100 KB — much less than that), and
 leaves images and PDFs alone. The club's own Caddy, outside this repo, needs both lines in
-its site block (`docs/deployment-no-docker.md`).
+its site block (`docs/deployment.md`).
 
 Checking how a page actually looks, in an environment with no GUI: Claude Code's own
 browser-automation tool ("Claude in Chrome") needs a real, windowed Google Chrome plus a
