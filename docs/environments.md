@@ -595,7 +595,8 @@ What has to be set up, once per environment:
    API reads first); a reverse proxy that rewrites it has to keep `X-Forwarded-Host` as the
    original.
 3. **On the tablet**, `https://local.intranet.katiuskas.es/` as the browser's bookmark or start
-   page. Nothing else: every person signs in as always.
+   page. Nothing else: every person signs in as always, and the login page shows a "Sesión local"
+   notice there, saying that the session will last only a few hours.
 
 `PUBLIC_BASE_URL` stays the main address. The link in the sign-in email follows the address the
 request was made through only when it is exactly `local.` plus the public address (so it is opened

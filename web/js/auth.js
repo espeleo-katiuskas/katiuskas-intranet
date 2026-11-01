@@ -2,6 +2,13 @@ import { setToken } from './api.js';
 
 const API_BASE = '/api/v1';
 
+// On a "local." address (the club's shared tablet: local.intranet.katiuskas.es) the API gives sessions
+// of a few hours instead of a month — the same rule it applies, the first component of the host —
+// and the page says so, before anybody signs in. The page is the same on every other address.
+if (window.location.hostname.toLowerCase().split('.')[0] === 'local') {
+  document.getElementById('local-notice').hidden = false;
+}
+
 const consumingPanel = document.getElementById('consuming-panel');
 const consumingMessage = document.getElementById('consuming-message');
 const requestForm = document.getElementById('request-form');

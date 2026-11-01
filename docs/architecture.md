@@ -431,11 +431,12 @@ site, another name for it), and the rule is about the address, not about the dev
 sign-in is finished (the link opened or the code typed) through an address whose first component, up
 to the first `.`, is `local`, lasts `config.LocalTokenTTL` (3 hours) instead of 30 days, the cookie
 too (`authapi.Handler.sessionTTL`; the address is the `X-Forwarded-Host` the reverse proxy adds,
-else `Host`). The login page is the same on every address, and nothing marks or remembers a device
-on the server: what is the tablet's is only its bookmark, and anybody may use that address, which
-can only give them a shorter session. Because it is another address it is also another site for the
-browser — its own storage and cookie, so being signed in on the tablet and on the main address are
-two separate things.
+else `Host`). The login page is the same on every address except that on a `local.…` one it opens
+with a prominent "Sesión local" notice saying that the session will last only a few hours, and
+nothing marks or remembers a device on the server: what is the tablet's is only its bookmark, and
+anybody may use that address, which can only give them a shorter session. Because it is another
+address it is also another site for the browser — its own storage and cookie, so being signed in on
+the tablet and on the main address are two separate things.
 
 The link in the sign-in email has to lead to the same address, or the person who asked for it on the
 tablet and opens it there would finish at the main one and get 30 days: for a request made through

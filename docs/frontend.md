@@ -101,19 +101,22 @@ the data arrives and toggles `.hidden` directly instead (see `activity.js`'s
 uses for the magic-link token from an emailed URL. Its login code has no URL of its own to arrive in
 — `login.html`'s second panel gets it typed in by hand — so the email/phone from the first step are
 instead remembered in a plain JS variable across that two-step flow. The page is the same on every
-address: the club's tablet is given `local.` + the public address, and the API shortens the session
-(`docs/architecture.md`, "Short sessions"), without anything on this page or in `auth.js` knowing.
-That second panel appears only when the API accepts the details; for a pair that matches nobody who
-can sign in it answers 404 `unknown_details`, and the first panel says so ("Ese correo y ese
-teléfono no corresponden a nadie con acceso…") and asks to check them and, if they are right, to
-contact the Junta Directiva. The panel says an email with a link and a code will arrive. The link
-from that email is usually opened in another window or tab, which signs in there while this one
-keeps asking: `auth.js`'s `watchForSignInElsewhere` therefore listens for the `storage` event on the
-`token` key (and for the tab becoming visible again, for a browser that doesn't deliver it) and,
-when a stored token really is valid (`GET /auth/me`, as at load), sends this window to `/` already
-signed in — a stale or invalid one changes nothing. `login.html` also offers Telegram as a second
-way in, alongside (never instead of) the email/phone form: on load, `auth.js`'s
-`loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
+address except one thing: on a `local.…` address (the club's tablet is given `local.` + the public
+address, and the API shortens the session there, `docs/architecture.md`, "Short sessions"),
+`auth.js` applies the same rule to `location.hostname` and shows `#local-notice` above the panels —
+"Sesión local", in the accent color, saying that the address is for shared use and the session will
+close by itself in a few hours (no number, so it can't disagree with `LocalTokenTTL`). Everywhere
+else it stays hidden. That second panel appears only when the API accepts the details; for a pair
+that matches nobody who can sign in it answers 404 `unknown_details`, and the first panel says so
+("Ese correo y ese teléfono no corresponden a nadie con acceso…") and asks to check them and, if
+they are right, to contact the Junta Directiva. The panel says an email with a link and a code will
+arrive. The link from that email is usually opened in another window or tab, which signs in there
+while this one keeps asking: `auth.js`'s `watchForSignInElsewhere` therefore listens for the
+`storage` event on the `token` key (and for the tab becoming visible again, for a browser that
+doesn't deliver it) and, when a stored token really is valid (`GET /auth/me`, as at load), sends
+this window to `/` already signed in — a stale or invalid one changes nothing. `login.html` also
+offers Telegram as a second way in, alongside (never instead of) the email/phone form: on load,
+`auth.js`'s `loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
 (`authapi.Handler.TelegramBotInfo`, backed by `config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` —
 independent of `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is,
 since it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes

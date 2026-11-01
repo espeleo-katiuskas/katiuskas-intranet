@@ -730,6 +730,30 @@ form.form-panel {
   padding: 28px;
 }
 
+/* /login on a "local." address (the club's shared tablet): its sessions are short, and it says so
+   before anybody signs in — above the panels, in the accent color, the width of the panels. */
+.local-notice {
+  max-width: 360px;
+  margin: 40px auto -30px;
+  padding: 14px 18px;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background: #fbf1e3;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.local-notice strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+
+.local-notice p {
+  margin: 0;
+}
+
 /* 404.html's plain panel for somebody with no session: the same box as the
    sign-in form, for a block that isn't a form. */
 .notfound-panel {

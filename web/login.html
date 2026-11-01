@@ -9,6 +9,12 @@
 </head>
 <body>
 <main>
+  <!-- Only on a "local." address (the club's shared tablet), see js/auth.js. -->
+  <div id="local-notice" class="local-notice" role="note" hidden>
+    <strong>Sesión local</strong>
+    <p>Estás entrando desde una dirección de uso compartido. Tu sesión se cerrará sola en pocas horas.</p>
+  </div>
+
   <div id="consuming-panel" class="form-panel" hidden>
     <h1 class="login-brand"><img src="images/logo-katiuskas.png" alt="" class="login-brand-mark"> Club de Espeleología Katiuskas</h1>
     <p class="subtitle" id="consuming-message">Comprobando el enlace de acceso…</p>
