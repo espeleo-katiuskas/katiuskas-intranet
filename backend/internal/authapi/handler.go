@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +39,11 @@ import (
 // just the public "@name" a t.me/<username> link needs, so the login
 // page can offer signing in via Telegram at all; see TelegramBotInfo.
 type Options struct {
-	TokenTTL             time.Duration
+	TokenTTL time.Duration
+	// LocalTokenTTL is the (shorter) lifetime of a session opened through an address whose
+	// first label is "local" (see sessionTTL); zero means no such thing, and every session
+	// lasts TokenTTL.
+	LocalTokenTTL        time.Duration
 	MagicLinkTTL         time.Duration
 	MagicLinkCooldown    time.Duration
 	TelegramBotDMLinkTTL time.Duration
@@ -177,7 +183,7 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome, user, err := h.sendMagicLinkIfEligible(r.Context(), body.Email, body.Phone)
+	outcome, user, err := h.sendMagicLinkIfEligible(r.Context(), body.Email, body.Phone, h.linkBase(r))
 	if err != nil {
 		slog.Error("magic link request failed", "error", err)
 	}
@@ -216,7 +222,7 @@ func (h *Handler) TelegramBotInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone string) (outcome magicLinkOutcome, user users.User, err error) {
+func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone, linkBase string) (outcome magicLinkOutcome, user users.User, err error) {
 	user, err = h.users.FindActiveByEmailAndPhone(ctx, email, phone)
 	if errors.Is(err, users.ErrNotFound) {
 		return outcomeUnknownDetails, user, nil
@@ -231,7 +237,7 @@ func (h *Handler) sendMagicLinkIfEligible(ctx context.Context, email, phone stri
 	if !auth.HasBaselineRole(roleNames) {
 		return outcomeNoAccess, user, nil
 	}
-	return outcomeIssued, user, h.issueMagicLink(ctx, user, false)
+	return outcomeIssued, user, h.issueMagicLink(ctx, user, linkBase, false)
 }
 
 // magicLinkOutcome says how a web request for a link went: what is logged
@@ -286,7 +292,7 @@ func (h *Handler) IssueMagicLinkForTelegramUser(ctx context.Context, userID int6
 	if err != nil {
 		return err
 	}
-	return h.issueMagicLink(ctx, user, true)
+	return h.issueMagicLink(ctx, user, h.opts.PublicBaseURL, true)
 }
 
 // requestOrigin is the fixed "recibes este mensaje porque..." clause
@@ -308,7 +314,7 @@ const requestOrigin = "desde la página de acceso de la intranet"
 // into the bot, so a follow-up email would be redundant rather than
 // helpful, the same reasoning notifyMagicLinkViaTelegram's own
 // viaTelegramBot branch already applies to that DM's own wording.
-func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegramBot bool) error {
+func (h *Handler) issueMagicLink(ctx context.Context, user users.User, linkBase string, viaTelegramBot bool) error {
 	// Signing in would be pointless for someone who can't call the API
 	// anyway (see auth.BaselineRoles) — don't hand out a link, and don't
 	// even let the cooldown check below reveal that this person exists
@@ -341,7 +347,7 @@ func (h *Handler) issueMagicLink(ctx context.Context, user users.User, viaTelegr
 		return err
 	}
 
-	link := fmt.Sprintf("%s/login?token=%s", h.opts.PublicBaseURL, rawToken)
+	link := fmt.Sprintf("%s/login?token=%s", linkBase, rawToken)
 	// notifyMagicLinkViaTelegram only ever returns a non-nil error for a
 	// bot-triggered request (see its own doc comment) — a web request's
 	// own DM attempt is best-effort and always reports success here
@@ -695,8 +701,63 @@ func (h *Handler) ConsumeMagicLinkCode(w http.ResponseWriter, r *http.Request) {
 	h.issueSessionAndRespond(w, r, userID)
 }
 
+// localHostLabel names the addresses whose sessions are short: a request whose host starts with
+// "local" — local.intranet.katiuskas.es, the address the club's shared tablet is given — gets a
+// session of LocalTokenTTL instead of TokenTTL. Which address someone used is nothing to trust (a
+// client can send any Host), and nothing needs it to be: it can only shorten a session.
+const localHostLabel = "local"
+
+// requestHost is the address the client used, without its port and in lower case: the
+// X-Forwarded-Host the reverse proxy adds, if there is one, else the Host header.
+func requestHost(r *http.Request) string {
+	host, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Host"), ",")
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = r.Host
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.ToLower(host)
+}
+
+// isLocalHost says whether the first component of host, up to the first ".", is "local".
+func isLocalHost(host string) bool {
+	first, _, _ := strings.Cut(host, ".")
+	return first == localHostLabel
+}
+
+// sessionTTL is how long the session of a sign-in lasts: TokenTTL, or the shorter LocalTokenTTL
+// when the request was made through a "local" address. Nothing is remembered about a device and a
+// request cannot ask for a longer session: what decides is the address used.
+func (h *Handler) sessionTTL(r *http.Request) time.Duration {
+	if isLocalHost(requestHost(r)) && h.opts.LocalTokenTTL > 0 && h.opts.LocalTokenTTL < h.opts.TokenTTL {
+		return h.opts.LocalTokenTTL
+	}
+	return h.opts.TokenTTL
+}
+
+// linkBase is where the link in a sign-in email points. Normally PublicBaseURL; but for a request
+// made through local.<that same address> it points there too, so that opening the link on the
+// device that asked (the tablet) finishes the sign-in at the local address and gets the short
+// session — a link to the main address would give a 30-day one. Only that exact address, built
+// from PublicBaseURL, is accepted: a Host header anybody could forge must never decide where a
+// link in an email to somebody else points.
+func (h *Handler) linkBase(r *http.Request) string {
+	u, err := url.Parse(h.opts.PublicBaseURL)
+	if err != nil || u.Hostname() == "" {
+		return h.opts.PublicBaseURL
+	}
+	if requestHost(r) == localHostLabel+"."+strings.ToLower(u.Hostname()) {
+		u.Host = localHostLabel + "." + u.Host
+		return u.String()
+	}
+	return h.opts.PublicBaseURL
+}
+
 func (h *Handler) issueSessionAndRespond(w http.ResponseWriter, r *http.Request, userID int64) {
-	sessionToken, err := h.tokens.Issue(r.Context(), userID, h.opts.TokenTTL)
+	ttl := h.sessionTTL(r)
+	sessionToken, err := h.tokens.Issue(r.Context(), userID, ttl)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not issue session")
 		return
@@ -705,7 +766,7 @@ func (h *Handler) issueSessionAndRespond(w http.ResponseWriter, r *http.Request,
 	_ = h.users.TouchLastLogin(r.Context(), userID, ip)
 	h.notifyLogin(r.Context(), userID, ip)
 	h.deletePendingTelegramDM(userID)
-	auth.SetSessionCookie(w, sessionToken, h.opts.PublicBaseURL, h.opts.TokenTTL)
+	auth.SetSessionCookie(w, sessionToken, h.opts.PublicBaseURL, ttl)
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": sessionToken})
 }
 
@@ -794,11 +855,11 @@ func (h *Handler) ExitImpersonation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newToken, err := h.tokens.ExitImpersonation(r.Context(), rawToken, *user.ImpersonatedBy, h.opts.TokenTTL)
+	newToken, err := h.tokens.ExitImpersonation(r.Context(), rawToken, *user.ImpersonatedBy, h.sessionTTL(r))
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not exit impersonation")
 		return
 	}
-	auth.SetSessionCookie(w, newToken, h.opts.PublicBaseURL, h.opts.TokenTTL)
+	auth.SetSessionCookie(w, newToken, h.opts.PublicBaseURL, h.sessionTTL(r))
 	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"token": newToken})
 }

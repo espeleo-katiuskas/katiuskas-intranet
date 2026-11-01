@@ -69,11 +69,14 @@ if the person has linked Telegram, by Telegram too.
   - errors: 400 `invalid_body`, `missing_fields`; 404 `unknown_details`; 429 `rate_limited`
 - **POST** `/auth/magic-link/consume` — *Public*. Exchanges the link's token for a session token.
   - body: `token*`
+  - The session lasts 3 hours instead of 30 days when the request is made through an address whose
+    first label is `local` (`local.intranet.katiuskas.es`: the club's shared tablet)
   - returns: 200 `JSON`
   - errors: 400 `invalid_body`; 401 `invalid_token`
 - **POST** `/auth/magic-link/consume-code` — *Public*. Exchanges the 6-digit code (plus email and
   phone) for a session token. Same limit by origin.
   - body: `email*`, `phone*`, `code*`
+  - Same session lifetime rule as above
   - returns: 200 `JSON`
   - errors: 400 `invalid_body`, `missing_fields`; 401 `invalid_code`; 429 `rate_limited`
 - **POST** `/auth/logout` — *Public*. Revokes the session token (knowing the token is the proof).
@@ -650,8 +653,9 @@ Nested fields:
 - `database`: `{ok, latency_ms, error, migration_version}`
 - `mail`: `{smtp_configured}`
 - `telegram`: `{log_channel_configured, bot_running, bot_username}`
-- `settings`: `{public_base_url, session_ttl_seconds, magic_link_ttl_seconds,
-  magic_link_cooldown_seconds, impersonation_ttl_seconds, bot_dm_link_ttl_seconds}`
+- `settings`: `{public_base_url, session_ttl_seconds, local_session_ttl_seconds,
+  magic_link_ttl_seconds, magic_link_cooldown_seconds, impersonation_ttl_seconds,
+  bot_dm_link_ttl_seconds}`
 - `storage`: `[{name, path, exists}]`
 - `disks`: `[{paths, total_bytes, free_bytes, used_percent}]`, one per filesystem that holds some of
   the storage directories

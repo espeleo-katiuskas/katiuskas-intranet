@@ -29,6 +29,7 @@ type Info struct {
 
 	PublicBaseURL         string
 	SessionTTL            time.Duration
+	LocalSessionTTL       time.Duration
 	MagicLinkTTL          time.Duration
 	MagicLinkCooldown     time.Duration
 	ImpersonationTTL      time.Duration
@@ -92,6 +93,7 @@ type settingsStatus struct {
 	MagicLinkCooldownSeconds int64  `json:"magic_link_cooldown_seconds"`
 	ImpersonationTTLSeconds  int64  `json:"impersonation_ttl_seconds"`
 	BotDMLinkTTLSeconds      int64  `json:"bot_dm_link_ttl_seconds"`
+	LocalSessionTTLSeconds   int64  `json:"local_session_ttl_seconds"`
 }
 
 type storageStatus struct {
@@ -151,6 +153,7 @@ func (h *Handler) collect(ctx context.Context) statusResponse {
 			MagicLinkCooldownSeconds: int64(h.info.MagicLinkCooldown.Seconds()),
 			ImpersonationTTLSeconds:  int64(h.info.ImpersonationTTL.Seconds()),
 			BotDMLinkTTLSeconds:      int64(h.info.TelegramBotDMLinkTTL.Seconds()),
+			LocalSessionTTLSeconds:   int64(h.info.LocalSessionTTL.Seconds()),
 		},
 		Storage: storage,
 		Disks:   disksOf(storage),

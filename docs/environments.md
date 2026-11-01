@@ -569,3 +569,41 @@ What this does not cover, because it needs something that is not running to say 
 down (or the whole host), and the webhook receiver not working (the 15-minute timer is what
 makes a deployment happen anyway). A check from outside the host, such as an uptime monitor that
 asks for `https://intranet.katiuskas.es/api/v1/health`, is the way to cover those.
+
+## The shared tablet: an address for short sessions
+
+The club has a tablet that anyone uses, and a session left open on it should not last 30 days. The
+login page is the same everywhere and nothing marks the tablet as special; what changes is the
+address it is given: a session opened through an address whose first component, up to the first `.`,
+is `local` lasts 3 hours (`config.LocalTokenTTL`) instead of 30 days. So the tablet uses `local.`
+followed by the usual address — `local.intranet.katiuskas.es` for production,
+`local.testing.katiuskas.es` for testing. The rule is in `docs/architecture.md`, "Short sessions".
+What has to be set up, once per environment:
+
+1. **A DNS record** for `local.intranet.katiuskas.es`, the same as for `intranet.katiuskas.es`.
+2. **The same site in the reverse proxy**, with both addresses. In the club's Caddy (see
+   `docs/deployment-no-docker.md`, "Caddy") it is a second address on the site block, which then
+   also gets its own certificate:
+
+   ```
+   intranet.katiuskas.es, local.intranet.katiuskas.es {
+   	…the rest of the block as it is…
+   }
+   ```
+
+   Caddy passes the address the browser used to the API (`Host`, and `X-Forwarded-Host`, which the
+   API reads first); a reverse proxy that rewrites it has to keep `X-Forwarded-Host` as the
+   original.
+3. **On the tablet**, `https://local.intranet.katiuskas.es/` as the browser's bookmark or start
+   page. Nothing else: every person signs in as always.
+
+`PUBLIC_BASE_URL` stays the main address. The link in the sign-in email follows the address the
+request was made through only when it is exactly `local.` plus the public address (so it is opened
+on the tablet and finishes there, with the short session); for any other it points to the public
+one.
+
+Things to know. The tablet's address is another site for the browser, with its own storage: being
+signed in there and on the main address are separate. Anybody can use that address, on any device,
+and all it does is give them a shorter session. The sessions are listed in `/admin` and in each
+person's "Mis sesiones", with their expiry; those opened on the tablet before this was set up last
+their 30 days until closed there.

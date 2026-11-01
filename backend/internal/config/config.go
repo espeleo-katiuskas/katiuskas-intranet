@@ -36,6 +36,10 @@ type Config struct {
 	// (the email, and a DM merely riding along a web request) still
 	// states, and is bound by, the real MagicLinkTTL.
 	TelegramBotDMLinkTTL time.Duration
+	// LocalTokenTTL is how long a session lasts when it is opened through an address
+	// whose first label is "local" (local.intranet.katiuskas.es, the one the club's
+	// shared tablet uses), instead of TokenTTL. See authapi.Handler.sessionTTL.
+	LocalTokenTTL time.Duration
 	// ImpersonationTokenTTL is deliberately much shorter than TokenTTL —
 	// a session acting as someone else is a bigger blast radius than a
 	// normal one, so it expires on its own well before a normal session
@@ -97,6 +101,7 @@ func Load() (Config, error) {
 		HTTPAddr:              getEnv("HTTP_ADDR", ":64711"),
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
 		TokenTTL:              30 * 24 * time.Hour,
+		LocalTokenTTL:         3 * time.Hour,
 		MagicLinkTTL:          15 * time.Minute,
 		MagicLinkCooldown:     60 * time.Second,
 		MagicLinkIPRateLimit:  20,

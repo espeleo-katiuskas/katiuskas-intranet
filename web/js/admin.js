@@ -468,6 +468,7 @@ function renderStatus(status) {
     statusGroup('Ajustes', [
       ['Dirección pública', escapeHtml(settings.public_base_url)],
       ['Duración de una sesión', formatDuration(settings.session_ttl_seconds)],
+      ['Duración en las direcciones «local.…»', formatDuration(settings.local_session_ttl_seconds)],
       ['Validez del enlace de acceso', formatDuration(settings.magic_link_ttl_seconds)],
       ['Espera entre dos enlaces', formatDuration(settings.magic_link_cooldown_seconds)],
       ['Validez del enlace enviado por el bot', formatDuration(settings.bot_dm_link_ttl_seconds)],

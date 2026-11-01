@@ -53,6 +53,7 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 		StartedAt:             started,
 		PublicBaseURL:         "https://intranet.example.test",
 		SessionTTL:            30 * 24 * time.Hour,
+		LocalSessionTTL:       3 * time.Hour,
 		MagicLinkTTL:          15 * time.Minute,
 		MagicLinkCooldown:     time.Minute,
 		ImpersonationTTL:      time.Hour,
@@ -111,6 +112,9 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 	}
 	if !got.Mail["smtp_configured"] || !got.Telegram.LogChannelConfigured || !got.Telegram.BotRunning || got.Telegram.BotUsername != "KatiuskasBot" {
 		t.Errorf("unexpected mail/telegram: %v / %+v", got.Mail, got.Telegram)
+	}
+	if got.Settings["local_session_ttl_seconds"] != float64(3*3600) {
+		t.Errorf("unexpected session lifetime for local addresses: %v", got.Settings["local_session_ttl_seconds"])
 	}
 	if got.Settings["session_ttl_seconds"] != float64(30*24*3600) || got.Settings["magic_link_ttl_seconds"] != float64(900) || got.Settings["public_base_url"] != "https://intranet.example.test" {
 		t.Errorf("unexpected settings: %v", got.Settings)

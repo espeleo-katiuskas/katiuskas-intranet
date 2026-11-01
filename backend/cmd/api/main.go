@@ -221,6 +221,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 
 	authHandler = authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, telegramSender, telegramClient, authapi.Options{
 		TokenTTL:              cfg.TokenTTL,
+		LocalTokenTTL:         cfg.LocalTokenTTL,
 		MagicLinkTTL:          cfg.MagicLinkTTL,
 		MagicLinkCooldown:     cfg.MagicLinkCooldown,
 		TelegramBotDMLinkTTL:  cfg.TelegramBotDMLinkTTL,
@@ -234,6 +235,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		StartedAt:             time.Now(),
 		PublicBaseURL:         cfg.PublicBaseURL,
 		SessionTTL:            cfg.TokenTTL,
+		LocalSessionTTL:       cfg.LocalTokenTTL,
 		MagicLinkTTL:          cfg.MagicLinkTTL,
 		MagicLinkCooldown:     cfg.MagicLinkCooldown,
 		ImpersonationTTL:      cfg.ImpersonationTokenTTL,

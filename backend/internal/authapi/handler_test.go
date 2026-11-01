@@ -228,6 +228,7 @@ func newTestServerWithOptions(t *testing.T, magicLinkTTL, cooldown time.Duration
 
 	handler := authapi.NewHandler(usersService, rolesService, tokensService, authenticator, mailer, notifier, telegramClient, authapi.Options{
 		TokenTTL:             time.Hour,
+		LocalTokenTTL:        10 * time.Minute,
 		MagicLinkTTL:         magicLinkTTL,
 		MagicLinkCooldown:    cooldown,
 		TelegramBotDMLinkTTL: magicLinkTTL,
@@ -1798,4 +1799,154 @@ func TestFailedAccessAttemptsAreReportedToTheLogChannel(t *testing.T) {
 			t.Errorf("expected the typed email in the message, got %q", msg)
 		}
 	})
+}
+
+// postTo is s.post to a given address, as the browser would send it (the Host header), and with
+// whatever other headers.
+func (s *testServer) postTo(t *testing.T, host, path string, body any, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
+	req.Host = host
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// A sign-in finished through an address whose first label is "local" gets a short session, whether it
+// finishes with the link or with the code; through any other, the usual one. The cookie lasts as long.
+func TestSessionsThroughALocalAddressAreShorter(t *testing.T) {
+	const short, usual = 10 * time.Minute, time.Hour
+	cases := []struct {
+		name    string
+		host    string
+		headers map[string]string
+		want    time.Duration
+	}{
+		{"local address", "local.intranet.example", nil, short},
+		{"with a port and capitals", "LOCAL.Intranet.example:8443", nil, short},
+		{"just local", "local", nil, short},
+		{"the main address", "intranet.example", nil, usual},
+		{"local is not the first label", "intranet.local.example", nil, usual},
+		{"starts with local but is not it", "locally.example", nil, usual},
+		{"the proxy says it was local", "intranet.example", map[string]string{"X-Forwarded-Host": "local.intranet.example"}, short},
+		{"the proxy says it was not", "local.intranet.example", map[string]string{"X-Forwarded-Host": "intranet.example"}, usual},
+		{"several proxies: the first counts", "intranet.example", map[string]string{"X-Forwarded-Host": "local.intranet.example, proxy.internal"}, short},
+	}
+	lifetime := func(t *testing.T, s *testServer, userID int64) time.Duration {
+		t.Helper()
+		list, err := s.tokens.ListForUser(context.Background(), userID)
+		if err != nil || len(list) != 1 {
+			t.Fatalf("expected exactly one session, got %d (%v)", len(list), err)
+		}
+		return time.Until(list[0].ExpiresAt)
+	}
+	within := func(got, want time.Duration) bool { return got > want-time.Minute && got <= want }
+
+	for _, c := range cases {
+		t.Run("link/"+c.name, func(t *testing.T) {
+			s := newTestServer(t)
+			user := s.insertUserWithRole(t, "611222333", "admin")
+			token := s.requestAndExtractToken(t, user.Email, user.Phone)
+			rec := s.postTo(t, c.host, "/api/v1/auth/magic-link/consume", map[string]string{"token": token}, c.headers)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if got := lifetime(t, s, user.ID); !within(got, c.want) {
+				t.Errorf("expected the session to last %v, it lasts %v", c.want, got)
+			}
+			if cookies := rec.Result().Cookies(); len(cookies) != 1 || time.Duration(cookies[0].MaxAge)*time.Second != c.want {
+				t.Errorf("expected the cookie to last %v too, got %+v", c.want, cookies)
+			}
+		})
+		t.Run("code/"+c.name, func(t *testing.T) {
+			s := newTestServer(t)
+			user := s.insertUserWithRole(t, "611222333", "admin")
+			code := s.requestAndExtractCode(t, user.Email, user.Phone)
+			rec := s.postTo(t, c.host, "/api/v1/auth/magic-link/consume-code",
+				map[string]string{"email": user.Email, "phone": user.Phone, "code": code}, c.headers)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if got := lifetime(t, s, user.ID); !within(got, c.want) {
+				t.Errorf("expected the session to last %v, it lasts %v", c.want, got)
+			}
+		})
+	}
+}
+
+// The short lifetime only ever shortens: with none configured, or one longer than the usual, a local
+// address gets the usual one.
+func TestLocalTokenTTLCanOnlyShortenASession(t *testing.T) {
+	for name, local := range map[string]time.Duration{"none": 0, "longer": 2 * time.Hour} {
+		tx := testutil.NewTx(t)
+		rolesService := roles.NewService(roles.NewRepository(tx))
+		membershipsService := memberships.NewService(memberships.NewRepository(tx))
+		licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+		usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+		tokensService := tokens.NewService(tokens.NewRepository(tx), rolesService)
+		mailer := &capturingMailer{}
+		handler := authapi.NewHandler(usersService, rolesService, tokensService, auth.NewAuthenticator(tokensService), mailer, &capturingNotifier{}, &capturingTelegramClient{}, authapi.Options{
+			TokenTTL: time.Hour, LocalTokenTTL: local, MagicLinkTTL: 15 * time.Minute, PublicBaseURL: "http://localhost:64710",
+		})
+		mux := http.NewServeMux()
+		handler.RegisterRoutes(mux)
+		s := &testServer{mux: mux, handler: handler, tx: tx, users: usersService, tokens: tokensService, mailer: mailer}
+		user := s.insertUserWithRole(t, "611222333", "admin")
+		token := s.requestAndExtractToken(t, user.Email, user.Phone)
+		if rec := s.postTo(t, "local.example", "/api/v1/auth/magic-link/consume", map[string]string{"token": token}, nil); rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", name, rec.Code)
+		}
+		list, _ := tokensService.ListForUser(context.Background(), user.ID)
+		if got := time.Until(list[0].ExpiresAt); got < 59*time.Minute || got > time.Hour {
+			t.Errorf("%s: expected the usual hour, got %v", name, got)
+		}
+	}
+}
+
+// The link in the email points to the address the request was made through only for local.<the public
+// address>, so that opening it on the device that asked finishes the sign-in there and gets the short
+// session. Any other address — which anybody can forge in a request for somebody else's link — is
+// ignored: the link points to the public one.
+func TestTheEmailLinkFollowsOnlyTheLocalFormOfThePublicAddress(t *testing.T) {
+	// The test server's public address is http://localhost:64710.
+	cases := []struct {
+		name, host, wantBase string
+	}{
+		{"the local form", "local.localhost:64710", "http://local.localhost:64710"},
+		{"the local form in capitals", "LOCAL.localhost:64710", "http://local.localhost:64710"},
+		{"the public address", "localhost:64710", "http://localhost:64710"},
+		{"local of somebody else's", "local.evil.example", "http://localhost:64710"},
+		{"somebody else's", "evil.example", "http://localhost:64710"},
+		{"local nested deeper", "local.local.localhost:64710", "http://localhost:64710"},
+		{"a suffix of the public one", "local.notlocalhost:64710", "http://localhost:64710"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := newTestServer(t)
+			user := s.insertUserWithRole(t, "611222333", "admin")
+			rec := s.postTo(t, c.host, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone}, nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if want := c.wantBase + "/login?token="; !strings.Contains(s.mailer.lastBody, want) {
+				t.Errorf("expected the link to start with %q, the email says:\n%s", want, s.mailer.lastBody)
+			}
+		})
+	}
+	// Headers a client forges don't move it either.
+	s := newTestServer(t)
+	user := s.insertUserWithRole(t, "611222333", "admin")
+	s.postTo(t, "localhost:64710", "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone},
+		map[string]string{"X-Forwarded-Host": "evil.example", "Origin": "http://evil.example", "Referer": "http://evil.example/"})
+	if !strings.Contains(s.mailer.lastBody, "http://localhost:64710/login?token=") || strings.Contains(s.mailer.lastBody, "evil.example") {
+		t.Errorf("a forged header must not decide the link, the email says:\n%s", s.mailer.lastBody)
+	}
 }

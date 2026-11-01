@@ -253,6 +253,10 @@ intranet.tudominio.org {
 sudo systemctl reload caddy
 ```
 
+To give the club's shared tablet sessions that expire after 3 hours, the same block also answers to
+`local.` followed by the address (`intranet.tudominio.org, local.intranet.tudominio.org { … }`, with
+its DNS record): see [`environments.md`](environments.md), "The shared tablet".
+
 The line `header Cache-Control "max-age=3600"` is not optional. With no cache header at all,
 browsers work out for themselves how long a file is valid (a tenth of its age), so a file unchanged
 for weeks can be served stale for days after a deployment. A fixed hour is a trade-off: the

@@ -107,6 +107,15 @@ paths:
         down one address cycling through many different fake email/phone
         guesses): a limit generous enough for a shared address (a
         household, an office) to never notice it in normal use.
+
+        The link in the email points to the public address, except when
+        the request was made through exactly local.<that address>
+        (X-Forwarded-Host, else Host): then it points there, so that
+        opening it on the device that asked finishes the sign-in through
+        the local address, whose sessions are short (see
+        /auth/magic-link/consume). Any other address a request claims is
+        ignored, since it is not something that may decide where an email
+        to somebody else points.
       requestBody:
         required: true
         content:
@@ -143,6 +152,13 @@ paths:
         every subsequent request until it's revoked (via /auth/logout or
         by an admin, see DELETE /users/{login}/tokens/{tokenID}) or it
         expires.
+
+        The session lasts 30 days, or 3 hours when the request is made
+        through an address whose first label (up to the first ".") is
+        "local" — the X-Forwarded-Host the reverse proxy adds, else Host —
+        such as local.intranet.katiuskas.es, the one the club's shared
+        tablet uses. It is the address that decides, not a device, and it
+        can only shorten a session.
       requestBody:
         required: true
         content:
@@ -3431,6 +3447,7 @@ components:
           properties:
             public_base_url: { type: string }
             session_ttl_seconds: { type: integer }
+            local_session_ttl_seconds: { type: integer, description: How long a session lasts when it was opened through an address whose first label is "local" (the club's shared tablet). }
             magic_link_ttl_seconds: { type: integer }
             magic_link_cooldown_seconds: { type: integer }
             impersonation_ttl_seconds: { type: integer }
