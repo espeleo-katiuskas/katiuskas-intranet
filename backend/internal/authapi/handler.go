@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -825,14 +826,22 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	// file links, see auth.SetSessionCookie) is renewed with it: set again here, once per page
 	// load, for as long as the session has left. Without it the cookie would die at the time the
 	// session was opened plus its lifetime, however much it was used.
+	secondsLeft := -1
 	if raw, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); raw != "" {
 		if expires, err := h.tokens.ExpiresAtForRawToken(r.Context(), raw); err == nil {
 			auth.SetSessionCookie(w, raw, h.opts.PublicBaseURL, time.Until(expires))
+			secondsLeft = int(math.Ceil(time.Until(expires).Seconds()))
 		}
 	}
 	response := map[string]any{"login": who.Login, "first_name": who.FirstName, "last_name": who.LastName, "roles": user.Roles}
 	if user.ImpersonatedBy != nil {
 		response["impersonated_by"] = h.impersonatorSummary(r.Context(), *user.ImpersonatedBy)
+		// How long the impersonation has left, as a duration and not as a moment: the page counts it
+		// down from when it got this answer, so a browser clock that is off cannot make it reload
+		// early (or over and over). An impersonation session has a fixed expiry, so this is when it ends.
+		if secondsLeft >= 0 {
+			response["impersonation_seconds_left"] = secondsLeft
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, response)
 }

@@ -279,7 +279,10 @@ paths:
         resolved by the same lookup that authenticated the request.
         impersonated_by is present only for a session started by
         POST /users/{login}/impersonate: login/roles above are the
-        impersonated person's, not the admin's. The frontend calls it once
+        impersonated person's, not the admin's, and impersonation_seconds_left
+        says how long the impersonation has left (a duration, not a moment, so
+        a client with a wrong clock can count it down from when it got the
+        answer). The frontend calls it once
         per page load, and it also sets the session cookie again, lasting as
         long as the session has left: a session that expires after its last
         use needs the cookie that mirrors it (for the file links) renewed
@@ -297,6 +300,11 @@ paths:
                   first_name: { type: string, description: So a page can greet the person without asking for their record. }
                   last_name: { type: string }
                   roles: { type: array, items: { type: string } }
+                  impersonation_seconds_left:
+                    type: integer
+                    description: >
+                      Only in an impersonation session, whose expiry is fixed:
+                      the seconds (rounded up) until it ends.
                   impersonated_by:
                     type: object
                     nullable: true

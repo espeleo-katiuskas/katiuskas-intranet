@@ -1988,3 +1988,52 @@ func TestMeRenewsTheSessionAndItsCookie(t *testing.T) {
 		t.Errorf("expected the cookie renewed for the hour the session has left, got %+v", cookies)
 	}
 }
+
+// An impersonation session says, in /auth/me, how long it has left — as seconds from now, so that the page
+// counts down from the answer and a wrong clock in the browser cannot make it reload early. A normal
+// session says nothing about it.
+func TestMeSaysHowLongAnImpersonationHasLeft(t *testing.T) {
+	s := newTestServer(t)
+	admin := s.insertUserWithRole(t, "611222333", "admin")
+	target := s.insertUserWithRole(t, "644555666", "admin")
+
+	raw, err := s.tokens.Impersonate(context.Background(), admin.ID, target.ID, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("impersonate: %v", err)
+	}
+	var me map[string]any
+	rec := s.getWithToken(t, "/api/v1/auth/me", raw)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
+		t.Fatal(err)
+	}
+	left, ok := me["impersonation_seconds_left"].(float64)
+	if !ok || left < 29*60 || left > 30*60 {
+		t.Errorf("expected about 1800 seconds left, got %v", me["impersonation_seconds_left"])
+	}
+	if me["impersonated_by"] == nil {
+		t.Errorf("expected impersonated_by too, got %v", me)
+	}
+
+	// Using it does not move a fixed expiry: asked again after "time passes", it has less left.
+	if _, err := s.tx.Exec(context.Background(), `UPDATE tokens SET expires_at = now() + interval '90 seconds' WHERE impersonated_by IS NOT NULL`); err != nil {
+		t.Fatal(err)
+	}
+	rec = s.getWithToken(t, "/api/v1/auth/me", raw)
+	_ = json.Unmarshal(rec.Body.Bytes(), &me)
+	if left, _ := me["impersonation_seconds_left"].(float64); left < 89 || left > 90 {
+		t.Errorf("expected the 90 seconds that are left, got %v", me["impersonation_seconds_left"])
+	}
+
+	// A normal session has nothing of the kind.
+	normal, err := s.tokens.Issue(context.Background(), admin.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = s.getWithToken(t, "/api/v1/auth/me", normal)
+	if strings.Contains(rec.Body.String(), "impersonation_seconds_left") || strings.Contains(rec.Body.String(), "impersonated_by") {
+		t.Errorf("a normal session must not carry impersonation fields: %s", rec.Body.String())
+	}
+}

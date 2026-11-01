@@ -89,7 +89,8 @@ if the person has linked Telegram, by Telegram too.
   second way to sign in. Empty if not configured.
   - returns: 200 `JSON`
 - **GET** `/auth/me` — *Any baseline role*. Who owns the token and which roles they have now.
-  Carries `impersonated_by` in an impersonation session. It also renews the session cookie for as
+  Carries `impersonated_by` and `impersonation_seconds_left` (how long the impersonation has left,
+  as a duration) in an impersonation session. It also renews the session cookie for as
   long as the session has left (the frontend calls it on every page load).
   - returns: 200 `JSON`
 - **POST** `/auth/impersonate/exit` — *Any valid session*. Ends an impersonation and returns a new

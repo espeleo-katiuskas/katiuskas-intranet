@@ -457,11 +457,12 @@ included, is a bigger leap than the rest of what board can already do) creates a
 
 - **Effect**: since roles are resolved live from `user_id`, as in any normal session, that session
   can only do the same as that person, with no special case in the rest of the API.
-- **Exceptions in `authapi`**: `GET /auth/me` adds `impersonated_by` to the response (so that the
-  frontend can warn about it) and `POST /auth/impersonate/exit` lets the admin leave the
-  impersonation whatever happens to the impersonated person's roles at that moment. That is why
-  that endpoint only requires `RequireAuth`, not `Protect` (which would require a baseline role):
-  if the person had lost it while being impersonated, the admin would be left with no way out.
+- **Exceptions in `authapi`**: `GET /auth/me` adds `impersonated_by` and
+  `impersonation_seconds_left` to the response (so that the frontend can warn about it, and say how
+  long is left) and `POST /auth/impersonate/exit` lets the admin leave the impersonation whatever
+  happens to the impersonated person's roles at that moment. That is why that endpoint only requires
+  `RequireAuth`, not `Protect` (which would require a baseline role): if the person had lost it
+  while being impersonated, the admin would be left with no way out.
 - **Leaving**: the API itself does not reuse the token the admin had before impersonating, because
   it never again has the plain value of a token already issued: `POST /auth/impersonate/exit`
   revokes the impersonation session and issues a new one for the admin. But the *browser* does have
@@ -475,8 +476,11 @@ included, is a bigger leap than the rest of what board can already do) creates a
 - **Duration**: `config.ImpersonationTokenTTL`, 1 hour against the 30 days of a normal token. A
   session acting as another person is too big a risk compared with a normal one to leave it alive
   for a month if somebody forgets to leave. Its expiry is fixed: it ends an hour after it began, use
-  or no use. When it ends, or is revoked, the next request the page makes is a 401 and the frontend
-  puts the admin back in their own session, with a note, instead of signing them out.
+  or no use. The banner shown while impersonating says how long is left and counts it down, and
+  reloads the page by itself when it reaches zero, so nobody takes a page that stayed open for
+  somebody else's session once it is not; when it ends, or is revoked, the next request the page
+  makes is a 401 and the frontend puts the admin back in their own session, with a note, instead of
+  signing them out.
 
 ### `memberships`
 

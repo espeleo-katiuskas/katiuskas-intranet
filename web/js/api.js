@@ -28,6 +28,7 @@ async function initSession() {
       lastName: me.last_name ?? '',
       roles: me.roles ?? [],
       impersonatedBy: me.impersonated_by ?? null,
+      impersonationSecondsLeft: me.impersonation_seconds_left ?? null,
     };
     if (cachedUser.impersonatedBy) {
       renderImpersonationBanner(cachedUser.impersonatedBy);
@@ -59,11 +60,44 @@ function renderImpersonationBanner(impersonator) {
     <span>
       Estás usando la intranet como <strong>${escapeHtml(selfName)}</strong>
       — impersonado por ${escapeHtml(impersonator.first_name ?? '')} ${escapeHtml(impersonator.last_name ?? '')}.
+      <span id="impersonation-time-left" hidden>Tiempo restante: <strong></strong>; después volverás a tu sesión.</span>
     </span>
     <button type="button" id="exit-impersonation-button" class="btn btn-secondary btn-small">Salir de la impersonación</button>
   `;
   document.body.prepend(banner);
   document.getElementById('exit-impersonation-button').addEventListener('click', exitImpersonation);
+  if (cachedUser.impersonationSecondsLeft != null) {
+    countDownImpersonation(cachedUser.impersonationSecondsLeft);
+  }
+}
+
+// "42 min" while there is a minute or more, "35 s" in the last one.
+function formatTimeLeft(ms) {
+  return ms >= 60000 ? `${Math.ceil(ms / 60000)} min` : `${Math.max(0, Math.ceil(ms / 1000))} s`;
+}
+
+// An impersonation ends on its own (its expiry is fixed), and a page that stayed open would go on
+// looking like somebody else's long after it stopped being so. So the banner says how long is left,
+// counting down from when the API said it (a duration, not a moment, so a wrong clock in this browser
+// can't move it), and when it reaches zero the page reloads: the first request after the end is a 401,
+// which puts the admin back in their own session (see restoreOriginalSession).
+function countDownImpersonation(secondsLeft) {
+  const receivedAt = Date.now();
+  const holder = document.getElementById('impersonation-time-left');
+  const label = holder.querySelector('strong');
+  holder.hidden = false;
+  const tick = () => {
+    // Half a second more than the API's answer: it rounds up, and reloading before the session has
+    // really ended would only show the banner again, with almost nothing left.
+    const left = secondsLeft * 1000 + 500 - (Date.now() - receivedAt);
+    if (left <= 0) {
+      window.location.reload();
+      return;
+    }
+    label.textContent = formatTimeLeft(left);
+    setTimeout(tick, left >= 60000 ? 1000 : 250);
+  };
+  tick();
 }
 
 // Starts an impersonation session in this browser: its token replaces the admin's, whose own is kept

@@ -88,6 +88,14 @@ anyone who isn't a real admin — board can still see a person's full data this 
 not submit any change to it, the same read-only-but-visible treatment `profile.js` already
 gives a plain member's own name/DNI/birth date/gender.
 
+The impersonation banner (`renderImpersonationBanner`) shows "Tiempo restante: 42 min; después
+volverás a tu sesión" and counts it down (minutes, then seconds in the last one), from
+`impersonation_seconds_left` in `/auth/me` — a duration counted from when the answer arrived, not a
+moment compared with this browser's clock, so a wrong clock can't make it reload early or over and
+over — and when it reaches zero it reloads the page, which is what sends the first request after the
+end (a 401) and puts the admin back (below). It waits half a second more than the API's answer,
+which is rounded up, so that the reload does find the session ended.
+
 Impersonation (`js/api.js`): `startImpersonation` swaps the admin's token for the impersonation's
 and keeps the admin's own in `localStorage` (`katiuskas:original-token`; one started from inside
 another keeps the first admin's). `restoreOriginalSession` puts it back, if it still works (asking
