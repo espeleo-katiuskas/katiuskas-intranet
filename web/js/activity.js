@@ -267,6 +267,7 @@ async function loadParticipants(ready = Promise.resolve()) {
     isParticipant = alreadyIn;
     // Signing up (or leaving) changes what can be done with the memoria: show it right away.
     if (changed) await refreshMemoriaControls();
+    document.getElementById('joined-note').hidden = !alreadyIn;
     document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
     document.getElementById('leave-activity').hidden = !alreadyIn;
 

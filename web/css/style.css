@@ -716,6 +716,17 @@ th.sortable:focus-visible {
   color: #3e6e8e;
 }
 
+.joined-note {
+  display: inline-block;
+  margin: 4px 0 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: #e8f0e9;
+  color: var(--success);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .badge.status-ongoing {
   background: #fbf1da;
   color: #8a6420;

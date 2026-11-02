@@ -67,6 +67,10 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
+**Being signed up on `/actividad`.** Under the header, a note "✓ Estás apuntado a esta actividad."
+shows while the viewer is among the participants (`#joined-note`, set by `loadParticipants` together
+with the "Apuntarme"/"Darme de baja" buttons), so it is not something to look for in a long list.
+
 **Loans and returns on `/actividad`.** The "+ Préstamo/devolución" dialog (`activity.js`) offers, as
 the material to pick, only what fits the type chosen (`loanItemEntriesFor`): for a *Préstamo*, items
 that can be loaned and have a unit available; for a *Devolución*, those still out on loan for this
