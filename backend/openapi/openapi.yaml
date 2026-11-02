@@ -2962,17 +2962,16 @@ paths:
               schema: { $ref: "#/components/schemas/Item" }
         "400":
           description: >
-            invalid_body, invalid_item_type (type isn't rope, bag
-            or general), invalid_date (acquired_at not YYYY-MM-DD), unknown_category
-            (category_id isn't in the catalog), single_unit_item
+            invalid_body, invalid_date (acquired_at not YYYY-MM-DD), unknown_type
+            (type_id isn't in GET /material/types), single_unit_item
             (total_quantity above 1 for a rope or bag — they're always
             exactly one individually-tracked object), or
-            invalid_item_fields (the given fields don't fit type's
-            own required shape — a rope needs rope_type/diameter_mm/
+            invalid_item_fields (the given fields don't fit the kind of
+            the item's type: its own required shape — a rope needs rope_type/diameter_mm/
             manufacture_year/length_m in addition to brand/model/code,
             a bag needs bag_type/capacity_liters, a general item needs
-            category_id/description, and none of a rope or bag's own
-            fields may be set on the other two types), or
+            a description, and none of a rope or bag's own
+            fields may be set on the other two kinds), or
             model_without_brand (a model was given without a brand).
         "409": { description: duplicate_item_code — another item already has that code. }
 
@@ -2981,7 +2980,7 @@ paths:
       summary: Edit an item
       description: >
         Requires the admin, board or material role. Replaces every editable field (brand, model, code,
-        description, loanable, the prices and the fields of its own type) with the body's; the item's
+        description, loanable, the prices and the fields of its own kind) with the body's; the item's
         type and quantities are not editable (the quantities are whatever its movements say), so an
         type or total_quantity in the body is ignored. The same constraints as when it was
         created apply.
@@ -2999,27 +2998,88 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: "invalid_id, invalid_body, unknown_category, invalid_item_fields or model_without_brand." }
+        "400": { description: "invalid_id, invalid_body, invalid_item_fields or model_without_brand." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }
 
-  /material/categories:
+  /material/types:
     get:
-      summary: List the material category catalog
+      summary: List the types of material
       description: >
         Requires the admin, board or material role, matching POST /material/items: the
-        catalog only exists to populate the "new item" form's category
-        picker for general items.
+        catalog populates the "new item" form's type picker. Cuerda (kind rope) and Saca (kind
+        bag) come first, then the rest (kind general) by name.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
-          description: Categories
+          description: Types
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/MaterialCategory" }
+                items: { $ref: "#/components/schemas/MaterialType" }
+    post:
+      summary: Add a material type
+      description: Admin only. The name is trimmed; a type added is always general.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: The type
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialType" }
+        "400": { description: invalid_body (also a blank name). }
+        "403": { description: Requires admin. }
+        "409": { description: duplicate_type — another type has that name. }
+
+  /material/types/{id}:
+    patch:
+      summary: Rename a material type
+      description: Admin only. Its items follow, since they point at its id. Cuerda and Saca are fixed.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200":
+          description: The type as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialType" }
+        "400": { description: invalid_id or invalid_body (also a blank name). }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_type — another type has that name. }
+    delete:
+      summary: Delete a material type
+      description: Admin only. Refused while any item has it, and always for Cuerda and Saca.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: type_in_use — some item has it; or fixed_type — it is Cuerda or Saca. }
 
   /material/items/{id}/movements:
     get:
@@ -4601,16 +4661,17 @@ components:
           format: date-time
           description: When this resource was added. Fixed at creation — there's no way to backdate or edit it afterward.
 
-    MaterialCategory:
+    MaterialType:
       type: object
       description: >
-        One entry in the material category catalog (see GET
-        /material/categories) — mosquetones, spits, placas, maillones,
-        iluminación... kept in the database rather than a fixed enum, so
-        the list can grow with an INSERT instead of a code deploy.
+        One entry in the catalog of types of material (see GET /material/types). Two are fixed:
+        Cuerda (kind rope) and Saca (kind bag), which cannot be renamed or deleted. The rest (kind
+        general) — mosquetones, spits, placas, maillones, iluminación... — are kept in the
+        database, so an admin changes the list (on /admin) without a code deploy.
       properties:
         id: { type: integer }
         name: { type: string }
+        kind: { type: string, enum: [rope, bag, general] }
 
     Item:
       type: object
@@ -4621,9 +4682,9 @@ components:
         manufacture_year/length_m for rope, bag_type/capacity_liters for bag —
         bag_type extends rope_type's caving/canyoning split with two
         purpose-based kinds, quick and special). general is a
-        fungible stock item filed under a category from
-        GET /material/categories; brand/model/code may be unknown, though a model needs a brand, and
-        description and category_id are always set. rentable/sellable
+        fungible stock item; brand/model/code may be unknown, though a model needs a brand, and
+        its description is always set. Every item has a type from
+        GET /material/types, which decides its kind (Cuerda is rope, Saca is bag, any other general). rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
         to derive that from. total_quantity/available_quantity/
@@ -4634,7 +4695,9 @@ components:
         in that same history.
       properties:
         id: { type: integer }
-        type: { type: string, enum: [rope, bag, general] }
+        kind: { type: string, enum: [rope, bag, general] }
+        type_id: { type: integer, description: An id from GET /material/types. }
+        type_name: { type: string }
         brand: { type: string, nullable: true }
         model: { type: string, nullable: true }
         code: { type: string, nullable: true }
@@ -4670,14 +4733,12 @@ components:
         length_m: { type: integer, nullable: true, description: "rope only, in metres." }
         bag_type: { type: string, enum: [caving, canyoning, quick, special], nullable: true, description: "bag only." }
         capacity_liters: { type: number, nullable: true, description: "bag only." }
-        category_id: { type: integer, nullable: true, description: "general only — an id from GET /material/categories." }
-        category_name: { type: string, nullable: true, description: "general only — resolved alongside category_id." }
 
     CreateItemInput:
       type: object
-      required: [type]
+      required: [type_id]
       properties:
-        type: { type: string, enum: [rope, bag, general] }
+        type_id: { type: integer, description: An id from GET /material/types; its kind decides the rest. }
         brand: { type: string, description: Required for rope/bag. }
         model: { type: string, description: Required for rope/bag; needs a brand. }
         code: { type: string, description: Required for rope/bag. }
@@ -4705,7 +4766,6 @@ components:
         length_m: { type: integer, description: "Required for rope, in metres." }
         bag_type: { type: string, enum: [caving, canyoning, quick, special], description: Required for bag. }
         capacity_liters: { type: number, description: Required for bag. }
-        category_id: { type: integer, description: Required for general — an id from GET /material/categories. }
 
     Movement:
       type: object

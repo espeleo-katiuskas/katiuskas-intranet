@@ -192,6 +192,36 @@
       </div>
     </form>
   </dialog>
+
+  <div class="section-header">
+    <div>
+      <h2>Tipos de material</h2>
+      <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar.</p>
+    </div>
+    <button id="toggle-new-material-type" type="button" class="btn btn-secondary btn-small">+ Nuevo tipo</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Tipo</th><th></th></tr>
+      </thead>
+      <tbody id="material-types-table-body"></tbody>
+    </table>
+  </div>
+  <dialog id="material-type-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="material-type-dialog-title">Nuevo tipo</h3>
+    <form id="material-type-form">
+      <div class="field">
+        <label for="mt-name">Nombre</label>
+        <input id="mt-name" name="name" type="text" maxlength="100" required>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
     </main>
   </div>
 </div>

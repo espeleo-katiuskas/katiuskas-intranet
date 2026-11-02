@@ -28,9 +28,16 @@ var (
 	// unmapped, so it would have surfaced as a raw 500.
 	ErrNotRentable = errors.New("this item cannot be rented (no rental price set)")
 	ErrNotSellable = errors.New("this item cannot be sold (no sale price set)")
-	// ErrCategoryNotFound means the given category_id isn't in the
-	// material_categories catalog.
-	ErrCategoryNotFound = errors.New("material category not found")
+	// ErrTypeNotFound means the given type_id isn't in the material_types catalog.
+	ErrTypeNotFound = errors.New("material type not found")
+	// ErrDuplicateType means another type already has that name.
+	ErrDuplicateType = errors.New("another material type already has this name")
+	// ErrTypeInUse means a type cannot be deleted because some item has it.
+	ErrTypeInUse = errors.New("the material type has items")
+	// ErrBlankTypeName means a type was given no name.
+	ErrBlankTypeName = errors.New("the type name is required")
+	// ErrFixedType means the type is Cuerda or Saca, which can be neither renamed nor deleted.
+	ErrFixedType = errors.New("the types Cuerda and Saca are fixed")
 	// ErrSingleUnitItem means either a rope or bag was asked to start
 	// with (CreateItem) or gain (CreateMovement's 'acquisition') more
 	// than its one single unit — those are always exactly one
@@ -46,10 +53,10 @@ var (
 	// type's own required shape — a rope or bag with no
 	// code/brand/model, a rope without its own rope-only fields (or a
 	// non-rope with them), a bag without bag_type/capacity_liters (or a
-	// non-bag with them), or a general item with no category_id/
+	// non-bag with them), or a general item with no
 	// description (see migration 00006_inventory.sql's own CHECK
 	// constraints). There are too many distinct constraints here to
-	// give each its own sentinel error the way ErrCategoryNotFound does
+	// give each its own sentinel error the way ErrTypeNotFound does
 	// for the one foreign key on this same INSERT — every case instead
 	// wraps this one sentinel with %w, so errors.Is still matches
 	// regardless of which specific constraint fired, while the
@@ -69,13 +76,16 @@ var (
 // uniqueViolationCode is the unique violation Postgres raises for an item code that another item has.
 const uniqueViolationCode = "23505"
 
-// categoryFKViolationCode is the foreign-key violation Postgres raises
-// when CreateItem is given a category_id absent from material_categories.
-const categoryFKViolationCode = "23503"
+// foreignKeyViolationCode is the foreign-key violation Postgres raises, when deleting a type that
+// items have.
+const foreignKeyViolationCode = "23503"
 
 // checkViolationCode is any CHECK constraint violation — see
 // ErrInvalidItemFields, the only place this is checked for.
 const checkViolationCode = "23514"
+
+// integrityViolationCode is what the trigger that keeps the fixed types fixed raises.
+const integrityViolationCode = "23000"
 
 // activityRequiredConstraint is the CHECK constraint (see migration
 // 00006_inventory.sql) requiring a loan or return to name the activity it's for.
@@ -100,21 +110,19 @@ func NewRepository(pool db.PGX) *Repository {
 // drift from what actually happened the way stored, manually-updated
 // columns could.
 const itemSelect = `
-	i.id, i.type, i.brand, i.model, i.code, i.description,
+	i.id, i.kind, i.type_id, mt.name, i.brand, i.model, i.code, i.description,
 	q.total_quantity, q.available_quantity, q.outstanding_loan_quantity, i.status, i.loanable,
 	i.rental_price_per_week, i.sale_price,
-	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters,
-	i.category_id, mc.name
+	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters
 	FROM material_items i
 	JOIN material_item_quantities q ON q.item_id = i.id
-	LEFT JOIN material_categories mc ON mc.id = i.category_id`
+	JOIN material_types mt ON mt.id = i.type_id`
 
 func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
-	if err := row.Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description,
+	if err := row.Scan(&it.ID, &it.Kind, &it.TypeID, &it.TypeName, &it.Brand, &it.Model, &it.Code, &it.Description,
 		&it.TotalQuantity, &it.AvailableQuantity, &it.OutstandingLoanQuantity, &it.Status, &it.Loanable,
 		&it.RentalPricePerWeek, &it.SalePrice,
 		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters,
-		&it.CategoryID, &it.CategoryName,
 	); err != nil {
 		return err
 	}
@@ -132,9 +140,6 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	if initialQuantity <= 0 {
 		initialQuantity = 1
 	}
-	if (in.Type == ItemTypeRope || in.Type == ItemTypeBag) && initialQuantity != 1 {
-		return Item{}, ErrSingleUnitItem
-	}
 	acquiredAt := time.Now()
 	if in.AcquiredAt != nil {
 		acquiredAt = *in.AcquiredAt
@@ -146,29 +151,40 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	}
 	defer tx.Rollback(ctx)
 
+	var kind ItemKind
+	var typeName string
+	err = tx.QueryRow(ctx, `SELECT kind, name FROM material_types WHERE id = $1`, in.TypeID).Scan(&kind, &typeName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Item{}, ErrTypeNotFound
+	}
+	if err != nil {
+		return Item{}, err
+	}
+	if (kind == ItemKindRope || kind == ItemKindBag) && initialQuantity != 1 {
+		return Item{}, ErrSingleUnitItem
+	}
+
 	var it Item
 	err = tx.QueryRow(ctx, `
-		INSERT INTO material_items (type, brand, model, code, description, loanable,
+		INSERT INTO material_items (kind, type_id, brand, model, code, description, loanable,
 			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
-			bag_type, capacity_liters, category_id)
+			bag_type, capacity_liters)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-		RETURNING id, type, brand, model, code, description, status, loanable,
+		RETURNING id, brand, model, code, description, status, loanable,
 			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
-			bag_type, capacity_liters, category_id
-	`, in.Type, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
+			bag_type, capacity_liters
+	`, kind, in.TypeID, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters, in.CategoryID,
-	).Scan(&it.ID, &it.Type, &it.Brand, &it.Model, &it.Code, &it.Description, &it.Status, &it.Loanable,
+		in.BagType, in.CapacityLiters,
+	).Scan(&it.ID, &it.Brand, &it.Model, &it.Code, &it.Description, &it.Status, &it.Loanable,
 		&it.RentalPricePerWeek, &it.SalePrice, &it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM,
-		&it.BagType, &it.CapacityLiters, &it.CategoryID)
+		&it.BagType, &it.CapacityLiters)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case categoryFKViolationCode:
-			return Item{}, ErrCategoryNotFound
 		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit type %q (violates %s): %w",
-				in.Type, pgErr.ConstraintName, ErrInvalidItemFields)
+			return Item{}, fmt.Errorf("fields do not fit kind %q (violates %s): %w",
+				kind, pgErr.ConstraintName, ErrInvalidItemFields)
 		case uniqueViolationCode:
 			return Item{}, ErrDuplicateItemCode
 		}
@@ -184,13 +200,7 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 		return Item{}, err
 	}
 
-	if it.CategoryID != nil {
-		var name string
-		if err := tx.QueryRow(ctx, `SELECT name FROM material_categories WHERE id = $1`, *it.CategoryID).Scan(&name); err != nil {
-			return Item{}, err
-		}
-		it.CategoryName = &name
-	}
+	it.Kind, it.TypeID, it.TypeName = kind, in.TypeID, typeName
 	it.Rentable = it.RentalPricePerWeek != nil
 	it.Sellable = it.SalePrice != nil
 	it.TotalQuantity = initialQuantity
@@ -210,28 +220,26 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 	}
 	defer tx.Rollback(ctx)
 
-	var itemType ItemType
+	var kind ItemKind
 	err = tx.QueryRow(ctx, `
 		UPDATE material_items SET brand=$2, model=$3, code=$4, description=$5, loanable=$6,
 			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
-			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, category_id=$15
+			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14
 		WHERE id = $1
-		RETURNING type
+		RETURNING kind
 	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters, in.CategoryID,
-	).Scan(&itemType)
+		in.BagType, in.CapacityLiters,
+	).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, ErrNotFound
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case categoryFKViolationCode:
-			return Item{}, ErrCategoryNotFound
 		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit type %q (violates %s): %w",
-				itemType, pgErr.ConstraintName, ErrInvalidItemFields)
+			return Item{}, fmt.Errorf("fields do not fit kind %q (violates %s): %w",
+				kind, pgErr.ConstraintName, ErrInvalidItemFields)
 		case uniqueViolationCode:
 			return Item{}, ErrDuplicateItemCode
 		}
@@ -263,7 +271,7 @@ func (r *Repository) GetItem(ctx context.Context, id int64) (Item, error) {
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+itemSelect+`
-		ORDER BY i.type, i.brand, i.model, i.id
+		ORDER BY mt.kind = 'general', mt.kind, mt.name, i.brand, i.model, i.id
 	`)
 	if err != nil {
 		return nil, err
@@ -281,25 +289,76 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return list, rows.Err()
 }
 
-// ListMaterialCategories returns the material category catalog (migration
-// 00006_inventory.sql) — every entry, in name order, for the "new item"
-// form's category picker.
-func (r *Repository) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name FROM material_categories ORDER BY name`)
+// ListMaterialTypes returns the catalog of types of material: the fixed ones (Cuerda, Saca) first,
+// then the rest by name.
+func (r *Repository) ListMaterialTypes(ctx context.Context) ([]MaterialType, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name, kind FROM material_types ORDER BY kind = 'general', kind, name`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	list := []MaterialCategory{}
+	list := []MaterialType{}
 	for rows.Next() {
-		var c MaterialCategory
-		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+		var t MaterialType
+		if err := rows.Scan(&t.ID, &t.Name, &t.Kind); err != nil {
 			return nil, err
 		}
-		list = append(list, c)
+		list = append(list, t)
 	}
 	return list, rows.Err()
+}
+
+// typeQuery runs a statement that returns one type inside its own (sub)transaction, so a rejected
+// one (a duplicate name, a type in use, a fixed type) is rolled back on its own: under test, where
+// everything shares one outer transaction, the violation would otherwise abort all of it.
+func (r *Repository) typeQuery(ctx context.Context, sql string, args ...any) (MaterialType, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return MaterialType{}, err
+	}
+	defer tx.Rollback(ctx)
+	var t MaterialType
+	if err := tx.QueryRow(ctx, sql, args...).Scan(&t.ID, &t.Name, &t.Kind); err != nil {
+		return MaterialType{}, typeError(err)
+	}
+	return t, tx.Commit(ctx)
+}
+
+// CreateType adds a type to the catalog; it is always a general one (the fixed two are seeded).
+func (r *Repository) CreateType(ctx context.Context, name string) (MaterialType, error) {
+	return r.typeQuery(ctx, `INSERT INTO material_types (name) VALUES ($1) RETURNING id, name, kind`, name)
+}
+
+// RenameType changes a type's name; its items follow, since they point at its id. The fixed types
+// are refused (the database refuses them too, with a trigger).
+func (r *Repository) RenameType(ctx context.Context, id int64, name string) (MaterialType, error) {
+	return r.typeQuery(ctx, `UPDATE material_types SET name = $2 WHERE id = $1 RETURNING id, name, kind`, id, name)
+}
+
+// DeleteType removes a type that no item has. The fixed types are refused.
+func (r *Repository) DeleteType(ctx context.Context, id int64) (MaterialType, error) {
+	return r.typeQuery(ctx, `DELETE FROM material_types WHERE id = $1 RETURNING id, name, kind`, id)
+}
+
+// typeError maps the errors of the type queries to this package's own.
+func typeError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrTypeNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case uniqueViolationCode:
+			return ErrDuplicateType
+		case foreignKeyViolationCode:
+			return ErrTypeInUse
+		case integrityViolationCode:
+			return ErrFixedType
+		}
+	}
+	return err
 }
 
 // itemStatusForMovement maps a permanent stock-removal movement type to
@@ -371,13 +430,13 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	}
 	defer tx.Rollback(ctx)
 
-	var itemType ItemType
+	var kind ItemKind
 	var loanable bool
 	var rentalPrice, salePrice *float64
 	err = tx.QueryRow(ctx, `
-		SELECT type, loanable, rental_price_per_week, sale_price
+		SELECT kind, loanable, rental_price_per_week, sale_price
 		FROM material_items WHERE id = $1 FOR UPDATE
-	`, in.ItemID).Scan(&itemType, &loanable, &rentalPrice, &salePrice)
+	`, in.ItemID).Scan(&kind, &loanable, &rentalPrice, &salePrice)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Movement{}, ErrNotFound
 	}
@@ -388,7 +447,7 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	// Rope and bag are individually tracked (always exactly one unit):
 	// every movement type on them targets that single unit, and a
 	// further acquisition makes no sense — a new rope is a new item.
-	if itemType == ItemTypeRope || itemType == ItemTypeBag {
+	if kind == ItemKindRope || kind == ItemKindBag {
 		if in.Type == MovementAcquisition {
 			return Movement{}, ErrSingleUnitItem
 		}

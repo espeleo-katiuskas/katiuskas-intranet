@@ -21,10 +21,10 @@ import (
 func createItem(t *testing.T, tx pgx.Tx, repo *material.Repository, quantity int32) material.Item {
 	t.Helper()
 	description := "Casco Petzl Boreo"
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	rentalPrice, salePrice := 10.0, 25.0
 	item, err := repo.CreateItem(context.Background(), material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: quantity, Loanable: true,
 		RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
@@ -289,7 +289,7 @@ func TestAcquisitionRejectedForRopeAndBag(t *testing.T) {
 	year := int32(2024)
 	length := int32(60)
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
@@ -849,14 +849,14 @@ func TestCreateRopeItem(t *testing.T) {
 	length := int32(60)
 
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
 		t.Fatalf("create rope: %v", err)
 	}
-	if item.Type != material.ItemTypeRope || item.TotalQuantity != 1 || item.AvailableQuantity != 1 {
+	if item.Kind != material.ItemKindRope || item.TypeName != "Cuerda" || item.TotalQuantity != 1 || item.AvailableQuantity != 1 {
 		t.Errorf("expected a single-unit rope item, got %+v", item)
 	}
 	if item.RopeType == nil || *item.RopeType != material.RopeTypeCaving {
@@ -867,9 +867,6 @@ func TestCreateRopeItem(t *testing.T) {
 	}
 	if item.LengthM == nil || *item.LengthM != 60 {
 		t.Errorf("expected length 60m, got %+v", item.LengthM)
-	}
-	if item.CategoryID != nil {
-		t.Errorf("expected no category for a rope, got %+v", item.CategoryID)
 	}
 }
 
@@ -883,7 +880,7 @@ func TestCreateBagItem(t *testing.T) {
 	capacity := 45.0
 
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Saca"), Brand: &brand, Model: &model, Code: &code,
 		BagType: &bagType, CapacityLiters: &capacity, InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -914,7 +911,7 @@ func TestCreateRopeRejectsMissingManufactureYear(t *testing.T) {
 
 	// Violates rope_requires_rope_fields.
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing manufacture_year")
@@ -933,24 +930,10 @@ func TestCreateRopeRejectsMissingLengthM(t *testing.T) {
 
 	// Violates rope_requires_rope_fields.
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing length_m")
-	}
-}
-
-func TestCreateGearRejectsMissingCategory(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := material.NewRepository(tx)
-	ctx := context.Background()
-
-	// Violates general_requires_category.
-	description := "Casco"
-	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, InitialQuantity: 1, Loanable: true,
-	}); err == nil {
-		t.Error("expected an error for general missing category_id")
 	}
 }
 
@@ -966,7 +949,7 @@ func TestCreateRopeRejectsMissingBrandModelCode(t *testing.T) {
 	// Violates rope_and_bag_require_brand_model and
 	// rope_and_bag_require_code.
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, RopeType: &ropeType, DiameterMM: &diameter,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), RopeType: &ropeType, DiameterMM: &diameter,
 		ManufactureYear: &year, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing brand/model/code")
@@ -983,7 +966,7 @@ func TestCreateBagRejectsMissingBagType(t *testing.T) {
 
 	// Violates bag_requires_bag_type.
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Saca"), Brand: &brand, Model: &model, Code: &code,
 		CapacityLiters: &capacity, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a bag missing bag_type")
@@ -996,9 +979,9 @@ func TestCreateGearRejectsMissingDescription(t *testing.T) {
 	ctx := context.Background()
 
 	// Violates general_requires_description.
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, CategoryID: &categoryID, InitialQuantity: 1, Loanable: true,
+		TypeID: typeID, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for general missing description")
 	}
@@ -1016,7 +999,7 @@ func TestCreateRopeRejectsInitialQuantityAboveOne(t *testing.T) {
 	length := int32(60)
 
 	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 3, Loanable: true,
 	}); !errors.Is(err, material.ErrSingleUnitItem) {
@@ -1030,11 +1013,11 @@ func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 	ctx := context.Background()
 
 	description := "Casco"
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	rentalPrice, salePrice := 5.0, 30.0
 
 	withoutPrices, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1045,7 +1028,7 @@ func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 	}
 
 	withPrices, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: 1, Loanable: true, RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
 	if err != nil {
@@ -1062,9 +1045,9 @@ func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 	ctx := context.Background()
 
 	description := "Casco"
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: 1, Loanable: false,
 	})
 	if err != nil {
@@ -1097,9 +1080,9 @@ func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
 	ctx := context.Background()
 
 	description := "Casco"
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1124,9 +1107,9 @@ func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 	ctx := context.Background()
 
 	description := "Casco"
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
+		TypeID: typeID, Description: &description,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1179,7 +1162,7 @@ func TestCreateItemRejectsRopeMissingRopeFields(t *testing.T) {
 
 	brand, model, code := "Beal", "Antipodes", "C-101"
 	_, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		InitialQuantity: 1, Loanable: true,
 		// Deliberately missing RopeType/DiameterMM/ManufactureYear/LengthM.
 	})
@@ -1188,33 +1171,86 @@ func TestCreateItemRejectsRopeMissingRopeFields(t *testing.T) {
 	}
 }
 
-func TestCreateItemRejectsGearMissingCategory(t *testing.T) {
+func TestListMaterialTypes(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	description := "Casco"
-	_, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeGeneral, Description: &description,
-		InitialQuantity: 1, Loanable: true,
-		// Deliberately missing CategoryID.
-	})
-	if !errors.Is(err, material.ErrInvalidItemFields) {
-		t.Errorf("expected ErrInvalidItemFields, got %v", err)
+	types, err := repo.ListMaterialTypes(ctx)
+	if err != nil {
+		t.Fatalf("list material types: %v", err)
+	}
+	if len(types) < 3 || types[0].Name != "Cuerda" || types[0].Kind != material.ItemKindRope ||
+		types[1].Name != "Saca" || types[1].Kind != material.ItemKindBag || types[2].Kind != material.ItemKindGeneral {
+		t.Errorf("expected Cuerda and Saca first, then the general ones, got %+v", types)
 	}
 }
 
-func TestListMaterialCategories(t *testing.T) {
+// Cuerda and Saca are fixed: neither the repository nor, behind it, the database lets them be
+// renamed, deleted or turned into anything else.
+func TestFixedTypesCannotChange(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	categories, err := repo.ListMaterialCategories(ctx)
-	if err != nil {
-		t.Fatalf("list material categories: %v", err)
+	for _, name := range []string{"Cuerda", "Saca"} {
+		id := testutil.MaterialTypeID(t, tx, name)
+		if _, err := repo.RenameType(ctx, id, name+" 2"); !errors.Is(err, material.ErrFixedType) {
+			t.Errorf("renaming %s: expected ErrFixedType, got %v", name, err)
+		}
+		if _, err := repo.DeleteType(ctx, id); !errors.Is(err, material.ErrFixedType) {
+			t.Errorf("deleting %s: expected ErrFixedType, got %v", name, err)
+		}
 	}
-	if len(categories) == 0 {
-		t.Error("expected the seeded material categories to be listed")
+	// A second fixed type of a kind cannot be made behind the repository's back either.
+	sub, err := tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Rollback(ctx)
+	if _, err := sub.Exec(ctx, `INSERT INTO material_types (name, kind) VALUES ('Otra cuerda', 'rope')`); err == nil {
+		t.Error("expected a second rope type to be refused")
+	}
+}
+
+func TestTypeCRUD(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := material.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.CreateType(ctx, "Cintas")
+	if err != nil || created.Kind != material.ItemKindGeneral {
+		t.Fatalf("create: %+v %v", created, err)
+	}
+	if _, err := repo.CreateType(ctx, "Cintas"); !errors.Is(err, material.ErrDuplicateType) {
+		t.Errorf("expected ErrDuplicateType, got %v", err)
+	}
+	renamed, err := repo.RenameType(ctx, created.ID, "Cintas planas")
+	if err != nil || renamed.Name != "Cintas planas" {
+		t.Fatalf("rename: %+v %v", renamed, err)
+	}
+	if _, err := repo.RenameType(ctx, 999999, "X"); !errors.Is(err, material.ErrTypeNotFound) {
+		t.Errorf("expected ErrTypeNotFound, got %v", err)
+	}
+
+	description := "Cinta"
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		TypeID: created.ID, Description: &description, InitialQuantity: 1, Loanable: true,
+	})
+	if err != nil || item.TypeName != "Cintas planas" {
+		t.Fatalf("item of the new type: %+v %v", item, err)
+	}
+	if _, err := repo.DeleteType(ctx, created.ID); !errors.Is(err, material.ErrTypeInUse) {
+		t.Errorf("expected ErrTypeInUse, got %v", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM material_movements WHERE item_id = $1`, item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM material_items WHERE id = $1`, item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DeleteType(ctx, created.ID); err != nil {
+		t.Errorf("delete: %v", err)
 	}
 }
 
@@ -1230,7 +1266,7 @@ func TestMovementQuantityForcedToOneForRopeAndBag(t *testing.T) {
 	length := int32(60)
 
 	item, err := repo.CreateItem(ctx, material.CreateItemInput{
-		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
@@ -1339,13 +1375,13 @@ func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 func TestModelNeedsBrandConstraint(t *testing.T) {
 	tx := testutil.NewTx(t)
 	ctx := context.Background()
-	category := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	sub, err := tx.Begin(ctx) // a savepoint, so the refusal does not abort the test's transaction
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sub.Rollback(ctx)
-	_, err = sub.Exec(ctx, `INSERT INTO material_items (type, description, category_id, model) VALUES ('general', 'Casco', $1, 'Vertex')`, category)
+	_, err = sub.Exec(ctx, `INSERT INTO material_items (kind, type_id, description, model) VALUES ('general', $1, 'Casco', 'Vertex')`, typeID)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "model_needs_brand" {
 		t.Fatalf("expected the model_needs_brand constraint to refuse it, got %v", err)

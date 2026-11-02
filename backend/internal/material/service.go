@@ -33,6 +33,35 @@ func blankToNil(p *string) *string {
 	return &trimmed
 }
 
+// cleanTypeName trims a type name and refuses a blank one.
+func cleanTypeName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrBlankTypeName
+	}
+	return name, nil
+}
+
+func (s *Service) CreateType(ctx context.Context, name string) (MaterialType, error) {
+	name, err := cleanTypeName(name)
+	if err != nil {
+		return MaterialType{}, err
+	}
+	return s.repo.CreateType(ctx, name)
+}
+
+func (s *Service) RenameType(ctx context.Context, id int64, name string) (MaterialType, error) {
+	name, err := cleanTypeName(name)
+	if err != nil {
+		return MaterialType{}, err
+	}
+	return s.repo.RenameType(ctx, id, name)
+}
+
+func (s *Service) DeleteType(ctx context.Context, id int64) (MaterialType, error) {
+	return s.repo.DeleteType(ctx, id)
+}
+
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {
 	in.Brand, in.Model, in.Code, in.Description = blankToNil(in.Brand), blankToNil(in.Model), blankToNil(in.Code), blankToNil(in.Description)
 	if in.Model != nil && in.Brand == nil {
@@ -57,8 +86,8 @@ func (s *Service) ListItems(ctx context.Context) ([]Item, error) {
 	return s.repo.ListItems(ctx)
 }
 
-func (s *Service) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
-	return s.repo.ListMaterialCategories(ctx)
+func (s *Service) ListMaterialTypes(ctx context.Context) ([]MaterialType, error) {
+	return s.repo.ListMaterialTypes(ctx)
 }
 
 func (s *Service) CreateMovement(ctx context.Context, in CreateMovementInput) (Movement, error) {

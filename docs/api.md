@@ -417,26 +417,39 @@ files (up to 25 MiB).
 
 - **GET** `/material/items` — *Any baseline role*. Catalog of material.
   - returns: 200 `[Item]`
-- **POST** `/material/items` — *Admin, board or material*. Adds an item (rope, bag or general
-  material).
-  - body: `type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
+- **POST** `/material/items` — *Admin, board or material*. Adds an item of a type (Cuerda and Saca
+  make a rope and a bag; any other type, general material).
+  - body: `type_id*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
     `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
-    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `category_id`. `brand`, `model`
-    and `code` are required for a rope or bag and optional for general material; a `model` needs a
-    `brand` (blank text counts as no value)
+    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`. `brand`, `model` and `code` are
+    required for a rope or bag and optional for general material; a `model` needs a `brand` (blank
+    text counts as no value)
   - returns: 201 `Item`
-  - errors: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
-    `single_unit_item`, `invalid_item_fields`, `model_without_brand`; 409 `duplicate_item_code`
+  - errors: 400 `invalid_body`, `unknown_type`, `invalid_date`, `single_unit_item`,
+    `invalid_item_fields`, `model_without_brand`; 409 `duplicate_item_code`
 - **PATCH** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
   editable field with the body's (the brand, model, code, description, `loanable`, prices and the
-  rope, bag or general fields of its type). Its type and its quantities, which only movements
-  change, are not editable (a `type` or `total_quantity` in the body is ignored).
-  - body: the same as creating, without `type`, `acquired_at` and `total_quantity`
+  rope or bag fields of its kind). Its type and its quantities, which only movements change, are not
+  editable (a `type_id` or `total_quantity` in the body is ignored).
+  - body: the same as creating, without `type_id`, `acquired_at` and `total_quantity`
   - returns: 200 `Item`
-  - errors: 400 `invalid_id`, `invalid_body`, `unknown_category`, `invalid_item_fields`,
-    `model_without_brand`; 404 `not_found`; 409 `duplicate_item_code`
-- **GET** `/material/categories` — *Admin, board or material*. Categories of general material.
-  - returns: 200 `[MaterialCategory]`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_item_fields`, `model_without_brand`; 404
+    `not_found`; 409 `duplicate_item_code`
+- **GET** `/material/types` — *Admin, board or material*. Types of material: Cuerda and Saca first,
+  then the rest by name.
+  - returns: 200 `[MaterialType]`
+- **POST** `/material/types` — *Admin*. Adds a type (always general; the name is trimmed).
+  - body: `name*`
+  - returns: 201 `MaterialType`
+  - errors: 400 `invalid_body` (blank name); 409 `duplicate_type`
+- **PATCH** `/material/types/{id}` — *Admin*. Renames a type; its items follow.
+  - body: `name*`
+  - returns: 200 `MaterialType`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `duplicate_type`, `fixed_type`
+    (Cuerda and Saca)
+- **DELETE** `/material/types/{id}` — *Admin*. Deletes a type no item has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `type_in_use`, `fixed_type`
 - **GET** `/material/items/{id}/movements` — *Any baseline role*. Movement history of an item.
   - returns: 200 `[Movement]`
   - errors: 400 `invalid_id`
@@ -1165,19 +1178,22 @@ Nested fields:
 | `position` | integer |
 | `created_at` | datetime |
 
-### `MaterialCategory`
+### `MaterialType`
 
 | Field | Type |
 |---|---|
 | `id` | integer |
 | `name` | text |
+| `kind` | rope/bag/general |
 
 ### `Item`
 
 | Field | Type |
 |---|---|
 | `id` | integer |
-| `type` | rope/bag/general |
+| `kind` | rope/bag/general |
+| `type_id` | integer |
+| `type_name` | text |
 | `brand` | text |
 | `model` | text |
 | `code` | text |
@@ -1197,14 +1213,12 @@ Nested fields:
 | `length_m` | integer |
 | `bag_type` | caving/canyoning/quick/special |
 | `capacity_liters` | number |
-| `category_id` | integer |
-| `category_name` | text |
 
 ### `CreateItemInput`
 
 | Field | Type |
 |---|---|
-| `type*` | rope/bag/general |
+| `type_id*` | integer |
 | `brand` | text |
 | `model` | text |
 | `code` | text |
@@ -1220,7 +1234,6 @@ Nested fields:
 | `length_m` | integer |
 | `bag_type` | caving/canyoning/quick/special |
 | `capacity_liters` | number |
-| `category_id` | integer |
 
 ### `Movement`
 

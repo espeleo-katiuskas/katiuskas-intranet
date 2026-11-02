@@ -133,9 +133,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/material/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
-	// material-categories has the same roles as create: the catalog only exists to populate the
-	// "new item" form's category picker for general items.
-	mux.Handle("GET /api/v1/material/categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board", "material"))
+	// Reading the types has the same roles as creating an item: the catalog populates the "new item"
+	// form's type picker. Changing the list is admin only (/admin), and never Cuerda or Saca.
+	mux.Handle("GET /api/v1/material/types", h.authenticator.Protect(h.listMaterialTypes, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/material/types", h.authenticator.Protect(h.createType, "admin"))
+	mux.Handle("PATCH /api/v1/material/types/{id}", h.authenticator.Protect(h.renameType, "admin"))
+	mux.Handle("DELETE /api/v1/material/types/{id}", h.authenticator.Protect(h.deleteType, "admin"))
 
 	mux.Handle("GET /api/v1/material/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/material/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
@@ -168,7 +171,7 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Type               ItemType  `json:"type"`
+		TypeID             int64     `json:"type_id"`
 		Brand              *string   `json:"brand"`
 		Model              *string   `json:"model"`
 		Code               *string   `json:"code"`
@@ -184,14 +187,9 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		LengthM            *int32    `json:"length_m"`
 		BagType            *BagType  `json:"bag_type"`
 		CapacityLiters     *float64  `json:"capacity_liters"`
-		CategoryID         *int64    `json:"category_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
-		return
-	}
-	if !(body.Type == ItemTypeRope || body.Type == ItemTypeBag || body.Type == ItemTypeGeneral) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_type", "type must be rope, bag or general")
 		return
 	}
 	var acquiredAt *time.Time
@@ -208,14 +206,14 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		loanable = *body.Loanable
 	}
 	item, err := h.service.CreateItem(r.Context(), CreateItemInput{
-		Type: body.Type, Brand: body.Brand, Model: body.Model, Code: body.Code,
+		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code,
 		Description: body.Description, AcquiredAt: acquiredAt, InitialQuantity: body.TotalQuantity,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
-		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
+		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
-	if errors.Is(err, ErrCategoryNotFound) {
-		httpapi.WriteError(w, http.StatusBadRequest, "unknown_category", err.Error())
+	if errors.Is(err, ErrTypeNotFound) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
 		return
 	}
 	if errors.Is(err, ErrSingleUnitItem) {
@@ -239,15 +237,15 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el material «%s» (%s, x%d).",
-		h.actorLogin(r.Context()), itemLabel(item), item.Type, item.TotalQuantity))
+		h.actorLogin(r.Context()), itemLabel(item), item.TypeName, item.TotalQuantity))
 	httpapi.WriteJSON(w, http.StatusCreated, item)
 }
 
 // itemAuditFields are the Item fields an edit's notification diffs — those UpdateItemInput can change
-// (the category by its name, not by the numeric id).
+// (the type is not editable).
 var itemAuditFields = []string{
 	"Brand", "Model", "Code", "Description", "Loanable", "RentalPricePerWeek", "SalePrice",
-	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters", "CategoryName",
+	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters",
 }
 
 // updateItem replaces every editable field of an item with the body's: the type and the quantities
@@ -273,7 +271,6 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		LengthM            *int32    `json:"length_m"`
 		BagType            *BagType  `json:"bag_type"`
 		CapacityLiters     *float64  `json:"capacity_liters"`
-		CategoryID         *int64    `json:"category_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -288,14 +285,14 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
-		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters, CategoryID: body.CategoryID,
+		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
 		return
-	case errors.Is(err, ErrCategoryNotFound):
-		httpapi.WriteError(w, http.StatusBadRequest, "unknown_category", err.Error())
+	case errors.Is(err, ErrTypeNotFound):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
 		return
 	case errors.Is(err, ErrInvalidItemFields):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
@@ -319,13 +316,105 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, item)
 }
 
-func (h *Handler) listMaterialCategories(w http.ResponseWriter, r *http.Request) {
-	list, err := h.service.ListMaterialCategories(r.Context())
+func (h *Handler) listMaterialTypes(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListMaterialTypes(r.Context())
 	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list material categories")
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list material types")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// writeTypeError answers with the status and code of an error of the type routes.
+func writeTypeError(w http.ResponseWriter, err error, what string) {
+	switch {
+	case errors.Is(err, ErrBlankTypeName):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", err.Error())
+	case errors.Is(err, ErrTypeNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
+	case errors.Is(err, ErrFixedType):
+		httpapi.WriteError(w, http.StatusConflict, "fixed_type", err.Error())
+	case errors.Is(err, ErrDuplicateType):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_type", err.Error())
+	case errors.Is(err, ErrTypeInUse):
+		httpapi.WriteError(w, http.StatusConflict, "type_in_use", err.Error())
+	default:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not "+what+" the type")
+	}
+}
+
+func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "invalid JSON body")
+		return
+	}
+	t, err := h.service.CreateType(r.Context(), body.Name)
+	if err != nil {
+		writeTypeError(w, err, "create")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha añadido el tipo de material «%s».",
+		h.actorLogin(r.Context()), t.Name))
+	httpapi.WriteJSON(w, http.StatusCreated, t)
+}
+
+func (h *Handler) renameType(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "invalid JSON body")
+		return
+	}
+	before, beforeErr := h.typeName(r.Context(), id)
+	t, err := h.service.RenameType(r.Context(), id, body.Name)
+	if err != nil {
+		writeTypeError(w, err, "rename")
+		return
+	}
+	if beforeErr == nil && before != t.Name {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha cambiado el nombre del tipo de material «%s» por «%s».",
+			h.actorLogin(r.Context()), before, t.Name))
+	}
+	httpapi.WriteJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	t, err := h.service.DeleteType(r.Context(), id)
+	if err != nil {
+		writeTypeError(w, err, "delete")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha borrado el tipo de material «%s».",
+		h.actorLogin(r.Context()), t.Name))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// typeName is a type's current name, for the notification of a rename.
+func (h *Handler) typeName(ctx context.Context, id int64) (string, error) {
+	list, err := h.service.ListMaterialTypes(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, t := range list {
+		if t.ID == id {
+			return t.Name, nil
+		}
+	}
+	return "", ErrTypeNotFound
 }
 
 func (h *Handler) listItemMovements(w http.ResponseWriter, r *http.Request) {

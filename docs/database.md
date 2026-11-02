@@ -14,7 +14,7 @@ Contents:
 - [Members](#members): `memberships`, `membership_leaves`, `membership_dues`, `licenses`,
   `license_types`, `board_members`
 - [Activities](#activities): `activities`, `activity_participants`, `activity_resources`, `holidays`
-- [Material](#material): `material_items`, `material_categories`, `material_movements`,
+- [Material](#material): `material_items`, `material_types`, `material_movements`,
   `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
@@ -62,7 +62,7 @@ users ──┬─< memberships, membership_leaves, membership_dues, licenses, b
 
 activities ──< activity_resources, activity_participants, material_movements
 material_items ──< material_movements        (material_item_quantities is a view of the two)
-license_types ──< licenses                material_categories ──< material_items
+license_types ──< licenses                material_types ──< material_items
 
 distributions ──┬─< distribution_options
                 ├─< distribution_articles ──< distribution_unit_identifiers
@@ -90,7 +90,7 @@ transactions ──< membership_dues, licenses, distribution_payments
 - `distribution_status` (`distributions.status`): draft, open, closed, done
 - `distribution_visibility` (`distributions.visibility`): all, material, board, admin
 - `gender` (`users.gender`): male, female
-- `material_item_type` (`material_items.type`): rope, bag, general
+- `material_kind` (`material_items.kind`, `material_types.kind`): rope, bag, general
 - `material_item_status` (`material_items.status`): available, on_loan, rented, sold, lost,
   abandoned, maintenance, retired
 - `material_movement_status` (`material_movements.status`): active, completed, overdue, cancelled
@@ -602,15 +602,17 @@ Constraints:
 
 ### `material_items`
 
-Catalog of the club's material. `type` decides which fields it carries: `rope` and `bag` are
-individual objects, each with its own code and make and model; `general` is general material, filed
-under a category and with a description. Stock is never stored: it comes from the movements
+Catalog of the club's material. Each item has a type (`type_id`, see `material_types`) and the type
+decides its `kind`, which decides which fields it carries: `rope` (the type Cuerda) and `bag` (the
+type Saca) are individual objects, each with its own code and make and model; `general` (every other
+type) is general material, with a description. Stock is never stored: it comes from the movements
 (`material_item_quantities`).
 
 | Column | Type | Null | Default |
 |---|---|---|---|
 | `id` | bigint | no | identity |
-| `type` | material_item_type | no |  |
+| `kind` | material_kind | no |  |
+| `type_id` | bigint | no |  |
 | `brand` | text | yes |  |
 | `model` | text | yes |  |
 | `code` | text | yes |  |
@@ -625,7 +627,6 @@ under a category and with a description. Stock is never stored: it comes from th
 | `length_m` | integer | yes |  |
 | `bag_type` | bag_type | yes |  |
 | `capacity_liters` | numeric(5,1) | yes |  |
-| `category_id` | bigint | yes |  |
 
 Notes on the columns:
 
@@ -636,32 +637,35 @@ Constraints:
 
 - primary key (id)
 - unique (code)
-- `category_id` → `material_categories(id)`
-- `bag_requires_bag_type`: `(type <> 'bag') OR (bag_type IS NOT NULL)`
-- `bag_requires_capacity`: `(type <> 'bag') OR (capacity_liters IS NOT NULL)`
-- `bag_type_only_for_bag`: `(type = 'bag') OR (bag_type IS NULL)`
-- `capacity_only_for_bag`: `(type = 'bag') OR (capacity_liters IS NULL)`
-- `category_only_for_general`: `(type = 'general') OR (category_id IS NULL)`
-- `general_requires_category`: `(type <> 'general') OR (category_id IS NOT NULL)`
-- `general_requires_description`: `(type <> 'general') OR (description IS NOT NULL)`
-- `rope_and_bag_require_brand_model`: `(type = 'general') OR ((brand IS NOT NULL) AND (model IS
+- `(type_id, kind)` → `material_types(id, kind)`: the kind is always the one of the item's type
+- `bag_requires_bag_type`: `(kind <> 'bag') OR (bag_type IS NOT NULL)`
+- `bag_requires_capacity`: `(kind <> 'bag') OR (capacity_liters IS NOT NULL)`
+- `bag_type_only_for_bag`: `(kind = 'bag') OR (bag_type IS NULL)`
+- `capacity_only_for_bag`: `(kind = 'bag') OR (capacity_liters IS NULL)`
+- `general_requires_description`: `(kind <> 'general') OR (description IS NOT NULL)`
+- `rope_and_bag_require_brand_model`: `(kind = 'general') OR ((brand IS NOT NULL) AND (model IS
   NOT NULL))`
-- `rope_and_bag_require_code`: `(type = 'general') OR (code IS NOT NULL)`
+- `rope_and_bag_require_code`: `(kind = 'general') OR (code IS NOT NULL)`
 - `model_needs_brand`: `(model IS NULL) OR (brand IS NOT NULL)`
-- `rope_fields_only_for_rope`: `(type = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
+- `rope_fields_only_for_rope`: `(kind = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
   NULL) AND (manufacture_year IS NULL) AND (length_m IS NULL))`
-- `rope_requires_rope_fields`: `(type <> 'rope') OR ((rope_type IS NOT NULL) AND (diameter_mm
+- `rope_requires_rope_fields`: `(kind <> 'rope') OR ((rope_type IS NOT NULL) AND (diameter_mm
   IS NOT NULL) AND (manufacture_year IS NOT NULL) AND (length_m IS NOT NULL))`
 
-### `material_categories`
+### `material_types`
 
-Categories of general material (carabiners, spits, plates, maillons, lighting). It lives in the
-database so it can be extended without deploying.
+Types of material. Two are fixed, **Cuerda** (kind `rope`) and **Saca** (kind `bag`): they carry the
+rope and bag fields, cannot be renamed or deleted (a trigger refuses it) and there is exactly one of
+each kind (a partial unique index). The rest, of kind `general`, are what used to be the categories
+(carabiners, spits, plates, maillons, lighting…) and an admin adds, renames and deletes them freely
+(`/admin`); one that has items cannot be deleted. It lives in the database so it can be extended
+without deploying.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
 | `id` | bigint | no | identity |
 | `name` | text | no |  |
+| `kind` | material_kind | no | 'general' |
 
 Constraints:
 
@@ -1249,7 +1253,8 @@ Besides the schema, the migrations leave this data:
   `material` and `money`.
 - `license_types`: 24 types (zones A, B and B1 × BASICA and PLUS × adulto, Infantil and Juvenil,
   plus ZERO, ASEDEB, FAE, FERM, FMM and "Otra").
-- `material_categories`: Mosquetones, Spits, Placas, Maillones and Iluminación.
+- `material_types`: Cuerda (rope) and Saca (bag), fixed, and Mosquetones, Spits, Placas, Maillones
+  and Iluminación (general).
 - `holidays`: the holidays of 2026.
 - Nothing else is seeded: no people, no accounting accounts, no distributions, and no
   `club_info_items` (the club's data is entered from `/admin`, so none of it is in the repository:
@@ -1318,3 +1323,6 @@ at the end; that database has to be recreated when a new migration appears.
   becomes `general`)
 - `00047_material_model_needs_brand.sql`: `material_items.model_needs_brand`; first, a model with no
   brand becomes the brand
+- `00048_material_types.sql`: `material_categories` becomes `material_types` (with `kind`; Cuerda
+  and Saca added as the fixed ones), `material_items.type_id` replaces `category_id`,
+  `material_items.type` is renamed `kind` and its enum `material_kind`

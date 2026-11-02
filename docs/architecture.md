@@ -768,10 +768,12 @@ Catalog of the club's material and its movements. The movements go in a single t
 discriminator (`type`) instead of a table per type, and several `CHECK`s prevent meaningless
 combinations (a sale with a return date, for example).
 
-The catalog items have three shapes (`rope`, `bag` and `general`), each with its own fields; the
-details and what is mandatory in each shape are in [`database.md`](database.md). The movements go
-in a single table with a type discriminator instead of a table per type, and several `CHECK`s
-prevent meaningless combinations (a sale with a return date, for example).
+Every item has a type (`material_types`): two are fixed, Cuerda and Saca, and give the items their
+rope and bag shape; every other one, which an admin edits freely, gives the general shape. So the
+catalog items have three shapes (the item's `kind`: `rope`, `bag` and `general`), each with its own
+fields; the details and what is mandatory in each shape are in [`database.md`](database.md). The
+movements go in a single table with a type discriminator instead of a table per type, and several
+`CHECK`s prevent meaningless combinations (a sale with a return date, for example).
 
 **Rules**
 
@@ -793,9 +795,12 @@ prevent meaningless combinations (a sale with a return date, for example).
 delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
 loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
 is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
-catalog (and the categories its form offers) and editing it (`PATCH /material/items/{id}`: not its
-type, and not its quantities, which only movements change) is for the same three. An item's `code`
-is unique (409 `duplicate_item_code`).
+catalog (and reading the types its form offers) and editing it (`PATCH /material/items/{id}`:
+not its type, and not its quantities, which only movements change) is for the same three. An item's
+`code` is unique (409 `duplicate_item_code`). The list of types itself is changed by admin
+alone (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and
+Saca can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted
+(409 `type_in_use`).
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,

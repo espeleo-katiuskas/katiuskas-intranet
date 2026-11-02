@@ -365,7 +365,6 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // hunting the item down on the material page. Item type/rope/bag
 // labels are duplicated from js/material.js and js/member.js, the
 // same way those two already duplicate them from each other.
-const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', general: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = {
   caving: 'Espeleología',
@@ -376,7 +375,7 @@ const bagTypeLabels = {
 
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.type === 'rope') {
+  if (item.kind === 'rope') {
     const parts = [
       brandModel || null,
       `${item.diameter_mm} mm`,
@@ -386,7 +385,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  if (item.type === 'bag') {
+  if (item.kind === 'bag') {
     const parts = [
       brandModel || null,
       `${item.capacity_liters} L`,
@@ -394,7 +393,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [item.category_name, brandModel || null, item.description || null];
+  const parts = [item.type_name, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
@@ -402,11 +401,10 @@ function itemLabel(item) {
 // renderPickerOptions/pickerLabel already escape it, so this must not.
 function itemPickerText(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  const typeLabel = itemTypeLabels[item.type] ?? item.type;
   const parts =
-    item.type === 'general'
-      ? [typeLabel, item.category_name, brandModel || null, item.description || null]
-      : [typeLabel, brandModel || null, item.code];
+    item.kind === 'general'
+      ? [item.type_name, brandModel || null, item.description || null]
+      : [item.type_name, brandModel || null, item.code];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -545,7 +543,7 @@ function updateLoanQuantityVisibility() {
   if (!loanItemInput) return;
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
   const item = itemId != null ? itemsById[itemId] : null;
-  const isSingleUnit = item?.type === 'rope' || item?.type === 'bag';
+  const isSingleUnit = item?.kind === 'rope' || item?.kind === 'bag';
   loanQuantityField.hidden = isSingleUnit;
   if (isSingleUnit) loanQuantityInput.value = '1';
   const max = !item

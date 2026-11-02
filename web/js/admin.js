@@ -804,6 +804,100 @@ clubInfoBody.addEventListener('click', async (event) => {
   }
 });
 
+// "Tipos de material": the catalog every item has one of (GET/POST /material/types,
+// PATCH/DELETE /material/types/{id}). Cuerda and Saca are fixed (they carry the rope and bag fields):
+// they are listed but cannot be renamed or deleted; a type with items can't go either.
+const materialTypesBody = document.getElementById('material-types-table-body');
+const materialTypeDialog = document.getElementById('material-type-dialog');
+const materialTypeForm = document.getElementById('material-type-form');
+let materialTypes = [];
+let editingMaterialTypeId = null; // null: the dialog is creating one
+initModal(materialTypeDialog, materialTypeForm);
+
+function renderMaterialTypes() {
+  materialTypesBody.innerHTML = materialTypes.length
+    ? materialTypes
+        .map(
+          (type) => `
+        <tr>
+          <td>${escapeHtml(type.name)}</td>
+          <td class="nowrap">${
+            type.kind === 'general'
+              ? `<button type="button" class="btn btn-secondary btn-small" data-edit-material-type="${type.id}">Renombrar</button>
+            <button type="button" class="btn btn-danger btn-small" data-delete-material-type="${type.id}">Borrar</button>`
+              : '<span class="badge">Fijo</span>'
+          }</td>
+        </tr>`,
+        )
+        .join('')
+    : '<tr><td colspan="2">No hay tipos.</td></tr>';
+}
+
+async function loadMaterialTypes() {
+  try {
+    materialTypes = await apiFetch('/material/types');
+    renderMaterialTypes();
+  } catch {
+    materialTypesBody.innerHTML = '<tr><td colspan="2">No se pudieron cargar los tipos.</td></tr>';
+  }
+}
+
+function openMaterialTypeDialog(type) {
+  editingMaterialTypeId = type?.id ?? null;
+  document.getElementById('material-type-dialog-title').textContent = type
+    ? 'Renombrar tipo'
+    : 'Nuevo tipo';
+  materialTypeForm.elements.name.value = type?.name ?? '';
+  openModal(materialTypeDialog);
+}
+
+document
+  .getElementById('toggle-new-material-type')
+  .addEventListener('click', () => openMaterialTypeDialog(null));
+
+materialTypeForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const submitButton = materialTypeForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  const editing = editingMaterialTypeId != null;
+  try {
+    await apiFetch(editing ? `/material/types/${editingMaterialTypeId}` : '/material/types', {
+      method: editing ? 'PATCH' : 'POST',
+      body: JSON.stringify({ name: materialTypeForm.elements.name.value.trim() }),
+    });
+    materialTypeDialog.close();
+    showFeedback(editing ? 'Tipo guardado.' : 'Tipo añadido.');
+    await loadMaterialTypes();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+materialTypesBody.addEventListener('click', async (event) => {
+  const edit = event.target.closest('button[data-edit-material-type]');
+  if (edit) {
+    openMaterialTypeDialog(
+      materialTypes.find((c) => c.id === Number(edit.dataset.editMaterialType)),
+    );
+    return;
+  }
+  const del = event.target.closest('button[data-delete-material-type]');
+  if (!del) return;
+  const type = materialTypes.find((c) => c.id === Number(del.dataset.deleteMaterialType));
+  if (!type || !confirm(`¿Borrar el tipo «${type.name}»?`)) return;
+  del.disabled = true;
+  try {
+    await apiFetch(`/material/types/${type.id}`, { method: 'DELETE' });
+    showFeedback('Tipo borrado.');
+    await loadMaterialTypes();
+  } catch (err) {
+    del.disabled = false;
+    showError(err.message);
+  }
+});
+
 // Every section asks for its own data and none needs another's, so all of it
 // goes out at once — seven requests one after another were most of this page's
 // wait. The sessions show names from the directory, so if the directory
@@ -817,4 +911,5 @@ await Promise.all([
   loadSessions(),
   loadHolidays(),
   loadClubInfo(),
+  loadMaterialTypes(),
 ]);

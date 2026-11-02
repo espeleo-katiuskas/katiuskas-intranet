@@ -2,7 +2,6 @@ import { escapeHtml } from './api.js';
 
 // How a piece of material is named, shared by the pages that list it (/material, /material-prestado).
 
-const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', general: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = {
   caving: 'Espeleología',
@@ -11,15 +10,14 @@ const bagTypeLabels = {
   special: 'Especial',
 };
 
-// A rope/bag is identified by brand+model (plus its type-specific
+// A rope/bag is identified by brand+model (plus its kind-specific
 // attributes); a general item may have no known brand/model at all, so its
-// category — always set — anchors the label instead. includeCategory
+// type — always set — anchors the label instead. includeType
 // is false only in the items table, where the Tipo column already
-// shows a general item's category (see itemTypeColumn) and repeating it
-// here would be redundant.
-function itemLabel(item, { includeCategory = true } = {}) {
+// shows the item's type and repeating it here would be redundant.
+function itemLabel(item, { includeType = true } = {}) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.type === 'rope') {
+  if (item.kind === 'rope') {
     const parts = [
       brandModel || null,
       `${item.diameter_mm} mm`,
@@ -29,7 +27,7 @@ function itemLabel(item, { includeCategory = true } = {}) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  if (item.type === 'bag') {
+  if (item.kind === 'bag') {
     const parts = [
       brandModel || null,
       `${item.capacity_liters} L`,
@@ -37,12 +35,8 @@ function itemLabel(item, { includeCategory = true } = {}) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [
-    includeCategory ? item.category_name : null,
-    brandModel || null,
-    item.description || null,
-  ];
+  const parts = [includeType ? item.type_name : null, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
-export { bagTypeLabels, itemLabel, itemTypeLabels, ropeTypeLabels };
+export { bagTypeLabels, itemLabel, ropeTypeLabels };

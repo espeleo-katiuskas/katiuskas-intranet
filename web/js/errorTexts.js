@@ -100,12 +100,14 @@ const texts = {
   invalid_activity_id: 'La actividad indicada no es válida.',
 
   // Material
-  invalid_item_type: 'El tipo de material tiene que ser cuerda, saca o material general.',
   duplicate_item_code: 'Ya hay otro material con ese código.',
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
   model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
-  unknown_category: 'La categoría de material no existe.',
+  duplicate_type: 'Ya hay otro tipo de material con ese nombre.',
+  type_in_use: 'El tipo tiene material y no se puede borrar.',
+  fixed_type: 'Los tipos «Cuerda» y «Saca» son fijos: no se pueden renombrar ni borrar.',
+  unknown_type: 'El tipo de material no existe.',
   insufficient_stock: 'No queda cantidad suficiente disponible.',
   activity_required: 'Los préstamos y las devoluciones tienen que ir asociados a una actividad.',
   login_required: 'Los alquileres necesitan indicar a qué persona se hacen.',

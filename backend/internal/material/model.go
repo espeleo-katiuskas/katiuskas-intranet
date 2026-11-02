@@ -17,17 +17,17 @@ const (
 	ItemRetired     ItemStatus = "retired"
 )
 
-// ItemType distinguishes the three shapes a material item can take —
-// see migration 00006_inventory.sql. Rope and bag are individually tracked physical
-// objects (their own code, always total_quantity 1) with type-specific
-// attributes; general is everything else, a fungible stock item filed
-// under an admin-managed category.
-type ItemType string
+// ItemKind distinguishes the three shapes a material item can take. Rope and bag are individually
+// tracked physical objects (their own code, always total_quantity 1) with kind-specific
+// attributes; general is everything else, a fungible stock item. The kind comes from the item's
+// type (MaterialType): the two fixed types, Cuerda and Saca, are the rope and the bag kind, and
+// every other type, which an admin edits freely, is general.
+type ItemKind string
 
 const (
-	ItemTypeRope    ItemType = "rope"
-	ItemTypeBag     ItemType = "bag"
-	ItemTypeGeneral ItemType = "general"
+	ItemKindRope    ItemKind = "rope"
+	ItemKindBag     ItemKind = "bag"
+	ItemKindGeneral ItemKind = "general"
 )
 
 // RopeType is a rope's discipline: caving over rock and mud, canyoning
@@ -52,13 +52,13 @@ const (
 	BagTypeSpecial   BagType = "special"
 )
 
-// MaterialCategory is one entry in the material category catalog — kept in
-// the database rather than a Go enum, the same license_types pattern
-// (licenses.LicenseType), so the list can grow with an INSERT instead
-// of a code deploy.
-type MaterialCategory struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+// MaterialType is one entry in the catalog of types of material (table material_types): the two
+// fixed ones, Cuerda (kind rope) and Saca (kind bag), which cannot be renamed or deleted, and the
+// rest (kind general), which an admin adds, renames and deletes — mosquetones, spits, placas…
+type MaterialType struct {
+	ID   int64    `json:"id"`
+	Name string   `json:"name"`
+	Kind ItemKind `json:"kind"`
 }
 
 // MovementType is either an exchange with a specific person — rental
@@ -100,8 +100,11 @@ const (
 )
 
 type Item struct {
-	ID   int64    `json:"id"`
-	Type ItemType `json:"type"`
+	ID int64 `json:"id"`
+	// Kind is the shape of the item (from its type); TypeID and TypeName say which type it is.
+	Kind     ItemKind `json:"kind"`
+	TypeID   int64    `json:"type_id"`
+	TypeName string   `json:"type_name"`
 	// Brand/Model are required for rope and bag (they identify a
 	// specific physical object) and optional for general — some parts are
 	// generic, or the brand simply isn't known.
@@ -148,15 +151,10 @@ type Item struct {
 	// Bag-only.
 	BagType        *BagType `json:"bag_type,omitempty"`
 	CapacityLiters *float64 `json:"capacity_liters,omitempty"`
-	// General-only. CategoryID is the catalog id; CategoryName is resolved
-	// alongside it (see Repository.GetItem/ListItems/CreateItem), the
-	// same LicenseTypeID/Type split licenses.License uses.
-	CategoryID   *int64  `json:"category_id,omitempty"`
-	CategoryName *string `json:"category_name,omitempty"`
 }
 
 type CreateItemInput struct {
-	Type        ItemType
+	TypeID      int64
 	Brand       *string
 	Model       *string
 	Code        *string
@@ -177,11 +175,10 @@ type CreateItemInput struct {
 	LengthM            *int32
 	BagType            *BagType
 	CapacityLiters     *float64
-	CategoryID         *int64
 }
 
 // UpdateItemInput is what PATCH /items/{id} replaces: every field an item can be edited in, all at
-// once (the same "resend everything" as the other PATCHes). Not the item's type, which is what its
+// once (the same "resend everything" as the other PATCHes). Not the item's type (and so its kind), which is what its
 // shape and required fields hang from, and not its quantities, which only movements change.
 type UpdateItemInput struct {
 	Brand              *string
@@ -197,7 +194,6 @@ type UpdateItemInput struct {
 	LengthM            *int32
 	BagType            *BagType
 	CapacityLiters     *float64
-	CategoryID         *int64
 }
 
 type Movement struct {

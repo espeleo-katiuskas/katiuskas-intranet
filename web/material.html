@@ -32,45 +32,41 @@
     <form id="new-item-form">
       <div class="field-grid">
         <div class="field">
-          <label for="ni-item-type">Tipo</label>
-          <select id="ni-item-type" name="type" required>
-            <option value="rope">Cuerda</option>
-            <option value="bag">Saca</option>
-            <option value="general">Material general</option>
-          </select>
+          <label for="ni-type">Tipo</label>
+          <select id="ni-type" name="type_id" required></select>
         </div>
         <div class="field">
-          <label for="ni-brand">Marca <span class="optional" data-item-type-field="general">(opcional)</span></label>
+          <label for="ni-brand">Marca <span class="optional" data-kind-field="general">(opcional)</span></label>
           <input id="ni-brand" name="brand" type="text">
         </div>
         <div class="field">
-          <label for="ni-model">Modelo <span class="optional" data-item-type-field="general">(opcional)</span></label>
+          <label for="ni-model">Modelo <span class="optional" data-kind-field="general">(opcional)</span></label>
           <input id="ni-model" name="model" type="text">
         </div>
         <div class="field">
-          <label for="ni-code">Código <span class="optional" data-item-type-field="general">(opcional)</span></label>
+          <label for="ni-code">Código <span class="optional" data-kind-field="general">(opcional)</span></label>
           <input id="ni-code" name="code" type="text">
         </div>
-        <div class="field" data-item-type-field="rope">
+        <div class="field" data-kind-field="rope">
           <label for="ni-rope-type">Tipo de cuerda</label>
           <select id="ni-rope-type" name="rope_type">
             <option value="caving">Espeleología</option>
             <option value="canyoning">Cañones</option>
           </select>
         </div>
-        <div class="field" data-item-type-field="rope">
+        <div class="field" data-kind-field="rope">
           <label for="ni-diameter-mm">Diámetro (mm)</label>
           <input id="ni-diameter-mm" name="diameter_mm" type="number" min="0" step="0.1">
         </div>
-        <div class="field" data-item-type-field="rope">
+        <div class="field" data-kind-field="rope">
           <label for="ni-manufacture-year">Año de fabricación</label>
           <input id="ni-manufacture-year" name="manufacture_year" type="number" min="1900" step="1">
         </div>
-        <div class="field" data-item-type-field="rope">
+        <div class="field" data-kind-field="rope">
           <label for="ni-length-m">Longitud (m)</label>
           <input id="ni-length-m" name="length_m" type="number" min="1" step="1">
         </div>
-        <div class="field" data-item-type-field="bag">
+        <div class="field" data-kind-field="bag">
           <label for="ni-bag-type">Tipo de saca</label>
           <select id="ni-bag-type" name="bag_type">
             <option value="caving">Espeleología</option>
@@ -79,15 +75,11 @@
             <option value="special">Saca especial</option>
           </select>
         </div>
-        <div class="field" data-item-type-field="bag">
+        <div class="field" data-kind-field="bag">
           <label for="ni-capacity-liters">Capacidad (L)</label>
           <input id="ni-capacity-liters" name="capacity_liters" type="number" min="0" step="0.1">
         </div>
-        <div class="field" data-item-type-field="general">
-          <label for="ni-category">Categoría</label>
-          <select id="ni-category" name="category_id"></select>
-        </div>
-        <div class="field" data-item-type-field="general" data-create-only>
+        <div class="field" data-kind-field="general" data-create-only>
           <label for="ni-total-quantity">Cantidad</label>
           <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
         </div>
@@ -107,7 +99,7 @@
           <label class="checkbox-label" for="ni-loanable"><input id="ni-loanable" name="loanable" type="checkbox" checked> Se puede prestar</label>
         </div>
         <div class="field span-2">
-          <label for="ni-description"><span data-item-type-field="general">Descripción</span><span data-item-type-field="rope,bag">Observaciones <span class="optional">(opcional)</span></span></label>
+          <label for="ni-description"><span data-kind-field="general">Descripción</span><span data-kind-field="rope,bag">Observaciones <span class="optional">(opcional)</span></span></label>
           <textarea id="ni-description" name="description"></textarea>
         </div>
       </div>
@@ -120,7 +112,7 @@
 
   <div class="field" id="item-search-field">
     <label for="item-search">Buscar material</label>
-    <input id="item-search" type="search" autocomplete="off" placeholder="Marca, modelo, código, tipo, categoría…">
+    <input id="item-search" type="search" autocomplete="off" placeholder="Marca, modelo, código, tipo…">
   </div>
 
   <div class="table-wrap">

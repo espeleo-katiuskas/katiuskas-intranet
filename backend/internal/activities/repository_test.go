@@ -146,11 +146,11 @@ func TestListActive(t *testing.T) {
 	cancel(cancelledWithMaterial)
 
 	user := testutil.InsertUser(t, tx, "")
-	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	typeID := testutil.MaterialTypeID(t, tx, "Mosquetones")
 	var itemID int64
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO material_items (type, description, category_id) VALUES ('general', 'Test item', $1) RETURNING id
-	`, categoryID).Scan(&itemID); err != nil {
+		INSERT INTO material_items (kind, type_id, description) VALUES ('general', $1, 'Test item') RETURNING id
+	`, typeID).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
 	}
 	// A loan is always 'completed' the moment it's recorded — what makes it "still out" is that

@@ -47,8 +47,11 @@ dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditIt
 title and the button change, the type is fixed (the field is disabled and the item's own type is
 used), the quantity and the date of acquisition are left out (the stock is what its movements say)
 and the form is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every
-field. Brand, model and code are in the form for every type, required only for ropes and bags; the
-model field stays disabled (and empty) while there is no brand.
+field. The "Tipo" select lists every type from `GET /material/types` (Cuerda and Saca first); the
+fields shown depend on the *kind* of the chosen type (rope fields for Cuerda, bag fields for Saca,
+description and quantity for any other), each option carrying it in `data-kind`. Brand, model and
+code are in the form for every type, required only for ropes and bags; the model field stays
+disabled (and empty) while there is no brand.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
@@ -599,26 +602,30 @@ a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST 
 `PATCH`/`DELETE /club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑
 ↓ to put them in order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by
 creating and editing (a label, a value and, optionally, a text for a copy button and the button's
-own text). The home page (`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the
-copy buttons handled by one listener on the list since they are drawn after load: the data is not
-written in `index.html`, so an administrator changes it without a deploy and a private one (the
-Bizum number) is not in the repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain
-member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see
-**Permission tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual",
-"Federación") and the column toggles sit behind a "Filtros…" button, and above it a "Buscar persona"
-box (`matchesSearch`: every word typed has to appear, in any order and ignoring accents and case, in
-the first name and surnames and — admin/board only, as that is all their listing carries — the phone
-and DNI; not the membership number, login or email. The placeholder says "Nombre o apellidos" (for
-admin/board, "Nombre, apellidos, teléfono o DNI"); it narrows what the filters leave and isn't
-persisted). Every filter starts with every option checked except "Tipo de socio", which starts with
-only "Activo" and "Baja temporal", so the default view is the current membership. "Cuota anual"
-splits people on whether `last_due_year` is the current year ("A corriente de pago"), and
-"Federación" on whether `license_type` is present — `GET /users` only reports a license for the
-current year, so having one *is* being federated. Filters, visible columns and sort order persist in
-`localStorage` (`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page
-lands on the same view, and a counter shows how many people the current filters leave. With nothing
-saved, the columns shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia"
-(each column's `default` flag); the rest are optional in the "Filtros…" panel.
+own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE
+/material/types/{id}`: a table with "Renombrar" and "Borrar" and a dialog shared by creating and
+renaming; "Cuerda" and "Saca" are listed as "Fijo" with no buttons, and a type with material is
+refused with its own message). The home page
+(`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by
+one listener on the list since they are drawn after load: the data is not written in `index.html`,
+so an administrator changes it without a deploy and a private one (the Bizum number) is not in the
+repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
+`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see **Permission
+tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the
+column toggles sit behind a "Filtros…" button, and above it a "Buscar persona" box (`matchesSearch`:
+every word typed has to appear, in any order and ignoring accents and case, in the first name and
+surnames and — admin/board only, as that is all their listing carries — the phone and DNI; not the
+membership number, login or email. The placeholder says "Nombre o apellidos" (for admin/board,
+"Nombre, apellidos, teléfono o DNI"); it narrows what the filters leave and isn't persisted). Every
+filter starts with every option checked except "Tipo de socio", which starts with only "Activo" and
+"Baja temporal", so the default view is the current membership. "Cuota anual" splits people on
+whether `last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
+`license_type` is present — `GET /users` only reports a license for the current year, so having one
+*is* being federated. Filters, visible columns and sort order persist in `localStorage`
+(`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page lands on the same
+view, and a counter shows how many people the current filters leave. With nothing saved, the columns
+shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's
+`default` flag); the rest are optional in the "Filtros…" panel.
 
 A page's requests that don't depend on each other go out together, not one after another
 (each wait in a row costs a full round trip, which is most of what a page load takes once

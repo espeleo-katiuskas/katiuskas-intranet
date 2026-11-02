@@ -146,16 +146,14 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 func generalItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
 	t.Helper()
 	return map[string]any{
-		"type":                  "general",
-		"description":           "Casco",
-		"category_id":           testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"type_id": testutil.MaterialTypeID(t, tx, "Mosquetones"), "description": "Casco",
 		"total_quantity":        totalQuantity,
 		"rental_price_per_week": 10.0,
 		"sale_price":            25.0,
 	}
 }
 
-// Adding equipment to the catalog (and the categories its form needs) is for admin, board and the
+// Adding equipment to the catalog (and the types its form needs) is for admin, board and the
 // material role — which, like everything on the API, also needs one of admin/board/member.
 func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
@@ -169,16 +167,16 @@ func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be forbidden from creating an item, got %d", name, rec.Code)
 		}
-		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", token, nil); rec.Code != http.StatusForbidden {
-			t.Errorf("expected %s to be forbidden from listing the categories, got %d", name, rec.Code)
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", token, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from listing the types, got %d", name, rec.Code)
 		}
 	}
 	for name, token := range map[string]string{"board": boardToken, "material (and member)": materialMemberToken} {
 		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusCreated {
 			t.Errorf("expected %s to create an item, got %d: %s", name, rec.Code, rec.Body.String())
 		}
-		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", token, nil); rec.Code != http.StatusOK {
-			t.Errorf("expected %s to list the categories, got %d", name, rec.Code)
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", token, nil); rec.Code != http.StatusOK {
+			t.Errorf("expected %s to list the types, got %d", name, rec.Code)
 		}
 	}
 }
@@ -312,33 +310,18 @@ func TestHandlerCreateMovementRequiresActivityForLoan(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateItemRejectsInvalidItemType(t *testing.T) {
+func TestHandlerCreateItemRejectsUnknownType(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "not-a-type", "total_quantity": 1,
+		"type_id": 999999, "description": "Casco", "total_quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for an invalid type, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 400 for an unknown type_id, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if code := errorCode(t, rec); code != "invalid_item_type" {
-		t.Errorf("expected error code invalid_item_type, got %q", code)
-	}
-}
-
-func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
-	boardToken := tokenFor(t, authn, 1, "board")
-
-	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "general", "description": "Casco", "category_id": 999999, "total_quantity": 1,
-	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for an unknown category_id, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if code := errorCode(t, rec); code != "unknown_category" {
-		t.Errorf("expected error code unknown_category, got %q", code)
+	if code := errorCode(t, rec); code != "unknown_type" {
+		t.Errorf("expected error code unknown_type, got %q", code)
 	}
 }
 
@@ -347,11 +330,11 @@ func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
 // used to hit the database's own CHECK constraint directly, instead of
 // a clear 400.
 func TestHandlerCreateItemRejectsMismatchedFieldsForType(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
+	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-101", "total_quantity": 1,
+		"type_id": testutil.MaterialTypeID(t, tx, "Cuerda"), "brand": "Beal", "model": "Antipodes", "code": "C-101", "total_quantity": 1,
 		// Deliberately missing rope_type/diameter_mm/manufacture_year/length_m.
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -367,8 +350,7 @@ func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "general", "description": "Casco",
-		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"type_id": testutil.MaterialTypeID(t, tx, "Mosquetones"), "description": "Casco",
 		"total_quantity": 1, "loanable": false,
 	})
 	if rec.Code != http.StatusCreated {
@@ -406,8 +388,7 @@ func TestHandlerCreateMovementRejectsRentalOfNonRentableItem(t *testing.T) {
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "general", "description": "Casco",
-		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"type_id": testutil.MaterialTypeID(t, tx, "Mosquetones"), "description": "Casco",
 		"total_quantity": 1, "loanable": true,
 	})
 	if rec.Code != http.StatusCreated {
@@ -437,8 +418,7 @@ func TestHandlerCreateMovementRejectsSaleOfNonSellableItem(t *testing.T) {
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "general", "description": "Casco",
-		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
+		"type_id": testutil.MaterialTypeID(t, tx, "Mosquetones"), "description": "Casco",
 		"total_quantity": 1, "loanable": true,
 	})
 	if rec.Code != http.StatusCreated {
@@ -482,24 +462,24 @@ func TestHandlerCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 	}
 }
 
-func TestHandlerListMaterialCategoriesRequiresAdminOrBoard(t *testing.T) {
+func TestHandlerListMaterialTypesRequiresAdminOrBoard(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
 	boardToken := tokenFor(t, authn, 2, "board")
 
-	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member to be forbidden from listing material categories, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", memberToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member to be forbidden from listing material types, got %d", rec.Code)
 	}
-	rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", boardToken, nil)
+	rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", boardToken, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected board to list material categories, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected board to list material types, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var categories []material.MaterialCategory
-	if err := json.Unmarshal(rec.Body.Bytes(), &categories); err != nil {
+	var types []material.MaterialType
+	if err := json.Unmarshal(rec.Body.Bytes(), &types); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(categories) == 0 {
-		t.Error("expected the seeded material categories to be listed")
+	if len(types) == 0 {
+		t.Error("expected the seeded material types to be listed")
 	}
 }
 
@@ -660,11 +640,11 @@ func TestHandlerCreateMovementAllowsAcquisitionWithoutLogin(t *testing.T) {
 }
 
 func TestHandlerCreateMovementRejectsAcquisitionOnRope(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
+	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
-		"type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-500",
+		"type_id": testutil.MaterialTypeID(t, tx, "Cuerda"), "brand": "Beal", "model": "Antipodes", "code": "C-500",
 		"rope_type": "caving", "diameter_mm": 9.5, "manufacture_year": 2024, "length_m": 60,
 		"total_quantity": 1,
 	})
@@ -981,11 +961,10 @@ func TestHandlerUpdateItem(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/material/items/%d", item.ID)
 	edited := map[string]any{
 		"description":           "Casco con barbuquejo",
-		"category_id":           testutil.MaterialCategoryID(t, tx, "Placas"),
 		"rental_price_per_week": 12.5,
 		"loanable":              false,
 		// What cannot be edited is ignored.
-		"type": "rope", "total_quantity": 99,
+		"type_id": testutil.MaterialTypeID(t, tx, "Placas"), "total_quantity": 99,
 	}
 
 	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
@@ -1001,27 +980,23 @@ func TestHandlerUpdateItem(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Type != material.ItemTypeGeneral || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
-		got.CategoryName == nil || *got.CategoryName != "Placas" || got.Loanable || got.SalePrice != nil ||
+	if got.Kind != material.ItemKindGeneral || got.TypeName != "Mosquetones" || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
+		got.Loanable || got.SalePrice != nil ||
 		got.RentalPricePerWeek == nil || *got.RentalPricePerWeek != 12.5 {
 		t.Fatalf("edited item: %+v", got)
 	}
 	msg := notifier.waitForNthMessage(t, 1) // the second, after the creation's
-	for _, want := range []string{"ha editado el material", "Description:", "CategoryName:", "SalePrice:"} {
+	for _, want := range []string{"ha editado el material", "Description:", "SalePrice:"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("notice %q lacks %q", msg, want)
 		}
 	}
 
 	// The same constraints as when it was created.
-	bad := map[string]any{"description": nil, "category_id": testutil.MaterialCategoryID(t, tx, "Placas")}
+	bad := map[string]any{"description": nil}
 	rec = doRequest(mux, http.MethodPatch, path, boardToken, bad)
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
 		t.Errorf("a general item without a description: %d %s", rec.Code, rec.Body.String())
-	}
-	rec = doRequest(mux, http.MethodPatch, path, boardToken, map[string]any{"description": "x", "category_id": 987654})
-	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "unknown_category" {
-		t.Errorf("an unknown category: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
 		t.Errorf("an item that does not exist: %d", rec.Code)
@@ -1033,11 +1008,11 @@ func TestHandlerUpdateItem(t *testing.T) {
 
 // A code is unique: giving an item the one another has says so, when editing and when creating.
 func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
-	mux, authn, _ := newTestServer(t)
+	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 3, "board")
 	rope := func(code string) map[string]any {
 		return map[string]any{
-			"type": "rope", "brand": "Beal", "model": "Karma", "code": code, "rope_type": "caving",
+			"type_id": testutil.MaterialTypeID(t, tx, "Cuerda"), "brand": "Beal", "model": "Karma", "code": code, "rope_type": "caving",
 			"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
 		}
 	}
@@ -1157,7 +1132,7 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/v1/material/items/%d", item.ID)
 	edit := func(extra map[string]any) *httptest.ResponseRecorder {
-		b := map[string]any{"description": "Casco", "category_id": testutil.MaterialCategoryID(t, tx, "Mosquetones")}
+		b := map[string]any{"description": "Casco", "type_id": testutil.MaterialTypeID(t, tx, "Mosquetones")}
 		for k, v := range extra {
 			b[k] = v
 		}
@@ -1174,7 +1149,7 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 
 	// A rope or a bag still needs all three.
 	rope := map[string]any{
-		"type": "rope", "brand": "Beal", "model": "Karma", "code": "C-9", "rope_type": "caving",
+		"type_id": testutil.MaterialTypeID(t, tx, "Cuerda"), "brand": "Beal", "model": "Karma", "code": "C-9", "rope_type": "caving",
 		"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
 	}
 	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, rope); rec.Code != http.StatusCreated {
@@ -1191,5 +1166,75 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("a rope with a blank %s: %d %s", missing, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// Changing the list of types is for admin alone (the page /admin); reading it stays with
+// admin, board and material.
+func TestHandlerTypesAreManagedByAdminOnly(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	adminToken := tokenFor(t, authn, 1, "admin")
+	boardToken := tokenFor(t, authn, 2, "board")
+
+	for name, token := range map[string]string{"board": boardToken, "nobody": ""} {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/types", token, map[string]any{"name": "ZZ"}); rec.Code != http.StatusForbidden && rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected %s to be refused from creating a type, got %d", name, rec.Code)
+		}
+	}
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/types", adminToken, map[string]any{"name": "  Cintas  "})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var created material.MaterialType
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Name != "Cintas" {
+		t.Errorf("expected the name trimmed, got %q", created.Name)
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/types", adminToken, map[string]any{"name": "Cintas"}); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_type" {
+		t.Errorf("expected 409 duplicate_type, got %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/types", adminToken, map[string]any{"name": "   "}); rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for a blank name, got %d", rec.Code)
+	}
+
+	path := fmt.Sprintf("/api/v1/material/types/%d", created.ID)
+	if rec := doRequest(mux, http.MethodPatch, path, boardToken, map[string]any{"name": "Cintas planas"}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from renaming, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Cintas planas"}); rec.Code != http.StatusOK {
+		t.Errorf("rename: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/types/999999", adminToken, map[string]any{"name": "X"}); rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 renaming a missing type, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, boardToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from deleting, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 deleting it twice, got %d", rec.Code)
+	}
+}
+
+func TestHandlerCannotDeleteATypeInUse(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	adminToken := tokenFor(t, authn, 1, "admin")
+
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", adminToken, generalItemBody(t, tx, 1)); rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d %s", rec.Code, rec.Body.String())
+	}
+	path := fmt.Sprintf("/api/v1/material/types/%d", testutil.MaterialTypeID(t, tx, "Mosquetones"))
+	rec := doRequest(mux, http.MethodDelete, path, adminToken, nil)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "type_in_use" {
+		t.Errorf("expected 409 type_in_use, got %d %s", rec.Code, rec.Body.String())
+	}
+	// And the rest of the test's transaction still works after the refusal.
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", adminToken, nil); rec.Code != http.StatusOK {
+		t.Errorf("list after the refusal: %d", rec.Code)
 	}
 }

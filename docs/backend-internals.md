@@ -1294,8 +1294,8 @@ two-entry transaction for tests that record a due or a license against one:
 `InsertTransaction` posts it to an account that allows both, `InsertTransactionOn(t, tx,
 allowsDues, allowsLicenses)` picks the flags, for the cases that must be rejected), and
 `InsertTransactionAt(t, tx, occurredAt)` (the same as `InsertTransaction` with a chosen
-`occurred_at`, for tests that care when a payment happened), `MaterialCategoryID` (looks
-up a seeded material category by name, like `RoleID`/`LicenseTypeID`), `UniqueEmail` (a
+`occurred_at`, for tests that care when a payment happened), `MaterialTypeID` (looks
+up a material type, fixed or seeded, by name, like `RoleID`/`LicenseTypeID`), `UniqueEmail` (a
 per-test, per-call unique address, which `InsertUser` itself uses), and
 `FakeResolver` + `NewTestAuthenticator`/`TokenFor` — an in-memory `auth.SessionResolver`
 so handler tests in every *other* package can mint bearer tokens for arbitrary

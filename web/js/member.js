@@ -1115,10 +1115,10 @@ const bagTypeLabels = {
 
 // A rope/bag is identified by brand+model (plus its type-specific
 // attributes); a general item may have no known brand/model at all, so its
-// category — always set — anchors the label instead.
+// type — always set — anchors the label instead.
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.type === 'rope') {
+  if (item.kind === 'rope') {
     const parts = [
       brandModel || null,
       `${item.diameter_mm} mm`,
@@ -1128,7 +1128,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  if (item.type === 'bag') {
+  if (item.kind === 'bag') {
     const parts = [
       brandModel || null,
       `${item.capacity_liters} L`,
@@ -1136,7 +1136,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [item.category_name, brandModel || null, item.description || null];
+  const parts = [item.type_name, brandModel || null, item.description || null];
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 

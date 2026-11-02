@@ -12,7 +12,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { bagTypeLabels, itemLabel, itemTypeLabels, ropeTypeLabels } from './materialCommon.js';
+import { bagTypeLabels, itemLabel, ropeTypeLabels } from './materialCommon.js';
 
 const user = await initPage();
 // Managing the material — adding equipment to the catalog, and its movements (loans, rentals,
@@ -62,7 +62,7 @@ function movementTypeOptionsFor(item) {
   const allowed = {
     rental: item.rentable && available,
     sale: item.sellable && available,
-    acquisition: item.type === 'general',
+    acquisition: item.kind === 'general',
     loss: available,
     abandonment: available,
     retirement: available,
@@ -112,12 +112,11 @@ function personLabel(login) {
 function itemSearchText(item) {
   return normalizeForSearch(
     [
-      itemTypeLabels[item.type],
+      item.type_name,
       item.brand,
       item.model,
       item.code,
       item.description,
-      item.category_name,
       ropeTypeLabels[item.rope_type],
       bagTypeLabels[item.bag_type],
     ]
@@ -126,21 +125,11 @@ function itemSearchText(item) {
   );
 }
 
-// Rope/bag show their item type ("Cuerda"/"Saca"); general shows its
-// category instead ("Mosquetones"...) — "Material" alone would be true
-// of every general row and say nothing useful for telling them apart.
-function itemTypeColumn(item) {
-  if (item.type === 'general') {
-    return escapeHtml(item.category_name ?? itemTypeLabels.general);
-  }
-  return itemTypeLabels[item.type] ?? item.type;
-}
-
 function renderItemRow(item) {
   return `
     <tr>
-      <td>${itemTypeColumn(item)}</td>
-      <td>${itemLabel(item, { includeCategory: false })}</td>
+      <td>${escapeHtml(item.type_name)}</td>
+      <td>${itemLabel(item, { includeType: false })}</td>
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
@@ -258,7 +247,7 @@ function openNewMovementDialog(itemId) {
   if (!item) return;
   movementItemId = itemId;
   document.getElementById('new-movement-item-label').innerHTML = itemLabel(item);
-  const isSingleUnit = item.type === 'rope' || item.type === 'bag';
+  const isSingleUnit = item.kind === 'rope' || item.kind === 'bag';
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
   document.getElementById('mv-type').innerHTML = movementTypeOptionsFor(item)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
@@ -411,15 +400,13 @@ async function handleReturn(button) {
 if (canManageMovements) {
   const newItemDialog = document.getElementById('new-item-dialog');
   const newItemForm = document.getElementById('new-item-form');
-  const itemTypeSelect = document.getElementById('ni-item-type');
+  const typeSelect = document.getElementById('ni-type');
   const descriptionField = document.getElementById('ni-description');
-  const categorySelect = document.getElementById('ni-category');
   // The dialog is shared: the id of the item it is editing, or null when it creates one.
   let editingItemId = null;
 
-  // Only rope/bag/general-specific controls toggle required — the fields
-  // shared by every type (acquired_at, prices, loanable) stay as they
-  // are regardless of type.
+  // Only the controls specific to a kind (rope, bag, general) toggle required — the fields
+  // shared by every kind (acquired_at, prices, loanable) stay as they are.
   const requiredWhenVisible = [
     'ni-rope-type',
     'ni-diameter-mm',
@@ -427,7 +414,6 @@ if (canManageMovements) {
     'ni-length-m',
     'ni-bag-type',
     'ni-capacity-liters',
-    'ni-category',
   ];
 
   function syncModelWithBrand() {
@@ -438,64 +424,73 @@ if (canManageMovements) {
   }
   document.getElementById('ni-brand').addEventListener('input', syncModelWithBrand);
 
-  function updateItemTypeFieldsVisibility() {
-    const type = itemTypeSelect.value;
-    document.querySelectorAll('[data-item-type-field]').forEach((el) => {
-      el.hidden = !el.dataset.itemTypeField.split(',').includes(type);
+  // The kind (rope, bag or general) of the chosen type: Cuerda and Saca are the fixed types of the
+  // rope and bag kinds, and every other type is general.
+  function selectedKind() {
+    return typeSelect.selectedOptions[0]?.dataset.kind ?? 'general';
+  }
+
+  function updateKindFieldsVisibility() {
+    const kind = selectedKind();
+    document.querySelectorAll('[data-kind-field]').forEach((el) => {
+      el.hidden = !el.dataset.kindField.split(',').includes(kind);
     });
     for (const id of requiredWhenVisible) {
       const input = document.getElementById(id);
-      input.required = !input.closest('[data-item-type-field]').hidden;
+      input.required = !input.closest('[data-kind-field]').hidden;
     }
     // description is the required "Descripción" for general, and the
     // optional "Observaciones" for rope/bag — see the two toggled
     // label spans above the textarea.
-    descriptionField.required = type === 'general';
+    descriptionField.required = kind === 'general';
     // Brand, model and code are in every type's form, but only a rope or a bag must have them. A model
     // is the model of a brand: it can only be written once there is a brand.
     for (const id of ['ni-brand', 'ni-model', 'ni-code']) {
-      document.getElementById(id).required = type === 'rope' || type === 'bag';
+      document.getElementById(id).required = kind === 'rope' || kind === 'bag';
     }
     syncModelWithBrand();
     // What only makes sense when creating (the quantity and the date of acquisition: the stock is
     // whatever the movements say) is out of an edit.
     document.querySelectorAll('[data-create-only]').forEach((el) => {
       if (editingItemId !== null) el.hidden = true;
-      else if (!el.dataset.itemTypeField) el.hidden = false;
+      else if (!el.dataset.kindField) el.hidden = false;
     });
     document.getElementById('ni-title').textContent =
       editingItemId !== null ? 'Editar material' : 'Nuevo material';
     document.getElementById('ni-submit').textContent =
       editingItemId !== null ? 'Guardar' : 'Crear material';
-    itemTypeSelect.disabled = editingItemId !== null;
+    typeSelect.disabled = editingItemId !== null;
   }
-  itemTypeSelect.addEventListener('change', updateItemTypeFieldsVisibility);
-  updateItemTypeFieldsVisibility();
+  typeSelect.addEventListener('change', updateKindFieldsVisibility);
+  updateKindFieldsVisibility();
 
-  apiFetch('/material/categories')
-    .then((categories) => {
-      categorySelect.innerHTML = categories
-        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+  // The types come with the fixed ones first (Cuerda, Saca), then the rest by name; each option
+  // remembers its kind.
+  apiFetch('/material/types')
+    .then((types) => {
+      typeSelect.innerHTML = types
+        .map((t) => `<option value="${t.id}" data-kind="${t.kind}">${escapeHtml(t.name)}</option>`)
         .join('');
+      updateKindFieldsVisibility();
     })
-    .catch(() => showError('No se pudo cargar la lista de categorías.'));
+    .catch(() => showError('No se pudo cargar la lista de tipos de material.'));
 
   initModal(newItemDialog, newItemForm);
   // The dialog's own "close" (initModal already resets the form there,
-  // regardless of how it closed) reverts type back to its default
+  // regardless of how it closed) reverts the type back to its first
   // option — recompute which fields that implies right after, same as
   // the very first render below.
   newItemDialog.addEventListener('close', () => {
     editingItemId = null;
-    updateItemTypeFieldsVisibility();
+    updateKindFieldsVisibility();
   });
 
   openEditItemDialog = (itemId) => {
     const item = itemsById[itemId];
     if (!item) return;
     editingItemId = itemId;
-    itemTypeSelect.value = item.type;
-    updateItemTypeFieldsVisibility();
+    typeSelect.value = item.type_id;
+    updateKindFieldsVisibility();
     const set = (name, value) => {
       newItemForm.elements[name].value = value ?? '';
     };
@@ -509,7 +504,6 @@ if (canManageMovements) {
     set('length_m', item.length_m);
     set('bag_type', item.bag_type);
     set('capacity_liters', item.capacity_liters);
-    set('category_id', item.category_id);
     set('rental_price_per_week', item.rental_price_per_week);
     set('sale_price', item.sale_price);
     set('description', item.description);
@@ -525,8 +519,8 @@ if (canManageMovements) {
     event.preventDefault();
     const formData = new FormData(newItemForm);
     const editing = editingItemId !== null ? itemsById[editingItemId] : null;
-    // A disabled field is not in the FormData: when editing, the type is the item's own.
-    const type = editing ? editing.type : formData.get('type');
+    // A disabled field is not in the FormData: when editing, the kind is the item's own.
+    const kind = editing ? editing.kind : selectedKind();
     const optionalText = (key) => formData.get(key)?.toString().trim() || null;
     const optionalNumber = (key) => (formData.get(key) ? Number(formData.get(key)) : null);
 
@@ -539,21 +533,19 @@ if (canManageMovements) {
     body.brand = optionalText('brand');
     body.model = optionalText('model');
     body.code = optionalText('code');
-    if (type === 'rope') {
+    if (kind === 'rope') {
       body.rope_type = formData.get('rope_type');
       body.diameter_mm = Number(formData.get('diameter_mm'));
       body.manufacture_year = Number(formData.get('manufacture_year'));
       body.length_m = Number(formData.get('length_m'));
-    } else if (type === 'bag') {
+    } else if (kind === 'bag') {
       body.bag_type = formData.get('bag_type');
       body.capacity_liters = Number(formData.get('capacity_liters'));
-    } else {
-      body.category_id = Number(formData.get('category_id'));
     }
     if (!editing) {
-      body.type = type;
+      body.type_id = Number(formData.get('type_id'));
       body.acquired_at = optionalText('acquired_at');
-      if (type === 'general') body.total_quantity = Number(formData.get('total_quantity')) || 1;
+      if (kind === 'general') body.total_quantity = Number(formData.get('total_quantity')) || 1;
     }
 
     const submitButton = newItemForm.querySelector('button[type="submit"]');
