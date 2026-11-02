@@ -44,6 +44,9 @@ var (
 	// ErrItemHasMovements means an item cannot be deleted because it has a history: some movement
 	// other than the acquisition it was created with (a loan, a sale, more stock...).
 	ErrItemHasMovements = errors.New("the item has movements and cannot be deleted")
+	// ErrMovementNeeded means a movement cannot be deleted because others depend on it: without it
+	// the item would be left with a negative stock, or a return with nothing lent for it.
+	ErrMovementNeeded = errors.New("other movements depend on this one: deleting it would leave a negative stock or a return with nothing lent")
 	// ErrSingleUnitItem means either a rope or bag was asked to start
 	// with (CreateItem) or gain (CreateMovement's 'acquisition') more
 	// than its one single unit — those are always exactly one
@@ -610,6 +613,101 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	}
 
 	return m, tx.Commit(ctx)
+}
+
+// DeleteMovement removes a movement that was recorded by mistake and answers with it. Stock is never
+// stored, it is what the movements add up to, so the delete is refused (ErrMovementNeeded) when
+// what is left would not make sense: a negative stock (deleting an acquisition or a return that
+// later sales or loans were made on) or, for some activity, more returned than lent. The item's
+// status is recomputed afterwards (deleting the sale that emptied it makes it available again).
+func (r *Repository) DeleteMovement(ctx context.Context, id int64) (Movement, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Movement{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var itemID int64
+	err = tx.QueryRow(ctx, `SELECT item_id FROM material_movements WHERE id = $1`, id).Scan(&itemID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Movement{}, ErrNotFound
+	}
+	if err != nil {
+		return Movement{}, err
+	}
+	// The item's row is locked, as when a movement is recorded, so none is recorded meanwhile.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM material_items WHERE id = $1 FOR UPDATE`, itemID); err != nil {
+		return Movement{}, err
+	}
+
+	var m Movement
+	err = tx.QueryRow(ctx, `
+		DELETE FROM material_movements WHERE id = $1
+		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
+			price, status, recorded_by, activity_id, notes
+	`, id).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
+		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Movement{}, ErrNotFound
+	}
+	if err != nil {
+		return Movement{}, err
+	}
+
+	var total, available int32
+	if err := tx.QueryRow(ctx, `
+		SELECT total_quantity, available_quantity FROM material_item_quantities WHERE item_id = $1
+	`, itemID).Scan(&total, &available); err != nil {
+		return Movement{}, err
+	}
+	var overReturned bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM material_movements WHERE item_id = $1 AND type IN ('loan', 'return')
+			GROUP BY activity_id
+			HAVING SUM(CASE WHEN type = 'loan' THEN quantity ELSE -quantity END) < 0)
+	`, itemID).Scan(&overReturned); err != nil {
+		return Movement{}, err
+	}
+	if total < 0 || available < 0 || overReturned {
+		return Movement{}, ErrMovementNeeded
+	}
+
+	if err := r.resyncItemStatus(ctx, tx, itemID, available); err != nil {
+		return Movement{}, err
+	}
+	return m, tx.Commit(ctx)
+}
+
+// resyncItemStatus puts an item's status back in step with its movements after one was deleted: with
+// stock again, a terminal status (sold, lost...) goes back to available; with none, it takes the
+// one of the last movement that drained it, if there is one.
+func (r *Repository) resyncItemStatus(ctx context.Context, tx pgx.Tx, itemID int64, available int32) error {
+	var status ItemStatus
+	if err := tx.QueryRow(ctx, `SELECT status FROM material_items WHERE id = $1`, itemID).Scan(&status); err != nil {
+		return err
+	}
+	if available > 0 {
+		if isTerminalItemStatus(status) {
+			_, err := tx.Exec(ctx, `UPDATE material_items SET status = 'available' WHERE id = $1`, itemID)
+			return err
+		}
+		return nil
+	}
+	var last MovementType
+	err := tx.QueryRow(ctx, `
+		SELECT type FROM material_movements
+		WHERE item_id = $1 AND type IN ('sale', 'loss', 'abandonment', 'retirement')
+		ORDER BY transacted_at DESC, id DESC LIMIT 1
+	`, itemID).Scan(&last)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE material_items SET status = $2 WHERE id = $1`, itemID, itemStatusForMovement[last])
+	return err
 }
 
 // ReturnMovement closes an active rental — the only type that still

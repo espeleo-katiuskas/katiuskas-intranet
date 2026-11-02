@@ -110,6 +110,15 @@ func (s *Service) GetLeave(ctx context.Context, id int64) (Leave, error) {
 	return s.repo.GetLeaveByID(ctx, id)
 }
 
+// GetDue and DeleteDue: see Repository.DeleteDue.
+func (s *Service) GetDue(ctx context.Context, id int64) (Due, error) {
+	return s.repo.GetDueByID(ctx, id)
+}
+
+func (s *Service) DeleteDue(ctx context.Context, id int64) error {
+	return s.repo.DeleteDue(ctx, id)
+}
+
 func (s *Service) DeleteLeave(ctx context.Context, id int64) error {
 	return s.repo.DeleteLeave(ctx, id)
 }

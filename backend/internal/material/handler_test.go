@@ -1357,3 +1357,94 @@ func TestHandlerDeleteItem(t *testing.T) {
 		t.Errorf("expected the item to still be listed after the refusal")
 	}
 }
+
+// A movement recorded by mistake can be deleted, by admin alone, as long as what is left makes sense:
+// stock is what the movements add up to, so one that others depend on is refused.
+func TestHandlerDeleteMovement(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertUser(t, tx, "") // a real person: a movement records who made it
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	materialToken := tokenFor(t, authn, 3, "material", "member")
+	adminToken := tokenFor(t, authn, 4, "admin")
+	activityID := testutil.InsertActivity(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 3))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d %s", rec.Code, rec.Body.String())
+	}
+	var item material.Item
+	_ = json.Unmarshal(rec.Body.Bytes(), &item)
+
+	record := func(body map[string]any) material.Movement {
+		t.Helper()
+		body["item_id"] = item.ID
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("record %v: %d %s", body, rec.Code, rec.Body.String())
+		}
+		var m material.Movement
+		_ = json.Unmarshal(rec.Body.Bytes(), &m)
+		return m
+	}
+	path := func(m material.Movement) string { return fmt.Sprintf("/api/v1/material/movements/%d", m.ID) }
+	current := func() material.Item {
+		t.Helper()
+		var got material.Item
+		list := doRequest(mux, http.MethodGet, "/api/v1/material/items", boardToken, nil)
+		var items []material.Item
+		_ = json.Unmarshal(list.Body.Bytes(), &items)
+		for _, i := range items {
+			if i.ID == item.ID {
+				got = i
+			}
+		}
+		return got
+	}
+	movements := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/material/items/%d/movements", item.ID), boardToken, nil)
+	var first []material.Movement
+	_ = json.Unmarshal(movements.Body.Bytes(), &first)
+	acquisition := first[0]
+
+	// A sale of everything empties the item (status sold); deleting the acquisition would leave -3.
+	sale := record(map[string]any{"type": "sale", "quantity": 3})
+	if got := current(); got.Status != material.ItemSold || got.AvailableQuantity != 0 {
+		t.Fatalf("after the sale: %+v", got)
+	}
+	for name, token := range map[string]string{"board": boardToken, "material": materialToken} {
+		if rec := doRequest(mux, http.MethodDelete, path(sale), token, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from deleting a movement, got %d", name, rec.Code)
+		}
+	}
+	rec = doRequest(mux, http.MethodDelete, path(acquisition), adminToken, nil)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "movement_needed" {
+		t.Errorf("the acquisition the sale depends on: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path(sale), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete the sale: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := current(); got.Status != material.ItemAvailable || got.AvailableQuantity != 3 || got.TotalQuantity != 3 {
+		t.Errorf("after deleting the sale: %+v", got)
+	}
+
+	// A loan and its return: the loan cannot go while the return needs it; the return can, and then the
+	// loan is out again.
+	loan := record(map[string]any{"type": "loan", "quantity": 2, "activity_id": activityID})
+	back := record(map[string]any{"type": "return", "quantity": 2, "activity_id": activityID})
+	rec = doRequest(mux, http.MethodDelete, path(loan), adminToken, nil)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "movement_needed" {
+		t.Errorf("the loan its return depends on: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path(back), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete the return: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := current(); got.OutstandingLoanQuantity != 2 || got.AvailableQuantity != 1 {
+		t.Errorf("after deleting the return: %+v", got)
+	}
+
+	if rec := doRequest(mux, http.MethodDelete, path(back), adminToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("deleting it twice: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/material/movements/abc", adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
+}

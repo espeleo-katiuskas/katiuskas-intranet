@@ -69,6 +69,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create))
 	mux.Handle("GET /api/v1/activities/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update))
+	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.deleteActivity))
 
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
@@ -350,6 +351,40 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
+}
+
+// deleteActivity really deletes an activity, but only one with nothing attached (participants,
+// resources, material movements): to take it out of sight without deleting it, cancel it with PATCH.
+func (h *Handler) deleteActivity(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if !h.canManage(r, id) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can delete this activity")
+		return
+	}
+	// Fetched before deleting, so the notification below can still name the activity.
+	target, targetErr := h.service.Get(r.Context(), id)
+
+	err = h.service.Delete(r.Context(), id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	case errors.Is(err, ErrActivityInUse):
+		httpapi.WriteError(w, http.StatusConflict, "activity_in_use", err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete activity")
+		return
+	}
+	if targetErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la actividad «%s».",
+			h.actorLogin(r.Context()), target.Title))
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
 // listByUser is open to any signed-in baseline user, not just admin/board

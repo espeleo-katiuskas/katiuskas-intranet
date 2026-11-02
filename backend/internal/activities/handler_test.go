@@ -453,10 +453,6 @@ func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, cancel); rec.Code != http.StatusOK {
 		t.Errorf("expected the organizer to cancel their own activity, got %d: %s", rec.Code, rec.Body.String())
 	}
-	// There is no DELETE: an activity is cancelled, not removed.
-	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
-		t.Errorf("expected DELETE /activities/{id} not to exist, got %d", rec.Code)
-	}
 }
 
 func TestHandlerUpdateCanChangeType(t *testing.T) {
@@ -1525,4 +1521,54 @@ func doRequestIsParticipant(t *testing.T, mux *http.ServeMux, base, token, login
 		}
 	}
 	return false, nil
+}
+
+// DELETE deletes an activity for real, for its organizer, admin or board, while nothing is attached.
+func TestHandlerDeleteActivity(t *testing.T) {
+	mux, authn, tx, notifier := newTestServerWithNotifier(t)
+	leader := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	otherToken := tokenFor(t, authn, other.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+		"title": "Por error", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	notifier.waitForMessage(t) // the creation's
+	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+
+	if rec := doRequest(mux, http.MethodDelete, path, otherToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected a member who is not the organizer to be forbidden, got %d", rec.Code)
+	}
+	// Somebody signed up: refused until they are taken off.
+	if rec := doRequest(mux, http.MethodPost, path+"/participants", otherToken, nil); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Fatalf("sign up: %d: %s", rec.Code, rec.Body.String())
+	}
+	notifier.waitForMessage(t)
+	rec = doRequest(mux, http.MethodDelete, path, leaderToken, nil)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "activity_in_use" {
+		t.Errorf("an activity with a participant: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("%s/participants/%s", path, other.Login), otherToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("leave: %d: %s", rec.Code, rec.Body.String())
+	}
+	notifier.waitForMessage(t)
+
+	if rec := doRequest(mux, http.MethodDelete, path, leaderToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d: %s", rec.Code, rec.Body.String())
+	}
+	if msg := notifier.waitForMessage(t); !strings.Contains(msg, "ha borrado") || !strings.Contains(msg, "Por error") {
+		t.Errorf("expected the notice to say who deleted which activity, got %q", msg)
+	}
+	if rec := doRequest(mux, http.MethodGet, path, leaderToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("expected it to be gone, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/activities/abc", leaderToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
 }

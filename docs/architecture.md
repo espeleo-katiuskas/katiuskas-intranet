@@ -567,8 +567,9 @@ join, and then one more each following year.
 - In `/socio`, each due is one more event ("Cuota anual · year") of the "Historial como socio"
   timeline, with the date of the payment and no edit or delete buttons. `/perfil` shows the same
   timeline, without buttons.
-- There is no endpoint to correct or delete a due, nor any validation that the year falls inside
-  an active joining period; both things are out of scope on purpose for now.
+- A due can be deleted (`DELETE /dues/{id}`, admin): only the due, the transaction and any joining
+  period it opened stay. There is no endpoint to correct one, nor any validation that the year falls
+  inside an active joining period; both things are out of scope on purpose for now.
 
 ### `membership_leaves`
 

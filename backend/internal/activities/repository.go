@@ -13,6 +13,9 @@ import (
 
 var (
 	ErrNotFound = errors.New("activity not found")
+	// ErrActivityInUse means the activity cannot be deleted because something is attached to it:
+	// participants, resources or material movements.
+	ErrActivityInUse = errors.New("the activity still has participants, resources or material movements: remove them first")
 	// ErrParticipantNotFound means one of the given participant user ids
 	// doesn't exist. Create rejects the whole activity rather than
 	// creating it with a partial participant list.
@@ -252,6 +255,41 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 		}
 	}
 	return a, nil
+}
+
+// Delete removes an activity that has nothing attached: nothing cascades, so an activity with
+// participants, resources (memoria) or material movements (a loan, a return) is refused
+// (ErrActivityInUse) until those are removed, one by one, deliberately.
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var locked int64
+	err = tx.QueryRow(ctx, `SELECT id FROM activities WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var attached int
+	if err := tx.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM activity_participants WHERE activity_id = $1)
+		     + (SELECT count(*) FROM activity_resources WHERE activity_id = $1)
+		     + (SELECT count(*) FROM material_movements WHERE activity_id = $1)
+	`, id).Scan(&attached); err != nil {
+		return err
+	}
+	if attached > 0 {
+		return ErrActivityInUse
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM activities WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // AddParticipant signs a person up, recording who did it (addedBy: the person themselves, or somebody

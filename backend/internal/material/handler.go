@@ -144,6 +144,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/material/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/material/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/material/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
+	mux.Handle("DELETE /api/v1/material/movements/{id}", h.authenticator.Protect(h.deleteMovement, "admin"))
 
 	mux.Handle("GET /api/v1/users/{login}/material/movements", h.authenticator.Protect(h.listMovementsByUser))
 }
@@ -634,6 +635,32 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 // returnMovement closes an active rental — the only type that still
 // reaches status 'active'. A loan's return is a separate 'return'
 // movement created via POST /movements instead (see createMovement).
+// deleteMovement removes a movement recorded by mistake (see Repository.DeleteMovement).
+func (h *Handler) deleteMovement(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	m, err := h.service.DeleteMovement(r.Context(), id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "movement not found")
+		return
+	case errors.Is(err, ErrMovementNeeded):
+		httpapi.WriteError(w, http.StatusConflict, "movement_needed", err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete movement")
+		return
+	}
+	if item, itemErr := h.service.GetItem(r.Context(), m.ItemID); itemErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado un movimiento de «%s»: %s, x%d.",
+			h.actorLogin(r.Context()), itemLabel(item), movementVerb(m.Type), m.Quantity))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) returnMovement(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

@@ -1339,6 +1339,21 @@ paths:
             membership periods) or overlapping_period (they overlap
             another leave of this same person) — see the error code.
 
+  /dues/{id}:
+    delete:
+      summary: Delete a due
+      description: >
+        Admin only. Only the due goes: the transaction that paid it stays in the accounting, and so
+        does the joining period that recording it may have opened.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /leaves/{id}:
     patch:
       summary: Correct a temporary leave's dates or reason
@@ -1474,8 +1489,8 @@ paths:
         update it — anyone else gets a 403. leader_login itself
         (reassigning the organizer) is narrower still: admin/board
         only, even for the current organizer. cancelled: true cancels the
-        activity and false reactivates it: an activity is cancelled, never
-        deleted, so there is no DELETE on it.
+        activity and false reactivates it (to take it out of sight without
+        deleting it).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1496,6 +1511,23 @@ paths:
             leader_login was given by someone who isn't admin/board.
         "404":
           description: not_found — the activity doesn't exist, or leader_login doesn't belong to anyone.
+
+    delete:
+      summary: Delete an activity
+      description: >
+        Only the activity's organizer (leader_login), or admin/board. Only an activity with nothing
+        attached can be deleted: with participants, resources or material movements it is refused
+        (409 activity_in_use) until those are removed. Cancel it with PATCH to take it out of sight
+        without deleting it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Only the organizer, board, or admin can delete this activity. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: activity_in_use — it still has participants, resources or material movements. }
 
   /activities/{id}/participants:
     get:
@@ -3213,6 +3245,25 @@ paths:
             recipient_not_member (a loan or a rental for somebody who
             is not a member now) or recipient_not_member_or_former (a
             sale for somebody who is neither a member nor a former one).
+
+  /material/movements/{id}:
+    delete:
+      summary: Delete a movement
+      description: >
+        Admin only. For a movement recorded by mistake. Stock is never stored, it is what the
+        movements add up to, so the delete is refused (409 movement_needed) when others depend on it:
+        it would leave a negative stock (an acquisition or a return that later sales or loans were
+        made on) or, for some activity, more returned than lent. The item's status is recomputed
+        afterwards (deleting the sale that emptied it makes it available again).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: movement_needed — other movements depend on it. }
 
   /material/movements/{id}/return:
     patch:

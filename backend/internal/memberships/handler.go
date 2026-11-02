@@ -63,6 +63,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/users/{login}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
 	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
 	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
+	mux.Handle("DELETE /api/v1/dues/{id}", h.authenticator.Protect(h.deleteDue, "admin"))
 
 	// Dues follow the same self-or-admin/board read, admin-only write
 	// split as the rest of a person's data (licenses included) — see
@@ -462,6 +463,36 @@ func (h *Handler) deleteLeave(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado una excedencia de %s (%s a %s).",
 			h.actorLogin(r.Context()), login, target.StartDate.Format("2006-01-02"), endText))
+	}
+	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// deleteDue removes one due (see Repository.DeleteDue): the transaction that paid it stays.
+func (h *Handler) deleteDue(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	// Fetched before deleting, so the notification can still describe the due.
+	target, targetErr := h.service.GetDue(r.Context(), id)
+
+	err = h.service.DeleteDue(r.Context(), id)
+	if errors.Is(err, ErrDueNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "due not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete due")
+		return
+	}
+	if targetErr == nil {
+		login := h.leaveOwnerLogin(r.Context(), target.UserID)
+		if login == "" {
+			login = fmt.Sprintf("user#%d", target.UserID)
+		}
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado la cuota de %d de %s.",
+			h.actorLogin(r.Context()), target.Year, login))
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }

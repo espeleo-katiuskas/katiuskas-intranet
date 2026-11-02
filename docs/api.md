@@ -271,6 +271,10 @@ Directiva).
   - returns: 201 `Due`
   - errors: 400 `invalid_body`, `missing_fields`, `invalid_date`, `start_date_required`,
     `unknown_transaction`; 409 `due_already_recorded`, `transaction_not_for_dues`
+- **DELETE** `/dues/{id}` — *Admin*. Deletes a due. Only the due: the transaction that paid it stays
+  in the accounting, and so does the joining period that recording it may have opened.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
 - **GET** `/users/{login}/licenses` — *The person themselves, admin or board*. Federative licenses
   of a person.
   - returns: 200 `[License]`
@@ -340,13 +344,18 @@ Directiva).
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`
 - **PATCH** `/activities/{id}` — *Organizer, admin or board*. Modifies an activity. Changing the
-  organizer is only for admin or board. `cancelled: true` cancels it and `false` reactivates it (an
-  activity is cancelled, never deleted: there is no `DELETE /activities/{id}`).
+  organizer is only for admin or board. `cancelled: true` cancels it and `false` reactivates it (to
+  take it out of sight without deleting it).
   - body: `title`, `type`, `start_date`, `end_date`, `description`, `cancelled`, `visibility`,
     `leader_login`
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`; 403 `forbidden`; 404 `not_found`
+- **DELETE** `/activities/{id}` — *Organizer, admin or board*. Deletes an activity, but only one
+  with nothing attached: with participants, resources or material movements it is refused until
+  those are removed. To take it out of sight without deleting it, cancel it with `PATCH`.
+  - returns: 204
+  - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`; 409 `activity_in_use`
 - **GET** `/activities/{id}/participants` — *Any baseline role*. Participants.
   - returns: 200 `[Participant]`
   - errors: 400 `invalid_id`
@@ -476,6 +485,13 @@ files (up to 25 MiB).
     `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`,
     `recipient_not_member` (a loan or a rental for somebody who is not a member now),
     `recipient_not_member_or_former` (a sale for somebody who is neither a member nor a former one)
+- **DELETE** `/material/movements/{id}` — *Admin*. Deletes a movement recorded by mistake. Stock is
+  what the movements add up to, so it is refused when others depend on it: a negative stock (an
+  acquisition or a return that later sales or loans were made on) or, for some activity, more
+  returned than lent. The item's status is recomputed (deleting the sale that emptied it makes it
+  available again).
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `movement_needed`
 - **PATCH** `/material/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
   - returns: 200 `Movement`
   - errors: 400 `invalid_id`; 404 `not_found`

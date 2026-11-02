@@ -94,6 +94,11 @@ func (s *Service) ListMaterialTypes(ctx context.Context) ([]MaterialType, error)
 	return s.repo.ListMaterialTypes(ctx)
 }
 
+// DeleteMovement: see Repository.DeleteMovement.
+func (s *Service) DeleteMovement(ctx context.Context, id int64) (Movement, error) {
+	return s.repo.DeleteMovement(ctx, id)
+}
+
 func (s *Service) CreateMovement(ctx context.Context, in CreateMovementInput) (Movement, error) {
 	if in.Quantity <= 0 {
 		in.Quantity = 1

@@ -604,3 +604,73 @@ func TestDeleteHolidayNotFound(t *testing.T) {
 		t.Errorf("expected ErrHolidayNotFound, got %v", err)
 	}
 }
+
+// An activity is deleted only while nothing is attached to it: participants, resources or material
+// movements make it refuse (nothing cascades) until they are removed.
+func TestDeleteRefusesAnActivityWithSomethingAttached(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := activities.NewRepository(tx)
+	ctx := context.Background()
+	leader := testutil.InsertUser(t, tx, "")
+	other := testutil.InsertUser(t, tx, "")
+
+	create := func(title string) activities.Activity {
+		t.Helper()
+		a, err := repo.Create(ctx, activities.CreateInput{Title: title, Type: activities.TypeCaving, Visibility: activities.VisibilityPublic,
+			StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID, CreatedBy: leader.ID})
+		if err != nil {
+			t.Fatalf("create %q: %v", title, err)
+		}
+		return a
+	}
+
+	// With a participant.
+	withParticipant := create("With a participant")
+	if err := repo.AddParticipant(ctx, withParticipant.ID, other.ID, leader.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, withParticipant.ID); !errors.Is(err, activities.ErrActivityInUse) {
+		t.Errorf("a participant: expected ErrActivityInUse, got %v", err)
+	}
+	if err := repo.RemoveParticipant(ctx, withParticipant.ID, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, withParticipant.ID); err != nil {
+		t.Errorf("once the participant is out: %v", err)
+	}
+	if _, err := repo.GetByID(ctx, withParticipant.ID); !errors.Is(err, activities.ErrNotFound) {
+		t.Errorf("expected it to be gone, got %v", err)
+	}
+
+	// With a material movement.
+	withLoan := create("With a loan")
+	var itemID int64
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO material_items (kind, type_id, description) VALUES ('general', $1, 'Item') RETURNING id
+	`, testutil.MaterialTypeID(t, tx, "Mosquetones")).Scan(&itemID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO material_movements (item_id, user_id, type, activity_id, status) VALUES ($1, $2, 'loan', $3, 'completed')
+	`, itemID, other.ID, withLoan.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, withLoan.ID); !errors.Is(err, activities.ErrActivityInUse) {
+		t.Errorf("a loan: expected ErrActivityInUse, got %v", err)
+	}
+
+	// With a resource (the memoria).
+	withResource := create("With a resource")
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO activity_resources (activity_id, author_id, type, title, description, position) VALUES ($1, $2, 'text', 'Memoria', 'Texto', 1)
+	`, withResource.ID, leader.ID); err != nil {
+		t.Fatalf("insert resource: %v", err)
+	}
+	if err := repo.Delete(ctx, withResource.ID); !errors.Is(err, activities.ErrActivityInUse) {
+		t.Errorf("a resource: expected ErrActivityInUse, got %v", err)
+	}
+
+	if err := repo.Delete(ctx, 999999); !errors.Is(err, activities.ErrNotFound) {
+		t.Errorf("a missing one: expected ErrNotFound, got %v", err)
+	}
+}

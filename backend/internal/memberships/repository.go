@@ -27,6 +27,8 @@ var (
 	// that year (membership_dues' own UNIQUE (user_id, year)) — one
 	// payment per person per year, never two.
 	ErrDueAlreadyRecorded = errors.New("a due for this user and year has already been recorded")
+	// ErrDueNotFound means there is no due with that id.
+	ErrDueNotFound = errors.New("due not found")
 	// ErrUnknownTransaction means the given transaction_id doesn't name an
 	// existing transaction — every due has to be tied to the payment that
 	// recorded it, the same requirement licenses.CreateInput places on a
@@ -474,6 +476,31 @@ func (r *Repository) CreateDue(ctx context.Context, in CreateDueInput) (Due, err
 		return d, err
 	}
 	return d, nil
+}
+
+// GetDueByID looks up one due, for the notice of its deletion.
+func (r *Repository) GetDueByID(ctx context.Context, id int64) (Due, error) {
+	var d Due
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, user_id, year, transaction_id, created_at FROM membership_dues WHERE id = $1
+	`, id).Scan(&d.ID, &d.UserID, &d.Year, &d.TransactionID, &d.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return d, ErrDueNotFound
+	}
+	return d, err
+}
+
+// DeleteDue removes one due. Only the due: the transaction that paid it stays in the accounting, and
+// so does the membership period that its recording may have started for a first due.
+func (r *Repository) DeleteDue(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM membership_dues WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrDueNotFound
+	}
+	return nil
 }
 
 // ListDuesForTransaction returns every due recorded against one

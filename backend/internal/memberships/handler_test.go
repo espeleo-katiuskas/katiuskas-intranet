@@ -1016,3 +1016,51 @@ func TestHandlerCreateDueStartDateIsOptionalForAnExistingMember(t *testing.T) {
 		t.Errorf("expected a malformed start_date to still be a 400 invalid_date, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A due can be deleted by admin alone. Only the due goes: the transaction that paid it stays in the
+// accounting, and so does the membership period that recording it started.
+func TestHandlerDeleteDue(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	boardToken := testutil.TokenFor(resolver, 2, "board")
+	transactionID := testutil.InsertTransaction(t, tx)
+
+	rec := doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": transactionID, "start_date": "2026-03-01"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var due memberships.Due
+	if err := json.Unmarshal(rec.Body.Bytes(), &due); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/dues/%d", due.ID)
+
+	if rec := doRequest(mux, http.MethodDelete, path, boardToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected board to be forbidden from deleting a due, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("deleting it twice: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/dues/abc", adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
+
+	var transactions, periods int
+	ctx := context.Background()
+	_ = tx.QueryRow(ctx, `SELECT count(*) FROM transactions WHERE id = $1`, transactionID).Scan(&transactions)
+	_ = tx.QueryRow(ctx, `SELECT count(*) FROM memberships WHERE user_id = $1`, target.ID).Scan(&periods)
+	if transactions != 1 || periods != 1 {
+		t.Errorf("expected the transaction and the membership period to stay, got %d and %d", transactions, periods)
+	}
+	// The year is free again.
+	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/dues", target.Login), adminToken,
+		map[string]any{"year": 2026, "transaction_id": transactionID})
+	if rec.Code != http.StatusCreated {
+		t.Errorf("recording the due again: %d: %s", rec.Code, rec.Body.String())
+	}
+}

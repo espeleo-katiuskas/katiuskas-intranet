@@ -111,6 +111,10 @@ const texts = {
   fixed_type: 'Los tipos «Cuerda» y «Saca» son fijos: no se pueden renombrar ni borrar.',
   item_has_movements:
     'Este material tiene movimientos (préstamos, ventas, pérdidas…) y no se puede borrar.',
+  movement_needed:
+    'No se puede borrar este movimiento: otros movimientos dependen de él (se quedaría el stock en negativo o una devolución sin préstamo).',
+  activity_in_use:
+    'La actividad todavía tiene participantes, recursos o movimientos de material: quítalos antes de borrarla.',
   kind_change:
     'Una cuerda o una saca no puede cambiar de tipo, ni el material general pasar a ser cuerda o saca.',
   unknown_type: 'El tipo de material no existe.',
