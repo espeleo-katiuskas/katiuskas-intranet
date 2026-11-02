@@ -724,7 +724,7 @@ decides who can add participants, not only who can sign up. `Handler.join` queri
 | Sign oneself up | any member | only the organizer, board or admin (and somebody already signed up, who is in) |
 | Add another person | anybody | organizer, board, admin or somebody already signed up |
 | Remove oneself | any member | any member |
-| Remove another person | admin/board | organizer, admin/board |
+| Remove another person | admin/board, or whoever signed them up | organizer, admin/board, or whoever signed them up |
 
 **Listing and holidays**
 

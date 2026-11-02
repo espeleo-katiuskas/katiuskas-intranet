@@ -111,6 +111,11 @@ func (s *Service) Join(ctx context.Context, activityID, userID, addedBy int64) e
 	return s.repo.AddParticipant(ctx, activityID, userID, addedBy)
 }
 
+// AddedBy is who signed userID up to the activity, and false if they are not signed up.
+func (s *Service) AddedBy(ctx context.Context, activityID, userID int64) (int64, bool, error) {
+	return s.repo.AddedBy(ctx, activityID, userID)
+}
+
 func (s *Service) Leave(ctx context.Context, activityID, userID int64) error {
 	return s.repo.RemoveParticipant(ctx, activityID, userID)
 }

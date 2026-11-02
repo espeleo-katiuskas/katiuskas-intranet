@@ -81,6 +81,11 @@ the "Apuntarme" button; in a private one only the organizer, admin and board (an
 whoever is already signed up: it appears as soon as they are, as the button turns into "Darme de
 baja"). "Apuntarme" is only offered to members (`canAddOthers`, `canJoinSelf` in `activity.js`).
 
+In the participants list the "Quitar" button sits right after the name it is about
+(`.participant-row`), not at the far end of the row, and only on the rows the viewer may remove
+(`canRemoveParticipant`, as the API decides: admin/board, the organizer of a private activity, and
+whoever signed that person up; never on the viewer's own row, which is "Darme de baja").
+
 **The organizer on `/actividad`.** Under the header line, "Organizador: <name>" (`#activity-leader`;
 a link to the person's page only for admin and board, like every name there), once the directory has
 the name.

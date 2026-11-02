@@ -248,13 +248,21 @@ function personName(login, name) {
     : escapeHtml(name);
 }
 
+// Who can take a participant off, as the API decides it: admin and board, the organizer of a private
+// activity, and whoever signed them up. Not on the viewer's own row: that is "Darme de baja".
+function canRemoveParticipant(p) {
+  if (p.user_login === viewer?.login) return false;
+  return isAdmin || (activityPrivate && canManage) || p.added_by_login === viewer?.login;
+}
+
+// The "Quitar" button goes right after the name it is about, not at the far end of the row.
 function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
-    <div class="detail-row">
+    <div class="detail-row participant-row">
       <span>${personName(p.user_login, name)}
         ${p.federated ? '<span class="badge status-completed">Federado</span>' : '<span class="badge">No federado</span>'}</span>
-      ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
+      ${canRemoveParticipant(p) ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;
 }

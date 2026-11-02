@@ -1571,11 +1571,11 @@ paths:
     delete:
       summary: Leave an activity
       description: >
-        A member can only remove themselves; admin/board can remove
-        anyone. On a private activity, the organizer can also remove
-        anyone — the mirror image of POST .../participants' own
-        organizer-only gate for adding one there — but gets no such
-        extra say on a public activity, same as for adding one.
+        A person can remove themselves; admin/board can remove anyone;
+        whoever signed somebody up can remove them (public or private,
+        even without being the organizer); and on a private activity the
+        organizer can also remove anyone, but gets no such extra say on a
+        public one. Anyone else gets a 403.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }

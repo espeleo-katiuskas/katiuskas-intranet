@@ -1453,3 +1453,64 @@ func TestHandlerRejectsInvalidActivityFields(t *testing.T) {
 		t.Errorf("expected a start date still before the end date to be accepted, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Whoever signed somebody up can take them off again, in a public or a private activity, even without
+// being the organizer, admin or board; somebody else who is not any of those still cannot.
+func TestHandlerWhoSignedSomebodyUpCanRemoveThem(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	leader := testutil.InsertMember(t, tx)
+	signer := testutil.InsertMember(t, tx)
+	signed := testutil.InsertMember(t, tx)
+	bystander := testutil.InsertMember(t, tx)
+	leaderToken := tokenFor(t, authn, leader.ID, "member")
+	signerToken := tokenFor(t, authn, signer.ID, "member")
+	bystanderToken := tokenFor(t, authn, bystander.ID, "member")
+
+	for _, visibility := range []string{"public", "private"} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
+			"title": visibility, "type": "social", "visibility": visibility, "start_date": "2026-01-01", "end_date": "2026-01-01",
+			"participant_logins": []string{signer.Login, bystander.Login},
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d: %s", visibility, rec.Code, rec.Body.String())
+		}
+		var a activities.Activity
+		_ = json.Unmarshal(rec.Body.Bytes(), &a)
+		base := fmt.Sprintf("/api/v1/activities/%d/participants", a.ID)
+		path := base + "/" + signed.Login
+		// The signer (already in, so allowed to add in a private one) signs somebody up.
+		if rec := doRequest(mux, http.MethodPost, base, signerToken, map[string]any{"login": signed.Login}); rec.Code != http.StatusNoContent {
+			t.Fatalf("%s: signing up: %d: %s", visibility, rec.Code, rec.Body.String())
+		}
+		// Another participant, who did not sign them up, cannot take them off (nor is the organizer of a public one).
+		if rec := doRequest(mux, http.MethodDelete, path, bystanderToken, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("%s: a bystander removing somebody: %d", visibility, rec.Code)
+		}
+		// Whoever signed them up can.
+		if rec := doRequest(mux, http.MethodDelete, path, signerToken, nil); rec.Code != http.StatusNoContent {
+			t.Errorf("%s: the one who signed them up removing them: %d: %s", visibility, rec.Code, rec.Body.String())
+		}
+		// They are really gone, and the signer cannot remove somebody they did not sign up.
+		if in, _ := doRequestIsParticipant(t, mux, base, leaderToken, signed.Login); in {
+			t.Errorf("%s: still signed up after being removed", visibility)
+		}
+		if rec := doRequest(mux, http.MethodDelete, base+"/"+bystander.Login, signerToken, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("%s: removing somebody the signer did not sign up: %d", visibility, rec.Code)
+		}
+	}
+}
+
+func doRequestIsParticipant(t *testing.T, mux *http.ServeMux, base, token, login string) (bool, error) {
+	t.Helper()
+	rec := doRequest(mux, http.MethodGet, base, token, nil)
+	var list []activities.Participant
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		return false, err
+	}
+	for _, p := range list {
+		if p.UserLogin == login {
+			return true, nil
+		}
+	}
+	return false, nil
+}

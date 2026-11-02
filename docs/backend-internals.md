@@ -303,9 +303,10 @@ to the organizer, board, admin, or somebody who is already signed up (`Handler.j
 (`activity_participants.added_by`, `added_at`, shown as `added_by_login` and `added_at`;
 `Repository.AddParticipant`, and `CreateInput.CreatedBy` for those named at creation); signing up
 somebody who is already in changes nothing, the first record stays. Removing one (`Handler.leave`,
-`DELETE .../participants/{login}`) mirrors this: a plain member can only remove themselves
-regardless of visibility, but a private activity's own organizer can remove anyone, the same as they
-can add anyone — on a public one they get no such extra say, same as for adding.
+`DELETE .../participants/{login}`): the person themselves, admin and board, a private activity's own
+organizer (who can add anyone, so can remove anyone; on a public one they get no such extra say) and
+whoever signed that person up (`Service.AddedBy`, whatever the visibility): somebody can always undo
+what they did.
 
 ## Activity resources (memoria)
 

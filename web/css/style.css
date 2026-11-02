@@ -622,6 +622,11 @@ th.sortable:focus-visible {
   padding: 4px 0;
 }
 
+.detail-list .detail-row.participant-row {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
 .badge {
   display: inline-block;
   padding: 2px 8px;

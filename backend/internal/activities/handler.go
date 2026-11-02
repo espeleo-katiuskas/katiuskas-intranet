@@ -517,14 +517,19 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Symmetric with join: a private activity's organizer may remove
-	// anyone, the same as they may add anyone — but, also like join, get
-	// no such extra say over a public activity, which works exactly as
-	// it always has (self, or admin/board removing anyone).
+	// Who may remove a participant: themselves, admin or board, a private activity's organizer, and
+	// whoever signed them up (whatever the visibility) — somebody can always undo their own mistake.
 	isOrganizerOfPrivate := activity.Visibility == VisibilityPrivate && current.ID == activity.LeaderID
 	if !current.HasAnyRole("admin", "board") && !isOrganizerOfPrivate && current.ID != userID {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only remove themselves")
-		return
+		addedBy, signedUp, err := h.service.AddedBy(r.Context(), id, userID)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not check who signed them up")
+			return
+		}
+		if !signedUp || addedBy != current.ID {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the person themselves, whoever signed them up, the organizer of a private activity, admin or board can remove a participant")
+			return
+		}
 	}
 
 	if err := h.service.Leave(r.Context(), id, userID); err != nil {

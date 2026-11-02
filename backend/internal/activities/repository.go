@@ -275,6 +275,18 @@ func (r *Repository) AddParticipant(ctx context.Context, activityID, userID, add
 	return err
 }
 
+// AddedBy is who signed the participant up, and false if they are not signed up.
+func (r *Repository) AddedBy(ctx context.Context, activityID, userID int64) (int64, bool, error) {
+	var addedBy int64
+	err := r.pool.QueryRow(ctx, `
+		SELECT added_by FROM activity_participants WHERE activity_id = $1 AND user_id = $2
+	`, activityID, userID).Scan(&addedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return addedBy, err == nil, err
+}
+
 func (r *Repository) RemoveParticipant(ctx context.Context, activityID, userID int64) error {
 	_, err := r.pool.Exec(ctx, `
 		DELETE FROM activity_participants WHERE activity_id=$1 AND user_id=$2

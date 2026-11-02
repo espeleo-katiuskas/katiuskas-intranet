@@ -358,8 +358,9 @@ Directiva).
   - returns: 204
   - errors: 400 `invalid_id`, `invalid_body`; 403 `forbidden` (a private activity, and the caller
     is none of those); 404 `not_found`; 409 `not_a_member`
-- **DELETE** `/activities/{id}/participants/{login}` — *Depends on the visibility*. Leave the
-  activity, or remove another person (admin or board, or the organizer in a private one).
+- **DELETE** `/activities/{id}/participants/{login}` — *Depends on the activity*. Leave the
+  activity, or remove another person: admin or board, the organizer in a private one, or whoever
+  signed that person up.
   - returns: 204
   - errors: 400 `invalid_id`
 - **GET** `/users/{login}/activities` — *Any baseline role*. Activity history of a person (as
