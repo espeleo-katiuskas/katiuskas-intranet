@@ -106,6 +106,8 @@ async function loadActivity(ready = Promise.resolve()) {
 
     // The organizer's label needs the directory.
     await ready;
+    document.getElementById('activity-leader').innerHTML =
+      `Organizador: ${personName(activity.leader_login, personLabel(activity.leader_login))}`;
     if (editForm) {
       editForm.title.value = activity.title;
       editForm.type.value = activity.type;

@@ -76,6 +76,10 @@ member (it follows the type chosen, and what was typed before and no longer fits
 organizer of an activity is still any person. In the participants list of `/actividad`, each name
 has a "Federado" or "No federado" badge (`federated`), as information: nothing requires it.
 
+**The organizer on `/actividad`.** Under the header line, "Organizador: <name>" (`#activity-leader`;
+a link to the person's page only for admin and board, like every name there), once the directory has
+the name.
+
 **Being signed up on `/actividad`.** Under the header, a note "✓ Estás apuntado a esta actividad."
 shows while the viewer is among the participants (`#joined-note`, set by `loadParticipants` together
 with the "Apuntarme"/"Darme de baja" buttons), so it is not something to look for in a long list.
