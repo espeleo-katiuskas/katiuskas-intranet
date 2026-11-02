@@ -4268,7 +4268,6 @@ components:
         activity_id: { type: integer }
         user_login: { type: string }
         role: { type: string, enum: [leader, participant] }
-        confirmed: { type: boolean }
         federated: { type: boolean, description: "Has a federative license for the current year. Only information: any member can join any activity." }
 
     Distribution:

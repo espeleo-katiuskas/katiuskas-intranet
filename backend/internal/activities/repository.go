@@ -299,7 +299,7 @@ func (r *Repository) IsParticipant(ctx context.Context, activityID, userID int64
 
 func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]Participant, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT ap.activity_id, ap.user_id, u.login, ap.role, ap.confirmed
+		SELECT ap.activity_id, ap.user_id, u.login, ap.role
 		FROM activity_participants ap
 		JOIN users u ON u.id = ap.user_id
 		WHERE ap.activity_id = $1
@@ -312,7 +312,7 @@ func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]
 	list := []Participant{}
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.UserLogin, &p.Role, &p.Confirmed); err != nil {
+		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.UserLogin, &p.Role); err != nil {
 			return nil, err
 		}
 		list = append(list, p)

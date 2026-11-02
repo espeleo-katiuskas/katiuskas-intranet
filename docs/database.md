@@ -527,7 +527,6 @@ Who takes part in each activity. The organizer need not appear here.
 | `activity_id` | bigint | no |  |
 | `user_id` | bigint | no |  |
 | `role` | participant_role | no | 'participant' |
-| `confirmed` | boolean | no | true |
 
 Constraints:
 
@@ -1303,3 +1302,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00040_transaction_files.sql`: `transaction_files`
 - `00041_tokens_role_override.sql`: `tokens.role_override`, `tokens.role_override_until`
 - `00042_activities_cancelled.sql`: `activities.cancelled` instead of `activities.status`
+- `00043_activity_participants_drop_confirmed.sql`: drops `activity_participants.confirmed`, which was never used
