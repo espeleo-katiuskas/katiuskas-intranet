@@ -240,7 +240,10 @@ function refreshUserOptions() {
   }
 }
 
-document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
+// The dialogs only exist for whoever manages the material (the others get them removed by data-roles).
+if (canManageMovements) {
+  document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
+}
 
 function openNewMovementDialog(itemId) {
   const item = itemsById[itemId];
@@ -314,9 +317,9 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
 
 const newMovementDialog = document.getElementById('new-movement-dialog');
 const newMovementForm = document.getElementById('new-movement-form');
-initModal(newMovementDialog, newMovementForm);
+if (canManageMovements) initModal(newMovementDialog, newMovementForm);
 
-newMovementForm.addEventListener('submit', async (event) => {
+newMovementForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const type = document.getElementById('mv-type').value;
