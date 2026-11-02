@@ -201,27 +201,33 @@ editForm?.addEventListener('submit', async (event) => {
 // so the "add participant" picker can search by name.
 let directoryByLogin = {};
 let personEntries = [];
+// Only a member (a socio now) can be signed up, and only one can have material lent: those are who
+// the pickers for that offer.
+let memberEntries = [];
 
 async function loadDirectory() {
   try {
     const directory = await apiFetch('/users/directory');
     directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
-    personEntries = directory
+    const sorted = directory
       .slice()
       .sort((a, b) =>
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
-      )
-      .map((person) => ({
-        id: person.login,
-        label: `${person.first_name} ${person.last_name} #${person.login}`,
-      }));
+      );
+    const entryOf = (person) => ({
+      id: person.login,
+      label: `${person.first_name} ${person.last_name} #${person.login}`,
+    });
+    personEntries = sorted.map(entryOf);
+    memberEntries = sorted.filter((person) => person.member).map(entryOf);
     const loanUserOptions = document.getElementById('loan-user-options');
-    if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(personEntries);
+    if (loanUserOptions) loanUserOptions.innerHTML = renderPickerOptions(memberEntries);
     const leaderOptions = document.getElementById('ea-leader-options');
     if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
   } catch {
     directoryByLogin = {};
     personEntries = [];
+    memberEntries = [];
   }
 }
 
@@ -242,7 +248,8 @@ function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
-      <span>${personName(p.user_login, name)}${p.role === 'leader' ? ' · organizador' : ''}</span>
+      <span>${personName(p.user_login, name)}${p.role === 'leader' ? ' · organizador' : ''}
+        ${p.federated ? '<span class="badge status-completed">Federado</span>' : '<span class="badge">No federado</span>'}</span>
       ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
   `;
@@ -274,7 +281,7 @@ async function loadParticipants(ready = Promise.resolve()) {
     const optionsEl = document.getElementById('participant-options');
     if (optionsEl) {
       const alreadyInSet = new Set(participants.map((p) => p.user_login));
-      const candidates = personEntries.filter((entry) => !alreadyInSet.has(entry.id));
+      const candidates = memberEntries.filter((entry) => !alreadyInSet.has(entry.id));
       optionsEl.innerHTML = renderPickerOptions(candidates);
     }
   } catch (err) {
@@ -304,7 +311,7 @@ document.getElementById('leave-activity').addEventListener('click', async () => 
 
 document.getElementById('add-participant')?.addEventListener('click', async () => {
   const input = document.getElementById('participant-search');
-  const login = resolvePickerId(personEntries, input.value);
+  const login = resolvePickerId(memberEntries, input.value);
   if (!login) {
     showError('Escribe un nombre de la lista de socios.');
     return;
@@ -594,7 +601,7 @@ newLoanForm?.addEventListener('submit', async (event) => {
   const userInput = document.getElementById('loan-user');
   let login = null;
   if (userInput.value.trim()) {
-    login = resolvePickerId(personEntries, userInput.value);
+    login = resolvePickerId(memberEntries, userInput.value);
     if (!login) {
       showError('Elige un socio de la lista, o déjalo vacío.');
       return;

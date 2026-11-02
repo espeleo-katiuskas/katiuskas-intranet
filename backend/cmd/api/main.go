@@ -188,12 +188,12 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	authenticator := auth.NewAuthenticator(tokensService)
 
 	activitiesRepo := activities.NewRepository(repoPool)
-	activitiesService := activities.NewService(activitiesRepo, licensesService)
+	activitiesService := activities.NewService(activitiesRepo, licensesService, rolesService)
 
 	distributionsService := distributions.NewService(distributions.NewRepository(repoPool))
 
 	inventoryRepo := inventory.NewRepository(repoPool)
-	inventoryService := inventory.NewService(inventoryRepo)
+	inventoryService := inventory.NewService(inventoryRepo, rolesService)
 
 	libraryService, err := library.NewService(cfg.LibraryRoot)
 	if err != nil {

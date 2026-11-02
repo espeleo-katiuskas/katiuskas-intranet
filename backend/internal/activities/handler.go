@@ -198,8 +198,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
 		return
 	}
-	if errors.Is(err, ErrNotFederated) {
-		httpapi.WriteError(w, http.StatusConflict, "not_federated", err.Error())
+	if errors.Is(err, ErrNotMember) {
+		httpapi.WriteError(w, http.StatusConflict, "not_a_member", err.Error())
 		return
 	}
 	if err != nil {
@@ -469,8 +469,8 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
 		return
 	}
-	if errors.Is(err, ErrNotFederated) {
-		httpapi.WriteError(w, http.StatusConflict, "not_federated", err.Error())
+	if errors.Is(err, ErrNotMember) {
+		httpapi.WriteError(w, http.StatusConflict, "not_a_member", err.Error())
 		return
 	}
 	if err != nil {

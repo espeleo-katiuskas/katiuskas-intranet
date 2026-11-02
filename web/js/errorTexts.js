@@ -90,8 +90,8 @@ const texts = {
   // Activities
   invalid_visibility: 'La visibilidad no es válida.',
   duplicate_holiday: 'Ya hay un festivo en esa fecha.',
-  not_federated:
-    'Solo un socio con la licencia federativa en vigor puede apuntarse a una actividad de espeleología o cañones.',
+  not_a_member:
+    'Solo un socio puede apuntarse a una actividad (y quien la apunta tiene que serlo).',
   unknown_participant: 'Alguno de los participantes no existe.',
   title_required: 'Hace falta un título.',
   description_required: 'Un recurso de texto necesita una descripción.',
@@ -112,6 +112,8 @@ const texts = {
   not_rentable: 'Este material no se puede alquilar (no tiene precio de alquiler).',
   not_sellable: 'Este material no se puede vender (no tiene precio de venta).',
   return_exceeds_loaned: 'No se puede devolver más de lo que hay prestado para esta actividad.',
+  recipient_not_member: 'Un préstamo o un alquiler solo puede ser para un socio.',
+  recipient_not_member_or_former: 'Una venta solo puede ser para un socio o un antiguo socio.',
   recipient_not_allowed: 'Las altas, pérdidas, abandonos y retiradas no tienen destinatario.',
 
   // Accounting

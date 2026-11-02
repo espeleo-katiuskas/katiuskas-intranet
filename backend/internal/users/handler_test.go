@@ -913,3 +913,31 @@ func TestHandlerListExposesLastDueYearButNotItsDateToAPlainMember(t *testing.T) 
 		t.Errorf("expected admin's listing to include %s", target.Login)
 	}
 }
+
+// The directory says who is a member now and who was one, so a picker can offer only whom a thing is
+// open to.
+func TestHandlerDirectoryFlagsMembersAndFormerMembers(t *testing.T) {
+	mux, resolver, _, _, _, tx := newTestServerWithLicenses(t)
+	member := testutil.InsertMember(t, tx)
+	never := testutil.InsertUser(t, tx, "")
+	former := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, CURRENT_DATE - 400, CURRENT_DATE - 30)`, former.ID); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(mux, http.MethodGet, "/api/v1/users/directory", testutil.TokenFor(resolver, member.ID, "member"), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("directory: %d %s", rec.Code, rec.Body.String())
+	}
+	var entries []users.DirectoryEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2]bool{}
+	for _, e := range entries {
+		got[e.Login] = [2]bool{e.Member, e.FormerMember}
+	}
+	if got[member.Login] != [2]bool{true, false} || got[former.Login] != [2]bool{false, true} || got[never.Login] != [2]bool{false, false} {
+		t.Errorf("flags: member %v, former %v, never %v", got[member.Login], got[former.Login], got[never.Login])
+	}
+}

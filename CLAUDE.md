@@ -159,8 +159,8 @@ inventory movements: admin, board or `material`. **Whatever `material` can do, `
 can do too**: a route or check that names `material` always names `board` with it.
 
 **Activities.** Mandatory `leader_id`; only the organizer, admin and board edit or cancel; naming or
-changing the organizer is admin/board only. `caving`/`canyoning` need a current federative license
-(`not_federated`). `private` visibility restricts who adds and removes participants. Memoria resources
+changing the organizer is admin/board only. **Only a `member` (a socio now) can be signed up to any
+activity, of any type, federated or not (409 `not_a_member`)**; the participants list says who is federated. `private` visibility restricts who adds and removes participants. Memoria resources
 (`activityresources`): metadata in Postgres, file bytes on disk keyed by the row id, created once with
 `O_EXCL` and **never rewritten** — other directory trees share them by hard link, so a rewrite in place
 would corrupt both.

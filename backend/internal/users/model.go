@@ -243,14 +243,20 @@ type UpdateInput struct {
 // person out of a list — e.g. an activity's leader or participants —
 // without exposing the personal data GET /users returns to admin/board.
 type DirectoryEntry struct {
+	Identity
+	// Member says whether the person is a socio now, and FormerMember whether they were and are not
+	// any more (the two automatic roles of the same names), so a picker can offer only who a
+	// thing is open to: an activity or a loan or rental, only to a member; a sale, to either.
+	Member       bool `json:"member"`
+	FormerMember bool `json:"former_member"`
+}
+
+// Identity is who somebody is — login and name — as GET /auth/me says it.
+type Identity struct {
 	Login     string `json:"login"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 }
-
-// Identity is who somebody is — login and name — as GET /auth/me says it: the
-// same three fields as a directory entry.
-type Identity = DirectoryEntry
 
 // MemberListing is what GET /users returns to a caller who's a plain
 // member (not admin or board): no DNI, address, contact info, or

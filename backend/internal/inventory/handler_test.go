@@ -35,8 +35,8 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx)
 // care about mutation notifications.
 func newTestServerWithServices(t *testing.T, notifier httpapi.MutationNotifier) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *inventory.Service, *users.Service) {
 	tx := testutil.NewTx(t)
-	service := inventory.NewService(inventory.NewRepository(tx))
 	rolesService := roles.NewService(roles.NewRepository(tx))
+	service := inventory.NewService(inventory.NewRepository(tx), rolesService)
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
@@ -189,10 +189,10 @@ func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 // board), isn't enough for the material endpoints either.
 func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
-	materialOnlyUser := testutil.InsertUser(t, tx, "")
-	materialMemberUser := testutil.InsertUser(t, tx, "")
-	memberUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
+	materialOnlyUser := testutil.InsertMember(t, tx)
+	materialMemberUser := testutil.InsertMember(t, tx)
+	memberUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	materialOnlyToken := tokenFor(t, authn, materialOnlyUser.ID, "material")
 	materialMemberToken := tokenFor(t, authn, materialMemberUser.ID, "material", "member")
@@ -207,7 +207,7 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 		t.Fatalf("decode item: %v", err)
 	}
 	activityID := testutil.InsertActivity(t, tx)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
@@ -246,9 +246,9 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 
 func TestHandlerListMovementsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
-	target := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
+	target := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	targetToken := tokenFor(t, authn, target.ID, "member")
 	otherToken := tokenFor(t, authn, other.ID, "member")
@@ -300,7 +300,7 @@ func TestHandlerCreateMovementRequiresActivityForLoan(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
@@ -381,7 +381,7 @@ func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	if item.Loanable {
 		t.Fatalf("expected the created item to be non-loanable, got %+v", item)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	body := map[string]any{
@@ -420,7 +420,7 @@ func TestHandlerCreateMovementRejectsRentalOfNonRentableItem(t *testing.T) {
 	if item.Rentable {
 		t.Fatalf("expected the created item not to be rentable with no rental price given, got %+v", item)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
@@ -451,7 +451,7 @@ func TestHandlerCreateMovementRejectsSaleOfNonSellableItem(t *testing.T) {
 	if item.Sellable {
 		t.Fatalf("expected the created item not to be sellable with no sale price given, got %+v", item)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "sale", "quantity": 1}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
@@ -555,7 +555,7 @@ func TestHandlerCreateMovementRequiresLoginForRental(t *testing.T) {
 // the mandatory link, not necessarily one specific person.
 func TestHandlerCreateMovementAllowsLoanWithoutLogin(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	activityID := testutil.InsertActivity(t, tx)
 
@@ -580,7 +580,7 @@ func TestHandlerCreateMovementAllowsLoanWithoutLogin(t *testing.T) {
 // socio.
 func TestHandlerCreateMovementAllowsSaleWithoutLogin(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
@@ -605,7 +605,7 @@ func TestHandlerCreateMovementAllowsSaleWithoutLogin(t *testing.T) {
 func TestHandlerCreateMovementRejectsLoginForAcquisition(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
@@ -631,7 +631,7 @@ func TestHandlerCreateMovementRejectsLoginForAcquisition(t *testing.T) {
 // board member can log one without naming any socio.
 func TestHandlerCreateMovementAllowsAcquisitionWithoutLogin(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
@@ -693,9 +693,9 @@ func TestHandlerCreateMovementRejectsAcquisitionOnRope(t *testing.T) {
 // next, each its own POST against the same item and activity.
 func TestHandlerReturnTypeSupportsPartialQuantities(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 30))
@@ -754,9 +754,9 @@ func TestHandlerReturnTypeSupportsPartialQuantities(t *testing.T) {
 
 func TestHandlerReturnTypeRejectsOverReturn(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
@@ -815,9 +815,9 @@ func TestHandlerReturnTypeRequiresActivity(t *testing.T) {
 // outstanding item by item.
 func TestHandlerListMovementsByActivity(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 	otherActivityID := testutil.InsertActivity(t, tx)
 
@@ -857,7 +857,7 @@ func TestHandlerListMovementsByActivity(t *testing.T) {
 func TestHandlerCreateItemNotifiesTelegram(t *testing.T) {
 	notifier := &fakeNotifier{}
 	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
@@ -880,9 +880,9 @@ func TestHandlerCreateItemNotifiesTelegram(t *testing.T) {
 func TestHandlerCreateMovementNotifiesTelegramWithBorrower(t *testing.T) {
 	notifier := &fakeNotifier{}
 	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	borrower := testutil.InsertUser(t, tx, "")
+	borrower := testutil.InsertMember(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
@@ -916,9 +916,9 @@ func TestHandlerCreateMovementNotifiesTelegramWithBorrower(t *testing.T) {
 func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 	notifier := &fakeNotifier{}
 	mux, authn, tx, _, _ := newTestServerWithServices(t, notifier)
-	boardUser := testutil.InsertUser(t, tx, "")
+	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
-	borrower := testutil.InsertUser(t, tx, "")
+	borrower := testutil.InsertMember(t, tx)
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
@@ -1061,5 +1061,54 @@ func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
 	delete(own, "item_type")
 	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
 		t.Errorf("editing with its own code: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// A loan or a rental is only for a member; a sale, for a member or a former member; nobody else.
+func TestHandlerMovementRecipientsMustBeMembers(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardUser := testutil.InsertMember(t, tx)
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	member := testutil.InsertMember(t, tx)
+	never := testutil.InsertUser(t, tx, "")
+	former := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, CURRENT_DATE - 400, CURRENT_DATE - 30)`, former.ID); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 20))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item inventory.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	activityID := testutil.InsertActivity(t, tx)
+
+	move := func(kind string, who testutil.TestUser) *httptest.ResponseRecorder {
+		body := map[string]any{"item_id": item.ID, "type": kind, "quantity": 1, "login": who.Login}
+		if kind == "loan" || kind == "return" {
+			body["activity_id"] = activityID
+		}
+		return doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	}
+	for _, kind := range []string{"loan", "rental"} {
+		if rec := move(kind, member); rec.Code != http.StatusCreated {
+			t.Errorf("%s to a member: %d %s", kind, rec.Code, rec.Body.String())
+		}
+		for name, who := range map[string]testutil.TestUser{"a former member": former, "somebody who never was a member": never} {
+			if rec := move(kind, who); rec.Code != http.StatusConflict || errorCode(t, rec) != "recipient_not_member" {
+				t.Errorf("%s to %s: %d %s", kind, name, rec.Code, rec.Body.String())
+			}
+		}
+	}
+	for name, who := range map[string]testutil.TestUser{"a member": member, "a former member": former} {
+		if rec := move("sale", who); rec.Code != http.StatusCreated {
+			t.Errorf("sale to %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := move("sale", never); rec.Code != http.StatusConflict || errorCode(t, rec) != "recipient_not_member_or_former" {
+		t.Errorf("sale to somebody who never was a member: %d %s", rec.Code, rec.Body.String())
 	}
 }

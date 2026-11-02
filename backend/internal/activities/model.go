@@ -26,14 +26,6 @@ func (t Type) Valid() bool {
 	return false
 }
 
-// RequiresFederation reports whether joining an activity of this type
-// requires a currently valid federative license — see
-// Service.checkFederationRequired. Caving and canyoning both go through
-// terrain a federation covers people for; the others don't.
-func (t Type) RequiresFederation() bool {
-	return t == TypeCaving || t == TypeCanyoning
-}
-
 type Visibility string
 
 const (
@@ -104,6 +96,9 @@ type Participant struct {
 	UserLogin  string `json:"user_login"`
 	Role       string `json:"role"`
 	Confirmed  bool   `json:"confirmed"`
+	// Federated says whether the person has a federative license for the current year. It is only
+	// information: any member can join any activity, federated or not.
+	Federated bool `json:"federated"`
 }
 
 // Holiday is a club holiday — the calendar view (see GET /holidays)

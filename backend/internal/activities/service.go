@@ -8,35 +8,36 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 )
 
-// ErrNotFederated means one of the given participants doesn't currently
-// hold a valid federative license, required to join a caving or
-// canyoning activity (see Type.RequiresFederation).
-var ErrNotFederated = errors.New("only a currently federated member can join a caving or canyoning activity")
+// ErrNotMember means one of the people to sign up is not a member (a socio) now: anybody who is
+// can join any activity, whatever its type and whether or not they are federated, and only them.
+var ErrNotMember = errors.New("only a member can join an activity")
+
+// RoleLookup says whether a person holds a role, the automatic ones included — roles.Service
+// satisfies it structurally (see main.go's wiring).
+type RoleLookup interface {
+	HasAnyRole(ctx context.Context, userID int64, names ...string) (bool, error)
+}
 
 type Service struct {
 	repo     *Repository
 	licenses *licenses.Service
+	roles    RoleLookup
 }
 
-func NewService(repo *Repository, licensesService *licenses.Service) *Service {
-	return &Service{repo: repo, licenses: licensesService}
+func NewService(repo *Repository, licensesService *licenses.Service, roles RoleLookup) *Service {
+	return &Service{repo: repo, licenses: licensesService, roles: roles}
 }
 
-// checkFederationRequired verifies that every given user is currently
-// federated, if the activity type requires it. Called both when an
-// activity is created with initial participants and when someone joins
-// one afterwards.
-func (s *Service) checkFederationRequired(ctx context.Context, t Type, userIDs []int64) error {
-	if !t.RequiresFederation() {
-		return nil
-	}
+// checkMembers verifies that every given user is a member now. Called both when an activity is
+// created with initial participants and when someone is signed up afterwards.
+func (s *Service) checkMembers(ctx context.Context, userIDs []int64) error {
 	for _, userID := range userIDs {
-		federated, err := s.licenses.IsCurrentlyFederated(ctx, userID)
+		member, err := s.roles.HasAnyRole(ctx, userID, "member")
 		if err != nil {
 			return err
 		}
-		if !federated {
-			return ErrNotFederated
+		if !member {
+			return ErrNotMember
 		}
 	}
 	return nil
@@ -49,7 +50,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	if !in.Visibility.Valid() {
 		return Activity{}, ErrInvalidVisibility
 	}
-	if err := s.checkFederationRequired(ctx, in.Type, in.ParticipantUserIDs); err != nil {
+	if err := s.checkMembers(ctx, in.ParticipantUserIDs); err != nil {
 		return Activity{}, err
 	}
 	return s.repo.Create(ctx, in)
@@ -100,11 +101,10 @@ func (s *Service) Cancel(ctx context.Context, id int64) error {
 }
 
 func (s *Service) Join(ctx context.Context, activityID, userID int64) error {
-	activity, err := s.repo.GetByID(ctx, activityID)
-	if err != nil {
+	if _, err := s.repo.GetByID(ctx, activityID); err != nil {
 		return err
 	}
-	if err := s.checkFederationRequired(ctx, activity.Type, []int64{userID}); err != nil {
+	if err := s.checkMembers(ctx, []int64{userID}); err != nil {
 		return err
 	}
 	return s.repo.AddParticipant(ctx, activityID, userID)
@@ -114,8 +114,24 @@ func (s *Service) Leave(ctx context.Context, activityID, userID int64) error {
 	return s.repo.RemoveParticipant(ctx, activityID, userID)
 }
 
+// ListParticipants lists who is signed up, each saying whether they are federated this year.
 func (s *Service) ListParticipants(ctx context.Context, activityID int64) ([]Participant, error) {
-	return s.repo.ListParticipants(ctx, activityID)
+	list, err := s.repo.ListParticipants(ctx, activityID)
+	if err != nil || len(list) == 0 {
+		return list, err
+	}
+	ids := make([]int64, len(list))
+	for i, p := range list {
+		ids[i] = p.UserID
+	}
+	federated, err := s.licenses.CurrentByUsers(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		_, list[i].Federated = federated[list[i].UserID]
+	}
+	return list, nil
 }
 
 func (s *Service) IsParticipant(ctx context.Context, activityID, userID int64) (bool, error) {

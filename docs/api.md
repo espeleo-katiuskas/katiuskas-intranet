@@ -156,7 +156,9 @@ A person is always identified by their `login`, never by a numeric id.
   - errors: 400 `invalid_body`, `invalid_date`, `unknown_role`, `role_names`, `automatic_role`,
     `former_member`; 409 `duplicate`
 - **GET** `/users/directory` — *Any baseline role*. Only `login`, first name and last name of
-  everyone, to pick someone in a selector.
+  everyone, and whether they are a `member` now or a `former_member`, to pick someone in a selector
+  (an activity is only for members, a loan or a rental too, a sale is for members and former
+  members).
   - returns: 200 `[DirectoryEntry]`
 - **GET** `/users/{login}` — *The person themselves, admin or board*. Full record of a person.
   - returns: 200 `User`
@@ -319,8 +321,8 @@ Directiva).
 ## Activities
 
 - **GET** `/activities` — *Any baseline role*. Paged list, most recent first. `active=true` leaves
-  only the ones that still need attention: those not cancelled whose `end_date` is today or later, and
-  any (even over or cancelled) with a loan or rental of material not yet returned.
+  only the ones that still need attention: those not cancelled whose `end_date` is today or later,
+  and any (even over or cancelled) with a loan or rental of material not yet returned.
   - query: `active`, `order`, `limit`, `offset`
   - returns: 200 `[Activity]`
 - **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if
@@ -330,17 +332,17 @@ Directiva).
   - returns: 201 `Activity`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`, `unknown_participant`; 403 `forbidden`; 404 `not_found`; 409
-    `not_federated`
+    `not_a_member` (a participant who is not a member now)
 - **GET** `/activities/{id}` — *Any baseline role*. One activity.
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`
 - **PATCH** `/activities/{id}` — *Organizer, admin or board*. Modifies an activity. Changing the
   organizer is only for admin or board.
-  - body: `title`, `type`, `start_date`, `end_date`, `description`, `status`, `visibility`,
+  - body: `title`, `type`, `start_date`, `end_date`, `description`, `cancelled`, `visibility`,
     `leader_login`
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
-    `invalid_status`, `invalid_visibility`; 403 `forbidden`; 404 `not_found`
+    `invalid_visibility`; 403 `forbidden`; 404 `not_found`
 - **DELETE** `/activities/{id}` — *Organizer, admin or board*. Cancels an activity.
   - returns: 204
   - errors: 400 `invalid_id`
@@ -349,11 +351,11 @@ Directiva).
   - errors: 400 `invalid_id`
 - **POST** `/activities/{id}/participants` — *Depends on the visibility*. Sign up, or sign up
   another person. In a public one each person signs themselves up; in a private one only the
-  organizer, admin or board. Caving and canyoning ones require a license for the year
-  (`not_federated`).
+  organizer, admin or board. Only a member (a socio now) can be signed up, to any type of activity,
+  federated or not.
   - body: `login`
   - returns: 204
-  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `not_federated`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `not_a_member`
 - **DELETE** `/activities/{id}/participants/{login}` — *Depends on the visibility*. Leave the
   activity, or remove another person (admin or board, or the organizer in a private one).
   - returns: 204
@@ -421,8 +423,8 @@ files (up to 25 MiB).
     `single_unit_item`, `invalid_item_fields`; 409 `duplicate_item_code`
 - **PATCH** `/items/{id}` — *Admin, board or material*. Edits an item: replaces every editable field
   with the body's (the brand, model, code, description, `loanable`, prices and the rope, bag or gear
-  fields of its type). Its type and its quantities, which only movements change, are not editable (an
-  `item_type` or `total_quantity` in the body is ignored).
+  fields of its type). Its type and its quantities, which only movements change, are not editable
+  (an `item_type` or `total_quantity` in the body is ignored).
   - body: the same as creating, without `item_type`, `acquired_at` and `total_quantity`
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_category`, `invalid_item_fields`; 404
@@ -443,7 +445,9 @@ files (up to 25 MiB).
   - returns: 201 `Movement`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_type`, `login_required`,
     `recipient_not_allowed`, `activity_required`; 404 `not_found`; 409 `insufficient_stock`,
-    `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`
+    `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`,
+    `recipient_not_member` (a loan or a rental for somebody who is not a member now),
+    `recipient_not_member_or_former` (a sale for somebody who is neither a member nor a former one)
 - **PATCH** `/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
   - returns: 200 `Movement`
   - errors: 400 `invalid_id`; 404 `not_found`
@@ -837,6 +841,8 @@ Nested fields:
 | `login` | text |
 | `first_name` | text |
 | `last_name` | text |
+| `member` | boolean |
+| `former_member` | boolean |
 
 ### `CreateUserInput`
 
@@ -993,6 +999,7 @@ Nested fields:
 | `user_login` | text |
 | `role` | leader/participant |
 | `confirmed` | boolean |
+| `federated` | boolean |
 
 ### `Distribution`
 

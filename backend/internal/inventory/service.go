@@ -5,12 +5,19 @@ import (
 	"time"
 )
 
-type Service struct {
-	repo *Repository
+// RoleLookup says whether a person holds a role, the automatic ones included — roles.Service
+// satisfies it structurally (see main.go's wiring).
+type RoleLookup interface {
+	HasAnyRole(ctx context.Context, userID int64, names ...string) (bool, error)
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+type Service struct {
+	repo  *Repository
+	roles RoleLookup
+}
+
+func NewService(repo *Repository, roles RoleLookup) *Service {
+	return &Service{repo: repo, roles: roles}
 }
 
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {
@@ -39,6 +46,27 @@ func (s *Service) CreateMovement(ctx context.Context, in CreateMovementInput) (M
 	}
 	if in.TransactedAt.IsZero() {
 		in.TransactedAt = time.Now()
+	}
+	// Who can have material: a loan or a rental, only a member; a sale, a member or a former member.
+	if in.UserID != nil {
+		switch in.Type {
+		case MovementLoan, MovementRental:
+			member, err := s.roles.HasAnyRole(ctx, *in.UserID, "member")
+			if err != nil {
+				return Movement{}, err
+			}
+			if !member {
+				return Movement{}, ErrRecipientNotMember
+			}
+		case MovementSale:
+			ok, err := s.roles.HasAnyRole(ctx, *in.UserID, "member", "former_member")
+			if err != nil {
+				return Movement{}, err
+			}
+			if !ok {
+				return Movement{}, ErrRecipientNotMemberOrFormer
+			}
+		}
 	}
 	return s.repo.CreateMovement(ctx, in)
 }

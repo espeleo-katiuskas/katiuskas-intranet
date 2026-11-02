@@ -308,6 +308,25 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 	return TestUser{ID: id, Login: login, Email: email, Phone: phone}
 }
 
+// MakeMember gives a person a current membership (they became a socio a year ago), so that they are
+// a member (the automatic role) for whatever a test needs one for: signing up to an activity, or
+// receiving a loan or a rental.
+func MakeMember(t *testing.T, tx pgx.Tx, userID int64) {
+	t.Helper()
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO memberships (user_id, start_date) VALUES ($1, CURRENT_DATE - 365)`, userID); err != nil {
+		t.Fatalf("make member: %v", err)
+	}
+}
+
+// InsertMember is InsertUser for somebody who is a member now.
+func InsertMember(t *testing.T, tx pgx.Tx) TestUser {
+	t.Helper()
+	u := InsertUser(t, tx, "")
+	MakeMember(t, tx, u.ID)
+	return u
+}
+
 // InsertActivity inserts a bare-bones activity, for tests that need a real
 // activities.id to satisfy a foreign key — namely a loan or return
 // movement, which the activity_required_for_loan_and_return CHECK

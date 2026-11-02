@@ -455,8 +455,10 @@ paths:
       description: >
         Open to any authenticated user, including one who'd only get
         MemberListing from GET /users. Returns just login, first_name and
-        last_name — enough to populate a picker (e.g. an activity's leader
-        or participants) without exposing anything more.
+        last_name, and whether the person is a member now or a former
+        member — enough to populate a picker (an activity's participants
+        and a loan or a rental are only for members, a sale for members and
+        former members) without exposing anything more.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -1456,8 +1458,7 @@ paths:
           description: not_found — leader_login doesn't belong to anyone.
         "409":
           description: >
-            not_federated — the activity is caving or canyoning and one of
-            the given participant_logins isn't currently federated.
+            not_a_member — one of the given participant_logins isn't a member now.
 
   /activities/{id}:
     get:
@@ -1538,9 +1539,9 @@ paths:
         them on that person's behalf. On a private activity, only the
         organizer, board, or admin may call this at all — even to sign up
         the caller themselves; anyone else gets a 403 regardless of whose
-        login they name. If the activity's type is caving or canyoning,
-        the person being added must currently hold a valid federative
-        license, or the call is rejected with 409 not_federated.
+        login they name. The person being added must be a member now (of
+        any activity type, federated or not), or the call is rejected
+        with 409 not_a_member.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1564,8 +1565,7 @@ paths:
         "404": { description: not_found — no such activity, or the given login doesn't belong to anyone. }
         "409":
           description: >
-            not_federated — the activity is caving or canyoning and the
-            person being added isn't currently federated.
+            not_a_member — the person being added isn't a member now.
 
   /activities/{id}/participants/{login}:
     delete:
@@ -3143,8 +3143,11 @@ paths:
             loan, not_rentable/not_sellable (the item has no
             rental_price_per_week/sale_price on file) for a rental or
             sale, single_unit_item (an acquisition against a rope or
-            bag item), or return_exceeds_loaned (a return larger than
-            what this item still has outstanding for this activity).
+            bag item), return_exceeds_loaned (a return larger than
+            what this item still has outstanding for this activity),
+            recipient_not_member (a loan or a rental for somebody who
+            is not a member now) or recipient_not_member_or_former (a
+            sale for somebody who is neither a member nor a former one).
 
   /movements/{id}/return:
     patch:
@@ -4013,6 +4016,8 @@ components:
         login: { type: string }
         first_name: { type: string }
         last_name: { type: string }
+        member: { type: boolean, description: "A socio now (the automatic role `member`)." }
+        former_member: { type: boolean, description: "Was a socio and is not now (the automatic role `former_member`)." }
 
     CreateUserInput:
       allOf:
@@ -4264,6 +4269,7 @@ components:
         user_login: { type: string }
         role: { type: string, enum: [leader, participant] }
         confirmed: { type: boolean }
+        federated: { type: boolean, description: "Has a federative license for the current year. Only information: any member can join any activity." }
 
     Distribution:
       type: object

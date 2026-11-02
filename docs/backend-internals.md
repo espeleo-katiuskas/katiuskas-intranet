@@ -287,22 +287,21 @@ so a route or check that names `material` always names `board` with it.
 ## Activities
 
 **Activities**: every activity has a mandatory `leader_id` (exposed as `leader_login`; the
-organizer, defaulting to whoever creates it) who, along with admin/board, is the only one
-who can edit or cancel it (`Handler.canManage`). admin/board can instead name someone else
-as `leader_login` at creation time, or reassign an existing activity's organizer via
-`PATCH` — the current organizer can't do either for themselves, even though they can edit
-every other field. Its `type`
-(`caving`/`canyoning`/`training`/`social`/`other`) gates a federation check: joining — or
-being named as an initial participant at creation time — a `caving`/`canyoning` activity
-requires a currently valid federative license (`licenses.Service.IsCurrentlyFederated`),
-else 409 `not_federated`. Its `visibility` (`public`, the default, or `private`) gates who
-may add a participant at all, not just who may join: public works as it always has (anyone
-can sign themselves up, admin/board can add anyone else); private restricts adding
-*anyone* — self included — to the organizer, board, or admin (`Handler.join`).
-Removing one (`Handler.leave`, `DELETE .../participants/{login}`) mirrors this: a plain
-member can only remove themselves regardless of visibility, but a private activity's own
-organizer can remove anyone, the same as they can add anyone — on a public one they get no
-such extra say, same as for adding.
+organizer, defaulting to whoever creates it) who, along with admin/board, is the only one who can
+edit or cancel it (`Handler.canManage`). admin/board can instead name someone else as `leader_login`
+at creation time, or reassign an existing activity's organizer via `PATCH` — the current organizer
+can't do either for themselves, even though they can edit every other field. Whatever its `type`
+(`caving`/`canyoning`/`training`/`social`/`other`), joining — or being named as an initial
+participant at creation time — requires being a member now (`Service.checkMembers`, through the
+`RoleLookup` that `roles.Service` satisfies), else 409 `not_a_member`; being federated is not
+required, and `GET .../participants` only says for each whether they are (`federated`, one
+`licenses.Service.CurrentByUsers` query for all of them). Its `visibility` (`public`, the default,
+or `private`) gates who may add a participant at all, not just who may join: public works as it
+always has (anyone can sign themselves up, admin/board can add anyone else); private restricts
+adding *anyone* — self included — to the organizer, board, or admin (`Handler.join`). Removing one
+(`Handler.leave`, `DELETE .../participants/{login}`) mirrors this: a plain member can only remove
+themselves regardless of visibility, but a private activity's own organizer can remove anyone, the
+same as they can add anyone — on a public one they get no such extra say, same as for adding.
 
 ## Activity resources (memoria)
 

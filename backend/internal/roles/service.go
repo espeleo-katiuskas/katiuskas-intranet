@@ -39,6 +39,23 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// HasAnyRole reports whether the person holds at least one of the given roles, the automatic ones
+// (member, former_member, board) included, resolved live.
+func (s *Service) HasAnyRole(ctx context.Context, userID int64, names ...string) (bool, error) {
+	have, err := s.ListNamesForUser(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, h := range have {
+		for _, want := range names {
+			if h == want {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func (s *Service) ListNamesForUser(ctx context.Context, userID int64) ([]string, error) {
 	return s.repo.ListNamesForUser(ctx, userID)
 }

@@ -701,12 +701,15 @@ only admin/board), who can also sign up the initial participants in one go.
   compared with the already merged values, so sending only one of the two dates is fine. The
   database constraint `end_not_before_start` remains as the last barrier.
 
-**Federation**
+**Who can take part**
 
-- Signing up a participant in a `caving` or `canyoning` activity requires that person to have a
-  federative license of the current year (`licenses.Service.IsCurrentlyFederated`); otherwise, 409
-  `not_federated`. It applies both when joining later and when signing up initial participants at
-  creation.
+- Any `member` (a socio now) can be signed up to any activity, whatever its type (caving, canyoning
+  or any other), and only a member: somebody who is not one (never was, or is a former member) is
+  refused with 409 `not_a_member`, whoever signs them up and whether it is when joining later or
+  when naming initial participants at creation.
+- Being federated is not required for any type. The list of participants says, for each, whether
+  they have a federative license of the current year (`federated`, from `licenses.Service`), as
+  information.
 
 **Visibility and participants**
 
@@ -785,10 +788,13 @@ prevent meaningless combinations (a sale with a return date, for example).
   view).
 
 **Permissions**: creating or modifying a movement requires `admin`, `board` or the optional role
-`material`, which is seeded but is not a system one (a club that does not want that distinction
-can delete it and keep using `board`); adding gear to the catalog (and the categories its form
-offers) and editing it (`PATCH /items/{id}`: not its type, and not its quantities, which only
-movements change) is for the same three. An item's `code` is unique (409 `duplicate_item_code`).
+`material`, which is seeded but is not a system one (a club that does not want that distinction can
+delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
+loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
+is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding gear to the
+catalog (and the categories its form offers) and editing it (`PATCH /items/{id}`: not its type, and
+not its quantities, which only movements change) is for the same three. An item's `code` is unique
+(409 `duplicate_item_code`).
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,

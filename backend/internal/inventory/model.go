@@ -31,8 +31,7 @@ const (
 )
 
 // RopeType is a rope's discipline: caving over rock and mud, canyoning
-// through water — the two disciplines the club's federative license
-// (licenses.Type.RequiresFederation) also distinguishes.
+// through water.
 type RopeType string
 
 const (

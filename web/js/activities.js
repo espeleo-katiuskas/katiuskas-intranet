@@ -20,23 +20,28 @@ await initPage();
 // per-activity participant management lives on /actividad?id=… instead.
 let directoryByLogin = {};
 let personEntries = [];
+// Only a member can be signed up to an activity, so the participants picker offers only them.
+let memberEntries = [];
 
 async function loadDirectory() {
   try {
     const directory = await apiFetch('/users/directory');
     directoryByLogin = Object.fromEntries(directory.map((person) => [person.login, person]));
-    personEntries = directory
+    const sorted = directory
       .slice()
       .sort((a, b) =>
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
-      )
-      .map((person) => ({
-        id: person.login,
-        label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
-      }));
+      );
+    const entryOf = (person) => ({
+      id: person.login,
+      label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+    });
+    personEntries = sorted.map(entryOf);
+    memberEntries = sorted.filter((person) => person.member).map(entryOf);
   } catch {
     directoryByLogin = {};
     personEntries = [];
+    memberEntries = [];
   }
 }
 
@@ -131,7 +136,7 @@ function renderParticipantChips() {
 }
 
 function addChosenParticipant() {
-  const login = resolvePickerId(personEntries, participantSearchInput.value);
+  const login = resolvePickerId(memberEntries, participantSearchInput.value);
   if (!login) {
     showError('Escribe un nombre de la lista de socios.');
     return;
@@ -162,7 +167,7 @@ participantChips.addEventListener('click', (event) => {
 // drawing, so the organizer column has names to show on first paint instead of
 // falling back to "Socio n.º …" until a re-render happens.
 const directoryLoaded = loadDirectory().then(() => {
-  participantOptions.innerHTML = renderPickerOptions(personEntries);
+  participantOptions.innerHTML = renderPickerOptions(memberEntries);
   const leaderOptions = document.getElementById('na-leader-options');
   if (leaderOptions) leaderOptions.innerHTML = renderPickerOptions(personEntries);
 });

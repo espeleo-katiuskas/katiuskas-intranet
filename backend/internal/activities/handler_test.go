@@ -77,7 +77,7 @@ func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, p
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
-	service := activities.NewService(activities.NewRepository(tx), licensesService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
@@ -96,7 +96,7 @@ func newTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResol
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
-	service := activities.NewService(activities.NewRepository(tx), licensesService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 
@@ -139,7 +139,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	body := map[string]any{
@@ -159,7 +159,7 @@ func TestHandlerCreateIsOpenToAnyMember(t *testing.T) {
 
 func TestHandlerGet(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
@@ -188,7 +188,7 @@ func TestHandlerGet(t *testing.T) {
 
 func TestHandlerGetNotFound(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodGet, "/api/v1/activities/999999", memberToken, nil)
@@ -199,8 +199,8 @@ func TestHandlerGetNotFound(t *testing.T) {
 
 func TestHandlerListActiveLeavesOutWhatIsOverOrCancelled(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	member := testutil.InsertUser(t, tx, "")
-	admin := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
@@ -265,7 +265,7 @@ func TestHandlerListActiveLeavesOutWhatIsOverOrCancelled(t *testing.T) {
 
 func TestHandlerCreateWithParticipants(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	body := map[string]any{
@@ -289,9 +289,9 @@ func TestHandlerCreateWithParticipants(t *testing.T) {
 
 func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	member := testutil.InsertUser(t, tx, "")
-	admin := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
@@ -323,9 +323,9 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 
 func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	admin := testutil.InsertUser(t, tx, "")
-	person := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertMember(t, tx)
+	person := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 	memberToken := tokenFor(t, authn, other.ID, "member")
 
@@ -356,7 +356,7 @@ func TestHandlerListByUserIsOpenToAnyBaselineUser(t *testing.T) {
 
 func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
@@ -379,8 +379,8 @@ func TestHandlerCreateSetsLeaderIDFromTheCaller(t *testing.T) {
 // creation time instead of always leading it themselves.
 func TestHandlerCreateAllowsBoardToChooseADifferentLeader(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	board := testutil.InsertUser(t, tx, "")
-	organizer := testutil.InsertUser(t, tx, "")
+	board := testutil.InsertMember(t, tx)
+	organizer := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, board.ID, "board")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", boardToken, map[string]any{
@@ -403,8 +403,8 @@ func TestHandlerCreateAllowsBoardToChooseADifferentLeader(t *testing.T) {
 // — leader_login is board/admin only.
 func TestHandlerCreateRejectsMemberChoosingADifferentLeader(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
@@ -418,9 +418,9 @@ func TestHandlerCreateRejectsMemberChoosingADifferentLeader(t *testing.T) {
 
 func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
-	otherMember := testutil.InsertUser(t, tx, "")
-	admin := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	otherMember := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	otherMemberToken := tokenFor(t, authn, otherMember.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
@@ -456,7 +456,7 @@ func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 
 func TestHandlerUpdateCanChangeType(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -486,7 +486,7 @@ func TestHandlerUpdateCanChangeType(t *testing.T) {
 
 func TestHandlerUpdateCanChangeDates(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -526,51 +526,116 @@ func TestHandlerUpdateCanChangeDates(t *testing.T) {
 	}
 }
 
-func TestHandlerJoinRequiresFederationForCavingAndCanyoning(t *testing.T) {
+// Any member can join any activity, whatever its type and whether or not they are federated.
+func TestHandlerAnyMemberJoinsAnyActivityFederatedOrNot(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	admin := testutil.InsertUser(t, tx, "")
-	unfederated := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx) // with no federative license
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
-	unfederatedToken := tokenFor(t, authn, unfederated.ID, "member")
+	memberToken := tokenFor(t, authn, member.ID, "member")
+
+	for _, kind := range []string{"caving", "canyoning", "social", "training", "other"} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+			"title": kind, "type": kind, "start_date": "2026-01-01", "end_date": "2026-01-01",
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s activity: %d: %s", kind, rec.Code, rec.Body.String())
+		}
+		var a activities.Activity
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/participants", a.ID), memberToken, nil)
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("expected an unfederated member to join a %s activity, got %d: %s", kind, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// Only a member (a socio now) can be signed up: not somebody who never was, nor a former member, whoever
+// does it and however it is done.
+func TestHandlerOnlyAMemberCanBeSignedUp(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	admin := testutil.InsertMember(t, tx)
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+	neverMember := testutil.InsertUser(t, tx, "")
+	former := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, CURRENT_DATE - 400, CURRENT_DATE - 30)`, former.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+		"title": "Salida", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	var a activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d/participants", a.ID)
+
+	for name, person := range map[string]testutil.TestUser{"somebody who never was a member": neverMember, "a former member": former} {
+		// Signing up themselves, even with a token that says they are members.
+		rec := doRequest(mux, http.MethodPost, path, tokenFor(t, authn, person.ID, "member"), nil)
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_a_member" {
+			t.Errorf("%s joining: %d %s", name, rec.Code, rec.Body.String())
+		}
+		// Admin adding them.
+		rec = doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"login": person.Login})
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_a_member" {
+			t.Errorf("admin adding %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+		// At creation.
+		rec = doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
+			"title": "Otra", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+			"participant_logins": []string{person.Login},
+		})
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_a_member" {
+			t.Errorf("creating with %s as a participant: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// The list of participants says, besides who they are, whether each has a federative license this year.
+func TestHandlerParticipantsSayWhetherTheyAreFederated(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	admin := testutil.InsertMember(t, tx)
+	federated := testutil.InsertMember(t, tx)
+	plain := testutil.InsertMember(t, tx)
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+	var licenseType int64
+	if err := tx.QueryRow(context.Background(), `SELECT id FROM license_types ORDER BY id LIMIT 1`).Scan(&licenseType); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO licenses (user_id, license_type_id, issued_date, year) VALUES ($1, $2, CURRENT_DATE, EXTRACT(year FROM CURRENT_DATE))`, federated.ID, licenseType); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
 		"title": "Sima", "type": "caving", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"participant_logins": []string{federated.Login, plain.Login},
 	})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create caving activity: %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
 	}
-	var caving activities.Activity
-	if err := json.Unmarshal(rec.Body.Bytes(), &caving); err != nil {
-		t.Fatalf("decode: %v", err)
+	var a activities.Activity
+	_ = json.Unmarshal(rec.Body.Bytes(), &a)
+	rec = doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/activities/%d/participants", a.ID), adminToken, nil)
+	var list []activities.Participant
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 2 {
+		t.Fatalf("participants: %v %s", err, rec.Body.String())
 	}
-
-	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/participants", caving.ID), unfederatedToken, nil)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409 for an unfederated member joining a caving activity, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if code := errorCode(t, rec); code != "not_federated" {
-		t.Errorf("expected error code not_federated, got %q", code)
-	}
-
-	rec = doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
-		"title": "Social", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create social activity: %d: %s", rec.Code, rec.Body.String())
-	}
-	var social activities.Activity
-	if err := json.Unmarshal(rec.Body.Bytes(), &social); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	rec = doRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/activities/%d/participants", social.ID), unfederatedToken, nil)
-	if rec.Code != http.StatusNoContent {
-		t.Errorf("expected an unfederated member to still join a social activity, got %d: %s", rec.Code, rec.Body.String())
+	for _, p := range list {
+		if want := p.UserLogin == federated.Login; p.Federated != want {
+			t.Errorf("%s: federated = %v, want %v", p.UserLogin, p.Federated, want)
+		}
 	}
 }
 
 func TestHandlerCreateDefaultsToPublicVisibility(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, person.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", memberToken, map[string]any{
@@ -590,10 +655,10 @@ func TestHandlerCreateDefaultsToPublicVisibility(t *testing.T) {
 
 func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	leader := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
-	admin := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
@@ -625,10 +690,10 @@ func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
 
 func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	leader := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
-	board := testutil.InsertUser(t, tx, "")
-	admin := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
+	board := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	boardToken := tokenFor(t, authn, board.ID, "board")
@@ -672,10 +737,10 @@ func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *te
 
 func TestHandlerLeaveSelfOrAdminBoardOnly(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	leader := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
-	board := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
+	board := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 	boardToken := tokenFor(t, authn, board.ID, "board")
@@ -714,8 +779,8 @@ func TestHandlerLeaveSelfOrAdminBoardOnly(t *testing.T) {
 
 func TestHandlerLeavePrivateActivityOrganizerCanRemoveAnyone(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	leader := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -744,8 +809,8 @@ func TestHandlerLeavePrivateActivityOrganizerCanRemoveAnyone(t *testing.T) {
 
 func TestHandlerLeavePublicActivityOrganizerCannotRemoveSomeoneElse(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
-	leader := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 
@@ -775,7 +840,7 @@ func TestHandlerLeavePublicActivityOrganizerCannotRemoveSomeoneElse(t *testing.T
 
 func TestHandlerLeaveActivityNotFound(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	member := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertMember(t, tx)
 	memberToken := tokenFor(t, authn, member.ID, "member")
 
 	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/activities/%d/participants/%s", 999999, member.Login), memberToken, nil)
@@ -786,8 +851,8 @@ func TestHandlerLeaveActivityNotFound(t *testing.T) {
 
 func TestHandlerLeaveNotifiesTelegramDifferentlyForSelfVersusOther(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	admin := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", adminToken, map[string]any{
@@ -822,7 +887,7 @@ func TestHandlerLeaveNotifiesTelegramDifferentlyForSelfVersusOther(t *testing.T)
 
 func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -855,9 +920,9 @@ func TestHandlerUpdateCanChangeVisibility(t *testing.T) {
 // stuck with whoever happened to create it.
 func TestHandlerUpdateAllowsBoardToChangeLeader(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
-	newLeader := testutil.InsertUser(t, tx, "")
-	board := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	newLeader := testutil.InsertMember(t, tx)
+	board := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	boardToken := tokenFor(t, authn, board.ID, "board")
 
@@ -897,8 +962,8 @@ func TestHandlerUpdateAllowsBoardToChangeLeader(t *testing.T) {
 // hand it off to someone else themselves — only admin/board can.
 func TestHandlerUpdateRejectsLeaderChangingLeader(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -1015,7 +1080,7 @@ func TestHandlerDeleteHolidayNotFound(t *testing.T) {
 // start instead, same as an out-of-range limit already was.
 func TestHandlerListClampsNegativeOffset(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	member := testutil.InsertUser(t, tx, "")
+	member := testutil.InsertMember(t, tx)
 	token := tokenFor(t, authn, member.ID, "member")
 	if rec := doRequest(mux, http.MethodGet, "/api/v1/activities?offset=-1", token, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected a negative offset to be clamped rather than error, got %d: %s", rec.Code, rec.Body.String())
@@ -1024,7 +1089,7 @@ func TestHandlerListClampsNegativeOffset(t *testing.T) {
 
 func TestHandlerListOrderDefaultsToDescendingAndCanBeAscending(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	token := tokenFor(t, authn, leader.ID, "member")
 
 	older := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
@@ -1068,7 +1133,7 @@ func TestHandlerListOrderDefaultsToDescendingAndCanBeAscending(t *testing.T) {
 
 func TestHandlerCreateNotifiesTelegramWithActorAndTitle(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -1089,7 +1154,7 @@ func TestHandlerCreateNotifiesTelegramWithActorAndTitle(t *testing.T) {
 // not just that something did.
 func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -1123,7 +1188,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 // misleading "edited" message with an empty diff.
 func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -1152,7 +1217,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 
 func TestHandlerCancelNotifiesTelegramWithActorAndTitle(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	leader := testutil.InsertUser(t, tx, "")
+	leader := testutil.InsertMember(t, tx)
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -1180,9 +1245,9 @@ func TestHandlerCancelNotifiesTelegramWithActorAndTitle(t *testing.T) {
 
 func TestHandlerJoinNotifiesTelegramDifferentlyForSelfVersusOther(t *testing.T) {
 	mux, authn, tx, notifier := newTestServerWithNotifier(t)
-	admin := testutil.InsertUser(t, tx, "")
-	member := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	admin := testutil.InsertMember(t, tx)
+	member := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	adminToken := tokenFor(t, authn, admin.ID, "admin")
 	memberToken := tokenFor(t, authn, member.ID, "member")
 
@@ -1263,7 +1328,7 @@ func TestHandlerDeleteHolidayNotifiesTelegram(t *testing.T) {
 // to become.
 func TestHandlerRejectsInvalidActivityFields(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
-	person := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
 	token := tokenFor(t, authn, person.ID, "member")
 	valid := func() map[string]any {
 		return map[string]any{"title": "A", "type": "social", "start_date": "2026-03-10", "end_date": "2026-03-12"}

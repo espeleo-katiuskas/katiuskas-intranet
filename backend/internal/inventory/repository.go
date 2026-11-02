@@ -56,6 +56,10 @@ var (
 	// message itself (built from Postgres's own ConstraintName) still
 	// says which one.
 	ErrInvalidItemFields = errors.New("item fields do not match item_type's required shape")
+	// ErrRecipientNotMember means a loan or a rental was for somebody who is not a member now, and
+	// ErrRecipientNotMemberOrFormer a sale for somebody who is neither a member nor a former one.
+	ErrRecipientNotMember         = errors.New("a loan or a rental can only be for a member")
+	ErrRecipientNotMemberOrFormer = errors.New("a sale can only be for a member or a former member")
 	// ErrDuplicateItemCode means another item already has the code.
 	ErrDuplicateItemCode = errors.New("another item already has this code")
 )

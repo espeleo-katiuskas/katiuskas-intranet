@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
 
@@ -80,7 +81,7 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 3)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -109,7 +110,7 @@ func TestLoanRejectedWhenInsufficientStock(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	_, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 2,
@@ -125,7 +126,7 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
@@ -242,7 +243,7 @@ func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
@@ -346,7 +347,7 @@ func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementAcquisition, Quantity: 1,
@@ -423,7 +424,7 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 2)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
@@ -465,7 +466,7 @@ func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	}
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
 	})
@@ -491,7 +492,7 @@ func TestReturnMovementRefusesNonReturnableTypes(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -513,7 +514,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -572,7 +573,7 @@ func TestReturnTypeValidatesAgainstOutstandingForActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 25)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	for _, qty := range []int32{10, 15} {
@@ -626,7 +627,7 @@ func TestReturnTypeRejectsExceedingOutstandingForActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -652,7 +653,7 @@ func TestReturnTypeScopedPerActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 10)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityA := testutil.InsertActivity(t, tx)
 	activityB := testutil.InsertActivity(t, tx)
 
@@ -693,7 +694,7 @@ func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 2)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	// 1 unit out on loan, the other lost — draining available_quantity
@@ -741,8 +742,8 @@ func TestListMovementsByUser(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	person := testutil.InsertUser(t, tx, "")
-	other := testutil.InsertUser(t, tx, "")
+	person := testutil.InsertMember(t, tx)
+	other := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -772,7 +773,7 @@ func TestCreateMovementRequiresActivityForLoan(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
@@ -789,7 +790,7 @@ func TestCreateMovementRentalDoesNotRequireActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
@@ -804,7 +805,7 @@ func TestCreateMovementSaleDoesNotRequireActivity(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
@@ -819,7 +820,7 @@ func TestCreateMovementStoresActivityID(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -1067,7 +1068,7 @@ func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create non-loanable item: %v", err)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -1105,7 +1106,7 @@ func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
 	if item.Rentable {
 		t.Fatalf("expected the item not to be rentable with no rental price set, got %+v", item)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
@@ -1132,7 +1133,7 @@ func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 	if item.Sellable {
 		t.Fatalf("expected the item not to be sellable with no sale price set, got %+v", item)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 
 	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
@@ -1234,7 +1235,7 @@ func TestMovementQuantityForcedToOneForRopeAndBag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create rope: %v", err)
 	}
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	// A rope only ever has 1 unit available, so asking for 5 would
@@ -1260,7 +1261,7 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 
 	// createItem sets rental_price_per_week 10.0 and sale_price 25.0.
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
@@ -1302,12 +1303,12 @@ func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
-	user := testutil.InsertUser(t, tx, "")
+	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
 	// The zero-value TransactedAt default lives in Service, not
 	// Repository — exercise it through the service.
-	service := inventory.NewService(repo)
+	service := inventory.NewService(repo, roles.NewService(roles.NewRepository(tx)))
 	today, err := service.CreateMovement(ctx, inventory.CreateMovementInput{
 		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,

@@ -580,7 +580,10 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 // in at all.
 func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT u.login, u.first_name, u.last_name
+		SELECT u.login, u.first_name, u.last_name,
+		       EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.period @> CURRENT_DATE),
+		       EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id)
+		         AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.period @> CURRENT_DATE)
 		FROM users u
 		ORDER BY u.first_name, u.last_name
 	`)
@@ -592,7 +595,7 @@ func (r *Repository) ListDirectory(ctx context.Context) ([]DirectoryEntry, error
 	list := []DirectoryEntry{}
 	for rows.Next() {
 		var e DirectoryEntry
-		if err := rows.Scan(&e.Login, &e.FirstName, &e.LastName); err != nil {
+		if err := rows.Scan(&e.Login, &e.FirstName, &e.LastName, &e.Member, &e.FormerMember); err != nil {
 			return nil, err
 		}
 		list = append(list, e)

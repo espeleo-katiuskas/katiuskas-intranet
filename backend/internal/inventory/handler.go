@@ -473,6 +473,14 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "return_exceeds_loaned", err.Error())
 		return
 	}
+	if errors.Is(err, ErrRecipientNotMember) {
+		httpapi.WriteError(w, http.StatusConflict, "recipient_not_member", err.Error())
+		return
+	}
+	if errors.Is(err, ErrRecipientNotMemberOrFormer) {
+		httpapi.WriteError(w, http.StatusConflict, "recipient_not_member_or_former", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create movement")
 		return

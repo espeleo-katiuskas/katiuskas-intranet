@@ -231,6 +231,24 @@ function updateMovementFormVisibility() {
   const requiresRecipient = recipientRequiredTypes.has(type);
   userInput.required = requiresRecipient;
   document.getElementById('mv-user-hint').hidden = requiresRecipient || forbidsRecipient;
+  refreshUserOptions();
+}
+
+// Who can be picked as the "Socio" depends on the type: a loan or a rental (and the return of a loan)
+// is for a member; a sale, for a member or a former member. What was typed before and no longer fits
+// is cleared.
+function userEntriesFor(type) {
+  return userEntries.filter((e) => e.member || (type === 'sale' && e.formerMember));
+}
+
+function refreshUserOptions() {
+  const userInput = document.getElementById('mv-user');
+  const type = document.getElementById('mv-type').value;
+  const entries = userEntriesFor(type);
+  document.getElementById('mv-user-options').innerHTML = renderPickerOptions(entries);
+  if (userInput.value.trim() && resolvePickerId(entries, userInput.value) == null) {
+    userInput.value = '';
+  }
 }
 
 document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
@@ -322,7 +340,7 @@ newMovementForm.addEventListener('submit', async (event) => {
 
   let userLogin = null;
   if (userInput.value.trim()) {
-    userLogin = resolvePickerId(userEntries, userInput.value);
+    userLogin = resolvePickerId(userEntriesFor(type), userInput.value);
     if (!userLogin) {
       showError('Elige un socio de la lista, o déjalo vacío.');
       return;
@@ -574,8 +592,10 @@ if (canManageMovements) {
         .map((person) => ({
           id: person.login,
           label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+          member: person.member,
+          formerMember: person.former_member,
         }));
-      document.getElementById('mv-user-options').innerHTML = renderPickerOptions(userEntries);
+      refreshUserOptions();
     })
     .catch(() => showError('No se pudo cargar la lista de socios.'));
 

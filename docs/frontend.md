@@ -67,6 +67,15 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
+**Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
+`former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):
+the participants of an activity — "Añadir participante" on `/actividad` and the participants of
+"Nueva actividad" on `/actividades` — and the "Socio" of a loan (on `/actividad`) or of a rental
+(on `/material`) are only members; the "Socio" of a sale on `/material` is a member or a former
+member (it follows the type chosen, and what was typed before and no longer fits is cleared). The
+organizer of an activity is still any person. In the participants list of `/actividad`, each name
+has a "Federado" or "No federado" badge (`federated`), as information: nothing requires it.
+
 **Being signed up on `/actividad`.** Under the header, a note "✓ Estás apuntado a esta actividad."
 shows while the viewer is among the participants (`#joined-note`, set by `loadParticipants` together
 with the "Apuntarme"/"Darme de baja" buttons), so it is not something to look for in a long list.
