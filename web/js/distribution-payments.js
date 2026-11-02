@@ -1,4 +1,13 @@
-import { apiFetch, escapeHtml, formatCurrency, showError } from './api.js';
+import {
+  apiFetch,
+  escapeHtml,
+  formatCurrency,
+  isNotFound,
+  queryId,
+  showError,
+  showNotFound,
+  stopAsNotFound,
+} from './api.js';
 import { initPage } from './layout.js';
 import { compactNumbers, formatDateTime } from './distributionCommon.js';
 
@@ -6,7 +15,8 @@ import { compactNumbers, formatDateTime } from './distributionCommon.js';
 // after each one. Admin and board: it says who paid.
 await initPage({ requireAnyRole: ['admin', 'board'] });
 
-const id = Number(new URLSearchParams(window.location.search).get('id'));
+const id = queryId();
+if (id === null) await stopAsNotFound();
 const base = `/distributions/${id}`;
 document.getElementById('back-link').href = `/reparto?id=${id}`;
 
@@ -61,6 +71,10 @@ async function load({ more = false } = {}) {
     offset += page.length;
     moreButton.hidden = entries.length <= PAGE_SIZE;
   } catch (err) {
+    if (isNotFound(err)) {
+      showNotFound();
+      return;
+    }
     list.innerHTML = '<tr><td colspan="6">No se pudieron cargar los pagos.</td></tr>';
     showError(err.message);
   }
@@ -77,7 +91,8 @@ async function showDistribution() {
     document.getElementById('payments-title').textContent = `Pagos: ${distribution.name}`;
     document.title = `Pagos: ${distribution.name} — Club de Espeleología Katiuskas`;
   } catch (err) {
-    showError(err.message);
+    if (isNotFound(err)) showNotFound();
+    else showError(err.message);
   }
 }
 

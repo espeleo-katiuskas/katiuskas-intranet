@@ -6,6 +6,10 @@ import {
   formatDate,
   hasAnyRole,
   showError,
+  isNotFound,
+  queryId,
+  showNotFound,
+  stopAsNotFound,
   showFeedback,
 } from './api.js';
 import { initPage } from './layout.js';
@@ -32,7 +36,8 @@ import {
 await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
 const canMarkPaid = hasAnyRole(currentUser(), ['admin', 'board']);
 
-const id = Number(new URLSearchParams(window.location.search).get('id'));
+const id = queryId();
+if (id === null) await stopAsNotFound();
 const base = `/distributions/${id}`;
 document.getElementById('back-link').href = `/reparto?id=${id}`;
 
@@ -724,6 +729,10 @@ async function load(ready = Promise.resolve()) {
     renderOrder(order);
     render();
   } catch (err) {
+    if (isNotFound(err)) {
+      showNotFound();
+      return;
+    }
     fail(err);
   }
 }

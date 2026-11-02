@@ -4,7 +4,9 @@ import {
   escapeHtml,
   encodeFilePath,
   formatDate,
+  isNotFound,
   showError,
+  showNotFound,
 } from './api.js';
 import { initPage } from './layout.js';
 import { renderMarkdown } from './markdown.js';
@@ -55,6 +57,12 @@ function renderEntryRow(dirPath, entry) {
   `;
 }
 
+// A path that is not there, or is not what the address says (a file where a folder was asked for,
+// or the other way round): the same page as anything else that does not exist.
+function isMissing(err) {
+  return isNotFound(err) || ['invalid_path', 'not_a_directory', 'not_a_file'].includes(err?.code);
+}
+
 async function loadDirectory(dirPath) {
   directoryView.hidden = false;
   fileView.hidden = true;
@@ -66,6 +74,10 @@ async function loadDirectory(dirPath) {
       ? listing.entries.map((entry) => renderEntryRow(listing.path, entry)).join('')
       : '<tr><td colspan="3">Esta carpeta está vacía.</td></tr>';
   } catch (err) {
+    if (isMissing(err)) {
+      showNotFound();
+      return;
+    }
     entriesList.innerHTML = `<tr><td colspan="3">${escapeHtml(err.message)}</td></tr>`;
   }
 }
@@ -132,6 +144,10 @@ async function loadFile(path) {
         '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
     }
   } catch (err) {
+    if (isMissing(err)) {
+      showNotFound();
+      return;
+    }
     document.getElementById('file-meta').textContent = '';
     showError(err.message);
   }
@@ -139,7 +155,12 @@ async function loadFile(path) {
 
 const params = new URLSearchParams(window.location.search);
 const viewPath = params.get('view');
-if (viewPath !== null) {
+// A "." or ".." in the path would be collapsed by the browser before the request even left: it is
+// not a path of the library, so it is as missing as any other that is not there.
+const hasDotSegments = (path) => path.split('/').some((part) => part === '.' || part === '..');
+if (hasDotSegments(viewPath ?? params.get('path') ?? '')) {
+  showNotFound();
+} else if (viewPath !== null) {
   loadFile(viewPath);
 } else {
   loadDirectory(params.get('path') ?? '');

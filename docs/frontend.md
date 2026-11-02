@@ -153,7 +153,18 @@ created on demand, titled "Ha ocurrido un error", with the message and a "Cerrar
 the top layer over everything, even another open dialog, behind a dark backdrop, so the rest of the
 page can't be operated until it is closed (the button, Escape or a click on the backdrop); a second
 error while it's open replaces the message. `showFeedback` is still the sticky `#feedback` banner
-for successes — pages no longer have an `#error` element. `login.html`'s own inline messages next to
+for successes — pages no longer have an `#error` element.
+
+**Something that does not exist.** A page about one thing (`/actividad?id=…`, `/cuenta?id=…`,
+`/socio?login=…`, `/reparto?id=…` and its `-pedidos`, `-numeros` and `-pagos`, `/archivo?path=…` or
+`?view=…`) answers the same way as an address that is not a page: `showNotFound()` (`api.js`) hides
+the page's own content and puts "Esta página no existe" in its place, in the usual shell — no
+redirect and no modal. It happens when the address has no usable id (`queryId()`: a positive whole
+number, else null; `stopAsNotFound()` also keeps the rest of the page's script from running) and
+when the API says the thing is not there (`isNotFound(err)`: `not_found` or `invalid_id`; the
+library also treats `invalid_path`, `not_a_directory` and `not_a_file` that way). After that
+`showError` stays silent, since the page's other requests fail for the same reason. Any other
+failure (a 500, no network) still opens the error modal. `login.html`'s own inline messages next to
 the button they answer are the exception. `perfil.html`'s own "Mis datos" and `member.js`'s
 own "Datos" are both left as a plain inline form instead, not a dialog: a person's own
 core data is prominent enough on both pages (the entire reason `/perfil` exists at all;

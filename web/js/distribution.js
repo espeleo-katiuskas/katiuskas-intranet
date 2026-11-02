@@ -6,6 +6,9 @@ import {
   formatDate,
   hasAnyRole,
   showError,
+  isNotFound,
+  queryId,
+  stopAsNotFound,
   showFeedback,
 } from './api.js';
 import { initPage } from './layout.js';
@@ -40,7 +43,8 @@ const me = currentUser();
 // deadline, act while it is closed or done, and change what is paid.
 const isStaff = hasAnyRole(me, ['admin', 'board', 'material']);
 
-const id = Number(new URLSearchParams(window.location.search).get('id'));
+const id = queryId();
+if (id === null) await stopAsNotFound();
 const base = `/distributions/${id}`;
 let distribution = null;
 let units = [];
@@ -669,7 +673,8 @@ document.getElementById('of-person-options').innerHTML = people.entries
 try {
   distribution = await distributionRequest;
 } catch (err) {
-  document.getElementById('distribution-title').textContent = 'Reparto no encontrado';
+  if (isNotFound(err)) await stopAsNotFound();
+  document.getElementById('distribution-title').textContent = 'No se ha podido cargar este reparto';
   fail(err);
   throw err;
 }

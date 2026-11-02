@@ -13,6 +13,10 @@ import {
   activityStateLabels,
   showFeedback,
   showError,
+  isNotFound,
+  queryId,
+  showNotFound,
+  stopAsNotFound,
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
@@ -56,10 +60,8 @@ function canContributeToMemoria() {
 // material movements.
 const canManageMovements = hasAnyRole(viewer, ['admin', 'board', 'material']);
 
-const activityId = Number(new URLSearchParams(window.location.search).get('id'));
-if (!activityId) {
-  window.location.href = '/actividades';
-}
+const activityId = queryId();
+if (activityId === null) await stopAsNotFound();
 
 const visibilityLabels = { public: 'Pública', private: 'Privada' };
 
@@ -124,6 +126,10 @@ async function loadActivity(ready = Promise.resolve()) {
       }
     }
   } catch (err) {
+    if (isNotFound(err)) {
+      showNotFound();
+      return;
+    }
     document.getElementById('activity-title').textContent =
       'No se ha podido cargar esta actividad.';
     showError(err.message);

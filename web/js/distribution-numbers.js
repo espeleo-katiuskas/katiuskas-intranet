@@ -1,4 +1,13 @@
-import { apiFetch, escapeHtml, hasAnyRole, showError } from './api.js';
+import {
+  apiFetch,
+  escapeHtml,
+  hasAnyRole,
+  isNotFound,
+  queryId,
+  showError,
+  showNotFound,
+  stopAsNotFound,
+} from './api.js';
 import { initPage } from './layout.js';
 import { apiErrorText, statusBadge } from './distributionCommon.js';
 
@@ -9,7 +18,8 @@ const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'material'] }
 // A person's page is only open to admin and board: for material the name is plain text.
 const canOpenPeople = hasAnyRole(viewer, ['admin', 'board']);
 
-const id = Number(new URLSearchParams(window.location.search).get('id'));
+const id = queryId();
+if (id === null) await stopAsNotFound();
 const base = `/distributions/${id}`;
 document.getElementById('back-link').href = `/reparto?id=${id}`;
 const fail = (err) => showError(apiErrorText(err));
@@ -118,5 +128,6 @@ try {
   });
 } catch (err) {
   container.innerHTML = '';
-  fail(err);
+  if (isNotFound(err)) showNotFound();
+  else fail(err);
 }

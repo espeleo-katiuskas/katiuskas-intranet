@@ -11,6 +11,9 @@ import {
   activityStateLabels,
   showFeedback,
   showError,
+  isNotFound,
+  showNotFound,
+  stopAsNotFound,
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
@@ -24,9 +27,7 @@ const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
 const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
 const memberLogin = new URLSearchParams(window.location.search).get('login');
-if (!memberLogin) {
-  window.location.href = '/socios';
-}
+if (!memberLogin) await stopAsNotFound();
 
 // "member"/"former_member"/"board" are computed from membership/board
 // history and can't be granted or revoked by hand at all. Everything
@@ -276,6 +277,10 @@ async function loadMember(ready = Promise.resolve()) {
     renderRoles(person);
     populateEditForm(person);
   } catch (err) {
+    if (isNotFound(err)) {
+      showNotFound();
+      return;
+    }
     document.getElementById('member-email').textContent = 'No se ha podido cargar esta persona.';
     showError(err.message);
   }

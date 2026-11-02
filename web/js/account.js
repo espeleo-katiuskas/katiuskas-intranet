@@ -5,6 +5,9 @@ import {
   formatCurrency,
   showFeedback,
   showError,
+  queryId,
+  showNotFound,
+  stopAsNotFound,
   hasAnyRole,
   pickerLabel,
   renderPickerOptions,
@@ -43,10 +46,8 @@ if (!canWrite) document.getElementById('toggle-new-transaction').hidden = true;
 // on elements that, for them, were never rendered in the first place).
 const isRealAdmin = hasAnyRole(viewer, ['admin']);
 
-const accountId = Number(new URLSearchParams(window.location.search).get('id'));
-if (!accountId) {
-  window.location.href = '/contabilidad';
-}
+const accountId = queryId();
+if (accountId === null) await stopAsNotFound();
 
 let allAccounts = []; // from the last GET /accounts — reused by every "otra cuenta" picker on this page, new-transaction and edit alike
 let editingTransactionId = null; // which transaction #edit-transaction-dialog's fields currently belong to — set right before it opens, read back on save
@@ -615,7 +616,7 @@ async function loadAccount() {
     allAccounts = await apiFetch('/accounts');
     const account = allAccounts.find((a) => a.id === accountId);
     if (!account) {
-      showError('Esta cuenta no existe.');
+      showNotFound();
       return;
     }
     renderHeader(account);

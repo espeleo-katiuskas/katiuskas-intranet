@@ -625,7 +625,54 @@ function errorDialog() {
   return dialog;
 }
 
+// What a page does when the thing it is about does not exist — an address like /actividad?id=foo or
+// /socio?login=nadie, whatever the kind of page: the same as an address that is not a page at all
+// (404.html): the content is replaced by "Esta página no existe", with no redirect and no modal.
+// The page's own elements stay (hidden), so the code that is still running does not trip over them,
+// and from then on showError says nothing: the requests of the page that fail as well (they all
+// refer to what is not there) would only pile modals on top of it.
+let notFoundShown = false;
+
+// A positive whole number from the address (?id=12), or null when it is missing or anything else.
+function queryId(name = 'id') {
+  const value = new URLSearchParams(window.location.search).get(name);
+  return /^[1-9]\d*$/.test(value ?? '') ? Number(value) : null;
+}
+
+// Whether an error of the API says that what was asked for is not there (or cannot be: an id
+// that is not a number).
+function isNotFound(err) {
+  return err?.code === 'not_found' || err?.code === 'invalid_id';
+}
+
+function showNotFound() {
+  if (notFoundShown) return;
+  notFoundShown = true;
+  document.getElementById('error-dialog')?.close();
+  const main = document.querySelector('main.content');
+  if (!main) return;
+  for (const child of main.children) child.hidden = true;
+  const notFound = document.createElement('div');
+  notFound.id = 'not-found';
+  notFound.innerHTML = `
+    <h1>Esta página no existe</h1>
+    <p>
+      La dirección no corresponde a nada que exista: puede que el enlace esté mal escrito o que lo
+      que buscas se haya borrado. Usa el menú para ir a otra página, o <a href="/">vuelve al
+      inicio</a>.
+    </p>`;
+  main.append(notFound);
+}
+
+// showNotFound for a page whose own code must not go on (nothing it would draw exists): the
+// promise never settles, so the rest of the module does not run.
+function stopAsNotFound() {
+  showNotFound();
+  return new Promise(() => {});
+}
+
 function showError(message) {
+  if (notFoundShown) return;
   const feedbackBox = document.getElementById('feedback');
   if (feedbackBox) feedbackBox.hidden = true;
   const dialog = errorDialog();
@@ -728,6 +775,10 @@ export {
   activityStateLabels,
   showFeedback,
   showError,
+  queryId,
+  isNotFound,
+  showNotFound,
+  stopAsNotFound,
   formatDate,
   formatDateTime,
   formatCurrency,
