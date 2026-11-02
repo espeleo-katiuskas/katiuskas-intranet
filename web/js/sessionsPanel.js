@@ -2,7 +2,7 @@ import { apiFetch, escapeHtml, formatDateTime, logout, showError, showFeedback }
 import { initSortableHeaders } from './sortableHeaders.js';
 
 // The sessions of a person: where they are signed in (GET /users/{login}/tokens?status=active, the ones
-// not expired or revoked), each of which can be closed (DELETE .../tokens/{id}). It is the person
+// not expired or revoked), each of which can be closed (PATCH .../tokens/{id} with revoked: true). It is the person
 // themselves on /perfil ("Mis sesiones") and an admin on /socio, where it is anybody's. Closing the one
 // in use is signing out, so that one signs out of this browser too. The page has the markup
 // (#sessions-impersonating, #sessions-head, #sessions-list).
@@ -85,7 +85,8 @@ function initSessionsPanel({ login, own, impersonating = false }) {
     button.disabled = true;
     try {
       await apiFetch(`/users/${encodeURIComponent(login)}/tokens/${session.id}`, {
-        method: 'DELETE',
+        method: 'PATCH',
+        body: JSON.stringify({ revoked: true }),
       });
       if (session.current) {
         logout();

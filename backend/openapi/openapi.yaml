@@ -150,7 +150,7 @@ paths:
         separate short-lived access token and long-lived refresh token
         pair. The token is used directly as the bearer credential on
         every subsequent request until it's revoked (via /auth/logout or
-        by an admin, see DELETE /users/{login}/tokens/{tokenID}) or it
+        by an admin, see PATCH /users/{login}/tokens/{tokenID}) or it
         expires.
 
         The session expires 30 days after its last use — every request made
@@ -783,14 +783,20 @@ paths:
 
   /users/{login}/tokens/{tokenID}:
     patch:
-      summary: Change a token's expiry
+      summary: Revoke a session or change when it expires
       description: >
-        Admin-only. Lets a token be extended or shortened without revoking it.
-        A session expires a while after its last use, so setting when it ends
-        also sets how long it lasts from now on (the time from now to that
-        moment), which each later use renews: the change is not undone by
-        using the session. A moment already past ends it. A session with a
-        fixed expiry (an impersonation one) keeps the expiry given.
+        A session is never deleted: a revoked one stays on file and cannot be brought back.
+        `revoked: true` (the only value accepted) revokes it. It is open to that person themselves
+        (to close one of their own sessions, the one in use included, which is signing out) and to
+        admin; not through a session started by impersonating the person (403: it can see the
+        person's sessions but not end them). Idempotent: revoking an already-revoked session still
+        returns 204. It ends the session at once — the next request made with it gets 401.
+        `expires_at` is admin only (403 otherwise): it lets a session be extended or shortened
+        without revoking it. A session expires a while after its last use, so setting when it ends
+        also sets how long it lasts from now on (the time from now to that moment), which each later
+        use renews: the change is not undone by using the session. A moment already past ends it. A
+        session with a fixed expiry (an impersonation one) keeps the expiry given. One of the two
+        has to be given.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -801,30 +807,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [expires_at]
               properties:
+                revoked: { type: boolean, enum: [true] }
                 expires_at: { type: string, format: date-time }
       responses:
-        "204": { description: Expiry updated }
-        "400": { description: invalid_body, missing_fields (expires_at is required) or invalid_id (tokenID isn't numeric). }
-        "404": { $ref: "#/components/responses/NotFound" }
-    delete:
-      summary: Revoke a token
-      description: >
-        Open to that person themselves (to close one of their own sessions,
-        the one in use included, which is signing out) and to admin; not
-        through a session started by impersonating the person (403: it can
-        see the person's sessions but not end them). Idempotent:
-        revoking an already-revoked token still returns 204. Immediately
-        ends that session — the next request made with it gets 401.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: login, in: path, required: true, schema: { type: string } }
-        - { name: tokenID, in: path, required: true, schema: { type: integer } }
-      responses:
-        "204": { description: Revoked }
-        "400": { description: invalid_id — tokenID isn't numeric. }
-        "403": { description: Neither that person nor admin (or an impersonation session). }
+        "204": { description: Updated }
+        "400": { description: invalid_body (malformed, revoked false, or expires_at not a date), missing_fields (neither revoked nor expires_at) or invalid_id (tokenID isn't numeric). }
+        "403": { description: Not that person nor admin (or an impersonation session), or expires_at from somebody who is not admin. }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/memberships:
@@ -2805,31 +2794,37 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: already_paid, no_distribution_account or account_has_children (the account paid in, or the one the payments go to, groups other accounts). }
 
-  /distributions/{id}/units/{unitID}/payment:
-    delete:
-      summary: Remove the paid mark from a unit
+  /distributions/{id}/units/{unitID}/payment/reversal:
+    post:
+      summary: Take off the payment of a unit
       description: >
-        Requires admin or board. Takes `quantity` units off what is paid in the
+        Requires admin or board. Nothing is deleted: the reverse is recorded, like the payment was,
+        in the log of payments (an entry of the other sign) and in the accounting, as the
+        transaction with the signs changed. Takes `quantity` units off what is paid in the
         row, the given paid `identifiers`, or all of it without either (400
-        invalid_quantity for more than are paid). A number the row doesn't have is
+        invalid_quantity for fewer than one or more than are paid). A number the row doesn't have is
         400 identifier_not_assigned and one that isn't paid 409 identifier_not_paid,
-        naming them at the end of the message. Like paying, it is recorded in the
-        accounting, as the transaction with the signs changed: `account_id` is the
-        asset account the money goes back from (same errors as POST
-        /distributions/{id}/payments).
+        naming them at the end of the message. `account_id` is the asset account the money goes
+        back from (same errors as POST /distributions/{id}/payments).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: unitID, in: path, required: true, schema: { type: integer } }
-        - { name: account_id, in: query, required: false, schema: { type: integer }, description: The asset account the money goes back from; required unless the units cost nothing. }
-        - { name: quantity, in: query, required: false, schema: { type: integer, minimum: 1 } }
-        - { name: identifiers, in: query, required: false, schema: { type: string }, description: Comma-separated numbers (ranges allowed where described). }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                account_id: { type: integer, description: The asset account the money goes back from; required unless the units cost nothing. }
+                quantity: { type: integer, minimum: 1 }
+                identifiers: { type: array, items: { type: string }, description: Numbers (ranges allowed where described). }
       responses:
-        "204": { description: Removed }
-        "400": { description: account_required, unknown_account or account_not_asset. }
+        "204": { description: Taken off }
+        "400": { description: account_required, unknown_account, account_not_asset, invalid_quantity, identifier_not_assigned or invalid_body. }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: no_distribution_account. }
+        "409": { description: no_distribution_account or identifier_not_paid. }
 
   /users/{login}/material/movements:
     get:

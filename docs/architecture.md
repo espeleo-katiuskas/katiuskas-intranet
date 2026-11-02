@@ -970,31 +970,30 @@ the API but not write it, except for asking for units and editing their own).
   accepts ranges (`0001-0010, 0015`, `Service.expandTokens`). Articles without numbers and
   loose units keep counting (`paid_quantity`, `picked_up_quantity`). Assigning and removing
   numbers without replacing the list: `POST` and `DELETE …/units/{id}/identifiers`.
-- **Paid**: a row can be partly paid. `paid_quantity` (from 0 to `quantity`, migration `00027`)
-  says how many units are paid; `paid_at` and who marked it are those of the last payment and
-  are present exactly when something is paid. Only admin and board set and remove it:
-  `POST /distributions/{id}/payments` adds payments, in a batch and all or nothing, with
-  `payments` (`unit_id` and `quantity` units, or all the pending ones if missing) and
-  `unit_ids` (everything pending in those rows); going over what is pending gives 409
-  `already_paid`. `DELETE …/units/{id}/payment[?quantity=N]` removes N paid units, or all of
-  them. Asking for more of something already paid does not make what is added paid, and
-  `quantity` cannot be lowered below what is paid (409 `quantity_below_paid`). A row with
-  something paid counts as paid for the locks above (only admin/board change it). **Every
-  payment is recorded in Accounting** (migration `00032`): the distribution has an account
-  (`account_id`, optional; `account_name` in the JSON) where its payments are entered and, if it
-  has none, the account marked as `distribution_default` (only one; marking one removes the mark
-  from the other). Both have to be of type `income`: a distribution with another account is 400
-  `account_not_income`; marking as default an account that is not, or removing the `income` type
-  from one that some distribution uses, is 409 `not_income_for_distributions`. If there is
-  neither of the two, 409 `no_distribution_account`. When paying (`account_id` in the body) or
-  removing a payment (`?account_id=`) it has to be said in which account it was paid, which has
-  to exist (400 `unknown_account`) and be of type `asset` (400 `account_not_asset`); with no
-  account, 400 `account_required`, unless what is paid is free, which moves no money and enters
-  nothing. For each person in the request an automatic transaction is created between that asset
-  account (`+total`) and the distribution's (`−total`; when a payment is removed, the other way
-  round) with a description in Spanish, for example "Pago de Ana Pérez en «Lotería de Navidad»:
-  3 × Papeleta (0001-0003)" or "Devolución del pago de …". An order with something paid cannot
-  be deleted (409 `unit_paid`): the payment is removed first.
+- **Paid**: a row can be partly paid. `paid_quantity` (from 0 to `quantity`, migration `00027`) says
+  how many units are paid; `paid_at` and who marked it are those of the last payment and are present
+  exactly when something is paid. Only admin and board set and remove it: `POST
+  /distributions/{id}/payments` adds payments, in a batch and all or nothing, with `payments`
+  (`unit_id` and `quantity` units, or all the pending ones if missing) and `unit_ids` (everything
+  pending in those rows); going over what is pending gives 409 `already_paid`. `POST
+  …/units/{id}/payment/reversal` (body `quantity`: N) takes N paid units off, or all of them. Asking
+  for more of something already paid does not make what is added paid, and `quantity` cannot be
+  lowered below what is paid (409 `quantity_below_paid`). A row with something paid counts as paid
+  for the locks above (only admin/board change it). **Every payment is recorded in Accounting**
+  (migration `00032`): the distribution has an account (`account_id`, optional; `account_name` in
+  the JSON) where its payments are entered and, if it has none, the account marked as
+  `distribution_default` (only one; marking one removes the mark from the other). Both have to be of
+  type `income`: a distribution with another account is 400 `account_not_income`; marking as default
+  an account that is not, or removing the `income` type from one that some distribution uses, is 409
+  `not_income_for_distributions`. If there is neither of the two, 409 `no_distribution_account`.
+  When paying (`account_id` in the body) or removing a payment (`?account_id=`) it has to be said in
+  which account it was paid, which has to exist (400 `unknown_account`) and be of type `asset` (400
+  `account_not_asset`); with no account, 400 `account_required`, unless what is paid is free, which
+  moves no money and enters nothing. For each person in the request an automatic transaction is
+  created between that asset account (`+total`) and the distribution's (`−total`; when a payment is
+  removed, the other way round) with a description in Spanish, for example "Pago de Ana Pérez en
+  «Lotería de Navidad»: 3 × Papeleta (0001-0003)" or "Devolución del pago de …". An order with
+  something paid cannot be deleted (409 `unit_paid`): the payment is removed first.
 - **List of payments** (`distribution_payments`; only admin and board, because it says who has
   paid what): every payment that is entered leaves an entry with the date, who entered it, whose
   order it was (the one who paid: a payer distinct from the order's member is not stored), what

@@ -105,13 +105,16 @@ func (e *env) newPerson(t *testing.T, memberSince string, roleNames ...string) p
 
 func (e *env) do(method, path, token string, body any) *httptest.ResponseRecorder {
 	var reader *bytes.Reader
-	// Payments say which account the money went through; most tests don't care.
-	if method == http.MethodDelete && strings.Contains(path, "/payment") && !strings.Contains(path, "account_id=") {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
+	// Taking a payment off says which account the money goes back from; most tests don't care.
+	if method == http.MethodPost && strings.HasSuffix(path, "/payment/reversal") {
+		m, _ := body.(map[string]any)
+		if m == nil {
+			m = map[string]any{}
 		}
-		path += fmt.Sprintf("%saccount_id=%d", sep, e.cash)
+		if _, ok := m["account_id"]; !ok {
+			m["account_id"] = e.cash
+		}
+		body = m
 	}
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -844,9 +847,13 @@ func TestPaymentsAreMarkedByAdminAndBoardOnly(t *testing.T) {
 	if paid.PaidAt == nil || paid.PaidMarkedByLogin == nil || *paid.PaidMarkedByLogin != board.Login {
 		t.Errorf("unexpected payment on %+v", paid)
 	}
-	undo := fmt.Sprintf("%s/%d/payment", unitsPath(d.ID), extra.ID)
-	expect(t, e.do("DELETE", undo, material.token, nil), http.StatusForbidden, "forbidden")
-	mustStatus(t, e.do("DELETE", undo, admin.token, nil), http.StatusNoContent)
+	undo := fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), extra.ID)
+	expect(t, e.do("POST", undo, material.token, nil), http.StatusForbidden, "forbidden")
+	// The old DELETE is gone: taking a payment off records its reverse, it deletes nothing.
+	if rec := e.do("DELETE", strings.TrimSuffix(undo, "/reversal"), admin.token, nil); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Errorf("expected DELETE .../payment not to exist, got %d", rec.Code)
+	}
+	mustStatus(t, e.do("POST", undo, admin.token, nil), http.StatusNoContent)
 	if gone := unitByID(t, e, admin, d.ID, extra.ID); gone.PaidAt != nil || gone.PaidMarkedByLogin != nil {
 		t.Errorf("payment should be gone: %+v", gone)
 	}
@@ -891,7 +898,7 @@ func TestOptionsAreLockedOnceUnitsExistButTheDistributionCanBeDeleted(t *testing
 	unit := unitFor(t, e, admin, d.ID, member.Login)
 	mustStatus(t, e.do("POST", path+"/payments", admin.token, map[string]any{"unit_ids": []int64{unit.ID}}), http.StatusNoContent)
 	expect(t, e.do("DELETE", path, admin.token, nil), http.StatusConflict, "has_settled_units")
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, unit.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/units/%d/payment/reversal", path, unit.ID), admin.token, nil), http.StatusNoContent)
 	mustStatus(t, e.do("DELETE", path, admin.token, nil), http.StatusNoContent)
 	var left int
 	if err := e.tx.QueryRow(context.Background(), `SELECT count(*) FROM distribution_units WHERE distribution_id = $1`, d.ID).Scan(&left); err != nil || left != 0 {
@@ -1025,7 +1032,7 @@ func TestBackToDraftDeletesEveryUnit(t *testing.T) {
 	if count() != 3 {
 		t.Errorf("a refused change must leave the units alone, got %d", count())
 	}
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, idleUnit.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/units/%d/payment/reversal", path, idleUnit.ID), admin.token, nil), http.StatusNoContent)
 
 	// Without marks, back to a draft deletes all of them, the extra included.
 	got := decode[distributions.Distribution](t, mustStatus(t, back(), http.StatusOK))
@@ -1100,7 +1107,7 @@ func TestSwitchingToSignupDeletesTheUntouchedAutomaticUnits(t *testing.T) {
 	if len(logins()) != 4 {
 		t.Errorf("a refused change must leave the units alone, got %v", logins())
 	}
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/units/%d/payment", path, paidUnit.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/units/%d/payment/reversal", path, paidUnit.ID), admin.token, nil), http.StatusNoContent)
 
 	// Without marks: the untouched ones go; the chosen one and the extra stay.
 	got := decode[distributions.Distribution](t, mustStatus(t, toSignup(), http.StatusOK))

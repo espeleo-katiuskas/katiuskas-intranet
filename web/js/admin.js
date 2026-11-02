@@ -202,7 +202,7 @@ newRoleForm.addEventListener('submit', async (event) => {
 
 // "Sesiones": every session token, to see who is signed in and cut one off.
 // GET /tokens lists them (the active ones, or all with the checkbox) and
-// PATCH/DELETE /users/{login}/tokens/{id} change or revoke one. A page at a
+// PATCH /users/{login}/tokens/{id} changes one (its expiry) or revokes it. A page at a
 // time, asking for one more than a page to know whether "Ver más" is needed.
 const SESSIONS_PAGE_SIZE = 50;
 const sessionsBody = document.getElementById('sessions-table-body');
@@ -322,7 +322,8 @@ sessionsBody.addEventListener('click', async (event) => {
     revoke.disabled = true;
     try {
       await apiFetch(`/users/${encodeURIComponent(session.user_login)}/tokens/${session.id}`, {
-        method: 'DELETE',
+        method: 'PATCH',
+        body: JSON.stringify({ revoked: true }),
       });
       showFeedback('Sesión revocada.');
       await loadSessions();

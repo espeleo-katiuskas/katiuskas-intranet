@@ -221,19 +221,19 @@ positions and are not assigned by hand.
   theirs, as the person would in their profile.
   - returns: 200 `[Token]`
   - errors: 400 `invalid_status`; 403 `forbidden`; 404 `not_found` (admin)
-- **PATCH** `/users/{login}/tokens/{tokenID}` — *Admin*. Changes the expiry of a session. Since a
-  session expires after its last use, this also sets how long it lasts from now on (from now to that
-  moment), so a later use does not undo it; a moment in the past ends it.
-  - body: `expires_at*`
+- **PATCH** `/users/{login}/tokens/{tokenID}` — *That person, or admin*. Changes a session: revokes
+  it (`revoked: true`) and/or sets when it expires (`expires_at`, admin only). A session is never
+  deleted: a revoked one stays on file and cannot be brought back.
+  - Revoking ends it: the next request with it gets 401. A person closes their own sessions this
+    way, the one in use included (that is signing out); not another's, and not through a session
+    started by impersonating them (403): it can see the person's sessions but not end them, the
+    admin leaves the impersonation first.
+  - Since a session expires after its last use, setting `expires_at` also sets how long it lasts
+    from now on (from now to that moment), so a later use does not undo it; a moment in the past
+    ends it.
+  - body: `revoked` (only `true`), `expires_at`; one of them at least
   - returns: 204
-  - errors: 400 `invalid_body`
-- **DELETE** `/users/{login}/tokens/{tokenID}` — *That person, or admin*. Revokes a session; the
-  next request with it gets 401. A person closes their own sessions this way, the one in use
-  included (that is signing out); not another's, and not through a session started by impersonating
-  them (403): it can see the person's sessions but not end them, the admin leaves the impersonation
-  first.
-  - returns: 204
-  - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`
+  - errors: 400 `invalid_body`, `missing_fields`, `invalid_id`; 403 `forbidden`; 404 `not_found`
 - **POST** `/users/{login}/impersonate` — *Admin*. Opens a short session (1 hour) that acts as that
   person. From inside an impersonation it is recorded as started by the original admin (the one
   behind it), not by the person they were acting as.
@@ -595,9 +595,10 @@ changes it.
   - body: `account_id`, `unit_ids`, `payments`
   - returns: 204
   - errors: 400 `no_units`; 409 `already_paid`
-- **DELETE** `/distributions/{id}/units/{unitID}/payment` — *Admin or board*. Takes off a payment,
-  with its reverse transaction.
-  - query: `account_id`, `quantity`, `identifiers`
+- **POST** `/distributions/{id}/units/{unitID}/payment/reversal` — *Admin or board*. Takes off a
+  payment: nothing is deleted, the reverse is recorded (a payment of the other sign in the log of
+  payments and a reverse transaction in the accounting).
+  - body: `account_id`, `quantity`, `identifiers`
   - returns: 204
   - errors: 400 `account_required`; 409 `no_distribution_account`
 

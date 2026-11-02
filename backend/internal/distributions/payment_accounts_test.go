@@ -86,7 +86,7 @@ func TestPayingRecordsATransactionBetweenTheAssetAndTheDistributionsAccount(t *t
 	}
 
 	// Taking it off moves the money back, with the signs changed.
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment?quantity=1", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), u.ID), admin.token, map[string]any{"quantity": 1}), http.StatusNoContent)
 	got = e.movements(t)
 	if len(got) != 4 || got[2].account != "Repartos" || got[2].amount != 5 || got[3].account != "Caja" || got[3].amount != -5 ||
 		!strings.HasPrefix(got[2].description, "Devolución del pago de "+e.nameOf(t, a)) {
@@ -238,7 +238,7 @@ func TestUndoingThePaymentsOfATransactionLeavesTheOrderAsItWas(t *testing.T) {
 	first := e.transactionsOfPayments(t)[0]
 
 	// A payment taken off is undone by deleting its transaction: it is paid again.
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment?identifiers=0002", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"0002"}}), http.StatusNoContent)
 	reversal := e.transactionsOfPayments(t)[1]
 	if err := distributions.UndoPaymentsOf(ctx, e.tx, reversal); err != nil {
 		t.Fatalf("undo the reversal: %v", err)
@@ -270,7 +270,7 @@ func TestPaymentsCantBeUndoneOnceTheOrderChanged(t *testing.T) {
 	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/payments", admin.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusNoContent)
 	tid := e.transactionsOfPayments(t)[0]
 	// The same payment taken off by hand, so there is nothing left to unpay.
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), u.ID), admin.token, nil), http.StatusNoContent)
 	if err := distributions.UndoPaymentsOf(context.Background(), e.tx, tid); err != distributions.ErrPaymentsNotUndoable {
 		t.Fatalf("expected ErrPaymentsNotUndoable, got %v", err)
 	}

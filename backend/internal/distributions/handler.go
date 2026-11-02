@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,7 +64,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/distributions/{id}/articles/{articleID}/numbers", h.authenticator.Protect(h.numbers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/return", h.authenticator.Protect(h.returnUnits, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.markPaid, "admin", "board"))
-	mux.Handle("DELETE /api/v1/distributions/{id}/units/{unitID}/payment", h.authenticator.Protect(h.clearPaid, "admin", "board"))
+	// Taking off a payment does not delete anything: it records the reverse (a payment of the other
+	// sign in the log and a reverse transaction in the accounting), so it is a POST.
+	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/payment/reversal", h.authenticator.Protect(h.clearPaid, "admin", "board"))
 }
 
 func (h *Handler) actorLogin(ctx context.Context) string {
@@ -966,30 +969,27 @@ func (h *Handler) clearPaid(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// ?quantity=N takes only N units off what is paid; without it, all of it.
+	// quantity takes only that many units off what is paid; without it, all of it. identifiers are
+	// the numbers of a numbered article to take off. account_id is the asset account the money goes
+	// back from.
+	var body struct {
+		AccountID   int64    `json:"account_id"`
+		Quantity    *int     `json:"quantity"`
+		Identifiers []string `json:"identifiers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
 	quantity := 0
-	if q := r.URL.Query().Get("quantity"); q != "" {
-		n, err := strconv.Atoi(q)
-		if err != nil || n < 1 {
+	if body.Quantity != nil {
+		if *body.Quantity < 1 {
 			writeError(w, ErrInvalidQuantity, "")
 			return
 		}
-		quantity = n
+		quantity = *body.Quantity
 	}
-	var identifiers []string
-	if list := r.URL.Query().Get("identifiers"); list != "" {
-		identifiers = strings.Split(list, ",")
-	}
-	// ?account_id= is the asset account the money goes back from.
-	var assetAccount int64
-	if raw := r.URL.Query().Get("account_id"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "account_id must be numeric")
-			return
-		}
-		assetAccount = n
-	}
+	identifiers, assetAccount := body.Identifiers, body.AccountID
 	current, _ := auth.UserFromContext(r.Context())
 	if err := h.service.ClearPaid(r.Context(), d.ID, unit.ID, quantity, identifiers, current.ID, assetAccount); err != nil {
 		writeError(w, err, "could not undo the payment")

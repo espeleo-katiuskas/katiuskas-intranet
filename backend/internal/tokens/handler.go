@@ -69,10 +69,9 @@ func (h *Handler) loginOf(ctx context.Context, id int64) string {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/tokens", h.authenticator.Protect(h.listAll, "admin"))
 	// A person sees and revokes their own sessions; an admin, anybody's (see sessionOwner). Changing
-	// a session's expiry stays admin only.
+	// a session's expiry stays admin only. A session is never deleted: revoking it is a PATCH.
 	mux.Handle("GET /api/v1/users/{login}/tokens", h.authenticator.Protect(h.list))
-	mux.Handle("PATCH /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.updateExpiry, "admin"))
-	mux.Handle("DELETE /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.revoke))
+	mux.Handle("PATCH /api/v1/users/{login}/tokens/{tokenID}", h.authenticator.Protect(h.update))
 	mux.Handle("POST /api/v1/users/{login}/impersonate", h.authenticator.Protect(h.impersonate, "admin"))
 	// RequireAuth only, not Protect: while an admin acts with other roles (maybe none of them admin,
 	// maybe not even one that can call anything else) they have to be able to change that and to put
@@ -363,48 +362,36 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
-func (h *Handler) updateExpiry(w http.ResponseWriter, r *http.Request) {
-	userID, tokenID, ok := h.pathIDs(w, r)
-	if !ok {
-		return
-	}
+// update changes a session: it revokes it (`revoked: true`: that person, or admin) and/or sets when
+// it expires (`expires_at`: admin only). A revoked session stays on file, and cannot be brought back.
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ExpiresAt time.Time `json:"expires_at"`
+		ExpiresAt *time.Time `json:"expires_at"`
+		Revoked   *bool      `json:"revoked"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if body.ExpiresAt.IsZero() {
-		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "expires_at is required")
+	if body.ExpiresAt == nil && body.Revoked == nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "expires_at or revoked is required")
 		return
 	}
-
-	// Fetched before applying anything, purely to describe the old
-	// expiry in the mutation notification below — a failure here isn't
-	// reason enough to fail the actual edit, so it's only ever
-	// consulted if it succeeded.
-	before, beforeErr := h.service.Get(r.Context(), userID, tokenID)
-
-	err := h.service.UpdateExpiry(r.Context(), userID, tokenID, body.ExpiresAt)
-	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
+	if body.ExpiresAt != nil && body.ExpiresAt.IsZero() {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "expires_at is not a date")
 		return
 	}
-	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update token")
+	if body.Revoked != nil && !*body.Revoked {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "a revoked session cannot be reactivated: revoked can only be true")
 		return
 	}
-	if beforeErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado la caducidad de un token de %s: %s → %s.",
-			h.actorLogin(r.Context()), before.UserLogin,
-			before.ExpiresAt.Format("2006-01-02 15:04"), body.ExpiresAt.Format("2006-01-02 15:04")))
+	current, _ := auth.UserFromContext(r.Context())
+	if body.ExpiresAt != nil && !current.HasAnyRole("admin") {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only admin can change when a session expires")
+		return
 	}
-	httpapi.WriteJSON(w, http.StatusNoContent, nil)
-}
-
-func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.sessionOwner(w, r, true)
+	// Whose session it is, and whether the caller may end it (revoking, or a past expiry, ends it).
+	userID, ok := h.sessionOwner(w, r, body.Revoked != nil)
 	if !ok {
 		return
 	}
@@ -412,37 +399,46 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Fetched before revoking, purely so the mutation notification below
-	// can still name whose token it was.
+	// Fetched before applying anything, to name whose token it was in the notices below — a failure
+	// here is not reason enough to fail the change itself.
 	target, targetErr := h.service.Get(r.Context(), userID, tokenID)
 
-	err := h.service.Revoke(r.Context(), userID, tokenID)
-	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
-		return
+	if body.ExpiresAt != nil {
+		err := h.service.UpdateExpiry(r.Context(), userID, tokenID, *body.ExpiresAt)
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
+			return
+		}
+		if err != nil {
+			httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update token")
+			return
+		}
+		if targetErr == nil {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado la caducidad de un token de %s: %s → %s.",
+				h.actorLogin(r.Context()), target.UserLogin,
+				target.ExpiresAt.Format("2006-01-02 15:04"), body.ExpiresAt.Format("2006-01-02 15:04")))
+		}
 	}
-	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not revoke token")
-		return
-	}
-	if targetErr == nil {
-		if current, _ := auth.UserFromContext(r.Context()); current.ID == userID {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha cerrado una de sus sesiones.", target.UserLogin))
-		} else {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha revocado un token de %s.",
-				h.actorLogin(r.Context()), target.UserLogin))
+	if body.Revoked != nil {
+		err := h.service.Revoke(r.Context(), userID, tokenID)
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrWrongUser) {
+			httpapi.WriteError(w, http.StatusNotFound, "not_found", "token not found")
+			return
+		}
+		if err != nil {
+			httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not revoke token")
+			return
+		}
+		if targetErr == nil {
+			if current.ID == userID {
+				httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha cerrado una de sus sesiones.", target.UserLogin))
+			} else {
+				httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha revocado un token de %s.",
+					h.actorLogin(r.Context()), target.UserLogin))
+			}
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
-}
-
-func (h *Handler) pathIDs(w http.ResponseWriter, r *http.Request) (userID, tokenID int64, ok bool) {
-	userID, ok = h.resolveUserLogin(w, r)
-	if !ok {
-		return 0, 0, false
-	}
-	tokenID, ok = h.tokenID(w, r)
-	return userID, tokenID, ok
 }
 
 func (h *Handler) tokenID(w http.ResponseWriter, r *http.Request) (int64, bool) {

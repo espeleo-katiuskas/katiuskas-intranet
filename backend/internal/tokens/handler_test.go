@@ -265,7 +265,7 @@ func TestHandlerUpdateExpiryAndRevokeRequireAdmin(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, path, boardToken, map[string]string{"expires_at": time.Now().Add(48 * time.Hour).Format(time.RFC3339)}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from extending expiry, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodDelete, path, boardToken, nil); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPatch, path, boardToken, map[string]bool{"revoked": true}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from revoking, got %d", rec.Code)
 	}
 }
@@ -339,10 +339,9 @@ func TestHandlerUpdateExpiryRequiresExpiresAt(t *testing.T) {
 	}
 }
 
-// TestHandlerPathIDsRejectsNonNumericTokenID covers pathIDs's own
-// tokenID parse failure — shared by both updateExpiry and revoke, so
-// exercising it through either route is enough for both.
-func TestHandlerPathIDsRejectsNonNumericTokenID(t *testing.T) {
+// TestHandlerRejectsNonNumericTokenID covers the tokenID parse failure, whether the request
+// changes the expiry or revokes.
+func TestHandlerRejectsNonNumericTokenID(t *testing.T) {
 	mux, resolver, _, tx := newHandlerTestServer(t)
 	target := testutil.InsertUser(t, tx, "")
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
@@ -351,7 +350,7 @@ func TestHandlerPathIDsRejectsNonNumericTokenID(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]string{"expires_at": time.Now().Add(time.Hour).Format(time.RFC3339)}); rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_id for a non-numeric token id, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusBadRequest {
+	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]bool{"revoked": true}); rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_id for a non-numeric token id, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
@@ -366,7 +365,7 @@ func TestHandlerRevoke(t *testing.T) {
 	tokenID := list[0].ID
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, nil)
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, map[string]bool{"revoked": true})
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -392,7 +391,7 @@ func TestHandlerRejectsTokenIDBelongingToAnotherUser(t *testing.T) {
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", someoneElse.Login, tokenID)
-	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusNotFound {
+	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]bool{"revoked": true}); rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for a token id under the wrong user, got %d", rec.Code)
 	}
 }
@@ -460,7 +459,7 @@ func TestHandlerRevokeNotifiesTelegram(t *testing.T) {
 	tokenID := list[0].ID
 
 	adminToken := testutil.TokenFor(resolver, admin.ID, "admin")
-	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, nil)
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", target.Login, tokenID), adminToken, map[string]bool{"revoked": true})
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -720,11 +719,11 @@ func TestHandlerAPersonSeesAndRevokesTheirOwnSessions(t *testing.T) {
 		}
 	}
 	otherList, _ := service.ListForUser(ctx, other.ID)
-	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", other.Login, otherList[0].ID), myToken, nil), http.StatusForbidden)
-	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, otherList[0].ID), myToken, nil), http.StatusNotFound)
+	expectCode(doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", other.Login, otherList[0].ID), myToken, map[string]bool{"revoked": true}), http.StatusForbidden)
+	expectCode(doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, otherList[0].ID), myToken, map[string]bool{"revoked": true}), http.StatusNotFound)
 	expectCode(doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, mine.ID), myToken,
 		map[string]string{"expires_at": time.Now().Add(48 * time.Hour).Format(time.RFC3339)}), http.StatusForbidden)
-	expectCode(doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, mine.ID), myToken, nil), http.StatusNoContent)
+	expectCode(doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, mine.ID), myToken, map[string]bool{"revoked": true}), http.StatusNoContent)
 	if _, err := service.Authenticate(ctx, activeRaw, "", ""); err == nil {
 		t.Errorf("the session I revoked should no longer work")
 	}
@@ -767,7 +766,7 @@ func TestHandlerAnImpersonationSessionSeesButCannotEndThePersonsSessions(t *test
 	if rec := doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/users/%s/tokens", other.Login), impersonated, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for another person's sessions, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("%s/%d", path, list[0].ID), impersonated, nil); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("%s/%d", path, list[0].ID), impersonated, map[string]bool{"revoked": true}); rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403 ending a session through an impersonation, got %d", rec.Code)
 	}
 	again, _ := service.ListForUser(ctx, person.ID)
@@ -787,7 +786,7 @@ func TestHandlerRevokingYourOwnSessionNotifiesInItsOwnWords(t *testing.T) {
 	}
 	list, _ := service.ListForUser(ctx, me.ID)
 	myToken := testutil.TokenFor(resolver, me.ID, "member")
-	rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, list[0].ID), myToken, nil)
+	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, list[0].ID), myToken, map[string]bool{"revoked": true})
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -985,5 +984,38 @@ func TestHandlerListForAPersonWithoutSessionsIsAnEmptyArray(t *testing.T) {
 		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
 			t.Errorf("query %q: expected 200 and [], got %d %q", query, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// A session is revoked with PATCH and revoked: true, and never brought back; the expiry is admin
+// only, and one of the two has to be given.
+func TestHandlerPatchSessionRevokedAndExpiryRules(t *testing.T) {
+	mux, resolver, service, tx := newHandlerTestServer(t)
+	me := testutil.InsertUser(t, tx, "")
+	if _, err := service.Issue(context.Background(), me.ID, time.Hour); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	list, _ := service.ListForUser(context.Background(), me.ID)
+	path := fmt.Sprintf("/api/v1/users/%s/tokens/%d", me.Login, list[0].ID)
+	myToken := testutil.TokenFor(resolver, me.ID, "member")
+
+	if rec := doRequest(mux, http.MethodPatch, path, myToken, map[string]any{}); rec.Code != http.StatusBadRequest {
+		t.Errorf("an empty body: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, myToken, map[string]bool{"revoked": false}); rec.Code != http.StatusBadRequest {
+		t.Errorf("revoked: false: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, myToken, map[string]any{"expires_at": time.Now().Add(time.Hour).Format(time.RFC3339)}); rec.Code != http.StatusForbidden {
+		t.Errorf("a person changing their own expiry: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path, myToken, nil); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Errorf("expected DELETE on a session not to exist, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, myToken, map[string]bool{"revoked": true}); rec.Code != http.StatusNoContent {
+		t.Fatalf("revoking their own: %d %s", rec.Code, rec.Body.String())
+	}
+	after, _ := service.ListForUser(context.Background(), me.ID)
+	if len(after) != 1 || after[0].RevokedAt == nil {
+		t.Errorf("expected the session to stay on file, revoked: %+v", after)
 	}
 }

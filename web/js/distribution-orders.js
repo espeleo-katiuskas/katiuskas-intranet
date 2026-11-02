@@ -558,11 +558,7 @@ async function perform(act, u) {
       });
     }
     case 'unpay': {
-      const query = numbered
-        ? `?identifiers=${encodeList(chosen)}`
-        : quantity
-          ? `?quantity=${quantity}`
-          : '';
+      const reversal = numbered ? { identifiers: chosen } : quantity ? { quantity } : {};
       if (
         !numbered &&
         !quantity &&
@@ -575,8 +571,10 @@ async function perform(act, u) {
         hint: `${capitalized(which)} de ${u.beneficiary_name}.`,
         label: 'Cuenta de la que se devuelve el dinero',
         run: (accountId) => {
-          const joined = accountId ? `${query ? '&' : '?'}account_id=${accountId}` : '';
-          return apiFetch(`${base}/units/${u.id}/payment${query}${joined}`, { method: 'DELETE' });
+          return apiFetch(`${base}/units/${u.id}/payment/reversal`, {
+            method: 'POST',
+            body: JSON.stringify({ ...reversal, ...(accountId ? { account_id: accountId } : {}) }),
+          });
         },
         done: 'Marca de pagado quitada.',
       });

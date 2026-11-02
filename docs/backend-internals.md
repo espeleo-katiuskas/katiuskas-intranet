@@ -73,41 +73,41 @@ database dependency. `internal/tokens` is the real resolver: it hashes the raw t
 touches `last_used_at`/`last_used_ip`/`last_used_user_agent` (the address and `User-Agent` the
 middleware passes, `Authenticator` → `SessionResolver.Authenticate`) in one query, then resolves
 roles *live* (not baked into the token) via `roles.Service`. `tokens` also exposes endpoints to
-audit and end sessions: `GET` and `DELETE /users/{login}/tokens[/{tokenID}]` are for that person
-themselves (who sees and closes their own sessions from `/perfil`, `?status=active`) or admin
-(`sessionOwner`: anybody else, or a login nobody has, is a 403 so it can't be used to check which
-exist; somebody impersonating the person sees their sessions, as the person would in their profile,
-but is not them acting for themselves, so can't end them — the admin leaves the impersonation first
-(`sessionOwner`'s `ending`); closing one's own says "ha cerrado una de sus sesiones" in the log
-channel), while `PATCH` (the expiry), `GET /tokens` and `POST /users/{login}/impersonate` are
-admin-only; `GET /tokens` lists everyone's — the active ones by default, `?status=all` for the
-history, paged by `limit`/`offset` — which marks the caller's own session `current`, found by the
-hash of its bearer token) to audit, re-expire, or revoke any token, plus `POST
-/users/{login}/impersonate` (admin-only, issues a short-lived token — `config.ImpersonationTokenTTL`
-— that resolves as the target person in every way except `AuthenticatedUser.ImpersonatedBy`, which
-names the admin) and `POST /auth/impersonate/exit` to end one and get a fresh normal token back.
-`PUT`/`DELETE /auth/role-override` let a real admin make their *own* session act for an hour with
-other roles (`tokens.role_override`, migration `00041`) to see what somebody with them sees, without
-touching anybody's real roles (which would run into the automatic roles, the last-admin rule and the
-risk of locking oneself out): `Service.Authenticate` still resolves the person's roles live, and
-answers with those of the override as `AuthenticatedUser.Roles` while it has not ended
-(`RoleOverrideUntil`), keeping the own ones in `RealRoles`. The routes use `RequireAuth` and check
-`RealRoles` for `admin` themselves, because under the override the roles in force may not include
-it; an impersonation session is refused (409 `impersonating`); the roles must exist and include
-`admin`, `board` or `member` (`no_baseline_role`: with none nothing could be used). `GET /auth/me`
-adds `real_roles` and `role_override_seconds_left` while one is in force. Neither changing the roles
-nor putting them back is announced on Telegram (an admin does it often and it only adds noise,
-unlike an impersonation, which is). The
-same session token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie
-(`auth.SetSessionCookie`, name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or
-refreshed (sign-in, impersonation start/exit) — every ordinary route still only ever looks at the
-bearer header (`auth.Protect`/`RequireAuth`), so this cookie existing changes nothing about them. It
-exists purely for `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which
-`internal/library` and `internal/userfiles` use on their own file-serving `GET` routes specifically
-(nowhere else) so a document/file can be a plain, browser-navigable `<a href>` link — opened
-directly in a new tab, or saved by the browser's own "Save As" with the real filename — instead of
-needing `apiFetchBlob`'s fetch-then-`Blob` dance the way `library.js` otherwise uses for everything
-else; `web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
+audit and end sessions: `GET /users/{login}/tokens` and `PATCH …/{tokenID}` (`revoked: true`; a
+session is never deleted) are for that person themselves (who sees and closes their own sessions
+from `/perfil`, `?status=active`) or admin (`sessionOwner`: anybody else, or a login nobody has, is
+a 403 so it can't be used to check which exist; somebody impersonating the person sees their
+sessions, as the person would in their profile, but is not them acting for themselves, so can't end
+them — the admin leaves the impersonation first (`sessionOwner`'s `ending`); closing one's own says
+"ha cerrado una de sus sesiones" in the log channel), while `PATCH` (the expiry), `GET /tokens` and
+`POST /users/{login}/impersonate` are admin-only; `GET /tokens` lists everyone's — the active ones
+by default, `?status=all` for the history, paged by `limit`/`offset` — which marks the caller's own
+session `current`, found by the hash of its bearer token) to audit, re-expire, or revoke any token,
+plus `POST /users/{login}/impersonate` (admin-only, issues a short-lived token —
+`config.ImpersonationTokenTTL` — that resolves as the target person in every way except
+`AuthenticatedUser.ImpersonatedBy`, which names the admin) and `POST /auth/impersonate/exit` to end
+one and get a fresh normal token back. `PUT`/`DELETE /auth/role-override` let a real admin make
+their *own* session act for an hour with other roles (`tokens.role_override`, migration `00041`) to
+see what somebody with them sees, without touching anybody's real roles (which would run into the
+automatic roles, the last-admin rule and the risk of locking oneself out): `Service.Authenticate`
+still resolves the person's roles live, and answers with those of the override as
+`AuthenticatedUser.Roles` while it has not ended (`RoleOverrideUntil`), keeping the own ones in
+`RealRoles`. The routes use `RequireAuth` and check `RealRoles` for `admin` themselves, because
+under the override the roles in force may not include it; an impersonation session is refused (409
+`impersonating`); the roles must exist and include `admin`, `board` or `member` (`no_baseline_role`:
+with none nothing could be used). `GET /auth/me` adds `real_roles` and `role_override_seconds_left`
+while one is in force. Neither changing the roles nor putting them back is announced on Telegram (an
+admin does it often and it only adds noise, unlike an impersonation, which is). The same session
+token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie (`auth.SetSessionCookie`,
+name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or refreshed (sign-in,
+impersonation start/exit) — every ordinary route still only ever looks at the bearer header
+(`auth.Protect`/`RequireAuth`), so this cookie existing changes nothing about them. It exists purely
+for `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/library` and
+`internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere else) so a
+document/file can be a plain, browser-navigable `<a href>` link — opened directly in a new tab, or
+saved by the browser's own "Save As" with the real filename — instead of needing `apiFetchBlob`'s
+fetch-then-`Blob` dance the way `library.js` otherwise uses for everything else;
+`web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
 links. `ClearSessionCookie` removes it on logout, so a signed-out browser can't open a file link
 straight from history or a bookmark anymore. `internal/authapi` glues magic-link
 request/consume/logout and `GET /auth/me` (identity+roles resolved from context, one light query for
@@ -403,9 +403,9 @@ can be partial (migration `00027`): `paid_quantity` of its `quantity` are paid, 
 `paid_at`/`paid_marked_by_id` as when and by whom the last payment was marked, set exactly when
 something is paid (`CHECK`s). Admin/board only: `POST .../payments` adds payments, all-or-nothing
 (`Repository.MarkPaid`: `payments` of `quantity` units of a row, all that is pending when 0, plus
-`unit_ids` for whole rows; more than pending is `ErrAlreadyPaid`), `DELETE
-.../units/{id}/payment[?quantity=N]` takes units off (`ClearPaid`). Asking for more of something
-paid leaves the added units unpaid, and `UpdateQuantity` refuses to go below what is paid
+`unit_ids` for whole rows; more than pending is `ErrAlreadyPaid`), `POST
+.../units/{id}/payment/reversal` (`quantity`: N) takes units off (`ClearPaid`). Asking for more of
+something paid leaves the added units unpaid, and `UpdateQuantity` refuses to go below what is paid
 (`ErrBelowPaid`); a row with anything paid is "paid" for `checkEditable`. Pickups still mark a whole
 row. **Payments are recorded in accounting** (migration `00032_distribution_accounts.sql`): every
 distribution has an optional `account_id` (the account its payments go to; `account_name` in the
@@ -415,17 +415,17 @@ marking one as the default is refused by `accounting` (`ErrNotIncomeForDistribut
 `not_income_for_distributions`), as is taking the `income` type off an account some distribution
 names — (at most one, a partial unique index; marking one in
 `accounting.Repository.Create`/`UpdateAccount` unmarks the other) is used — none of the two is 409
-`no_distribution_account`. `POST .../payments` takes `account_id` in the body and `DELETE
-.../payment` as `?account_id=`: the account the money was paid into or goes back from, which has to
-exist (`ErrUnknownAccount`, 400), be of type `asset` (`ErrAccountNotAsset`), and is required
-whenever money moves (`ErrAccountRequired`; what costs nothing needs no account and records
-nothing). In the same database transaction `recordPaymentTransactions` writes, per beneficiary of
-the request, a transaction with two entries — the asset `+total`, the distribution's account
-`−total`, signs changed when a payment is taken off — by direct SQL (not through
-`internal/accounting`, which this package doesn't import), with a Spanish description of who and
-what ("Pago de Nombre Apellidos en «Reparto»: 3 × Papeleta (0001-0003)"; "Devolución del pago de
-…"), and sets `distribution_payments.transaction_id` of the entries it wrote (`ON DELETE RESTRICT`).
-A payment made by mistake is undone by deleting its transaction: `accounting.Repository` runs a hook
+`no_distribution_account`. `POST .../payments` and `POST .../payment/reversal` take `account_id` in
+the body: the account the money was paid into or goes back from, which has to exist
+(`ErrUnknownAccount`, 400), be of type `asset` (`ErrAccountNotAsset`), and is required whenever
+money moves (`ErrAccountRequired`; what costs nothing needs no account and records nothing). In the
+same database transaction `recordPaymentTransactions` writes, per beneficiary of the request, a
+transaction with two entries — the asset `+total`, the distribution's account `−total`, signs
+changed when a payment is taken off — by direct SQL (not through `internal/accounting`, which this
+package doesn't import), with a Spanish description of who and what ("Pago de Nombre Apellidos en
+«Reparto»: 3 × Papeleta (0001-0003)"; "Devolución del pago de …"), and sets
+`distribution_payments.transaction_id` of the entries it wrote (`ON DELETE RESTRICT`). A payment
+made by mistake is undone by deleting its transaction: `accounting.Repository` runs a hook
 (`BeforeDeleteTransaction`, wired in `cmd/api/main.go` to `distributions.UndoPaymentsOf`) in the
 same database transaction before deleting it, which unpays what each entry of the list of payments
 paid (or pays again what it took off) and removes those entries; if an order has changed since and

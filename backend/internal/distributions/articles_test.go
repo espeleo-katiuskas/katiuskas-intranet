@@ -721,16 +721,16 @@ func TestARowCanBePaidInPartAndAddingToItLeavesTheRestPending(t *testing.T) {
 	}
 
 	// Taking some off, or all of it.
-	clear := func(q string) *httptest.ResponseRecorder {
-		return e.do("DELETE", fmt.Sprintf("%s/%d/payment%s", unitsPath(d.ID), papeletas.ID, q), board.token, nil)
+	clear := func(body map[string]any) *httptest.ResponseRecorder {
+		return e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), papeletas.ID), board.token, body)
 	}
-	expect(t, clear("?quantity=6"), http.StatusBadRequest, "invalid_quantity")
-	expect(t, clear("?quantity=0"), http.StatusBadRequest, "invalid_quantity")
-	mustStatus(t, clear("?quantity=2"), http.StatusNoContent)
+	expect(t, clear(map[string]any{"quantity": 6}), http.StatusBadRequest, "invalid_quantity")
+	expect(t, clear(map[string]any{"quantity": 0}), http.StatusBadRequest, "invalid_quantity")
+	mustStatus(t, clear(map[string]any{"quantity": 2}), http.StatusNoContent)
 	if u := unit(papeletas); u.PaidQuantity != 3 || u.PaidAt == nil {
 		t.Errorf("unexpected unit: %+v", u)
 	}
-	mustStatus(t, clear(""), http.StatusNoContent)
+	mustStatus(t, clear(nil), http.StatusNoContent)
 	if u := unit(papeletas); u.PaidQuantity != 0 || u.PaidAt != nil || u.PaidMarkedByLogin != nil {
 		t.Errorf("nothing should be paid: %+v", u)
 	}
@@ -760,7 +760,7 @@ func TestMaterialCanChangeAndRemoveAnybodysOrder(t *testing.T) {
 	expect(t, e.do("POST", distributionPath(d.ID)+"/payments", material.token, map[string]any{"unit_ids": []int64{u.ID}}), http.StatusForbidden, "forbidden")
 	// An order with something paid can't go until the payment is taken off.
 	expect(t, e.do("DELETE", path, material.token, nil), http.StatusConflict, "unit_paid")
-	mustStatus(t, e.do("DELETE", path+"/payment", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", path+"/payment/reversal", admin.token, nil), http.StatusNoContent)
 	mustStatus(t, e.do("DELETE", path, material.token, nil), http.StatusNoContent)
 }
 
@@ -911,12 +911,12 @@ func TestHandedOutUnitsCanBeReturnedUnlessPaidAndTheirNumbersAreFreed(t *testing
 	expect(t, giveBack(map[string]any{}), http.StatusBadRequest, "invalid_quantity")
 	// Unpaying a specific one makes it returnable; and when nothing is left the
 	// row goes.
-	mustStatus(t, e.do("DELETE", unitPath+"/payment?identifiers=0001", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", unitPath+"/payment/reversal", admin.token, map[string]any{"identifiers": []string{"0001"}}), http.StatusNoContent)
 	mustStatus(t, giveBack(map[string]any{"identifiers": []string{"0001"}}), http.StatusNoContent)
 	if got := row(); got.Quantity != 2 || got.PickedUpQuantity != 1 || got.PaidQuantity != 1 || strings.Join(got.Identifiers, ",") != "0002" {
 		t.Errorf("unexpected row: %+v", got)
 	}
-	mustStatus(t, e.do("DELETE", unitPath+"/payment", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", unitPath+"/payment/reversal", admin.token, nil), http.StatusNoContent)
 	mustStatus(t, giveBack(map[string]any{}), http.StatusNoContent)
 	if got := row(); got.Quantity != 1 || got.PickedUpQuantity != 0 || got.PickedUpAt != nil || len(got.Identifiers) != 0 {
 		t.Errorf("unexpected row: %+v", got)
@@ -997,15 +997,15 @@ func TestOnlyItemsWithANumberCanBePaidAndWhichOnesIsKnown(t *testing.T) {
 	// Numbers paid or handed out can't be taken off the list; the others can.
 	expect(t, e.do("PUT", fmt.Sprintf("%s/%d/identifiers", unitsPath(d.ID), u.ID), admin.token, map[string]any{"identifiers": []string{"0001-0003"}}), http.StatusBadRequest, "invalid_identifiers")
 	// Unpaying is by which ones too.
-	clear := func(q string) *httptest.ResponseRecorder {
-		return e.do("DELETE", fmt.Sprintf("%s/%d/payment%s", unitsPath(d.ID), u.ID, q), board.token, nil)
+	clear := func(body map[string]any) *httptest.ResponseRecorder {
+		return e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(d.ID), u.ID), board.token, body)
 	}
-	expect(t, clear("?identifiers=0001,0099"), http.StatusBadRequest, "identifier_not_assigned")
-	mustStatus(t, clear("?identifiers=0002"), http.StatusNoContent)
+	expect(t, clear(map[string]any{"identifiers": []string{"0001", "0099"}}), http.StatusBadRequest, "identifier_not_assigned")
+	mustStatus(t, clear(map[string]any{"identifiers": []string{"0002"}}), http.StatusNoContent)
 	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0003,0004" || got.PaidQuantity != 3 {
 		t.Errorf("unexpected row: %+v", got)
 	}
-	mustStatus(t, clear("?quantity=1"), http.StatusNoContent)
+	mustStatus(t, clear(map[string]any{"quantity": 1}), http.StatusNoContent)
 	if got := row(); strings.Join(got.PaidIdentifiers, ",") != "0001,0003" {
 		t.Errorf("the last paid goes: %+v", got)
 	}
@@ -1061,7 +1061,7 @@ func TestNumbersCanBeAddedAndRemovedAndRangesWorkEverywhere(t *testing.T) {
 		"deliveries": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001-0002"}}}, "picked_up_by_login": a.Login,
 	}), http.StatusNoContent)
 	mustStatus(t, e.do("DELETE", path+"/pickup?identifiers=0001-0002", admin.token, nil), http.StatusNoContent)
-	mustStatus(t, e.do("DELETE", path+"/payment?identifiers=0001-0002", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", path+"/payment/reversal", admin.token, map[string]any{"identifiers": []string{"0001-0002"}}), http.StatusNoContent)
 	mustStatus(t, e.do("POST", distributionPath(d.ID)+"/pickups", admin.token, map[string]any{
 		"deliveries": []map[string]any{{"unit_id": u.ID, "identifiers": []string{"0001-0002"}}}, "picked_up_by_login": a.Login,
 	}), http.StatusNoContent)
@@ -1122,8 +1122,8 @@ func TestListOfPaymentsOfADistributionIsChronologicalWithItsRunningTotal(t *test
 	pay(board, other, po, map[string]any{"quantity": 4})                      // 20, in the other one
 	pay(board, lot, pa, map[string]any{"quantity": 1})                        // 5 more: 0003
 	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/identifiers", unitsPath(lot.ID), db.ID), admin.token, map[string]any{"identifiers": []string{"124/1-2"}}), http.StatusOK)
-	pay(admin, lot, db, map[string]any{})                                                                                                          // 2 × 20 = 40: total 55
-	mustStatus(t, e.do("DELETE", fmt.Sprintf("%s/%d/payment?identifiers=0002", unitsPath(lot.ID), pa.ID), board.token, nil), http.StatusNoContent) // −5: 50
+	pay(admin, lot, db, map[string]any{})                                                                                                                                            // 2 × 20 = 40: total 55
+	mustStatus(t, e.do("POST", fmt.Sprintf("%s/%d/payment/reversal", unitsPath(lot.ID), pa.ID), board.token, map[string]any{"identifiers": []string{"0002"}}), http.StatusNoContent) // −5: 50
 
 	got := list(lot, "")
 	if len(got) != 4 {
@@ -1178,7 +1178,7 @@ func TestListOfPaymentsOfADistributionIsChronologicalWithItsRunningTotal(t *test
 	// first, and the entries stay.
 	orderPath := fmt.Sprintf("%s/%d", unitsPath(other.ID), po.ID)
 	expect(t, e.do("DELETE", orderPath, admin.token, nil), http.StatusConflict, "unit_paid")
-	mustStatus(t, e.do("DELETE", orderPath+"/payment", admin.token, nil), http.StatusNoContent)
+	mustStatus(t, e.do("POST", orderPath+"/payment/reversal", admin.token, nil), http.StatusNoContent)
 	mustStatus(t, e.do("DELETE", orderPath, admin.token, nil), http.StatusNoContent)
 	after := list(other, "")
 	if len(after) != 2 || after[0].Quantity != -4 || after[0].Amount != -20 || after[0].TotalAfter != 0 || after[0].UnitID != nil || after[0].RecordedByLogin != admin.Login {
@@ -1209,10 +1209,10 @@ func TestNumbersNotInTheStateAnOperationNeedsAreNamedInTheError(t *testing.T) {
 		}
 	}
 	// Taking the payment off a number that isn't paid, alone or among others.
-	check(e.do("DELETE", path+"/payment?identifiers=0003", admin.token, nil), http.StatusConflict, "identifier_not_paid", "0003")
-	check(e.do("DELETE", path+"/payment?identifiers=0001,0002,0003,0004", admin.token, nil), http.StatusConflict, "identifier_not_paid", "0003, 0004")
+	check(e.do("POST", path+"/payment/reversal", admin.token, map[string]any{"identifiers": []string{"0003"}}), http.StatusConflict, "identifier_not_paid", "0003")
+	check(e.do("POST", path+"/payment/reversal", admin.token, map[string]any{"identifiers": []string{"0001", "0002", "0003", "0004"}}), http.StatusConflict, "identifier_not_paid", "0003, 0004")
 	// One that isn't even assigned to the order.
-	check(e.do("DELETE", path+"/payment?identifiers=0001,0150", admin.token, nil), http.StatusBadRequest, "identifier_not_assigned", "0150")
+	check(e.do("POST", path+"/payment/reversal", admin.token, map[string]any{"identifiers": []string{"0001", "0150"}}), http.StatusBadRequest, "identifier_not_assigned", "0150")
 	// The same for undoing a delivery and for returning.
 	check(e.do("DELETE", path+"/pickup?identifiers=0001,0002", admin.token, nil), http.StatusConflict, "identifier_not_delivered", "0002")
 	check(e.do("POST", path+"/return", admin.token, map[string]any{"identifiers": []string{"0003"}}), http.StatusConflict, "identifier_not_delivered", "0003")
