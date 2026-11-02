@@ -314,11 +314,27 @@ func (r *Repository) AddedBy(ctx context.Context, activityID, userID int64) (int
 	return addedBy, err == nil, err
 }
 
+// RemoveParticipant takes a person off an activity — refused (ErrHasGuests) while they still have
+// guests in it: those go first, nothing cascades.
 func (r *Repository) RemoveParticipant(ctx context.Context, activityID, userID int64) error {
-	_, err := r.pool.Exec(ctx, `
+	// In its own (sub)transaction so a refused delete is rolled back on its own: under test, where
+	// every call shares one outer transaction, the violation would otherwise abort all of it.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
 		DELETE FROM activity_participants WHERE activity_id=$1 AND user_id=$2
 	`, activityID, userID)
-	return err
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+		return ErrHasGuests
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // IsParticipant reports whether userID has an actual activity_participants

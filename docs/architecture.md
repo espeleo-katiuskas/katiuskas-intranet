@@ -693,6 +693,13 @@ only admin/board), who can also sign up the initial participants in one go.
   which queries the activity to compare `leader_id` with the authenticated user).
 - The type (`caving`, `canyoning`, `training`, `social`, `other`) can also be changed when
   editing.
+- **Guests.** People from outside the club can go to an activity, invited by somebody of the club
+  who goes (`activity_guests`: a name and who invites them, who has to be signed up: a composite
+  foreign key says so). Whoever invites (once signed up) adds them with just the name; the
+  organizer, admin and board add them saying which of the people signed up invites them, and remove
+  them like the one who invited them. A person with guests cannot be taken off the activity until
+  those are removed (409 `has_guests`). They are not participants: they are not counted by the rules
+  of who can sign up (only a member), nor are they `federated` or not.
 
 **Validation**
 

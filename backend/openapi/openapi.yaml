@@ -1603,6 +1603,69 @@ paths:
             themselves, or — on a public activity — the organizer tried
             to remove someone other than themselves.
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: has_guests — that person still has guests in the activity; remove them first. }
+
+  /activities/{id}/guests:
+    get:
+      summary: List an activity's guests
+      description: >
+        Any baseline role. Guests are people from outside the club who go to the activity, each
+        invited by one of the people signed up to it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Guests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Guest" }
+    post:
+      summary: Add a guest
+      description: >
+        Whoever invites the guest (signed up to the activity), the organizer, admin and board. Whoever
+        invites just gives the name; the organizer, admin and board also give invited_by, the login of
+        the person signed up who invites them. A participant who is none of those cannot name somebody
+        else (403).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                invited_by: { type: string, description: "Login of the person who invites them; required for the organizer, admin and board." }
+      responses:
+        "201":
+          description: The guest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Guest" }
+        "400": { description: invalid_id, invalid_body (also a blank name) or invited_by_required. }
+        "403": { description: Not signed up to the activity (and not organizer, admin or board), or naming somebody else without being any of those. }
+        "404": { description: not_found — the activity, or the login in invited_by. }
+        "409": { description: inviter_not_signed_up, or duplicate_guest (the same person already invited that name). }
+
+  /activities/{id}/guests/{guestID}:
+    delete:
+      summary: Remove a guest
+      description: Whoever invited them, the organizer, admin and board.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: guestID, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Removed }
+        "400": { description: invalid_id. }
+        "403": { description: Neither whoever invited them, nor the organizer, admin or board. }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /activities/{id}/resources:
     get:
@@ -4377,6 +4440,17 @@ components:
             Reassigns the organizer. admin/board only — even the
             current organizer can't change this on their own activity
             (403 otherwise).
+
+    Guest:
+      type: object
+      description: A person from outside the club who goes to an activity, invited by one of those signed up to it.
+      properties:
+        id: { type: integer }
+        activity_id: { type: integer }
+        name: { type: string }
+        invited_by_login: { type: string }
+        added_by_login: { type: string, description: Whoever recorded it. }
+        added_at: { type: string, format: date-time }
 
     Participant:
       type: object

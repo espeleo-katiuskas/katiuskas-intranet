@@ -115,6 +115,10 @@ const texts = {
     'No se puede borrar este movimiento: otros movimientos dependen de él (se quedaría el stock en negativo o una devolución sin préstamo).',
   activity_in_use:
     'La actividad todavía tiene participantes, recursos o movimientos de material: quítalos antes de borrarla.',
+  has_guests: 'Esa persona tiene invitados en la actividad: quítalos antes.',
+  duplicate_guest: 'Esa persona ya ha apuntado a un invitado con ese nombre.',
+  inviter_not_signed_up: 'Quien invita tiene que estar apuntado a la actividad.',
+  invited_by_required: 'Hay que indicar cuál de los apuntados invita.',
   kind_change:
     'Una cuerda o una saca no puede cambiar de tipo, ni el material general pasar a ser cuerda o saca.',
   unknown_type: 'El tipo de material no existe.',

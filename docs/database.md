@@ -13,7 +13,8 @@ Contents:
   `roles`, `user_roles`
 - [Members](#members): `memberships`, `membership_leaves`, `membership_dues`, `licenses`,
   `license_types`, `board_members`
-- [Activities](#activities): `activities`, `activity_participants`, `activity_resources`, `holidays`
+- [Activities](#activities): `activities`, `activity_participants`, `activity_guests`,
+  `activity_resources`, `holidays`
 - [Material](#material): `material_items`, `material_types`, `material_movements`,
   `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -57,10 +58,11 @@ Contents:
 users ──┬─< memberships, membership_leaves, membership_dues, licenses, board_members
         ├─< user_roles >── roles
         ├─< tokens, magic_link_tokens
-        ├─< activities (leader) , activity_participants >── activities
+        ├─< activities (leader) , activity_participants >── activities, activity_guests
         └─< material_movements (recipient and who records it)
 
-activities ──< activity_resources, activity_participants, material_movements
+activities ──< activity_resources, activity_participants, activity_guests, material_movements
+activity_participants ──< activity_guests   (the person who invites them)
 material_items ──< material_movements        (material_item_quantities is a view of the two)
 license_types ──< licenses                material_types ──< material_items
 
@@ -96,6 +98,8 @@ what it deletes, the code does it itself, explicitly, in the same transaction:
   activities they led or are signed up to, dues, material movements, orders...) makes it refuse
   (409 `has_references`) until it is removed.
 - `DELETE /roles/{id}`: refused while somebody holds the role (409 `role_in_use`).
+- `DELETE /activities/{id}/participants/{login}`: refused while that person has guests in the
+  activity (409 `has_guests`).
 
 ## Enumerated types
 
@@ -559,6 +563,33 @@ Constraints:
 `added_by` is who signed the person up (themselves, or somebody else) and `added_at` when; for the
 ones signed up before this was recorded (migration `00045`) `added_by` is the organizer of the
 activity and `added_at` its creation.
+
+### `activity_guests`
+
+People from outside the club who go to an activity: a name and the person of the club who invites
+them, who has to be signed up to it.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `activity_id` | bigint | no |  |
+| `name` | text | no |  |
+| `invited_by` | bigint | no |  |
+| `added_by` | bigint | no |  |
+| `added_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `activity_id` → `activities(id)`: an activity with it cannot be deleted
+- `(activity_id, invited_by)` → `activity_participants(activity_id, user_id)`: the person who
+  invites has to be signed up, and cannot be taken off the activity while they have guests (409
+  `has_guests`)
+- `added_by` → `users(id)`: whoever recorded it (the one who invites, the organizer, admin or board)
+  cannot be deleted
+- `activity_guests_name_not_blank`: `btrim(name) <> ''`
+- unique `(activity_id, invited_by, lower(name))`: the same person does not invite the same name
+  twice to one activity
 
 ### `activity_resources`
 
@@ -1349,3 +1380,4 @@ at the end; that database has to be recreated when a new migration appears.
   `material_items.type` is renamed `kind` and its enum `material_kind`
 - `00049_foreign_keys_restrict.sql`: every foreign key becomes `ON DELETE RESTRICT` (some were
   `CASCADE`, two `SET NULL` and the rest the default)
+- `00050_activity_guests.sql`: `activity_guests`

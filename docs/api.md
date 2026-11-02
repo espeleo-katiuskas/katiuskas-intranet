@@ -370,9 +370,24 @@ Directiva).
     is none of those); 404 `not_found`; 409 `not_a_member`
 - **DELETE** `/activities/{id}/participants/{login}` — *Depends on the activity*. Leave the
   activity, or remove another person: admin or board, the organizer in a private one, or whoever
-  signed that person up.
+  signed that person up. Refused while that person still has guests in the activity.
   - returns: 204
-  - errors: 400 `invalid_id`
+  - errors: 400 `invalid_id`; 409 `has_guests`
+- **GET** `/activities/{id}/guests` — *Any baseline role*. Guests: people from outside the club who
+  go to the activity, each with who of the club invites them.
+  - returns: 200 `[Guest]`
+- **POST** `/activities/{id}/guests` — *Whoever invites them (signed up to the activity), the
+  organizer, admin or board*. Adds a guest. Whoever invites just gives the `name`; the organizer,
+  admin and board also give `invited_by`, the login of the person signed up who invites them (a
+  participant cannot name somebody else).
+  - body: `name*`, `invited_by`
+  - returns: 201 `Guest`
+  - errors: 400 `invalid_id`, `invalid_body`, `invited_by_required`; 403 `forbidden`; 404
+    `not_found`; 409 `inviter_not_signed_up`, `duplicate_guest`
+- **DELETE** `/activities/{id}/guests/{guestID}` — *Whoever invited them, the organizer, admin or
+  board*. Removes a guest.
+  - returns: 204
+  - errors: 400 `invalid_id`; 403 `forbidden`; 404 `not_found`
 - **GET** `/users/{login}/activities` — *Any baseline role*. Activity history of a person (as
   organizer or participant).
   - returns: 200 `[Activity]`
@@ -1043,6 +1058,17 @@ Nested fields:
 | `activity_id` | integer |
 | `user_login` | text |
 | `federated` | boolean |
+| `added_by_login` | text |
+| `added_at` | datetime |
+
+### `Guest`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `activity_id` | integer |
+| `name` | text |
+| `invited_by_login` | text |
 | `added_by_login` | text |
 | `added_at` | datetime |
 

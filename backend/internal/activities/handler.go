@@ -71,6 +71,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update))
 	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.deleteActivity))
 
+	mux.Handle("GET /api/v1/activities/{id}/guests", h.authenticator.Protect(h.listGuests))
+	mux.Handle("POST /api/v1/activities/{id}/guests", h.authenticator.Protect(h.addGuest))
+	mux.Handle("DELETE /api/v1/activities/{id}/guests/{guestID}", h.authenticator.Protect(h.deleteGuest))
+
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
 	mux.Handle("DELETE /api/v1/activities/{id}/participants/{login}", h.authenticator.Protect(h.leave))
@@ -546,6 +550,10 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Leave(r.Context(), id, userID); err != nil {
+		if errors.Is(err, ErrHasGuests) {
+			httpapi.WriteError(w, http.StatusConflict, "has_guests", err.Error())
+			return
+		}
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not leave activity")
 		return
 	}

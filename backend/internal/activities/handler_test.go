@@ -1572,3 +1572,148 @@ func TestHandlerDeleteActivity(t *testing.T) {
 		t.Errorf("a bad id: %d", rec.Code)
 	}
 }
+
+// Guests are people from outside the club, invited by somebody signed up to the activity. That
+// person adds them (with just a name); the organizer, admin and board say who of those signed up
+// invites them. The same people remove them.
+func TestHandlerGuests(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	organizer := testutil.InsertMember(t, tx)
+	host := testutil.InsertMember(t, tx)
+	outsider := testutil.InsertMember(t, tx) // a member, but not signed up
+	admin := testutil.InsertMember(t, tx)
+	organizerToken := tokenFor(t, authn, organizer.ID, "member")
+	hostToken := tokenFor(t, authn, host.ID, "member")
+	outsiderToken := tokenFor(t, authn, outsider.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", organizerToken, map[string]any{
+		"title": "Con invitados", "type": "caving", "start_date": "2026-01-01", "end_date": "2026-01-01",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created activities.Activity
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	base := fmt.Sprintf("/api/v1/activities/%d", created.ID)
+	guests := base + "/guests"
+	if rec := doRequest(mux, http.MethodPost, base+"/participants", hostToken, nil); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Fatalf("sign up: %d: %s", rec.Code, rec.Body.String())
+	}
+	add := func(token string, body map[string]any) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, guests, token, body)
+	}
+	decodeGuest := func(rec *httptest.ResponseRecorder) activities.Guest {
+		t.Helper()
+		var g activities.Guest
+		if err := json.Unmarshal(rec.Body.Bytes(), &g); err != nil {
+			t.Fatalf("decode %q: %v", rec.Body.String(), err)
+		}
+		return g
+	}
+
+	// Whoever invites, being signed up, gives just the name.
+	rec = add(hostToken, map[string]any{"name": "  Marta Pérez  "})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("a participant adds a guest: %d %s", rec.Code, rec.Body.String())
+	}
+	own := decodeGuest(rec)
+	if own.Name != "Marta Pérez" || own.InvitedByLogin != host.Login || own.AddedByLogin != host.Login {
+		t.Errorf("unexpected guest: %+v", own)
+	}
+	// Naming themselves is fine, naming somebody else is not.
+	if rec := add(hostToken, map[string]any{"name": "Otro", "invited_by": host.Login}); rec.Code != http.StatusCreated {
+		t.Errorf("a participant naming themselves: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := add(hostToken, map[string]any{"name": "Otro más", "invited_by": organizer.Login}); rec.Code != http.StatusForbidden {
+		t.Errorf("a participant naming somebody else: %d %s", rec.Code, rec.Body.String())
+	}
+	// Somebody not signed up cannot add one.
+	if rec := add(outsiderToken, map[string]any{"name": "Pedro"}); rec.Code != http.StatusForbidden {
+		t.Errorf("somebody not signed up: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// The organizer and admin have to say who invites them, who has to be signed up.
+	for name, token := range map[string]string{"the organizer": organizerToken, "admin": adminToken} {
+		rec := add(token, map[string]any{"name": "Luis"})
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invited_by_required" {
+			t.Errorf("%s without invited_by: %d %s", name, rec.Code, rec.Body.String())
+		}
+		rec = add(token, map[string]any{"name": "Luis", "invited_by": outsider.Login})
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "inviter_not_signed_up" {
+			t.Errorf("%s naming somebody not signed up: %d %s", name, rec.Code, rec.Body.String())
+		}
+		if rec := add(token, map[string]any{"name": "Luis", "invited_by": "nadie.nadie"}); rec.Code != http.StatusNotFound {
+			t.Errorf("%s naming nobody: %d", name, rec.Code)
+		}
+	}
+	rec = add(organizerToken, map[string]any{"name": "Elena", "invited_by": host.Login})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("the organizer adds one for the host: %d %s", rec.Code, rec.Body.String())
+	}
+	byOrganizer := decodeGuest(rec)
+	if byOrganizer.InvitedByLogin != host.Login || byOrganizer.AddedByLogin != organizer.Login {
+		t.Errorf("expected invited by the host, added by the organizer: %+v", byOrganizer)
+	}
+	rec = add(adminToken, map[string]any{"name": "Raúl", "invited_by": host.Login})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("admin adds one: %d %s", rec.Code, rec.Body.String())
+	}
+	byAdmin := decodeGuest(rec)
+
+	// The same name from the same person is a duplicate, whatever its case; a blank one is not a name.
+	if rec := add(hostToken, map[string]any{"name": "marta pérez"}); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_guest" {
+		t.Errorf("a duplicate: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := add(hostToken, map[string]any{"name": "   "}); rec.Code != http.StatusBadRequest {
+		t.Errorf("a blank name: %d", rec.Code)
+	}
+
+	// Anybody signed in lists them.
+	rec = doRequest(mux, http.MethodGet, guests, outsiderToken, nil)
+	var list []activities.Guest
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if rec.Code != http.StatusOK || len(list) != 4 {
+		t.Errorf("listing: %d, %d guests: %s", rec.Code, len(list), rec.Body.String())
+	}
+
+	// The host cannot leave with guests; they have to be removed first.
+	leave := fmt.Sprintf("%s/participants/%s", base, host.Login)
+	if rec := doRequest(mux, http.MethodDelete, leave, hostToken, nil); rec.Code != http.StatusConflict || errorCode(t, rec) != "has_guests" {
+		t.Errorf("leaving with guests: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Removing: whoever invited them, the organizer, admin and board; nobody else.
+	one := func(g activities.Guest) string { return fmt.Sprintf("%s/%d", guests, g.ID) }
+	if rec := doRequest(mux, http.MethodDelete, one(own), outsiderToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("somebody else removing a guest: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, one(own), hostToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("the host removing their own: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, one(byOrganizer), organizerToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("the organizer removing one: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, one(byAdmin), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("admin removing one: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, one(byAdmin), adminToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("removing it twice: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, guests+"/abc", adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
+	// One guest left ("Otro", the host's): when it goes the host can leave.
+	rec = doRequest(mux, http.MethodGet, guests, hostToken, nil)
+	list = nil
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 {
+		t.Fatalf("expected one guest left, got %+v", list)
+	}
+	if rec := doRequest(mux, http.MethodDelete, one(list[0]), hostToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("removing the last: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodDelete, leave, hostToken, nil); rec.Code != http.StatusNoContent {
+		t.Errorf("leaving with no guests: %d %s", rec.Code, rec.Body.String())
+	}
+}
