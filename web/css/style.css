@@ -1595,3 +1595,29 @@ a.btn {
   color: var(--ink-muted);
   font-size: 0.85rem;
 }
+
+/* A row of links to the sections of a long page (/admin), each a jump to the heading's id. */
+.section-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.section-index a {
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--link);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.section-index a:hover {
+  background: var(--surface-muted);
+}
+
+h2[id^="section-"] {
+  scroll-margin-top: 16px;
+}

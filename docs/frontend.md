@@ -574,7 +574,9 @@ is admin-only, in the markup and in `members.js`, which loads the role catalog (
 role checkboxes) only for an admin. The list of roles itself, to create or delete one, is no longer
 here: it lives on `/admin`, the page behind the "Admin" sidebar entry (admin only, `NAV_ITEMS`'
 `roles: ['admin']`), meant for whatever else only administrators care about —
-`admin.html`/`admin.js`, which for now holds an "Estado del sistema" section (`GET /admin/status`,
+`admin.html`/`admin.js`. It starts with a row of links to its sections (`.section-index`, each
+one an anchor to its `<h2 id="section-…">`: add a section, add its link), and for now holds an
+"Estado del sistema" section (`GET /admin/status`,
 see **Admin status**: on top, what is wrong right now (`problems`, in a red box) or "No se ha
 detectado ningún problema"; then version and commit, database and migration, email, Telegram,
 timeouts, directories and, in "Espacio en disco", how full the disks that hold them are, with an

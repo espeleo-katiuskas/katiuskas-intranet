@@ -20,11 +20,20 @@
     </div>
   </div>
 
+  <nav class="section-index" aria-label="Secciones de la página">
+    <a href="#section-status">Estado del sistema</a>
+    <a href="#section-roles">Roles</a>
+    <a href="#section-sessions">Sesiones</a>
+    <a href="#section-holidays">Festivos</a>
+    <a href="#section-club-info">Datos de interés</a>
+    <a href="#section-material-types">Tipos de material</a>
+  </nav>
+
   <p id="feedback" class="success-message" hidden></p>
 
   <div class="section-header">
     <div>
-      <h2>Estado del sistema</h2>
+      <h2 id="section-status">Estado del sistema</h2>
       <p class="subtitle">Qué versión hay desplegada, si la base de datos responde y cómo está configurado, sin entrar en el servidor.</p>
     </div>
     <button id="refresh-status" type="button" class="btn btn-secondary btn-small">Actualizar</button>
@@ -33,7 +42,7 @@
 
   <div class="section-header">
     <div>
-      <h2>Roles</h2>
+      <h2 id="section-roles">Roles</h2>
       <p class="subtitle">Qué personas tiene cada rol, y a quién se lo das o se lo quitas. Los roles automáticos (socio, junta, antiguo socio) se asignan solos según el historial.</p>
     </div>
     <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
@@ -74,7 +83,7 @@
 
   <div class="section-header">
     <div>
-      <h2>Sesiones</h2>
+      <h2 id="section-sessions">Sesiones</h2>
       <p class="subtitle">Quién tiene la sesión abierta, desde cuándo y desde dónde. Revocar una sesión la cierra en el acto.</p>
     </div>
   </div>
@@ -108,7 +117,7 @@
 
   <div class="section-header">
     <div>
-      <h2>Festivos</h2>
+      <h2 id="section-holidays">Festivos</h2>
       <p class="subtitle">Los días que el calendario de actividades marca como festivos, año por año.</p>
     </div>
     <button id="toggle-new-holiday" type="button" class="btn btn-secondary btn-small">+ Nuevo festivo</button>
@@ -150,7 +159,7 @@
 
   <div class="section-header">
     <div>
-      <h2>Datos de interés</h2>
+      <h2 id="section-club-info">Datos de interés</h2>
       <p class="subtitle">Lo que se ve en la portada: nombre del club, NIF, dirección, cuentas, teléfono de Bizum… Se guardan en la base de datos, no en el código.</p>
     </div>
     <button id="toggle-new-club-info" type="button" class="btn btn-secondary btn-small">+ Nuevo dato</button>
@@ -195,7 +204,7 @@
 
   <div class="section-header">
     <div>
-      <h2>Tipos de material</h2>
+      <h2 id="section-material-types">Tipos de material</h2>
       <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar.</p>
     </div>
     <button id="toggle-new-material-type" type="button" class="btn btn-secondary btn-small">+ Nuevo tipo</button>
