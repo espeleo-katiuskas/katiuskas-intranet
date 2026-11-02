@@ -82,6 +82,10 @@ function applyManagementVisibility() {
   document.getElementById('cancel-activity').hidden = !canManage || activityCancelled;
   document.getElementById('reactivate-activity').hidden = !canManage || !activityCancelled;
   document.getElementById('add-participant-row').hidden = !canAddOthers();
+  // Guests: whoever is signed up adds their own with just a name; the organizer, admin and board also
+  // say which of the people signed up invites them (as the backend requires).
+  document.getElementById('add-guest-row').hidden = !(canManage || isParticipant);
+  document.getElementById('guest-inviter').hidden = !canManage;
 }
 
 function dateRangeLabel(activity) {
@@ -290,6 +294,11 @@ async function loadParticipants(ready = Promise.resolve()) {
           .join('')
       : '<p>Todavía no hay nadie apuntado.</p>';
 
+    participantLogins = participants.map((p) => p.user_login);
+    participantCount = participants.length;
+    renderInviterOptions();
+    renderAttendance();
+
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
     const changed = isParticipant !== alreadyIn;
     isParticipant = alreadyIn;
@@ -313,6 +322,102 @@ async function loadParticipants(ready = Promise.resolve()) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
 }
+
+// People from outside the club (GET/POST /activities/{id}/guests, DELETE …/{guestID}), each invited by
+// one of those signed up. Whoever invited a guest, the organizer, admin and board can remove them.
+let guests = [];
+let participantLogins = [];
+let participantCount = null;
+
+function renderAttendance() {
+  const element = document.getElementById('attendance');
+  if (participantCount == null) return;
+  element.hidden = false;
+  const noun = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  element.textContent =
+    `${noun(participantCount, 'persona del club apuntada', 'personas del club apuntadas')} ` +
+    `y ${noun(guests.length, 'invitado', 'invitados')}: ` +
+    `${noun(participantCount + guests.length, 'persona', 'personas')} en total.`;
+}
+
+// Whoever can say who invites a guest picks among the people signed up.
+function renderInviterOptions() {
+  const options = memberEntries.filter((entry) => participantLogins.includes(entry.id));
+  document.getElementById('guest-inviter-options').innerHTML = renderPickerOptions(options);
+}
+
+function renderGuestRow(guest) {
+  const canRemove = canManage || guest.invited_by_login === viewer?.login;
+  return `
+    <div class="detail-row participant-row">
+      <span>${escapeHtml(guest.name)}
+        <span class="badge">Invitado de ${personName(guest.invited_by_login, personLabel(guest.invited_by_login))}</span></span>
+      ${canRemove ? `<button type="button" class="btn btn-danger btn-small" data-remove-guest="${guest.id}">Quitar</button>` : ''}
+    </div>
+  `;
+}
+
+async function loadGuests(ready = Promise.resolve()) {
+  const container = document.getElementById('guests-list');
+  try {
+    guests = await apiFetch(`/activities/${activityId}/guests`);
+    // Names come from the directory, and who can remove them from the activity.
+    await ready;
+    container.innerHTML = guests.length
+      ? guests.map(renderGuestRow).join('')
+      : '<p>Todavía no hay ningún invitado.</p>';
+    renderAttendance();
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById('add-guest').addEventListener('click', async () => {
+  const nameInput = document.getElementById('guest-name');
+  const inviterInput = document.getElementById('guest-inviter');
+  const name = nameInput.value.trim();
+  if (!name) {
+    showError('Escribe el nombre del invitado.');
+    return;
+  }
+  const body = { name };
+  if (canManage) {
+    const options = memberEntries.filter((entry) => participantLogins.includes(entry.id));
+    const login = resolvePickerId(options, inviterInput.value);
+    if (!login) {
+      showError('Elige, de la lista de apuntados, quién invita.');
+      return;
+    }
+    body.invited_by = login;
+  }
+  try {
+    await apiFetch(`/activities/${activityId}/guests`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    nameInput.value = '';
+    inviterInput.value = '';
+    showFeedback('Invitado añadido.');
+    await loadGuests();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+document.getElementById('guests-list').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-remove-guest]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/activities/${activityId}/guests/${button.dataset.removeGuest}`, {
+      method: 'DELETE',
+    });
+    await loadGuests();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
 
 document.getElementById('join-activity').addEventListener('click', async () => {
   try {
@@ -946,10 +1051,12 @@ const directoryLoaded = loadDirectory();
 const activityLoaded = loadActivity(directoryLoaded);
 const participantsLoaded = loadParticipants(Promise.all([directoryLoaded, activityLoaded]));
 const itemsLoaded = loadItems();
+const guestsLoaded = loadGuests(Promise.all([directoryLoaded, activityLoaded]));
 await Promise.all([
   directoryLoaded,
   activityLoaded,
   participantsLoaded,
+  guestsLoaded,
   itemsLoaded,
   loadActivityLoans(itemsLoaded),
   loadMemoria(Promise.all([directoryLoaded, participantsLoaded])),
