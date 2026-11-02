@@ -94,6 +94,7 @@ const ACTIVE_ALIASES = {
   '/actividad': '/actividades',
   '/socio': '/socios',
   '/cuenta': '/contabilidad',
+  '/material-prestado': '/material',
   '/justificantes': '/contabilidad',
   '/reparto': '/repartos',
   '/reparto-pedidos': '/repartos',

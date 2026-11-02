@@ -50,6 +50,15 @@ and the form is filled with the item; it sends `PATCH /items/{id}`, which replac
 for a gear item, whose form has no brand, model or code, the ones it already has are sent back as
 they are.
 
+**Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
+and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
+of `/material`: *Prestado*, the items whose loans have not all come back
+(`outstanding_loan_quantity`), with the units pending and, from each item's own movements, the
+activities they are out for (loans minus returns, per activity), and *Alquilado*, the open rentals
+(`GET /movements?status=active`) with a "Devolver" button. A loan is returned from the page of its
+activity, so this page only reports them. `materialCommon.js` has how an item is named, shared with
+`/material`. In the menu it counts as part of Material (`ACTIVE_ALIASES`).
+
 **Movement types on `/material`.** "+ Movimiento" only offers what can be done with that item right
 now (`movementTypeOptionsFor` in `inventory.js`; the API would refuse the rest): *Alquiler* if it
 has a rental price and a unit available, *Venta* if it has a sale price and a unit available,

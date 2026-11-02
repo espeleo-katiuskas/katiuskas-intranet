@@ -12,6 +12,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { bagTypeLabels, itemLabel, itemTypeLabels, ropeTypeLabels } from './materialCommon.js';
 
 const user = await initPage();
 // Managing the material — adding equipment to the catalog, and its movements (loans, rentals,
@@ -28,15 +29,6 @@ const itemStatusLabels = {
   abandoned: 'Abandonado',
   maintenance: 'En mantenimiento',
   retired: 'De baja',
-};
-
-const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
-const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = {
-  caving: 'Espeleología',
-  canyoning: 'Cañones',
-  quick: 'Rápida',
-  special: 'Especial',
 };
 
 // Every movement type, for display — loans still show up in an item's
@@ -112,40 +104,6 @@ let activityEntries = [];
 function personLabel(login) {
   const person = directoryByLogin[login];
   return person ? `${person.first_name} ${person.last_name}` : login;
-}
-
-// A rope/bag is identified by brand+model (plus its type-specific
-// attributes); gear may have no known brand/model at all, so its
-// category — always set — anchors the label instead. includeCategory
-// is false only in the items table, where the Tipo column already
-// shows a gear item's category (see itemTypeColumn) and repeating it
-// here would be redundant.
-function itemLabel(item, { includeCategory = true } = {}) {
-  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.item_type === 'rope') {
-    const parts = [
-      brandModel || null,
-      `${item.diameter_mm} mm`,
-      ropeTypeLabels[item.rope_type] ?? item.rope_type,
-      item.manufacture_year,
-      item.length_m ? `${item.length_m} m` : null,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  if (item.item_type === 'bag') {
-    const parts = [
-      brandModel || null,
-      `${item.capacity_liters} L`,
-      bagTypeLabels[item.bag_type] ?? item.bag_type,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  const parts = [
-    includeCategory ? item.category_name : null,
-    brandModel || null,
-    item.description || null,
-  ];
-  return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
 // Accent-insensitive substring match — "cañones" and "canones" should
@@ -310,7 +268,6 @@ async function loadItems() {
     allItems = await apiFetch('/items');
     itemsById = Object.fromEntries(allItems.map((item) => [item.id, item]));
     renderFilteredItems();
-    renderLoanedMaterial();
   } catch {
     tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
   }
@@ -407,7 +364,6 @@ newMovementForm.addEventListener('submit', async (event) => {
     newMovementDialog.close();
     await loadItems();
     await expandItemMovements(movementItemId);
-    await loadActiveMovements();
   } catch (err) {
     showError(err.message);
   } finally {
@@ -428,85 +384,11 @@ async function handleReturn(button) {
     showFeedback('Devolución registrada.');
     await loadItems();
     if (itemId) await expandItemMovements(Number(itemId));
-    if (canManageMovements) await loadActiveMovements();
   } catch (err) {
     button.disabled = false;
     showError(err.message);
   }
 }
-
-function renderActiveMovementRow(m) {
-  const item = itemsById[m.item_id];
-  const canReturn = canManageMovements && isReturnable(m);
-  return `
-    <tr>
-      <td>${formatDate(m.transacted_at)}</td>
-      <td>${item ? itemLabel(item) : `Material n.º ${m.item_id}`}</td>
-      <td>${m.user_login ? escapeHtml(personLabel(m.user_login)) : '—'}</td>
-      <td>${typeLabels[m.type] ?? m.type}</td>
-      <td>${m.quantity}</td>
-      <td>${canReturn ? `<button type="button" class="btn btn-secondary btn-small" data-return="${m.id}">Devolver</button>` : '—'}</td>
-    </tr>
-  `;
-}
-
-async function loadActiveMovements() {
-  const tableBody = document.getElementById('active-movements-table-body');
-  try {
-    // A sale (or acquisition/loss/abandonment/retirement) is never
-    // really "active", and a loan settles immediately too — only
-    // rental can be — so this filters defensively in case stray data
-    // ever says otherwise.
-    const movements = (await apiFetch('/movements?status=active')).filter(isReturnable);
-    tableBody.innerHTML = movements.length
-      ? movements.map(renderActiveMovementRow).join('')
-      : '<tr><td colspan="6">No hay movimientos activos.</td></tr>';
-  } catch {
-    tableBody.innerHTML = '<tr><td colspan="6">No se pudieron cargar los movimientos.</td></tr>';
-  }
-}
-
-document.getElementById('active-movements-table-body')?.addEventListener('click', async (event) => {
-  const returnButton = event.target.closest('button[data-return]');
-  if (returnButton) {
-    await handleReturn(returnButton);
-  }
-});
-
-function renderLoanedMaterialRow(item) {
-  return `
-    <tr>
-      <td>${itemLabel(item)}</td>
-      <td>${item.outstanding_loan_quantity}</td>
-      <td><button type="button" class="btn btn-secondary btn-small" data-view-loaned-item="${item.id}">Ver movimientos</button></td>
-    </tr>
-  `;
-}
-
-// Every loan's own outstanding balance, summed across every activity —
-// what's actually out with someone right now, regardless of which trip
-// it went out for. Read-only here: a return is registered against a
-// specific item's own inline form (with the activity it's for), same
-// as any other movement.
-function renderLoanedMaterial() {
-  const tableBody = document.getElementById('loaned-material-table-body');
-  if (!tableBody) return;
-  const loaned = allItems.filter((item) => item.outstanding_loan_quantity > 0);
-  tableBody.innerHTML = loaned.length
-    ? loaned.map(renderLoanedMaterialRow).join('')
-    : '<tr><td colspan="3">No hay material prestado pendiente de devolver.</td></tr>';
-}
-
-document.getElementById('loaned-material-table-body')?.addEventListener('click', async (event) => {
-  const viewButton = event.target.closest('button[data-view-loaned-item]');
-  if (!viewButton) return;
-  const itemId = Number(viewButton.dataset.viewLoanedItem);
-  const row = document.querySelector(`[data-item-movements-row="${itemId}"]`);
-  if (!row) return;
-  row.hidden = false;
-  await expandItemMovements(itemId);
-  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-});
 
 if (canManageMovements) {
   const newItemDialog = document.getElementById('new-item-dialog');
@@ -711,7 +593,6 @@ if (canManageMovements) {
   // Awaited so the "Socio" column has names to show on first paint
   // instead of falling back to the bare login until a re-render happens.
   await directoryLoaded;
-  loadActiveMovements();
 }
 
 await itemsLoaded;

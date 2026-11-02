@@ -18,7 +18,10 @@
       <h1>Material</h1>
       <p class="subtitle">Catálogo de material del club, su disponibilidad y sus movimientos.</p>
     </div>
-    <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board,material">+ Nuevo material</button>
+    <div class="table-actions">
+      <a href="/material-prestado" class="btn btn-secondary btn-small" data-roles="admin,board,material">Material prestado o alquilado</a>
+      <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board,material">+ Nuevo material</button>
+    </div>
   </div>
 
   <p id="feedback" class="success-message" hidden></p>
@@ -168,30 +171,6 @@
     </form>
   </dialog>
 
-  <div data-roles="admin,board,material">
-    <h2>Material prestado</h2>
-    <p class="subtitle">Lo que sigue pendiente de devolver, sumado en todas las actividades. Para registrar una devolución, usa el formulario del propio material (botón «Movimientos»).</p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Material</th><th>Pendiente</th><th></th></tr>
-        </thead>
-        <tbody id="loaned-material-table-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div data-roles="admin,board,material">
-    <h2>Movimientos activos</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Fecha</th><th>Material</th><th>Socio</th><th>Tipo</th><th>Cantidad</th><th></th></tr>
-        </thead>
-        <tbody id="active-movements-table-body"></tbody>
-      </table>
-    </div>
-  </div>
     </main>
   </div>
 </div>
