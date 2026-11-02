@@ -18,7 +18,11 @@
       <h1>Actividades</h1>
       <p class="subtitle">Próximas salidas y actividades del club.</p>
     </div>
-    <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small">+ Nueva actividad</button>
+    <div class="table-actions">
+      <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
+      <button id="toggle-calendar-view" type="button" class="btn btn-secondary btn-small">Ver calendario</button>
+      <button id="toggle-new-activity" type="button" class="btn btn-secondary btn-small">+ Nueva actividad</button>
+    </div>
   </div>
 
   <p id="feedback" class="success-message" hidden></p>
@@ -86,14 +90,6 @@
       </div>
     </form>
   </dialog>
-
-  <div class="section-header">
-    <h2>Actividades</h2>
-    <span>
-      <button id="toggle-activity-filter" type="button" class="btn btn-secondary btn-small">Ver todas</button>
-      <button id="toggle-calendar-view" type="button" class="btn btn-secondary btn-small">Ver calendario</button>
-    </span>
-  </div>
 
   <div id="list-view">
     <p class="hint">Haz clic en una actividad para ver todos sus detalles, apuntarte o gestionarla.</p>
