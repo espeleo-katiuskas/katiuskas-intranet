@@ -997,7 +997,6 @@ Nested fields:
 |---|---|
 | `activity_id` | integer |
 | `user_login` | text |
-| `role` | leader/participant |
 | `federated` | boolean |
 
 ### `Distribution`

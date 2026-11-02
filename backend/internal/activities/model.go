@@ -94,7 +94,6 @@ type Participant struct {
 	ActivityID int64  `json:"activity_id"`
 	UserID     int64  `json:"-"`
 	UserLogin  string `json:"user_login"`
-	Role       string `json:"role"`
 	// Federated says whether the person has a federative license for the current year. It is only
 	// information: any member can join any activity, federated or not.
 	Federated bool `json:"federated"`

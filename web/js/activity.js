@@ -250,7 +250,7 @@ function renderParticipantRow(p) {
   const name = personLabel(p.user_login);
   return `
     <div class="detail-row">
-      <span>${personName(p.user_login, name)}${p.role === 'leader' ? ' · organizador' : ''}
+      <span>${personName(p.user_login, name)}
         ${p.federated ? '<span class="badge status-completed">Federado</span>' : '<span class="badge">No federado</span>'}</span>
       ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-participant="${p.user_login}">Quitar</button>` : ''}
     </div>
