@@ -96,10 +96,6 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activit
 	return s.repo.Update(ctx, id, in)
 }
 
-func (s *Service) Cancel(ctx context.Context, id int64) error {
-	return s.repo.Cancel(ctx, id)
-}
-
 // Join signs userID up to the activity; addedBy is who is doing it (userID themselves, or somebody else).
 func (s *Service) Join(ctx context.Context, activityID, userID, addedBy int64) error {
 	if _, err := s.repo.GetByID(ctx, activityID); err != nil {

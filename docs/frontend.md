@@ -112,9 +112,9 @@ today, *En curso* otherwise (`activityStateLabels` has the texts; the badge's CS
 `status-<state>`). `activities.js` (list, with its "active only" filter `?active=true`, and the
 calendar, which leaves cancelled ones out), `activity.js` (the header, and, for whoever can manage
 the activity, a "Cancelar actividad" button next to "Editar actividad", after a confirmation —
-`DELETE /activities/{id}` — which becomes "Reactivar actividad" while it is cancelled — `PATCH` with
-`cancelled: false`; the edit dialog has no state field) and `member.js` use it, and `material.js`
-asks for `?active=true` for its activity picker.
+`PATCH` with `cancelled: true` — which becomes "Reactivar actividad" while it is cancelled, `PATCH`
+with `cancelled: false`; the edit dialog has no state field) and `member.js` use it, and
+`material.js` asks for `?active=true` for its activity picker.
 
 **Going back to the page that was asked for.** When `initSession()` finds no session (no token, or
 `GET /auth/me` rejects it), it keeps the address asked for (path and query, except `/` and

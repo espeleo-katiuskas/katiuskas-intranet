@@ -254,17 +254,6 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	return a, nil
 }
 
-func (r *Repository) Cancel(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE activities SET cancelled = true WHERE id = $1`, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
 // AddParticipant signs a person up, recording who did it (addedBy: the person themselves, or somebody
 // else) and when. Signing up somebody who is already in changes nothing, the first record stays.
 func (r *Repository) AddParticipant(ctx context.Context, activityID, userID, addedBy int64) error {

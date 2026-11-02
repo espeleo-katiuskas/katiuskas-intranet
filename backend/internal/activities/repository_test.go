@@ -129,7 +129,8 @@ func TestListActive(t *testing.T) {
 	}
 	cancel := func(a activities.Activity) {
 		t.Helper()
-		if err := repo.Cancel(ctx, a.ID); err != nil {
+		cancelled := true
+		if _, err := repo.Update(ctx, a.ID, activities.UpdateInput{Cancelled: &cancelled}); err != nil {
 			t.Fatalf("cancel: %v", err)
 		}
 	}
@@ -290,35 +291,6 @@ func TestUpdateCanReassignLeader(t *testing.T) {
 	}
 	if found.LeaderID != newLeader.ID || found.LeaderLogin != newLeader.Login {
 		t.Errorf("expected the reassignment to persist, got %+v", found)
-	}
-}
-
-func TestCancel(t *testing.T) {
-	tx := testutil.NewTx(t)
-	repo := activities.NewRepository(tx)
-	ctx := context.Background()
-	leader := testutil.InsertUser(t, tx, "")
-
-	created, err := repo.Create(ctx, activities.CreateInput{Title: "A", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if err := repo.Cancel(ctx, created.ID); err != nil {
-		t.Fatalf("cancel: %v", err)
-	}
-	found, err := repo.GetByID(ctx, created.ID)
-	if err != nil {
-		t.Fatalf("get by id: %v", err)
-	}
-	if !found.Cancelled {
-		t.Error("expected the activity to be cancelled")
-	}
-}
-
-func TestCancelNotFound(t *testing.T) {
-	repo := activities.NewRepository(testutil.NewTx(t))
-	if err := repo.Cancel(context.Background(), 999999); !errors.Is(err, activities.ErrNotFound) {
-		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 

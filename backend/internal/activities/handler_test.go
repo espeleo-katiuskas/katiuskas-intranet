@@ -446,11 +446,16 @@ func TestHandlerUpdateAndCancelAllowLeaderOrAdminOrBoardOnly(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"title": "Newer"}); rec.Code != http.StatusOK {
 		t.Errorf("expected an admin to update an activity, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodDelete, path, otherMemberToken, nil); rec.Code != http.StatusForbidden {
+	cancel := map[string]any{"cancelled": true}
+	if rec := doRequest(mux, http.MethodPatch, path, otherMemberToken, cancel); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a non-leader member to be forbidden from cancelling an activity, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodDelete, path, leaderToken, nil); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, cancel); rec.Code != http.StatusOK {
 		t.Errorf("expected the organizer to cancel their own activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// There is no DELETE: an activity is cancelled, not removed.
+	if rec := doRequest(mux, http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Errorf("expected DELETE /activities/{id} not to exist, got %d", rec.Code)
 	}
 }
 
@@ -1296,13 +1301,20 @@ func TestHandlerCancelNotifiesTelegramWithActorAndTitle(t *testing.T) {
 	notifier.waitForMessage(t) // drain the create notification first
 
 	path := fmt.Sprintf("/api/v1/activities/%d", created.ID)
-	if rec := doRequest(mux, http.MethodDelete, path, leaderToken, nil); rec.Code != http.StatusNoContent {
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"cancelled": true}); rec.Code != http.StatusOK {
 		t.Fatalf("cancel: %d: %s", rec.Code, rec.Body.String())
 	}
 
 	msg := notifier.waitForMessage(t)
-	if !strings.Contains(msg, leader.Login) || !strings.Contains(msg, "Cancelada") {
-		t.Errorf("expected the notification to name the actor and title, got %q", msg)
+	if !strings.Contains(msg, leader.Login) || !strings.Contains(msg, "Cancelada") || !strings.Contains(msg, "ha cancelado") {
+		t.Errorf("expected the notification to say who cancelled which activity, got %q", msg)
+	}
+
+	if rec := doRequest(mux, http.MethodPatch, path, leaderToken, map[string]any{"cancelled": false}); rec.Code != http.StatusOK {
+		t.Fatalf("reactivate: %d: %s", rec.Code, rec.Body.String())
+	}
+	if msg := notifier.waitForMessage(t); !strings.Contains(msg, "ha reactivado") {
+		t.Errorf("expected the notification to say it was reactivated, got %q", msg)
 	}
 }
 

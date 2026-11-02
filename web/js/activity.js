@@ -146,7 +146,10 @@ document.getElementById('cancel-activity').addEventListener('click', async () =>
   )
     return;
   try {
-    await apiFetch(`/activities/${activityId}`, { method: 'DELETE' });
+    await apiFetch(`/activities/${activityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cancelled: true }),
+    });
     showFeedback('Actividad cancelada.');
     await loadActivity();
   } catch (err) {

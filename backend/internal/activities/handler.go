@@ -61,7 +61,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // nothing this endpoint can't actually touch shows up as a spurious
 // "change".
 var auditableFields = []string{
-	"Title", "Type", "StartDate", "EndDate", "Description", "Cancelled", "Visibility", "LeaderLogin",
+	"Title", "Type", "StartDate", "EndDate", "Description", "Visibility", "LeaderLogin",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -69,7 +69,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/activities", h.authenticator.Protect(h.create))
 	mux.Handle("GET /api/v1/activities/{id}", h.authenticator.Protect(h.get))
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update))
-	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.cancel))
 
 	mux.Handle("GET /api/v1/activities/{id}/participants", h.authenticator.Protect(h.listParticipants))
 	mux.Handle("POST /api/v1/activities/{id}/participants", h.authenticator.Protect(h.join))
@@ -336,42 +335,21 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if beforeErr == nil {
+		// Cancelling and reactivating are said in their own words, not as one more changed field.
+		if before.Cancelled != a.Cancelled {
+			verb := "ha cancelado"
+			if !a.Cancelled {
+				verb = "ha reactivado"
+			}
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s %s la actividad «%s».",
+				h.actorLogin(r.Context()), verb, before.Title))
+		}
 		if diff := httpapi.DiffFields(before, a, auditableFields...); len(diff) > 0 {
 			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado la actividad «%s»:\n%s",
 				h.actorLogin(r.Context()), before.Title, strings.Join(diff, "\n")))
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
-}
-
-func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
-		return
-	}
-	if !h.canManage(r, id) {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can cancel this activity")
-		return
-	}
-	// Fetched before cancelling purely so the notification below can
-	// still name the activity afterward.
-	target, targetErr := h.service.Get(r.Context(), id)
-
-	err = h.service.Cancel(r.Context(), id)
-	if errors.Is(err, ErrNotFound) {
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
-		return
-	}
-	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not cancel activity")
-		return
-	}
-	if targetErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha cancelado la actividad «%s».",
-			h.actorLogin(r.Context()), target.Title))
-	}
-	httpapi.WriteJSON(w, http.StatusNoContent, nil)
 }
 
 // listByUser is open to any signed-in baseline user, not just admin/board

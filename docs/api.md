@@ -340,15 +340,13 @@ Directiva).
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`
 - **PATCH** `/activities/{id}` — *Organizer, admin or board*. Modifies an activity. Changing the
-  organizer is only for admin or board.
+  organizer is only for admin or board. `cancelled: true` cancels it and `false` reactivates it (an
+  activity is cancelled, never deleted: there is no `DELETE /activities/{id}`).
   - body: `title`, `type`, `start_date`, `end_date`, `description`, `cancelled`, `visibility`,
     `leader_login`
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`; 403 `forbidden`; 404 `not_found`
-- **DELETE** `/activities/{id}` — *Organizer, admin or board*. Cancels an activity.
-  - returns: 204
-  - errors: 400 `invalid_id`
 - **GET** `/activities/{id}/participants` — *Any baseline role*. Participants.
   - returns: 200 `[Participant]`
   - errors: 400 `invalid_id`

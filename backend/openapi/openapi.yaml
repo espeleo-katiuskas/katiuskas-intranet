@@ -1484,7 +1484,9 @@ paths:
         Only the activity's organizer (leader_login), or admin/board, may
         update it — anyone else gets a 403. leader_login itself
         (reassigning the organizer) is narrower still: admin/board
-        only, even for the current organizer.
+        only, even for the current organizer. cancelled: true cancels the
+        activity and false reactivates it: an activity is cancelled, never
+        deleted, so there is no DELETE on it.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -1505,19 +1507,6 @@ paths:
             leader_login was given by someone who isn't admin/board.
         "404":
           description: not_found — the activity doesn't exist, or leader_login doesn't belong to anyone.
-    delete:
-      summary: Cancel an activity
-      description: >
-        Only the activity's organizer (leader_login), or admin/board, may
-        cancel it — anyone else gets a 403.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
-      responses:
-        "204": { description: Activity cancelled }
-        "400": { description: invalid_id — id isn't numeric. }
-        "403": { description: Only the organizer, board, or admin can cancel this activity. }
-        "404": { $ref: "#/components/responses/NotFound" }
 
   /activities/{id}/participants:
     get:
