@@ -263,7 +263,10 @@ async function loadParticipants(ready = Promise.resolve()) {
       : '<p>Todavía no hay nadie apuntado.</p>';
 
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
+    const changed = isParticipant !== alreadyIn;
     isParticipant = alreadyIn;
+    // Signing up (or leaving) changes what can be done with the memoria: show it right away.
+    if (changed) await refreshMemoriaControls();
     document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
     document.getElementById('leave-activity').hidden = !alreadyIn;
 
@@ -717,8 +720,24 @@ async function loadMemoria(ready = Promise.resolve()) {
   } catch (err) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
+  updateMemoriaAddButton();
+}
+
+function updateMemoriaAddButton() {
   const toggleAddButton = document.getElementById('toggle-memoria-add');
   if (toggleAddButton) toggleAddButton.hidden = !canContributeToMemoria();
+}
+
+// What whoever takes part can do with the memoria (add, and reorder the entries) depends on being
+// signed up, which can change without the page reloading: the add button, and the arrows of the
+// entries already drawn, follow it.
+async function refreshMemoriaControls() {
+  updateMemoriaAddButton();
+  const container = document.getElementById('memoria-list');
+  if (container && memoriaResources.length) {
+    container.innerHTML = memoriaResources.map((res, i) => renderMemoriaRow(res, i)).join('');
+    await loadMemoriaImagePreviews();
+  }
 }
 
 // #edit-memoria-dialog is one shared dialog, not one per resource —
