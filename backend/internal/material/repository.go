@@ -38,6 +38,9 @@ var (
 	ErrBlankTypeName = errors.New("the type name is required")
 	// ErrFixedType means the type is Cuerda or Saca, which can be neither renamed nor deleted.
 	ErrFixedType = errors.New("the types Cuerda and Saca are fixed")
+	// ErrKindChange means an update tried to change an item's kind: a rope or a bag cannot change
+	// type, and general material cannot become a rope or a bag (or the other way round).
+	ErrKindChange = errors.New("an item cannot change between rope, bag and general")
 	// ErrSingleUnitItem means either a rope or bag was asked to start
 	// with (CreateItem) or gain (CreateMovement's 'acquisition') more
 	// than its one single unit — those are always exactly one
@@ -221,15 +224,37 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 	defer tx.Rollback(ctx)
 
 	var kind ItemKind
+	if in.TypeID != nil {
+		var itemKind, typeKind ItemKind
+		err := tx.QueryRow(ctx, `SELECT kind FROM material_items WHERE id = $1`, id).Scan(&itemKind)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Item{}, ErrNotFound
+		}
+		if err != nil {
+			return Item{}, err
+		}
+		err = tx.QueryRow(ctx, `SELECT kind FROM material_types WHERE id = $1`, *in.TypeID).Scan(&typeKind)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Item{}, ErrTypeNotFound
+		}
+		if err != nil {
+			return Item{}, err
+		}
+		// Cuerda and Saca are the only types of their kinds, so the same kind is the same type for
+		// them: only general material really moves.
+		if typeKind != itemKind {
+			return Item{}, ErrKindChange
+		}
+	}
 	err = tx.QueryRow(ctx, `
-		UPDATE material_items SET brand=$2, model=$3, code=$4, description=$5, loanable=$6,
+		UPDATE material_items SET type_id=COALESCE($15, type_id), brand=$2, model=$3, code=$4, description=$5, loanable=$6,
 			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
 			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14
 		WHERE id = $1
 		RETURNING kind
 	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters,
+		in.BagType, in.CapacityLiters, in.TypeID,
 	).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, ErrNotFound

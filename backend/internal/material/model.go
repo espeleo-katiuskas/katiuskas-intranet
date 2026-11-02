@@ -178,9 +178,13 @@ type CreateItemInput struct {
 }
 
 // UpdateItemInput is what PATCH /items/{id} replaces: every field an item can be edited in, all at
-// once (the same "resend everything" as the other PATCHes). Not the item's type (and so its kind), which is what its
+// once (the same "resend everything" as the other PATCHes), but for the type, which may be left out
+// to keep it. Not the item's kind, which is what its
 // shape and required fields hang from, and not its quantities, which only movements change.
 type UpdateItemInput struct {
+	// TypeID is the item's new type; nil keeps it. A general item can move to any other general type;
+	// a rope or a bag stays Cuerda or Saca, and nothing becomes one of them (ErrKindChange).
+	TypeID             *int64
 	Brand              *string
 	Model              *string
 	Code               *string

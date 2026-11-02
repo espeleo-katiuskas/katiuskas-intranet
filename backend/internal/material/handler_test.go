@@ -961,7 +961,7 @@ func TestHandlerUpdateItem(t *testing.T) {
 		"description":           "Casco con barbuquejo",
 		"rental_price_per_week": 12.5,
 		"loanable":              false,
-		// What cannot be edited is ignored.
+		// A general item can move to another general type; its quantities are not editable (ignored).
 		"type_id": testutil.MaterialTypeID(t, tx, "Placas"), "total_quantity": 99,
 	}
 
@@ -978,13 +978,13 @@ func TestHandlerUpdateItem(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind != material.ItemKindGeneral || got.TypeName != "Mosquetones" || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
+	if got.Kind != material.ItemKindGeneral || got.TypeName != "Placas" || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
 		got.Loanable || got.SalePrice != nil ||
 		got.RentalPricePerWeek == nil || *got.RentalPricePerWeek != 12.5 {
 		t.Fatalf("edited item: %+v", got)
 	}
 	msg := notifier.waitForNthMessage(t, 1) // the second, after the creation's
-	for _, want := range []string{"ha editado el material", "Description:", "SalePrice:"} {
+	for _, want := range []string{"ha editado el material", "Description:", "TypeName:", "SalePrice:"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("notice %q lacks %q", msg, want)
 		}
@@ -1001,6 +1001,70 @@ func TestHandlerUpdateItem(t *testing.T) {
 	}
 	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
 		t.Errorf("a bad id: %d", rec.Code)
+	}
+}
+
+// The type of general material can change, but only to another general type: a rope or a bag stays
+// Cuerda or Saca, and nothing becomes one of them.
+func TestHandlerItemTypeCanOnlyChangeWithinGeneral(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 1, "board")
+	create := func(body map[string]any) material.Item {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+		}
+		var item material.Item
+		if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+			t.Fatal(err)
+		}
+		return item
+	}
+	patch := func(item material.Item, body map[string]any) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, body)
+	}
+	cuerda, saca, placas := testutil.MaterialTypeID(t, tx, "Cuerda"), testutil.MaterialTypeID(t, tx, "Saca"), testutil.MaterialTypeID(t, tx, "Placas")
+
+	general := create(generalItemBody(t, tx, 1))
+	for name, typeID := range map[string]int64{"Cuerda": cuerda, "Saca": saca} {
+		rec := patch(general, map[string]any{"description": "Casco", "type_id": typeID})
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "kind_change" {
+			t.Errorf("a general item to %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := patch(general, map[string]any{"description": "Casco", "type_id": 999999}); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "unknown_type" {
+		t.Errorf("an unknown type: %d %s", rec.Code, rec.Body.String())
+	}
+	// Leaving it out keeps the type.
+	rec := patch(general, map[string]any{"description": "Casco"})
+	var kept material.Item
+	_ = json.Unmarshal(rec.Body.Bytes(), &kept)
+	if rec.Code != http.StatusOK || kept.TypeName != "Mosquetones" {
+		t.Errorf("without type_id: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = patch(general, map[string]any{"description": "Casco", "type_id": placas})
+	var moved material.Item
+	_ = json.Unmarshal(rec.Body.Bytes(), &moved)
+	if rec.Code != http.StatusOK || moved.TypeName != "Placas" || moved.Kind != material.ItemKindGeneral {
+		t.Errorf("a general item to another general type: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rope := create(map[string]any{
+		"type_id": cuerda, "brand": "Beal", "model": "Karma", "code": "C-T1", "rope_type": "caving",
+		"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
+	})
+	ropeBody := map[string]any{"brand": "Beal", "model": "Karma", "code": "C-T1", "rope_type": "caving",
+		"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50}
+	for name, typeID := range map[string]int64{"a general type": placas, "Saca": saca} {
+		ropeBody["type_id"] = typeID
+		if rec := patch(rope, ropeBody); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "kind_change" {
+			t.Errorf("a rope to %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	ropeBody["type_id"] = cuerda
+	if rec := patch(rope, ropeBody); rec.Code != http.StatusOK {
+		t.Errorf("a rope with its own type: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -1025,13 +1089,11 @@ func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
 	var item material.Item
 	_ = json.Unmarshal(second.Body.Bytes(), &item)
 	edit := rope("C-1")
-	delete(edit, "type")
 	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
 		t.Errorf("editing to a code in use: %d %s", rec.Code, rec.Body.String())
 	}
 	// Keeping its own code is fine.
 	own := rope("C-2")
-	delete(own, "type")
 	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
 		t.Errorf("editing with its own code: %d %s", rec.Code, rec.Body.String())
 	}

@@ -242,10 +242,10 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 }
 
 // itemAuditFields are the Item fields an edit's notification diffs — those UpdateItemInput can change
-// (the type is not editable).
+// (the type by its name, not by the numeric id).
 var itemAuditFields = []string{
 	"Brand", "Model", "Code", "Description", "Loanable", "RentalPricePerWeek", "SalePrice",
-	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters",
+	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters", "TypeName",
 }
 
 // updateItem replaces every editable field of an item with the body's: the type and the quantities
@@ -271,6 +271,7 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		LengthM            *int32    `json:"length_m"`
 		BagType            *BagType  `json:"bag_type"`
 		CapacityLiters     *float64  `json:"capacity_liters"`
+		TypeID             *int64    `json:"type_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -282,7 +283,7 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 	}
 	before, beforeErr := h.service.GetItem(r.Context(), id)
 	item, err := h.service.UpdateItem(r.Context(), id, UpdateItemInput{
-		Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
+		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
 		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
@@ -293,6 +294,9 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, ErrTypeNotFound):
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
+		return
+	case errors.Is(err, ErrKindChange):
+		httpapi.WriteError(w, http.StatusBadRequest, "kind_change", err.Error())
 		return
 	case errors.Is(err, ErrInvalidItemFields):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())

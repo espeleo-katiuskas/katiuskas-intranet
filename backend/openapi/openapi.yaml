@@ -2980,10 +2980,11 @@ paths:
       summary: Edit an item
       description: >
         Requires the admin, board or material role. Replaces every editable field (brand, model, code,
-        description, loanable, the prices and the fields of its own kind) with the body's; the item's
-        type and quantities are not editable (the quantities are whatever its movements say), so an
-        type or total_quantity in the body is ignored. The same constraints as when it was
-        created apply.
+        description, loanable, the prices and the fields of its own kind) with the body's. type_id may
+        be left out to keep the type; general material can move to another general type, but a rope
+        or a bag stays Cuerda or Saca and nothing becomes one of them (400 kind_change). The
+        quantities are not editable (they are whatever its movements say), so a total_quantity in
+        the body is ignored. The same constraints as when it was created apply.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -2998,7 +2999,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: "invalid_id, invalid_body, invalid_item_fields or model_without_brand." }
+        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields or model_without_brand." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }

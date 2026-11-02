@@ -429,12 +429,15 @@ files (up to 25 MiB).
     `invalid_item_fields`, `model_without_brand`; 409 `duplicate_item_code`
 - **PATCH** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
   editable field with the body's (the brand, model, code, description, `loanable`, prices and the
-  rope or bag fields of its kind). Its type and its quantities, which only movements change, are not
-  editable (a `type_id` or `total_quantity` in the body is ignored).
-  - body: the same as creating, without `type_id`, `acquired_at` and `total_quantity`
+  rope or bag fields of its kind). General material can change its type (`type_id`, which may be
+  left out to keep it), but only to another general one: a rope or a bag stays Cuerda or Saca and
+  nothing becomes one of them (`kind_change`). The quantities, which only movements change, are not
+  editable (a `total_quantity` in the body is ignored).
+  - body: the same as creating, without `acquired_at` and `total_quantity`, and with `type_id`
+    optional
   - returns: 200 `Item`
-  - errors: 400 `invalid_id`, `invalid_body`, `invalid_item_fields`, `model_without_brand`; 404
-    `not_found`; 409 `duplicate_item_code`
+  - errors: 400 `invalid_id`, `invalid_body`, `unknown_type`, `kind_change`, `invalid_item_fields`,
+    `model_without_brand`; 404 `not_found`; 409 `duplicate_item_code`
 - **GET** `/material/types` — *Any baseline role*. Types of material: Cuerda and Saca first,
   then the rest by name.
   - returns: 200 `[MaterialType]`

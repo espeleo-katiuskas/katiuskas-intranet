@@ -44,14 +44,15 @@ since it is served at whatever address was asked for, however deep — which is 
 
 **Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
 dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditItemDialog`): the
-title and the button change, the type is fixed (the field is disabled and the item's own type is
-used), the quantity and the date of acquisition are left out (the stock is what its movements say)
-and the form is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every
-field. The "Tipo" select lists every type from `GET /material/types` (Cuerda and Saca first); the
-fields shown depend on the *kind* of the chosen type (rope fields for Cuerda, bag fields for Saca,
-description and quantity for any other), each option carrying it in `data-kind`. Brand, model and
-code are in the form for every type, required only for ropes and bags; the model field stays
-disabled (and empty) while there is no brand.
+title and the button change, the type is fixed for a rope or a bag (the field is disabled) and, for
+general material, can be changed to another general type (Cuerda and Saca are not offered), the
+quantity and the date of acquisition are left out (the stock is what its movements say) and the form
+is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every field. The
+"Tipo" select lists every type from `GET /material/types` (Cuerda and Saca first); the fields shown
+depend on the *kind* of the chosen type (rope fields for Cuerda, bag fields for Saca, description
+and quantity for any other), each option carrying it in `data-kind`. Brand, model and code are in
+the form for every type, required only for ropes and bags; the model field stays disabled (and
+empty) while there is no brand.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom

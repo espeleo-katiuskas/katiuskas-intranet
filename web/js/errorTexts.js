@@ -107,6 +107,8 @@ const texts = {
   duplicate_type: 'Ya hay otro tipo de material con ese nombre.',
   type_in_use: 'El tipo tiene material y no se puede borrar.',
   fixed_type: 'Los tipos «Cuerda» y «Saca» son fijos: no se pueden renombrar ni borrar.',
+  kind_change:
+    'Una cuerda o una saca no puede cambiar de tipo, ni el material general pasar a ser cuerda o saca.',
   unknown_type: 'El tipo de material no existe.',
   insufficient_stock: 'No queda cantidad suficiente disponible.',
   activity_required: 'Los préstamos y las devoluciones tienen que ir asociados a una actividad.',

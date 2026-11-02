@@ -462,7 +462,14 @@ if (canManageMovements) {
       editingItemId !== null ? 'Editar material' : 'Nuevo material';
     document.getElementById('ni-submit').textContent =
       editingItemId !== null ? 'Guardar' : 'Crear material';
-    typeSelect.disabled = editingItemId !== null;
+    // Editing: a rope or a bag keeps its type, and general material may change it, but only to another
+    // general one (so Cuerda and Saca are not offered).
+    const editingKind = editingItemId !== null ? itemsById[editingItemId]?.kind : null;
+    typeSelect.disabled = editingKind != null && editingKind !== 'general';
+    for (const option of typeSelect.options) {
+      option.disabled = option.hidden =
+        editingKind === 'general' && option.dataset.kind !== 'general';
+    }
   }
   typeSelect.addEventListener('change', updateKindFieldsVisibility);
   updateKindFieldsVisibility();
@@ -545,8 +552,9 @@ if (canManageMovements) {
       body.bag_type = formData.get('bag_type');
       body.capacity_liters = Number(formData.get('capacity_liters'));
     }
+    // A disabled select is not in the FormData: a rope or a bag keeps its type.
+    if (formData.get('type_id')) body.type_id = Number(formData.get('type_id'));
     if (!editing) {
-      body.type_id = Number(formData.get('type_id'));
       body.acquired_at = optionalText('acquired_at');
       if (kind === 'general') body.total_quantity = Number(formData.get('total_quantity')) || 1;
     }
