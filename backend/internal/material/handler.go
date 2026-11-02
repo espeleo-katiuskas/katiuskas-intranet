@@ -131,6 +131,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/material/items", h.authenticator.Protect(h.listItems))
 	mux.Handle("POST /api/v1/material/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
 	mux.Handle("PATCH /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
+	mux.Handle("DELETE /api/v1/material/items/{id}", h.authenticator.Protect(h.deleteItem, "admin"))
 	mux.Handle("GET /api/v1/material/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
 	// Whoever can read the items can read their types (every item names one). Changing the list is
@@ -327,6 +328,34 @@ func (h *Handler) listMaterialTypes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// deleteItem removes an item with no history (see Repository.DeleteItem).
+func (h *Handler) deleteItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	// Fetched before deleting, so the notification can still name the item.
+	item, itemErr := h.service.GetItem(r.Context(), id)
+	err = h.service.DeleteItem(r.Context(), id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	case errors.Is(err, ErrItemHasMovements):
+		httpapi.WriteError(w, http.StatusConflict, "item_has_movements", err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete item")
+		return
+	}
+	if itemErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el material «%s» (%s).",
+			h.actorLogin(r.Context()), itemLabel(item), item.TypeName))
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // writeTypeError answers with the status and code of an error of the type routes.

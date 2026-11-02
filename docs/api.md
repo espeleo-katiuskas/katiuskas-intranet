@@ -441,6 +441,11 @@ files (up to 25 MiB).
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_type`, `kind_change`, `invalid_item_fields`,
     `model_without_brand`; 404 `not_found`; 409 `duplicate_item_code`
+- **DELETE** `/material/items/{id}` — *Admin*. Deletes an item that has no
+  history: the acquisition it was created with goes with it, but any other movement (a loan, a
+  rental, a sale, more stock, a loss...) makes it refuse.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `item_has_movements`
 - **GET** `/material/types` — *Any baseline role*. Types of material: Cuerda and Saca first,
   then the rest by name.
   - returns: 200 `[MaterialType]`

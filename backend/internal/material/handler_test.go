@@ -1298,3 +1298,62 @@ func TestHandlerCannotDeleteATypeInUse(t *testing.T) {
 		t.Errorf("list after the refusal: %d", rec.Code)
 	}
 }
+
+// An item can be deleted, by admin alone, while it has no history beyond the acquisition
+// it was created with (which goes with it); any other movement makes the delete refuse.
+func TestHandlerDeleteItem(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	memberToken := tokenFor(t, authn, 1, "member")
+	boardUser := testutil.InsertUser(t, tx, "") // a real person: a movement records who made it
+	boardToken := tokenFor(t, authn, boardUser.ID, "board")
+	materialMemberToken := tokenFor(t, authn, 3, "material", "member")
+	adminToken := tokenFor(t, authn, 4, "admin")
+
+	create := func() material.Item {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 3))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+		}
+		var item material.Item
+		_ = json.Unmarshal(rec.Body.Bytes(), &item)
+		return item
+	}
+	path := func(item material.Item) string { return fmt.Sprintf("/api/v1/material/items/%d", item.ID) }
+
+	item := create()
+	for name, token := range map[string]string{"a member": memberToken, "board": boardToken, "material": materialMemberToken} {
+		if rec := doRequest(mux, http.MethodDelete, path(item), token, nil); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden from deleting an item, got %d", name, rec.Code)
+		}
+	}
+	if rec := doRequest(mux, http.MethodDelete, path(item), adminToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodDelete, path(item), adminToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("deleting it twice: %d", rec.Code)
+	}
+	var left int
+	if err := tx.QueryRow(context.Background(), `SELECT count(*) FROM material_movements WHERE item_id = $1`, item.ID).Scan(&left); err != nil || left != 0 {
+		t.Errorf("expected its acquisition to go with it, %d left (%v)", left, err)
+	}
+	if rec := doRequest(mux, http.MethodDelete, "/api/v1/material/items/abc", adminToken, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a bad id: %d", rec.Code)
+	}
+
+	// With any other movement it stays.
+	kept := create()
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
+		"item_id": kept.ID, "type": "loss", "quantity": 1,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("loss: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(mux, http.MethodDelete, path(kept), adminToken, nil)
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "item_has_movements" {
+		t.Errorf("an item with a movement: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/items", boardToken, nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), fmt.Sprintf(`"id":%d,`, kept.ID)) {
+		t.Errorf("expected the item to still be listed after the refusal")
+	}
+}

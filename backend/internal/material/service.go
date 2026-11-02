@@ -78,6 +78,10 @@ func (s *Service) UpdateItem(ctx context.Context, id int64, in UpdateItemInput) 
 	return s.repo.UpdateItem(ctx, id, in)
 }
 
+func (s *Service) DeleteItem(ctx context.Context, id int64) error {
+	return s.repo.DeleteItem(ctx, id)
+}
+
 func (s *Service) GetItem(ctx context.Context, id int64) (Item, error) {
 	return s.repo.GetItem(ctx, id)
 }

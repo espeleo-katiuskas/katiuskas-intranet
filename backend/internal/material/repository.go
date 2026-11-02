@@ -41,6 +41,9 @@ var (
 	// ErrKindChange means an update tried to change an item's kind: a rope or a bag cannot change
 	// type, and general material cannot become a rope or a bag (or the other way round).
 	ErrKindChange = errors.New("an item cannot change between rope, bag and general")
+	// ErrItemHasMovements means an item cannot be deleted because it has a history: some movement
+	// other than the acquisition it was created with (a loan, a sale, more stock...).
+	ErrItemHasMovements = errors.New("the item has movements and cannot be deleted")
 	// ErrSingleUnitItem means either a rope or bag was asked to start
 	// with (CreateItem) or gain (CreateMovement's 'acquisition') more
 	// than its one single unit — those are always exactly one
@@ -276,6 +279,45 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 		return Item{}, err
 	}
 	return r.GetItem(ctx, id)
+}
+
+// DeleteItem removes an item that has no history: the acquisition it was created with goes with it
+// (nothing cascades, so it is deleted here), but any other movement — a loan, a rental, a sale, more
+// stock, a loss — is a real thing that happened and makes the delete refuse (ErrItemHasMovements).
+func (r *Repository) DeleteItem(ctx context.Context, id int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// The item's row is locked so that no movement can be recorded while this decides.
+	var locked int64
+	err = tx.QueryRow(ctx, `SELECT id FROM material_items WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var others int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM material_movements
+		WHERE item_id = $1 AND (type <> 'acquisition' OR id <> (
+			SELECT min(id) FROM material_movements WHERE item_id = $1))
+	`, id).Scan(&others); err != nil {
+		return err
+	}
+	if others > 0 {
+		return ErrItemHasMovements
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM material_movements WHERE item_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM material_items WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // GetItem looks up a single item by id — used to name it in a mutation

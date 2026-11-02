@@ -798,7 +798,9 @@ loan) is only for a `member` (a socio now), a sale for a member or a former memb
 is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
 catalog and editing it (`PATCH /material/items/{id}`:
 not its quantities, which only movements change, and its type only within general material, never
-to or from Cuerda and Saca, 400 `kind_change`) is for the same three. An item's
+to or from Cuerda and Saca, 400 `kind_change`) is for the same three. Deleting one
+(`DELETE /material/items/{id}`) is for admin alone, and only while it has no movements besides the
+acquisition it was created with, which goes with it (409 `item_has_movements` otherwise). An item's
 `code` is unique (409 `duplicate_item_code`). The list of types itself is changed by admin
 alone (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and
 Saca can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted

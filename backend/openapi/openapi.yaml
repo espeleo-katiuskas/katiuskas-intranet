@@ -3007,6 +3007,21 @@ paths:
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }
+    delete:
+      summary: Delete an item
+      description: >
+        Admin only. Only an item with no history can be deleted: the
+        acquisition it was created with goes with it, but any other movement (a loan, a rental, a
+        sale, more stock, a loss...) makes it refuse.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: item_has_movements — it has movements besides its first acquisition. }
 
   /material/types:
     get:
