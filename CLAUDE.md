@@ -160,7 +160,8 @@ can do too**: a route or check that names `material` always names `board` with i
 
 **Activities.** Mandatory `leader_id`; only the organizer, admin and board edit or cancel; naming or
 changing the organizer is admin/board only. **Only a `member` (a socio now) can be signed up to any
-activity, of any type, federated or not (409 `not_a_member`)**; the participants list says who is federated. `private` visibility restricts who adds and removes participants. Memoria resources
+activity, of any type, federated or not (409 `not_a_member`)**; the participants list says who is federated. In a `public` activity anybody can sign up anybody; in a `private` one only the organizer, admin, board or
+somebody already signed up can. Each participant keeps who signed them up and when (`added_by`, `added_at`). Memoria resources
 (`activityresources`): metadata in Postgres, file bytes on disk keyed by the row id, created once with
 `O_EXCL` and **never rewritten** — other directory trees share them by hard link, so a rewrite in place
 would corrupt both.

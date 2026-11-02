@@ -100,14 +100,15 @@ func (s *Service) Cancel(ctx context.Context, id int64) error {
 	return s.repo.Cancel(ctx, id)
 }
 
-func (s *Service) Join(ctx context.Context, activityID, userID int64) error {
+// Join signs userID up to the activity; addedBy is who is doing it (userID themselves, or somebody else).
+func (s *Service) Join(ctx context.Context, activityID, userID, addedBy int64) error {
 	if _, err := s.repo.GetByID(ctx, activityID); err != nil {
 		return err
 	}
 	if err := s.checkMembers(ctx, []int64{userID}); err != nil {
 		return err
 	}
-	return s.repo.AddParticipant(ctx, activityID, userID)
+	return s.repo.AddParticipant(ctx, activityID, userID, addedBy)
 }
 
 func (s *Service) Leave(ctx context.Context, activityID, userID int64) error {

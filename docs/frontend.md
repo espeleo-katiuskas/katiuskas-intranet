@@ -76,6 +76,11 @@ member (it follows the type chosen, and what was typed before and no longer fits
 organizer of an activity is still any person. In the participants list of `/actividad`, each name
 has a "Federado" or "No federado" badge (`federated`), as information: nothing requires it.
 
+**Signing people up on `/actividad`.** In a public activity anybody sees the "add a person" row and
+the "Apuntarme" button; in a private one only the organizer, admin and board (and, for the row,
+whoever is already signed up: it appears as soon as they are, as the button turns into "Darme de
+baja"). "Apuntarme" is only offered to members (`canAddOthers`, `canJoinSelf` in `activity.js`).
+
 **The organizer on `/actividad`.** Under the header line, "Organizador: <name>" (`#activity-leader`;
 a link to the person's page only for admin and board, like every name there), once the directory has
 the name.

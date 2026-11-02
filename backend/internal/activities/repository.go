@@ -95,9 +95,9 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 
 	for _, userID := range in.ParticipantUserIDs {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO activity_participants (activity_id, user_id) VALUES ($1,$2)
+			INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1,$2,$3)
 			ON CONFLICT (activity_id, user_id) DO NOTHING
-		`, a.ID, userID); err != nil {
+		`, a.ID, userID, in.CreatedBy); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
 				return Activity{}, ErrParticipantNotFound
@@ -265,11 +265,13 @@ func (r *Repository) Cancel(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *Repository) AddParticipant(ctx context.Context, activityID, userID int64) error {
+// AddParticipant signs a person up, recording who did it (addedBy: the person themselves, or somebody
+// else) and when. Signing up somebody who is already in changes nothing, the first record stays.
+func (r *Repository) AddParticipant(ctx context.Context, activityID, userID, addedBy int64) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO activity_participants (activity_id, user_id) VALUES ($1,$2)
+		INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1,$2,$3)
 		ON CONFLICT (activity_id, user_id) DO NOTHING
-	`, activityID, userID)
+	`, activityID, userID, addedBy)
 	return err
 }
 
@@ -299,9 +301,10 @@ func (r *Repository) IsParticipant(ctx context.Context, activityID, userID int64
 
 func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]Participant, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT ap.activity_id, ap.user_id, u.login
+		SELECT ap.activity_id, ap.user_id, u.login, ab.login, ap.added_at
 		FROM activity_participants ap
 		JOIN users u ON u.id = ap.user_id
+		JOIN users ab ON ab.id = ap.added_by
 		WHERE ap.activity_id = $1
 	`, activityID)
 	if err != nil {
@@ -312,7 +315,7 @@ func (r *Repository) ListParticipants(ctx context.Context, activityID int64) ([]
 	list := []Participant{}
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.UserLogin); err != nil {
+		if err := rows.Scan(&p.ActivityID, &p.UserID, &p.UserLogin, &p.AddedByLogin, &p.AddedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, p)

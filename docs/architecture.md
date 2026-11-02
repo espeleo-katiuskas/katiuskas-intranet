@@ -715,13 +715,14 @@ only admin/board), who can also sign up the initial participants in one go.
 
 Each activity has a `visibility` (`public`, the default, or `private`; migration 00005) that
 decides who can add participants, not only who can sign up. `Handler.join` queries `leader_id` and
-`visibility` before delegating to `Service.Join`; `Handler.leave`
+`visibility` (and, for a private one, whether the caller is signed up) before delegating to
+`Service.Join`, which records who is doing it (`added_by`) and when (`added_at`); `Handler.leave`
 (`DELETE .../participants/{login}`) does the symmetrical thing.
 
 | Action | Public activity | Private activity |
 |---|---|---|
-| Sign oneself up | any member | only the organizer, board or admin do it for them |
-| Add another person | admin/board | organizer, board or admin |
+| Sign oneself up | any member | only the organizer, board or admin (and somebody already signed up, who is in) |
+| Add another person | anybody | organizer, board, admin or somebody already signed up |
 | Remove oneself | any member | any member |
 | Remove another person | admin/board | organizer, admin/board |
 

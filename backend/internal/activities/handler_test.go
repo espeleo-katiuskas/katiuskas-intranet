@@ -311,9 +311,9 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, nil); rec.Code != http.StatusNoContent {
 		t.Errorf("expected a member to sign themselves up (204), got %d: %s", rec.Code, rec.Body.String())
 	}
-	// A member naming someone else is forbidden.
-	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"login": other.Login}); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member adding someone else to be forbidden, got %d", rec.Code)
+	// In a public activity a member can sign up someone else too.
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected a member to sign someone else up to a public activity (204), got %d: %s", rec.Code, rec.Body.String())
 	}
 	// admin/board can add anyone.
 	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
@@ -678,17 +678,16 @@ func TestHandlerPublicActivityJoinWorksAsBefore(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPost, path, memberToken, nil); rec.Code != http.StatusNoContent {
 		t.Errorf("expected a plain member to sign themselves up to a public activity, got %d: %s", rec.Code, rec.Body.String())
 	}
-	// The organizer alone (not admin/board) still can't add someone else
-	// to a *public* activity — that extra privilege is private-only.
-	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"login": other.Login}); rec.Code != http.StatusForbidden {
-		t.Errorf("expected the organizer to be forbidden from adding someone else to a public activity, got %d", rec.Code)
+	// Anybody can sign up anybody to a public activity, the organizer and a plain member included.
+	if rec := doRequest(mux, http.MethodPost, path, leaderToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected the organizer to sign someone else up to a public activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add someone else to a public activity, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *testing.T) {
+func TestHandlerPrivateActivityOnlyOrganizerBoardAdminOrParticipantsCanAddParticipants(t *testing.T) {
 	mux, authn, tx := newTestServerWithTx(t)
 	leader := testutil.InsertMember(t, tx)
 	member := testutil.InsertMember(t, tx)
@@ -732,6 +731,70 @@ func TestHandlerPrivateActivityOnlyOrganizerBoardOrAdminCanAddParticipants(t *te
 	}
 	if rec := doRequest(mux, http.MethodPost, path, adminToken, map[string]any{"login": admin.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add a participant to a private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Now that the member is signed up, they can sign somebody else up — but somebody who is not
+	// signed up still cannot, whoever they name.
+	stranger := testutil.InsertMember(t, tx)
+	third := testutil.InsertMember(t, tx)
+	strangerToken := tokenFor(t, authn, stranger.ID, "member")
+	if rec := doRequest(mux, http.MethodPost, path, strangerToken, map[string]any{"login": third.Login}); rec.Code != http.StatusForbidden {
+		t.Errorf("expected somebody not signed up to be forbidden from adding to a private activity, got %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPost, path, memberToken, map[string]any{"login": third.Login}); rec.Code != http.StatusNoContent {
+		t.Errorf("expected a participant to add somebody to a private activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Nor can somebody not signed up sign themselves up.
+	if rec := doRequest(mux, http.MethodPost, path, strangerToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected somebody not signed up to be forbidden from joining a private activity, got %d", rec.Code)
+	}
+}
+
+// Who signed each person up, and when, is kept and listed: themselves, somebody else, or whoever
+// created the activity with them.
+func TestHandlerParticipantsRecordWhoSignedThemUpAndWhen(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	creator := testutil.InsertMember(t, tx)
+	atCreation := testutil.InsertMember(t, tx)
+	byThemselves := testutil.InsertMember(t, tx)
+	byAnother := testutil.InsertMember(t, tx)
+	creatorToken := tokenFor(t, authn, creator.ID, "member")
+	selfToken := tokenFor(t, authn, byThemselves.ID, "member")
+
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", creatorToken, map[string]any{
+		"title": "A", "type": "social", "start_date": "2026-01-01", "end_date": "2026-01-01",
+		"participant_logins": []string{atCreation.Login},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var a activities.Activity
+	_ = json.Unmarshal(rec.Body.Bytes(), &a)
+	path := fmt.Sprintf("/api/v1/activities/%d/participants", a.ID)
+	if rec := doRequest(mux, http.MethodPost, path, selfToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("self sign-up: %d", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodPost, path, selfToken, map[string]any{"login": byAnother.Login}); rec.Code != http.StatusNoContent {
+		t.Fatalf("sign-up by another: %d", rec.Code)
+	}
+	// Signing somebody up again changes nothing: the first record stays.
+	if rec := doRequest(mux, http.MethodPost, path, creatorToken, map[string]any{"login": byAnother.Login}); rec.Code != http.StatusNoContent {
+		t.Fatalf("second sign-up: %d", rec.Code)
+	}
+
+	before := time.Now().Add(-time.Minute)
+	rec = doRequest(mux, http.MethodGet, path, creatorToken, nil)
+	var list []activities.Participant
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list) != 3 {
+		t.Fatalf("participants: %v %s", err, rec.Body.String())
+	}
+	want := map[string]string{atCreation.Login: creator.Login, byThemselves.Login: byThemselves.Login, byAnother.Login: byThemselves.Login}
+	for _, p := range list {
+		if p.AddedByLogin != want[p.UserLogin] {
+			t.Errorf("%s was signed up by %q, want %s", p.UserLogin, p.AddedByLogin, want[p.UserLogin])
+		}
+		if p.AddedAt.Before(before) || p.AddedAt.After(time.Now().Add(time.Minute)) {
+			t.Errorf("%s: added_at %v is not about now", p.UserLogin, p.AddedAt)
+		}
 	}
 }
 

@@ -56,11 +56,10 @@ type Activity struct {
 	// cancel their own activity.
 	LeaderID    int64  `json:"-"`
 	LeaderLogin string `json:"leader_login"`
-	// Visibility gates who may add participants: anyone can join a
-	// public activity (themselves, or admin/board adding someone else),
-	// same as before this field existed. A private activity can only
-	// gain participants through the organizer, board, or admin — see
-	// Handler.join.
+	// Visibility gates who may sign people up: in a public activity,
+	// anybody can sign up anybody (themselves included); in a private
+	// one, only the organizer, admin, board or somebody who is already
+	// signed up — see Handler.join.
 	Visibility Visibility `json:"visibility"`
 }
 
@@ -75,6 +74,8 @@ type CreateInput struct {
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
+	// CreatedBy is who creates the activity, and so who signs those participants up.
+	CreatedBy int64
 }
 
 type UpdateInput struct {
@@ -97,6 +98,10 @@ type Participant struct {
 	// Federated says whether the person has a federative license for the current year. It is only
 	// information: any member can join any activity, federated or not.
 	Federated bool `json:"federated"`
+	// AddedByLogin is who signed the person up (themselves, or somebody else) and AddedAt when. For
+	// those signed up before it was recorded it is the organizer, and the activity's creation.
+	AddedByLogin string    `json:"added_by_login"`
+	AddedAt      time.Time `json:"added_at"`
 }
 
 // Holiday is a club holiday — the calendar view (see GET /holidays)

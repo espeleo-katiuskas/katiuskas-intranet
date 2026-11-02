@@ -1531,15 +1531,15 @@ paths:
                 items: { $ref: "#/components/schemas/Participant" }
         "400": { description: invalid_id — id isn't numeric. }
     post:
-      summary: Join an activity, or (admin/board, or the organizer) add someone else to it
+      summary: Join an activity, or add someone else to it
       description: >
         On a public activity: with no body (or a null/omitted login)
-        signs up the caller; a plain member naming anyone other than
-        themselves gets a 403; admin/board can name any login to add
-        them on that person's behalf. On a private activity, only the
-        organizer, board, or admin may call this at all — even to sign up
-        the caller themselves; anyone else gets a 403 regardless of whose
-        login they name. The person being added must be a member now (of
+        signs up the caller; naming a login signs up that person, whoever
+        the caller is. On a private activity, only the organizer, board,
+        admin or somebody already signed up may call this at all — even to
+        sign up the caller themselves; anyone else gets a 403 regardless of
+        whose login they name. Who did it and when is recorded
+        (added_by_login, added_at in the participants list). The person being added must be a member now (of
         any activity type, federated or not), or the call is rejected
         with 409 not_a_member.
       security: [{ bearerAuth: [] }]
@@ -4268,6 +4268,8 @@ components:
         activity_id: { type: integer }
         user_login: { type: string }
         federated: { type: boolean, description: "Has a federative license for the current year. Only information: any member can join any activity." }
+        added_by_login: { type: string, description: "Who signed the person up (themselves, or somebody else). For those signed up before it was recorded, the organizer of the activity." }
+        added_at: { type: string, format: date-time }
 
     Distribution:
       type: object

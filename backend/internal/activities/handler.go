@@ -180,7 +180,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Description: body.Description, LeaderID: leaderID, Visibility: body.Visibility,
-		ParticipantUserIDs: participantIDs,
+		ParticipantUserIDs: participantIDs, CreatedBy: current.ID,
 	})
 	if errors.Is(err, ErrInvalidType) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
@@ -447,24 +447,22 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A private activity only gains participants through the organizer,
-	// board, or admin — even signing *yourself* up needs one of them to
-	// do it. A public activity works exactly as it always has: anyone
-	// can sign themselves up, and admin/board can add anyone else — the
-	// organizer gets no extra say over who joins their own public
-	// activity.
-	isStaff := current.HasAnyRole("admin", "board")
-	if activity.Visibility == VisibilityPrivate {
-		if !isStaff && current.ID != activity.LeaderID {
-			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can add participants to a private activity")
+	// In a public activity anybody can sign up anybody (themselves included). A private one only
+	// gains participants through the organizer, admin, board, or somebody who is already signed up:
+	// that is also who can sign *themselves* up, as nobody else can see it is there to ask.
+	if activity.Visibility == VisibilityPrivate && !current.HasAnyRole("admin", "board") && current.ID != activity.LeaderID {
+		isParticipant, err := h.service.IsParticipant(r.Context(), id, current.ID)
+		if err != nil {
+			httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not check participation")
 			return
 		}
-	} else if !isStaff && userID != current.ID {
-		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "members can only add themselves")
-		return
+		if !isParticipant {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, admin, board or somebody already signed up can add participants to a private activity")
+			return
+		}
 	}
 
-	err = h.service.Join(r.Context(), id, userID)
+	err = h.service.Join(r.Context(), id, userID, current.ID)
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
 		return
@@ -477,9 +475,8 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not join activity")
 		return
 	}
-	// Distinguishes "signed themselves up" from "an organizer/admin/board
-	// added someone else" — the second is worth naming both people, the
-	// first would just be saying the same login twice.
+	// Distinguishes "signed themselves up" from "somebody signed up someone else" — the second is
+	// worth naming both people, the first would just be saying the same login twice.
 	if userID == current.ID {
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s se ha apuntado a la actividad «%s».",
 			h.actorLogin(r.Context()), activity.Title))

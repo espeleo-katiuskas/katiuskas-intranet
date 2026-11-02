@@ -296,12 +296,16 @@ participant at creation time — requires being a member now (`Service.checkMemb
 `RoleLookup` that `roles.Service` satisfies), else 409 `not_a_member`; being federated is not
 required, and `GET .../participants` only says for each whether they are (`federated`, one
 `licenses.Service.CurrentByUsers` query for all of them). Its `visibility` (`public`, the default,
-or `private`) gates who may add a participant at all, not just who may join: public works as it
-always has (anyone can sign themselves up, admin/board can add anyone else); private restricts
-adding *anyone* — self included — to the organizer, board, or admin (`Handler.join`). Removing one
-(`Handler.leave`, `DELETE .../participants/{login}`) mirrors this: a plain member can only remove
-themselves regardless of visibility, but a private activity's own organizer can remove anyone, the
-same as they can add anyone — on a public one they get no such extra say, same as for adding.
+or `private`) gates who may add a participant at all, not just who may join: in a public one anybody
+can sign up anybody (themselves included); a private one restricts adding *anyone* — self included —
+to the organizer, board, admin, or somebody who is already signed up (`Handler.join`, which asks
+`Service.IsParticipant` for the last). Whoever signs somebody up is recorded with the date
+(`activity_participants.added_by`, `added_at`, shown as `added_by_login` and `added_at`;
+`Repository.AddParticipant`, and `CreateInput.CreatedBy` for those named at creation); signing up
+somebody who is already in changes nothing, the first record stays. Removing one (`Handler.leave`,
+`DELETE .../participants/{login}`) mirrors this: a plain member can only remove themselves
+regardless of visibility, but a private activity's own organizer can remove anyone, the same as they
+can add anyone — on a public one they get no such extra say, same as for adding.
 
 ## Activity resources (memoria)
 

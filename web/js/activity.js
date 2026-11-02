@@ -29,14 +29,18 @@ const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
 let canManage = isAdmin;
 let activityTitle = '';
 let activityCancelled = false;
-// Who may add a participant depends on visibility too, not just on
-// canManage: a public activity works as it always has (anyone can join
-// themselves; only admin/board can add someone else — the organizer
-// alone gets no extra say), while a private one restricts adding
-// *anyone*, self included, to the organizer/board/admin. See
+// Who may sign people up depends on visibility too, not just on canManage: in a public activity
+// anybody can sign up anybody (themselves included); in a private one only the organizer, admin,
+// board or somebody already signed up can, and so only they can sign themselves up. See
 // Handler.join on the backend for the same split.
-let canJoinSelf = true;
-let canAddOthers = isAdmin;
+let activityPrivate = false;
+function canAddOthers() {
+  return !activityPrivate || canManage || isParticipant;
+}
+// Only a member can be signed up, so only a member is offered "Apuntarme".
+function canJoinSelf() {
+  return hasAnyRole(viewer, ['member']) && (!activityPrivate || canManage);
+}
 // Set once loadParticipants() resolves. Combined with canManage (the
 // organizer always counts too, even before/without a participant row
 // of their own — see activityresources.Handler.requireContributor on
@@ -75,7 +79,7 @@ function applyManagementVisibility() {
   document.getElementById('open-edit-activity').hidden = !canManage;
   document.getElementById('cancel-activity').hidden = !canManage || activityCancelled;
   document.getElementById('reactivate-activity').hidden = !canManage || !activityCancelled;
-  document.getElementById('add-participant-row').hidden = !canAddOthers;
+  document.getElementById('add-participant-row').hidden = !canAddOthers();
 }
 
 function dateRangeLabel(activity) {
@@ -99,9 +103,7 @@ async function loadActivity(ready = Promise.resolve()) {
     activityTitle = activity.title;
     activityCancelled = activity.cancelled;
     canManage = isAdmin || viewer?.login === activity.leader_login;
-    const isPrivate = activity.visibility === 'private';
-    canJoinSelf = isPrivate ? canManage : true;
-    canAddOthers = isPrivate ? canManage : isAdmin;
+    activityPrivate = activity.visibility === 'private';
     applyManagementVisibility();
 
     // The organizer's label needs the directory.
@@ -274,10 +276,14 @@ async function loadParticipants(ready = Promise.resolve()) {
     const alreadyIn = participants.some((p) => p.user_login === viewer?.login);
     const changed = isParticipant !== alreadyIn;
     isParticipant = alreadyIn;
-    // Signing up (or leaving) changes what can be done with the memoria: show it right away.
-    if (changed) await refreshMemoriaControls();
+    // Signing up (or leaving) changes what can be done with the memoria, and, in a private activity,
+    // whether the viewer can sign others up: show it right away.
+    if (changed) {
+      applyManagementVisibility();
+      await refreshMemoriaControls();
+    }
     document.getElementById('joined-note').hidden = !alreadyIn;
-    document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf;
+    document.getElementById('join-activity').hidden = alreadyIn || !canJoinSelf();
     document.getElementById('leave-activity').hidden = !alreadyIn;
 
     const optionsEl = document.getElementById('participant-options');

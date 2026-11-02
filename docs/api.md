@@ -350,12 +350,14 @@ Directiva).
   - returns: 200 `[Participant]`
   - errors: 400 `invalid_id`
 - **POST** `/activities/{id}/participants` — *Depends on the visibility*. Sign up, or sign up
-  another person. In a public one each person signs themselves up; in a private one only the
-  organizer, admin or board. Only a member (a socio now) can be signed up, to any type of activity,
-  federated or not.
+  another person. In a public one anybody can sign up anybody; in a private one only the organizer,
+  admin, board or somebody already signed up (and so can sign themselves up). The participant keeps
+  who signed them up and when. Only a member (a socio now) can be signed up, to any type of
+  activity, federated or not.
   - body: `login`
   - returns: 204
-  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `not_a_member`
+  - errors: 400 `invalid_id`, `invalid_body`; 403 `forbidden` (a private activity, and the caller
+    is none of those); 404 `not_found`; 409 `not_a_member`
 - **DELETE** `/activities/{id}/participants/{login}` — *Depends on the visibility*. Leave the
   activity, or remove another person (admin or board, or the organizer in a private one).
   - returns: 204
@@ -998,6 +1000,8 @@ Nested fields:
 | `activity_id` | integer |
 | `user_login` | text |
 | `federated` | boolean |
+| `added_by_login` | text |
+| `added_at` | datetime |
 
 ### `Distribution`
 

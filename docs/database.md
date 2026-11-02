@@ -525,12 +525,20 @@ Who takes part in each activity. The organizer need not appear here.
 |---|---|---|---|
 | `activity_id` | bigint | no |  |
 | `user_id` | bigint | no |  |
+| `added_by` | bigint | no |  |
+| `added_at` | timestamptz | no | now() |
 
 Constraints:
 
 - primary key (activity_id, user_id)
 - `activity_id` → `activities(id)`, deleted with it
 - `user_id` → `users(id)`, deleted with it
+- `added_by` → `users(id)`: a person who has signed somebody up cannot be deleted (409
+  `has_references`), like the organizer of an activity
+
+`added_by` is who signed the person up (themselves, or somebody else) and `added_at` when; for the
+ones signed up before this was recorded (migration `00045`) `added_by` is the organizer of the
+activity and `added_at` its creation.
 
 ### `activity_resources`
 
@@ -1300,5 +1308,8 @@ at the end; that database has to be recreated when a new migration appears.
 - `00040_transaction_files.sql`: `transaction_files`
 - `00041_tokens_role_override.sql`: `tokens.role_override`, `tokens.role_override_until`
 - `00042_activities_cancelled.sql`: `activities.cancelled` instead of `activities.status`
-- `00043_activity_participants_drop_confirmed.sql`: drops `activity_participants.confirmed`, which was never used
-- `00044_activity_participants_drop_role.sql`: drops `activity_participants.role` and `participant_role`, never used
+- `00043_activity_participants_drop_confirmed.sql`: drops `activity_participants.confirmed`, which
+  was never used
+- `00044_activity_participants_drop_role.sql`: drops `activity_participants.role` and
+  `participant_role`, never used
+- `00045_activity_participants_added_by.sql`: `activity_participants.added_by` and `added_at`

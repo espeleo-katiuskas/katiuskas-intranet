@@ -333,7 +333,7 @@ func TestCreateWithInitialParticipants(t *testing.T) {
 
 	activity, err := repo.Create(ctx, activities.CreateInput{
 		Title: "A", Type: activities.TypeCaving, Visibility: activities.VisibilityPublic, StartDate: date("2026-01-01"), EndDate: date("2026-01-01"), LeaderID: leader.ID,
-		ParticipantUserIDs: []int64{userA.ID, userB.ID},
+		ParticipantUserIDs: []int64{userA.ID, userB.ID}, CreatedBy: leader.ID,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -409,7 +409,7 @@ func TestListByUserIncludesLedAndParticipatedActivities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create joined activity: %v", err)
 	}
-	if err := repo.AddParticipant(ctx, joined.ID, person.ID); err != nil {
+	if err := repo.AddParticipant(ctx, joined.ID, person.ID, person.ID); err != nil {
 		t.Fatalf("add participant: %v", err)
 	}
 	// Someone else's activity should never show up.
@@ -504,14 +504,14 @@ func TestParticipants(t *testing.T) {
 	userA := testutil.InsertUser(t, tx, "")
 	userB := testutil.InsertUser(t, tx, "")
 
-	if err := repo.AddParticipant(ctx, activity.ID, userA.ID); err != nil {
+	if err := repo.AddParticipant(ctx, activity.ID, userA.ID, userA.ID); err != nil {
 		t.Fatalf("add participant A: %v", err)
 	}
-	if err := repo.AddParticipant(ctx, activity.ID, userB.ID); err != nil {
+	if err := repo.AddParticipant(ctx, activity.ID, userB.ID, userB.ID); err != nil {
 		t.Fatalf("add participant B: %v", err)
 	}
 	// Joining twice should be a harmless no-op (ON CONFLICT DO NOTHING).
-	if err := repo.AddParticipant(ctx, activity.ID, userA.ID); err != nil {
+	if err := repo.AddParticipant(ctx, activity.ID, userA.ID, userA.ID); err != nil {
 		t.Fatalf("re-add participant A: %v", err)
 	}
 
@@ -554,7 +554,7 @@ func TestIsParticipant(t *testing.T) {
 	}
 	participant := testutil.InsertUser(t, tx, "")
 	stranger := testutil.InsertUser(t, tx, "")
-	if err := repo.AddParticipant(ctx, activity.ID, participant.ID); err != nil {
+	if err := repo.AddParticipant(ctx, activity.ID, participant.ID, participant.ID); err != nil {
 		t.Fatalf("add participant: %v", err)
 	}
 
