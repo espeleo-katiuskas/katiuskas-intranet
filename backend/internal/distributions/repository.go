@@ -369,7 +369,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Dist
 		if settled > 0 {
 			return Distribution{}, ErrHasSettledUnits
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE distribution_id = $1 AND `+scope, id); err != nil {
+		if err := deleteUnitsWhere(ctx, tx, `distribution_id = $1 AND `+scope, id); err != nil {
 			return Distribution{}, err
 		}
 	}
@@ -558,9 +558,33 @@ func sameOptions(ctx context.Context, tx pgx.Tx, id int64, options *[]OptionInpu
 	}), nil
 }
 
+// deleteUnit removes one unit, and the numbers it holds first (nothing cascades).
+func deleteUnit(ctx context.Context, tx pgx.Tx, id int64) error {
+	return deleteUnitsWhere(ctx, tx, `id = $1`, id)
+}
+
+// deleteUnitsWhere removes the units that match where (a condition on distribution_units with its
+// arguments), the numbers they hold first: nothing cascades, so each thing that hangs from them is
+// dealt with here, in the caller's transaction. The log of payments keeps its rows (they are the
+// history of what was paid, and taken off), only no longer pointing at the unit.
+func deleteUnitsWhere(ctx context.Context, tx pgx.Tx, where string, args ...any) error {
+	if _, err := tx.Exec(ctx, `
+		UPDATE distribution_payments SET unit_id = NULL
+		WHERE unit_id IN (SELECT id FROM distribution_units WHERE `+where+`)`, args...); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM distribution_unit_identifiers
+		WHERE unit_id IN (SELECT id FROM distribution_units WHERE `+where+`)`, args...); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE `+where, args...)
+	return err
+}
+
 // Delete removes a distribution together with its units (what members chose
-// goes with it), unless some unit was already paid or collected — those marks
-// are real things that happened, and have to be undone first, deliberately.
+// goes with it), its options and its articles, unless some unit was already paid or collected —
+// those marks are real things that happened, and have to be undone first, deliberately.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -577,6 +601,16 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	}
 	if settled > 0 {
 		return ErrHasSettledUnits
+	}
+	if err := deleteUnitsWhere(ctx, tx, `distribution_id = $1`, id); err != nil {
+		return err
+	}
+	// What is left of the distribution goes with it: its log of payments (the transactions that
+	// recorded them stay in the accounting), its options and its articles.
+	for _, table := range []string{"distribution_payments", "distribution_options", "distribution_articles"} {
+		if _, err := tx.Exec(ctx, `DELETE FROM `+table+` WHERE distribution_id = $1`, id); err != nil {
+			return err
+		}
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM distributions WHERE id = $1`, id)
 	if err != nil {
@@ -1006,7 +1040,7 @@ func (r *Repository) DeleteUnit(ctx context.Context, distributionID, id int64) e
 	if st.paid > 0 {
 		return ErrUnitPaid
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1`, id); err != nil {
+	if err := deleteUnit(ctx, tx, id); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -1513,7 +1547,7 @@ func (r *Repository) ReturnUnits(ctx context.Context, distributionID, id int64, 
 		}
 	}
 	if st.quantity-q == 0 {
-		if _, err := tx.Exec(ctx, `DELETE FROM distribution_units WHERE id = $1`, id); err != nil {
+		if err := deleteUnit(ctx, tx, id); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)

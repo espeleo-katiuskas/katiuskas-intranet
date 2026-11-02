@@ -75,7 +75,27 @@ transactions ──< membership_dues, licenses, distribution_payments
 ```
 
 `A ──< B` means that `B` has a foreign key to `A`. Each table below gives the detail and the
-`ON DELETE` of each one.
+`ON DELETE` of each one: all of them are `RESTRICT` (see "Deleting" below), so each table
+only says where a delete has a consequence.
+
+## Deleting
+
+Every foreign key is `ON DELETE RESTRICT` (migration `00049`; a test checks it): nothing cascades
+and nothing is set to NULL, so deleting a row fails while any other row still points at it, and
+nothing disappears that the request did not name. Where an endpoint is meant to delete the parts of
+what it deletes, the code does it itself, explicitly, in the same transaction:
+
+- `DELETE /transactions/{id}`: its entries and the dues it paid (the license it paid, a file or a
+  payment of a distribution make it refuse).
+- `DELETE /distributions/{id}`: its orders and the numbers they hold, its articles, its options and
+  its log of payments (refused if an order is paid or collected). Deleting an order (or an order
+  that ends up with nothing) keeps the rows of the log of payments, which stop pointing at it.
+- `DELETE /budgets/{year}` and `PUT /budgets/{year}`: the line items and the accounts they cover.
+- `DELETE /users/{login}`: only the person's sessions and sign-in links, which are ephemeral.
+  Anything else that points at them (roles, membership periods, leaves, licenses, board positions,
+  activities they led or are signed up to, dues, material movements, orders...) makes it refuse
+  (409 `has_references`) until it is removed.
+- `DELETE /roles/{id}`: refused while somebody holds the role (409 `role_in_use`).
 
 ## Enumerated types
 
@@ -192,7 +212,7 @@ Constraints:
 
 - primary key (id)
 - unique (token_hash)
-- `user_id` → `users(id)`, deleted with it
+- `user_id` → `users(id)`: a person with it cannot be deleted
 
 Indexes:
 
@@ -248,8 +268,8 @@ Constraints:
 
 - primary key (id)
 - unique (token_hash)
-- `impersonated_by` → `users(id)`, deleted with it
-- `user_id` → `users(id)`, deleted with it
+- `impersonated_by` → `users(id)`: the sessions are deleted by the code together with the person
+- `user_id` → `users(id)`: the sessions are deleted by the code together with the person
 
 Indexes:
 
@@ -290,8 +310,8 @@ not appear here.
 Constraints:
 
 - primary key (user_id, role_id)
-- `role_id` → `roles(id)`, deleted with it
-- `user_id` → `users(id)`, deleted with it
+- `role_id` → `roles(id)`: a role somebody holds cannot be deleted
+- `user_id` → `users(id)`: a person with it cannot be deleted
 
 ## Members
 
@@ -316,7 +336,7 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `user_id` → `users(id)`, deleted with it
+- `user_id` → `users(id)`: a person with it cannot be deleted
 - `memberships_user_id_period_excl`: exclusion `(user_id WITH =, period WITH &&)` (never two rows of
   the same person with overlapping periods)
 - `end_not_before_start`: `(end_date IS NULL) OR (end_date >= start_date)`
@@ -348,7 +368,7 @@ periods is checked by the service.
 Constraints:
 
 - primary key (id)
-- `user_id` → `users(id)`, deleted with it
+- `user_id` → `users(id)`: a person with it cannot be deleted
 - `membership_leaves_user_id_period_excl`: exclusion `(user_id WITH =, period WITH &&)` (never two
   rows of the same person with overlapping periods)
 - `leave_end_not_before_start`: `(end_date IS NULL) OR (end_date >= start_date)`
@@ -365,8 +385,8 @@ Rules outside the database:
 ### `membership_dues`
 
 Annual membership dues: one row per person and year covered, always tied to the transaction that
-recorded the payment. Unlike a license, it makes no sense without its transaction, so it is deleted
-with it.
+recorded the payment. Unlike a license, it makes no sense without its transaction, so the code
+deletes it together with it.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -380,7 +400,7 @@ Constraints:
 
 - primary key (id)
 - unique (user_id, year)
-- `transaction_id` → `transactions(id)`, deleted with it
+- `transaction_id` → `transactions(id)`, deleted by the code together with it
 - `user_id` → `users(id)`
 
 Indexes:
@@ -421,7 +441,7 @@ Constraints:
 - primary key (id)
 - `license_type_id` → `license_types(id)`
 - `transaction_id` → `transactions(id)`
-- `user_id` → `users(id)`, deleted with it
+- `user_id` → `users(id)`: a person with it cannot be deleted
 
 Indexes:
 
@@ -473,7 +493,7 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `user_id` → `users(id)`, deleted with it
+- `user_id` → `users(id)`: a person with it cannot be deleted
 - `board_members_user_id_period_excl`: exclusion `(user_id WITH =, period WITH &&)` (never two rows
   of the same person with overlapping periods)
 - `board_member_end_not_before_start`: `(end_date IS NULL) OR (end_date >= start_date)`
@@ -531,8 +551,8 @@ Who takes part in each activity. The organizer need not appear here.
 Constraints:
 
 - primary key (activity_id, user_id)
-- `activity_id` → `activities(id)`, deleted with it
-- `user_id` → `users(id)`, deleted with it
+- `activity_id` → `activities(id)`: an activity with it cannot be deleted
+- `user_id` → `users(id)`: a person with it cannot be deleted
 - `added_by` → `users(id)`: a person who has signed somebody up cannot be deleted (409
   `has_references`), like the organizer of an activity
 
@@ -569,7 +589,7 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `activity_id` → `activities(id)`, deleted with it
+- `activity_id` → `activities(id)`: an activity with it cannot be deleted
 - `author_id` → `users(id)`
 - `description_only_for_text`: `(type = 'text') OR (description IS NULL)`
 - `description_required_for_text`: `(type <> 'text') OR (description IS NOT NULL)`
@@ -804,7 +824,7 @@ Constraints:
 
 - primary key (id)
 - unique (distribution_id, name)
-- `distribution_id` → `distributions(id)`, deleted with it
+- `distribution_id` → `distributions(id)`, deleted by the code together with it
 - `distribution_options_values_check`: `cardinality("values") >= 1`
 
 ### `distribution_articles`
@@ -837,7 +857,7 @@ Constraints:
 
 - primary key (id)
 - unique (distribution_id, name)
-- `distribution_id` → `distributions(id)`, deleted with it
+- `distribution_id` → `distributions(id)`, deleted by the code together with it
 - `distribution_articles_max_per_person_check`: `max_per_person >= 1`
 - `distribution_articles_max_total_check`: `max_total >= 1`
 - `distribution_articles_price_check`: `price >= 0`
@@ -885,9 +905,9 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `article_id` → `distribution_articles(id)`, deleted with it
+- `article_id` → `distribution_articles(id)`, deleted by the code together with it
 - `beneficiary_id` → `users(id)`
-- `distribution_id` → `distributions(id)`, deleted with it
+- `distribution_id` → `distributions(id)`, deleted by the code together with it
 - `paid_marked_by_id` → `users(id)`
 - `picked_up_by_id` → `users(id)`
 - `pickup_recorded_by_id` → `users(id)`
@@ -936,9 +956,9 @@ Constraints:
 
 - primary key (id)
 - unique (article_id, identifier)
-- `article_id` → `distribution_articles(id)`, deleted with it
+- `article_id` → `distribution_articles(id)`, deleted by the code together with it
 - `paid_marked_by_id` → `users(id)`
-- `unit_id` → `distribution_units(id)`, deleted with it
+- `unit_id` → `distribution_units(id)`, deleted by the code together with it
 - `distribution_unit_identifiers_identifier_check`: `identifier <> ''`
 
 Indexes:
@@ -968,7 +988,7 @@ it.
 
 Notes on the columns:
 
-- `unit_id`: The order it referred to; empty if the order is deleted afterwards.
+- `unit_id`: The order it referred to; empty if the order is deleted afterwards (the code does it).
 - `beneficiary_id`: Who paid: the member of the order (no different payer is stored).
 - `description`: What was paid for: the name of the article, or of the distribution if it has no
   articles.
@@ -983,10 +1003,10 @@ Constraints:
 
 - primary key (id)
 - `beneficiary_id` → `users(id)`
-- `distribution_id` → `distributions(id)`, deleted with it
+- `distribution_id` → `distributions(id)`, deleted by the code together with it
 - `recorded_by_id` → `users(id)`
 - `transaction_id` → `transactions(id)`
-- `unit_id` → `distribution_units(id)`, set to empty if it is deleted
+- `unit_id` → `distribution_units(id)`: the code sets it to empty when the order is deleted
 - `distribution_payments_quantity_check`: `quantity <> 0`
 
 Indexes:
@@ -1101,7 +1121,7 @@ Constraints:
 - primary key (id)
 - unique (transaction_id, account_id)
 - `account_id` → `accounts(id)`
-- `transaction_id` → `transactions(id)`, deleted with it
+- `transaction_id` → `transactions(id)`, deleted by the code together with it
 - `amount_not_zero`: `amount <> 0`
 - `transaction_entries_balance`: constraint trigger deferred until `COMMIT`
 
@@ -1145,7 +1165,7 @@ Constraints:
 - primary key (id)
 - `transaction_id` references `transactions` with no delete action: a transaction that still has
   files cannot be deleted (the API answers 409 `transaction_has_files`)
-- `uploaded_by` references `users` (`ON DELETE SET NULL`)
+- `uploaded_by` references `users`: a person who uploaded a file cannot be deleted
 - `file_name` and `content_type` are not blank; `file_size > 0`
 - `idx_transaction_files_transaction_id` on `(transaction_id)`
 
@@ -1208,8 +1228,9 @@ A line item ("partida") of one part of a budget. The enum `budget_kind` is `inco
 | `amount` | numeric(14,2) | no |  |
 | `position` | integer | no |  |
 
-Constraints: primary key (id); `budget_id` references `budgets` (delete cascades); `name` not
-blank; `amount >= 0`; unique `(id, budget_id)`. `position` is the order within the part.
+Constraints: primary key (id); `budget_id` references `budgets` (a budget is deleted with its items
+by the code, not by a cascade); `name` not blank; `amount >= 0`; unique `(id, budget_id)`.
+`position` is the order within the part.
 
 ### `budget_item_accounts`
 
@@ -1222,7 +1243,7 @@ The accounts a line item stands for.
 | `account_id` | bigint | no |  |
 
 Constraints: primary key `(item_id, account_id)`; `(item_id, budget_id)` references
-`budget_items(id, budget_id)` (delete cascades); `account_id` references `accounts` (no delete: an
+`budget_items(id, budget_id)`; `account_id` references `accounts` (an
 account in a budget cannot be deleted); unique `(budget_id, account_id)`, so an account is in one
 item per budget.
 
@@ -1326,3 +1347,5 @@ at the end; that database has to be recreated when a new migration appears.
 - `00048_material_types.sql`: `material_categories` becomes `material_types` (with `kind`; Cuerda
   and Saca added as the fixed ones), `material_items.type_id` replaces `category_id`,
   `material_items.type` is renamed `kind` and its enum `material_kind`
+- `00049_foreign_keys_restrict.sql`: every foreign key becomes `ON DELETE RESTRICT` (some were
+  `CASCADE`, two `SET NULL` and the rest the default)

@@ -169,8 +169,10 @@ A person is always identified by their `login`, never by a numeric id.
   - returns: 200 `User`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_login`; 403 `forbidden`,
     `restricted_fields`; 409 `duplicate`
-- **DELETE** `/users/{login}` — *Admin*. Deletes the person along with their history. The last admin
-  cannot be deleted.
+- **DELETE** `/users/{login}` — *Admin*. Deletes the person (and their sessions and sign-in links),
+  but nothing else: if they still have a role, a membership, a leave, a license, a board position,
+  activities, dues, material movements or orders, it is refused until those are removed. The last
+  admin cannot be deleted.
   - returns: 204
   - errors: 409 `cannot_delete_self`, `has_references`, `last_admin`
 
@@ -186,9 +188,10 @@ positions and are not assigned by hand.
   - body: `name*`, `description`
   - returns: 201 `Role`
   - errors: 400 `invalid_body`, `invalid_name`; 409 `duplicate`
-- **DELETE** `/roles/{id}` — *Admin*. Deletes a role (system roles cannot be deleted).
+- **DELETE** `/roles/{id}` — *Admin*. Deletes a role (system roles cannot be deleted, nor can one
+  somebody still holds).
   - returns: 204
-  - errors: 400 `invalid_id`; 409 `system_role`, `former_member`
+  - errors: 400 `invalid_id`; 409 `system_role`, `former_member`, `role_in_use`
 - **POST** `/users/{login}/roles` — *Admin*. Gives a role to a person. Rejects the automatic ones.
   - body: `role_id*`
   - returns: 204

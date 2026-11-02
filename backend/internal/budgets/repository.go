@@ -144,7 +144,7 @@ func (r *Repository) replace(ctx context.Context, year int, in Input) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM budget_items WHERE budget_id = $1`, budgetID); err != nil {
+	if err := deleteItems(ctx, tx, budgetID); err != nil {
 		return err
 	}
 	for _, part := range []struct {
@@ -172,13 +172,36 @@ func (r *Repository) replace(ctx context.Context, year int, in Input) error {
 	return tx.Commit(ctx)
 }
 
+// deleteItems removes every line item of a budget and the accounts each one covers: nothing
+// cascades, so each thing that hangs from them is deleted here, in the caller's transaction.
+func deleteItems(ctx context.Context, tx pgx.Tx, budgetID int64) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM budget_item_accounts WHERE budget_id = $1`, budgetID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM budget_items WHERE budget_id = $1`, budgetID)
+	return err
+}
+
+// delete removes the budget of a year with its line items.
 func (r *Repository) delete(ctx context.Context, year int) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM budgets WHERE year = $1`, year)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer tx.Rollback(ctx)
+	var budgetID int64
+	err = tx.QueryRow(ctx, `SELECT id FROM budgets WHERE year = $1`, year).Scan(&budgetID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if err := deleteItems(ctx, tx, budgetID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM budgets WHERE id = $1`, budgetID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

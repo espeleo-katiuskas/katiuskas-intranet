@@ -578,56 +578,51 @@ the error it always got first.
 
 ## Membership dues
 
-**Membership dues** (`membership_dues`, alongside `memberships`): every year a socio
-remains a member, they owe a cuota to cover it — the first one (alongside the one-time
-matrícula) the same day they join, then once more each following year for as long as they
-stay a socio. `memberships.Due` is one row per `(user_id, year)` covered (`UNIQUE`,
-`ErrDueAlreadyRecorded` on a second one for the same year), always tied to the
-`transaction_id` that actually recorded the payment — a due with no transaction behind it
-doesn't mean anything yet, so unlike a membership period itself there's no "unpaid" row to
-represent. Deliberately keyed by `user_id`, not `membership_id`: a rejoining member's due
-for a given year isn't naturally tied to one specific membership period, and this way a
-year never needs to be reconciled against period boundaries. `POST /users/{login}/dues`
-(admin-only) is `Service.RecordDue`: if the person has *no* membership period on file at
-all yet, this is treated as their very first due, so a new membership period is also
-started for them (the request's own `start_date` becomes its `StartDate`) — the same alta
-a person otherwise gets through `POST /users/{login}/memberships`; someone with a prior,
-since-closed membership who's rejoining is left entirely to that existing, separate alta
-flow instead (`HasAnyMembership` is already true for them, so nothing extra happens).
-The request's `start_date` is therefore optional: it's only required — 400
-`start_date_required`, `ErrStartDateRequired` — when there is no membership on file to open,
-and ignored otherwise (a malformed one is still a 400 `invalid_date`).
-Before any of that, `RecordDue` checks the transaction itself — it has to exist
-(`ErrUnknownTransaction`) and have at least one entry on an account marked `allows_dues`
-(`ErrTransactionNotForDues`, 409 `transaction_not_for_dues`;
-`Repository.TransactionAllowsDues`, the dues counterpart of licenses' check above) — so a
-rejected due can never leave a membership period started as a side effect.
-`GET /users/{login}/dues` mirrors licenses' own self-or-admin/board read split, and joins
-each due's transaction to add `paid_at` (the payment's own `occurred_at` — not
-`created_at`, since a past year's due can be registered long after it was paid), only from
-this listing, never on `POST`'s response, the same "only from the listing" pattern as
-`Account.Balance`. That is what `/socio` and `/perfil` show: `/socio`'s "Historial como
-socio" timeline gets one "Cuota anual · <year>" event per due, dated by `paid_at` and with
-no Editar/Borrar (there's no endpoint for either) — its date has to keep the same
-midnight-UTC string shape every other event's has, since the timeline sorts them as plain
-strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
+**Membership dues** (`membership_dues`, alongside `memberships`): every year a socio remains a
+member, they owe a cuota to cover it — the first one (alongside the one-time matrícula) the same day
+they join, then once more each following year for as long as they stay a socio. `memberships.Due` is
+one row per `(user_id, year)` covered (`UNIQUE`, `ErrDueAlreadyRecorded` on a second one for the
+same year), always tied to the `transaction_id` that actually recorded the payment — a due with no
+transaction behind it doesn't mean anything yet, so unlike a membership period itself there's no
+"unpaid" row to represent. Deliberately keyed by `user_id`, not `membership_id`: a rejoining
+member's due for a given year isn't naturally tied to one specific membership period, and this way a
+year never needs to be reconciled against period boundaries. `POST /users/{login}/dues` (admin-only)
+is `Service.RecordDue`: if the person has *no* membership period on file at all yet, this is treated
+as their very first due, so a new membership period is also started for them (the request's own
+`start_date` becomes its `StartDate`) — the same alta a person otherwise gets through `POST
+/users/{login}/memberships`; someone with a prior, since-closed membership who's rejoining is left
+entirely to that existing, separate alta flow instead (`HasAnyMembership` is already true for them,
+so nothing extra happens). The request's `start_date` is therefore optional: it's only required —
+400 `start_date_required`, `ErrStartDateRequired` — when there is no membership on file to open, and
+ignored otherwise (a malformed one is still a 400 `invalid_date`). Before any of that, `RecordDue`
+checks the transaction itself — it has to exist (`ErrUnknownTransaction`) and have at least one
+entry on an account marked `allows_dues` (`ErrTransactionNotForDues`, 409
+`transaction_not_for_dues`; `Repository.TransactionAllowsDues`, the dues counterpart of licenses'
+check above) — so a rejected due can never leave a membership period started as a side effect. `GET
+/users/{login}/dues` mirrors licenses' own self-or-admin/board read split, and joins each due's
+transaction to add `paid_at` (the payment's own `occurred_at` — not `created_at`, since a past
+year's due can be registered long after it was paid), only from this listing, never on `POST`'s
+response, the same "only from the listing" pattern as `Account.Balance`. That is what `/socio` and
+`/perfil` show: `/socio`'s "Historial como socio" timeline gets one "Cuota anual · <year>" event per
+due, dated by `paid_at` and with no Editar/Borrar (there's no endpoint for either) — its date has to
+keep the same midnight-UTC string shape every other event's has, since the timeline sorts them as
+plain strings and a bare `YYYY-MM-DD` would sort before an alta of the same day instead of tying
 with it; on a tie the order is alta, then the cuota, then a license paid the same day
-(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/perfil` shows the very same timeline, only
-without the buttons: `js/timeline.js` (`loadTimelineData`, `renderTimelineRow`) builds and
-renders it for both pages, `member.js` adding its action buttons to each row. That
-needed `GET /users/{login}/leaves` to open to the person themselves, like their
-memberships, licenses and dues. There's no endpoint to correct or remove a due, and no
-validation that a due's `year` actually falls within an active membership period — both
-deliberately out of scope for now. `membership_dues.transaction_id` cascades on delete
-(`ON DELETE CASCADE`) — a due is pure bookkeeping metadata with no meaning apart from its
-transaction — while `licenses.transaction_id` (nullable, see above) uses the default
-`ON DELETE RESTRICT` instead: a license is a real, independently meaningful record (proof
-of federation) even apart from its payment, so the transaction that paid for one can't be
-deleted out from under it at all. `/socio` has a "+ Licencia sin pago" button
-(admin-only, in the same panel as the alta/baja actions) opening a dialog that `POST`s a
-license with no `transaction_id` — the way to record one the club didn't collect; the ones
-it does collect are registered from their transaction, in Contabilidad (`/cuenta`). The
-license then shows in the "Historial como socio" like any other, with Editar/Borrar.
+(`TIMELINE_TIE_BREAK_PRIORITY`) — and `/perfil` shows the very same timeline, only without the
+buttons: `js/timeline.js` (`loadTimelineData`, `renderTimelineRow`) builds and renders it for both
+pages, `member.js` adding its action buttons to each row. That needed `GET /users/{login}/leaves` to
+open to the person themselves, like their memberships, licenses and dues. There's no endpoint to
+correct or remove a due, and no validation that a due's `year` actually falls within an active
+membership period — both deliberately out of scope for now. `membership_dues.transaction_id` is
+deleted with the transaction (`Repository.DeleteTransaction` does it, nothing cascades) — a due is
+pure bookkeeping metadata with no meaning apart from its transaction — while
+`licenses.transaction_id` (nullable, see above) makes the delete refuse instead: a license is a
+real, independently meaningful record (proof of federation) even apart from its payment, so the
+transaction that paid for one can't be deleted out from under it at all. `/socio` has a "+ Licencia
+sin pago" button (admin-only, in the same panel as the alta/baja actions) opening a dialog that
+`POST`s a license with no `transaction_id` — the way to record one the club didn't collect; the ones
+it does collect are registered from their transaction, in Contabilidad (`/cuenta`). The license then
+shows in the "Historial como socio" like any other, with Editar/Borrar.
 
 ## Temporary leaves
 
@@ -1103,51 +1098,51 @@ lists, reads, edits and posts to a hidden account like any other. `DELETE /accou
 posted entry answers 409 `account_in_use` (`ErrAccountInUse`, from the foreign-key violation).
 Likewise `DELETE /transactions/{id}` answers 409 `transaction_has_licenses`
 (`ErrTransactionHasLicenses`) while a license still names the transaction as its payment
-(`licenses.transaction_id` is `ON DELETE RESTRICT`); its dues, by contrast, cascade. Against that
-chart sit `transactions`: every real movement of money the club records, each made of two or more
-`entries` (an `account_id` and an `amount`, positive into that account or negative out of it) whose
-amounts always sum to exactly zero — standard double-entry bookkeeping, so a transaction always says
-both where money came from and where it went, never just one side of it. Each account also appears
-at most once per transaction (`transaction_entries_account_once`, a `UNIQUE (transaction_id,
-account_id)` from migration `00018`; `validateEntries` checks it in Go before touching the database,
-alongside the two-entry minimum and non-zero amounts, `ErrDuplicateAccount`, 400
-`duplicate_account`) — its one entry's amount already says everything that moved through it, and the
-ledger's per-account running balance and "other accounts" detail both assume it. `GET /accounts`
-also joins in each account's `balance` (summed from every entry ever posted to it) and
-`last_transaction_at` (the most recent one's `occurred_at`) — for an account that groups others,
-which has no entries of its own, those of everything below it (a `closure` CTE of every account with
-its descendants), so a group shows the sum of its children's balances and the latest of their last
-movements — and never present on any other `accounts` route (`GET`/`POST`/`PATCH /accounts/{id}` are
-all just the row itself, no extra join); a `LEFT JOIN` against `transaction_entries`/`transactions`
-means an account with no entries at all still gets one row back rather than being silently missing,
-`COALESCE`d to a zero `balance` (a real, computed zero — never absent the way it is everywhere else
-`Account` shows up) while `last_transaction_at` is simply `NULL`. "At least two entries" and "sums
-to zero" both depend on every sibling row, not just one, so neither can be a plain `CHECK` — both
-are enforced instead by `transaction_entries_balance`, a `DEFERRABLE INITIALLY DEFERRED` constraint
-trigger (migration `00012_accounting.sql`) that only actually runs at commit, after every entry a
-write touched is in place, rather than rejecting a transaction's entries one at a time as
-`accounting.Repository.CreateTransaction`/`UpdateTransaction` insert them individually inside their
-own DB transaction (the same `pool.Begin` pattern `activities.Repository.Create` already uses for an
-activity's initial participants). The trigger explicitly skips its own check once the `transactions`
-row itself is also gone (checked first, before counting/summing entries) — deleting a whole
-transaction cascades to every one of its entries, each of which fires this same trigger, and without
-that guard the last entry to go would look like "a transaction with zero (too few) entries" instead
-of a transaction that's correctly, completely gone.
-`Repository.CreateTransaction`/`UpdateTransaction` don't just rely on the deferred default, though:
-right after inserting entries they run `SET CONSTRAINTS transaction_entries_balance IMMEDIATE` on
-their own DB transaction to force the check right then (mapping a violation to `ErrUnbalanced` from
-that call instead of a later `Commit`), then set it back to `DEFERRED` before returning — necessary
-because `pool.Begin` on top of an already-open `pgx.Tx` (exactly what every test does, via
-`testutil.NewTx`) opens a *savepoint*, not a real nested transaction, and Postgres only ever fires a
-deferred trigger at a real `COMMIT`, never at a savepoint's own `RELEASE` — so without forcing it
-immediate, the check would silently never run at all under test, and resetting back to `DEFERRED`
-afterward matters too, since `SET CONSTRAINTS`'s effect otherwise outlives the savepoint that set it
-(unlike a `ROLLBACK`, a successful `RELEASE SAVEPOINT` doesn't undo it), which would make the *next*
-multi-row entry insert anywhere else in the same enclosing transaction fail spuriously, checked one
-row too early. `UpdateTransaction` corrects a transaction by replacing its description,
-`occurred_at`, and its *entire* set of entries at once (delete every existing one, insert the given
-set) rather than editing a single entry in place — there's no single-entry edit endpoint.
-`occurred_at` is a real timestamp, not just a date the way
+(`licenses.transaction_id` is `ON DELETE RESTRICT`); its dues, by contrast, are deleted with it.
+Against that chart sit `transactions`: every real movement of money the club records, each made of
+two or more `entries` (an `account_id` and an `amount`, positive into that account or negative out
+of it) whose amounts always sum to exactly zero — standard double-entry bookkeeping, so a
+transaction always says both where money came from and where it went, never just one side of it.
+Each account also appears at most once per transaction (`transaction_entries_account_once`, a
+`UNIQUE (transaction_id, account_id)` from migration `00018`; `validateEntries` checks it in Go
+before touching the database, alongside the two-entry minimum and non-zero amounts,
+`ErrDuplicateAccount`, 400 `duplicate_account`) — its one entry's amount already says everything
+that moved through it, and the ledger's per-account running balance and "other accounts" detail both
+assume it. `GET /accounts` also joins in each account's `balance` (summed from every entry ever
+posted to it) and `last_transaction_at` (the most recent one's `occurred_at`) — for an account that
+groups others, which has no entries of its own, those of everything below it (a `closure` CTE of
+every account with its descendants), so a group shows the sum of its children's balances and the
+latest of their last movements — and never present on any other `accounts` route
+(`GET`/`POST`/`PATCH /accounts/{id}` are all just the row itself, no extra join); a `LEFT JOIN`
+against `transaction_entries`/`transactions` means an account with no entries at all still gets one
+row back rather than being silently missing, `COALESCE`d to a zero `balance` (a real, computed zero
+— never absent the way it is everywhere else `Account` shows up) while `last_transaction_at` is
+simply `NULL`. "At least two entries" and "sums to zero" both depend on every sibling row, not just
+one, so neither can be a plain `CHECK` — both are enforced instead by `transaction_entries_balance`,
+a `DEFERRABLE INITIALLY DEFERRED` constraint trigger (migration `00012_accounting.sql`) that only
+actually runs at commit, after every entry a write touched is in place, rather than rejecting a
+transaction's entries one at a time as `accounting.Repository.CreateTransaction`/`UpdateTransaction`
+insert them individually inside their own DB transaction (the same `pool.Begin` pattern
+`activities.Repository.Create` already uses for an activity's initial participants). The trigger
+explicitly skips its own check once the `transactions` row itself is also gone (checked first,
+before counting/summing entries) — deleting a whole transaction deletes every one of its entries
+(explicitly, just before), each of which fires this same trigger, and without that guard the last
+entry to go would look like "a transaction with zero (too few) entries" instead of a transaction
+that's correctly, completely gone. `Repository.CreateTransaction`/`UpdateTransaction` don't just
+rely on the deferred default, though: right after inserting entries they run `SET CONSTRAINTS
+transaction_entries_balance IMMEDIATE` on their own DB transaction to force the check right then
+(mapping a violation to `ErrUnbalanced` from that call instead of a later `Commit`), then set it
+back to `DEFERRED` before returning — necessary because `pool.Begin` on top of an already-open
+`pgx.Tx` (exactly what every test does, via `testutil.NewTx`) opens a *savepoint*, not a real nested
+transaction, and Postgres only ever fires a deferred trigger at a real `COMMIT`, never at a
+savepoint's own `RELEASE` — so without forcing it immediate, the check would silently never run at
+all under test, and resetting back to `DEFERRED` afterward matters too, since `SET CONSTRAINTS`'s
+effect otherwise outlives the savepoint that set it (unlike a `ROLLBACK`, a successful `RELEASE
+SAVEPOINT` doesn't undo it), which would make the *next* multi-row entry insert anywhere else in the
+same enclosing transaction fail spuriously, checked one row too early. `UpdateTransaction` corrects
+a transaction by replacing its description, `occurred_at`, and its *entire* set of entries at once
+(delete every existing one, insert the given set) rather than editing a single entry in place —
+there's no single-entry edit endpoint. `occurred_at` is a real timestamp, not just a date the way
 `activities.start_date`/`licenses.issued_date` are, so it decodes straight into a Go `time.Time`
 (RFC 3339, `encoding/json`'s own default) rather than needing the manual `time.Parse` every
 plain-date field elsewhere needs. Reading (`GET /accounts`, `GET /transactions`, and their `/{id}`
@@ -1162,8 +1157,8 @@ same pattern as `UserLookup` — rather than this package joining their tables i
 type `transactionWithPayments` exists only for that one response, never for create/update/list.
 Writing needs admin or the optional, non-system "money" role (seeded by migration
 `00012_accounting.sql`, deletable by a club that doesn't want the distinction), the same "admin plus
-one optional custom role" shape `material` already has for material movements — board itself gets
-no special write access here, same as it has none for licenses or a person's own data. Every write
+one optional custom role" shape `material` already has for material movements — board itself gets no
+special write access here, same as it has none for licenses or a person's own data. Every write
 still goes through the same baseline-role floor as every other route: holding only `money` with none
 of admin/board/member is rejected everywhere, this included. Every account also has a `position`
 (migration `00012_accounting.sql`) — its manual display order among its own siblings (same

@@ -132,6 +132,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "system_role", err.Error())
 		return
 	}
+	if errors.Is(err, ErrRoleInUse) {
+		httpapi.WriteError(w, http.StatusConflict, "role_in_use", err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete role")
 		return

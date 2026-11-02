@@ -537,10 +537,11 @@ join, and then one more each following year.
 - Keyed by `user_id` on purpose, not by `membership_id`: the due of a year of somebody who rejoins
   is not naturally tied to one particular period, and this way a year never needs to be matched
   against the boundaries of a period.
-- A due is deleted together with its transaction (`ON DELETE CASCADE`: it is pure bookkeeping
-  annotation, meaningless apart from it), whereas a license uses `ON DELETE RESTRICT`: it is a
-  real record with a meaning of its own (proof of being federated) even apart from its payment, so
-  the transaction that paid for it cannot be deleted from under it.
+- A due is deleted together with its transaction (the code does it when the transaction is deleted:
+  it is pure bookkeeping annotation, meaningless apart from it), whereas a license refuses the
+  delete (`ON DELETE RESTRICT`): it is a real record with a meaning of its own (proof of being
+  federated) even apart from its payment, so the transaction that paid for it cannot be deleted from
+  under it.
 
 **Recording (`POST /users/{login}/dues`, admin only)**
 
@@ -1150,11 +1151,12 @@ replaces the flags: leaving one out turns it off.
   can sign in sees that a transaction has files, admin, board and money read them, admin and money
   attach and remove. A transaction that still has files cannot be deleted (409
   `transaction_has_files`).
-- Deleting a transaction takes its entries with it and, by cascade, the dues it paid. If any
-  license names it as its payment it cannot be deleted (409 `transaction_has_licenses`), because
-  `licenses.transaction_id` is `ON DELETE RESTRICT`: a license is valid even if the trace of how
-  it was paid is lost. If it was the payment of a distribution, deleting it undoes that payment
-  (see "Distributions (`distributions`, `distribution_options`, `distribution_units`)").
+- Deleting a transaction takes its entries with it and the dues it paid (the code deletes them). If
+  any license names it as its payment it cannot be deleted (409 `transaction_has_licenses`), because
+  `licenses.transaction_id` is `ON DELETE RESTRICT`, like every foreign key: a license is valid even
+  if the trace of how it was paid is lost. If it was the payment of a distribution, deleting it
+  undoes that payment (see "Distributions (`distributions`, `distribution_options`,
+  `distribution_units`)").
 
 #### Balances and listings
 

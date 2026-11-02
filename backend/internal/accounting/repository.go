@@ -810,6 +810,13 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
 			return err
 		}
 	}
+	// Nothing cascades: the entries of the transaction and the dues it paid go with it, deleted here.
+	if _, err := tx.Exec(ctx, `DELETE FROM membership_dues WHERE transaction_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM transaction_entries WHERE transaction_id = $1`, id); err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM transactions WHERE id = $1`, id)
 	if pgErrCode(err) == foreignKeyViolationCode {
 		// Which thing still points at it: a license, a payment of a distribution or a file.

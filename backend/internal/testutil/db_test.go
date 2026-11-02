@@ -80,3 +80,23 @@ CREATE INDEX idx_foo ON foo(id);
 		}
 	}
 }
+
+// One rule for every foreign key: ON DELETE RESTRICT. Nothing cascades and nothing is set to NULL,
+// so deleting something never takes anything else with it unless the code does it, explicitly.
+func TestEveryForeignKeyIsRestrict(t *testing.T) {
+	tx := NewTx(t)
+	rows, err := tx.Query(context.Background(), `
+		SELECT conrelid::regclass::text, conname FROM pg_constraint
+		WHERE contype = 'f' AND confdeltype <> 'r' ORDER BY 1, 2`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var table, name string
+		if err := rows.Scan(&table, &name); err != nil {
+			t.Fatal(err)
+		}
+		t.Errorf("%s.%s is not ON DELETE RESTRICT", table, name)
+	}
+}

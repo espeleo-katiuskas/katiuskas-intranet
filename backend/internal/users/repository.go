@@ -17,11 +17,11 @@ import (
 var (
 	ErrNotFound = errors.New("user not found")
 	// ErrHasReferences means the user can't be deleted because other
-	// records (an activity they led, a material movement they're
-	// party to) still point at them — deleting would silently erase that
-	// history, so PostgreSQL's foreign keys refuse the delete instead of
-	// cascading through it.
-	ErrHasReferences = errors.New("cannot delete: this person still has related activities or transactions")
+	// records (a membership, a license, a role, an activity they led or are signed up to, a
+	// material movement they're party to...) still point at them — deleting would silently erase that
+	// history, so PostgreSQL's foreign keys refuse the delete instead of cascading through it: each
+	// of those has to be removed first, deliberately.
+	ErrHasReferences = errors.New("cannot delete: this person still has records (roles, membership, licenses, activities, transactions...) that have to be removed first")
 	// ErrDuplicate means an email (or one of several — see
 	// emailTakenByAnotherUser), a phone (phoneTakenByAnotherUser), a
 	// national ID, a login, or a membership number being set already
@@ -553,14 +553,26 @@ func (r *Repository) EnsureMembershipNumber(ctx context.Context, userID int64) e
 	return err
 }
 
-// Delete removes a person's record entirely, along with their refresh
-// tokens, magic-link tokens, membership history and activity sign-ups
-// (all ON DELETE CASCADE). It's rejected by the database if the
-// person is still referenced as an activity's leader or a material
-// transaction's party — that history has to be reassigned or completed
-// first.
+// Delete removes a person's record, along with their sessions and sign-in links, which are
+// ephemeral (the sessions they started by impersonating somebody too). Nothing else goes with it:
+// if any other record still points at the person — a role, a membership, a leave, a license, a
+// board position, an activity they led or are signed up to, a material movement, a due, an order of
+// a distribution... — the database refuses (ErrHasReferences) and that history has to be removed
+// first, deliberately.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	// In its own (sub)transaction: a refused delete must not leave the sessions deleted.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM tokens WHERE user_id = $1 OR impersonated_by = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM magic_link_tokens WHERE user_id = $1`, id); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
 		return ErrHasReferences
@@ -571,7 +583,7 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // ListDirectory returns every person on file, for populating pickers

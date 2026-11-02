@@ -14,6 +14,8 @@ var (
 	ErrNotFound      = errors.New("role not found")
 	ErrDuplicateName = errors.New("a role with this name already exists")
 	ErrSystemRole    = errors.New("this role is built into the system and can't be deleted")
+	// ErrRoleInUse means somebody still holds the role: it has to be taken off them first.
+	ErrRoleInUse = errors.New("this role is still given to somebody and can't be deleted")
 	// ErrAutomaticRole means the role is computed (member, former_member)
 	// rather than stored, so it can't be granted or revoked by hand.
 	ErrAutomaticRole = errors.New("this role is automatic and can't be granted or revoked by hand")
@@ -87,9 +89,8 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Role, error) {
 	return role, err
 }
 
-// Delete refuses to remove a system role (admin/board/member); anything
-// else is a plain delete that cascades out of every user_roles row that
-// referenced it.
+// Delete refuses to remove a system role (admin/board/member), and a role somebody still holds
+// (ErrRoleInUse): nothing cascades, the people have to lose it first.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	role, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -98,8 +99,22 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	if role.IsSystem {
 		return ErrSystemRole
 	}
-	_, err = r.pool.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
-	return err
+	// In its own (sub)transaction so a refused delete is rolled back on its own: under test, where
+	// every call shares one outer transaction, the violation would otherwise abort all of it.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+		return ErrRoleInUse
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ListNamesForUser is the single source of truth for "what roles does

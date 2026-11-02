@@ -521,8 +521,11 @@ paths:
         "409":
           description: duplicate — the email, phone, national ID, or login being set already belongs to another person.
     delete:
-      summary: Delete a person (and their login, membership history and activity sign-ups)
-      description: Admin-only — board can no longer modify a person's data at all.
+      summary: Delete a person (and their sessions and sign-in links)
+      description: >
+        Admin-only — board can no longer modify a person's data at all. Nothing else goes with the
+        person: a role, membership, leave, license, board position, activity, due, movement or
+        order that still points at them makes it refuse (has_references).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -533,9 +536,9 @@ paths:
         "409":
           description: >
             cannot_delete_self (this account is the caller's own),
-            has_references (the person is still referenced by an
-            activity they led or an material movement they're party
-            to), or last_admin (they're the only remaining admin —
+            has_references (the person still has records that point at
+            them: roles, membership periods, licenses, activities,
+            material movements...), or last_admin (they're the only remaining admin —
             someone has to be left who can manage users and roles).
 
   /roles:
@@ -597,7 +600,8 @@ paths:
           description: >
             system_role — this is a system role (admin, board, member,
             former_member): it's wired to permissions or automatic
-            behavior elsewhere in the API and can't be deleted.
+            behavior elsewhere in the API and can't be deleted; or
+            role_in_use — somebody still holds it, take it off them first.
 
   /users/{login}/roles:
     post:
@@ -3680,7 +3684,7 @@ paths:
       summary: Delete a transaction (and its entries)
       description: >
         Requires admin or the money role. Also removes the membership
-        dues it recorded (they cascade). A transaction that a license
+        dues it recorded. A transaction that a license
         references can't be deleted (409 transaction_has_licenses): a
         license outlives the record of how it was paid. If it recorded payments of a
         distribution, deleting it undoes them (what they paid is unpaid again, what

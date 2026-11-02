@@ -452,8 +452,9 @@ func TestServiceDeleteBlocksTheLastAdmin(t *testing.T) {
 	}
 }
 
-func TestServiceDeleteAllowsRemovingAnAdminWhenAnotherRemains(t *testing.T) {
-	svc, _ := newUsersService(t)
+// Nothing goes with a person but their sessions: a role they hold has to be taken off first.
+func TestServiceDeleteRefusesAPersonWhoStillHoldsARole(t *testing.T) {
+	svc, roleSvc, _, _, tx := newUsersServiceWithMemberships(t)
 	ctx := context.Background()
 
 	first, err := svc.Create(ctx, users.CreateInput{
@@ -462,14 +463,21 @@ func TestServiceDeleteAllowsRemovingAnAdminWhenAnotherRemains(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create first admin: %v", err)
 	}
-	if _, err := svc.Create(ctx, users.CreateInput{
+	second, err := svc.Create(ctx, users.CreateInput{
 		FirstName: "Second", LastName: "Admin", Email: strPtr(testutil.UniqueEmail(t)), RoleNames: []string{"admin"},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create second admin: %v", err)
 	}
 
+	if err := svc.Delete(ctx, first.ID); !errors.Is(err, users.ErrHasReferences) {
+		t.Errorf("expected ErrHasReferences while the person holds a role, got %v", err)
+	}
+	if err := roleSvc.Remove(ctx, second.ID, first.ID, testutil.RoleID(t, tx, "admin")); err != nil {
+		t.Fatalf("take the role off: %v", err)
+	}
 	if err := svc.Delete(ctx, first.ID); err != nil {
-		t.Errorf("expected deletion to succeed with a second admin present, got %v", err)
+		t.Errorf("expected deletion to succeed once the role is off and another admin remains, got %v", err)
 	}
 }
 
@@ -624,5 +632,52 @@ func TestListEnrichesEverybodyAsOneByOneWithAFewQueries(t *testing.T) {
 		if (due != nil) != (u.LastDueYear != nil) || (due != nil && (*u.LastDueYear != due.Year || u.LastDuePaidAt == nil || !u.LastDuePaidAt.Equal(*due.PaidAt))) {
 			t.Errorf("%s: last due %v, one by one %+v", u.Login, u.LastDueYear, due)
 		}
+	}
+}
+
+// A person goes with their sessions and sign-in links, which are ephemeral, but with nothing else:
+// a membership (any record) makes the delete refuse, and leaves the sessions alone.
+func TestServiceDeleteTakesSessionsButRefusesAPersonWithHistory(t *testing.T) {
+	svc, _, membershipsService, _, tx := newUsersServiceWithMemberships(t)
+	ctx := context.Background()
+
+	create := func(name string) users.User {
+		u, err := svc.Create(ctx, users.CreateInput{FirstName: name, LastName: "Test", Email: strPtr(testutil.UniqueEmail(t))})
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return u
+	}
+	withLink := func(u users.User) {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO magic_link_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')`,
+			u.ID, testutil.UniqueEmail(t)); err != nil {
+			t.Fatalf("sign-in link: %v", err)
+		}
+	}
+	links := func(u users.User) (n int) {
+		_ = tx.QueryRow(ctx, `SELECT count(*) FROM magic_link_tokens WHERE user_id = $1`, u.ID).Scan(&n)
+		return n
+	}
+
+	plain := create("Plain")
+	withLink(plain)
+	if err := svc.Delete(ctx, plain.ID); err != nil {
+		t.Fatalf("a person with only a sign-in link: %v", err)
+	}
+	if links(plain) != 0 {
+		t.Error("expected the sign-in link to go with the person")
+	}
+
+	member := create("Member")
+	withLink(member)
+	if _, err := membershipsService.Create(ctx, memberships.CreateInput{UserID: member.ID, StartDate: time.Now().AddDate(-1, 0, 0)}); err != nil {
+		t.Fatalf("membership: %v", err)
+	}
+	if err := svc.Delete(ctx, member.ID); !errors.Is(err, users.ErrHasReferences) {
+		t.Fatalf("expected ErrHasReferences for a person with a membership, got %v", err)
+	}
+	if links(member) != 1 {
+		t.Error("expected a refused delete to leave the sign-in link")
 	}
 }

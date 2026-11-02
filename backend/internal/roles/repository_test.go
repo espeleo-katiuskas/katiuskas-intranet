@@ -200,6 +200,31 @@ func TestDeleteCustomRole(t *testing.T) {
 	}
 }
 
+// Nothing cascades: a role somebody still holds is not deleted until it is taken off them.
+func TestDeleteRefusesARoleSomebodyStillHolds(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := roles.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, roles.CreateInput{Name: "temporary"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	user := testutil.InsertUser(t, tx, "")
+	if _, err := tx.Exec(ctx, `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, user.ID, created.ID); err != nil {
+		t.Fatalf("give the role: %v", err)
+	}
+	if err := repo.Delete(ctx, created.ID); !errors.Is(err, roles.ErrRoleInUse) {
+		t.Fatalf("expected ErrRoleInUse, got %v", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM user_roles WHERE role_id = $1`, created.ID); err != nil {
+		t.Fatalf("take the role off: %v", err)
+	}
+	if err := repo.Delete(ctx, created.ID); err != nil {
+		t.Errorf("expected the delete to work once nobody holds it, got %v", err)
+	}
+}
+
 func TestDeleteNotFound(t *testing.T) {
 	repo := roles.NewRepository(testutil.NewTx(t))
 	if err := repo.Delete(context.Background(), 999999); !errors.Is(err, roles.ErrNotFound) {

@@ -62,12 +62,14 @@ const texts = {
 
   // People, roles, membership
   invalid_login: 'El login solo puede llevar letras minúsculas, números, puntos y guiones.',
-  has_references: 'No se puede borrar: la persona tiene actividades o transacciones asociadas.',
+  has_references:
+    'No se puede borrar: la persona todavía tiene datos asociados (roles, periodos de socio, licencias, actividades, cuotas…). Quítaselos antes.',
   cannot_delete_self: 'No puedes borrar tu propia cuenta.',
   restricted_fields:
     'Solo puedes cambiar tus datos de contacto; el resto lo cambia un administrador.',
   automatic_role: 'Ese rol es automático: no se concede ni se quita a mano.',
   system_role: 'Ese rol es del sistema y no se puede borrar.',
+  role_in_use: 'Ese rol lo tiene alguien todavía: quítaselo antes de borrarlo.',
   last_admin: 'No se puede quitar el rol de administrador al único administrador que queda.',
   self_admin_removal: 'Un administrador no puede quitarse a sí mismo el rol de administrador.',
   overlapping_period: 'Ese periodo se solapa con otro que ya existe para esta persona.',
