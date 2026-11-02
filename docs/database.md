@@ -647,6 +647,7 @@ Constraints:
 - `rope_and_bag_require_brand_model`: `(type = 'general') OR ((brand IS NOT NULL) AND (model IS
   NOT NULL))`
 - `rope_and_bag_require_code`: `(type = 'general') OR (code IS NOT NULL)`
+- `model_needs_brand`: `(model IS NULL) OR (brand IS NOT NULL)`
 - `rope_fields_only_for_rope`: `(type = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
   NULL) AND (manufacture_year IS NULL) AND (length_m IS NULL))`
 - `rope_requires_rope_fields`: `(type <> 'rope') OR ((rope_type IS NOT NULL) AND (diameter_mm
@@ -1313,3 +1314,7 @@ at the end; that database has to be recreated when a new migration appears.
 - `00044_activity_participants_drop_role.sql`: drops `activity_participants.role` and
   `participant_role`, never used
 - `00045_activity_participants_added_by.sql`: `activity_participants.added_by` and `added_at`
+- `00046_material_naming.sql`: renames the inventory tables and types to `material_*` (`gear`
+  becomes `general`)
+- `00047_material_model_needs_brand.sql`: `material_items.model_needs_brand`; first, a model with no
+  brand becomes the brand

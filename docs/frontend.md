@@ -47,8 +47,8 @@ dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditIt
 title and the button change, the type is fixed (the field is disabled and the item's own type is
 used), the quantity and the date of acquisition are left out (the stock is what its movements say)
 and the form is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every
-field, so for a general item, whose form has no brand, model or code, the ones it already has are
-sent back as they are.
+field. Brand, model and code are in the form for every type, required only for ropes and bags; the
+model field stays disabled (and empty) while there is no brand.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom

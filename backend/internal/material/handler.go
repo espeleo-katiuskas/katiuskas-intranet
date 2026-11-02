@@ -226,6 +226,10 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
 		return
 	}
+	if errors.Is(err, ErrModelWithoutBrand) {
+		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
+		return
+	}
 	if errors.Is(err, ErrDuplicateItemCode) {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
 		return
@@ -295,6 +299,9 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, ErrInvalidItemFields):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
+		return
+	case errors.Is(err, ErrModelWithoutBrand):
+		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
 		return
 	case errors.Is(err, ErrDuplicateItemCode):
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())

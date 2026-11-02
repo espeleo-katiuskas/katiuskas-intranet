@@ -60,6 +60,8 @@ var (
 	// ErrRecipientNotMemberOrFormer a sale for somebody who is neither a member nor a former one.
 	ErrRecipientNotMember         = errors.New("a loan or a rental can only be for a member")
 	ErrRecipientNotMemberOrFormer = errors.New("a sale can only be for a member or a former member")
+	// ErrModelWithoutBrand means a model was given with no brand: a model is the model of a brand.
+	ErrModelWithoutBrand = errors.New("a model can only be given when there is a brand")
 	// ErrDuplicateItemCode means another item already has the code.
 	ErrDuplicateItemCode = errors.New("another item already has this code")
 )

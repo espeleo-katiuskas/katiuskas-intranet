@@ -2,6 +2,7 @@ package material
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -20,11 +21,31 @@ func NewService(repo *Repository, roles RoleLookup) *Service {
 	return &Service{repo: repo, roles: roles}
 }
 
+// blankToNil trims a text and gives nil for a blank one, so that "" is never stored as if it were a value.
+func blankToNil(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*p)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {
+	in.Brand, in.Model, in.Code, in.Description = blankToNil(in.Brand), blankToNil(in.Model), blankToNil(in.Code), blankToNil(in.Description)
+	if in.Model != nil && in.Brand == nil {
+		return Item{}, ErrModelWithoutBrand
+	}
 	return s.repo.CreateItem(ctx, in)
 }
 
 func (s *Service) UpdateItem(ctx context.Context, id int64, in UpdateItemInput) (Item, error) {
+	in.Brand, in.Model, in.Code, in.Description = blankToNil(in.Brand), blankToNil(in.Model), blankToNil(in.Code), blankToNil(in.Description)
+	if in.Model != nil && in.Brand == nil {
+		return Item{}, ErrModelWithoutBrand
+	}
 	return s.repo.UpdateItem(ctx, id, in)
 }
 

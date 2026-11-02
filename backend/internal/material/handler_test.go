@@ -1112,3 +1112,84 @@ func TestHandlerMovementRecipientsMustBeMembers(t *testing.T) {
 		t.Errorf("sale to somebody who never was a member: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Brand, model and code are optional for general material (required for ropes and bags), but a model is the
+// model of a brand: it cannot be given without one. Blank texts count as not given.
+func TestHandlerModelNeedsABrand(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 3, "board")
+
+	body := func(extra map[string]any) map[string]any {
+		b := generalItemBody(t, tx, 1)
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	// General material may have a brand, a model and a code, or any of them... except a model alone.
+	for name, extra := range map[string]map[string]any{
+		"nothing":           {},
+		"a brand":           {"brand": "Petzl"},
+		"a brand and model": {"brand": "Petzl", "model": "Vertex"},
+		"all three":         {"brand": "Petzl", "model": "Vertex", "code": "H-1"},
+		"a blank model":     {"brand": "Petzl", "model": "   "},
+	} {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(extra)); rec.Code != http.StatusCreated {
+			t.Errorf("general material with %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	for name, extra := range map[string]map[string]any{
+		"a model alone":                     {"model": "Vertex"},
+		"a model and a blank brand":         {"model": "Vertex", "brand": "  "},
+		"a model and an empty-string brand": {"model": "Vertex", "brand": ""},
+	} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(extra))
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "model_without_brand" {
+			t.Errorf("general material with %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Editing follows the same rule, and a blank value is stored as not given.
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(map[string]any{"brand": "Petzl", "model": "Vertex"}))
+	var item material.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/material/items/%d", item.ID)
+	edit := func(extra map[string]any) *httptest.ResponseRecorder {
+		b := map[string]any{"description": "Casco", "category_id": testutil.MaterialCategoryID(t, tx, "Mosquetones")}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return doRequest(mux, http.MethodPatch, path, boardToken, b)
+	}
+	if rec := edit(map[string]any{"model": "Vertex"}); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "model_without_brand" {
+		t.Errorf("editing to a model without a brand: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = edit(map[string]any{"brand": "Edelrid", "model": ""})
+	var got material.Item
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || rec.Code != http.StatusOK || got.Model != nil || got.Brand == nil || *got.Brand != "Edelrid" {
+		t.Errorf("editing to a brand and a blank model: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// A rope or a bag still needs all three.
+	rope := map[string]any{
+		"type": "rope", "brand": "Beal", "model": "Karma", "code": "C-9", "rope_type": "caving",
+		"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, rope); rec.Code != http.StatusCreated {
+		t.Fatalf("rope: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, missing := range []string{"brand", "model", "code"} {
+		r := map[string]any{}
+		for k, v := range rope {
+			r[k] = v
+		}
+		r["code"] = "C-10"
+		r[missing] = "  "
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("a rope with a blank %s: %d %s", missing, rec.Code, rec.Body.String())
+		}
+	}
+}

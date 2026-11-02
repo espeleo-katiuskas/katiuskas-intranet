@@ -103,6 +103,7 @@ const texts = {
   invalid_item_type: 'El tipo de material tiene que ser cuerda, saca o material general.',
   duplicate_item_code: 'Ya hay otro material con ese código.',
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
+  model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
   unknown_category: 'La categoría de material no existe.',
   insufficient_stock: 'No queda cantidad suficiente disponible.',

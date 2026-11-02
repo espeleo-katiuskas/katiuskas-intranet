@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -1330,5 +1332,22 @@ func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 	}
 	if past.TransactedAt.Format("2006-01-02") != backdated.Format("2006-01-02") {
 		t.Errorf("expected backdated transacted_at to round-trip, got %v want %v", past.TransactedAt, backdated)
+	}
+}
+
+// The database refuses a model with no brand even if something other than the API wrote it.
+func TestModelNeedsBrandConstraint(t *testing.T) {
+	tx := testutil.NewTx(t)
+	ctx := context.Background()
+	category := testutil.MaterialCategoryID(t, tx, "Mosquetones")
+	sub, err := tx.Begin(ctx) // a savepoint, so the refusal does not abort the test's transaction
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Rollback(ctx)
+	_, err = sub.Exec(ctx, `INSERT INTO material_items (type, description, category_id, model) VALUES ('general', 'Casco', $1, 'Vertex')`, category)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "model_needs_brand" {
+		t.Fatalf("expected the model_needs_brand constraint to refuse it, got %v", err)
 	}
 }

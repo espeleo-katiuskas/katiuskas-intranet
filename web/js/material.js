@@ -421,9 +421,6 @@ if (canManageMovements) {
   // shared by every type (acquired_at, prices, loanable) stay as they
   // are regardless of type.
   const requiredWhenVisible = [
-    'ni-brand',
-    'ni-model',
-    'ni-code',
     'ni-rope-type',
     'ni-diameter-mm',
     'ni-manufacture-year',
@@ -432,6 +429,14 @@ if (canManageMovements) {
     'ni-capacity-liters',
     'ni-category',
   ];
+
+  function syncModelWithBrand() {
+    const brand = document.getElementById('ni-brand');
+    const model = document.getElementById('ni-model');
+    model.disabled = brand.value.trim() === '';
+    if (model.disabled) model.value = '';
+  }
+  document.getElementById('ni-brand').addEventListener('input', syncModelWithBrand);
 
   function updateItemTypeFieldsVisibility() {
     const type = itemTypeSelect.value;
@@ -446,6 +451,12 @@ if (canManageMovements) {
     // optional "Observaciones" for rope/bag — see the two toggled
     // label spans above the textarea.
     descriptionField.required = type === 'general';
+    // Brand, model and code are in every type's form, but only a rope or a bag must have them. A model
+    // is the model of a brand: it can only be written once there is a brand.
+    for (const id of ['ni-brand', 'ni-model', 'ni-code']) {
+      document.getElementById(id).required = type === 'rope' || type === 'bag';
+    }
+    syncModelWithBrand();
     // What only makes sense when creating (the quantity and the date of acquisition: the stock is
     // whatever the movements say) is out of an edit.
     document.querySelectorAll('[data-create-only]').forEach((el) => {
@@ -491,6 +502,7 @@ if (canManageMovements) {
     set('brand', item.brand);
     set('model', item.model);
     set('code', item.code);
+    syncModelWithBrand();
     set('rope_type', item.rope_type);
     set('diameter_mm', item.diameter_mm);
     set('manufacture_year', item.manufacture_year);
@@ -524,11 +536,9 @@ if (canManageMovements) {
       sale_price: optionalNumber('sale_price'),
       loanable: formData.get('loanable') === 'on',
     };
-    if (type === 'rope' || type === 'bag') {
-      body.brand = formData.get('brand');
-      body.model = formData.get('model');
-      body.code = formData.get('code');
-    }
+    body.brand = optionalText('brand');
+    body.model = optionalText('model');
+    body.code = optionalText('code');
     if (type === 'rope') {
       body.rope_type = formData.get('rope_type');
       body.diameter_mm = Number(formData.get('diameter_mm'));
@@ -540,14 +550,7 @@ if (canManageMovements) {
     } else {
       body.category_id = Number(formData.get('category_id'));
     }
-    if (editing) {
-      // An edit replaces every field, and the form has no brand, model or code for general: keep them.
-      if (type === 'general') {
-        body.brand = editing.brand ?? null;
-        body.model = editing.model ?? null;
-        body.code = editing.code ?? null;
-      }
-    } else {
+    if (!editing) {
       body.type = type;
       body.acquired_at = optionalText('acquired_at');
       if (type === 'general') body.total_quantity = Number(formData.get('total_quantity')) || 1;

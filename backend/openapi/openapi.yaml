@@ -2972,7 +2972,8 @@ paths:
             manufacture_year/length_m in addition to brand/model/code,
             a bag needs bag_type/capacity_liters, a general item needs
             category_id/description, and none of a rope or bag's own
-            fields may be set on the other two types).
+            fields may be set on the other two types), or
+            model_without_brand (a model was given without a brand).
         "409": { description: duplicate_item_code — another item already has that code. }
 
   /material/items/{id}:
@@ -2998,7 +2999,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: invalid_id, invalid_body, unknown_category or invalid_item_fields. }
+        "400": { description: "invalid_id, invalid_body, unknown_category, invalid_item_fields or model_without_brand." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }
@@ -4621,7 +4622,7 @@ components:
         bag_type extends rope_type's caving/canyoning split with two
         purpose-based kinds, quick and special). general is a
         fungible stock item filed under a category from
-        GET /material/categories; brand/model may be unknown, but
+        GET /material/categories; brand/model/code may be unknown, though a model needs a brand, and
         description and category_id are always set. rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
@@ -4678,7 +4679,7 @@ components:
       properties:
         type: { type: string, enum: [rope, bag, general] }
         brand: { type: string, description: Required for rope/bag. }
-        model: { type: string, description: Required for rope/bag. }
+        model: { type: string, description: Required for rope/bag; needs a brand. }
         code: { type: string, description: Required for rope/bag. }
         description: { type: string, description: Required for general. }
         acquired_at:
