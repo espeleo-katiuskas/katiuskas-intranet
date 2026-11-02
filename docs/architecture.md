@@ -795,7 +795,7 @@ movements go in a single table with a type discriminator instead of a table per 
 delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
 loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
 is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
-catalog (and reading the types its form offers) and editing it (`PATCH /material/items/{id}`:
+catalog and editing it (`PATCH /material/items/{id}`:
 not its type, and not its quantities, which only movements change) is for the same three. An item's
 `code` is unique (409 `duplicate_item_code`). The list of types itself is changed by admin
 alone (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and

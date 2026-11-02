@@ -435,7 +435,7 @@ files (up to 25 MiB).
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_item_fields`, `model_without_brand`; 404
     `not_found`; 409 `duplicate_item_code`
-- **GET** `/material/types` — *Admin, board or material*. Types of material: Cuerda and Saca first,
+- **GET** `/material/types` — *Any baseline role*. Types of material: Cuerda and Saca first,
   then the rest by name.
   - returns: 200 `[MaterialType]`
 - **POST** `/material/types` — *Admin*. Adds a type (always general; the name is trimmed).

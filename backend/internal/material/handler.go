@@ -133,9 +133,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
 	mux.Handle("GET /api/v1/material/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
-	// Reading the types has the same roles as creating an item: the catalog populates the "new item"
-	// form's type picker. Changing the list is admin only (/admin), and never Cuerda or Saca.
-	mux.Handle("GET /api/v1/material/types", h.authenticator.Protect(h.listMaterialTypes, "admin", "board", "material"))
+	// Whoever can read the items can read their types (every item names one). Changing the list is
+	// admin only (/admin), and never Cuerda or Saca.
+	mux.Handle("GET /api/v1/material/types", h.authenticator.Protect(h.listMaterialTypes))
 	mux.Handle("POST /api/v1/material/types", h.authenticator.Protect(h.createType, "admin"))
 	mux.Handle("PATCH /api/v1/material/types/{id}", h.authenticator.Protect(h.renameType, "admin"))
 	mux.Handle("DELETE /api/v1/material/types/{id}", h.authenticator.Protect(h.deleteType, "admin"))

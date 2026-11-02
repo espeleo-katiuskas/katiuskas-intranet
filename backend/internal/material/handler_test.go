@@ -167,9 +167,6 @@ func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be forbidden from creating an item, got %d", name, rec.Code)
 		}
-		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", token, nil); rec.Code != http.StatusForbidden {
-			t.Errorf("expected %s to be forbidden from listing the types, got %d", name, rec.Code)
-		}
 	}
 	for name, token := range map[string]string{"board": boardToken, "material (and member)": materialMemberToken} {
 		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusCreated {
@@ -462,17 +459,18 @@ func TestHandlerCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 	}
 }
 
-func TestHandlerListMaterialTypesRequiresAdminOrBoard(t *testing.T) {
+// Like the items, the types can be read by anybody with a baseline role (admin, board or member).
+func TestHandlerListMaterialTypesIsOpenToEveryBaselineRole(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	memberToken := tokenFor(t, authn, 1, "member")
-	boardToken := tokenFor(t, authn, 2, "board")
+	materialAloneToken := tokenFor(t, authn, 3, "material")
 
-	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("expected a member to be forbidden from listing material types, got %d", rec.Code)
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", materialAloneToken, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("expected the material role alone to be forbidden, as for the items, got %d", rec.Code)
 	}
-	rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", boardToken, nil)
+	rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", memberToken, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected board to list material types, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected a member to list material types, got %d: %s", rec.Code, rec.Body.String())
 	}
 	var types []material.MaterialType
 	if err := json.Unmarshal(rec.Body.Bytes(), &types); err != nil {

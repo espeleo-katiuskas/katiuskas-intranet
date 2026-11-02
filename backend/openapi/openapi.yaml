@@ -3007,8 +3007,8 @@ paths:
     get:
       summary: List the types of material
       description: >
-        Requires the admin, board or material role, matching POST /material/items: the
-        catalog populates the "new item" form's type picker. Cuerda (kind rope) and Saca (kind
+        Any baseline role (admin, board or member), like GET /material/items, whose items each
+        name one of these. Cuerda (kind rope) and Saca (kind
         bag) come first, then the rest (kind general) by name.
       security: [{ bearerAuth: [] }]
       responses:
