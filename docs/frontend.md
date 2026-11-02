@@ -172,6 +172,11 @@ admin, with the note "La impersonación ha terminado y has vuelto a tu sesión."
 flash shown by `initSession`). Any other sign-in (`setToken`) forgets the kept token, so it can't be
 restored later by mistake, and signing out while impersonating ends the admin's own session too.
 
+The "Entrar como esta persona" button of `/socio` (`member.js`) is only shown, to admins, for
+somebody with at least one of `admin`, `board` or `member`: with none of them the person cannot sign
+in and the API refuses to impersonate them (409 `not_eligible`). It follows the person's roles
+(`renderRoles`), which can change on that page.
+
 "Ver como…" (`js/roleOverride.js`, wired by `initPage`): admins have a link in the topbar (removed
 for anybody else by `data-roles`, and for an impersonation) that opens a dialog with the roles from
 `GET /roles` as checkboxes, plus buttons for the usual combinations (Socio, Socio con material,

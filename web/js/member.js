@@ -119,9 +119,15 @@ function renderRoleAddControl(person) {
   `;
 }
 
+// Somebody with none of these roles cannot sign in, so they cannot be impersonated either (the API
+// answers 409 not_eligible): the button is not offered. It follows the roles, which change on this page.
+const BASELINE_ROLES = ['admin', 'board', 'member'];
+
 function renderRoles(person) {
   document.getElementById('member-roles-list').innerHTML = renderRoleBadges(person);
   document.getElementById('member-role-add').innerHTML = renderRoleAddControl(person);
+  const impersonate = document.getElementById('impersonate-button');
+  if (impersonate) impersonate.hidden = !person.roles.some((r) => BASELINE_ROLES.includes(r));
 }
 
 document.getElementById('member-roles-list').addEventListener('click', async (event) => {
