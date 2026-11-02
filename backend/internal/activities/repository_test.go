@@ -149,7 +149,7 @@ func TestListActive(t *testing.T) {
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	var itemID int64
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO inventory_items (item_type, description, category_id) VALUES ('gear', 'Test item', $1) RETURNING id
+		INSERT INTO material_items (type, description, category_id) VALUES ('general', 'Test item', $1) RETURNING id
 	`, categoryID).Scan(&itemID); err != nil {
 		t.Fatalf("insert item: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestListActive(t *testing.T) {
 	loan := func(a activities.Activity) {
 		t.Helper()
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO item_movements (item_id, user_id, type, activity_id, status)
+			INSERT INTO material_movements (item_id, user_id, type, activity_id, status)
 			VALUES ($1, $2, 'loan', $3, 'completed')
 		`, itemID, user.ID, a.ID); err != nil {
 			t.Fatalf("insert loan: %v", err)
@@ -168,7 +168,7 @@ func TestListActive(t *testing.T) {
 	loan(cancelledWithMaterial)
 	loan(overFullyReturned)
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO item_movements (item_id, type, quantity, activity_id, status)
+		INSERT INTO material_movements (item_id, type, quantity, activity_id, status)
 		VALUES ($1, 'return', 1, $2, 'completed')
 	`, itemID, overFullyReturned.ID); err != nil {
 		t.Fatalf("insert return: %v", err)

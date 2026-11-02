@@ -161,7 +161,7 @@ TRANSACTION_FILES_ROOT=/opt/katiuskas-intranet/data/transaction-files
 # every time the API starts, errors, a notice for each sign-in, the sign-in
 # link and code also by Telegram (in addition to the email) to whoever
 # has the account linked, a message of its own for each person/member/
-# role/activity/equipment/... that is created, edited or deleted (who did it
+# role/activity/material/... that is created, edited or deleted (who did it
 # and, for an edit, what changed), and the bot asking for the contact of
 # anyone who writes to it without being linked yet, to associate their
 # Telegram account with their phone.

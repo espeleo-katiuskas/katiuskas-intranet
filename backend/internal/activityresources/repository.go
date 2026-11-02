@@ -18,7 +18,7 @@ var (
 	// 00010_activity_resources.sql) are the actual source of truth for
 	// which combinations are valid; this just
 	// surfaces a constraint violation as a typed error instead of a raw
-	// one, the same way inventory.CreateMovement does for
+	// one, the same way material.CreateMovement does for
 	// activityRequiredConstraint.
 	ErrInvalidFields = errors.New("fields given don't match this resource's type")
 	// ErrReorderMismatch means the given ids aren't exactly this

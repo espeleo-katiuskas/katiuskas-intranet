@@ -72,7 +72,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // role (seeded by migration 00012_accounting.sql, not a system role —
 // a club that doesn't want this distinction can delete it and keep
 // using admin instead), the same "admin plus one optional custom role"
-// shape inventory.Handler already uses via "material" for its own
+// shape the material package already uses via "material" for its own
 // movements.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/accounts", h.authenticator.Protect(h.listAccounts))

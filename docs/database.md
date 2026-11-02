@@ -14,8 +14,8 @@ Contents:
 - [Members](#members): `memberships`, `membership_leaves`, `membership_dues`, `licenses`,
   `license_types`, `board_members`
 - [Activities](#activities): `activities`, `activity_participants`, `activity_resources`, `holidays`
-- [Equipment](#equipment): `inventory_items`, `material_categories`, `item_movements`,
-  `inventory_item_quantities`
+- [Material](#material): `material_items`, `material_categories`, `material_movements`,
+  `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
 - [Accounting](#accounting): `accounts`, `transactions`, `transaction_entries`
@@ -39,7 +39,7 @@ Contents:
   and negative = goes out.
 - **Derived values that are not stored**: the age category (comes from `birth_date`), the end of a
   license (December 31st of its `year`), the automatic roles (`member`, `former_member`, `board`),
-  the stock of each equipment item (view `inventory_item_quantities`), the effective type of an
+  the stock of each material item (view `material_item_quantities`), the effective type of an
   account, the balance and the last movement of an account, and the running balance of a ledger or
   of the payment list of a distribution.
 - **Where the rules live**: whatever PostgreSQL can express with a constraint (`CHECK`, `UNIQUE`,
@@ -58,11 +58,11 @@ users ──┬─< memberships, membership_leaves, membership_dues, licenses, b
         ├─< user_roles >── roles
         ├─< tokens, magic_link_tokens
         ├─< activities (leader) , activity_participants >── activities
-        └─< item_movements (recipient and who records it)
+        └─< material_movements (recipient and who records it)
 
-activities ──< activity_resources, activity_participants, item_movements
-inventory_items ──< item_movements        (inventory_item_quantities is a view of the two)
-license_types ──< licenses                material_categories ──< inventory_items
+activities ──< activity_resources, activity_participants, material_movements
+material_items ──< material_movements        (material_item_quantities is a view of the two)
+license_types ──< licenses                material_categories ──< material_items
 
 distributions ──┬─< distribution_options
                 ├─< distribution_articles ──< distribution_unit_identifiers
@@ -83,20 +83,20 @@ transactions ──< membership_dues, licenses, distribution_payments
 - `activity_resource_type` (`activity_resources.type`): text, file
 - `activity_type` (`activities.type`): caving, canyoning, training, social, other
 - `activity_visibility` (`activities.visibility`): public, private
-- `bag_type` (`inventory_items.bag_type`): caving, canyoning, quick, special
+- `bag_type` (`material_items.bag_type`): caving, canyoning, quick, special
 - `board_position` (`board_members.position`): president, vice_president, secretary, treasurer,
   member_at_large
 - `distribution_audience` (`distributions.audience`): all_members, signup
 - `distribution_status` (`distributions.status`): draft, open, closed, done
 - `distribution_visibility` (`distributions.visibility`): all, material, board, admin
 - `gender` (`users.gender`): male, female
-- `item_material_type` (`inventory_items.item_type`): rope, bag, gear
-- `item_status` (`inventory_items.status`): available, on_loan, rented, sold, lost, abandoned,
-  maintenance, retired
-- `movement_status` (`item_movements.status`): active, completed, overdue, cancelled
-- `movement_type` (`item_movements.type`): loan, rental, sale, acquisition, loss, abandonment,
-  retirement, return
-- `rope_type` (`inventory_items.rope_type`): caving, canyoning
+- `material_item_type` (`material_items.type`): rope, bag, general
+- `material_item_status` (`material_items.status`): available, on_loan, rented, sold, lost,
+  abandoned, maintenance, retired
+- `material_movement_status` (`material_movements.status`): active, completed, overdue, cancelled
+- `material_movement_type` (`material_movements.type`): loan, rental, sale, acquisition, loss,
+  abandonment, retirement, return
+- `rope_type` (`material_items.rope_type`): caving, canyoning
 
 ## People, access and roles
 
@@ -598,24 +598,24 @@ Constraints:
 - primary key (id)
 - unique (date)
 
-## Equipment
+## Material
 
-### `inventory_items`
+### `material_items`
 
-Catalog of the club's equipment. `item_type` decides which fields it carries: `rope` and `bag` are
-individual objects, each with its own code and make and model; `gear` is generic equipment, filed
+Catalog of the club's material. `type` decides which fields it carries: `rope` and `bag` are
+individual objects, each with its own code and make and model; `general` is general material, filed
 under a category and with a description. Stock is never stored: it comes from the movements
-(`inventory_item_quantities`).
+(`material_item_quantities`).
 
 | Column | Type | Null | Default |
 |---|---|---|---|
 | `id` | bigint | no | identity |
-| `item_type` | item_material_type | no |  |
+| `type` | material_item_type | no |  |
 | `brand` | text | yes |  |
 | `model` | text | yes |  |
 | `code` | text | yes |  |
 | `description` | text | yes |  |
-| `status` | item_status | no | 'available' |
+| `status` | material_item_status | no | 'available' |
 | `loanable` | boolean | no | true |
 | `rental_price_per_week` | numeric(10,2) | yes |  |
 | `sale_price` | numeric(10,2) | yes |  |
@@ -637,24 +637,24 @@ Constraints:
 - primary key (id)
 - unique (code)
 - `category_id` → `material_categories(id)`
-- `bag_requires_bag_type`: `(item_type <> 'bag') OR (bag_type IS NOT NULL)`
-- `bag_requires_capacity`: `(item_type <> 'bag') OR (capacity_liters IS NOT NULL)`
-- `bag_type_only_for_bag`: `(item_type = 'bag') OR (bag_type IS NULL)`
-- `capacity_only_for_bag`: `(item_type = 'bag') OR (capacity_liters IS NULL)`
-- `category_only_for_gear`: `(item_type = 'gear') OR (category_id IS NULL)`
-- `gear_requires_category`: `(item_type <> 'gear') OR (category_id IS NOT NULL)`
-- `gear_requires_description`: `(item_type <> 'gear') OR (description IS NOT NULL)`
-- `rope_and_bag_require_brand_model`: `(item_type = 'gear') OR ((brand IS NOT NULL) AND (model IS
+- `bag_requires_bag_type`: `(type <> 'bag') OR (bag_type IS NOT NULL)`
+- `bag_requires_capacity`: `(type <> 'bag') OR (capacity_liters IS NOT NULL)`
+- `bag_type_only_for_bag`: `(type = 'bag') OR (bag_type IS NULL)`
+- `capacity_only_for_bag`: `(type = 'bag') OR (capacity_liters IS NULL)`
+- `category_only_for_general`: `(type = 'general') OR (category_id IS NULL)`
+- `general_requires_category`: `(type <> 'general') OR (category_id IS NOT NULL)`
+- `general_requires_description`: `(type <> 'general') OR (description IS NOT NULL)`
+- `rope_and_bag_require_brand_model`: `(type = 'general') OR ((brand IS NOT NULL) AND (model IS
   NOT NULL))`
-- `rope_and_bag_require_code`: `(item_type = 'gear') OR (code IS NOT NULL)`
-- `rope_fields_only_for_rope`: `(item_type = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
+- `rope_and_bag_require_code`: `(type = 'general') OR (code IS NOT NULL)`
+- `rope_fields_only_for_rope`: `(type = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
   NULL) AND (manufacture_year IS NULL) AND (length_m IS NULL))`
-- `rope_requires_rope_fields`: `(item_type <> 'rope') OR ((rope_type IS NOT NULL) AND (diameter_mm
+- `rope_requires_rope_fields`: `(type <> 'rope') OR ((rope_type IS NOT NULL) AND (diameter_mm
   IS NOT NULL) AND (manufacture_year IS NOT NULL) AND (length_m IS NOT NULL))`
 
 ### `material_categories`
 
-Categories of generic equipment (carabiners, spits, plates, maillons, lighting). It lives in the
+Categories of general material (carabiners, spits, plates, maillons, lighting). It lives in the
 database so it can be extended without deploying.
 
 | Column | Type | Null | Default |
@@ -667,9 +667,9 @@ Constraints:
 - primary key (id)
 - unique (name)
 
-### `item_movements`
+### `material_movements`
 
-All equipment movements in a single table with a `type` discriminator. A rental is priced per week
+All material movements in a single table with a `type` discriminator. A rental is priced per week
 and is closed in one go with `returned_at`. A return is not tied to any specific loan: the service
 validates it against what the activity still has unreturned.
 
@@ -678,12 +678,12 @@ validates it against what the activity still has unreturned.
 | `id` | bigint | no | identity |
 | `item_id` | bigint | no |  |
 | `user_id` | bigint | yes |  |
-| `type` | movement_type | no |  |
+| `type` | material_movement_type | no |  |
 | `quantity` | integer | no | 1 |
 | `transacted_at` | date | no | CURRENT_DATE |
 | `returned_at` | date | yes |  |
 | `price` | numeric(10,2) | yes |  |
-| `status` | movement_status | no | 'active' |
+| `status` | material_movement_status | no | 'active' |
 | `recorded_by` | bigint | yes |  |
 | `activity_id` | bigint | yes |  |
 | `notes` | text | yes |  |
@@ -698,7 +698,7 @@ Constraints:
 
 - primary key (id)
 - `activity_id` → `activities(id)`
-- `item_id` → `inventory_items(id)`
+- `item_id` → `material_items(id)`
 - `recorded_by` → `users(id)`
 - `user_id` → `users(id)`
 - `activity_required_for_loan_and_return`: `(type NOT IN (['loan', 'return'])) OR (activity_id IS
@@ -712,19 +712,19 @@ Constraints:
 
 Indexes:
 
-- `idx_item_movements_item_id` sobre `(item_id)`
-- `idx_item_movements_user_id` sobre `(user_id)`
+- `idx_material_movements_item_id` sobre `(item_id)`
+- `idx_material_movements_user_id` sobre `(user_id)`
 
 Rules outside the database:
 
 - The stock pending return (loans minus returns of the same item and activity) is validated by the
   service.
 
-### `inventory_item_quantities`
+### `material_item_quantities`
 
 A view (not a table): for each item, `total_quantity` (what exists), `available_quantity` (what is
 available now) and `outstanding_loan_quantity` (what is lent and not returned), all recomputed from
-`item_movements`.
+`material_movements`.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -1267,7 +1267,7 @@ at the end; that database has to be recreated when a new migration appears.
 - `00003_roles.sql`: `roles`, `user_roles`, `tokens` and `magic_link_tokens`
 - `00004_memberships.sql`: `memberships`
 - `00005_activities.sql`: `activities` and `activity_participants`
-- `00006_inventory.sql`: equipment: `inventory_items`, `item_movements`, stock view
+- `00006_inventory.sql`: material: `material_items`, `material_movements`, stock view
 - `00007_licenses.sql`: `license_types` and `licenses`
 - `00008_board_members.sql`: `board_members`
 - `00009_holidays.sql`: `holidays`

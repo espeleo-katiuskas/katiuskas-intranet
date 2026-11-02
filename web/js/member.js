@@ -1090,7 +1090,7 @@ async function loadActivities() {
 }
 
 // Only loan/rental/sale ever have a recipient, so this person's own
-// movement history (GET /users/{login}/movements) never contains an
+// movement history (GET /users/{login}/material/movements) never contains an
 // acquisition, loss, abandonment or retirement — no labels needed here
 // for those.
 const movementTypeLabels = {
@@ -1114,11 +1114,11 @@ const bagTypeLabels = {
 };
 
 // A rope/bag is identified by brand+model (plus its type-specific
-// attributes); gear may have no known brand/model at all, so its
+// attributes); a general item may have no known brand/model at all, so its
 // category — always set — anchors the label instead.
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.item_type === 'rope') {
+  if (item.type === 'rope') {
     const parts = [
       brandModel || null,
       `${item.diameter_mm} mm`,
@@ -1128,7 +1128,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  if (item.item_type === 'bag') {
+  if (item.type === 'bag') {
     const parts = [
       brandModel || null,
       `${item.capacity_liters} L`,
@@ -1167,8 +1167,8 @@ async function loadMovements() {
   const tableBody = document.getElementById('movements-table-body');
   try {
     const [items, movements] = await Promise.all([
-      apiFetch('/items').catch(() => []),
-      apiFetch(`/users/${memberLogin}/movements`),
+      apiFetch('/material/items').catch(() => []),
+      apiFetch(`/users/${memberLogin}/material/movements`),
     ]);
     const itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     tableBody.innerHTML = movements.length

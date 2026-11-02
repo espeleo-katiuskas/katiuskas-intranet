@@ -52,7 +52,7 @@ route.
 | Level | Can see | Can modify |
 |---|---|---|
 | `admin` | Everything | Everything, without exception |
-| `board` | All the data of the API | Activities, equipment and the calendar's holidays |
+| `board` | All the data of the API | Activities, material and the calendar's holidays |
 | `member` (socio) | A reduced view of people and their own data | Their own contact data |
 
 ### `admin`
@@ -62,12 +62,12 @@ Can do everything, without exception.
 ### `board`
 
 Can **see** all the data of the API: people, members, licenses, annual dues, temporary
-leaves, Junta Directiva, roles, activities, equipment and accounting.
+leaves, Junta Directiva, roles, activities, material and accounting.
 
 Can only **modify**:
 
 - Activities (any of them, not just their own).
-- Equipment (creating items and movements).
+- Material (creating items and movements).
 - The calendar's holidays.
 
 Everything else is admin-only: board cannot create or delete people, register joining/leaving,
@@ -189,13 +189,13 @@ route ever exposes the internal numeric id.
 - **Editing**: admin only, via `PATCH /users/{login}`. The format is checked with the same
   regular expression (`ErrInvalidLogin` if it does not comply; `ErrDuplicate` if it already
   belongs to another person).
-- **Other packages**: `tokens`, `roles`, `licenses`, `memberships`, `board`, `inventory` and
+- **Other packages**: `tokens`, `roles`, `licenses`, `memberships`, `board`, `material` and
   `activities` receive a login in their routes and translate it to the internal id with a
   minimal interface defined in each one (`UserLookup`, with `UserIDForLogin`/`LoginForUserID`)
   that `*users.Service` satisfies structurally. They cannot import `users` directly,
   because `users` already imports several of them (`roles`, `memberships`, `licenses`).
 - **Mixed listings**: a listing that can mix several people at once
-  (`GET /movements`, `GET /activities`, `GET /transactions`...) resolves the login with a
+  (`GET /material/movements`, `GET /activities`, `GET /transactions`...) resolves the login with a
   SQL `JOIN` against `users` instead of one query per row. A single-row write
   with `INSERT`/`UPDATE ... RETURNING` (which does not admit `JOIN`) resolves it from a
   login the handler already has at hand, or with a call to `LoginForUserID`.
@@ -381,7 +381,7 @@ Catalog of roles (manageable: create, delete) and who holds which (many-to-many 
 The system ones (`admin`, `board`, `member`, `former_member`) are the only ones to which the code
 gives permissions or automatic behavior. Any other role an admin creates is an organizational
 label: it unlocks nothing by itself unless explicitly programmed (`material` and `money` are of
-this kind and do have an effect, see "`inventory_items` and `item_movements`" and "Accounting").
+this kind and do have an effect, see "`material_items` and `material_movements`" and "Accounting").
 The automatic ones (`member`, `former_member` and `board`) are neither assigned nor removed by
 anybody by hand: `POST`/`DELETE /users/{login}/roles` reject them with 409. Which roles exist and
 which of them are system or automatic ones is in [`database.md`](database.md).
@@ -663,7 +663,7 @@ Who has been on the board (Junta Directiva) and in which position, with the same
   like `member`/`former_member` against `memberships`. That is why it does not need the interface
   arrangement that `membership_number` does (see "`users`").
 - Its `handler.go` does define, for another reason, the same minimal `UserLookup` interface as
-  `tokens`/`roles`/`licenses`/`memberships`/`inventory`/`activities`: translating the login of its
+  `tokens`/`roles`/`licenses`/`memberships`/`material`/`activities`: translating the login of its
   `/users/{login}/...` routes into an id.
 
 **Deletion and frontend**
@@ -762,13 +762,13 @@ deleting a particular one, only whoever wrote it or admin/board. The order is re
 once, and a list that does not match the current resources exactly is rejected instead of trying
 to reconcile it.
 
-### `inventory_items` and `item_movements`
+### `material_items` and `material_movements`
 
-Catalog of the club's gear and its movements. The movements go in a single table with a type
+Catalog of the club's material and its movements. The movements go in a single table with a type
 discriminator (`type`) instead of a table per type, and several `CHECK`s prevent meaningless
 combinations (a sale with a return date, for example).
 
-The catalog items have three shapes (`rope`, `bag` and `gear`), each with its own fields; the
+The catalog items have three shapes (`rope`, `bag` and `general`), each with its own fields; the
 details and what is mandatory in each shape are in [`database.md`](database.md). The movements go
 in a single table with a type discriminator instead of a table per type, and several `CHECK`s
 prevent meaningless combinations (a sale with a return date, for example).
@@ -776,26 +776,26 @@ prevent meaningless combinations (a sale with a return date, for example).
 **Rules**
 
 - A rental is priced per week (`rental_price_per_week`), not per day, and is closed in one go with
-  `returned_at` and `status='active'→'completed'`. `PATCH /movements/{id}/return` only applies to
-  an open rental.
-- A loan or a return is always linked to an activity (`item_movements.activity_id`, required by
+  `returned_at` and `status='active'→'completed'`. `PATCH /material/movements/{id}/return` only
+  applies to an open rental.
+- A loan or a return is always linked to an activity (`material_movements.activity_id`, required by
   another `CHECK`).
-- A return is not tied to any particular loan: it is validated in Go against how much of that gear
+- A return is not tied to any particular loan: it is validated in Go against how much of that item
   the activity still has outstanding (`SUM(loan.quantity) − SUM(return.quantity)` for the same
   `item_id`/`activity_id`). This way 10 carabiners can be lent and then 15 more, and 20 returned
   followed by the remaining 5, without matching each return with a loan.
 - `total_quantity`, `available_quantity` and `outstanding_loan_quantity` of each item are never
-  stored: they are always recomputed from its history of movements (`inventory_item_quantities`, a
+  stored: they are always recomputed from its history of movements (`material_item_quantities`, a
   view).
 
 **Permissions**: creating or modifying a movement requires `admin`, `board` or the optional role
 `material`, which is seeded but is not a system one (a club that does not want that distinction can
 delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
 loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
-is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding gear to the
-catalog (and the categories its form offers) and editing it (`PATCH /items/{id}`: not its type, and
-not its quantities, which only movements change) is for the same three. An item's `code` is unique
-(409 `duplicate_item_code`).
+is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
+catalog (and the categories its form offers) and editing it (`PATCH /material/items/{id}`: not its
+type, and not its quantities, which only movements change) is for the same three. An item's `code`
+is unique (409 `duplicate_item_code`).
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,
@@ -1077,7 +1077,7 @@ authorization...).
   [`api.md`](api.md)).
 - Unlike the archive, they are not open to any baseline role: only the person themselves or
   admin/board can see them (403 otherwise). The check is inside the handler itself, like
-  `memberships.listByUser` and `inventory.listMovementsByUser`.
+  `memberships.listByUser` and `material.listMovementsByUser`.
 - A person without a subdirectory of their own yet (the normal case, until somebody leaves them
   a file) sees an empty listing at their own root instead of a 404.
 ### Accounting (`accounts`, `transactions`, `transaction_entries`)
@@ -1214,7 +1214,7 @@ resource's `handler.go` is the only layer that knows HTTP exists.
 - `internal/telegram` and `internal/telegrambot`: client of the Telegram bot API and the bot
   that receives messages (see the "Telegram" subsection).
 - One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
-  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
+  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`,
   `accounting`, `clubinfo` (the home page's "datos de interés", editable from `/admin`) and
   `budgets` (the yearly budgets) and `transactionfiles` (documents attached to transactions).
   Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
@@ -1237,7 +1237,7 @@ always requires holding at least one of the roles `admin`, `board` or `member`. 
 applied on top of the specific roles the route asks for, not a default that those roles replace.
 
 - Whoever has only, for example, `material` (without also being admin, board or an active
-  member) cannot use the API at all, not even the equipment routes.
+  member) cannot use the API at all, not even the material routes.
 - Since `member` is automatic (computed from having an active joining right now), this floor also
   cuts access off the moment someone stops being a member.
 
@@ -1302,7 +1302,7 @@ trimmed by `.dockerignore`.
 | Login | One notice for each login (`authapi.Handler.notifyLogin`). |
 | Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told too (404 `unknown_details`), and a request that works does not notify. |
 | Magic link by DM | The same link (and, depending on the case, the code; see "Permissions") by DM to whoever has their account linked (`authapi.Handler.notifyMagicLinkViaTelegram`). |
-| Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, equipment, board position, resource of an activity's memoria, token, account or transaction. |
+| Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, material, board position, resource of an activity's memoria, token, account or transaction. |
 | Startup | `cmd/api/main.go` sends "🚀 API started" right before starting the server, with the version and the date of the last commit if they are known — "🚀 API started (version v0.3.6, commit del 17-10-2026)"; only one of the two, or neither, if that is all there is — (`startupMessage`, from `adminstatus.ReadBuild`: the same information Go records in the binary and `/admin` shows). It is the synchronous exception (same 10 s limit): a single call at startup competes with no request, so blocking on it costs nothing noticeable. |
 | Bot | `internal/telegrambot.Bot`, the only one that also *receives* messages, by long polling and not by webhook (see "Telegram bot"). |
 
@@ -1471,8 +1471,8 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | `/socios` | List of people. | Sidebar: admin, board and member. | For a member it reduces columns and filters to `MemberListing` and its rows are not clickable; for admin and board, each row leads to `/socio?login=<login>`. |
 | `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. Admin also sees and can close the person's sessions. |
 | `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses, "Mis sesiones" (the sessions not expired or revoked, each of which can be closed) and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |
-| `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent equipment and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
-| `/material` | Equipment catalog and its movements. | Any baseline role. | "Nuevo material" and the movements (loan, rental, sale), for admin, board and the `material` role. |
+| `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent material and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
+| `/material` | Material catalog and its movements. | Any baseline role. | "Nuevo material" and the movements (loan, rental, sale), for admin, board and the `material` role. |
 | `/material-prestado` (`material-prestado.html`/`loanedMaterial.js`) | The material that is still the club's but not in it right now: *Prestado* (every item with loans not yet returned, the units pending and the activities they are out for, each linking to its page) and *Alquilado* (the open rentals, with "Devolver"). | Admin, board and the `material` role; not in the sidebar, reached with the "Material prestado o alquilado" button of `/material`. | Material that is lost, abandoned or retired is not on it, as it is not the club's any more. |
 | `/archivo` | The club's document archive. | Any baseline role. | `js/fileBrowser.js` shares the listing and preview logic with `userFiles.js`; Markdown documents are rendered with `js/markdown.js`. |
 | `/repartos` | List of distributions (what the club hands out to members) with status, price and deadline; "Puedes pedirlo" on the open ones that apply to whoever is looking. "+ Nuevo reparto" opens a dialog. | Any baseline role; drafts and "+ Nuevo reparto" only for admin and board. | Options are written one per line, "Talla: S, M, L". |
@@ -1495,8 +1495,8 @@ For the person being looked at, the page gathers:
 - their editable data (only admin can save; board sees it disabled) and their roles;
 - the "Historial como socio": joinings, leavings, temporary leaves, dues, licenses and Junta
   positions in a single timeline;
-- their history of activities and equipment (`GET /users/{login}/activities` and
-  `GET /users/{login}/movements`);
+- their history of activities and material (`GET /users/{login}/activities` and
+  `GET /users/{login}/material/movements`);
 - their federative licenses (`js/licenseFiles.js`: thumbnails of the copies in `licencias/` among
   the person's files; the thumbnails are generated, on demand, by
   `scripts/generate-license-thumbnails.sh`);

@@ -16,7 +16,7 @@ Contents:
 - [Members](#members)
 - [Activities](#activities)
 - [Activity memoria](#activity-memoria)
-- [Equipment](#equipment)
+- [Material](#material)
 - [Distributions](#distributions)
 - [Document archive and per-person files](#document-archive-and-per-person-files)
 - [Accounting](#accounting)
@@ -413,37 +413,38 @@ files (up to 25 MiB).
   - query: `download`
   - errors: 400 `not_a_file`
 
-## Equipment
+## Material
 
-- **GET** `/items` — *Any baseline role*. Catalog of equipment.
+- **GET** `/material/items` — *Any baseline role*. Catalog of material.
   - returns: 200 `[Item]`
-- **POST** `/items` — *Admin, board or material*. Adds an item (rope, bag or generic equipment).
-  - body: `item_type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
+- **POST** `/material/items` — *Admin, board or material*. Adds an item (rope, bag or general
+  material).
+  - body: `type*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
     `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
     `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `category_id`
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `invalid_item_type`, `invalid_date`, `unknown_category`,
     `single_unit_item`, `invalid_item_fields`; 409 `duplicate_item_code`
-- **PATCH** `/items/{id}` — *Admin, board or material*. Edits an item: replaces every editable field
-  with the body's (the brand, model, code, description, `loanable`, prices and the rope, bag or gear
-  fields of its type). Its type and its quantities, which only movements change, are not editable
-  (an `item_type` or `total_quantity` in the body is ignored).
-  - body: the same as creating, without `item_type`, `acquired_at` and `total_quantity`
+- **PATCH** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
+  editable field with the body's (the brand, model, code, description, `loanable`, prices and the
+  rope, bag or general fields of its type). Its type and its quantities, which only movements
+  change, are not editable (a `type` or `total_quantity` in the body is ignored).
+  - body: the same as creating, without `type`, `acquired_at` and `total_quantity`
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_category`, `invalid_item_fields`; 404
     `not_found`; 409 `duplicate_item_code`
-- **GET** `/material-categories` — *Admin, board or material*. Categories of generic equipment.
+- **GET** `/material/categories` — *Admin, board or material*. Categories of general material.
   - returns: 200 `[MaterialCategory]`
-- **GET** `/items/{id}/movements` — *Any baseline role*. Movement history of an item.
+- **GET** `/material/items/{id}/movements` — *Any baseline role*. Movement history of an item.
   - returns: 200 `[Movement]`
   - errors: 400 `invalid_id`
-- **GET** `/movements` — *Admin, board or material*. Movements: the active ones by default, or all
-  those of an activity with `activity_id`.
+- **GET** `/material/movements` — *Admin, board or material*. Movements: the active ones by default,
+  or all those of an activity with `activity_id`.
   - query: `status`, `activity_id`
   - returns: 200 `[Movement]`
   - errors: 400 `invalid_activity_id`
-- **POST** `/movements` — *Admin, board or material*. Records a movement (loan, rental, sale,
-  joining, write-off, return).
+- **POST** `/material/movements` — *Admin, board or material*. Records a movement (loan, rental,
+  sale, joining, write-off, return).
   - body: `item_id*`, `login`, `type*`, `quantity`, `transacted_at`, `activity_id`, `notes`
   - returns: 201 `Movement`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_type`, `login_required`,
@@ -451,11 +452,11 @@ files (up to 25 MiB).
     `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`,
     `recipient_not_member` (a loan or a rental for somebody who is not a member now),
     `recipient_not_member_or_former` (a sale for somebody who is neither a member nor a former one)
-- **PATCH** `/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
+- **PATCH** `/material/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
   - returns: 200 `Movement`
   - errors: 400 `invalid_id`; 404 `not_found`
-- **GET** `/users/{login}/movements` — *The person themselves, admin, board or material*. Purchases,
-  rentals and loans of a person.
+- **GET** `/users/{login}/material/movements` — *The person themselves, admin, board or material*.
+  Purchases, rentals and loans of a person.
   - returns: 200 `[Movement]`
 
 ## Distributions
@@ -1174,7 +1175,7 @@ Nested fields:
 | Field | Type |
 |---|---|
 | `id` | integer |
-| `item_type` | rope/bag/gear |
+| `type` | rope/bag/general |
 | `brand` | text |
 | `model` | text |
 | `code` | text |
@@ -1201,7 +1202,7 @@ Nested fields:
 
 | Field | Type |
 |---|---|
-| `item_type*` | rope/bag/gear |
+| `type*` | rope/bag/general |
 | `brand` | text |
 | `model` | text |
 | `code` | text |

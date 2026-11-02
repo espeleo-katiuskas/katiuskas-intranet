@@ -17,7 +17,7 @@ import (
 var (
 	ErrNotFound = errors.New("user not found")
 	// ErrHasReferences means the user can't be deleted because other
-	// records (an activity they led, an inventory transaction they're
+	// records (an activity they led, a material movement they're
 	// party to) still point at them — deleting would silently erase that
 	// history, so PostgreSQL's foreign keys refuse the delete instead of
 	// cascading through it.
@@ -556,7 +556,7 @@ func (r *Repository) EnsureMembershipNumber(ctx context.Context, userID int64) e
 // Delete removes a person's record entirely, along with their refresh
 // tokens, magic-link tokens, membership history and activity sign-ups
 // (all ON DELETE CASCADE). It's rejected by the database if the
-// person is still referenced as an activity's leader or an inventory
+// person is still referenced as an activity's leader or a material
 // transaction's party — that history has to be reassigned or completed
 // first.
 func (r *Repository) Delete(ctx context.Context, id int64) error {

@@ -53,7 +53,7 @@ function canContributeToMemoria() {
 // Registering/returning a loan is gated the same way as on the
 // material page (admin/board/material) — independent of canManage,
 // since a plain member leading their own activity still can't touch
-// inventory movements.
+// material movements.
 const canManageMovements = hasAnyRole(viewer, ['admin', 'board', 'material']);
 
 const activityId = Number(new URLSearchParams(window.location.search).get('id'));
@@ -360,12 +360,12 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 });
 
 // A loan is always tied to an activity, and it's common for one trip
-// to have plenty of gear going out — this section lets admin/board/
+// to have plenty of material going out — this section lets admin/board/
 // material register (and return) those loans right here instead of
 // hunting the item down on the material page. Item type/rope/bag
-// labels are duplicated from js/inventory.js and js/member.js, the
+// labels are duplicated from js/material.js and js/member.js, the
 // same way those two already duplicate them from each other.
-const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', gear: 'Material' };
+const itemTypeLabels = { rope: 'Cuerda', bag: 'Saca', general: 'Material' };
 const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
 const bagTypeLabels = {
   caving: 'Espeleología',
@@ -376,7 +376,7 @@ const bagTypeLabels = {
 
 function itemLabel(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.item_type === 'rope') {
+  if (item.type === 'rope') {
     const parts = [
       brandModel || null,
       `${item.diameter_mm} mm`,
@@ -386,7 +386,7 @@ function itemLabel(item) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  if (item.item_type === 'bag') {
+  if (item.type === 'bag') {
     const parts = [
       brandModel || null,
       `${item.capacity_liters} L`,
@@ -402,9 +402,9 @@ function itemLabel(item) {
 // renderPickerOptions/pickerLabel already escape it, so this must not.
 function itemPickerText(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  const typeLabel = itemTypeLabels[item.item_type] ?? item.item_type;
+  const typeLabel = itemTypeLabels[item.type] ?? item.type;
   const parts =
-    item.item_type === 'gear'
+    item.type === 'general'
       ? [typeLabel, item.category_name, brandModel || null, item.description || null]
       : [typeLabel, brandModel || null, item.code];
   return parts.filter(Boolean).join(' · ');
@@ -418,7 +418,7 @@ let outstandingByItem = new Map();
 async function loadItems() {
   if (!canManageMovements) return;
   try {
-    const items = await apiFetch('/items');
+    const items = await apiFetch('/material/items');
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     itemEntries = items.map((item) => ({
       id: item.id,
@@ -460,7 +460,7 @@ function renderActivityLoanRow(itemId, totals) {
   `;
 }
 
-// GET /movements?activity_id= returns every movement tied to this
+// GET /material/movements?activity_id= returns every movement tied to this
 // activity — chiefly loan and return, which is what this list is built
 // from; anything else that happens to share this activity_id (a
 // rental, say) is simply ignored here.
@@ -469,7 +469,7 @@ async function loadActivityLoans(ready = Promise.resolve()) {
   const tableBody = document.getElementById('activity-loans-table-body');
   if (!tableBody) return;
   try {
-    const movements = await apiFetch(`/movements?activity_id=${activityId}`);
+    const movements = await apiFetch(`/material/movements?activity_id=${activityId}`);
     await ready; // the rows name the items, which loadItems fetches
     const totalsByItem = aggregateActivityLoans(movements);
     outstandingByItem = new Map(
@@ -545,7 +545,7 @@ function updateLoanQuantityVisibility() {
   if (!loanItemInput) return;
   const itemId = resolvePickerId(itemEntries, loanItemInput.value);
   const item = itemId != null ? itemsById[itemId] : null;
-  const isSingleUnit = item?.item_type === 'rope' || item?.item_type === 'bag';
+  const isSingleUnit = item?.type === 'rope' || item?.type === 'bag';
   loanQuantityField.hidden = isSingleUnit;
   if (isSingleUnit) loanQuantityInput.value = '1';
   const max = !item
@@ -639,7 +639,7 @@ newLoanForm?.addEventListener('submit', async (event) => {
   const submitButton = form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
+    await apiFetch('/material/movements', { method: 'POST', body: JSON.stringify(body) });
     showFeedback(type === 'return' ? 'Devolución registrada.' : 'Préstamo registrado.');
     newLoanDialog.close();
     await loadActivityLoans();

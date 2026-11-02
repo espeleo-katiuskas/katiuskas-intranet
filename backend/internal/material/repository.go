@@ -1,4 +1,4 @@
-package inventory
+package material
 
 import (
 	"context"
@@ -43,10 +43,10 @@ var (
 	// see Repository.CreateMovement.
 	ErrReturnExceedsLoaned = errors.New("cannot return more than is currently on loan for this activity")
 	// ErrInvalidItemFields means CreateItem's given fields don't fit
-	// item_type's own required shape — a rope or bag with no
+	// type's own required shape — a rope or bag with no
 	// code/brand/model, a rope without its own rope-only fields (or a
 	// non-rope with them), a bag without bag_type/capacity_liters (or a
-	// non-bag with them), or a gear item with no category_id/
+	// non-bag with them), or a general item with no category_id/
 	// description (see migration 00006_inventory.sql's own CHECK
 	// constraints). There are too many distinct constraints here to
 	// give each its own sentinel error the way ErrCategoryNotFound does
@@ -55,7 +55,7 @@ var (
 	// regardless of which specific constraint fired, while the
 	// message itself (built from Postgres's own ConstraintName) still
 	// says which one.
-	ErrInvalidItemFields = errors.New("item fields do not match item_type's required shape")
+	ErrInvalidItemFields = errors.New("item fields do not match type's required shape")
 	// ErrRecipientNotMember means a loan or a rental was for somebody who is not a member now, and
 	// ErrRecipientNotMemberOrFormer a sale for somebody who is neither a member nor a former one.
 	ErrRecipientNotMember         = errors.New("a loan or a rental can only be for a member")
@@ -93,18 +93,18 @@ func NewRepository(pool db.PGX) *Repository {
 // Item rows other than CreateItem's INSERT ... RETURNING (which can't
 // JOIN against the row it just wrote — see CreateItem's own follow-up
 // queries for the category name and computed quantities).
-// inventory_item_quantities computes total/available/outstanding-loan
+// material_item_quantities computes total/available/outstanding-loan
 // quantity from this item's own movement history, so they can never
 // drift from what actually happened the way stored, manually-updated
 // columns could.
 const itemSelect = `
-	i.id, i.item_type, i.brand, i.model, i.code, i.description,
+	i.id, i.type, i.brand, i.model, i.code, i.description,
 	q.total_quantity, q.available_quantity, q.outstanding_loan_quantity, i.status, i.loanable,
 	i.rental_price_per_week, i.sale_price,
 	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters,
 	i.category_id, mc.name
-	FROM inventory_items i
-	JOIN inventory_item_quantities q ON q.item_id = i.id
+	FROM material_items i
+	JOIN material_item_quantities q ON q.item_id = i.id
 	LEFT JOIN material_categories mc ON mc.id = i.category_id`
 
 func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
@@ -146,11 +146,11 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 
 	var it Item
 	err = tx.QueryRow(ctx, `
-		INSERT INTO inventory_items (item_type, brand, model, code, description, loanable,
+		INSERT INTO material_items (type, brand, model, code, description, loanable,
 			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
 			bag_type, capacity_liters, category_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-		RETURNING id, item_type, brand, model, code, description, status, loanable,
+		RETURNING id, type, brand, model, code, description, status, loanable,
 			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
 			bag_type, capacity_liters, category_id
 	`, in.Type, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
@@ -165,7 +165,7 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 		case categoryFKViolationCode:
 			return Item{}, ErrCategoryNotFound
 		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit item_type %q (violates %s): %w",
+			return Item{}, fmt.Errorf("fields do not fit type %q (violates %s): %w",
 				in.Type, pgErr.ConstraintName, ErrInvalidItemFields)
 		case uniqueViolationCode:
 			return Item{}, ErrDuplicateItemCode
@@ -176,7 +176,7 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO item_movements (item_id, type, quantity, transacted_at, status)
+		INSERT INTO material_movements (item_id, type, quantity, transacted_at, status)
 		VALUES ($1, 'acquisition', $2, $3, 'completed')
 	`, it.ID, initialQuantity, acquiredAt); err != nil {
 		return Item{}, err
@@ -210,11 +210,11 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 
 	var itemType ItemType
 	err = tx.QueryRow(ctx, `
-		UPDATE inventory_items SET brand=$2, model=$3, code=$4, description=$5, loanable=$6,
+		UPDATE material_items SET brand=$2, model=$3, code=$4, description=$5, loanable=$6,
 			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
 			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, category_id=$15
 		WHERE id = $1
-		RETURNING item_type
+		RETURNING type
 	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
 		in.BagType, in.CapacityLiters, in.CategoryID,
@@ -228,7 +228,7 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 		case categoryFKViolationCode:
 			return Item{}, ErrCategoryNotFound
 		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit item_type %q (violates %s): %w",
+			return Item{}, fmt.Errorf("fields do not fit type %q (violates %s): %w",
 				itemType, pgErr.ConstraintName, ErrInvalidItemFields)
 		case uniqueViolationCode:
 			return Item{}, ErrDuplicateItemCode
@@ -261,7 +261,7 @@ func (r *Repository) GetItem(ctx context.Context, id int64) (Item, error) {
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+itemSelect+`
-		ORDER BY i.item_type, i.brand, i.model, i.id
+		ORDER BY i.type, i.brand, i.model, i.id
 	`)
 	if err != nil {
 		return nil, err
@@ -279,7 +279,7 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return list, rows.Err()
 }
 
-// ListMaterialCategories returns the gear category catalog (migration
+// ListMaterialCategories returns the material category catalog (migration
 // 00006_inventory.sql) — every entry, in name order, for the "new item"
 // form's category picker.
 func (r *Repository) ListMaterialCategories(ctx context.Context) ([]MaterialCategory, error) {
@@ -339,19 +339,19 @@ func (r *Repository) syncItemStatusAfterMovement(ctx context.Context, tx pgx.Tx,
 	var available int32
 	var status ItemStatus
 	if err := tx.QueryRow(ctx, `
-		SELECT q.available_quantity, i.status FROM inventory_items i
-		JOIN inventory_item_quantities q ON q.item_id = i.id
+		SELECT q.available_quantity, i.status FROM material_items i
+		JOIN material_item_quantities q ON q.item_id = i.id
 		WHERE i.id = $1
 	`, itemID).Scan(&available, &status); err != nil {
 		return err
 	}
 
 	if newStatus, ok := itemStatusForMovement[movementType]; ok && available == 0 {
-		_, err := tx.Exec(ctx, `UPDATE inventory_items SET status = $1 WHERE id = $2`, newStatus, itemID)
+		_, err := tx.Exec(ctx, `UPDATE material_items SET status = $1 WHERE id = $2`, newStatus, itemID)
 		return err
 	}
 	if (movementType == MovementAcquisition || movementType == MovementReturn) && available > 0 && isTerminalItemStatus(status) {
-		_, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, itemID)
+		_, err := tx.Exec(ctx, `UPDATE material_items SET status = 'available' WHERE id = $1`, itemID)
 		return err
 	}
 	return nil
@@ -360,8 +360,8 @@ func (r *Repository) syncItemStatusAfterMovement(ctx context.Context, tx pgx.Tx,
 // CreateMovement locks the item row for the duration of the check, so
 // concurrent movements against the same item are serialized and can
 // never oversell it, then inserts the movement row. Quantities are
-// never stored on inventory_items — they're always recomputed from
-// item_movements — so there's no stock column here left to update.
+// never stored on material_items — they're always recomputed from
+// material_movements — so there's no stock column here left to update.
 func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput) (Movement, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -373,8 +373,8 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 	var loanable bool
 	var rentalPrice, salePrice *float64
 	err = tx.QueryRow(ctx, `
-		SELECT item_type, loanable, rental_price_per_week, sale_price
-		FROM inventory_items WHERE id = $1 FOR UPDATE
+		SELECT type, loanable, rental_price_per_week, sale_price
+		FROM material_items WHERE id = $1 FOR UPDATE
 	`, in.ItemID).Scan(&itemType, &loanable, &rentalPrice, &salePrice)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Movement{}, ErrNotFound
@@ -428,7 +428,7 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		var outstandingForActivity int32
 		if err := tx.QueryRow(ctx, `
 			SELECT COALESCE(SUM(CASE WHEN type = 'loan' THEN quantity ELSE -quantity END), 0)
-			FROM item_movements WHERE item_id = $1 AND activity_id = $2 AND type IN ('loan', 'return')
+			FROM material_movements WHERE item_id = $1 AND activity_id = $2 AND type IN ('loan', 'return')
 		`, in.ItemID, *in.ActivityID).Scan(&outstandingForActivity); err != nil {
 			return Movement{}, err
 		}
@@ -439,7 +439,7 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		// Every other type consumes existing available stock.
 		var available int32
 		if err := tx.QueryRow(ctx, `
-			SELECT available_quantity FROM inventory_item_quantities WHERE item_id = $1
+			SELECT available_quantity FROM material_item_quantities WHERE item_id = $1
 		`, in.ItemID).Scan(&available); err != nil {
 			return Movement{}, err
 		}
@@ -460,7 +460,7 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 
 	var m Movement
 	err = tx.QueryRow(ctx, `
-		INSERT INTO item_movements (item_id, user_id, type, quantity, transacted_at, price, status, recorded_by, activity_id, notes)
+		INSERT INTO material_movements (item_id, user_id, type, quantity, transacted_at, price, status, recorded_by, activity_id, notes)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id, notes
@@ -499,7 +499,7 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, er
 
 	var m Movement
 	err = tx.QueryRow(ctx, `
-		UPDATE item_movements SET returned_at = now(), status = 'completed'
+		UPDATE material_movements SET returned_at = now(), status = 'completed'
 		WHERE id = $1 AND status = 'active'
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
 			price, status, recorded_by, activity_id, notes
@@ -512,7 +512,7 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, er
 		return Movement{}, err
 	}
 
-	if _, err := tx.Exec(ctx, `UPDATE inventory_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE material_items SET status = 'available' WHERE id = $1`, m.ItemID); err != nil {
 		return Movement{}, err
 	}
 
@@ -554,7 +554,7 @@ func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.item_id, m.user_id, u.login, m.type, m.quantity, m.transacted_at,
 			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes
-		FROM item_movements m
+		FROM material_movements m
 		LEFT JOIN users u ON u.id = m.user_id
 		LEFT JOIN users ru ON ru.id = m.recorded_by
 		`+whereClause, arg)

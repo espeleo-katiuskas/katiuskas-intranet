@@ -534,7 +534,7 @@ paths:
           description: >
             cannot_delete_self (this account is the caller's own),
             has_references (the person is still referenced by an
-            activity they led or an inventory movement they're party
+            activity they led or an material movement they're party
             to), or last_admin (they're the only remaining admin —
             someone has to be left who can manage users and roles).
 
@@ -2838,7 +2838,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: no_distribution_account. }
 
-  /users/{login}/movements:
+  /users/{login}/material/movements:
     get:
       summary: List a person's material movement history
       description: >
@@ -2847,7 +2847,7 @@ paths:
         movements have no recipient, so they never appear here). The
         person themselves can view their own; anyone else needs admin,
         board, or the material role — a movement can carry a price, so
-        it's treated like GET /movements rather than activity
+        it's treated like GET /material/movements rather than activity
         participation.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -2933,9 +2933,9 @@ paths:
         "403": { description: Neither the person themselves nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /items:
+  /material/items:
     get:
-      summary: List inventory items
+      summary: List material items
       description: Open to any baseline role.
       security: [{ bearerAuth: [] }]
       responses:
@@ -2962,27 +2962,27 @@ paths:
               schema: { $ref: "#/components/schemas/Item" }
         "400":
           description: >
-            invalid_body, invalid_item_type (item_type isn't rope, bag
-            or gear), invalid_date (acquired_at not YYYY-MM-DD), unknown_category
+            invalid_body, invalid_item_type (type isn't rope, bag
+            or general), invalid_date (acquired_at not YYYY-MM-DD), unknown_category
             (category_id isn't in the catalog), single_unit_item
             (total_quantity above 1 for a rope or bag — they're always
             exactly one individually-tracked object), or
-            invalid_item_fields (the given fields don't fit item_type's
+            invalid_item_fields (the given fields don't fit type's
             own required shape — a rope needs rope_type/diameter_mm/
             manufacture_year/length_m in addition to brand/model/code,
-            a bag needs bag_type/capacity_liters, a gear item needs
+            a bag needs bag_type/capacity_liters, a general item needs
             category_id/description, and none of a rope or bag's own
             fields may be set on the other two types).
         "409": { description: duplicate_item_code — another item already has that code. }
 
-  /items/{id}:
+  /material/items/{id}:
     patch:
       summary: Edit an item
       description: >
         Requires the admin, board or material role. Replaces every editable field (brand, model, code,
         description, loanable, the prices and the fields of its own type) with the body's; the item's
         type and quantities are not editable (the quantities are whatever its movements say), so an
-        item_type or total_quantity in the body is ignored. The same constraints as when it was
+        type or total_quantity in the body is ignored. The same constraints as when it was
         created apply.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -3003,13 +3003,13 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }
 
-  /material-categories:
+  /material/categories:
     get:
-      summary: List the gear category catalog
+      summary: List the material category catalog
       description: >
-        Requires the admin, board or material role, matching POST /items: the
+        Requires the admin, board or material role, matching POST /material/items: the
         catalog only exists to populate the "new item" form's category
-        picker for gear items.
+        picker for general items.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -3020,7 +3020,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MaterialCategory" }
 
-  /items/{id}/movements:
+  /material/items/{id}/movements:
     get:
       summary: List an item's movement history
       security: [{ bearerAuth: [] }]
@@ -3036,7 +3036,7 @@ paths:
                 items: { $ref: "#/components/schemas/Movement" }
         "400": { description: invalid_id — id isn't numeric. }
 
-  /movements:
+  /material/movements:
     get:
       summary: List movements (defaults to active ones, or by activity)
       description: >
@@ -3070,7 +3070,7 @@ paths:
         below), not necessarily one specific person, and not every sale
         is tied to a socio either. acquisition (new stock in), loss,
         abandonment and retirement (stock permanently gone with no sale
-        behind it, or gear taken out of service) never have a recipient
+        behind it, or material taken out of service) never have a recipient
         at all — giving one is rejected (recipient_not_allowed), not
         just ignored. activity_id is required for loan and return
         (optional for everything else, rental included — a rental isn't
@@ -3149,7 +3149,7 @@ paths:
             is not a member now) or recipient_not_member_or_former (a
             sale for somebody who is neither a member nor a former one).
 
-  /movements/{id}/return:
+  /material/movements/{id}/return:
     patch:
       summary: Record a return against an active rental
       description: >
@@ -3158,7 +3158,7 @@ paths:
         other type, loan included, settles the moment it's recorded) —
         always all of it at once; there's no partial rental return. A
         loan's return is a separate 'return' movement instead
-        (POST /movements, type return), validated per item and activity
+        (POST /material/movements, type return), validated per item and activity
         rather than closing any one loan row. Returning anything else —
         or an unknown id, or an already-closed movement — is reported
         the same way: not_found.
@@ -3269,7 +3269,7 @@ paths:
         00012_accounting.sql, not a system role — a club that doesn't
         want this distinction can delete it and keep using admin
         instead), the same "admin plus one optional custom role" shape
-        the material role already has for inventory movements. Like
+        the material role already has for material movements. Like
         every route, also requires a baseline role (admin/board/member)
         regardless — holding only "money" with none of those is
         rejected everywhere, this included.
@@ -4603,8 +4603,8 @@ components:
     MaterialCategory:
       type: object
       description: >
-        One entry in the gear category catalog (see GET
-        /material-categories) — mosquetones, spits, placas, maillones,
+        One entry in the material category catalog (see GET
+        /material/categories) — mosquetones, spits, placas, maillones,
         iluminación... kept in the database rather than a fixed enum, so
         the list can grow with an INSERT instead of a code deploy.
       properties:
@@ -4619,21 +4619,21 @@ components:
         they carry type-specific fields (rope_type/diameter_mm/
         manufacture_year/length_m for rope, bag_type/capacity_liters for bag —
         bag_type extends rope_type's caving/canyoning split with two
-        purpose-based kinds, quick and special). gear is a
+        purpose-based kinds, quick and special). general is a
         fungible stock item filed under a category from
-        GET /material-categories; brand/model may be unknown, but
+        GET /material/categories; brand/model may be unknown, but
         description and category_id are always set. rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
         to derive that from. total_quantity/available_quantity/
         outstanding_loan_quantity are always computed from this item's
-        own movement history (see GET /items/{id}/movements) rather
+        own movement history (see GET /material/items/{id}/movements) rather
         than stored, so there's no acquired_at here either — it's the
         transacted_at of the item's first acquisition movement, visible
         in that same history.
       properties:
         id: { type: integer }
-        item_type: { type: string, enum: [rope, bag, gear] }
+        type: { type: string, enum: [rope, bag, general] }
         brand: { type: string, nullable: true }
         model: { type: string, nullable: true }
         code: { type: string, nullable: true }
@@ -4641,7 +4641,7 @@ components:
           type: string
           nullable: true
           description: >
-            Required for gear. Doubles as "Observaciones" in the
+            Required for general. Doubles as "Observaciones" in the
             frontend for rope/bag, where it's optional.
         total_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
         available_quantity:
@@ -4669,18 +4669,18 @@ components:
         length_m: { type: integer, nullable: true, description: "rope only, in metres." }
         bag_type: { type: string, enum: [caving, canyoning, quick, special], nullable: true, description: "bag only." }
         capacity_liters: { type: number, nullable: true, description: "bag only." }
-        category_id: { type: integer, nullable: true, description: "gear only — an id from GET /material-categories." }
-        category_name: { type: string, nullable: true, description: "gear only — resolved alongside category_id." }
+        category_id: { type: integer, nullable: true, description: "general only — an id from GET /material/categories." }
+        category_name: { type: string, nullable: true, description: "general only — resolved alongside category_id." }
 
     CreateItemInput:
       type: object
-      required: [item_type]
+      required: [type]
       properties:
-        item_type: { type: string, enum: [rope, bag, gear] }
+        type: { type: string, enum: [rope, bag, general] }
         brand: { type: string, description: Required for rope/bag. }
         model: { type: string, description: Required for rope/bag. }
         code: { type: string, description: Required for rope/bag. }
-        description: { type: string, description: Required for gear. }
+        description: { type: string, description: Required for general. }
         acquired_at:
           type: string
           format: date
@@ -4693,8 +4693,8 @@ components:
           description: >
             How many units to start with — recorded as the item's
             first acquisition movement. Must be 1 for rope/bag
-            (single_unit_item otherwise); more can be added to gear
-            later via POST /movements with type acquisition.
+            (single_unit_item otherwise); more can be added to general
+            later via POST /material/movements with type acquisition.
         loanable: { type: boolean, default: true }
         rental_price_per_week: { type: number }
         sale_price: { type: number }
@@ -4704,7 +4704,7 @@ components:
         length_m: { type: integer, description: "Required for rope, in metres." }
         bag_type: { type: string, enum: [caving, canyoning, quick, special], description: Required for bag. }
         capacity_liters: { type: number, description: Required for bag. }
-        category_id: { type: integer, description: Required for gear — an id from GET /material-categories. }
+        category_id: { type: integer, description: Required for general — an id from GET /material/categories. }
 
     Movement:
       type: object
@@ -4715,7 +4715,7 @@ components:
         recipient at all — user_login is always absent for those. A
         loan's own "returned" state isn't tracked on the loan itself —
         it's the sum of separate return movements against the same item
-        and activity (see GET /movements?activity_id=).
+        and activity (see GET /material/movements?activity_id=).
       properties:
         id: { type: integer }
         item_id: { type: integer }

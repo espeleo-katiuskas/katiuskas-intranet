@@ -1,4 +1,4 @@
-package inventory
+package material
 
 import (
 	"context"

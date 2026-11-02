@@ -142,9 +142,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool
 func (r *Repository) ListActive(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
-		LEFT JOIN item_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
+		LEFT JOIN material_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
 		WHERE (NOT a.cancelled AND a.end_date >= CURRENT_DATE) OR t.id IS NOT NULL OR EXISTS (
-			SELECT 1 FROM item_movements m
+			SELECT 1 FROM material_movements m
 			WHERE m.activity_id = a.id AND m.type IN ('loan', 'return')
 			GROUP BY m.item_id
 			HAVING SUM(CASE WHEN m.type = 'loan' THEN m.quantity ELSE -m.quantity END) > 0

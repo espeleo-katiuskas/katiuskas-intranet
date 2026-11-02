@@ -23,10 +23,10 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
@@ -192,8 +192,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 
 	distributionsService := distributions.NewService(distributions.NewRepository(repoPool))
 
-	inventoryRepo := inventory.NewRepository(repoPool)
-	inventoryService := inventory.NewService(inventoryRepo, rolesService)
+	materialRepo := material.NewRepository(repoPool)
+	materialService := material.NewService(materialRepo, rolesService)
 
 	libraryService, err := library.NewService(cfg.LibraryRoot)
 	if err != nil {
@@ -271,7 +271,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Memberships:       memberships.NewHandler(membershipsService, authenticator, usersService, telegramSender),
 		Licenses:          licenses.NewHandler(licensesService, authenticator, usersService, telegramSender),
 		Activities:        activities.NewHandler(activitiesService, authenticator, usersService, telegramSender),
-		Inventory:         inventory.NewHandler(inventoryService, authenticator, usersService, telegramSender),
+		Material:          material.NewHandler(materialService, authenticator, usersService, telegramSender),
 		Distributions:     distributions.NewHandler(distributionsService, authenticator, usersService, telegramSender),
 		Board:             board.NewHandler(boardService, authenticator, usersService, telegramSender),
 		Library:           library.NewHandler(libraryService, authenticator),

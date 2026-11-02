@@ -1,4 +1,4 @@
-package inventory_test
+package material_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 )
@@ -16,13 +16,13 @@ import (
 // createItem's rental/sale prices are set so tests can create a rental
 // or sale movement without needing to give a price themselves — it's
 // always taken from the item now (see Repository.CreateMovement).
-func createItem(t *testing.T, tx pgx.Tx, repo *inventory.Repository, quantity int32) inventory.Item {
+func createItem(t *testing.T, tx pgx.Tx, repo *material.Repository, quantity int32) material.Item {
 	t.Helper()
 	description := "Casco Petzl Boreo"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	rentalPrice, salePrice := 10.0, 25.0
-	item, err := repo.CreateItem(context.Background(), inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	item, err := repo.CreateItem(context.Background(), material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: quantity, Loanable: true,
 		RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
@@ -34,13 +34,13 @@ func createItem(t *testing.T, tx pgx.Tx, repo *inventory.Repository, quantity in
 
 func TestCreateAndListItems(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 
 	item := createItem(t, tx, repo, 3)
 	if item.AvailableQuantity != 3 || item.TotalQuantity != 3 {
 		t.Errorf("expected a freshly created item to start fully available, got %+v", item)
 	}
-	if item.Status != inventory.ItemAvailable {
+	if item.Status != material.ItemAvailable {
 		t.Errorf("expected default status available, got %q", item.Status)
 	}
 
@@ -55,7 +55,7 @@ func TestCreateAndListItems(t *testing.T) {
 
 func TestCreateItemRecordsInitialAcquisitionMovement(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 3)
@@ -67,7 +67,7 @@ func TestCreateItemRecordsInitialAcquisitionMovement(t *testing.T) {
 	if len(movements) != 1 {
 		t.Fatalf("expected 1 movement (the initial acquisition), got %d", len(movements))
 	}
-	if movements[0].Type != inventory.MovementAcquisition || movements[0].Quantity != 3 {
+	if movements[0].Type != material.MovementAcquisition || movements[0].Quantity != 3 {
 		t.Errorf("expected an acquisition of 3, got %+v", movements[0])
 	}
 	if movements[0].UserID != nil {
@@ -77,21 +77,21 @@ func TestCreateItemRecordsInitialAcquisitionMovement(t *testing.T) {
 
 func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 3)
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create movement: %v", err)
 	}
-	if m.Status != inventory.MovementCompleted {
+	if m.Status != material.MovementCompleted {
 		t.Errorf("expected a new loan to be completed immediately (only rental stays open), got %q", m.Status)
 	}
 
@@ -106,30 +106,30 @@ func TestLoanDecrementsAvailableQuantity(t *testing.T) {
 
 func TestLoanRejectedWhenInsufficientStock(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 
-	_, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 2,
+	_, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 2,
 	})
-	if !errors.Is(err, inventory.ErrInsufficientStock) {
+	if !errors.Is(err, material.ErrInsufficientStock) {
 		t.Errorf("expected ErrInsufficientStock, got %v", err)
 	}
 }
 
 func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -141,20 +141,20 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	if items[0].AvailableQuantity != 0 || items[0].TotalQuantity != 0 {
 		t.Errorf("expected total and available quantity 0, got %+v", items[0])
 	}
-	if items[0].Status != inventory.ItemSold {
+	if items[0].Status != material.ItemSold {
 		t.Errorf("expected status sold, got %q", items[0].Status)
 	}
 }
 
 func TestLossMarksItemLostWhenStockReachesZero(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementLoss, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementLoss, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create loss: %v", err)
 	}
@@ -166,20 +166,20 @@ func TestLossMarksItemLostWhenStockReachesZero(t *testing.T) {
 	if items[0].AvailableQuantity != 0 {
 		t.Errorf("expected available quantity 0, got %d", items[0].AvailableQuantity)
 	}
-	if items[0].Status != inventory.ItemLost {
+	if items[0].Status != material.ItemLost {
 		t.Errorf("expected status lost, got %q", items[0].Status)
 	}
 }
 
 func TestAbandonmentMarksItemAbandonedWhenStockReachesZero(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementAbandonment, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementAbandonment, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create abandonment: %v", err)
 	}
@@ -188,20 +188,20 @@ func TestAbandonmentMarksItemAbandonedWhenStockReachesZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemAbandoned {
+	if items[0].Status != material.ItemAbandoned {
 		t.Errorf("expected status abandoned, got %q", items[0].Status)
 	}
 }
 
 func TestRetirementMarksItemRetiredWhenStockReachesZero(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementRetirement, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementRetirement, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create retirement: %v", err)
 	}
@@ -210,20 +210,20 @@ func TestRetirementMarksItemRetiredWhenStockReachesZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemRetired {
+	if items[0].Status != material.ItemRetired {
 		t.Errorf("expected status retired, got %q", items[0].Status)
 	}
 }
 
 func TestAcquisitionIncreasesTotalAndAvailableQuantity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 3)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementAcquisition, Quantity: 2,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementAcquisition, Quantity: 2,
 	}); err != nil {
 		t.Fatalf("create acquisition: %v", err)
 	}
@@ -239,14 +239,14 @@ func TestAcquisitionIncreasesTotalAndAvailableQuantity(t *testing.T) {
 
 func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -254,12 +254,12 @@ func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemSold {
+	if items[0].Status != material.ItemSold {
 		t.Fatalf("expected status sold before restocking, got %q", items[0].Status)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementAcquisition, Quantity: 4,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementAcquisition, Quantity: 4,
 	}); err != nil {
 		t.Fatalf("create acquisition: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemAvailable {
+	if items[0].Status != material.ItemAvailable {
 		t.Errorf("expected status back to available after restocking, got %q", items[0].Status)
 	}
 	if items[0].AvailableQuantity != 4 {
@@ -278,16 +278,16 @@ func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 
 func TestAcquisitionRejectedForRopeAndBag(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-200"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 	length := int32(60)
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
@@ -295,22 +295,22 @@ func TestAcquisitionRejectedForRopeAndBag(t *testing.T) {
 		t.Fatalf("create rope: %v", err)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementAcquisition, Quantity: 1,
-	}); !errors.Is(err, inventory.ErrSingleUnitItem) {
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementAcquisition, Quantity: 1,
+	}); !errors.Is(err, material.ErrSingleUnitItem) {
 		t.Errorf("expected ErrSingleUnitItem, got %v", err)
 	}
 }
 
 func TestMovementsWithoutRecipientHaveNilUserLogin(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementLoss, Quantity: 1,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementLoss, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create loss: %v", err)
@@ -319,7 +319,7 @@ func TestMovementsWithoutRecipientHaveNilUserLogin(t *testing.T) {
 		t.Errorf("expected no recipient for a loss, got %+v", m.UserID)
 	}
 
-	list, err := repo.ListMovementsByStatus(ctx, inventory.MovementCompleted)
+	list, err := repo.ListMovementsByStatus(ctx, material.MovementCompleted)
 	if err != nil {
 		t.Fatalf("list by status: %v", err)
 	}
@@ -343,14 +343,14 @@ func TestMovementsWithoutRecipientHaveNilUserLogin(t *testing.T) {
 // this exercises it directly.
 func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementAcquisition, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementAcquisition, Quantity: 1,
 	}); err == nil {
 		t.Error("expected an error giving a recipient to an acquisition")
 	}
@@ -360,13 +360,13 @@ func TestCreateMovementRejectsRecipientForAcquisition(t *testing.T) {
 // fail.
 func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementSale, Quantity: 1,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementSale, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create sale without a recipient: %v", err)
@@ -380,14 +380,14 @@ func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
 // the mandatory link, not necessarily one specific person.
 func TestCreateMovementLoanRecipientIsOptional(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	activityID := testutil.InsertActivity(t, tx)
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementLoan, Quantity: 1, ActivityID: &activityID,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementLoan, Quantity: 1, ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create loan without a recipient: %v", err)
@@ -399,14 +399,14 @@ func TestCreateMovementLoanRecipientIsOptional(t *testing.T) {
 
 func TestMovementNotesRoundTrip(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	notes := "cuerda gastada tras varios años de uso"
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementRetirement, Quantity: 1, Notes: &notes,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementRetirement, Quantity: 1, Notes: &notes,
 	})
 	if err != nil {
 		t.Fatalf("create retirement: %v", err)
@@ -420,14 +420,14 @@ func TestMovementNotesRoundTrip(t *testing.T) {
 // closes it, all at once.
 func TestReturnMovementRestoresStock(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 2)
 	user := testutil.InsertMember(t, tx)
 
-	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create rental: %v", err)
@@ -437,7 +437,7 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("return: %v", err)
 	}
-	if returned.Status != inventory.MovementCompleted {
+	if returned.Status != material.MovementCompleted {
 		t.Errorf("expected status completed, got %q", returned.Status)
 	}
 	if returned.ReturnedAt == nil {
@@ -451,24 +451,24 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 	if items[0].AvailableQuantity != 2 {
 		t.Errorf("expected available quantity restored to 2, got %d", items[0].AvailableQuantity)
 	}
-	if items[0].Status != inventory.ItemAvailable {
+	if items[0].Status != material.ItemAvailable {
 		t.Errorf("expected status available again, got %q", items[0].Status)
 	}
 }
 
 func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	if _, err := repo.ReturnMovement(ctx, 999999); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, 999999); !errors.Is(err, material.ErrNotFound) {
 		t.Errorf("expected ErrNotFound for an unknown movement, got %v", err)
 	}
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
-	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create rental: %v", err)
@@ -476,7 +476,7 @@ func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	if _, err := repo.ReturnMovement(ctx, rental.ID); err != nil {
 		t.Fatalf("first return: %v", err)
 	}
-	if _, err := repo.ReturnMovement(ctx, rental.ID); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, rental.ID); !errors.Is(err, material.ErrNotFound) {
 		t.Errorf("expected ErrNotFound returning an already-closed movement, got %v", err)
 	}
 }
@@ -488,43 +488,43 @@ func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 // TestReturnMovementValidatesAgainstOutstandingForActivity below).
 func TestReturnMovementRefusesNonReturnableTypes(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	loan, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
 
-	if _, err := repo.ReturnMovement(ctx, loan.ID); !errors.Is(err, inventory.ErrNotFound) {
+	if _, err := repo.ReturnMovement(ctx, loan.ID); !errors.Is(err, material.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
 func TestListMovementsByItemAndStatus(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
-	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -542,7 +542,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 
 	// Only the rental reaches 'active' — the loan is completed the
 	// moment it's recorded.
-	active, err := repo.ListMovementsByStatus(ctx, inventory.MovementActive)
+	active, err := repo.ListMovementsByStatus(ctx, material.MovementActive)
 	if err != nil {
 		t.Fatalf("list by status: %v", err)
 	}
@@ -553,7 +553,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 	if _, err := repo.ReturnMovement(ctx, rental.ID); err != nil {
 		t.Fatalf("return rental: %v", err)
 	}
-	active, err = repo.ListMovementsByStatus(ctx, inventory.MovementActive)
+	active, err = repo.ListMovementsByStatus(ctx, material.MovementActive)
 	if err != nil {
 		t.Fatalf("list by status after return: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 // then 15 more, then returning 20 followed by the remaining 5.
 func TestReturnTypeValidatesAgainstOutstandingForActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 25)
@@ -577,21 +577,21 @@ func TestReturnTypeValidatesAgainstOutstandingForActivity(t *testing.T) {
 	activityID := testutil.InsertActivity(t, tx)
 
 	for _, qty := range []int32{10, 15} {
-		if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-			ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: qty,
+		if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+			ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: qty,
 			ActivityID: &activityID,
 		}); err != nil {
 			t.Fatalf("create loan of %d: %v", qty, err)
 		}
 	}
 
-	ret, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 20, ActivityID: &activityID,
+	ret, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 20, ActivityID: &activityID,
 	})
 	if err != nil {
 		t.Fatalf("create return of 20: %v", err)
 	}
-	if ret.Status != inventory.MovementCompleted {
+	if ret.Status != material.MovementCompleted {
 		t.Errorf("expected a return to be completed immediately, got %q", ret.Status)
 	}
 
@@ -607,8 +607,8 @@ func TestReturnTypeValidatesAgainstOutstandingForActivity(t *testing.T) {
 		t.Errorf("expected outstanding_loan_quantity 5, got %d", items[0].OutstandingLoanQuantity)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 5, ActivityID: &activityID,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 5, ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create return of the remaining 5: %v", err)
 	}
@@ -623,23 +623,23 @@ func TestReturnTypeValidatesAgainstOutstandingForActivity(t *testing.T) {
 
 func TestReturnTypeRejectsExceedingOutstandingForActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 5,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 5,
 		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 6, ActivityID: &activityID,
-	}); !errors.Is(err, inventory.ErrReturnExceedsLoaned) {
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 6, ActivityID: &activityID,
+	}); !errors.Is(err, material.ErrReturnExceedsLoaned) {
 		t.Errorf("expected ErrReturnExceedsLoaned returning more than was loaned, got %v", err)
 	}
 }
@@ -649,7 +649,7 @@ func TestReturnTypeRejectsExceedingOutstandingForActivity(t *testing.T) {
 // has plenty outstanding overall.
 func TestReturnTypeScopedPerActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 10)
@@ -657,30 +657,30 @@ func TestReturnTypeScopedPerActivity(t *testing.T) {
 	activityA := testutil.InsertActivity(t, tx)
 	activityB := testutil.InsertActivity(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 5,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 5,
 		ActivityID: &activityA,
 	}); err != nil {
 		t.Fatalf("create loan for activity A: %v", err)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 1, ActivityID: &activityB,
-	}); !errors.Is(err, inventory.ErrReturnExceedsLoaned) {
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 1, ActivityID: &activityB,
+	}); !errors.Is(err, material.ErrReturnExceedsLoaned) {
 		t.Errorf("expected ErrReturnExceedsLoaned returning against a different activity, got %v", err)
 	}
 }
 
 func TestReturnTypeRequiresActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 1,
-	}); !errors.Is(err, inventory.ErrActivityRequired) {
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 1,
+	}); !errors.Is(err, material.ErrActivityRequired) {
 		t.Errorf("expected ErrActivityRequired for a return without an activity, got %v", err)
 	}
 }
@@ -690,7 +690,7 @@ func TestReturnTypeRequiresActivity(t *testing.T) {
 // acquisition would.
 func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 2)
@@ -699,14 +699,14 @@ func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 
 	// 1 unit out on loan, the other lost — draining available_quantity
 	// to 0 marks the item lost, same as any other terminal movement.
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create loan: %v", err)
 	}
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementLoss, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementLoss, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create loss: %v", err)
 	}
@@ -714,12 +714,12 @@ func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemLost {
+	if items[0].Status != material.ItemLost {
 		t.Fatalf("expected status lost before the loaned unit comes back, got %q", items[0].Status)
 	}
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, Type: inventory.MovementReturn, Quantity: 1, ActivityID: &activityID,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, Type: material.MovementReturn, Quantity: 1, ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create return: %v", err)
 	}
@@ -728,7 +728,7 @@ func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
-	if items[0].Status != inventory.ItemAvailable {
+	if items[0].Status != material.ItemAvailable {
 		t.Errorf("expected status back to available once the loaned unit is returned, got %q", items[0].Status)
 	}
 	if items[0].AvailableQuantity != 1 {
@@ -738,7 +738,7 @@ func TestReturnTypeClearsTerminalItemStatus(t *testing.T) {
 
 func TestListMovementsByUser(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
@@ -746,14 +746,14 @@ func TestListMovementsByUser(t *testing.T) {
 	other := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &person.ID, Type: inventory.MovementLoan, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &person.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	}); err != nil {
 		t.Fatalf("create loan for person: %v", err)
 	}
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &other.ID, Type: inventory.MovementSale, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &other.ID, Type: material.MovementSale, Quantity: 1,
 	}); err != nil {
 		t.Fatalf("create sale for other: %v", err)
 	}
@@ -769,15 +769,15 @@ func TestListMovementsByUser(t *testing.T) {
 
 func TestCreateMovementRequiresActivityForLoan(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
-	}); !errors.Is(err, inventory.ErrActivityRequired) {
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
+	}); !errors.Is(err, material.ErrActivityRequired) {
 		t.Errorf("expected ErrActivityRequired for a loan without an activity, got %v", err)
 	}
 }
@@ -786,14 +786,14 @@ func TestCreateMovementRequiresActivityForLoan(t *testing.T) {
 // always is.
 func TestCreateMovementRentalDoesNotRequireActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 	}); err != nil {
 		t.Errorf("expected a rental without an activity to succeed, got %v", err)
 	}
@@ -801,14 +801,14 @@ func TestCreateMovementRentalDoesNotRequireActivity(t *testing.T) {
 
 func TestCreateMovementSaleDoesNotRequireActivity(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 
-	if _, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
 	}); err != nil {
 		t.Errorf("expected a sale without an activity to succeed, got %v", err)
 	}
@@ -816,15 +816,15 @@ func TestCreateMovementSaleDoesNotRequireActivity(t *testing.T) {
 
 func TestCreateMovementStoresActivityID(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -837,27 +837,27 @@ func TestCreateMovementStoresActivityID(t *testing.T) {
 
 func TestCreateRopeItem(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-042"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 	length := int32(60)
 
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
 		t.Fatalf("create rope: %v", err)
 	}
-	if item.Type != inventory.ItemTypeRope || item.TotalQuantity != 1 || item.AvailableQuantity != 1 {
+	if item.Type != material.ItemTypeRope || item.TotalQuantity != 1 || item.AvailableQuantity != 1 {
 		t.Errorf("expected a single-unit rope item, got %+v", item)
 	}
-	if item.RopeType == nil || *item.RopeType != inventory.RopeTypeCaving {
+	if item.RopeType == nil || *item.RopeType != material.RopeTypeCaving {
 		t.Errorf("expected rope_type caving, got %+v", item.RopeType)
 	}
 	if item.DiameterMM == nil || *item.DiameterMM != 9.5 {
@@ -873,15 +873,15 @@ func TestCreateRopeItem(t *testing.T) {
 
 func TestCreateBagItem(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Petzl", "Bulldozer", "S-017"
-	bagType := inventory.BagTypeCaving
+	bagType := material.BagTypeCaving
 	capacity := 45.0
 
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
 		BagType: &bagType, CapacityLiters: &capacity, InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -890,7 +890,7 @@ func TestCreateBagItem(t *testing.T) {
 	if item.CapacityLiters == nil || *item.CapacityLiters != 45.0 {
 		t.Errorf("expected capacity 45L, got %+v", item.CapacityLiters)
 	}
-	if item.BagType == nil || *item.BagType != inventory.BagTypeCaving {
+	if item.BagType == nil || *item.BagType != material.BagTypeCaving {
 		t.Errorf("expected bag_type caving, got %+v", item.BagType)
 	}
 }
@@ -903,16 +903,16 @@ func TestCreateBagItem(t *testing.T) {
 
 func TestCreateRopeRejectsMissingManufactureYear(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-043"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 
 	// Violates rope_requires_rope_fields.
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing manufacture_year")
@@ -921,17 +921,17 @@ func TestCreateRopeRejectsMissingManufactureYear(t *testing.T) {
 
 func TestCreateRopeRejectsMissingLengthM(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-043b"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 
 	// Violates rope_requires_rope_fields.
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing length_m")
@@ -940,31 +940,31 @@ func TestCreateRopeRejectsMissingLengthM(t *testing.T) {
 
 func TestCreateGearRejectsMissingCategory(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	// Violates gear_requires_category.
+	// Violates general_requires_category.
 	description := "Casco"
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, InitialQuantity: 1, Loanable: true,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
-		t.Error("expected an error for gear missing category_id")
+		t.Error("expected an error for general missing category_id")
 	}
 }
 
 func TestCreateRopeRejectsMissingBrandModelCode(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 
 	// Violates rope_and_bag_require_brand_model and
 	// rope_and_bag_require_code.
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, RopeType: &ropeType, DiameterMM: &diameter,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, RopeType: &ropeType, DiameterMM: &diameter,
 		ManufactureYear: &year, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a rope missing brand/model/code")
@@ -973,15 +973,15 @@ func TestCreateRopeRejectsMissingBrandModelCode(t *testing.T) {
 
 func TestCreateBagRejectsMissingBagType(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Petzl", "Bulldozer", "S-018"
 	capacity := 45.0
 
 	// Violates bag_requires_bag_type.
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeBag, Brand: &brand, Model: &model, Code: &code,
 		CapacityLiters: &capacity, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
 		t.Error("expected an error for a bag missing bag_type")
@@ -990,49 +990,49 @@ func TestCreateBagRejectsMissingBagType(t *testing.T) {
 
 func TestCreateGearRejectsMissingDescription(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	// Violates gear_requires_description.
+	// Violates general_requires_description.
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, CategoryID: &categoryID, InitialQuantity: 1, Loanable: true,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, CategoryID: &categoryID, InitialQuantity: 1, Loanable: true,
 	}); err == nil {
-		t.Error("expected an error for gear missing description")
+		t.Error("expected an error for general missing description")
 	}
 }
 
 func TestCreateRopeRejectsInitialQuantityAboveOne(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-044"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 	length := int32(60)
 
-	if _, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	if _, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 3, Loanable: true,
-	}); !errors.Is(err, inventory.ErrSingleUnitItem) {
+	}); !errors.Is(err, material.ErrSingleUnitItem) {
 		t.Errorf("expected ErrSingleUnitItem creating a rope with an initial quantity above 1, got %v", err)
 	}
 }
 
 func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	description := "Casco"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
 	rentalPrice, salePrice := 5.0, 30.0
 
-	withoutPrices, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	withoutPrices, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1042,8 +1042,8 @@ func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 		t.Errorf("expected neither rentable nor sellable with no prices set, got %+v", withoutPrices)
 	}
 
-	withPrices, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	withPrices, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: 1, Loanable: true, RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
 	if err != nil {
@@ -1056,13 +1056,13 @@ func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 
 func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	description := "Casco"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: 1, Loanable: false,
 	})
 	if err != nil {
@@ -1071,11 +1071,11 @@ func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	_, err = repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
-	if !errors.Is(err, inventory.ErrNotLoanable) {
+	if !errors.Is(err, material.ErrNotLoanable) {
 		t.Errorf("expected ErrNotLoanable, got %v", err)
 	}
 }
@@ -1091,13 +1091,13 @@ func TestLoanRejectedWhenItemNotLoanable(t *testing.T) {
 // answering with a clear, mapped error.
 func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	description := "Casco"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1108,23 +1108,23 @@ func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
 	}
 	user := testutil.InsertMember(t, tx)
 
-	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	_, err = repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 	})
-	if !errors.Is(err, inventory.ErrNotRentable) {
+	if !errors.Is(err, material.ErrNotRentable) {
 		t.Errorf("expected ErrNotRentable, got %v", err)
 	}
 }
 
 func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	description := "Casco"
 	categoryID := testutil.MaterialCategoryID(t, tx, "Mosquetones")
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description, CategoryID: &categoryID,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description, CategoryID: &categoryID,
 		InitialQuantity: 1, Loanable: true,
 	})
 	if err != nil {
@@ -1135,10 +1135,10 @@ func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 	}
 	user := testutil.InsertMember(t, tx)
 
-	_, err = repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	_, err = repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
 	})
-	if !errors.Is(err, inventory.ErrNotSellable) {
+	if !errors.Is(err, material.ErrNotSellable) {
 		t.Errorf("expected ErrNotSellable, got %v", err)
 	}
 }
@@ -1151,13 +1151,13 @@ func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 // other id-addressed lookup in this package.
 func TestCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	_, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: 999999, Type: inventory.MovementAcquisition, Quantity: 1,
+	_, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: 999999, Type: material.MovementAcquisition, Quantity: 1,
 	})
-	if !errors.Is(err, inventory.ErrNotFound) {
+	if !errors.Is(err, material.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -1165,46 +1165,46 @@ func TestCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 // TestCreateItemRejectsRopeMissingRopeFields and
 // TestCreateItemRejectsGearMissingCategory cover the fix for
 // CreateItem's own previously-unmapped CHECK-constraint violations:
-// rope/bag/gear each require their own type-specific fields (see
+// rope/bag/general each require their own type-specific fields (see
 // migration 00006_inventory.sql), none of which were validated in Go
 // before this — a mismatched combination used to hit the database's
 // raw CHECK constraint and surface as an unhandled 500 instead of a
 // clear 400.
 func TestCreateItemRejectsRopeMissingRopeFields(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-101"
-	_, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	_, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		InitialQuantity: 1, Loanable: true,
 		// Deliberately missing RopeType/DiameterMM/ManufactureYear/LengthM.
 	})
-	if !errors.Is(err, inventory.ErrInvalidItemFields) {
+	if !errors.Is(err, material.ErrInvalidItemFields) {
 		t.Errorf("expected ErrInvalidItemFields, got %v", err)
 	}
 }
 
 func TestCreateItemRejectsGearMissingCategory(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	description := "Casco"
-	_, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeGear, Description: &description,
+	_, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeGeneral, Description: &description,
 		InitialQuantity: 1, Loanable: true,
 		// Deliberately missing CategoryID.
 	})
-	if !errors.Is(err, inventory.ErrInvalidItemFields) {
+	if !errors.Is(err, material.ErrInvalidItemFields) {
 		t.Errorf("expected ErrInvalidItemFields, got %v", err)
 	}
 }
 
 func TestListMaterialCategories(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	categories, err := repo.ListMaterialCategories(ctx)
@@ -1218,17 +1218,17 @@ func TestListMaterialCategories(t *testing.T) {
 
 func TestMovementQuantityForcedToOneForRopeAndBag(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	brand, model, code := "Beal", "Antipodes", "C-100"
-	ropeType := inventory.RopeTypeCaving
+	ropeType := material.RopeTypeCaving
 	diameter := 9.5
 	year := int32(2024)
 	length := int32(60)
 
-	item, err := repo.CreateItem(ctx, inventory.CreateItemInput{
-		Type: inventory.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		Type: material.ItemTypeRope, Brand: &brand, Model: &model, Code: &code,
 		RopeType: &ropeType, DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length,
 		InitialQuantity: 1, Loanable: true,
 	})
@@ -1242,8 +1242,8 @@ func TestMovementQuantityForcedToOneForRopeAndBag(t *testing.T) {
 	// already fail as insufficient stock even without the override —
 	// what this actually checks is that the resulting movement's own
 	// quantity is forced to 1, not whatever was requested.
-	m, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 5,
+	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 5,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -1256,7 +1256,7 @@ func TestMovementQuantityForcedToOneForRopeAndBag(t *testing.T) {
 
 func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	// createItem sets rental_price_per_week 10.0 and sale_price 25.0.
@@ -1264,8 +1264,8 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	rental, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementRental, Quantity: 1,
+	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -1275,8 +1275,8 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 		t.Errorf("expected rental price 10.0 from the item, got %+v", rental.Price)
 	}
 
-	sale, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementSale, Quantity: 1,
+	sale, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
 	})
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
@@ -1285,8 +1285,8 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 		t.Errorf("expected sale price 25.0 from the item, got %+v", sale.Price)
 	}
 
-	loan, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	loan, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -1299,7 +1299,7 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 
 func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 	tx := testutil.NewTx(t)
-	repo := inventory.NewRepository(tx)
+	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
 	item := createItem(t, tx, repo, 5)
@@ -1308,9 +1308,9 @@ func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 
 	// The zero-value TransactedAt default lives in Service, not
 	// Repository — exercise it through the service.
-	service := inventory.NewService(repo, roles.NewService(roles.NewRepository(tx)))
-	today, err := service.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1,
+	service := material.NewService(repo, roles.NewService(roles.NewRepository(tx)))
+	today, err := service.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -1321,8 +1321,8 @@ func TestMovementDateDefaultsToTodayButCanBeBackdated(t *testing.T) {
 	}
 
 	backdated := time.Now().AddDate(0, 0, -5)
-	past, err := repo.CreateMovement(ctx, inventory.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: inventory.MovementLoan, Quantity: 1, TransactedAt: backdated,
+	past, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1, TransactedAt: backdated,
 		ActivityID: &activityID,
 	})
 	if err != nil {

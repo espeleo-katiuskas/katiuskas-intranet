@@ -43,24 +43,24 @@ since it is served at whatever address was asked for, however deep — which is 
 `layout.js`'s topbar logo is `/images/…` and not relative.
 
 **Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
-dialog of "Nuevo material" is reused to edit an item (`inventory.js`, `openEditItemDialog`): the
+dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditItemDialog`): the
 title and the button change, the type is fixed (the field is disabled and the item's own type is
 used), the quantity and the date of acquisition are left out (the stock is what its movements say)
-and the form is filled with the item; it sends `PATCH /items/{id}`, which replaces every field, so
-for a gear item, whose form has no brand, model or code, the ones it already has are sent back as
-they are.
+and the form is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every
+field, so for a general item, whose form has no brand, model or code, the ones it already has are
+sent back as they are.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
 of `/material`: *Prestado*, the items whose loans have not all come back
 (`outstanding_loan_quantity`), with the units pending and, from each item's own movements, the
 activities they are out for (loans minus returns, per activity), and *Alquilado*, the open rentals
-(`GET /movements?status=active`) with a "Devolver" button. A loan is returned from the page of its
-activity, so this page only reports them. `materialCommon.js` has how an item is named, shared with
-`/material`. In the menu it counts as part of Material (`ACTIVE_ALIASES`).
+(`GET /material/movements?status=active`) with a "Devolver" button. A loan is returned from the page
+of its activity, so this page only reports them. `materialCommon.js` has how an item is named,
+shared with `/material`. In the menu it counts as part of Material (`ACTIVE_ALIASES`).
 
 **Movement types on `/material`.** "+ Movimiento" only offers what can be done with that item right
-now (`movementTypeOptionsFor` in `inventory.js`; the API would refuse the rest): *Alquiler* if it
+now (`movementTypeOptionsFor` in `material.js`; the API would refuse the rest): *Alquiler* if it
 has a rental price and a unit available, *Venta* if it has a sale price and a unit available,
 *Adquisición* only for general material (ropes and bags are a single unit), *Pérdida*, *Abandono*
 and *Retirada* if a unit is available, and *Devolución* only if some of it is out on loan (a rental
@@ -109,7 +109,7 @@ today, *En curso* otherwise (`activityStateLabels` has the texts; the badge's CS
 calendar, which leaves cancelled ones out), `activity.js` (the header, and, for whoever can manage
 the activity, a "Cancelar actividad" button next to "Editar actividad", after a confirmation —
 `DELETE /activities/{id}` — which becomes "Reactivar actividad" while it is cancelled — `PATCH` with
-`cancelled: false`; the edit dialog has no state field) and `member.js` use it, and `inventory.js`
+`cancelled: false`; the edit dialog has no state field) and `member.js` use it, and `material.js`
 asks for `?active=true` for its activity picker.
 
 **Going back to the page that was asked for.** When `initSession()` finds no session (no token, or

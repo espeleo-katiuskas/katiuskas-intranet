@@ -1,6 +1,6 @@
-// Package inventory manages club gear available for loan, rental or sale,
+// Package material manages the club's material available for loan, rental or sale,
 // and every movement recorded against it.
-package inventory
+package material
 
 import "time"
 
@@ -17,17 +17,17 @@ const (
 	ItemRetired     ItemStatus = "retired"
 )
 
-// ItemType distinguishes the three shapes an inventory item can take —
+// ItemType distinguishes the three shapes a material item can take —
 // see migration 00006_inventory.sql. Rope and bag are individually tracked physical
 // objects (their own code, always total_quantity 1) with type-specific
-// attributes; gear is everything else, a fungible stock item filed
+// attributes; general is everything else, a fungible stock item filed
 // under an admin-managed category.
 type ItemType string
 
 const (
-	ItemTypeRope ItemType = "rope"
-	ItemTypeBag  ItemType = "bag"
-	ItemTypeGear ItemType = "gear"
+	ItemTypeRope    ItemType = "rope"
+	ItemTypeBag     ItemType = "bag"
+	ItemTypeGeneral ItemType = "general"
 )
 
 // RopeType is a rope's discipline: caving over rock and mud, canyoning
@@ -52,7 +52,7 @@ const (
 	BagTypeSpecial   BagType = "special"
 )
 
-// MaterialCategory is one entry in the gear category catalog — kept in
+// MaterialCategory is one entry in the material category catalog — kept in
 // the database rather than a Go enum, the same license_types pattern
 // (licenses.LicenseType), so the list can grow with an INSERT instead
 // of a code deploy.
@@ -101,22 +101,22 @@ const (
 
 type Item struct {
 	ID   int64    `json:"id"`
-	Type ItemType `json:"item_type"`
+	Type ItemType `json:"type"`
 	// Brand/Model are required for rope and bag (they identify a
-	// specific physical object) and optional for gear — some parts are
+	// specific physical object) and optional for general — some parts are
 	// generic, or the brand simply isn't known.
 	Brand *string `json:"brand,omitempty"`
 	Model *string `json:"model,omitempty"`
-	// Code is required for rope and bag, optional for gear.
+	// Code is required for rope and bag, optional for general.
 	Code *string `json:"code,omitempty"`
-	// Description is required for gear (it may be the only thing that
+	// Description is required for general (it may be the only thing that
 	// identifies an item with no known brand/model) and doubles as
 	// "Observaciones" in the frontend for rope/bag, where it's optional
 	// — same field underneath, just labelled differently per type.
 	Description *string `json:"description,omitempty"`
 	// TotalQuantity/AvailableQuantity/OutstandingLoanQuantity are never
 	// stored — they're computed from this item's own movement history
-	// (see the inventory_item_quantities view and
+	// (see the material_item_quantities view and
 	// Repository.itemSelect), so they can never drift from what
 	// actually happened. There's no AcquiredAt field for the same
 	// reason: it's the transacted_at of this item's first 'acquisition'
@@ -148,7 +148,7 @@ type Item struct {
 	// Bag-only.
 	BagType        *BagType `json:"bag_type,omitempty"`
 	CapacityLiters *float64 `json:"capacity_liters,omitempty"`
-	// Gear-only. CategoryID is the catalog id; CategoryName is resolved
+	// General-only. CategoryID is the catalog id; CategoryName is resolved
 	// alongside it (see Repository.GetItem/ListItems/CreateItem), the
 	// same LicenseTypeID/Type split licenses.License uses.
 	CategoryID   *int64  `json:"category_id,omitempty"`

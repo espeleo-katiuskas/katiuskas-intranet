@@ -36,7 +36,7 @@ Contents:
 
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging, panic
 recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`, `roles`,
-`memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `inventory`,
+`memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`,
 `tokens`, `accounting`, `clubinfo`, `budgets`, `transactionfiles`; `adminstatus` is the odd one out,
 see below), each split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The
 domain layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
@@ -192,7 +192,7 @@ suffix on collision (`users.Repository.generateLogin`) — and admin-editable af
 `PATCH /users/{login}` (format-checked, `ErrInvalidLogin` on a bad one; `ErrDuplicate` if
 another person already has it). No response or path anywhere in the API ever carries a
 person's numeric database id; every package that used to key a route or a JSON field on
-one (`tokens`, `roles`, `licenses`, `memberships`, `board`, `inventory`, `activities`) now
+one (`tokens`, `roles`, `licenses`, `memberships`, `board`, `material`, `activities`) now
 takes a login instead, translated to the internal id via a small, locally-defined
 `UserLookup` interface (`UserIDForLogin`/`LoginForUserID`) that `*users.Service` satisfies
 structurally — those packages can't import `users` directly, since `users` already imports
@@ -225,7 +225,7 @@ whichever one happens to come back first instead: `FindActiveByEmailAndPhone` fo
 
 **Permission tiers**: `admin` has full read/write access everywhere, including a person's
 core data and role assignment. `board` can read everything (the full `User` record,
-licenses, roles) but can only write activities (and the holiday calendar) and inventory
+licenses, roles) but can only write activities (and the holiday calendar) and material
 (creating items, lending/returning material) — every person-data,
 role-assignment, license, and Junta Directiva write endpoint rejects board even though it
 passes the baseline check. `member` gets `MemberListing` instead of `User` from
@@ -276,7 +276,7 @@ memberships, dues and licenses listings and the distributions' people orders by
 `first_name, last_name`, and the pages that build a picker sort again on the same key.
 `GET /users/directory` (any baseline role) is the name-only alternative: `login`,
 `first_name` and `last_name` of everyone on file, with no socio filter — what the
-activity, inventory and accounting pickers use to choose a person without seeing personal
+activity, material and accounting pickers use to choose a person without seeing personal
 data.
 The role catalog itself (`GET /roles`) is open to any baseline role, read-only regardless
 of who's asking, and lists only the catalog's names/descriptions — never who holds which —
@@ -315,7 +315,7 @@ took part in it writes up its memoria as an ordered list of resources — either
 entry (title + a plain-text/Markdown `description`) or an uploaded file (title + the file
 itself, typically a photo or PDF), discriminated by `activity_resources.type` and kept
 consistent with a set of `CHECK` constraints (migration `00010_activity_resources.sql`),
-the same "description only for text, file fields only for file" shape `item_movements`
+the same "description only for text, file fields only for file" shape `material_movements`
 already uses for its own type-specific fields. Metadata lives in Postgres (`Repository`);
 a file resource's bytes live on disk instead (`Storage`, `config.ActivityResourcesRoot` —
 a *named Docker volume*, not a host bind mount like `library`/`userfiles`, since files
@@ -685,7 +685,7 @@ exactly (including the path-in-URL file route, `?download=1` and Range support),
 *not* open to every baseline role: only that person themselves, or admin/board, may see
 them (403 otherwise) — checked inline in the handler (`Handler.resolveAccess`), the same
 self-or-privileged pattern
-`memberships.Handler.listByUser`/`inventory.Handler.listMovementsByUser` use, since who
+`memberships.Handler.listByUser`/`material.Handler.listMovementsByUser` use, since who
 may see a specific person's files isn't a fixed role list the way `/library`'s is. A login
 with no subdirectory of its own yet — most people, until someone drops a file in for them
 — gets an empty listing at their own root rather than a 404.
@@ -890,7 +890,7 @@ the send of a bot-flow magic-link DM.
   both display as `(vacío)`, so a field that merely swapped between those two produces no
   line: the point of the message is what a human reading it would actually notice changed,
   not every byte that did. Every resource package with a mutating route (`users`, `roles`,
-  `tokens`, `memberships`, `licenses`, `activities`, `inventory`, `board`,
+  `tokens`, `memberships`, `licenses`, `activities`, `material`, `board`,
   `activityresources`, `distributions`, `accounting`) takes an `httpapi.MutationNotifier`
   in its own `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not
   gated behind a "don't spam every single request" check the way the predecessor of this
@@ -904,7 +904,7 @@ the send of a bot-flow magic-link DM.
   of field names (`auditableFields`; `accounting` has `accountAuditableFields` and
   `transactionAuditableFields`; `memberships` names its fields inline) that exactly
   matches that endpoint's own `UpdateInput` — so nothing that endpoint can't actually
-  touch can appear as a spurious change; `roles` and `inventory` have no diffed update at
+  touch can appear as a spurious change; `roles` and `material` have no diffed update at
   all, and `tokens` reports an expiry change by hand. An edit whose diff comes back empty
   (every field resent unchanged) sends nothing, rather than an "edited" message with
   nothing in it. A `delete` handler fetches the target the same way, purely so it can
@@ -1162,7 +1162,7 @@ same pattern as `UserLookup` — rather than this package joining their tables i
 type `transactionWithPayments` exists only for that one response, never for create/update/list.
 Writing needs admin or the optional, non-system "money" role (seeded by migration
 `00012_accounting.sql`, deletable by a club that doesn't want the distinction), the same "admin plus
-one optional custom role" shape `material` already has for inventory movements — board itself gets
+one optional custom role" shape `material` already has for material movements — board itself gets
 no special write access here, same as it has none for licenses or a person's own data. Every write
 still goes through the same baseline-role floor as every other route: holding only `money` with none
 of admin/board/member is rejected everywhere, this included. Every account also has a `position`
@@ -1295,7 +1295,7 @@ two-entry transaction for tests that record a due or a license against one:
 allowsDues, allowsLicenses)` picks the flags, for the cases that must be rejected), and
 `InsertTransactionAt(t, tx, occurredAt)` (the same as `InsertTransaction` with a chosen
 `occurred_at`, for tests that care when a payment happened), `MaterialCategoryID` (looks
-up a seeded inventory category by name, like `RoleID`/`LicenseTypeID`), `UniqueEmail` (a
+up a seeded material category by name, like `RoleID`/`LicenseTypeID`), `UniqueEmail` (a
 per-test, per-call unique address, which `InsertUser` itself uses), and
 `FakeResolver` + `NewTestAuthenticator`/`TokenFor` — an in-memory `auth.SessionResolver`
 so handler tests in every *other* package can mint bearer tokens for arbitrary

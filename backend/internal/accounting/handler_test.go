@@ -205,7 +205,7 @@ func TestCreateAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	// "money" alone isn't enough — Protect always also requires a
 	// baseline role (auth.BaselineRoles) on top of whatever a route
 	// specifically lists, the same rule "material" is bound by for
-	// inventory (see docs/architecture.md's "Permissions" section).
+	// material (see docs/architecture.md's "Permissions" section).
 	moneyToken := testutil.TokenFor(resolver, 3, "member", "money")
 	body2 := map[string]string{"name": "Banco", "code": "572"}
 	if rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", moneyToken, body2); rec.Code != http.StatusCreated {

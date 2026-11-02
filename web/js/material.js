@@ -62,7 +62,7 @@ function movementTypeOptionsFor(item) {
   const allowed = {
     rental: item.rentable && available,
     sale: item.sellable && available,
-    acquisition: item.item_type === 'gear',
+    acquisition: item.type === 'general',
     loss: available,
     abandonment: available,
     retirement: available,
@@ -112,7 +112,7 @@ function personLabel(login) {
 function itemSearchText(item) {
   return normalizeForSearch(
     [
-      itemTypeLabels[item.item_type],
+      itemTypeLabels[item.type],
       item.brand,
       item.model,
       item.code,
@@ -126,14 +126,14 @@ function itemSearchText(item) {
   );
 }
 
-// Rope/bag show their item type ("Cuerda"/"Saca"); gear shows its
+// Rope/bag show their item type ("Cuerda"/"Saca"); general shows its
 // category instead ("Mosquetones"...) — "Material" alone would be true
-// of every gear row and say nothing useful for telling them apart.
+// of every general row and say nothing useful for telling them apart.
 function itemTypeColumn(item) {
-  if (item.item_type === 'gear') {
-    return escapeHtml(item.category_name ?? itemTypeLabels.gear);
+  if (item.type === 'general') {
+    return escapeHtml(item.category_name ?? itemTypeLabels.general);
   }
-  return itemTypeLabels[item.item_type] ?? item.item_type;
+  return itemTypeLabels[item.type] ?? item.type;
 }
 
 function renderItemRow(item) {
@@ -185,7 +185,7 @@ async function expandItemMovements(itemId) {
   const panel = row.querySelector(`[data-item-movements-panel="${itemId}"]`);
   panel.innerHTML = 'Cargando…';
   try {
-    const movements = await apiFetch(`/items/${itemId}/movements`);
+    const movements = await apiFetch(`/material/items/${itemId}/movements`);
     panel.innerHTML = movements.length
       ? movements.map(renderMovementDetail).join('')
       : '<p>Todavía no tiene movimientos.</p>';
@@ -258,7 +258,7 @@ function openNewMovementDialog(itemId) {
   if (!item) return;
   movementItemId = itemId;
   document.getElementById('new-movement-item-label').innerHTML = itemLabel(item);
-  const isSingleUnit = item.item_type === 'rope' || item.item_type === 'bag';
+  const isSingleUnit = item.type === 'rope' || item.type === 'bag';
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
   document.getElementById('mv-type').innerHTML = movementTypeOptionsFor(item)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
@@ -283,7 +283,7 @@ document.getElementById('item-search').addEventListener('input', renderFilteredI
 async function loadItems() {
   const tableBody = document.getElementById('items-table-body');
   try {
-    allItems = await apiFetch('/items');
+    allItems = await apiFetch('/material/items');
     itemsById = Object.fromEntries(allItems.map((item) => [item.id, item]));
     renderFilteredItems();
   } catch {
@@ -377,7 +377,7 @@ newMovementForm.addEventListener('submit', async (event) => {
   const submitButton = newMovementForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetch('/movements', { method: 'POST', body: JSON.stringify(body) });
+    await apiFetch('/material/movements', { method: 'POST', body: JSON.stringify(body) });
     showFeedback('Movimiento registrado.');
     newMovementDialog.close();
     await loadItems();
@@ -398,7 +398,7 @@ async function handleReturn(button) {
   // reload below wipes the whole items table.
   const itemId = button.closest('[data-item-movements-panel]')?.dataset.itemMovementsPanel;
   try {
-    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'PATCH' });
     showFeedback('Devolución registrada.');
     await loadItems();
     if (itemId) await expandItemMovements(Number(itemId));
@@ -417,9 +417,9 @@ if (canManageMovements) {
   // The dialog is shared: the id of the item it is editing, or null when it creates one.
   let editingItemId = null;
 
-  // Only rope/bag/gear-specific controls toggle required — the fields
+  // Only rope/bag/general-specific controls toggle required — the fields
   // shared by every type (acquired_at, prices, loanable) stay as they
-  // are regardless of item_type.
+  // are regardless of type.
   const requiredWhenVisible = [
     'ni-brand',
     'ni-model',
@@ -442,10 +442,10 @@ if (canManageMovements) {
       const input = document.getElementById(id);
       input.required = !input.closest('[data-item-type-field]').hidden;
     }
-    // description is the required "Descripción" for gear, and the
+    // description is the required "Descripción" for general, and the
     // optional "Observaciones" for rope/bag — see the two toggled
     // label spans above the textarea.
-    descriptionField.required = type === 'gear';
+    descriptionField.required = type === 'general';
     // What only makes sense when creating (the quantity and the date of acquisition: the stock is
     // whatever the movements say) is out of an edit.
     document.querySelectorAll('[data-create-only]').forEach((el) => {
@@ -461,7 +461,7 @@ if (canManageMovements) {
   itemTypeSelect.addEventListener('change', updateItemTypeFieldsVisibility);
   updateItemTypeFieldsVisibility();
 
-  apiFetch('/material-categories')
+  apiFetch('/material/categories')
     .then((categories) => {
       categorySelect.innerHTML = categories
         .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
@@ -471,7 +471,7 @@ if (canManageMovements) {
 
   initModal(newItemDialog, newItemForm);
   // The dialog's own "close" (initModal already resets the form there,
-  // regardless of how it closed) reverts item_type back to its default
+  // regardless of how it closed) reverts type back to its default
   // option — recompute which fields that implies right after, same as
   // the very first render below.
   newItemDialog.addEventListener('close', () => {
@@ -483,7 +483,7 @@ if (canManageMovements) {
     const item = itemsById[itemId];
     if (!item) return;
     editingItemId = itemId;
-    itemTypeSelect.value = item.item_type;
+    itemTypeSelect.value = item.type;
     updateItemTypeFieldsVisibility();
     const set = (name, value) => {
       newItemForm.elements[name].value = value ?? '';
@@ -514,7 +514,7 @@ if (canManageMovements) {
     const formData = new FormData(newItemForm);
     const editing = editingItemId !== null ? itemsById[editingItemId] : null;
     // A disabled field is not in the FormData: when editing, the type is the item's own.
-    const type = editing ? editing.item_type : formData.get('item_type');
+    const type = editing ? editing.type : formData.get('type');
     const optionalText = (key) => formData.get(key)?.toString().trim() || null;
     const optionalNumber = (key) => (formData.get(key) ? Number(formData.get(key)) : null);
 
@@ -541,25 +541,28 @@ if (canManageMovements) {
       body.category_id = Number(formData.get('category_id'));
     }
     if (editing) {
-      // An edit replaces every field, and the form has no brand, model or code for gear: keep them.
-      if (type === 'gear') {
+      // An edit replaces every field, and the form has no brand, model or code for general: keep them.
+      if (type === 'general') {
         body.brand = editing.brand ?? null;
         body.model = editing.model ?? null;
         body.code = editing.code ?? null;
       }
     } else {
-      body.item_type = type;
+      body.type = type;
       body.acquired_at = optionalText('acquired_at');
-      if (type === 'gear') body.total_quantity = Number(formData.get('total_quantity')) || 1;
+      if (type === 'general') body.total_quantity = Number(formData.get('total_quantity')) || 1;
     }
 
     const submitButton = newItemForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
     try {
       if (editing) {
-        await apiFetch(`/items/${editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        await apiFetch(`/material/items/${editing.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
       } else {
-        await apiFetch('/items', { method: 'POST', body: JSON.stringify(body) });
+        await apiFetch('/material/items', { method: 'POST', body: JSON.stringify(body) });
       }
       showFeedback(editing ? 'Material actualizado.' : 'Material creado.');
       newItemDialog.close();

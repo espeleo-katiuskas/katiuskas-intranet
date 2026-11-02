@@ -1,4 +1,4 @@
-package inventory
+package material
 
 import (
 	"context"
@@ -16,10 +16,10 @@ import (
 
 // UserLookup translates between a person's login and their numeric id.
 // This package's own routes are nested under /users/{login}/movements,
-// but item_movements is keyed by numeric user id — users.Service
-// satisfies this structurally (see main.go's wiring), without inventory
+// but material_movements is keyed by numeric user id — users.Service
+// satisfies this structurally (see main.go's wiring), without material
 // having to import that package directly. licenses/memberships/roles
-// genuinely can't (users.Service imports all three); inventory keeps
+// genuinely can't (users.Service imports all three); material keeps
 // the same small local-interface shape anyway for consistency across
 // every package that's keyed by user id.
 type UserLookup interface {
@@ -85,7 +85,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 
 // itemLabel picks whatever actually identifies item for a mutation
 // notification — rope/bag are always brand+model (both required for
-// those types), gear falls back to its description when brand/model
+// those types), general falls back to its description when brand/model
 // are absent (both optional there), and code is the last resort so a
 // notification is never just empty.
 func itemLabel(item Item) string {
@@ -128,20 +128,20 @@ func movementVerb(t MovementType) string {
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /api/v1/items", h.authenticator.Protect(h.listItems))
-	mux.Handle("POST /api/v1/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
-	mux.Handle("PATCH /api/v1/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
-	mux.Handle("GET /api/v1/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
+	mux.Handle("GET /api/v1/material/items", h.authenticator.Protect(h.listItems))
+	mux.Handle("POST /api/v1/material/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
+	mux.Handle("PATCH /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
+	mux.Handle("GET /api/v1/material/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
 	// material-categories has the same roles as create: the catalog only exists to populate the
-	// "new item" form's category picker for gear items.
-	mux.Handle("GET /api/v1/material-categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board", "material"))
+	// "new item" form's category picker for general items.
+	mux.Handle("GET /api/v1/material/categories", h.authenticator.Protect(h.listMaterialCategories, "admin", "board", "material"))
 
-	mux.Handle("GET /api/v1/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
-	mux.Handle("POST /api/v1/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
-	mux.Handle("PATCH /api/v1/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
+	mux.Handle("GET /api/v1/material/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/material/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
+	mux.Handle("PATCH /api/v1/material/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
 
-	mux.Handle("GET /api/v1/users/{login}/movements", h.authenticator.Protect(h.listMovementsByUser))
+	mux.Handle("GET /api/v1/users/{login}/material/movements", h.authenticator.Protect(h.listMovementsByUser))
 }
 
 // resolveUserLogin looks up the numeric id behind a {login} path
@@ -168,7 +168,7 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Type               ItemType  `json:"item_type"`
+		Type               ItemType  `json:"type"`
 		Brand              *string   `json:"brand"`
 		Model              *string   `json:"model"`
 		Code               *string   `json:"code"`
@@ -190,8 +190,8 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	if !(body.Type == ItemTypeRope || body.Type == ItemTypeBag || body.Type == ItemTypeGear) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_type", "item_type must be rope, bag or gear")
+	if !(body.Type == ItemTypeRope || body.Type == ItemTypeBag || body.Type == ItemTypeGeneral) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_type", "type must be rope, bag or general")
 		return
 	}
 	var acquiredAt *time.Time

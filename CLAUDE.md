@@ -8,7 +8,8 @@ explanations live in `docs/`; read the one that matches the task before changing
 
 - **All code** (identifiers, comments, logs, API error messages): **English**.
 - **Documentation** (`docs/`): **English**, in every file. The `README.md` is still in Spanish for
-  now. The Spanish words of the club's domain stay as they are when quoting what the interface shows.
+  now. The Spanish words of the club's domain stay as they are when quoting what the interface
+  shows.
 - **Frontend** (`web/`): all user-visible text in **Spanish** — it's the interface for
   Club de Espeleología Katiuskas, a Spanish caving club. JS/HTML identifiers stay in English.
 
@@ -25,8 +26,8 @@ explanations live in `docs/`; read the one that matches the task before changing
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and
 `docs/api.md`; a migration → `docs/database.md`; a rule or invariant → its section in
-`docs/backend-internals.md` (and `architecture.md` if it is mentioned there); a page → `docs/frontend.md`.
-`docs/*.md` never mention this file.
+`docs/backend-internals.md` (and `architecture.md` if it is mentioned there); a page →
+`docs/frontend.md`. `docs/*.md` never mention this file.
 
 ## Commands
 
@@ -36,7 +37,8 @@ Local stack (Postgres + API + Caddy-served frontend); API on `:64711`, frontend 
 docker compose up --build
 docker compose build api && docker compose up -d api     # after a backend change; the frontend needs no rebuild
 ```
-Migrations and first admin (once per fresh database); there are no passwords, sign-in is a magic link:
+Migrations and first admin (once per fresh database); there are no passwords, sign-in is a magic
+link:
 ```sh
 export DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet?sslmode=disable
 make migrate-up      # goose, db/migrations/
@@ -53,8 +55,8 @@ export TEST_DATABASE_URL=postgres://intranet:intranet@localhost:64712/intranet_t
 go test ./...    # or ./internal/users/...   or  -run TestCreate
 ```
 Without `TEST_DATABASE_URL` those tests `t.Skip`. The test database is only checked for existing at
-all, never for which migrations it has: **after adding a migration drop and recreate it**
-(`DROP DATABASE intranet_test`, then the `CREATE DATABASE` above) or tests fail with "column … does not
+all, never for which migrations it has: **after adding a migration drop and recreate it** (`DROP
+DATABASE intranet_test`, then the `CREATE DATABASE` above) or tests fail with "column … does not
 exist". CI starts fresh each run.
 
 Other checks: `go build ./...`, `go vet ./...` (from `backend/`), `make run` (no Docker),
@@ -80,159 +82,179 @@ Sign in there with `localStorage.setItem('token', '<token from get-token.sh>')` 
 Dropping files in (no rebuild or restart; both directories are gitignored): club documents into
 `./library/`, per-person files into `./user-files/<login>/`, a license copy into that person's
 `licencias/` as `yyyy-mm-dd-tipo_de_licencia.ext` (thumbnails with
-`scripts/generate-license-thumbnails.sh`; on the club's host a timer runs it every 15 minutes). See `docs/backend-internals.md`.
+`scripts/generate-license-thumbnails.sh`; on the club's host a timer runs it every 15 minutes). See
+`docs/backend-internals.md`.
 
 ### Environments (`docs/environments.md`)
 
 Local Docker stack (where changes are tried first), **testing** (`testing.katiuskas.es`) and
-**production** (`intranet.katiuskas.es`): the last two are systemd installations side by side on
-the club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stable`, units
-`katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool
-is in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
-sharing `LIBRARY_ROOT` and `USER_FILES_ROOT` (the directories the API writes to, `ACTIVITY_RESOURCES_ROOT` and
-`TRANSACTION_FILES_ROOT`, are separate in each, and testing gets production's files hard-linked). Production deploys without Docker
-(`docs/deployment.md`).
+**production** (`intranet.katiuskas.es`): the last two are systemd installations side by side on the
+club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stable`, units
+`katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool is
+in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
+sharing `LIBRARY_ROOT` and `USER_FILES_ROOT` (the directories the API writes to,
+`ACTIVITY_RESOURCES_ROOT` and `TRANSACTION_FILES_ROOT`, are separate in each, and testing gets
+production's files hard-linked). Production deploys without Docker (`docs/deployment.md`).
 
-- **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub what
-  each environment should run — the tip of `main` for testing, the highest semver tag for production —
-  and updates what differs. it is started within seconds of a push (the webhook receiver creates a file that a systemd path unit
-  watches; a request that arrives while a deployment runs is queued, several merge into one rerun)
-  and, as a safety net, by a timer every 15 minutes; its output is in the unit's journal;
-  **nothing in the request decides what is deployed** (the receiver only checks GitHub's signature). So merging into `main` is a live
-  deploy, and migrations run against a copy of real data. `ci.yml` only tests. Roll production back by
-  tagging a new, higher version.
-- Production is backed up every night (`scripts/backup.sh`, a timer; database and files, with a retention and an optional hook
-  to copy them off the host: `docs/environments.md`, "Backups").
-- Failures are told by Telegram: the API watches its own status (database, directories, disks: `adminstatus.Monitor`)
-  and a failed deployment or backup runs `scripts/notify-failure.sh` (`docs/environments.md`, "Alerts when something fails").
+- **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub
+  what each environment should run — the tip of `main` for testing, the highest semver tag for
+  production — and updates what differs. it is started within seconds of a push (the webhook
+  receiver creates a file that a systemd path unit watches; a request that arrives while a
+  deployment runs is queued, several merge into one rerun) and, as a safety net, by a timer every 15
+  minutes; its output is in the unit's journal; **nothing in the request decides what is deployed**
+  (the receiver only checks GitHub's signature). So merging into `main` is a live deploy, and
+  migrations run against a copy of real data. `ci.yml` only tests. Roll production back by tagging a
+  new, higher version.
+- Production is backed up every night (`scripts/backup.sh`, a timer; database and files, with a
+  retention and an optional hook to copy them off the host: `docs/environments.md`, "Backups").
+- Failures are told by Telegram: the API watches its own status (database, directories, disks:
+  `adminstatus.Monitor`) and a failed deployment or backup runs `scripts/notify-failure.sh`
+  (`docs/environments.md`, "Alerts when something fails").
 - Testing's database is a copy of production's, refreshed on every production deploy
-  (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real personal data and anything done there is overwritten.
-- Because the library and the per-person files are shared, don't grant admin/board in testing (it would
-  open every member's personal documents). Memoria and transaction files can be uploaded and deleted there:
-  testing has its own directories, hard-linked from production's at each copy.
-- `web/` is served by Caddy with `Cache-Control: max-age=3600`, so a browser may keep an old script up to
-  an hour after a deploy.
+  (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real
+  personal data and anything done there is overwritten.
+- Because the library and the per-person files are shared, don't grant admin/board in testing (it
+  would open every member's personal documents). Memoria and transaction files can be uploaded and
+  deleted there: testing has its own directories, hard-linked from production's at each copy.
+- `web/` is served by Caddy with `Cache-Control: max-age=3600`, so a browser may keep an old script
+  up to an hour after a deploy.
 
 ## Architecture essentials
 
 Each point is the short version; the reasons and the edge cases are in `docs/backend-internals.md`.
 
-**Layers.** `backend/internal/httpapi` (router, request logging, `WriteJSON`/`WriteError`) → one package
-per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`, `activityresources`,
-`distributions`, `inventory`, `tokens`, `accounting`, `budgets`, `transactionfiles`), each `model.go` / `repository.go` (pgx) /
-`service.go` / `handler.go`; only `handler.go` knows HTTP. Each package registers its routes with
-`RegisterRoutes(mux)`, wired in `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a
-read-only directory tree from disk (no repository; every caller path goes through `Service.resolve`) and
-`adminstatus` only reads. Packages that can't import each other use small local interfaces satisfied
-structurally (`UserLookup`, `DuesLookup`, `LicensesLookup`…).
+**Layers.** `backend/internal/httpapi` (router, request logging, `WriteJSON`/`WriteError`) → one
+package per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`,
+`activityresources`, `distributions`, `material`, `tokens`, `accounting`, `budgets`,
+`transactionfiles`), each `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`; only
+`handler.go` knows HTTP. Each package registers its routes with `RegisterRoutes(mux)`, wired in
+`cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a read-only directory tree from
+disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads.
+Packages that can't import each other use small local interfaces satisfied structurally
+(`UserLookup`, `DuesLookup`, `LicensesLookup`…).
 
 **`db.PGX`.** Repositories take the subset of `*pgxpool.Pool` they call, so tests give them a
-transaction (`testutil.NewTx`) that is rolled back. A `Begin` on top of a transaction is a *savepoint*:
-deferred constraint triggers never fire there, which is why accounting forces
-`SET CONSTRAINTS … IMMEDIATE` and puts it back.
+transaction (`testutil.NewTx`) that is rolled back. A `Begin` on top of a transaction is a
+*savepoint*: deferred constraint triggers never fire there, which is why accounting forces `SET
+CONSTRAINTS … IMMEDIATE` and puts it back.
 
-**Auth.** One opaque, revocable, database-backed session token (hash stored; no JWT, no refresh pair),
-roles resolved live on every request (`internal/tokens`). `Authenticator.Protect` *always* also requires
-admin, board or member on top of the roles a route lists, so someone holding only `material` or `money`
-is refused everywhere. The token is mirrored in the `katiuskas_session` cookie only for
-`ProtectAllowingCookie`, used by the file-serving routes of library and userfiles (and nowhere else).
-Magic-link token 128 bits (it travels in a URL), 6-digit code bounded by `code_attempts`; the request and
-code-consume routes share one `IPRateLimiter`; the request says when email+phone match nobody with access (404 `unknown_details`, a deliberate choice), the code route does not. Impersonation is
-admin-only, short-lived (`ImpersonationTokenTTL`) and `POST /auth/impersonate/exit` needs only `RequireAuth`.
+**Auth.** One opaque, revocable, database-backed session token (hash stored; no JWT, no refresh
+pair), roles resolved live on every request (`internal/tokens`). `Authenticator.Protect` *always*
+also requires admin, board or member on top of the roles a route lists, so someone holding only
+`material` or `money` is refused everywhere. The token is mirrored in the `katiuskas_session` cookie
+only for `ProtectAllowingCookie`, used by the file-serving routes of library and userfiles (and
+nowhere else). Magic-link token 128 bits (it travels in a URL), 6-digit code bounded by
+`code_attempts`; the request and code-consume routes share one `IPRateLimiter`; the request says
+when email+phone match nobody with access (404 `unknown_details`, a deliberate choice), the code
+route does not. Impersonation is admin-only, short-lived (`ImpersonationTokenTTL`) and `POST
+/auth/impersonate/exit` needs only `RequireAuth`.
 
-**Roles.** `admin`, `board`, `member`, `former_member` are system roles; `board`, `member`, `former_member`
-are automatic (computed live in `roles.Repository.ListNamesForUser` from `board_members` and
-`memberships`, never granted by hand, 409). Revoking `admin` is refused from the last admin
-(`last_admin`) and from oneself (`self_admin_removal`); deleting the last admin too.
+**Roles.** `admin`, `board`, `member`, `former_member` are system roles; `board`, `member`,
+`former_member` are automatic (computed live in `roles.Repository.ListNamesForUser` from
+`board_members` and `memberships`, never granted by hand, 409). Revoking `admin` is refused from the
+last admin (`last_admin`) and from oneself (`self_admin_removal`); deleting the last admin too.
 
-**A person is only ever identified by `login`** (generated from the name, admin-editable). No response or
-path carries the numeric user id; packages translate through their local `UserLookup`. Listings that mix
-people `JOIN` against `users` instead of one lookup per row. `email` and `phone` hold several values
-separated by a space; uniqueness across people is checked in Go (case-insensitive email, digits-only
-phone), not by a constraint.
+**A person is only ever identified by `login`** (generated from the name, admin-editable). No
+response or path carries the numeric user id; packages translate through their local `UserLookup`.
+Listings that mix people `JOIN` against `users` instead of one lookup per row. `email` and `phone`
+hold several values separated by a space; uniqueness across people is checked in Go
+(case-insensitive email, digits-only phone), not by a constraint.
 
-**Permission tiers.** `admin` everything. `board` reads everything and writes only activities, holidays
-and inventory. `member` gets `MemberListing` (not `User`) from `GET /users` — never the birth date,
-roles, DNI or contact — and may edit only its own contact fields (anything else is 403
+**Permission tiers.** `admin` everything. `board` reads everything and writes only activities,
+holidays and material. `member` gets `MemberListing` (not `User`) from `GET /users` — never the
+birth date, roles, DNI or contact — and may edit only its own contact fields (anything else is 403
 `restricted_fields`). `GET /users` is unpaginated on purpose. Accounting writes: admin or `money`;
-inventory movements: admin, board or `material`. **Whatever `material` can do, `board`
-can do too**: a route or check that names `material` always names `board` with it.
+material movements: admin, board or `material`. **Whatever `material` can do, `board` can do too**:
+a route or check that names `material` always names `board` with it.
 
 **Activities.** Mandatory `leader_id`; only the organizer, admin and board edit or cancel; naming or
 changing the organizer is admin/board only. **Only a `member` (a socio now) can be signed up to any
-activity, of any type, federated or not (409 `not_a_member`)**; the participants list says who is federated. In a `public` activity anybody can sign up anybody; in a `private` one only the organizer, admin, board or
-somebody already signed up can. Each participant keeps who signed them up and when (`added_by`, `added_at`). Memoria resources
-(`activityresources`): metadata in Postgres, file bytes on disk keyed by the row id, created once with
-`O_EXCL` and **never rewritten** — other directory trees share them by hard link, so a rewrite in place
-would corrupt both.
+activity, of any type, federated or not (409 `not_a_member`)**; the participants list says who is
+federated. In a `public` activity anybody can sign up anybody; in a `private` one only the
+organizer, admin, board or somebody already signed up can. Each participant keeps who signed them up
+and when (`added_by`, `added_at`). Memoria resources (`activityresources`): metadata in Postgres,
+file bytes on disk keyed by the row id, created once with `O_EXCL` and **never rewritten** — other
+directory trees share them by hard link, so a rewrite in place would corrupt both.
 
-**Licenses, dues, leaves.** A license's type comes from the `license_types` catalog; `year` is the year
-it covers, valid to 31 December (never stored); it may be assigned to anyone who was a socio at some
-point of that year; an optional `transaction_id` must point at a transaction with an entry on an
-`allows_licenses` account. A due is one row per `(user, year)`, always tied to its transaction
-(`allows_dues` account), deleted with it; the first due of a person with no membership also opens the
-membership. A temporary leave hangs off the person and must fall inside one of their membership periods
-(checked in Go). Periods never overlap (an `EXCLUDE` constraint).
+**Licenses, dues, leaves.** A license's type comes from the `license_types` catalog; `year` is the
+year it covers, valid to 31 December (never stored); it may be assigned to anyone who was a socio at
+some point of that year; an optional `transaction_id` must point at a transaction with an entry on
+an `allows_licenses` account. A due is one row per `(user, year)`, always tied to its transaction
+(`allows_dues` account), deleted with it; the first due of a person with no membership also opens
+the membership. A temporary leave hangs off the person and must fall inside one of their membership
+periods (checked in Go). Periods never overlap (an `EXCLUDE` constraint).
 
-**Distributions** (the club hands things out; `draft → open → closed → done`, deliverable in any state
-but `draft`). Units are rows per person (or per person and article with a `quantity`); `price` is frozen
-when entered; an `all_members` distribution gives every member on `cutoff_date` an automatic own unit
-(`SyncAutomaticUnits`). Payment and collection are per row and partial (`paid_quantity`,
-`picked_up_quantity`); articles can have described numbers (`Serie: 124-133`), and numbered items are paid
-and delivered one by one. Counting what is left of an article locks the distribution row (`FOR UPDATE`).
-**Every payment is recorded in accounting**: the account paid in (`account_id`, an `asset`) against the
-distribution's own income account or the one marked `distribution_default`, one transaction per person,
-and deleting that transaction undoes the payment (`UndoPaymentsOf`, via a hook wired in `cmd/api`).
+**Distributions** (the club hands things out; `draft → open → closed → done`, deliverable in any
+state but `draft`). Units are rows per person (or per person and article with a `quantity`); `price`
+is frozen when entered; an `all_members` distribution gives every member on `cutoff_date` an
+automatic own unit (`SyncAutomaticUnits`). Payment and collection are per row and partial
+(`paid_quantity`, `picked_up_quantity`); articles can have described numbers (`Serie: 124-133`), and
+numbered items are paid and delivered one by one. Counting what is left of an article locks the
+distribution row (`FOR UPDATE`). **Every payment is recorded in accounting**: the account paid in
+(`account_id`, an `asset`) against the distribution's own income account or the one marked
+`distribution_default`, one transaction per person, and deleting that transaction undoes the payment
+(`UndoPaymentsOf`, via a hook wired in `cmd/api`).
 
-**Accounting.** Double entry: a transaction has two or more entries that sum to zero, enforced by a deferred
-constraint trigger (see `db.PGX` above). An account has child accounts **or** transactions, never both
-(triggers, migration 00033). An account without a type inherits its parent's: rules use
+**Accounting.** Double entry: a transaction has two or more entries that sum to zero, enforced by a
+deferred constraint trigger (see `db.PGX` above). An account has child accounts **or** transactions,
+never both (triggers, migration 00033). An account without a type inherits its parent's: rules use
 `effective_type`, and `finishAccountChange` re-checks, in the same transaction, that distribution
-accounts and the default stay `income`, and that `allows_dues`/`allows_licenses` accounts are `income`.
-`GET /accounts` rolls balances and last movement up through the tree; the ledger of a group lists its
-descendants with a combined running balance.
+accounts and the default stay `income`, and that `allows_dues`/`allows_licenses` accounts are
+`income`. `GET /accounts` rolls balances and last movement up through the tree; the ledger of a
+group lists its descendants with a combined running balance.
 
-**Transaction files.** Tickets and invoices attached to a transaction (10 MiB each): metadata in Postgres, bytes
-on disk in `TRANSACTION_FILES_ROOT` keyed by row id, created once and **never rewritten** (like the memoria's;
-the prod→testing copy hard-links them, and `backup.sh` includes the directory). Everybody sees `file_count`;
-admin, board and money read; admin and money attach and remove; a transaction with files cannot be deleted. The
-type is decided from the bytes and only PDFs and images are served inline.
+**Transaction files.** Tickets and invoices attached to a transaction (10 MiB each): metadata in
+Postgres, bytes on disk in `TRANSACTION_FILES_ROOT` keyed by row id, created once and **never
+rewritten** (like the memoria's; the prod→testing copy hard-links them, and `backup.sh` includes the
+directory). Everybody sees `file_count`; admin, board and money read; admin and money attach and
+remove; a transaction with files cannot be deleted. The type is decided from the bytes and only PDFs
+and images are served inline.
 
-**Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over one or
-more leaf accounts of that type; both parts must add up to the same and every non-hidden income/expense
-account must be in some item (checked in Go on `PUT /budgets/{year}`, which replaces the whole budget).
-Anybody signed in reads (with the real amounts and the percentage); writes are admin or `money`.
+**Material** (`internal/material`, page `/material`): one word for the club's material, everywhere. A catalog
+entry is a *material item* (`type`: `rope`, `bag`, `general`; `category` for `general`), moved by *material
+movements*. API under `/material/…` (`/material/items`, `/material/movements`, `/material/categories`,
+`/users/{login}/material/movements`), tables and types `material_*` (`material_items`, `material_movements`,
+`material_item_quantities`, `material_item_type`…). Don't bring back `inventory`, `gear` or bare `item_`/`movement_`
+names for it.
 
-**Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK. Notifications
-are fire-and-forget (own goroutine, bounded timeout, detached context), with two exceptions: the startup
-message and the bot-flow magic-link DM. Every resource package takes an `httpapi.MutationNotifier` and
-sends one message per meaningful change (`httpapi.NotifyAsync`, `DiffFields` over a named field list that
-matches that endpoint's `UpdateInput`). The bot long-polls; a linked chat does **not** log in on any
-message — it must prove the registered email, and a shared contact is checked to be the sender's own
-(`isOwnContact`), both security rules.
+**Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over
+one or more leaf accounts of that type; both parts must add up to the same and every non-hidden
+income/expense account must be in some item (checked in Go on `PUT /budgets/{year}`, which replaces
+the whole budget). Anybody signed in reads (with the real amounts and the percentage); writes are
+admin or `money`.
 
-**Testing helpers.** `internal/testutil`: `NewTx`, `InsertUser`/`InsertActivity`, `InsertTransaction*`,
-`RoleID`/`LicenseTypeID`/`MaterialCategoryID`, `UniqueEmail`, and `FakeResolver` + `NewTestAuthenticator`/
-`TokenFor` to mint bearer tokens for any role without the real `tokens` table.
+**Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.
+Notifications are fire-and-forget (own goroutine, bounded timeout, detached context), with two
+exceptions: the startup message and the bot-flow magic-link DM. Every resource package takes an
+`httpapi.MutationNotifier` and sends one message per meaningful change (`httpapi.NotifyAsync`,
+`DiffFields` over a named field list that matches that endpoint's `UpdateInput`). The bot
+long-polls; a linked chat does **not** log in on any message — it must prove the registered email,
+and a shared contact is checked to be the sender's own (`isOwnContact`), both security rules.
+
+**Testing helpers.** `internal/testutil`: `NewTx`, `InsertUser`/`InsertActivity`,
+`InsertTransaction*`, `RoleID`/`LicenseTypeID`/`MaterialCategoryID`, `UniqueEmail`, and
+`FakeResolver` + `NewTestAuthenticator`/ `TokenFor` to mint bearer tokens for any role without the
+real `tokens` table.
 
 ## Frontend essentials (`web/`)
 
 Plain multi-page site, no SPA and no build step, on purpose: every page revalidates its session and
 reloads its data. One `<page>.html` + `js/<page>.js` per view.
 
-- Every authenticated page calls `await initPage({ requireAnyRole })` (`js/layout.js`): it validates the
-  session (`GET /auth/me`), renders sidebar and topbar, applies `data-roles="admin,board"` visibility
-  (UI only — the API is the authority) and returns the user. `login.html` is the only page without it.
-  Permissions that depend on data loaded later are computed in JS and toggle `.hidden`.
-- Every create/edit form is a `<dialog class="panel modal">` set up with `initModal(dialog, form?)` and
-  opened with `openModal(dialog)` (`js/modal.js`, which keeps the page's scroll position).
-- Errors: `showError(message)` opens a modal over everything that has to be closed, and `showFeedback` is
-  the sticky success banner. There is no `#error` element. What a user sees must be Spanish: the API's
-  messages are English, so `apiFetch` swaps them for the Spanish text of the error `code` in
-  `js/errorTexts.js` — **a new error code needs its entry there**.
-- `js/api.js` keeps the token in `localStorage` (`token`), `apiFetch` puts the API's error `code` on the
-  thrown `Error`, and the page's independent requests go out together, drawing waiting on a `ready`
-  promise only where needed.
+- Every authenticated page calls `await initPage({ requireAnyRole })` (`js/layout.js`): it validates
+  the session (`GET /auth/me`), renders sidebar and topbar, applies `data-roles="admin,board"`
+  visibility (UI only — the API is the authority) and returns the user. `login.html` is the only
+  page without it. Permissions that depend on data loaded later are computed in JS and toggle
+  `.hidden`.
+- Every create/edit form is a `<dialog class="panel modal">` set up with `initModal(dialog, form?)`
+  and opened with `openModal(dialog)` (`js/modal.js`, which keeps the page's scroll position).
+- Errors: `showError(message)` opens a modal over everything that has to be closed, and
+  `showFeedback` is the sticky success banner. There is no `#error` element. What a user sees must
+  be Spanish: the API's messages are English, so `apiFetch` swaps them for the Spanish text of the
+  error `code` in `js/errorTexts.js` — **a new error code needs its entry there**.
+- `js/api.js` keeps the token in `localStorage` (`token`), `apiFetch` puts the API's error `code` on
+  the thrown `Error`, and the page's independent requests go out together, drawing waiting on a
+  `ready` promise only where needed.
 - Dates and amounts of a table stay on one line (`.nowrap`, `.balance-cell`); money is
   `formatCurrency`, dates `formatDate`.
 - Search boxes normalize accents and case (`normalizeForSearch` in `api.js`).

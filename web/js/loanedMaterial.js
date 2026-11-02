@@ -5,7 +5,7 @@ import { itemLabel } from './materialCommon.js';
 // The material that is still the club's but is not in it right now: what is out on loan (the units of
 // each item that its loans have not got back, summed over every activity, and for which activities)
 // and the rentals still open. The page is for those who manage the material (the API's
-// `/movements` is for them too).
+// `/material/movements` is for them too).
 await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
 
 const loanedBody = document.getElementById('loaned-table-body');
@@ -42,7 +42,7 @@ async function loadLoaned() {
     }
     // Which activities each item is out for: its own movements, and the titles of those activities.
     const movementsOf = await Promise.all(
-      loaned.map((item) => apiFetch(`/items/${item.id}/movements`)),
+      loaned.map((item) => apiFetch(`/material/items/${item.id}/movements`)),
     );
     const perItem = loaned.map((item, i) => [item, outstandingByActivity(movementsOf[i])]);
     const activityIds = [...new Set(perItem.flatMap(([, list]) => list.map(([id]) => id)))];
@@ -76,7 +76,9 @@ async function loadLoaned() {
 async function loadRented() {
   try {
     // Only a rental stays open; anything else that came back as "active" is not a rental to return.
-    const rentals = (await apiFetch('/movements?status=active')).filter((m) => m.type === 'rental');
+    const rentals = (await apiFetch('/material/movements?status=active')).filter(
+      (m) => m.type === 'rental',
+    );
     rentedBody.innerHTML = rentals.length
       ? rentals
           .map((m) => {
@@ -102,7 +104,7 @@ rentedBody.addEventListener('click', async (event) => {
   if (!button) return;
   button.disabled = true;
   try {
-    await apiFetch(`/movements/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'PATCH' });
     showFeedback('Devolución registrada.');
     await load();
   } catch (err) {
@@ -112,7 +114,7 @@ rentedBody.addEventListener('click', async (event) => {
 });
 
 async function load() {
-  const items = await apiFetch('/items');
+  const items = await apiFetch('/material/items');
   itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
   await Promise.all([loadLoaned(), loadRented()]);
 }

@@ -1,4 +1,4 @@
-package inventory_test
+package material_test
 
 import (
 	"bytes"
@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/inventory"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -29,21 +29,21 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, pgx.Tx)
 }
 
 // newTestServerWithServices is newTestServer, but also returns the
-// inventory.Service and users.Service backing it (for tests that need
+// material.Service and users.Service backing it (for tests that need
 // to create an item/movement directly, or resolve a login), and wires
 // notifier — pass nil (like newTestServer does) when a test doesn't
 // care about mutation notifications.
-func newTestServerWithServices(t *testing.T, notifier httpapi.MutationNotifier) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *inventory.Service, *users.Service) {
+func newTestServerWithServices(t *testing.T, notifier httpapi.MutationNotifier) (*http.ServeMux, testutil.FakeResolver, pgx.Tx, *material.Service, *users.Service) {
 	tx := testutil.NewTx(t)
 	rolesService := roles.NewService(roles.NewRepository(tx))
-	service := inventory.NewService(inventory.NewRepository(tx), rolesService)
+	service := material.NewService(material.NewRepository(tx), rolesService)
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
-	inventory.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
+	material.NewHandler(service, authenticator, usersService, notifier).RegisterRoutes(mux)
 	return mux, resolver, tx, service, usersService
 }
 
@@ -137,16 +137,16 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return body.Error.Code
 }
 
-// gearItemBody is a valid POST /items body for a gear item — the shape
+// generalItemBody is a valid POST /items body for a general item — the shape
 // most of these handler tests just need to exist, not exercise the
-// per-type rope/bag/gear rules themselves.
+// per-type rope/bag/general rules themselves.
 // rental_price_per_week/sale_price are set so tests can create a
 // rental or sale movement against this item without needing to give
 // a price themselves — it's always taken from the item now.
-func gearItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
+func generalItemBody(t *testing.T, tx pgx.Tx, totalQuantity int) map[string]any {
 	t.Helper()
 	return map[string]any{
-		"item_type":             "gear",
+		"type":                  "general",
 		"description":           "Casco",
 		"category_id":           testutil.MaterialCategoryID(t, tx, "Mosquetones"),
 		"total_quantity":        totalQuantity,
@@ -164,20 +164,20 @@ func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 	boardToken := tokenFor(t, authn, 3, "board")
 	materialMemberToken := tokenFor(t, authn, 4, "material", "member")
 
-	body := gearItemBody(t, tx, 1)
+	body := generalItemBody(t, tx, 1)
 	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
-		if rec := doRequest(mux, http.MethodPost, "/api/v1/items", token, body); rec.Code != http.StatusForbidden {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be forbidden from creating an item, got %d", name, rec.Code)
 		}
-		if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", token, nil); rec.Code != http.StatusForbidden {
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", token, nil); rec.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be forbidden from listing the categories, got %d", name, rec.Code)
 		}
 	}
 	for name, token := range map[string]string{"board": boardToken, "material (and member)": materialMemberToken} {
-		if rec := doRequest(mux, http.MethodPost, "/api/v1/items", token, body); rec.Code != http.StatusCreated {
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusCreated {
 			t.Errorf("expected %s to create an item, got %d: %s", name, rec.Code, rec.Body.String())
 		}
-		if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", token, nil); rec.Code != http.StatusOK {
+		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", token, nil); rec.Code != http.StatusOK {
 			t.Errorf("expected %s to list the categories, got %d", name, rec.Code)
 		}
 	}
@@ -198,11 +198,11 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 	materialMemberToken := tokenFor(t, authn, materialMemberUser.ID, "material", "member")
 	memberToken := tokenFor(t, authn, memberUser.ID, "member")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
@@ -212,30 +212,30 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 	body := map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", memberToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", memberToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from creating a movement, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", materialOnlyToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", materialOnlyToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected \"material\" alone (no admin/board/member) to be forbidden, got %d", rec.Code)
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", materialMemberToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", materialMemberToken, body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected material+member to create a movement, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	// Loan never reaches 'active' (only rental does), so the return
 	// permission check below needs a rental to actually close.
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", materialMemberToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", materialMemberToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
 	}
-	var rental inventory.Movement
+	var rental material.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &rental); err != nil {
 		t.Fatalf("decode rental: %v", err)
 	}
-	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", rental.ID)
+	returnPath := fmt.Sprintf("/api/v1/material/movements/%d/return", rental.ID)
 	if rec := doRequest(mux, http.MethodPatch, returnPath, memberToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from returning a movement, got %d", rec.Code)
 	}
@@ -253,22 +253,22 @@ func TestHandlerListMovementsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	targetToken := tokenFor(t, authn, target.ID, "member")
 	otherToken := tokenFor(t, authn, other.ID, "member")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create movement: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	path := fmt.Sprintf("/api/v1/users/%s/movements", target.Login)
+	path := fmt.Sprintf("/api/v1/users/%s/material/movements", target.Login)
 	if rec := doRequest(mux, http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected another plain member to be forbidden, got %d", rec.Code)
 	}
@@ -279,7 +279,7 @@ func TestHandlerListMovementsByUserSelfOrPrivilegedOnly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected board to view anyone's history (200), got %d: %s", rec.Code, rec.Body.String())
 	}
-	var list []inventory.Movement
+	var list []material.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -292,18 +292,18 @@ func TestHandlerCreateMovementRequiresActivityForLoan(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for a loan without an activity, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -316,11 +316,11 @@ func TestHandlerCreateItemRejectsInvalidItemType(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "not-a-type", "total_quantity": 1,
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "not-a-type", "total_quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for an invalid item_type, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 400 for an invalid type, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if code := errorCode(t, rec); code != "invalid_item_type" {
 		t.Errorf("expected error code invalid_item_type, got %q", code)
@@ -331,8 +331,8 @@ func TestHandlerCreateItemRejectsUnknownCategory(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "gear", "description": "Casco", "category_id": 999999, "total_quantity": 1,
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "general", "description": "Casco", "category_id": 999999, "total_quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for an unknown category_id, got %d: %s", rec.Code, rec.Body.String())
@@ -350,8 +350,8 @@ func TestHandlerCreateItemRejectsMismatchedFieldsForType(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-101", "total_quantity": 1,
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-101", "total_quantity": 1,
 		// Deliberately missing rope_type/diameter_mm/manufacture_year/length_m.
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -366,15 +366,15 @@ func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "gear", "description": "Casco",
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "general", "description": "Casco",
 		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
 		"total_quantity": 1, "loanable": false,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestHandlerCreateMovementRejectsLoanOfNonLoanableItem(t *testing.T) {
 	body := map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": activityID,
 	}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for a loan of a non-loanable item, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -405,15 +405,15 @@ func TestHandlerCreateMovementRejectsRentalOfNonRentableItem(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "gear", "description": "Casco",
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "general", "description": "Casco",
 		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
 		"total_quantity": 1, "loanable": true,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestHandlerCreateMovementRejectsRentalOfNonRentableItem(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for a rental of a non-rentable item, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -436,15 +436,15 @@ func TestHandlerCreateMovementRejectsSaleOfNonSellableItem(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "gear", "description": "Casco",
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "general", "description": "Casco",
 		"category_id":    testutil.MaterialCategoryID(t, tx, "Mosquetones"),
 		"total_quantity": 1, "loanable": true,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestHandlerCreateMovementRejectsSaleOfNonSellableItem(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	body := map[string]any{"item_id": item.ID, "login": user.Login, "type": "sale", "quantity": 1}
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for a sale of a non-sellable item, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -473,7 +473,7 @@ func TestHandlerCreateMovementNotFoundForNonexistentItem(t *testing.T) {
 	boardToken := tokenFor(t, authn, 1, "board")
 
 	body := map[string]any{"item_id": 999999, "type": "acquisition", "quantity": 1}
-	rec := doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for a movement against a nonexistent item, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -487,14 +487,14 @@ func TestHandlerListMaterialCategoriesRequiresAdminOrBoard(t *testing.T) {
 	memberToken := tokenFor(t, authn, 1, "member")
 	boardToken := tokenFor(t, authn, 2, "board")
 
-	if rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", memberToken, nil); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", memberToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a member to be forbidden from listing material categories, got %d", rec.Code)
 	}
-	rec := doRequest(mux, http.MethodGet, "/api/v1/material-categories", boardToken, nil)
+	rec := doRequest(mux, http.MethodGet, "/api/v1/material/categories", boardToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected board to list material categories, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var categories []inventory.MaterialCategory
+	var categories []material.MaterialCategory
 	if err := json.Unmarshal(rec.Body.Bytes(), &categories); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -507,16 +507,16 @@ func TestHandlerCreateMovementRejectsInvalidType(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "not-a-type", "quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -531,16 +531,16 @@ func TestHandlerCreateMovementRequiresLoginForRental(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "rental", "quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -559,16 +559,16 @@ func TestHandlerCreateMovementAllowsLoanWithoutLogin(t *testing.T) {
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	activityID := testutil.InsertActivity(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "loan", "quantity": 1, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusCreated {
@@ -583,16 +583,16 @@ func TestHandlerCreateMovementAllowsSaleWithoutLogin(t *testing.T) {
 	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "sale", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
@@ -607,16 +607,16 @@ func TestHandlerCreateMovementRejectsLoginForAcquisition(t *testing.T) {
 	boardToken := tokenFor(t, authn, 1, "board")
 	user := testutil.InsertMember(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "acquisition", "quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -634,23 +634,23 @@ func TestHandlerCreateMovementAllowsAcquisitionWithoutLogin(t *testing.T) {
 	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
 	notes := "restock tras inventario"
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "acquisition", "quantity": 3, "notes": notes,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 for an acquisition without a login, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var m inventory.Movement
+	var m material.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
 		t.Fatalf("decode movement: %v", err)
 	}
@@ -663,20 +663,20 @@ func TestHandlerCreateMovementRejectsAcquisitionOnRope(t *testing.T) {
 	mux, authn, _ := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, map[string]any{
-		"item_type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-500",
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, map[string]any{
+		"type": "rope", "brand": "Beal", "model": "Antipodes", "code": "C-500",
 		"rope_type": "caving", "diameter_mm": 9.5, "manufacture_year": 2024, "length_m": 60,
 		"total_quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rope: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "acquisition", "quantity": 1,
 	})
 	if rec.Code != http.StatusConflict {
@@ -698,34 +698,34 @@ func TestHandlerReturnTypeSupportsPartialQuantities(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 30))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 30))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 30, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create loan: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "return", "quantity": 10, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("first partial return: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodGet, "/api/v1/items", boardToken, nil)
+	rec = doRequest(mux, http.MethodGet, "/api/v1/material/items", boardToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list items: %d: %s", rec.Code, rec.Body.String())
 	}
-	var items []inventory.Item
+	var items []material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -733,14 +733,14 @@ func TestHandlerReturnTypeSupportsPartialQuantities(t *testing.T) {
 		t.Fatalf("expected outstanding_loan_quantity 20 after returning 10 of 30, got %+v", items[0])
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "return", "quantity": 20, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("second partial return: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodGet, "/api/v1/items", boardToken, nil)
+	rec = doRequest(mux, http.MethodGet, "/api/v1/material/items", boardToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list items: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -759,23 +759,23 @@ func TestHandlerReturnTypeRejectsOverReturn(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 	activityID := testutil.InsertActivity(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 5, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create loan: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "return", "quantity": 6, "activity_id": activityID,
 	})
 	if rec.Code != http.StatusConflict {
@@ -790,16 +790,16 @@ func TestHandlerReturnTypeRequiresActivity(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	boardToken := tokenFor(t, authn, 1, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "type": "return", "quantity": 1,
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -821,31 +821,31 @@ func TestHandlerListMovementsByActivity(t *testing.T) {
 	activityID := testutil.InsertActivity(t, tx)
 	otherActivityID := testutil.InsertActivity(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 3, "activity_id": activityID,
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("create loan for activityID: %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": user.Login, "type": "loan", "quantity": 1, "activity_id": otherActivityID,
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("create loan for otherActivityID: %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/movements?activity_id=%d", activityID), boardToken, nil)
+	rec = doRequest(mux, http.MethodGet, fmt.Sprintf("/api/v1/material/movements?activity_id=%d", activityID), boardToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list by activity: %d: %s", rec.Code, rec.Body.String())
 	}
-	var list []inventory.Movement
+	var list []material.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -860,7 +860,7 @@ func TestHandlerCreateItemNotifiesTelegram(t *testing.T) {
 	boardUser := testutil.InsertMember(t, tx)
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -884,17 +884,17 @@ func TestHandlerCreateMovementNotifiesTelegramWithBorrower(t *testing.T) {
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	borrower := testutil.InsertMember(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 	notifier.waitForMessage(t) // the createItem notification, checked in its own test
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
@@ -920,22 +920,22 @@ func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 	boardToken := tokenFor(t, authn, boardUser.ID, "board")
 	borrower := testutil.InsertMember(t, tx)
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 5))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 5))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatalf("decode item: %v", err)
 	}
 
-	rec = doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, map[string]any{
+	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
 		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
 	}
-	var rental inventory.Movement
+	var rental material.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &rental); err != nil {
 		t.Fatalf("decode rental: %v", err)
 	}
@@ -943,7 +943,7 @@ func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 	// covered by their own test.
 	notifier.waitForNthMessage(t, 1)
 
-	returnPath := fmt.Sprintf("/api/v1/movements/%d/return", rental.ID)
+	returnPath := fmt.Sprintf("/api/v1/material/movements/%d/return", rental.ID)
 	if rec := doRequest(mux, http.MethodPatch, returnPath, boardToken, nil); rec.Code != http.StatusOK {
 		t.Fatalf("return rental: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -970,22 +970,22 @@ func TestHandlerUpdateItem(t *testing.T) {
 	materialAloneToken := tokenFor(t, authn, 5, "material")
 	memberToken := tokenFor(t, authn, 6, "member")
 
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 4))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 4))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatal(err)
 	}
-	path := fmt.Sprintf("/api/v1/items/%d", item.ID)
+	path := fmt.Sprintf("/api/v1/material/items/%d", item.ID)
 	edited := map[string]any{
 		"description":           "Casco con barbuquejo",
 		"category_id":           testutil.MaterialCategoryID(t, tx, "Placas"),
 		"rental_price_per_week": 12.5,
 		"loanable":              false,
 		// What cannot be edited is ignored.
-		"item_type": "rope", "total_quantity": 99,
+		"type": "rope", "total_quantity": 99,
 	}
 
 	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
@@ -997,11 +997,11 @@ func TestHandlerUpdateItem(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
 	}
-	var got inventory.Item
+	var got material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Type != inventory.ItemTypeGear || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
+	if got.Type != material.ItemTypeGeneral || got.TotalQuantity != 4 || got.Description == nil || *got.Description != "Casco con barbuquejo" ||
 		got.CategoryName == nil || *got.CategoryName != "Placas" || got.Loanable || got.SalePrice != nil ||
 		got.RentalPricePerWeek == nil || *got.RentalPricePerWeek != 12.5 {
 		t.Fatalf("edited item: %+v", got)
@@ -1017,16 +1017,16 @@ func TestHandlerUpdateItem(t *testing.T) {
 	bad := map[string]any{"description": nil, "category_id": testutil.MaterialCategoryID(t, tx, "Placas")}
 	rec = doRequest(mux, http.MethodPatch, path, boardToken, bad)
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
-		t.Errorf("a gear item without a description: %d %s", rec.Code, rec.Body.String())
+		t.Errorf("a general item without a description: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = doRequest(mux, http.MethodPatch, path, boardToken, map[string]any{"description": "x", "category_id": 987654})
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "unknown_category" {
 		t.Errorf("an unknown category: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodPatch, "/api/v1/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
 		t.Errorf("an item that does not exist: %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPatch, "/api/v1/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
+	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
 		t.Errorf("a bad id: %d", rec.Code)
 	}
 }
@@ -1037,29 +1037,29 @@ func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
 	boardToken := tokenFor(t, authn, 3, "board")
 	rope := func(code string) map[string]any {
 		return map[string]any{
-			"item_type": "rope", "brand": "Beal", "model": "Karma", "code": code, "rope_type": "caving",
+			"type": "rope", "brand": "Beal", "model": "Karma", "code": code, "rope_type": "caving",
 			"diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
 		}
 	}
-	first := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-1"))
-	second := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-2"))
+	first := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, rope("C-1"))
+	second := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, rope("C-2"))
 	if first.Code != http.StatusCreated || second.Code != http.StatusCreated {
 		t.Fatalf("create: %d %d", first.Code, second.Code)
 	}
-	if rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, rope("C-1")); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, rope("C-1")); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
 		t.Errorf("creating with a code in use: %d %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	_ = json.Unmarshal(second.Body.Bytes(), &item)
 	edit := rope("C-1")
-	delete(edit, "item_type")
-	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
+	delete(edit, "type")
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
 		t.Errorf("editing to a code in use: %d %s", rec.Code, rec.Body.String())
 	}
 	// Keeping its own code is fine.
 	own := rope("C-2")
-	delete(own, "item_type")
-	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
+	delete(own, "type")
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
 		t.Errorf("editing with its own code: %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -1076,11 +1076,11 @@ func TestHandlerMovementRecipientsMustBeMembers(t *testing.T) {
 		`INSERT INTO memberships (user_id, start_date, end_date) VALUES ($1, CURRENT_DATE - 400, CURRENT_DATE - 30)`, former.ID); err != nil {
 		t.Fatal(err)
 	}
-	rec := doRequest(mux, http.MethodPost, "/api/v1/items", boardToken, gearItemBody(t, tx, 20))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, generalItemBody(t, tx, 20))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create item: %d: %s", rec.Code, rec.Body.String())
 	}
-	var item inventory.Item
+	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatal(err)
 	}
@@ -1091,7 +1091,7 @@ func TestHandlerMovementRecipientsMustBeMembers(t *testing.T) {
 		if kind == "loan" || kind == "return" {
 			body["activity_id"] = activityID
 		}
-		return doRequest(mux, http.MethodPost, "/api/v1/movements", boardToken, body)
+		return doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	}
 	for _, kind := range []string{"loan", "rental"} {
 		if rec := move(kind, member); rec.Code != http.StatusCreated {

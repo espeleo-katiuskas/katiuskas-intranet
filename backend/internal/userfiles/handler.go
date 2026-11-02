@@ -62,7 +62,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // Both routes require only baseline auth at Protect — the actual access
 // check (this person themselves, or admin/board) happens inside each
 // handler, the same self-or-privileged pattern
-// memberships.Handler.listByUser and inventory.Handler.listMovementsByUser
+// memberships.Handler.listByUser and material.Handler.listMovementsByUser
 // use, since who may see a specific person's files isn't a fixed role
 // list the way, say, GET /library is. /file also accepts the session
 // cookie (ProtectAllowingCookie, see auth.RequireAuthFromHeaderOrCookie),
