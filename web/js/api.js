@@ -692,6 +692,27 @@ function formatDate(isoDate) {
   return `${day}-${month}-${date.getFullYear()}`;
 }
 
+const MONTHS = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+// "Enero de 2026": just the month and the year, for what is placed in time loosely.
+function formatMonthYear(iso) {
+  const date = new Date(iso);
+  return `${MONTHS[date.getMonth()]} de ${date.getFullYear()}`;
+}
+
 // "21-10-2026 18:05": the date and the time (the viewer's own), for what has a moment.
 function formatDateTime(iso) {
   const date = new Date(iso);
@@ -780,6 +801,7 @@ export {
   showNotFound,
   stopAsNotFound,
   formatDate,
+  formatMonthYear,
   formatDateTime,
   formatCurrency,
   pickerLabel,

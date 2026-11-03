@@ -1,4 +1,4 @@
-import { apiFetch, escapeHtml, formatCurrency, showError } from './api.js';
+import { apiFetch, escapeHtml, formatCurrency, formatMonthYear, showError } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import {
@@ -8,7 +8,6 @@ import {
   statusBadge,
   visibilityLabels,
   syncArticleFields,
-  formatDateTime,
 } from './distributionCommon.js';
 
 await initPage();
@@ -40,10 +39,10 @@ function renderRow(d) {
       : '';
   return `
     <tr data-distribution-id="${d.id}">
+      <td class="nowrap">${formatMonthYear(d.created_at)}</td>
       <td>${escapeHtml(d.name)}${restricted(d)}</td>
       <td>${statusBadge(d.status)}</td>
       <td>${escapeHtml(priceText(d))}</td>
-      <td>${d.closes_at ? formatDateTime(d.closes_at) : '—'}</td>
       <td>${mine}</td>
     </tr>`;
 }
