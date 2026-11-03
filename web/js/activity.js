@@ -345,10 +345,13 @@ function renderAttendance() {
   const noun = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const total = participantCount + guests.length;
   const full = activityMax != null && total >= activityMax;
+  // With no guests the line is just the people of the club; the guests and the sum only appear when
+  // there are some.
   element.textContent =
-    `${noun(participantCount, 'persona del club apuntada', 'personas del club apuntadas')} ` +
-    `y ${noun(guests.length, 'invitado', 'invitados')}: ` +
-    `${noun(total, 'persona', 'personas')} en total` +
+    noun(participantCount, 'persona del club apuntada', 'personas del club apuntadas') +
+    (guests.length
+      ? ` y ${noun(guests.length, 'invitado', 'invitados')}: ${noun(total, 'persona', 'personas')} en total`
+      : '') +
     (activityMax == null
       ? '.'
       : `, de un máximo de ${activityMax}${full ? ': la actividad está completa' : ''}.`);
