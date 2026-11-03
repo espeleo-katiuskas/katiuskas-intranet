@@ -1,10 +1,17 @@
-// What /repartos, /reparto, /reparto-pedidos and
-// /reparto-numeros share: the labels of a distribution's states, how its
+// What /repartos, /reparto and /reparto-gestion share: the labels of a distribution's states, how its
 // form is read and filled, how choices and people are shown, and the
 // searchable people picker. The server (internal/distributions) is the
 // authority on every rule; nothing here decides who may do what beyond hiding
 // controls.
-import { apiFetch, escapeHtml, formatDateTime, pickerLabel, resolvePickerId } from './api.js';
+import {
+  apiFetch,
+  escapeHtml,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  pickerLabel,
+  resolvePickerId,
+} from './api.js';
 
 const distributionStatusLabels = {
   draft: 'Borrador',
@@ -520,8 +527,49 @@ function bodyFrom(d, changes = {}) {
   };
 }
 
+// ----- what a distribution is, in a line -----
+
+// "Papeleta 5,00 € (quedan 120 de 200)": an article with what it costs and, when
+// there is a limit in all, how many are left.
+function articleText(a) {
+  const price = a.price > 0 ? formatCurrency(a.price) : 'gratis';
+  const left = articleLeft(a);
+  const notes = [
+    left == null ? null : `quedan ${left} de ${a.max_total}`,
+    a.max_per_person == null ? null : `hasta ${a.max_per_person} por persona`,
+  ].filter(Boolean);
+  return `${escapeHtml(a.name)} ${price}${notes.length ? ` (${notes.join(', ')})` : ''}`;
+}
+
+// What this distribution is, in a line.
+function describeDistribution(d) {
+  const parts = [statusBadge(d.status), escapeHtml(audienceLabels[d.audience])];
+  if (d.visibility && d.visibility !== 'all') {
+    parts.push(`lo ven: ${escapeHtml(visibilityLabels[d.visibility])}`);
+  }
+  if (d.cutoff_date) {
+    parts.push(
+      d.audience === 'signup'
+        ? `solo socios a ${formatDate(d.cutoff_date)}`
+        : `socios a ${formatDate(d.cutoff_date)}`,
+    );
+  }
+  if (hasArticles(d)) {
+    parts.push(d.articles.map(articleText).join(' · '));
+  } else {
+    parts.push(d.price > 0 ? `${formatCurrency(d.price)} cada uno` : 'gratis');
+    if (d.extra_price != null) {
+      const cap = d.max_extra != null ? `, hasta ${d.max_extra} por socio` : '';
+      parts.push(`extras a ${formatCurrency(d.extra_price)}${cap}`);
+    }
+  }
+  if (d.closes_at) parts.push(`se elige hasta el ${formatDateTime(d.closes_at)}`);
+  return parts.join(' · ');
+}
+
 export {
   errorMessages,
+  describeDistribution,
   apiErrorText,
   bodyFrom,
   loadAccountOptions,

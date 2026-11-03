@@ -19,22 +19,12 @@ import {
   articleLeft,
   unitCost,
   unitLabel,
-  syncArticleFields,
-  STATUS_ORDER,
   apiErrorText,
-  audienceLabels,
-  visibilityLabels,
-  bodyFrom,
   choicesText,
-  distributionStatusLabels,
+  describeDistribution,
   isUnchosen,
-  fillDistributionForm,
-  loadAccountOptions,
-  formatDateTime,
   loadPeople,
-  readDistributionForm,
   resolvePickerId,
-  statusBadge,
 } from './distributionCommon.js';
 
 await initPage();
@@ -53,44 +43,6 @@ let people = { entries: [], names: {} };
 const fail = (err) => showError(apiErrorText(err, distribution));
 const nameOf = (login) => people.names[login] ?? login;
 
-// "Papeleta 5,00 € (quedan 120 de 200)": an article with what it costs and, when
-// there is a limit in all, how many are left.
-function articleText(a) {
-  const price = a.price > 0 ? formatCurrency(a.price) : 'gratis';
-  const left = articleLeft(a);
-  const notes = [
-    left == null ? null : `quedan ${left} de ${a.max_total}`,
-    a.max_per_person == null ? null : `hasta ${a.max_per_person} por persona`,
-  ].filter(Boolean);
-  return `${escapeHtml(a.name)} ${price}${notes.length ? ` (${notes.join(', ')})` : ''}`;
-}
-
-// What this distribution is, in a line.
-function describe(d) {
-  const parts = [statusBadge(d.status), escapeHtml(audienceLabels[d.audience])];
-  if (d.visibility && d.visibility !== 'all') {
-    parts.push(`lo ven: ${escapeHtml(visibilityLabels[d.visibility])}`);
-  }
-  if (d.cutoff_date) {
-    parts.push(
-      d.audience === 'signup'
-        ? `solo socios a ${formatDate(d.cutoff_date)}`
-        : `socios a ${formatDate(d.cutoff_date)}`,
-    );
-  }
-  if (hasArticles(d)) {
-    parts.push(d.articles.map(articleText).join(' · '));
-  } else {
-    parts.push(d.price > 0 ? `${formatCurrency(d.price)} cada uno` : 'gratis');
-    if (d.extra_price != null) {
-      const cap = d.max_extra != null ? `, hasta ${d.max_extra} por socio` : '';
-      parts.push(`extras a ${formatCurrency(d.extra_price)}${cap}`);
-    }
-  }
-  if (d.closes_at) parts.push(`se elige hasta el ${formatDateTime(d.closes_at)}`);
-  return parts.join(' · ');
-}
-
 // Whether the signed-in person can ask for units now — the same rule the API
 // applies: never in a draft; staff (admin, board, material) otherwise always; a member
 // only while it is open and before the deadline.
@@ -104,178 +56,12 @@ function canOrderNow() {
 function renderHeader() {
   document.getElementById('distribution-title').textContent = distribution.name;
   document.title = `${distribution.name} — Club de Espeleología Katiuskas`;
-  document.getElementById('distribution-meta').innerHTML = describe(distribution);
+  document.getElementById('distribution-meta').innerHTML = describeDistribution(distribution);
   document.getElementById('distribution-description').textContent = distribution.description ?? '';
-  // Buttons restricted by data-roles are removed from the page for everybody
-  // else, hence the optional chaining on the ones that might not be there.
-  const ordersLink = document.getElementById('link-orders');
-  if (ordersLink) ordersLink.href = `/reparto-pedidos?id=${id}`;
-  // The list of payments only where there is something to pay.
-  const paymentsLink = document.getElementById('link-payments');
-  if (paymentsLink) {
-    paymentsLink.href = `/reparto-pagos?id=${id}`;
-    paymentsLink.hidden = !(
-      distribution.price > 0 ||
-      (distribution.extra_price ?? 0) > 0 ||
-      distribution.articles.some((a) => a.price > 0)
-    );
-  }
-  // Only when some article has its numbers described, so there is something to list.
-  const numbersLink = document.getElementById('link-numbers');
-  if (numbersLink) {
-    numbersLink.href = `/reparto-numeros?id=${id}`;
-    numbersLink.hidden = !distribution.articles.some((a) => a.identifier_fields.length > 0);
-  }
-  const steps = STATUS_ORDER;
-  const index = steps.indexOf(distribution.status);
-  const back = document.getElementById('step-back');
-  const forward = document.getElementById('step-forward');
-  if (!back || !forward) return;
-  back.hidden = index <= 0;
-  forward.hidden = index >= steps.length - 1;
-  if (index > 0) back.textContent = `Volver a «${distributionStatusLabels[steps[index - 1]]}»`;
-  if (index < steps.length - 1)
-    forward.textContent = `Pasar a «${distributionStatusLabels[steps[index + 1]]}»`;
+  // Only who manages distributions has the button (data-roles removes it for everybody else).
+  const manageLink = document.getElementById('manage-link');
+  if (manageLink) manageLink.href = `/reparto-gestion?id=${id}`;
 }
-
-async function setStatus(status) {
-  try {
-    distribution = await apiFetch(base, {
-      method: 'PATCH',
-      body: JSON.stringify(bodyFrom(distribution, { status })),
-    });
-    renderAll();
-    // Leaving a draft is when the orders (everybody's own, if it is for all
-    // members) appear; going back to one empties them.
-    if (distribution.status !== 'draft') await loadUnits();
-  } catch (err) {
-    fail(err);
-  }
-}
-
-// Staff-only controls: for anybody else they aren't on the page at all.
-function onClick(elementId, handler) {
-  document.getElementById(elementId)?.addEventListener('click', handler);
-}
-
-// Everything to manage the distribution is hidden until the "Gestionar" button, which only
-// admin/board/material have, is pressed.
-onClick('manage-toggle', () => {
-  const panel = document.getElementById('distribution-actions');
-  panel.hidden = !panel.hidden;
-  document.getElementById('manage-toggle').setAttribute('aria-expanded', String(!panel.hidden));
-});
-
-onClick('step-back', () => {
-  const steps = STATUS_ORDER;
-  const previous = steps[steps.indexOf(distribution.status) - 1];
-  // Back to a draft starts it over: the API deletes every order, with what was
-  // chosen on it, so say so when there is any.
-  if (previous === 'draft' && distribution.unit_count > 0) {
-    const count = distribution.unit_count === 1 ? '1 pedido' : `${distribution.unit_count} pedidos`;
-    const again =
-      distribution.audience === 'all_members'
-        ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
-        : '';
-    if (
-      !confirm(
-        `Al volver a borrador se borrarán todos los pedidos (${count}), con lo que hayan elegido los socios, y no se podrán recuperar.${again} ¿Volver a borrador?`,
-      )
-    )
-      return;
-  }
-  setStatus(previous);
-});
-onClick('step-forward', () => {
-  const steps = STATUS_ORDER;
-  const next = steps[steps.indexOf(distribution.status) + 1];
-  if (
-    next === 'closed' &&
-    !confirm(
-      'Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?',
-    )
-  )
-    return;
-  setStatus(next);
-});
-
-// ----- edit and delete -----
-const editDialog = document.getElementById('edit-distribution-dialog');
-const editForm = document.getElementById('edit-distribution-form');
-initModal(editDialog);
-const editAudience = document.getElementById('ed-audience');
-const editCutoff = document.getElementById('ed-cutoff');
-function syncEditCutoff() {
-  const required = editAudience.value === 'all_members';
-  editCutoff.required = required;
-  document.getElementById('ed-cutoff-hint').textContent = required
-    ? '(obligatorio)'
-    : '(opcional: si la pones, solo podrán apuntarse los socios de ese día)';
-}
-editAudience.addEventListener('change', syncEditCutoff);
-// With articles, the fields that only fit a single article are switched off.
-editForm.elements.articles.addEventListener('input', () => {
-  syncArticleFields(editForm);
-  syncEditCutoff();
-});
-
-onClick('open-edit', async () => {
-  await loadAccountOptions(editForm);
-  fillDistributionForm(editForm, distribution);
-  syncEditCutoff();
-  openModal(editDialog);
-});
-
-editForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  // Turning "todos los socios" into "quien se apunte" takes the orders nobody
-  // touched with it (the API deletes them).
-  if (
-    distribution.audience === 'all_members' &&
-    editAudience.value === 'signup' &&
-    distribution.unit_count > 0 &&
-    !confirm(
-      'Al pasarlo a «Quien se apunte» se borrarán los pedidos automáticos de los socios que no han elegido nada. Se quedan los que ya eligieron algo y los extras. ¿Seguir?',
-    )
-  ) {
-    return;
-  }
-  const submit = editForm.querySelector('button[type="submit"]');
-  submit.disabled = true;
-  try {
-    distribution = await apiFetch(base, {
-      method: 'PATCH',
-      body: JSON.stringify(readDistributionForm(editForm)),
-    });
-    editDialog.close();
-    showFeedback('Reparto guardado.');
-    renderAll();
-  } catch (err) {
-    fail(err);
-  } finally {
-    submit.disabled = false;
-  }
-});
-
-onClick('delete-distribution', async () => {
-  // Say what is lost in plain words: each "pedido" is what one member asked for
-  // or has coming — in a distribution for all members that includes everybody's
-  // own, which nobody asked for — and what they chose goes with it.
-  const units = distribution.unit_count;
-  let lost = '';
-  if (units > 0) {
-    const count = units === 1 ? '1 pedido' : `${units} pedidos`;
-    const verb = units === 1 ? 'se perderá' : 'se perderán';
-    lost = ` Tiene ${count}, con lo que hayan elegido los socios, y ${verb} con él.`;
-  }
-  if (!confirm(`¿Borrar el reparto «${distribution.name}»?${lost} No se puede deshacer.`)) return;
-  try {
-    await apiFetch(base, { method: 'DELETE' });
-    window.location.href = '/repartos';
-  } catch (err) {
-    fail(err);
-  }
-});
 
 // ----- asking for units -----
 const orderForm = document.getElementById('order-form');

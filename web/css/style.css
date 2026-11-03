@@ -1621,3 +1621,8 @@ a.btn {
 h2[id^="section-"] {
   scroll-margin-top: 16px;
 }
+
+/* The index of a page's sections right after a row of buttons. */
+.panel-actions + .section-index {
+  margin-top: 16px;
+}

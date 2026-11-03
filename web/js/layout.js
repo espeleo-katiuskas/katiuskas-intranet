@@ -97,9 +97,7 @@ const ACTIVE_ALIASES = {
   '/material-prestado': '/material',
   '/justificantes': '/contabilidad',
   '/reparto': '/repartos',
-  '/reparto-pedidos': '/repartos',
-  '/reparto-pagos': '/repartos',
-  '/reparto-numeros': '/repartos',
+  '/reparto-gestion': '/repartos',
 };
 
 function renderNavLink(item, activePath) {

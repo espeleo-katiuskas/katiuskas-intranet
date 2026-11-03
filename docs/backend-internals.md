@@ -531,11 +531,11 @@ in full before collection (`MissingIdentifiers`, `ErrIdentifiersMissing`); with 
 ask). Frontend: one line per article in the "Artículos" textarea, `Nombre: precio[, máximo N][, N
 por persona][, con números]` (`parseArticles`), which switches off the fields that don't apply
 (`syncArticleFields`); `/reparto` shows a quantity field per article with what is left, "Tus
-pedidos" rows are changed by quantity, `/reparto-pedidos` (below) shows each article against its cap
-and has every action on the orders, and `/reparto-numeros` (`distribution-numbers.js`, linked from
-`/reparto` when some article has described numbers) lists every number with who has it, filterable,
-and how many are free. The numbers are described in the articles textarea with indented lines under
-the article (` Serie: 124-133, 137`).
+pedidos" rows are changed by quantity, the "Pedidos" section of `/reparto-gestion` (below) shows
+each article against its cap and has every action on the orders, and its "Números" section
+(`distribution-numbers.js`, there when some article has described numbers) lists every number with
+who has it, filterable, and how many are free. The numbers are described in the articles textarea
+with indented lines under the article (` Serie: 124-133, 137`).
 
 ## Licenses
 

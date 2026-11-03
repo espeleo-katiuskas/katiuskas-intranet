@@ -1,76 +1,59 @@
-import {
-  apiFetch,
-  escapeHtml,
-  hasAnyRole,
-  isNotFound,
-  queryId,
-  showError,
-  showNotFound,
-  stopAsNotFound,
-} from './api.js';
-import { initPage } from './layout.js';
-import { apiErrorText, statusBadge } from './distributionCommon.js';
+import { apiFetch, escapeHtml, isNotFound, showError, showNotFound } from './api.js';
+import { apiErrorText } from './distributionCommon.js';
 
-// Every number that exists of the articles whose numbers are described, who has
-// each and how many are free: for the people who hand them out (admin, board,
-// material).
-const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'material'] });
-// A person's page is only open to admin and board: for material the name is plain text.
-const canOpenPeople = hasAnyRole(viewer, ['admin', 'board']);
+// Every number that exists of the articles whose numbers are described, who has each and how many
+// are free: for the people who hand them out (admin, board, material). It is a section of
+// /reparto-gestion; what is returned has `reload(distribution)`.
+export function initNumbers({ base, canOpenPeople }) {
+  const fail = (err) => showError(apiErrorText(err));
 
-const id = queryId();
-if (id === null) await stopAsNotFound();
-const base = `/distributions/${id}`;
-document.getElementById('back-link').href = `/reparto?id=${id}`;
-const fail = (err) => showError(apiErrorText(err));
+  // Past this many rows a table is hard to read and slow to draw: the filters
+  // narrow it down.
+  const MAX_ROWS = 500;
 
-// Past this many rows a table is hard to read and slow to draw: the filters
-// narrow it down.
-const MAX_ROWS = 500;
+  const container = document.getElementById('numbers-articles');
+  const state = new Map();
 
-const container = document.getElementById('numbers-articles');
-const state = new Map();
+  function parts(item) {
+    return item.identifier.split('/');
+  }
 
-function parts(item) {
-  return item.identifier.split('/');
-}
+  function matches(item, view) {
+    if (view.show === 'free' && item.beneficiary_login) return false;
+    if (view.show === 'taken' && !item.beneficiary_login) return false;
+    const needle = view.search.trim().toLowerCase();
+    if (!needle) return true;
+    return `${item.identifier} ${item.beneficiary_name ?? ''}`.toLowerCase().includes(needle);
+  }
 
-function matches(item, view) {
-  if (view.show === 'free' && item.beneficiary_login) return false;
-  if (view.show === 'taken' && !item.beneficiary_login) return false;
-  const needle = view.search.trim().toLowerCase();
-  if (!needle) return true;
-  return `${item.identifier} ${item.beneficiary_name ?? ''}`.toLowerCase().includes(needle);
-}
+  function renderRows(articleId) {
+    const { numbers, view } = state.get(articleId);
+    const shown = numbers.items.filter((item) => matches(item, view));
+    const rows = shown.slice(0, MAX_ROWS).map((item) => {
+      const cells = parts(item)
+        .map((p) => `<td>${escapeHtml(p)}</td>`)
+        .join('');
+      const holder = item.beneficiary_login
+        ? `${
+            canOpenPeople
+              ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
+              : escapeHtml(item.beneficiary_name)
+          } <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
+        : '<span class="hint">Libre</span>';
+      return `<tr>${cells}<td>${holder}</td></tr>`;
+    });
+    const more =
+      shown.length > MAX_ROWS
+        ? `<tr><td colspan="${numbers.fields.length + 1}">Se muestran los ${MAX_ROWS} primeros de ${shown.length}: filtra para ver el resto.</td></tr>`
+        : '';
+    document.getElementById(`rows-${articleId}`).innerHTML =
+      rows.join('') + more ||
+      `<tr><td colspan="${numbers.fields.length + 1}">No hay ninguno con ese filtro.</td></tr>`;
+  }
 
-function renderRows(articleId) {
-  const { numbers, view } = state.get(articleId);
-  const shown = numbers.items.filter((item) => matches(item, view));
-  const rows = shown.slice(0, MAX_ROWS).map((item) => {
-    const cells = parts(item)
-      .map((p) => `<td>${escapeHtml(p)}</td>`)
-      .join('');
-    const holder = item.beneficiary_login
-      ? `${
-          canOpenPeople
-            ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
-            : escapeHtml(item.beneficiary_name)
-        } <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
-      : '<span class="hint">Libre</span>';
-    return `<tr>${cells}<td>${holder}</td></tr>`;
-  });
-  const more =
-    shown.length > MAX_ROWS
-      ? `<tr><td colspan="${numbers.fields.length + 1}">Se muestran los ${MAX_ROWS} primeros de ${shown.length}: filtra para ver el resto.</td></tr>`
-      : '';
-  document.getElementById(`rows-${articleId}`).innerHTML =
-    rows.join('') + more ||
-    `<tr><td colspan="${numbers.fields.length + 1}">No hay ninguno con ese filtro.</td></tr>`;
-}
-
-function renderArticle(article, numbers) {
-  const head = numbers.fields.map((f) => `<th>${escapeHtml(f.name)}</th>`).join('');
-  return `
+  function renderArticle(article, numbers) {
+    const head = numbers.fields.map((f) => `<th>${escapeHtml(f.name)}</th>`).join('');
+    return `
     <div class="section-header">
       <div>
         <h2>${escapeHtml(article.name)}</h2>
@@ -97,37 +80,42 @@ function renderArticle(article, numbers) {
         <tbody id="rows-${article.id}"></tbody>
       </table>
     </div>`;
-}
+  }
 
-container.addEventListener('change', (event) => {
-  const select = event.target.closest('select[data-show]');
-  if (!select) return;
-  state.get(Number(select.dataset.show)).view.show = select.value;
-  renderRows(Number(select.dataset.show));
-});
-container.addEventListener('input', (event) => {
-  const input = event.target.closest('input[data-search]');
-  if (!input) return;
-  state.get(Number(input.dataset.search)).view.search = input.value;
-  renderRows(Number(input.dataset.search));
-});
-
-try {
-  const distribution = await apiFetch(base);
-  document.getElementById('numbers-title').textContent = `Números: ${distribution.name}`;
-  document.title = `Números: ${distribution.name} — Club de Espeleología Katiuskas`;
-  document.getElementById('numbers-meta').innerHTML = statusBadge(distribution.status);
-  const numbered = distribution.articles.filter((a) => a.identifier_fields.length > 0);
-  const all = await Promise.all(numbered.map((a) => apiFetch(`${base}/articles/${a.id}/numbers`)));
-  container.innerHTML = numbered.length
-    ? numbered.map((a, i) => renderArticle(a, all[i])).join('')
-    : '<p>Ningún artículo de este reparto tiene sus números descritos.</p>';
-  numbered.forEach((a, i) => {
-    state.set(a.id, { numbers: all[i], view: { show: 'all', search: '' } });
-    renderRows(a.id);
+  container.addEventListener('change', (event) => {
+    const select = event.target.closest('select[data-show]');
+    if (!select) return;
+    state.get(Number(select.dataset.show)).view.show = select.value;
+    renderRows(Number(select.dataset.show));
   });
-} catch (err) {
-  container.innerHTML = '';
-  if (isNotFound(err)) showNotFound();
-  else fail(err);
+  container.addEventListener('input', (event) => {
+    const input = event.target.closest('input[data-search]');
+    if (!input) return;
+    state.get(Number(input.dataset.search)).view.search = input.value;
+    renderRows(Number(input.dataset.search));
+  });
+
+  // Read again for the distribution it is given (its articles say which have numbers described).
+  async function load(distribution) {
+    try {
+      const numbered = distribution.articles.filter((a) => a.identifier_fields.length > 0);
+      const all = await Promise.all(
+        numbered.map((a) => apiFetch(`${base}/articles/${a.id}/numbers`)),
+      );
+      container.innerHTML = numbered.length
+        ? numbered.map((a, i) => renderArticle(a, all[i])).join('')
+        : '<p>Ningún artículo de este reparto tiene sus números descritos.</p>';
+      state.clear();
+      numbered.forEach((a, i) => {
+        state.set(a.id, { numbers: all[i], view: { show: 'all', search: '' } });
+        renderRows(a.id);
+      });
+    } catch (err) {
+      container.innerHTML = '';
+      if (isNotFound(err)) showNotFound();
+      else fail(err);
+    }
+  }
+
+  return { reload: load };
 }
