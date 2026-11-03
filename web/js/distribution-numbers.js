@@ -21,6 +21,9 @@ export function initNumbers({ base, canOpenPeople }) {
   function matches(item, view) {
     if (view.show === 'free' && item.beneficiary_login) return false;
     if (view.show === 'taken' && !item.beneficiary_login) return false;
+    // Assigned, and still without being handed out or paid.
+    if (view.show === 'undelivered' && (!item.beneficiary_login || item.delivered)) return false;
+    if (view.show === 'unpaid' && (!item.beneficiary_login || item.paid)) return false;
     const needle = view.search.trim().toLowerCase();
     if (!needle) return true;
     return `${item.identifier} ${item.beneficiary_name ?? ''}`.toLowerCase().includes(needle);
@@ -69,6 +72,8 @@ export function initNumbers({ base, canOpenPeople }) {
           <option value="all">Todos</option>
           <option value="free">Solo los libres</option>
           <option value="taken">Solo los asignados</option>
+          <option value="undelivered">Asignados y no entregados</option>
+          ${article.price > 0 ? '<option value="unpaid">Asignados y no pagados</option>' : ''}
         </select>
       </div>
       <div class="field">
