@@ -369,7 +369,7 @@ reading these pages, and an extra unit an "extra", since "unidad" meant nothing 
 "Repartos" sidebar entry (`layout.js` maps the two detail pages to it in `ACTIVE_ALIASES`). The list
 (columns: when it was created, as "Enero de 2026" with `formatMonthYear`, the name, the state and
 the price; the state has the same four names as everywhere: "Borrador", "Se puede pedir", "Activo"
-and "Cerrado" for `draft`, `open`, `closed` and `done`, each with its tooltip; except that a row
+and "Terminado" for `draft`, `open`, `closed` and `done`, each with its tooltip; except that a row
 with the "Puedes pedirlo" badge says "Activo" in the state column, so as not to repeat it) opens a
 new distribution from a dialog (admin/board; the options go in a textarea, one per line, "Talla: S,
 M, L", `parseOptions`) and shows "Puedes pedirlo" on the open ones whose `eligible` is true. The

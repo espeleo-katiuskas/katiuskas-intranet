@@ -17,7 +17,7 @@ const distributionStatusLabels = {
   draft: 'Borrador',
   open: 'Se puede pedir',
   closed: 'Activo',
-  done: 'Cerrado',
+  done: 'Terminado',
 };
 
 // What each state means, for a tooltip on its badge.
