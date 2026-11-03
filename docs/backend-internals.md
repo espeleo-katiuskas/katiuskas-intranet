@@ -535,7 +535,8 @@ por persona][, con números]` (`parseArticles`), which switches off the fields t
 pedidos" rows are changed by quantity, the "Pedidos" section of `/reparto-gestion` (below) shows
 each article against its cap and has every action on the orders, and its "Números" section
 (`distribution-numbers.js`, there when some article has described numbers) lists every number with
-who has it, filterable, and how many are free. The numbers are described in the articles textarea
+who has it, whether it is handed out and (if the article has a price) paid, filterable, and how many
+are free. The numbers are described in the articles textarea
 with indented lines under the article (` Serie: 124-133, 137`).
 
 ## Licenses

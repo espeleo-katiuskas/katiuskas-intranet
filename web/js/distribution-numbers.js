@@ -27,28 +27,30 @@ export function initNumbers({ base, canOpenPeople }) {
   }
 
   function renderRows(articleId) {
-    const { numbers, view } = state.get(articleId);
+    const { numbers, view, priced } = state.get(articleId);
+    // After the parts of the number: who has it, whether it is handed out and, if it costs, paid.
+    const columns = numbers.fields.length + (priced ? 3 : 2);
     const shown = numbers.items.filter((item) => matches(item, view));
     const rows = shown.slice(0, MAX_ROWS).map((item) => {
       const cells = parts(item)
         .map((p) => `<td>${escapeHtml(p)}</td>`)
         .join('');
       const holder = item.beneficiary_login
-        ? `${
-            canOpenPeople
-              ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
-              : escapeHtml(item.beneficiary_name)
-          } <span class="hint">${item.delivered ? '(entregado)' : '(asignado, sin entregar)'}</span>`
+        ? canOpenPeople
+          ? `<a href="/socio?login=${encodeURIComponent(item.beneficiary_login)}">${escapeHtml(item.beneficiary_name)}</a>`
+          : escapeHtml(item.beneficiary_name)
         : '<span class="hint">Libre</span>';
-      return `<tr>${cells}<td>${holder}</td></tr>`;
+      // Only a number somebody has can be handed out or paid.
+      const yesNo = (value) => (item.beneficiary_login ? (value ? 'Sí' : 'No') : '');
+      return `<tr>${cells}<td>${holder}</td><td>${yesNo(item.delivered)}</td>${priced ? `<td>${yesNo(item.paid)}</td>` : ''}</tr>`;
     });
     const more =
       shown.length > MAX_ROWS
-        ? `<tr><td colspan="${numbers.fields.length + 1}">Se muestran los ${MAX_ROWS} primeros de ${shown.length}: filtra para ver el resto.</td></tr>`
+        ? `<tr><td colspan="${columns}">Se muestran los ${MAX_ROWS} primeros de ${shown.length}: filtra para ver el resto.</td></tr>`
         : '';
     document.getElementById(`rows-${articleId}`).innerHTML =
       rows.join('') + more ||
-      `<tr><td colspan="${numbers.fields.length + 1}">No hay ninguno con ese filtro.</td></tr>`;
+      `<tr><td colspan="${columns}">No hay ninguno con ese filtro.</td></tr>`;
   }
 
   function renderArticle(article, numbers) {
@@ -76,7 +78,7 @@ export function initNumbers({ base, canOpenPeople }) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr>${head}<th>Quién lo tiene</th></tr></thead>
+        <thead><tr>${head}<th>Quién lo tiene</th><th>Entregado</th>${article.price > 0 ? '<th>Pagado</th>' : ''}</tr></thead>
         <tbody id="rows-${article.id}"></tbody>
       </table>
     </div>`;
@@ -107,7 +109,11 @@ export function initNumbers({ base, canOpenPeople }) {
         : '<p>Ningún artículo de este reparto tiene sus números descritos.</p>';
       state.clear();
       numbered.forEach((a, i) => {
-        state.set(a.id, { numbers: all[i], view: { show: 'all', search: '' } });
+        state.set(a.id, {
+          numbers: all[i],
+          priced: a.price > 0,
+          view: { show: 'all', search: '' },
+        });
         renderRows(a.id);
       });
     } catch (err) {
