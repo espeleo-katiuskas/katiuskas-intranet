@@ -423,6 +423,11 @@ h2 {
   margin-top: 32px;
 }
 
+/* Below h2, as the browser's own h3 (1.17em) would be above it. */
+h3 {
+  font-size: 1rem;
+}
+
 p.subtitle {
   color: var(--ink-muted);
   margin-top: 0;

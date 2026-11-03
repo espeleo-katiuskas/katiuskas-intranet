@@ -56,7 +56,7 @@ export function initNumbers({ base, canOpenPeople }) {
     return `
     <div class="section-header">
       <div>
-        <h2>${escapeHtml(article.name)}</h2>
+        <h2>Números - ${escapeHtml(article.name)}</h2>
         <p class="subtitle">${numbers.assigned} asignados · <strong>${numbers.free} libres</strong> de ${numbers.total}</p>
       </div>
     </div>

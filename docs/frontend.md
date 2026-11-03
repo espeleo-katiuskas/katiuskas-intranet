@@ -404,53 +404,56 @@ form) — all for admin and board — and "Borrar" (admin only: `DELETE` is admi
 the button is `data-roles="admin"`); a link "← Volver al reparto" goes back to the member's view.
 Under them, a row of links (`.section-index`) to its sections, which are what used to be three
 pages: **Pedidos**, **Pagos** (admin/board, and only when something has a price) and **Números**
-(only when some article has its numbers described); the page hides the section and its link
-otherwise (`renderHeader`), also after an edit that changes it. Every control restricted by
-`data-roles` is *removed* from the page for anybody else, so each script reaches those through a
-null-safe lookup (a bare `getElementById(...).addEventListener` on one of them would throw before
-the rest of the page ran) and the payments section is only started for admin/board. The page reads
-the distribution once and gives it to the sections, each of which is a module with an `init…`
-function that returns `reload`: changing the state or editing re-reads them all
-(`distributionChanged`), and what is done in the orders (paying, handing out, numbering) reloads the
-payments and the numbers (`onOrdersChanged`); the orders section also tells the page when it read a
-fresher distribution (what is left of each article changes with the orders), so the header is drawn
-again. The **Pedidos** section is everything about the orders in one place: on top `GET .../order`
-(what has to be bought), below it a list with one line per order (searchable by member or number;
-the ones with everything paid and handed out are hidden unless asked for) and a summary: what, how
-many are handed out and paid, what it costs. "Más información" unfolds its detail (`detail`, kept in
-`unfolded`): for an article with numbers (`isNumbered`) how many are without one (with "Asignar los
-siguientes libres" or typed numbers) and the list of its numbered items, each with its paid /
-delivered state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and
-act on — mark paid or take the payment off (admin/board), hand out to the person asked in a dialog
-(`deliver-dialog`, "Entregado a", prefilled with the member the order is for; only members are
-offered), undo a delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does
-the same. Paying and taking a payment off first ask, in `pay-dialog`, for the asset account
-(`withAccount`: the non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in
-`localStorage`; skipped when the order costs nothing) and send it as `account_id`. The create/edit
-dialogs of a distribution have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the
-default account, named in its first option). Changing or removing an order (`canEditOrder`) is
-offered at any time but in a draft, as the API allows. Everything goes through the single
-`perform(act, unit)`, confirming before handing over unpaid units, undoing, returning or taking
-numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by part,
-digits as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list
-such as the numbers an error message or an entry of the list of payments names). The Telegram
-messages about numbers say them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a
-Go copy of those two that must keep giving the same order and ranges; each message says what it
-changed — numbers added, taken off or newly assigned — not what was typed). What is unfolded, ticked
-and typed survives redrawing. Both pickers ("A nombre de", "Entregado a") offer only members, never
-everybody on file: `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people`
-— `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`, also
-today's members — and only the names shown for who did what come from `/users/directory`. The API
-enforces the same (`not_eligible`, `invalid_collector`), the pickers just don't offer what would be
-refused. `api.js`'s `apiFetch` puts the API's error `code` on the thrown `Error`, and sets its
-message to the Spanish text for that code from `js/errorTexts.js` (the one catalog of every code the
-API can answer with; a function for the few whose message carries something to show, such as the
-names of the accounts a budget is missing, or the two totals that do not match), falling back to the
-API's own text for a code it does not know. `apiFetchForm` and `apiFetchBlob` do the same, and a
-request that never reaches the server says so in Spanish instead of the browser's "Failed to fetch".
-A page that wants something more specific for a code still reads `err.code`
-(`distributionCommon.js`'s `apiErrorText`, `accountTree.js`'s `accountingErrorText`). A new error
-code in the API needs its entry in that catalog.
+(only when some article has its numbers described; its link in the index says "Números"). All
+their headings are `<h2>`, and a section has none of its own where it would only repeat the link:
+the orders have "Resumen de lo pedido" and "Pedidos de los socios", and the numbering has one block
+per article titled "Números - <article>". The page hides the section and its link otherwise
+(`renderHeader`), also after an edit that changes it. Every control restricted by `data-roles` is
+*removed* from the page for anybody else, so each script reaches those through a null-safe lookup (a
+bare `getElementById(...).addEventListener` on one of them would throw before the rest of the page
+ran) and the payments section is only started for admin/board. The page reads the distribution once
+and gives it to the sections, each of which is a module with an `init…` function that returns
+`reload`: changing the state or editing re-reads them all (`distributionChanged`), and what is done
+in the orders (paying, handing out, numbering) reloads the payments and the numbers
+(`onOrdersChanged`); the orders section also tells the page when it read a fresher distribution
+(what is left of each article changes with the orders), so the header is drawn again. The
+**Pedidos** section is everything about the orders in one place: on top `GET .../order` (what has to
+be bought), below it a list with one line per order (searchable by member or number; the ones with
+everything paid and handed out are hidden unless asked for) and a summary: what, how many are handed
+out and paid, what it costs. "Más información" unfolds its detail (`detail`, kept in `unfolded`):
+for an article with numbers (`isNumbered`) how many are without one (with "Asignar los siguientes
+libres" or typed numbers) and the list of its numbered items, each with its paid / delivered state,
+to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid
+or take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,
+"Entregado a", prefilled with the member the order is for; only members are offered), undo a
+delivery, return, take the numbers off; elsewhere a count field (`quantityOf`) does the same. Paying
+and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the
+non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped
+when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution
+have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in
+its first option). Changing or removing an order (`canEditOrder`) is offered at any time but in a
+draft, as the API allows. Everything goes through the single `perform(act, unit)`, confirming before
+handing over unpaid units, undoing, returning or taking numbers off. Wherever the frontend lists
+numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and joined into ranges
+(`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an error message or an
+entry of the list of payments names). The Telegram messages about numbers say them the same way
+(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
+the same order and ranges; each message says what it changed — numbers added, taken off or newly
+assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers
+("A nombre de", "Entregado a") offer only members, never everybody on file: `loadPeople(id,
+purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
+cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
+shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
+`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` puts
+the API's error `code` on the thrown `Error`, and sets its message to the Spanish text for that code
+from `js/errorTexts.js` (the one catalog of every code the API can answer with; a function for the
+few whose message carries something to show, such as the names of the accounts a budget is missing,
+or the two totals that do not match), falling back to the API's own text for a code it does not
+know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that never reaches the server
+says so in Spanish instead of the browser's "Failed to fetch". A page that wants something more
+specific for a code still reads `err.code` (`distributionCommon.js`'s `apiErrorText`,
+`accountTree.js`'s `accountingErrorText`). A new error code in the API needs its entry in that
+catalog.
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,
