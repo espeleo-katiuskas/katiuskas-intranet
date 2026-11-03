@@ -1180,7 +1180,7 @@ input[readonly] { background: var(--surface-muted); }
    containing block for .modal-close's own position: absolute below,
    the same as position: relative was. */
 dialog.modal {
-  max-width: 560px;
+  max-width: 640px;
   width: calc(100% - 32px);
   max-height: calc(100% - 64px);
   overflow-y: auto;
@@ -1685,4 +1685,15 @@ h2[id^="section-"] {
 .number-chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* The detail of an order of a distribution (distribution-orders.js): its blocks one below the other,
+   not stuck together; a block with nothing in it (the line of what is ticked, when nothing is) takes
+   no room. */
+.order-detail td > * + * {
+  margin-top: 12px;
+}
+
+.order-detail td > div:empty {
+  display: none;
 }

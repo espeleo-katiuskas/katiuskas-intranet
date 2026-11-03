@@ -441,17 +441,24 @@ list of its numbered items, each with its paid / delivered state, to tick (`tick
 pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or take the payment off
 (admin/board), hand out to the person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled
 with the member the order is for; only members are offered), undo a delivery, return, take the
-numbers off; elsewhere a count field (`quantityOf`) does the same. Paying and taking a payment off
-first ask, in `pay-dialog`, for the asset account (`withAccount`: the non-hidden `asset` ones of
-`GET /accounts`, the last chosen remembered in `localStorage`; skipped when the order costs nothing)
-and send it as `account_id`. The create/edit dialogs of a distribution have a "Cuenta de los pagos"
-select (`loadAccountOptions`; empty is the default account, named in its first option). Changing or
-removing an order (`canEditOrder`) is offered at any time but in a draft, as the API allows.
-Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
-units, undoing, returning or taking numbers off. Wherever the frontend lists numbers they are sorted
-(`sortIdentifiers`: part by part, digits as numbers) and joined into ranges (`formatIdentifiers`;
-`compactNumbers` for a bare list such as the numbers an error message or an entry of the list of
-payments names). The Telegram messages about numbers say them the same way
+numbers off. These actions are a line "Con lo marcado" (`markedActions`) that is there only while
+something is ticked and has only the buttons that would do something to what is ticked
+(`applicable`: "Marcar pagados" if some ticked number is unpaid, "Quitar pago" if some is paid,
+"Entregar" if some is not handed out, "Deshacer entrega" if some is, "Devolver" if some is handed
+out and unpaid, "Quitar números" if some is neither); each acts only on the ticked numbers it
+applies to, and the line is drawn again on each tick. The line "Pedido:" has "Pagar todo (importe)"
+and, while something can be handed out (`deliverable`), "Entregar todo", which asks in the same
+dialog who collects it. Elsewhere a count field (`quantityOf`) does the same as the ticks. Paying
+and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the
+non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped
+when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution
+have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in
+its first option). Changing or removing an order (`canEditOrder`) is offered at any time but in a
+draft, as the API allows. Everything goes through the single `perform(act, unit)`, confirming before
+handing over unpaid units, undoing, returning or taking numbers off. Wherever the frontend lists
+numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and joined into ranges
+(`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an error message or an
+entry of the list of payments names). The Telegram messages about numbers say them the same way
 (`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
 the same order and ranges; each message says what it changed — numbers added, taken off or newly
 assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers

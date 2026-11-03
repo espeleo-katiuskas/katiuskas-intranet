@@ -63,6 +63,12 @@ export async function initOrders(ctx) {
       ? returnableIds(u).length
       : Math.min(u.picked_up_quantity, u.quantity - u.paid_quantity);
   const payableCost = (u) => payable(u) * u.price;
+  // What can be handed out from a row, in units: the numbered ones not handed out yet (without a
+  // number nothing is), or what is left of a count.
+  const deliverable = (u) =>
+    isNumbered(u)
+      ? assigned(u).filter((i) => !deliveredIds(u).includes(i)).length
+      : u.quantity - u.picked_up_quantity;
   const finished = (u) => u.paid_quantity === u.quantity && u.picked_up_quantity === u.quantity;
 
   // ----- what has to be bought -----
@@ -188,6 +194,64 @@ export async function initOrders(ctx) {
     return `<div style="display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-height:14rem;overflow:auto;padding:.5rem;border:1px solid var(--border, #ddd);border-radius:6px">${items}</div>`;
   }
 
+  // Which of the ticked numbers an action is about: the ones it would really do something to (paying
+  // what is already paid, say, is nothing). The same list says which buttons to show.
+  const applicable = {
+    pay: (u, i) => !paidIds(u).includes(i),
+    unpay: (u, i) => paidIds(u).includes(i),
+    deliver: (u, i) => !deliveredIds(u).includes(i),
+    undeliver: (u, i) => deliveredIds(u).includes(i),
+    return: (u, i) => deliveredIds(u).includes(i) && !paidIds(u).includes(i),
+    remove: (u, i) => !paidIds(u).includes(i) && !deliveredIds(u).includes(i),
+  };
+  const tickedFor = (u, act) => [...tickedOf(u)].filter((i) => applicable[act](u, i));
+
+  // The line "Con lo marcado": only when something is ticked, and only the buttons that would do
+  // something to what is ticked.
+  function markedActions(u) {
+    if (tickedOf(u).size === 0) return '';
+    const buttons = [];
+    const can = (act) => tickedFor(u, act).length > 0;
+    if (canMarkPaid && u.price > 0) {
+      if (can('pay')) buttons.push(button('pay', u, 'Marcar pagados', 'btn-primary'));
+      if (can('unpay')) buttons.push(button('unpay', u, 'Quitar pago'));
+    }
+    if (canDeliver()) {
+      if (can('deliver')) buttons.push(button('deliver', u, 'Entregar', 'btn-primary'));
+      if (can('undeliver'))
+        buttons.push(
+          button(
+            'undeliver',
+            u,
+            'Deshacer entrega',
+            'btn-secondary',
+            'Vuelven a estar sin entregar, con su número',
+          ),
+        );
+      if (can('return'))
+        buttons.push(
+          button(
+            'return',
+            u,
+            'Devolver',
+            'btn-danger',
+            'Salen del pedido y su número queda libre (solo lo entregado y sin pagar)',
+          ),
+        );
+    }
+    if (can('remove'))
+      buttons.push(
+        button(
+          'remove',
+          u,
+          'Quitar números',
+          'btn-secondary',
+          'Quita el número a lo marcado (si no está pagado ni entregado): las unidades siguen en el pedido, sin número, y el número queda libre',
+        ),
+      );
+    return buttons.length ? `<span class="hint">Con lo marcado:</span> ${buttons.join(' ')}` : '';
+  }
+
   function selectors(u) {
     const pick = (kind, label) =>
       `<button type="button" class="link-button" data-pick="${kind}" data-unit="${u.id}">${label}</button>`;
@@ -215,15 +279,9 @@ export async function initOrders(ctx) {
       </div>`);
       }
       if (assigned(u).length) {
-        const pay =
-          canMarkPaid && u.price > 0
-            ? `${button('pay', u, 'Marcar pagados', 'btn-primary')} ${button('unpay', u, 'Quitar pago')}`
-            : '';
-        const delivery = canDeliver()
-          ? `${button('deliver', u, 'Entregar', 'btn-primary')} ${button('undeliver', u, 'Deshacer entrega', 'btn-secondary', 'Vuelven a estar sin entregar, con su número')} ${button('return', u, 'Devolver', 'btn-danger', 'Salen del pedido y su número queda libre (solo lo entregado y sin pagar)')}`
-          : '';
-        blocks.push(`<div>${selectors(u)}</div>${itemList(u)}
-        <div class="table-actions"><span class="hint">Con lo marcado:</span> ${pay} ${delivery} ${button('remove', u, 'Quitar números', 'btn-secondary', 'Quita el número a lo marcado (si no está pagado ni entregado): las unidades siguen en el pedido, sin número, y el número queda libre')}</div>`);
+        blocks.push(
+          `<div>${selectors(u)}</div>${itemList(u)}<div class="table-actions" data-marked-for="${u.id}">${markedActions(u)}</div>`,
+        );
       }
     } else {
       const count =
@@ -246,7 +304,9 @@ export async function initOrders(ctx) {
         order.push(button('delete', u, 'Quitar el pedido', 'btn-danger'));
     }
     if (canMarkPaid && u.price > 0 && payableCost(u) > 0)
-      order.push(button('payall', u, `Pagar todo lo posible (${formatCurrency(payableCost(u))})`));
+      order.push(button('payall', u, `Pagar todo (${formatCurrency(payableCost(u))})`));
+    if (canDeliver() && deliverable(u) > 0)
+      order.push(button('deliverall', u, 'Entregar todo', 'btn-secondary'));
     if (order.length)
       blocks.push(
         `<div class="table-actions"><span class="hint">Pedido:</span> ${order.join(' ')}</div>`,
@@ -600,7 +660,7 @@ export async function initOrders(ctx) {
   // changed something and the list has to be read again.
   async function perform(act, u) {
     const numbered = isNumbered(u);
-    const chosen = [...tickedOf(u)];
+    const chosen = applicable[act] ? tickedFor(u, act) : [...tickedOf(u)];
     const quantity = numbered ? null : quantityOf(u);
     if (quantity !== null && (!Number.isInteger(quantity) || quantity < 1)) {
       showError('Pon cuántas unidades (un número entero de 1 en adelante), o déjalo en blanco.');
@@ -719,6 +779,24 @@ export async function initOrders(ctx) {
         openModal(deliverDialog);
         return false;
       }
+      case 'deliverall': {
+        // Everything that can be handed out, with no ticking: the dialog asks who collects it.
+        const ids = numbered ? assigned(u).filter((i) => !deliveredIds(u).includes(i)) : [];
+        const unpaid = numbered
+          ? ids.some((i) => !paidIds(u).includes(i))
+          : u.paid_quantity < u.quantity;
+        delivering = {
+          u,
+          withWhich: numbered ? { identifiers: ids } : {},
+          unpaid: u.price > 0 && unpaid,
+        };
+        document.getElementById('deliver-hint').textContent =
+          `Todo lo que se pueda entregar de ${u.beneficiary_name}.`;
+        const owner = people.entries.find((e) => e.id === u.beneficiary_login);
+        deliverPerson.value = owner ? owner.label : '';
+        openModal(deliverDialog);
+        return false;
+      }
       case 'undeliver': {
         if (!confirm(`¿Deshacer la entrega de ${which}? Siguen en el pedido, sin entregar.`))
           return false;
@@ -775,6 +853,8 @@ export async function initOrders(ctx) {
   function updateCount(u) {
     const label = list.querySelector(`[data-count-for="${u.id}"]`);
     if (label) label.textContent = `${tickedOf(u).size} marcados`;
+    const actions = list.querySelector(`[data-marked-for="${u.id}"]`);
+    if (actions) actions.innerHTML = markedActions(u);
   }
 
   list.addEventListener('change', (event) => {
