@@ -1697,3 +1697,23 @@ h2[id^="section-"] {
 .order-detail td > div:empty {
   display: none;
 }
+
+/* "Marcar: todos · ninguno…" belongs to the list of numbers under it and to the order above it:
+   close to both, with the buttons that are links not making the line taller than its text. */
+.order-row[aria-expanded="true"] td {
+  padding-bottom: 6px;
+}
+
+/* The lines with buttons: the label ("Con lo marcado:", "Pedido:") and the buttons on the same
+   centre, instead of the label on top and the buttons stretched under it. */
+.order-detail .table-actions {
+  align-items: center;
+}
+
+.order-select-line button.link-button {
+  padding: 0 6px;
+}
+
+.order-detail td > .order-items {
+  margin-top: 6px;
+}

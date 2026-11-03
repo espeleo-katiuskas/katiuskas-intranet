@@ -191,7 +191,7 @@ export async function initOrders(ctx) {
       </label>`;
       })
       .join('');
-    return `<div style="display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-height:14rem;overflow:auto;padding:.5rem;border:1px solid var(--border, #ddd);border-radius:6px">${items}</div>`;
+    return `<div class="order-items" style="display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-height:14rem;overflow:auto;padding:.5rem;border:1px solid var(--border, #ddd);border-radius:6px">${items}</div>`;
   }
 
   // Which of the ticked numbers an action is about: the ones it would really do something to (paying
@@ -280,7 +280,7 @@ export async function initOrders(ctx) {
       }
       if (assigned(u).length) {
         blocks.push(
-          `<div>${selectors(u)}</div>${itemList(u)}<div class="table-actions" data-marked-for="${u.id}">${markedActions(u)}</div>`,
+          `<div class="order-select-line">${selectors(u)}</div>${itemList(u)}<div class="table-actions" data-marked-for="${u.id}">${markedActions(u)}</div>`,
         );
       }
     } else {
