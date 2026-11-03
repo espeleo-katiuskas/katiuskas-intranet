@@ -156,13 +156,12 @@ export async function initOrders(ctx) {
     const open = unfolded.has(u.id);
     const paid = u.price > 0 ? `${u.paid_quantity} de ${u.quantity}` : '—';
     const cost = u.price > 0 ? formatCurrency(unitCost(u)) : 'Gratis';
-    return `<tr class="order-row" data-order="${u.id}">
+    return `<tr class="order-row" data-order="${u.id}" tabindex="0" aria-expanded="${open}">
     <td>${escapeHtml(u.beneficiary_name)}</td>
     <td><strong>${escapeHtml(unitTitle(u))}</strong>${extra.length ? `<div class="hint">${escapeHtml(extra.join(' · '))}</div>` : ''}${numbers}</td>
     <td>${u.picked_up_quantity} de ${u.quantity}</td>
     <td>${paid}</td>
     <td>${cost}</td>
-    <td><button type="button" class="btn btn-secondary btn-small" data-toggle="${u.id}" aria-expanded="${open}">${open ? 'Ocultar' : 'Más información'}</button></td>
   </tr>`;
   }
 
@@ -258,7 +257,7 @@ export async function initOrders(ctx) {
     const last = u.picked_up_at
       ? `<div class="hint">Última entrega: ${escapeHtml(formatDateTime(u.picked_up_at))}${u.picked_up_by_login === u.beneficiary_login ? '' : `, a ${escapeHtml(nameOf(u.picked_up_by_login))}`} (apuntado por ${escapeHtml(nameOf(u.pickup_recorded_by_login))})</div>`
       : '';
-    return `<tr class="order-detail" data-detail="${u.id}"><td></td><td colspan="5">${last}${blocks.join('')}</td></tr>`;
+    return `<tr class="order-detail" data-detail="${u.id}"><td></td><td colspan="4">${last}${blocks.join('')}</td></tr>`;
   }
 
   function render() {
@@ -278,7 +277,7 @@ export async function initOrders(ctx) {
     }
     list.innerHTML = shown.length
       ? shown.map((u) => summaryRow(u) + (unfolded.has(u.id) ? detail(u) : '')).join('')
-      : `<tr><td colspan="6">${
+      : `<tr><td colspan="5">${
           units.length
             ? 'Nada con ese filtro.'
             : provisional
@@ -663,15 +662,24 @@ export async function initOrders(ctx) {
     if (qty) typed.set(`qty-${qty.dataset.qtyFor}`, qty.value);
   });
 
+  // Unfolds (or folds) an order's detail. The lines are drawn again, so the focus goes back to the
+  // one that was used, for the keyboard.
+  function toggleOrder(unitId, { focus = false } = {}) {
+    if (unfolded.has(unitId)) unfolded.delete(unitId);
+    else unfolded.add(unitId);
+    render();
+    if (focus) list.querySelector(`tr.order-row[data-order="${unitId}"]`)?.focus();
+  }
+
+  // The same for the keyboard: a focused line (tabindex="0") unfolds with Enter or Space.
+  list.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (!event.target.matches('tr.order-row')) return;
+    event.preventDefault();
+    toggleOrder(Number(event.target.dataset.order), { focus: true });
+  });
+
   list.addEventListener('click', async (event) => {
-    const toggle = event.target.closest('button[data-toggle]');
-    if (toggle) {
-      const unitId = Number(toggle.dataset.toggle);
-      if (unfolded.has(unitId)) unfolded.delete(unitId);
-      else unfolded.add(unitId);
-      render();
-      return;
-    }
     const picker = event.target.closest('button[data-pick]');
     if (picker) {
       pick(
@@ -681,7 +689,15 @@ export async function initOrders(ctx) {
       return;
     }
     const b = event.target.closest('button[data-act]');
-    if (!b) return;
+    if (!b) {
+      // Anywhere else on an order's line unfolds it, as a line of the ledger does — but not what is
+      // a control (the detail below is a row of its own).
+      const row = event.target.closest('tr.order-row');
+      if (row && !event.target.closest('a, button, input, select, label')) {
+        toggleOrder(Number(row.dataset.order));
+      }
+      return;
+    }
     const u = units.find((x) => x.id === Number(b.dataset.unit));
     b.disabled = true;
     try {

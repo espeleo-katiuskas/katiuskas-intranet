@@ -404,10 +404,10 @@ form) — all for admin and board — and "Borrar" (admin only: `DELETE` is admi
 the button is `data-roles="admin"`); a link "← Volver al reparto" goes back to the member's view.
 Under them, a row of links (`.section-index`) to its sections, which are what used to be three
 pages: **Pedidos**, **Pagos** (admin/board, and only when something has a price) and **Números**
-(only when some article has its numbers described; its link in the index says "Números"). All
-their headings are `<h2>`, and a section has none of its own where it would only repeat the link:
-the orders have "Resumen de lo pedido" and "Pedidos de los socios", and the numbering has one block
-per article titled "Números - <article>". The page hides the section and its link otherwise
+(only when some article has its numbers described; its link in the index says "Números"). All their
+headings are `<h2>`, and a section has none of its own where it would only repeat the link: the
+orders have "Resumen de lo pedido" and "Pedidos de los socios", and the numbering has one block per
+article titled "Números - <article>". The page hides the section and its link otherwise
 (`renderHeader`), also after an edit that changes it. Every control restricted by `data-roles` is
 *removed* from the page for anybody else, so each script reaches those through a null-safe lookup (a
 bare `getElementById(...).addEventListener` on one of them would throw before the rest of the page
@@ -420,8 +420,10 @@ in the orders (paying, handing out, numbering) reloads the payments and the numb
 **Pedidos** section is everything about the orders in one place: on top `GET .../order` (what has to
 be bought), below it a list with one line per order (searchable by member or number; the ones with
 everything paid and handed out are hidden unless asked for) and a summary: what, how many are handed
-out and paid, what it costs. "Más información" unfolds its detail (`detail`, kept in `unfolded`):
-for an article with numbers (`isNumbered`) how many are without one (with "Asignar los siguientes
+out and paid, what it costs. clicking the line (or Enter or Space on it, `toggleOrder`; the line is
+`tabindex="0"` with `aria-expanded`, styled like a line of the ledger of `/cuenta`: `.order-row`)
+unfolds its detail (`detail`, kept in `unfolded`, in a row of its own), with no button for it: for
+an article with numbers (`isNumbered`) how many are without one (with "Asignar los siguientes
 libres" or typed numbers) and the list of its numbered items, each with its paid / delivered state,
 to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid
 or take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,

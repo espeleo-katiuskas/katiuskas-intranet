@@ -501,25 +501,31 @@ th.sortable:focus-visible {
 }
 
 /* /cuenta's ledger: a row expands to show the transaction's other
-   accounts (account.js's toggleEntryDetail). Not .clickable-rows, whose
-   tr rules would also catch the expanded detail row itself. */
-.entry-row {
+   accounts (account.js's toggleEntryDetail); the orders of a distribution
+   do the same (distribution-orders.js's toggleOrder). Not .clickable-rows,
+   whose tr rules would also catch the expanded detail row itself. */
+.entry-row,
+.order-row {
   cursor: pointer;
 }
 
 .entry-row:hover,
-.entry-row:focus-visible {
+.entry-row:focus-visible,
+.order-row:hover,
+.order-row:focus-visible {
   background: var(--surface-muted);
 }
 
 /* An expanded row and its detail read as one block: same background, and
    no line between them (only the one below the detail remains). */
-.entry-row[aria-expanded="true"] td {
+.entry-row[aria-expanded="true"] td,
+.order-row[aria-expanded="true"] td {
   background: var(--surface-muted);
   border-bottom: none;
 }
 
-.entry-detail td {
+.entry-detail td,
+.order-detail td {
   background: var(--surface-muted);
   padding-top: 0;
   padding-bottom: 12px;
