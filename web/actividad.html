@@ -30,6 +30,8 @@
     <button id="reactivate-activity" type="button" class="btn btn-secondary btn-small" hidden>Reactivar actividad</button>
   </div>
 
+  <p class="hint" id="attendance" hidden></p>
+
   <dialog id="edit-activity-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Editar</h3>
@@ -100,7 +102,6 @@
   </div>
   <p class="hint">Personas de fuera del club que van a la actividad. Las invita alguien de los apuntados.</p>
   <div class="detail-list" id="guests-list"></div>
-  <p class="hint" id="attendance" hidden></p>
   <div class="role-add-row" id="add-guest-row" hidden>
     <input type="text" id="guest-name" autocomplete="off" maxlength="100" placeholder="Nombre del invitado…" aria-label="Nombre del invitado">
     <input type="text" id="guest-inviter" list="guest-inviter-options" autocomplete="off" placeholder="Quién lo invita…" aria-label="Quién lo invita" hidden>

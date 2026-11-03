@@ -92,13 +92,14 @@ whoever signed that person up; never on the viewer's own row, which is "Darme de
 
 **Guests on `/actividad`.** Under the participants, an "Invitados" section lists the people from
 outside the club who go (`GET /activities/{id}/guests`), each with a badge "Invitado de <name>" (who
-of the club invites them) and, under the list, a line with the total: people of the club signed up,
-guests, and the sum (`#attendance`, `renderAttendance`). Whoever is signed up sees a row to add
-one with just a name; the organizer, admin and board see it too, with a second field to choose
-which of the people signed up invites them (the datalist `#guest-inviter-options`, filled from the
-participants). The "Quitar" button of a guest is for whoever invited them, the organizer, admin
-and board (`renderGuestRow`, as the API decides). A person who still has guests cannot leave or be
-removed from the activity: the error text says to remove them first (`has_guests`).
+of the club invites them). A line with the total (people of the club signed up, guests, and the sum:
+`#attendance`, `renderAttendance`) sits at the top, after the description and the buttons and before
+the participants. Whoever is signed up sees a row to add one with just a name; the organizer, admin
+and board see it too, with a second field to choose which of the people signed up invites them (the
+datalist `#guest-inviter-options`, filled from the participants). The "Quitar" button of a guest is
+for whoever invited them, the organizer, admin and board (`renderGuestRow`, as the API decides). A
+person who still has guests cannot leave or be removed from the activity: the error text says to
+remove them first (`has_guests`).
 
 **The limit of people.** "Nueva actividad" (`/actividades`) and "Editar actividad" (`/actividad`)
 have an optional "Máximo de apuntados" (`max_participants`): blank is no limit, and the edit form,
