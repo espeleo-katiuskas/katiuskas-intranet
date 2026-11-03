@@ -129,22 +129,39 @@ function onClick(elementId, handler) {
   document.getElementById(elementId)?.addEventListener('click', handler);
 }
 
-onClick('step-back', () => {
+// The orders that going back to a draft, or deleting the distribution, would really lose. The API
+// deletes every order, but the own order of each member in a distribution for all members is nothing
+// but a placeholder (made again, empty, when it leaves the draft) if nobody has chosen anything on
+// it: nothing is lost with those.
+async function ordersWithSomethingToLose() {
+  const units = await apiFetch(`${base}/units`);
+  const hasChoices = (u) => Object.keys(u.choices ?? {}).length > 0;
+  const automatic = (u) => !u.registered_by_login && !u.is_extra && u.article_id == null;
+  return units.filter((u) => !automatic(u) || hasChoices(u)).length;
+}
+
+onClick('step-back', async () => {
   const { previous } = neighbours();
-  // Back to a draft starts it over: the API deletes every order, with what was chosen on it, so say
-  // so when there is any.
+  // Back to a draft starts it over, so say what is lost, if anything is.
   if (previous === 'draft' && distribution.unit_count > 0) {
-    const count = distribution.unit_count === 1 ? '1 pedido' : `${distribution.unit_count} pedidos`;
-    const again =
-      distribution.audience === 'all_members'
-        ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
-        : '';
-    if (
-      !confirm(
-        `Al volver a borrador se borrarán todos los pedidos (${count}), con lo que hayan elegido los socios, y no se podrán recuperar.${again} ¿Volver a borrador?`,
-      )
-    )
+    let lost;
+    try {
+      lost = await ordersWithSomethingToLose();
+    } catch (err) {
+      fail(err);
       return;
+    }
+    if (lost > 0) {
+      const what =
+        lost === 1
+          ? 'se borrará 1 pedido, con lo que haya elegido el socio, y no se podrá recuperar.'
+          : `se borrarán ${lost} pedidos, con lo que hayan elegido los socios, y no se podrán recuperar.`;
+      const again =
+        distribution.audience === 'all_members'
+          ? ' Al abrirlo otra vez se volverán a crear los de los socios, vacíos.'
+          : '';
+      if (!confirm(`Al volver a borrador ${what}${again} ¿Volver a borrador?`)) return;
+    }
   }
   setStatus(previous);
 });
@@ -222,15 +239,23 @@ editForm.addEventListener('submit', async (event) => {
 });
 
 onClick('delete-distribution', async () => {
-  // Say what is lost in plain words: each "pedido" is what one member asked for or has coming — in a
-  // distribution for all members that includes everybody's own, which nobody asked for — and what
-  // they chose goes with it.
-  const units = distribution.unit_count;
+  // Say what is lost in plain words: each "pedido" is what one member asked for or has coming, and
+  // what they chose goes with it — but not the placeholders nobody has chosen anything on.
   let lost = '';
-  if (units > 0) {
-    const count = units === 1 ? '1 pedido' : `${units} pedidos`;
-    const verb = units === 1 ? 'se perderá' : 'se perderán';
-    lost = ` Tiene ${count}, con lo que hayan elegido los socios, y ${verb} con él.`;
+  if (distribution.unit_count > 0) {
+    let units;
+    try {
+      units = await ordersWithSomethingToLose();
+    } catch (err) {
+      fail(err);
+      return;
+    }
+    if (units > 0) {
+      lost =
+        units === 1
+          ? ' Tiene 1 pedido, con lo que haya elegido el socio, y se perderá con él.'
+          : ` Tiene ${units} pedidos, con lo que hayan elegido los socios, y se perderán con él.`;
+    }
   }
   if (!confirm(`¿Borrar el reparto «${distribution.name}»?${lost} No se puede deshacer.`)) return;
   try {
