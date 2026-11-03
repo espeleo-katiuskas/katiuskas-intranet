@@ -242,6 +242,26 @@
     </form>
   </dialog>
 
+  <dialog id="numbers-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="nd-title">Asignar números</h3>
+    <p class="hint" id="nd-hint"></p>
+    <form id="numbers-form">
+      <div class="field">
+        <label for="nd-filter">Buscar <span class="optional">(un trozo del número)</span></label>
+        <input id="nd-filter" type="search" autocomplete="off">
+      </div>
+      <p class="hint">Pulsa un número para marcarlo o desmarcarlo; con Mayús, marcas desde el último hasta este.</p>
+      <div id="nd-chips" class="number-picker"></div>
+      <p id="nd-count" class="hint" aria-live="polite"></p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary" id="nd-submit">Asignar</button>
+        <button type="button" class="btn btn-secondary" id="nd-clear">Quitar las marcas</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="edit-unit-dialog" class="panel modal">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3 id="edit-unit-title">Cambiar el pedido</h3>

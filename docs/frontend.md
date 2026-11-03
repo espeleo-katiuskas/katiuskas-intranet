@@ -431,38 +431,44 @@ many are handed out and paid, what it costs. clicking the line (or Enter or Spac
 `toggleOrder`; the line is `tabindex="0"` with `aria-expanded`, styled like a line of the ledger of
 `/cuenta`: `.order-row`) unfolds its detail (`detail`, kept in `unfolded`, in a row of its own),
 with no button for it: for an article with numbers (`isNumbered`) how many are without one (with
-"Asignar los siguientes libres" or typed numbers) and the list of its numbered items, each with its
-paid / delivered state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state,
-`pick`) and act on — mark paid or take the payment off (admin/board), hand out to the person asked
-in a dialog (`deliver-dialog`, "Entregado a", prefilled with the member the order is for; only
-members are offered), undo a delivery, return, take the numbers off; elsewhere a count field
-(`quantityOf`) does the same. Paying and taking a payment off first ask, in `pay-dialog`, for the
-asset account (`withAccount`: the non-hidden `asset` ones of `GET /accounts`, the last chosen
-remembered in `localStorage`; skipped when the order costs nothing) and send it as `account_id`. The
-create/edit dialogs of a distribution have a "Cuenta de los pagos" select (`loadAccountOptions`;
-empty is the default account, named in its first option). Changing or removing an order
-(`canEditOrder`) is offered at any time but in a draft, as the API allows. Everything goes through
-the single `perform(act, unit)`, confirming before handing over unpaid units, undoing, returning or
-taking numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by
-part, digits as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare
-list such as the numbers an error message or an entry of the list of payments names). The Telegram
-messages about numbers say them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a
-Go copy of those two that must keep giving the same order and ranges; each message says what it
-changed — numbers added, taken off or newly assigned — not what was typed). What is unfolded, ticked
-and typed survives redrawing. Both pickers ("A nombre de", "Entregado a") offer only members, never
-everybody on file: `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people`
-— `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`, also
-today's members — and only the names shown for who did what come from `/users/directory`. The API
-enforces the same (`not_eligible`, `invalid_collector`), the pickers just don't offer what would be
-refused. `api.js`'s `apiFetch` puts the API's error `code` on the thrown `Error`, and sets its
-message to the Spanish text for that code from `js/errorTexts.js` (the one catalog of every code the
-API can answer with; a function for the few whose message carries something to show, such as the
-names of the accounts a budget is missing, or the two totals that do not match), falling back to the
-API's own text for a code it does not know. `apiFetchForm` and `apiFetchBlob` do the same, and a
-request that never reaches the server says so in Spanish instead of the browser's "Failed to fetch".
-A page that wants something more specific for a code still reads `err.code`
-(`distributionCommon.js`'s `apiErrorText`, `accountTree.js`'s `accountingErrorText`). A new error
-code in the API needs its entry in that catalog.
+"Asignar los siguientes libres" and, for an article whose numbers are described, "Elegir números…",
+which opens `numbers-dialog`: a button for each free number, in a row by the first part of the
+number when it has several (a series and its fractions), pressed to mark and unmark, with Shift to
+mark from the last one pressed to this one, a filter box, and never more marked than the order is
+missing — the rest are disabled — and the free numbers read again if the API refuses one because
+somebody took it meanwhile; for an article with free-text numbers, a field to type them) and the
+list of its numbered items, each with its paid / delivered state, to tick (`ticked`; "todos / sin
+pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or take the payment off
+(admin/board), hand out to the person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled
+with the member the order is for; only members are offered), undo a delivery, return, take the
+numbers off; elsewhere a count field (`quantityOf`) does the same. Paying and taking a payment off
+first ask, in `pay-dialog`, for the asset account (`withAccount`: the non-hidden `asset` ones of
+`GET /accounts`, the last chosen remembered in `localStorage`; skipped when the order costs nothing)
+and send it as `account_id`. The create/edit dialogs of a distribution have a "Cuenta de los pagos"
+select (`loadAccountOptions`; empty is the default account, named in its first option). Changing or
+removing an order (`canEditOrder`) is offered at any time but in a draft, as the API allows.
+Everything goes through the single `perform(act, unit)`, confirming before handing over unpaid
+units, undoing, returning or taking numbers off. Wherever the frontend lists numbers they are sorted
+(`sortIdentifiers`: part by part, digits as numbers) and joined into ranges (`formatIdentifiers`;
+`compactNumbers` for a bare list such as the numbers an error message or an entry of the list of
+payments names). The Telegram messages about numbers say them the same way
+(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
+the same order and ranges; each message says what it changed — numbers added, taken off or newly
+assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers
+("A nombre de", "Entregado a") offer only members, never everybody on file: `loadPeople(id,
+purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
+cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
+shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
+`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` puts
+the API's error `code` on the thrown `Error`, and sets its message to the Spanish text for that code
+from `js/errorTexts.js` (the one catalog of every code the API can answer with; a function for the
+few whose message carries something to show, such as the names of the accounts a budget is missing,
+or the two totals that do not match), falling back to the API's own text for a code it does not
+know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that never reaches the server
+says so in Spanish instead of the browser's "Failed to fetch". A page that wants something more
+specific for a code still reads `err.code` (`distributionCommon.js`'s `apiErrorText`,
+`accountTree.js`'s `accountingErrorText`). A new error code in the API needs its entry in that
+catalog.
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,

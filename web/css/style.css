@@ -1637,3 +1637,52 @@ h2[id^="section-"] {
 .panel-actions + .section-index {
   margin-top: 16px;
 }
+
+/* The dialog to pick the numbers of an order (distribution-orders.js): a button for each free number,
+   in rows by the first part of the number when it has several (a series, its fractions). */
+.number-picker {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.number-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.number-group-label {
+  min-width: 6rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.number-chip {
+  min-width: 2.6rem;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.number-chip:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.number-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.number-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

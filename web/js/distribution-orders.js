@@ -211,9 +211,7 @@ export async function initOrders(ctx) {
       const field = typed.get(`add-${u.id}`) ?? '';
       if (missing > 0) {
         blocks.push(`<div class="table-actions"><strong>Sin número: ${missing}.</strong>
-        ${isDescribed(u) ? button('next', u, `Asignar ${missing === 1 ? 'el siguiente libre' : `los ${missing} siguientes libres`}`, 'btn-primary') : ''}
-        <input type="text" size="26" data-add-for="${u.id}" value="${escapeHtml(field)}" placeholder="Números concretos${isDescribed(u) ? ' (0001-0010, 0015)' : ''}" aria-label="Números concretos">
-        ${button('add', u, 'Asignar estos')}
+        ${isDescribed(u) ? `${button('next', u, `Asignar ${missing === 1 ? 'el siguiente libre' : `los ${missing} siguientes libres`}`, 'btn-primary')} ${button('choose', u, 'Elegir números…')}` : `<input type="text" size="26" data-add-for="${u.id}" value="${escapeHtml(field)}" placeholder="Números concretos" aria-label="Números concretos"> ${button('add', u, 'Asignar estos')}`}
       </div>`);
       }
       if (assigned(u).length) {
@@ -356,6 +354,135 @@ export async function initOrders(ctx) {
       await load();
     } catch (err) {
       fail(err);
+    }
+  });
+
+  // ----- numbering: choosing the free numbers with the mouse -----
+  // For an article whose numbers are described, the free ones are buttons to press; the order can take
+  // no more than the numbers it is missing, and a range is marked with Shift.
+  const numbersDialog = document.getElementById('numbers-dialog');
+  const numbersForm = document.getElementById('numbers-form');
+  const chipsBox = document.getElementById('nd-chips');
+  const numbersFilter = document.getElementById('nd-filter');
+  initModal(numbersDialog, numbersForm);
+  // The order being numbered, the free numbers (in the order the API gives them), how many it is
+  // missing, the ones marked and the last one pressed (where a range starts).
+  let numbering = null;
+
+  function renderNumberChips() {
+    const { free, fields, marked } = numbering;
+    const needle = numbersFilter.value.trim().toLowerCase();
+    const shown = free.filter((n) => !needle || n.toLowerCase().includes(needle));
+    numbering.shown = shown;
+    const full = marked.size >= numbering.missing;
+    const chip = (identifier, label) =>
+      `<button type="button" class="number-chip" data-number="${escapeHtml(identifier)}" aria-pressed="${marked.has(identifier)}"${full && !marked.has(identifier) ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
+    if (shown.length === 0) {
+      chipsBox.innerHTML = '<p class="hint">No hay ningún número libre con ese filtro.</p>';
+    } else if (fields.length > 1) {
+      // A row for each first part (a series), with the rest of the number on its buttons.
+      const groups = new Map();
+      for (const identifier of shown) {
+        const [first, ...rest] = identifier.split('/');
+        if (!groups.has(first)) groups.set(first, []);
+        groups.get(first).push([identifier, rest.join('/')]);
+      }
+      chipsBox.innerHTML = [...groups]
+        .map(
+          ([first, items]) =>
+            `<div class="number-group"><span class="number-group-label">${escapeHtml(fields[0])} ${escapeHtml(first)}</span>${items.map(([identifier, rest]) => chip(identifier, rest)).join('')}</div>`,
+        )
+        .join('');
+    } else {
+      chipsBox.innerHTML = `<div class="number-group">${shown.map((identifier) => chip(identifier, identifier)).join('')}</div>`;
+    }
+    document.getElementById('nd-count').textContent =
+      `${marked.size} de ${numbering.missing} marcados${full ? ': ya no se pueden marcar más' : ''}.` +
+      (numbering.free.length > shown.length
+        ? ` Se ven ${shown.length} de ${numbering.free.length} libres.`
+        : '');
+    document.getElementById('nd-submit').disabled = marked.size === 0;
+  }
+
+  // The free numbers of the article, as the API says now.
+  async function freeNumbersOf(article) {
+    const numbers = await apiFetch(`${base}/articles/${article.id}/numbers`);
+    return {
+      fields: numbers.fields.map((f) => f.name),
+      free: numbers.items.filter((item) => !item.beneficiary_login).map((item) => item.identifier),
+    };
+  }
+
+  async function openNumbersDialog(u) {
+    const article = articleOf(u);
+    const missing = u.quantity - assigned(u).length;
+    numbering = {
+      u,
+      article,
+      missing,
+      ...(await freeNumbersOf(article)),
+      marked: new Set(),
+      last: null,
+      shown: [],
+    };
+    document.getElementById('nd-hint').textContent =
+      `${u.beneficiary_name}: faltan ${missing === 1 ? 'un número' : `${missing} números`} de ${article.name}. Marca los que quieras darle (como máximo ${missing}).`;
+    numbersFilter.value = '';
+    renderNumberChips();
+    openModal(numbersDialog);
+  }
+
+  chipsBox.addEventListener('click', (event) => {
+    const chip = event.target.closest('button[data-number]');
+    if (!chip || !numbering) return;
+    const { marked, shown } = numbering;
+    const identifier = chip.dataset.number;
+    if (event.shiftKey && numbering.last && shown.includes(numbering.last)) {
+      // From the last one pressed to this: marked (not unmarked), until the order has all it needs.
+      const a = shown.indexOf(numbering.last);
+      const b = shown.indexOf(identifier);
+      for (const n of shown.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+        if (marked.size >= numbering.missing) break;
+        marked.add(n);
+      }
+    } else if (marked.has(identifier)) {
+      marked.delete(identifier);
+    } else if (marked.size < numbering.missing) {
+      marked.add(identifier);
+    }
+    numbering.last = identifier;
+    renderNumberChips();
+  });
+  numbersFilter.addEventListener('input', () => numbering && renderNumberChips());
+  document.getElementById('nd-clear').addEventListener('click', () => {
+    numbering.marked.clear();
+    numbering.last = null;
+    renderNumberChips();
+  });
+  numbersForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!numbering || numbering.marked.size === 0) return;
+    const submit = document.getElementById('nd-submit');
+    submit.disabled = true;
+    try {
+      await apiFetch(`${base}/units/${numbering.u.id}/identifiers`, {
+        method: 'POST',
+        body: JSON.stringify({ identifiers: [...numbering.marked] }),
+      });
+      numbersDialog.close();
+      showFeedback('Números asignados.');
+      await load();
+    } catch (err) {
+      fail(err);
+      // Somebody may have taken one meanwhile: what is free now, keeping what is still free of what
+      // was marked.
+      try {
+        Object.assign(numbering, await freeNumbersOf(numbering.article));
+        numbering.marked = new Set([...numbering.marked].filter((n) => numbering.free.includes(n)));
+        renderNumberChips();
+      } catch {
+        // The error above says enough.
+      }
     }
   });
 
@@ -517,6 +644,10 @@ export async function initOrders(ctx) {
         showFeedback('Números asignados.');
         return true;
       }
+      case 'choose':
+        // A dialog does it: nothing to reload until it is accepted.
+        await openNumbersDialog(u);
+        return false;
       case 'next':
         await apiFetch(`${base}/units/${u.id}/identifiers/assign`, { method: 'POST' });
         showFeedback('Números asignados.');
