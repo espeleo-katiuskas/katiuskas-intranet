@@ -13,6 +13,13 @@ import (
 
 var (
 	ErrNotFound = errors.New("activity not found")
+	// ErrActivityFull means adding the person (or the guest) would go past the activity's limit of
+	// people, the members signed up and the guests together.
+	ErrActivityFull = errors.New("the activity is full: nobody else can be added")
+	// ErrMaxBelowAttendance means the new limit is lower than the people already going.
+	ErrMaxBelowAttendance = errors.New("the limit cannot be lower than the people already going (members and guests)")
+	// ErrInvalidMaxParticipants means the limit is not a number of at least 1.
+	ErrInvalidMaxParticipants = errors.New("max_participants must be at least 1")
 	// ErrActivityInUse means the activity cannot be deleted because something is attached to it:
 	// participants, resources or material movements.
 	ErrActivityInUse = errors.New("the activity still has participants, resources or material movements: remove them first")
@@ -44,7 +51,7 @@ const uniqueViolationCode = "23505"
 // joined in rather than resolved one at a time.
 const activitySelect = `
 	a.id, a.title, a.type, a.start_date, a.end_date, a.description,
-	a.cancelled, a.leader_id, ul.login, a.visibility
+	a.cancelled, a.leader_id, ul.login, a.visibility, a.max_participants
 	FROM activities a
 	JOIN users ul ON ul.id = a.leader_id`
 
@@ -61,7 +68,7 @@ func sortDirection(ascending bool) string {
 
 func scanActivity(row interface{ Scan(dest ...any) error }, a *Activity) error {
 	return row.Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description,
-		&a.Cancelled, &a.LeaderID, &a.LeaderLogin, &a.Visibility)
+		&a.Cancelled, &a.LeaderID, &a.LeaderLogin, &a.Visibility, &a.MaxParticipants)
 }
 
 type Repository struct {
@@ -87,11 +94,11 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 
 	var a Activity
 	err = tx.QueryRow(ctx, `
-		INSERT INTO activities (title, type, start_date, end_date, description, leader_id, visibility)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
-		RETURNING id, title, type, start_date, end_date, description, cancelled, leader_id, visibility
-	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Description, in.LeaderID, in.Visibility,
-	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Cancelled, &a.LeaderID, &a.Visibility)
+		INSERT INTO activities (title, type, start_date, end_date, description, leader_id, visibility, max_participants)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING id, title, type, start_date, end_date, description, cancelled, leader_id, visibility, max_participants
+	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Description, in.LeaderID, in.Visibility, in.MaxParticipants,
+	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Cancelled, &a.LeaderID, &a.Visibility, &a.MaxParticipants)
 	if err != nil {
 		return Activity{}, err
 	}
@@ -109,7 +116,47 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 		}
 	}
 
+	if err := checkRoom(ctx, tx, a.ID, a.MaxParticipants); err != nil {
+		return Activity{}, err
+	}
 	return a, tx.Commit(ctx)
+}
+
+// attendance is how many people go to an activity: the members signed up and the guests.
+func attendance(ctx context.Context, tx pgx.Tx, activityID int64) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM activity_participants WHERE activity_id = $1)
+		     + (SELECT count(*) FROM activity_guests WHERE activity_id = $1)
+	`, activityID).Scan(&n)
+	return n, err
+}
+
+// checkRoom says ErrActivityFull when the people going (after what the caller has just added in
+// this transaction) are more than the limit, if there is one. The caller holds the activity's row
+// locked, so two people being added at once cannot both take the last place.
+func checkRoom(ctx context.Context, tx pgx.Tx, activityID int64, max *int) error {
+	if max == nil {
+		return nil
+	}
+	n, err := attendance(ctx, tx, activityID)
+	if err != nil {
+		return err
+	}
+	if n > *max {
+		return ErrActivityFull
+	}
+	return nil
+}
+
+// lockActivity locks the activity's row for the rest of the transaction and answers with its limit.
+func lockActivity(ctx context.Context, tx pgx.Tx, activityID int64) (*int, error) {
+	var max *int
+	err := tx.QueryRow(ctx, `SELECT max_participants FROM activities WHERE id = $1 FOR UPDATE`, activityID).Scan(&max)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return max, err
 }
 
 func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool) ([]Activity, error) {
@@ -237,24 +284,49 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 	if in.LeaderID != nil {
 		a.LeaderID = *in.LeaderID
 	}
+	if in.SetMaxParticipants {
+		if in.MaxParticipants != nil && *in.MaxParticipants < 1 {
+			return a, ErrInvalidMaxParticipants
+		}
+		a.MaxParticipants = in.MaxParticipants
+	}
 	// Checked on the merged values: either date can be sent alone.
 	if a.EndDate.Before(a.StartDate) {
 		return a, ErrInvalidDateRange
 	}
-	_, err = r.pool.Exec(ctx, `
-		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, cancelled=$6, visibility=$7, leader_id=$8 WHERE id=$9
-	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Cancelled, a.Visibility, a.LeaderID, id)
+	// In a transaction with the row locked, so that nobody is added meanwhile and gets past a new,
+	// lower limit.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return a, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := lockActivity(ctx, tx, id); err != nil {
+		return a, err
+	}
+	if in.SetMaxParticipants && a.MaxParticipants != nil {
+		n, err := attendance(ctx, tx, id)
+		if err != nil {
+			return a, err
+		}
+		if n > *a.MaxParticipants {
+			return a, ErrMaxBelowAttendance
+		}
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, cancelled=$6, visibility=$7, leader_id=$8, max_participants=$9 WHERE id=$10
+	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Cancelled, a.Visibility, a.LeaderID, a.MaxParticipants, id)
 	if err != nil {
 		return a, err
 	}
 	if in.LeaderID != nil {
 		// a.LeaderLogin still holds the *previous* leader's login — it
 		// came from GetByID's JOIN before leader_id changed above.
-		if err := r.pool.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, a.LeaderID).Scan(&a.LeaderLogin); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, a.LeaderID).Scan(&a.LeaderLogin); err != nil {
 			return a, err
 		}
 	}
-	return a, nil
+	return a, tx.Commit(ctx)
 }
 
 // Delete removes an activity that has nothing attached: nothing cascades, so an activity with
@@ -294,12 +366,28 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 
 // AddParticipant signs a person up, recording who did it (addedBy: the person themselves, or somebody
 // else) and when. Signing up somebody who is already in changes nothing, the first record stays.
+// With a limit of people on the activity, it refuses (ErrActivityFull) to go past it, counting the
+// guests too.
 func (r *Repository) AddParticipant(ctx context.Context, activityID, userID, addedBy int64) error {
-	_, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	max, err := lockActivity(ctx, tx, activityID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1,$2,$3)
 		ON CONFLICT (activity_id, user_id) DO NOTHING
-	`, activityID, userID, addedBy)
-	return err
+	`, activityID, userID, addedBy); err != nil {
+		return err
+	}
+	if err := checkRoom(ctx, tx, activityID, max); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // AddedBy is who signed the participant up, and false if they are not signed up.

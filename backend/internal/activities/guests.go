@@ -93,6 +93,10 @@ func (r *Repository) AddGuest(ctx context.Context, activityID int64, name string
 		return Guest{}, err
 	}
 	defer tx.Rollback(ctx)
+	max, err := lockActivity(ctx, tx, activityID)
+	if err != nil {
+		return Guest{}, err
+	}
 	var id int64
 	err = tx.QueryRow(ctx, `
 		INSERT INTO activity_guests (activity_id, name, invited_by, added_by) VALUES ($1, $2, $3, $4) RETURNING id
@@ -107,6 +111,9 @@ func (r *Repository) AddGuest(ctx context.Context, activityID int64, name string
 		}
 	}
 	if err != nil {
+		return Guest{}, err
+	}
+	if err := checkRoom(ctx, tx, activityID, max); err != nil {
 		return Guest{}, err
 	}
 	var g Guest
@@ -234,6 +241,9 @@ func (h *Handler) addGuest(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, ErrDuplicateGuest):
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_guest", err.Error())
+		return
+	case errors.Is(err, ErrActivityFull):
+		httpapi.WriteError(w, http.StatusConflict, "activity_full", err.Error())
 		return
 	case err != nil:
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not add guest")

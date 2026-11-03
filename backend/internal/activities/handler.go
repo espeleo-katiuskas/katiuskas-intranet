@@ -61,7 +61,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // nothing this endpoint can't actually touch shows up as a spurious
 // "change".
 var auditableFields = []string{
-	"Title", "Type", "StartDate", "EndDate", "Description", "Visibility", "LeaderLogin",
+	"Title", "Type", "StartDate", "EndDate", "Description", "Visibility", "MaxParticipants", "LeaderLogin",
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -135,6 +135,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Visibility        Visibility `json:"visibility"`
 		ParticipantLogins []string   `json:"participant_logins"`
 		LeaderLogin       *string    `json:"leader_login"`
+		MaxParticipants   *int       `json:"max_participants"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -184,8 +185,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	a, err := h.service.Create(r.Context(), CreateInput{
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Description: body.Description, LeaderID: leaderID, Visibility: body.Visibility,
-		ParticipantUserIDs: participantIDs, CreatedBy: current.ID,
+		ParticipantUserIDs: participantIDs, CreatedBy: current.ID, MaxParticipants: body.MaxParticipants,
 	})
+	if errors.Is(err, ErrInvalidMaxParticipants) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_max_participants", err.Error())
+		return
+	}
+	if errors.Is(err, ErrActivityFull) {
+		httpapi.WriteError(w, http.StatusConflict, "activity_full", err.Error())
+		return
+	}
 	if errors.Is(err, ErrInvalidType) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
 		return
@@ -270,6 +279,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Cancelled   *bool       `json:"cancelled"`
 		Visibility  *Visibility `json:"visibility"`
 		LeaderLogin *string     `json:"leader_login"`
+		// Absent leaves the limit as it is, null takes it off, a number sets it.
+		MaxParticipants json.RawMessage `json:"max_participants"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -295,6 +306,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		}
 		in.LeaderID = &leaderID
 	}
+	if body.MaxParticipants != nil {
+		in.SetMaxParticipants = true
+		if string(body.MaxParticipants) != "null" {
+			var n int
+			if err := json.Unmarshal(body.MaxParticipants, &n); err != nil {
+				httpapi.WriteError(w, http.StatusBadRequest, "invalid_max_participants", "max_participants must be a whole number, or null for no limit")
+				return
+			}
+			in.MaxParticipants = &n
+		}
+	}
 	if body.StartDate != nil {
 		d, err := time.Parse("2006-01-02", *body.StartDate)
 		if err != nil {
@@ -319,6 +341,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	before, beforeErr := h.service.Get(r.Context(), id)
 
 	a, err := h.service.Update(r.Context(), id, in)
+	if errors.Is(err, ErrInvalidMaxParticipants) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_max_participants", err.Error())
+		return
+	}
+	if errors.Is(err, ErrMaxBelowAttendance) {
+		httpapi.WriteError(w, http.StatusConflict, "max_below_attendance", err.Error())
+		return
+	}
 	if errors.Is(err, ErrInvalidType) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", err.Error())
 		return
@@ -486,6 +516,10 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrNotMember) {
 		httpapi.WriteError(w, http.StatusConflict, "not_a_member", err.Error())
+		return
+	}
+	if errors.Is(err, ErrActivityFull) {
+		httpapi.WriteError(w, http.StatusConflict, "activity_full", err.Error())
 		return
 	}
 	if err != nil {

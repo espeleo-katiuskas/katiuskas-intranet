@@ -524,10 +524,14 @@ it.
 | `cancelled` | boolean | no | false |
 | `leader_id` | bigint | no |  |
 | `visibility` | activity_visibility | no | 'public' |
+| `max_participants` | integer | yes |  |
 | `created_at` | timestamptz | no | now() |
 
 Notes on the columns:
 
+- `max_participants`: an optional limit on how many people go, the members signed up and the guests
+  together (`> 0`, constraint `activities_max_participants_positive`); it is checked in Go, under a
+  lock of the activity's row, when someone is signed up or a guest is added (409 `activity_full`).
 - `visibility`: `private` limits who can add or remove participants: only the organizer, admin or
   board.
 
@@ -1381,3 +1385,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00049_foreign_keys_restrict.sql`: every foreign key becomes `ON DELETE RESTRICT` (some were
   `CASCADE`, two `SET NULL` and the rest the default)
 - `00050_activity_guests.sql`: `activity_guests`
+- `00051_activities_max_participants.sql`: `activities.max_participants`

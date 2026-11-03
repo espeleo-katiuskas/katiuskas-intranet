@@ -61,6 +61,9 @@ type Activity struct {
 	// one, only the organizer, admin, board or somebody who is already
 	// signed up — see Handler.join.
 	Visibility Visibility `json:"visibility"`
+	// MaxParticipants is an optional limit on how many people go: the members signed up and the
+	// guests together. Nobody can be added past it (ErrActivityFull).
+	MaxParticipants *int `json:"max_participants,omitempty"`
 }
 
 type CreateInput struct {
@@ -71,6 +74,8 @@ type CreateInput struct {
 	Description *string
 	LeaderID    int64
 	Visibility  Visibility
+	// MaxParticipants limits those who can go, if given (at least 1).
+	MaxParticipants *int
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
@@ -86,6 +91,10 @@ type UpdateInput struct {
 	Description *string
 	Cancelled   *bool
 	Visibility  *Visibility
+	// SetMaxParticipants says MaxParticipants is being changed: to its value, or, if that is nil, to
+	// no limit. It cannot go below the people already going (ErrMaxBelowAttendance).
+	SetMaxParticipants bool
+	MaxParticipants    *int
 	// LeaderID reassigns the organizer — admin/board only, see
 	// Handler.update.
 	LeaderID *int64

@@ -50,6 +50,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	if !in.Visibility.Valid() {
 		return Activity{}, ErrInvalidVisibility
 	}
+	if in.MaxParticipants != nil && *in.MaxParticipants < 1 {
+		return Activity{}, ErrInvalidMaxParticipants
+	}
 	if err := s.checkMembers(ctx, in.ParticipantUserIDs); err != nil {
 		return Activity{}, err
 	}

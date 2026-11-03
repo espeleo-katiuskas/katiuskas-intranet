@@ -1459,14 +1459,15 @@ paths:
             (end_date earlier than start_date), invalid_type or
             invalid_visibility (not one of the enum's values), or
             unknown_participant (one of the given participant_logins
-            doesn't exist).
+            doesn't exist), or invalid_max_participants (below 1).
         "403":
           description: forbidden — leader_login was given by someone who isn't admin/board.
         "404":
           description: not_found — leader_login doesn't belong to anyone.
         "409":
           description: >
-            not_a_member — one of the given participant_logins isn't a member now.
+            not_a_member — one of the given participant_logins isn't a member now;
+            or activity_full — there are more participant_logins than max_participants.
 
   /activities/{id}:
     get:
@@ -1504,13 +1505,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Activity" }
-        "400": { description: "invalid_id, invalid_body, invalid_date (start_date/end_date given but not YYYY-MM-DD), invalid_date_range (the resulting end_date would be earlier than start_date, whichever of the two was sent), or invalid_type, invalid_status or invalid_visibility (not one of the enum values)." }
+        "400": { description: "invalid_id, invalid_body, invalid_date (start_date/end_date given but not YYYY-MM-DD), invalid_date_range (the resulting end_date would be earlier than start_date, whichever of the two was sent), or invalid_type, invalid_status or invalid_visibility (not one of the enum values), or invalid_max_participants (below 1 or not a number)." }
         "403":
           description: >
             forbidden — not the organizer, board, or admin; or
             leader_login was given by someone who isn't admin/board.
         "404":
           description: not_found — the activity doesn't exist, or leader_login doesn't belong to anyone.
+        "409":
+          description: max_below_attendance — max_participants is lower than the people already going (members and guests).
 
     delete:
       summary: Delete an activity
@@ -1579,7 +1582,8 @@ paths:
         "404": { description: not_found — no such activity, or the given login doesn't belong to anyone. }
         "409":
           description: >
-            not_a_member — the person being added isn't a member now.
+            not_a_member — the person being added isn't a member now; or activity_full — the
+            activity has a limit (max_participants) and it is reached, counting the guests.
 
   /activities/{id}/participants/{login}:
     delete:
@@ -1651,7 +1655,7 @@ paths:
         "400": { description: invalid_id, invalid_body (also a blank name) or invited_by_required. }
         "403": { description: Not signed up to the activity (and not organizer, admin or board), or naming somebody else without being any of those. }
         "404": { description: not_found — the activity, or the login in invited_by. }
-        "409": { description: inviter_not_signed_up, or duplicate_guest (the same person already invited that name). }
+        "409": { description: inviter_not_signed_up, duplicate_guest (the same person already invited that name) or activity_full (the limit of people, members and guests together, is reached). }
 
   /activities/{id}/guests/{guestID}:
     delete:
@@ -4393,6 +4397,12 @@ components:
             private restricts who can add a participant *at all* — only
             the organizer, board, or admin — even to sign up someone who
             already wants in. See POST /activities/{id}/participants.
+        max_participants:
+          type: integer
+          minimum: 1
+          description: >
+            An optional limit on how many people go, the members signed up and the guests
+            together; absent when there is none. Nobody can be added past it (409 activity_full).
 
     CreateActivityInput:
       type: object
@@ -4420,6 +4430,12 @@ components:
           description: >
             The organizer. Defaults to the caller; naming anyone else
             here is admin/board only (403 otherwise).
+        max_participants:
+          type: integer
+          minimum: 1
+          description: >
+            An optional limit on how many people go (members and guests together). More participant_logins
+            than that is 409 activity_full; a number below 1 is 400 invalid_max_participants.
 
     UpdateActivityInput:
       type: object
@@ -4440,6 +4456,14 @@ components:
             Reassigns the organizer. admin/board only — even the
             current organizer can't change this on their own activity
             (403 otherwise).
+        max_participants:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: >
+            The limit on how many people go (members and guests together): a number sets it, null
+            takes it off, left out it stays. Below the people already going is 409
+            max_below_attendance; a number below 1 is 400 invalid_max_participants.
 
     Guest:
       type: object

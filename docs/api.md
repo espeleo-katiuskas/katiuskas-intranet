@@ -335,11 +335,12 @@ Directiva).
 - **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if
   wanted). The organizer is whoever creates it, unless admin or board name someone else.
   - body: `title*`, `type`, `start_date*`, `end_date*`, `description`, `visibility`,
-    `participant_logins`, `leader_login`
+    `participant_logins`, `leader_login`, `max_participants`
   - returns: 201 `Activity`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
-    `invalid_visibility`, `unknown_participant`; 403 `forbidden`; 404 `not_found`; 409
-    `not_a_member` (a participant who is not a member now)
+    `invalid_visibility`, `invalid_max_participants`, `unknown_participant`; 403 `forbidden`; 404
+    `not_found`; 409 `not_a_member` (a participant who is not a member now), `activity_full` (more
+    initial participants than `max_participants`)
 - **GET** `/activities/{id}` — *Any baseline role*. One activity.
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`
@@ -347,10 +348,12 @@ Directiva).
   organizer is only for admin or board. `cancelled: true` cancels it and `false` reactivates it (to
   take it out of sight without deleting it).
   - body: `title`, `type`, `start_date`, `end_date`, `description`, `cancelled`, `visibility`,
-    `leader_login`
+    `leader_login`, `max_participants` (a number, or `null` to take the limit off; left out, it
+    stays)
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
-    `invalid_visibility`; 403 `forbidden`; 404 `not_found`
+    `invalid_visibility`, `invalid_max_participants`; 403 `forbidden`; 404 `not_found`; 409
+    `max_below_attendance` (a limit lower than the people going)
 - **DELETE** `/activities/{id}` — *Organizer, admin or board*. Deletes an activity, but only one
   with nothing attached: with participants, resources or material movements it is refused until
   those are removed. To take it out of sight without deleting it, cancel it with `PATCH`.
@@ -367,7 +370,7 @@ Directiva).
   - body: `login`
   - returns: 204
   - errors: 400 `invalid_id`, `invalid_body`; 403 `forbidden` (a private activity, and the caller
-    is none of those); 404 `not_found`; 409 `not_a_member`
+    is none of those); 404 `not_found`; 409 `not_a_member`, `activity_full`
 - **DELETE** `/activities/{id}/participants/{login}` — *Depends on the activity*. Leave the
   activity, or remove another person: admin or board, the organizer in a private one, or whoever
   signed that person up. Refused while that person still has guests in the activity.
@@ -383,7 +386,7 @@ Directiva).
   - body: `name*`, `invited_by`
   - returns: 201 `Guest`
   - errors: 400 `invalid_id`, `invalid_body`, `invited_by_required`; 403 `forbidden`; 404
-    `not_found`; 409 `inviter_not_signed_up`, `duplicate_guest`
+    `not_found`; 409 `inviter_not_signed_up`, `duplicate_guest`, `activity_full`
 - **DELETE** `/activities/{id}/guests/{guestID}` — *Whoever invited them, the organizer, admin or
   board*. Removes a guest.
   - returns: 204
@@ -1024,6 +1027,7 @@ Nested fields:
 | `cancelled` | boolean |
 | `leader_login` | text |
 | `visibility` | public/private |
+| `max_participants` | integer |
 
 ### `CreateActivityInput`
 
@@ -1037,6 +1041,7 @@ Nested fields:
 | `visibility` | public/private |
 | `participant_logins` | [text] |
 | `leader_login` | text |
+| `max_participants` | integer |
 
 ### `UpdateActivityInput`
 
@@ -1050,6 +1055,7 @@ Nested fields:
 | `cancelled` | boolean |
 | `visibility` | public/private |
 | `leader_login` | text |
+| `max_participants` | integer or null |
 
 ### `Participant`
 

@@ -693,6 +693,11 @@ only admin/board), who can also sign up the initial participants in one go.
   which queries the activity to compare `leader_id` with the authenticated user).
 - The type (`caving`, `canyoning`, `training`, `social`, `other`) can also be changed when
   editing.
+- **Limit of people.** An activity may have a `max_participants`: the members signed up and the
+  guests together. Nobody can be signed up or added as a guest past it (409 `activity_full`; checked
+  in Go under a lock of the activity's row, so two people at once cannot both take the last place),
+  nor can the limit be lowered under the people already going (409 `max_below_attendance`). Signing
+  up somebody already in is not one more. `PATCH` with `max_participants: null` takes it off.
 - **Guests.** People from outside the club can go to an activity, invited by somebody of the club
   who goes (`activity_guests`: a name and who invites them, who has to be signed up: a composite
   foreign key says so). Whoever invites (once signed up) adds them with just the name; the

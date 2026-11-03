@@ -1717,3 +1717,101 @@ func TestHandlerGuests(t *testing.T) {
 		t.Errorf("leaving with no guests: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// An activity can have a limit of people: the members signed up and the guests together. Nobody is
+// added past it, and the limit cannot be lowered under the people already going.
+func TestHandlerMaxParticipantsCountsMembersAndGuests(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	organizer := testutil.InsertMember(t, tx)
+	a, b, c := testutil.InsertMember(t, tx), testutil.InsertMember(t, tx), testutil.InsertMember(t, tx)
+	organizerToken := tokenFor(t, authn, organizer.ID, "member")
+	aToken, bToken, cToken := tokenFor(t, authn, a.ID, "member"), tokenFor(t, authn, b.ID, "member"), tokenFor(t, authn, c.ID, "member")
+
+	create := func(body map[string]any) *httptest.ResponseRecorder {
+		body["title"], body["type"], body["start_date"], body["end_date"] = "Con límite", "caving", "2026-01-01", "2026-01-01"
+		return doRequest(mux, http.MethodPost, "/api/v1/activities", organizerToken, body)
+	}
+	for _, bad := range []any{0, -3} {
+		if rec := create(map[string]any{"max_participants": bad}); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_max_participants" {
+			t.Errorf("a limit of %v: %d %s", bad, rec.Code, rec.Body.String())
+		}
+	}
+	// More initial participants than the limit.
+	if rec := create(map[string]any{"max_participants": 1, "participant_logins": []string{a.Login, b.Login}}); rec.Code != http.StatusConflict || errorCode(t, rec) != "activity_full" {
+		t.Errorf("more participants than the limit: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec := create(map[string]any{"max_participants": 3})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var act activities.Activity
+	_ = json.Unmarshal(rec.Body.Bytes(), &act)
+	if act.MaxParticipants == nil || *act.MaxParticipants != 3 {
+		t.Fatalf("expected a limit of 3, got %+v", act.MaxParticipants)
+	}
+	base := fmt.Sprintf("/api/v1/activities/%d", act.ID)
+	join := func(token string) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, base+"/participants", token, nil)
+	}
+	guest := func(token, name string) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, base+"/guests", token, map[string]any{"name": name})
+	}
+	full := func(rec *httptest.ResponseRecorder, what string) {
+		t.Helper()
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "activity_full" {
+			t.Errorf("%s: expected 409 activity_full, got %d %s", what, rec.Code, rec.Body.String())
+		}
+	}
+
+	if rec := join(aToken); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Fatalf("a joins: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := join(bToken); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Fatalf("b joins: %d %s", rec.Code, rec.Body.String())
+	}
+	// A guest takes the third place...
+	rec = guest(aToken, "Marta")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("a guest: %d %s", rec.Code, rec.Body.String())
+	}
+	var marta activities.Guest
+	_ = json.Unmarshal(rec.Body.Bytes(), &marta)
+	// ...so now nobody else fits, a member or a guest.
+	full(join(cToken), "a third member")
+	full(guest(bToken, "Luis"), "another guest")
+	// Somebody who is already in is not added again, so it is no more people.
+	if rec := join(aToken); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Errorf("signing up somebody already in: %d %s", rec.Code, rec.Body.String())
+	}
+	// The limit cannot go under the three going; at three it can; later one place less is refused.
+	if rec := doRequest(mux, http.MethodPatch, base, organizerToken, map[string]any{"max_participants": 2}); rec.Code != http.StatusConflict || errorCode(t, rec) != "max_below_attendance" {
+		t.Errorf("a limit below the people going: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, base, organizerToken, map[string]any{"max_participants": 0}); rec.Code != http.StatusBadRequest {
+		t.Errorf("a limit of 0: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, base, organizerToken, map[string]any{"max_participants": "mucho"}); rec.Code != http.StatusBadRequest {
+		t.Errorf("a limit that is not a number: %d %s", rec.Code, rec.Body.String())
+	}
+	// A guest leaving makes room.
+	if rec := doRequest(mux, http.MethodDelete, fmt.Sprintf("%s/guests/%d", base, marta.ID), aToken, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove the guest: %d", rec.Code)
+	}
+	if rec := join(cToken); rec.Code != http.StatusNoContent && rec.Code != http.StatusCreated {
+		t.Errorf("c joins into the place left: %d %s", rec.Code, rec.Body.String())
+	}
+	full(guest(aToken, "Marta de nuevo"), "a guest when the three are members")
+
+	// Leaving the limit out of a PATCH keeps it; null takes it off, and then there is room.
+	if rec := doRequest(mux, http.MethodPatch, base, organizerToken, map[string]any{"title": "Otro título"}); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"max_participants":3`) {
+		t.Errorf("a PATCH without the limit: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(mux, http.MethodPatch, base, organizerToken, map[string]any{"max_participants": nil})
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "max_participants") {
+		t.Errorf("taking the limit off: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := guest(aToken, "Marta de nuevo"); rec.Code != http.StatusCreated {
+		t.Errorf("a guest with no limit: %d %s", rec.Code, rec.Body.String())
+	}
+}

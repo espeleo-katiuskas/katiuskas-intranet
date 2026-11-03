@@ -119,6 +119,10 @@ const texts = {
   duplicate_guest: 'Esa persona ya ha apuntado a un invitado con ese nombre.',
   inviter_not_signed_up: 'Quien invita tiene que estar apuntado a la actividad.',
   invited_by_required: 'Hay que indicar cuál de los apuntados invita.',
+  activity_full: 'La actividad está completa: no se puede apuntar a nadie más.',
+  max_below_attendance:
+    'El máximo no puede ser menor que las personas que ya van (socios e invitados).',
+  invalid_max_participants: 'El máximo de apuntados tiene que ser un número de 1 o más.',
   kind_change:
     'Una cuerda o una saca no puede cambiar de tipo, ni el material general pasar a ser cuerda o saca.',
   unknown_type: 'El tipo de material no existe.',
