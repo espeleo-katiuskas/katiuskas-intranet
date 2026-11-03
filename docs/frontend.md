@@ -368,37 +368,41 @@ own, `style.css` as well since `dashboard.css` stays index.html-specific.
 reading these pages, and an extra unit an "extra", since "unidad" meant nothing to them — behind one
 "Repartos" sidebar entry (`layout.js` maps the two detail pages to it in `ACTIVE_ALIASES`). The list
 (columns: when it was created, as "Enero de 2026" with `formatMonthYear`, the name, the state and
-the price) opens a new distribution from a dialog (admin/board; the options go in a textarea, one
-per line, "Talla: S, M, L", `parseOptions`) and shows "Puedes pedirlo" on the open ones whose
-`eligible` is true. The detail page renders the conditions and, except while it is a draft
-(`#ask-sections` is hidden then, and the orders are loaded only once it leaves the draft), a "Pedir"
-form (an "A nombre de" picker over `GET /users/directory`, one `<select>` per option, an extra
-checkbox when `extra_price` exists — except in a distribution for all members with no options, where
-the own order is already there and only extras are left: no checkbox, the request always goes as an
-extra, the button says "Pedido extra" (`extrasOnly`) and the subtitle gives the price, "Puedes pedir
-también extras a 8,00 €" —; `/repartos`' list marks a distribution only some people can see with a
-"Restringido" badge, and the page's description line says who ("lo ven: …"); the create and edit
-dialogs have a "Quién lo ve" select (`visibility`) that carries `data-roles="admin"`, so only an
-administrator has it, and `readDistributionForm` sends it only when it is there; `canOrderNow`
-repeats the API's own rule of when (open and before the deadline; admin, board and material at any
-time but in a draft, with a note saying that the distribution is not open) only to decide whether to
-show it) and "Tus pedidos" — the units where the signed-in person is the beneficiary or entered
-them, since `GET .../units` returns everything to admin/board/material — with who entered each when
-that isn't the person it is for. In a distribution for all members the member's own unit is already
-in that table ("Automático", "Sin elegir" with a primary "Elegir" button until somebody chooses, no
-"Quitar" since the API refuses it), and the whole "Pedir" section (`#order-section`, not just the
-form, so not even a "no longer admitting orders") is out when there is neither an option nor extras
-to ask for, `nothingToAsk`. The table's columns (`unitColumns`) are only the ones that mean
-something: "Elegido" only with options, "Tipo" (own or extra) only when extras exist, and nothing
-about payment for now — the state is "Recogido" or "No recogido"; the price (the unit's own, frozen)
-is shown in a "Precio" column, but nothing about paying (no state, no amount owed): the intranet
-doesn't keep that. Nothing to manage the distribution is on this page: whoever does (admin, board
-and material) has one "⚙ Gestionar este reparto" button (`#manage-link`,
-`data-roles="admin,board,material"`, so nobody else even has it) that goes to the management page.
+the price; the state has the same four names as everywhere: "Borrador", "Se puede pedir", "Activo"
+and "Cerrado" for `draft`, `open`, `closed` and `done`, each with its tooltip; except that a row
+with the "Puedes pedirlo" badge says "Activo" in the state column, so as not to repeat it) opens a
+new distribution from a dialog (admin/board; the options go in a textarea, one per line, "Talla: S,
+M, L", `parseOptions`) and shows "Puedes pedirlo" on the open ones whose `eligible` is true. The
+detail page renders the conditions and, except while it is a draft (`#ask-sections` is hidden then,
+and the orders are loaded only once it leaves the draft), a "Pedir" form (an "A nombre de" picker
+over `GET /users/directory`, one `<select>` per option, an extra checkbox when `extra_price` exists
+— except in a distribution for all members with no options, where the own order is already there and
+only extras are left: no checkbox, the request always goes as an extra, the button says "Pedido
+extra" (`extrasOnly`) and the subtitle gives the price, "Puedes pedir también extras a 8,00 €" —;
+`/repartos`' list marks a distribution only some people can see with a "Restringido" badge, and the
+page's description line says who ("lo ven: …"); the create and edit dialogs have a "Quién lo ve"
+select (`visibility`) that carries `data-roles="admin"`, so only an administrator has it, and
+`readDistributionForm` sends it only when it is there; `canOrderNow` repeats the API's own rule of
+when (open and before the deadline; admin, board and material at any time but in a draft, with a
+note saying that the distribution is not open) only to decide whether to show it) and "Tus pedidos"
+— the units where the signed-in person is the beneficiary or entered them, since `GET .../units`
+returns everything to admin/board/material — with who entered each when that isn't the person it is
+for. In a distribution for all members the member's own unit is already in that table ("Automático",
+"Sin elegir" with a primary "Elegir" button until somebody chooses, no "Quitar" since the API
+refuses it), and the whole "Pedir" section (`#order-section`, not just the form, so not even a "no
+longer admitting orders") is out when there is neither an option nor extras to ask for,
+`nothingToAsk`. The table's columns (`unitColumns`) are only the ones that mean something: "Elegido"
+only with options, "Tipo" (own or extra) only when extras exist, and nothing about payment for now —
+the state is "Recogido" or "No recogido"; the price (the unit's own, frozen) is shown in a "Precio"
+column, but nothing about paying (no state, no amount owed): the intranet doesn't keep that. Nothing
+to manage the distribution is on this page: whoever does (admin, board and material) has one "⚙
+Gestionar este reparto" button (`#manage-link`, `data-roles="admin,board,material"`, so nobody else
+even has it) that goes to the management page.
 
 `/reparto-gestion?id=…` (`distribution-manage.js`; `requireAnyRole` admin/board/material) is the one
 page to manage a distribution. At the top, after the title, the state and the description, are the
-buttons that act on the distribution itself: "Volver a …" / "Pasar a …" (one step at a time:
+buttons that act on the distribution itself: "Volver a …" / "Pasar a …" (one step at a time, except
+that a distribution with nothing for the members to ask skips "Se puede pedir", `neighbours`:
 `bodyFrom` rebuilds the whole body, as `PATCH` replaces every field), "Editar" (the dialog, with its
 form) — all for admin and board — and "Borrar" (admin only: `DELETE` is admin-only in the API, and
 the button is `data-roles="admin"`); a link "← Volver al reparto" goes back to the member's view.

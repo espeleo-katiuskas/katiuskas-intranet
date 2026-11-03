@@ -545,8 +545,9 @@ changes it.
   - returns: 200 `Distribution`
 - **PATCH** `/distributions/{id}` — *Admin or board*. Replaces all the fields (`options`,
   `articles`, `status` and `visibility` are left as they are when not sent); it also serves to
-  change the status one step. Only admin changes `visibility` (403 `forbidden` for board; sending
-  back the current one is fine).
+  change the status one step (or two, between `draft` and `closed`, in a distribution with nothing
+  for the members to ask: for all members, no options and no extras). Only admin changes
+  `visibility` (403 `forbidden` for board; sending back the current one is fine).
   - body: `name*`, `description`, `audience`, `visibility`, `closes_at`, `cutoff_date`,
     `account_id`, `price`, `extra_price`, `max_extra`, `options`, `articles`, `status`
   - returns: 200 `Distribution`

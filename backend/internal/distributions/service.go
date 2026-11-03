@@ -32,7 +32,8 @@ var (
 	// where it doesn't belong (or missing where it does).
 	ErrInvalidQuantity = errors.New("quantity is for units of an article only, and must be between 1 and 100000")
 	// ErrInvalidTransition means a status change that isn't one step forward
-	// or back.
+	// or back (a distribution with nothing to ask also goes between draft and
+	// closed, skipping open).
 	ErrInvalidTransition = errors.New("the status can only move one step at a time")
 	// ErrNotOpen means the distribution isn't taking choices (any more).
 	ErrNotOpen = errors.New("this distribution is not open for choosing")
@@ -205,6 +206,13 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Distribution, err
 	return s.repo.Create(ctx, in)
 }
 
+// nothingToAsk says that the members have nothing to do in a distribution: it is for all of them (so
+// each already has their own unit) and has no options to choose and no extras to ask for. Opening
+// it would not mean anything.
+func nothingToAsk(audience Audience, options int, extraPrice *float64) bool {
+	return audience == AudienceAllMembers && options == 0 && extraPrice == nil
+}
+
 func (s *Service) Get(ctx context.Context, id int64) (Distribution, error) {
 	return s.repo.Get(ctx, id)
 }
@@ -257,7 +265,13 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Distrib
 		}
 		step := in.Status.index() - current.Status.index()
 		if step < -1 || step > 1 {
-			return Distribution{}, ErrInvalidTransition
+			// A distribution with nothing for the members to ask skips open: there is nothing
+			// to do in it, so draft and closed are next to each other.
+			skipsOpen := (current.Status == StatusDraft && *in.Status == StatusClosed) ||
+				(current.Status == StatusClosed && *in.Status == StatusDraft)
+			if !skipsOpen || !nothingToAsk(in.Audience, options, in.ExtraPrice) {
+				return Distribution{}, ErrInvalidTransition
+			}
 		}
 	}
 	d, err := s.repo.Update(ctx, id, in)

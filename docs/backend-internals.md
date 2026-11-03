@@ -352,9 +352,10 @@ come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 **Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things the club
 hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a single article — two
 things to handle separately are two distributions — with a `status` (`draft` → `open` → `closed` →
-`done`, one step at a time, forward or back; a draft is editable and exists only for admin/board,
-members ask for units only while `open`, `visibility` (`all`, `material`, `board`, `admin`,
-migration `00035`) keeps whoever is below the level it names from seeing it at all
+`done`, one step at a time, forward or back (`nothingToAsk`, for all members with no options and no
+extras, skips `open`: draft and closed are next to each other); a draft is editable and exists only
+for admin/board, members ask for units only while `open`, `visibility` (`all`, `material`, `board`,
+`admin`, migration `00035`) keeps whoever is below the level it names from seeing it at all
 (`canSee`/`visibleTo` and `Handler.visible`/`accessible`: every route about the distribution answers
 404, the list leaves it out; a draft stays for admin/board whatever it says; only admin sets it,
 board sending anything but the current value gets 403, and leaving it out of a PATCH keeps it),

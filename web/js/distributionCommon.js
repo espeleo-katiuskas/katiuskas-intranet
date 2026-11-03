@@ -15,9 +15,9 @@ import {
 
 const distributionStatusLabels = {
   draft: 'Borrador',
-  open: 'Abierto',
-  closed: 'Cerrado',
-  done: 'Terminado',
+  open: 'Se puede pedir',
+  closed: 'Activo',
+  done: 'Cerrado',
 };
 
 // What each state means, for a tooltip on its badge.
@@ -76,8 +76,9 @@ const visibilityLabels = {
   admin: 'Solo administración',
 };
 
-function statusBadge(status) {
-  return `<span class="badge" title="${escapeHtml(distributionStatusHints[status] ?? '')}">${escapeHtml(distributionStatusLabels[status] ?? status)}</span>`;
+// The badge of a state, with its tooltip; `label` writes something else than the state's own name.
+function statusBadge(status, label = distributionStatusLabels[status] ?? status) {
+  return `<span class="badge" title="${escapeHtml(distributionStatusHints[status] ?? '')}">${escapeHtml(label)}</span>`;
 }
 
 // "Talla: M" — what was chosen for a unit. With nothing chosen it is "Sin

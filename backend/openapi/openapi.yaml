@@ -2290,7 +2290,8 @@ paths:
         not leave out one somebody has (409 number_in_use). `status`
         moves one step at a time along draft, open (members ask for units),
         closed (members can no longer ask for or change anything; admin, board and material still can) and done —
-        forward or back, one step at a time. Units can be handed out
+        forward or back, one step at a time (a distribution with nothing for the members to ask — for
+        all members, with no options and no extras — skips open: it goes between draft and closed). Units can be handed out
         (collections recorded, numbers written down) in any state but draft,
         since the order often arrives before the asking has ended.
         Changing `audience` from `all_members` to

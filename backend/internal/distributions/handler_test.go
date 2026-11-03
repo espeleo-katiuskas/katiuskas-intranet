@@ -403,6 +403,52 @@ func TestStatusMovesOneStepAtATime(t *testing.T) {
 	}
 }
 
+// A distribution for all members with no options and no extras has nothing for the members to do while
+// it is open, so it goes from draft straight to closed (and back), and everybody still gets their own
+// unit when it leaves the draft. Any other one has to go through open.
+func TestNothingToAskSkipsOpen(t *testing.T) {
+	e := newEnv(t)
+	admin := e.newPerson(t, "", "admin")
+	member := e.newPerson(t, "2020-01-01", "member")
+	plain := func() map[string]any {
+		return map[string]any{"name": "Pañuelo", "audience": "all_members", "cutoff_date": "2026-10-01", "price": 0}
+	}
+	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, plain()), http.StatusCreated))
+	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
+	patch := func(body map[string]any, status string) *httptest.ResponseRecorder {
+		body["status"] = status
+		return e.do("PATCH", path, admin.token, body)
+	}
+
+	if got := decode[distributions.Distribution](t, mustStatus(t, patch(plain(), "closed"), http.StatusOK)); got.Status != distributions.StatusClosed {
+		t.Fatalf("expected closed, got %s", got.Status)
+	}
+	// Everybody's own unit was made on leaving the draft.
+	units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", path+"/units", admin.token, nil), http.StatusOK))
+	found := false
+	for _, u := range units {
+		found = found || u.BeneficiaryLogin == member.Login
+	}
+	if !found {
+		t.Errorf("expected the member's own unit after going to closed, got %+v", units)
+	}
+	// And back to draft the same way (it starts over, as always).
+	if got := decode[distributions.Distribution](t, mustStatus(t, patch(plain(), "draft"), http.StatusOK)); got.Status != distributions.StatusDraft {
+		t.Errorf("expected draft, got %s", got.Status)
+	}
+
+	// One where there is something to ask does not skip open, nor does one that only has extras.
+	for _, body := range []map[string]any{
+		shirt(), // with options
+		{"name": "Gorra", "audience": "all_members", "cutoff_date": "2026-10-01", "price": 0, "extra_price": 8}, // with extras
+		{"name": "Rifa", "audience": "signup", "price": 5},                                                      // for sign-up
+	} {
+		x := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
+		body["status"] = "closed"
+		expect(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", x.ID), admin.token, body), http.StatusConflict, "invalid_status_transition")
+	}
+}
+
 // Units are handed out in any state but draft — the order often arrives before
 // the asking has ended, and somebody may come for theirs once it is done.
 // Everybody's own unit of a distribution for all members is made when it

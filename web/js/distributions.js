@@ -33,15 +33,16 @@ function restricted(d) {
 function renderRow(d) {
   // Drafts are only listed for the people who manage them; for anyone else
   // "eligible" says whether it is for them.
-  const mine =
-    d.status === 'open' && d.eligible
-      ? '<span class="badge status-planned">Puedes pedirlo</span>'
-      : '';
+  const canAsk = d.status === 'open' && d.eligible;
+  const mine = canAsk ? '<span class="badge status-planned">Puedes pedirlo</span>' : '';
+  // Where "Puedes pedirlo" already says that orders are taken, the state column just says "Activo":
+  // it would repeat it otherwise. Only in this table; elsewhere the state has its own name.
+  const state = canAsk ? statusBadge(d.status, 'Activo') : statusBadge(d.status);
   return `
     <tr data-distribution-id="${d.id}">
       <td class="nowrap">${formatMonthYear(d.created_at)}</td>
       <td>${escapeHtml(d.name)}${restricted(d)}</td>
-      <td>${statusBadge(d.status)}</td>
+      <td>${state}</td>
       <td>${escapeHtml(priceText(d))}</td>
       <td>${mine}</td>
     </tr>`;

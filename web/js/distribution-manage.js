@@ -11,6 +11,7 @@ import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import {
   STATUS_ORDER,
+  nothingToAsk,
   apiErrorText,
   bodyFrom,
   describeDistribution,
@@ -61,6 +62,20 @@ const hasNumbers = () => distribution.articles.some((a) => a.identifier_fields.l
 // from the page (payments, for material) is not there to start.
 const sections = [];
 
+// The states on each side of the current one. A distribution with nothing for the members to ask
+// skips "Se puede pedir": there is nothing to do in it, so draft and closed are next to each other (the API
+// allows it only for those).
+function neighbours() {
+  const index = STATUS_ORDER.indexOf(distribution.status);
+  let previous = STATUS_ORDER[index - 1];
+  let next = STATUS_ORDER[index + 1];
+  if (nothingToAsk(distribution)) {
+    if (next === 'open') next = 'closed';
+    if (previous === 'open') previous = 'draft';
+  }
+  return { previous, next };
+}
+
 function renderHeader() {
   document.getElementById('distribution-title').textContent = distribution.name;
   document.title = `${distribution.name} — Gestionar — Club de Espeleología Katiuskas`;
@@ -68,18 +83,14 @@ function renderHeader() {
   document.getElementById('distribution-description').textContent = distribution.description ?? '';
   // Buttons restricted by data-roles are removed from the page for everybody else, hence the
   // optional chaining on the ones that might not be there.
-  const index = STATUS_ORDER.indexOf(distribution.status);
+  const { previous, next } = neighbours();
   const back = document.getElementById('step-back');
   const forward = document.getElementById('step-forward');
   if (back && forward) {
-    back.hidden = index <= 0;
-    forward.hidden = index >= STATUS_ORDER.length - 1;
-    if (index > 0) {
-      back.textContent = `Volver a «${distributionStatusLabels[STATUS_ORDER[index - 1]]}»`;
-    }
-    if (index < STATUS_ORDER.length - 1) {
-      forward.textContent = `Pasar a «${distributionStatusLabels[STATUS_ORDER[index + 1]]}»`;
-    }
+    back.hidden = !previous;
+    forward.hidden = !next;
+    if (previous) back.textContent = `Volver a «${distributionStatusLabels[previous]}»`;
+    if (next) forward.textContent = `Pasar a «${distributionStatusLabels[next]}»`;
   }
   // Payments only where there is something to pay, numbers only where some article has them.
   for (const [name, shown] of [
@@ -119,7 +130,7 @@ function onClick(elementId, handler) {
 }
 
 onClick('step-back', () => {
-  const previous = STATUS_ORDER[STATUS_ORDER.indexOf(distribution.status) - 1];
+  const { previous } = neighbours();
   // Back to a draft starts it over: the API deletes every order, with what was chosen on it, so say
   // so when there is any.
   if (previous === 'draft' && distribution.unit_count > 0) {
@@ -138,11 +149,14 @@ onClick('step-back', () => {
   setStatus(previous);
 });
 onClick('step-forward', () => {
-  const next = STATUS_ORDER[STATUS_ORDER.indexOf(distribution.status) + 1];
+  const { next } = neighbours();
+  // Closing is only worth asking about when something was being asked: from a draft there is nothing
+  // yet, and a distribution with nothing to ask has nothing to close.
   if (
     next === 'closed' &&
+    distribution.status === 'open' &&
     !confirm(
-      'Al cerrar el reparto ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a abrirlo). ¿Cerrarlo?',
+      `Al pasar a «${distributionStatusLabels.closed}» ya nadie podrá pedir ni cambiar nada (para añadir algo habría que volver a «${distributionStatusLabels.open}»). ¿Pasarlo a «${distributionStatusLabels.closed}»?`,
     )
   )
     return;
