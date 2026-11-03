@@ -200,6 +200,9 @@ newActivityForm.addEventListener('submit', async (event) => {
     visibility: formData.get('visibility'),
     participant_logins: Array.from(chosenParticipants.keys()),
   };
+  // The limit of people (members and guests together) is optional: left blank, there is none.
+  const max = optional('max_participants');
+  if (max) body.max_participants = Number(max);
 
   // Only present at all for admin/board (see data-roles on the field);
   // left blank, the organizer defaults to the caller as always.

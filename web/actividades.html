@@ -65,6 +65,10 @@
             <option value="private">Privada</option>
           </select>
         </div>
+        <div class="field">
+          <label for="na-max-participants">Máximo de apuntados <span class="optional">(opcional)</span></label>
+          <input id="na-max-participants" name="max_participants" type="number" min="1" step="1" inputmode="numeric" placeholder="Sin límite">
+        </div>
         <div class="field" data-roles="admin,board">
           <label for="na-leader">Organizador <span class="optional">(opcional, tú por defecto)</span></label>
           <input id="na-leader" type="text" list="na-leader-options" autocomplete="off" placeholder="Escribe un nombre…">

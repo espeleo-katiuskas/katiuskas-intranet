@@ -100,6 +100,14 @@ participants). The "Quitar" button of a guest is for whoever invited them, the o
 and board (`renderGuestRow`, as the API decides). A person who still has guests cannot leave or be
 removed from the activity: the error text says to remove them first (`has_guests`).
 
+**The limit of people.** "Nueva actividad" (`/actividades`) and "Editar actividad" (`/actividad`)
+have an optional "Máximo de apuntados" (`max_participants`): blank is no limit, and the edit form,
+which resends everything, sends `null` for a blank one. On `/actividad` the total line
+(`#attendance`) says "…de un máximo de N" and, once the places are all taken, "la actividad está
+completa", and then "Apuntarme", "+ Participante" and "+ Invitado" are disabled with that as their
+tooltip (`renderAttendance`; the API refuses it too, 409 `activity_full`). Lowering the limit under
+the people already going is refused with its own message (`max_below_attendance`).
+
 **The organizer on `/actividad`.** Under the header line, "Organizador: <name>" (`#activity-leader`;
 a link to the person's page only for admin and board, like every name there), once the directory has
 the name.

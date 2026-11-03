@@ -38,6 +38,8 @@ let activityCancelled = false;
 // board or somebody already signed up can, and so only they can sign themselves up. See
 // Handler.join on the backend for the same split.
 let activityPrivate = false;
+// The limit of people (members and guests together), or null when there is none.
+let activityMax = null;
 function canAddOthers() {
   return !activityPrivate || canManage || isParticipant;
 }
@@ -110,7 +112,9 @@ async function loadActivity(ready = Promise.resolve()) {
     activityCancelled = activity.cancelled;
     canManage = isAdmin || viewer?.login === activity.leader_login;
     activityPrivate = activity.visibility === 'private';
+    activityMax = activity.max_participants ?? null;
     applyManagementVisibility();
+    renderAttendance();
 
     // The organizer's label needs the directory.
     await ready;
@@ -123,6 +127,7 @@ async function loadActivity(ready = Promise.resolve()) {
       editForm.end_date.value = activity.end_date.slice(0, 10);
       editForm.visibility.value = activity.visibility;
       editForm.description.value = activity.description ?? '';
+      editForm.max_participants.value = activity.max_participants ?? '';
       const leaderInput = document.getElementById('ea-leader');
       if (leaderInput) {
         leaderInput.value =
@@ -184,6 +189,10 @@ editForm?.addEventListener('submit', async (event) => {
     end_date: formData.get('end_date'),
     visibility: formData.get('visibility'),
     description: formData.get('description')?.toString().trim() || null,
+    // The form always resends everything: blank takes the limit of people off.
+    max_participants: formData.get('max_participants')
+      ? Number(formData.get('max_participants'))
+      : null,
   };
 
   // Only present at all for admin/board (see data-roles on the field) —
@@ -334,10 +343,22 @@ function renderAttendance() {
   if (participantCount == null) return;
   element.hidden = false;
   const noun = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const total = participantCount + guests.length;
+  const full = activityMax != null && total >= activityMax;
   element.textContent =
     `${noun(participantCount, 'persona del club apuntada', 'personas del club apuntadas')} ` +
     `y ${noun(guests.length, 'invitado', 'invitados')}: ` +
-    `${noun(participantCount + guests.length, 'persona', 'personas')} en total.`;
+    `${noun(total, 'persona', 'personas')} en total` +
+    (activityMax == null
+      ? '.'
+      : `, de un máximo de ${activityMax}${full ? ': la actividad está completa' : ''}.`);
+  // Nobody can be added to a full activity (the API refuses it too): the buttons say so.
+  for (const id of ['join-activity', 'add-participant', 'add-guest']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.disabled = full;
+    button.title = full ? 'La actividad está completa' : '';
+  }
 }
 
 // Whoever can say who invites a guest picks among the people signed up.
