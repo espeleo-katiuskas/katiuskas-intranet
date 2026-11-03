@@ -1682,6 +1682,13 @@ h2[id^="section-"] {
   color: #fff;
 }
 
+/* A marked number keeps its colour (and its white text) under the pointer, only a little darker: the
+   hover of an unmarked one would otherwise take the background and leave the text unreadable. */
+.number-chip[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(0.9);
+}
+
 .number-chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
