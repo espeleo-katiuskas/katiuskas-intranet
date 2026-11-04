@@ -5,42 +5,40 @@ come first, then the pages one by one. The endpoints a page calls are in [`api.m
 rules behind them, in [`backend-internals.md`](backend-internals.md) and
 [`architecture.md`](architecture.md).
 
-**Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate
-choice, not just an unexamined default: every page already revalidates its own session and
-re-fetches its own data on load, so there's no cross-page state an SPA would actually
-save, and this stays free of a bundler or any client-side router), one `<page>.html` +
-`js/<page>.js` per view, Caddy's `try_files {path} {path}.html` making `/socios` resolve
-to `socios.html`. The sidebar and topbar, identical on every authenticated page, are
-rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted into each
-`<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
-`<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own
-session bootstrap (in place of what used to be five near-identical lines re-typed at the
-top of every `<page>.js`): it validates the session, applies role-based visibility, and
-wires the sidebar toggle, topbar greeting, and logout button, returning the signed-in user
-same as `currentUser()` would. The menu collapses below 800px (an overlay behind the hamburger)
-and, on a wide screen, can be hidden with the "×" at the top of it: `api.js`'s
-`initSidebarToggle` puts `.sidebar-hidden` on `.shell` — which looks like the narrow layout,
-`style.css` keeps the two rules alike — and remembers it in `localStorage`
-(`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there the hamburger
-brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match
-the media query). Its own `requireAnyRole` option additionally redirects home
-if the signed-in user holds none of the listed roles — the whole-page gates of `member.js`
-(admin/board), of `accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin),
-tighter than the ordinary
-baseline check every API route already enforces. Which sidebar link reads as "active" is
-computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad`
-or `/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a
-per-page `class="active"` written by hand — one less thing a new page could forget.
-`login.html` is the one page with no shell and no session yet, and never calls
-`initPage()`. `404.html` (`js/notfound.js`) is what Caddy serves, with a 404 status and
-without changing the address, for anything that isn't a page (`handle_errors` in
-`deploy/Caddyfile`, which is why `root` is declared at the site level there — an error
-handler can't see one set inside the `handle`; API responses are untouched). It can't assume
-who is looking: with a session token it becomes an ordinary page (`initPage()`, menu
-included), imported only then because `api.js` reads the token as soon as it loads; without
-one it shows a plain panel linking to `/login`. Everything it loads is by absolute path,
-since it is served at whatever address was asked for, however deep — which is also why
-`layout.js`'s topbar logo is `/images/…` and not relative.
+**Frontend** (`web/`): classic multi-page site (no SPA, no build step — a deliberate choice, not
+just an unexamined default: every page already revalidates its own session and re-fetches its own
+data on load, so there's no cross-page state an SPA would actually save, and this stays free of a
+bundler or any client-side router), one `<page>.html` + `js/<page>.js` per view, Caddy's `try_files
+{path} {path}.html` making `/socios` resolve to `socios.html`. The sidebar and topbar, identical on
+every authenticated page, are rendered once from `js/layout.js`'s `initPage()` rather than
+copy-pasted into each `<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
+`<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own session
+bootstrap (in place of what used to be five near-identical lines re-typed at the top of every
+`<page>.js`): it validates the session, applies role-based visibility, and wires the sidebar toggle,
+topbar greeting, and logout button, returning the signed-in user same as `currentUser()` would. The
+menu collapses below 800px (an overlay behind the hamburger) and, on a wide screen, can be hidden
+with the "×" at the top of it: `api.js`'s `initSidebarToggle` puts `.sidebar-hidden` on `.shell` —
+which looks like the narrow layout, `style.css` keeps the two rules alike — and remembers it in
+`localStorage` (`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there
+the hamburger brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there
+has to match the media query). The content is at most 1400px wide (`.content`), the full width up to
+there so that tables use it; running text keeps 75 characters and the panels of filters and forms
+960px, whatever the width. Its own `requireAnyRole` option additionally redirects home if the
+signed-in user holds none of the listed roles — the whole-page gates of `member.js` (admin/board),
+of `accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin), tighter than the
+ordinary baseline check every API route already enforces. Which sidebar link reads as "active" is
+computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad` or
+`/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a per-page
+`class="active"` written by hand — one less thing a new page could forget. `login.html` is the one
+page with no shell and no session yet, and never calls `initPage()`. `404.html` (`js/notfound.js`)
+is what Caddy serves, with a 404 status and without changing the address, for anything that isn't a
+page (`handle_errors` in `deploy/Caddyfile`, which is why `root` is declared at the site level there
+— an error handler can't see one set inside the `handle`; API responses are untouched). It can't
+assume who is looking: with a session token it becomes an ordinary page (`initPage()`, menu
+included), imported only then because `api.js` reads the token as soon as it loads; without one it
+shows a plain panel linking to `/login`. Everything it loads is by absolute path, since it is served
+at whatever address was asked for, however deep — which is also why `layout.js`'s topbar logo is
+`/images/…` and not relative.
 
 **Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
 dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditItemDialog`): the
@@ -640,15 +638,16 @@ is admin-only, in the markup and in `members.js`, which loads the role catalog (
 role checkboxes) only for an admin. The list of roles itself, to create or delete one, is no longer
 here: it lives on `/admin`, the page behind the "Admin" sidebar entry (admin only, `NAV_ITEMS`'
 `roles: ['admin']`), meant for whatever else only administrators care about —
-`admin.html`/`admin.js`. It starts with a row of links to its sections (`.section-index`, each
-one an anchor to its `<h2 id="section-…">`: add a section, add its link), and for now holds an
-"Estado del sistema" section (`GET /admin/status`,
-see **Admin status**: on top, what is wrong right now (`problems`, in a red box) or "No se ha
-detectado ningún problema"; then version and commit, database and migration, email, Telegram,
-timeouts, directories and, in "Espacio en disco", how full the disks that hold them are, with an
-"Actualizar" button), a "Roles" section (`GET`/`POST`/`DELETE /roles`; a "Ver" under each role
-unfolds who holds it, taken from `GET /users` — admin sees everybody with their `roles` — with a "×"
-per person (`DELETE /users/{login}/roles/{id}`) and a name picker with "Dar este rol" (`POST
+`admin.html`/`admin.js`. It starts with a row of links to its sections (`.section-index`, each one
+an anchor to its `<h2 id="section-…">`: add a section, add its link), and for now holds an "Estado
+del sistema" section — a block of at most 960px, each name in a column of its own with the value
+next to it and a faint line under each row, since the names and values are short (`GET
+/admin/status`, see **Admin status**: on top, what is wrong right now (`problems`, in a red box) or
+"No se ha detectado ningún problema"; then version and commit, database and migration, email,
+Telegram, timeouts, directories and, in "Espacio en disco", how full the disks that hold them are,
+with an "Actualizar" button), a "Roles" section (`GET`/`POST`/`DELETE /roles`; a "Ver" under each
+role unfolds who holds it, taken from `GET /users` — admin sees everybody with their `roles` — with
+a "×" per person (`DELETE /users/{login}/roles/{id}`) and a name picker with "Dar este rol" (`POST
 /users/{login}/roles`); the automatic roles only list their holders, and the admin's own admin role
 has no "×", as on `/socio`; the unfolded roles survive the re-render in `expandedRoles`) and a
 "Sesiones" one: every session from `GET /tokens` (a person's name from the directory, last use,
@@ -673,27 +672,27 @@ creating and editing (a label, a value and, optionally, a text for a copy button
 own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE
 /material/types/{id}`: a table with "Renombrar" and "Borrar" and a dialog shared by creating and
 renaming; "Cuerda" and "Saca" are listed as "Fijo" with no buttons, and a type with material is
-refused with its own message). The home page
-(`dashboard.js`, `loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by
-one listener on the list since they are drawn after load: the data is not written in `index.html`,
-so an administrator changes it without a deploy and a private one (the Bizum number) is not in the
-repository. Admin/board get `FULL_COLUMNS` and `FULL_FILTERS`; a plain member gets
-`MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what `users.MemberListing` carries (see **Permission
-tiers**). Row filters ("Género", "Tipo de socio", "Categoría", "Cuota anual", "Federación") and the
-column toggles sit behind a "Filtros…" button, and above it a "Buscar persona" box (`matchesSearch`:
-every word typed has to appear, in any order and ignoring accents and case, in the first name and
-surnames and — admin/board only, as that is all their listing carries — the phone and DNI; not the
-membership number, login or email. The placeholder says "Nombre o apellidos" (for admin/board,
-"Nombre, apellidos, teléfono o DNI"); it narrows what the filters leave and isn't persisted). Every
-filter starts with every option checked except "Tipo de socio", which starts with only "Activo" and
-"Baja temporal", so the default view is the current membership. "Cuota anual" splits people on
-whether `last_due_year` is the current year ("A corriente de pago"), and "Federación" on whether
-`license_type` is present — `GET /users` only reports a license for the current year, so having one
-*is* being federated. Filters, visible columns and sort order persist in `localStorage`
-(`katiuskas:members-view`, best-effort), so "Volver a socios" from a person's page lands on the same
-view, and a counter shows how many people the current filters leave. With nothing saved, the columns
-shown are "N.º socio", "Nombre", "Apellidos", "Categoría" and "Tipo de licencia" (each column's
-`default` flag); the rest are optional in the "Filtros…" panel.
+refused with its own message). The home page (`dashboard.js`, `loadClubInfo`) draws them from `GET
+/club-info`, with the copy buttons handled by one listener on the list since they are drawn after
+load: the data is not written in `index.html`, so an administrator changes it without a deploy and a
+private one (the Bizum number) is not in the repository. Admin/board get `FULL_COLUMNS` and
+`FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what
+`users.MemberListing` carries (see **Permission tiers**). Row filters ("Género", "Tipo de socio",
+"Categoría", "Cuota anual", "Federación") and the column toggles sit behind a "Filtros…" button, and
+above it a "Buscar persona" box (`matchesSearch`: every word typed has to appear, in any order and
+ignoring accents and case, in the first name and surnames and — admin/board only, as that is all
+their listing carries — the phone and DNI; not the membership number, login or email. The
+placeholder says "Nombre o apellidos" (for admin/board, "Nombre, apellidos, teléfono o DNI"); it
+narrows what the filters leave and isn't persisted). Every filter starts with every option checked
+except "Tipo de socio", which starts with only "Activo" and "Baja temporal", so the default view is
+the current membership. "Cuota anual" splits people on whether `last_due_year` is the current year
+("A corriente de pago"), and "Federación" on whether `license_type` is present — `GET /users` only
+reports a license for the current year, so having one *is* being federated. Filters, visible columns
+and sort order persist in `localStorage` (`katiuskas:members-view`, best-effort), so "Volver a
+socios" from a person's page lands on the same view, and a counter shows how many people the current
+filters leave. With nothing saved, the columns shown are "N.º socio", "Nombre", "Apellidos",
+"Categoría" and "Tipo de licencia" (each column's `default` flag); the rest are optional in the
+"Filtros…" panel.
 
 A page's requests that don't depend on each other go out together, not one after another
 (each wait in a row costs a full round trip, which is most of what a page load takes once

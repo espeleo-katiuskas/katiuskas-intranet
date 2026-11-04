@@ -287,7 +287,20 @@ body {
 
 .content {
   padding: 28px;
-  max-width: 1120px;
+  /* Wide enough for the widest tables; past this the columns of a table end up too far from each
+     other to follow a line across. */
+  max-width: 1400px;
+}
+
+/* What is meant to be read or filled in keeps a measure of its own, whatever the width of the page:
+   running text (not the banner), and the panels with filters and forms (not the modal dialogs,
+   which have theirs). */
+.content p:not(.success-message) {
+  max-width: 75ch;
+}
+
+.content .panel:not(dialog) {
+  max-width: 960px;
 }
 
 /* #feedback (the shared top-of-page status banner every
@@ -1076,6 +1089,26 @@ button.link-button {
 input[readonly] { background: var(--surface-muted); }
 .status-groups h3 { margin: 18px 0 6px; font-size: 1rem; }
 .status-groups h3:first-child { margin-top: 0; }
+
+/* "Estado del sistema" (/admin): short names and short values, so the page's width would only put them
+   far apart. The block is narrow, the name has a column of its own and the value sits right next to it,
+   and a faint line under each row helps the eye along. */
+.status-groups,
+.status-header {
+  max-width: 960px;
+}
+
+.status-groups .detail-row {
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.status-groups .detail-row > :first-child {
+  flex: 0 0 20rem;
+  color: var(--ink-muted);
+}
 .account-hidden td { opacity: 0.6; }
 .load-more { text-align: center; margin: 12px 0; }
 
