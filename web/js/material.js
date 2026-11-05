@@ -4,7 +4,7 @@ import {
   escapeHtml,
   formatDate,
   normalizeForSearch,
-  pickerLabel,
+  personPickerLabeler,
   renderPickerOptions,
   resolvePickerId,
   showFeedback,
@@ -589,10 +589,11 @@ if (canManageMovements) {
   // Both socios and activities pile up over time, so a plain <select>
   // stops being usable — these shared datalists back a text input in
   // every item's inline add-movement form instead, searchable as you
-  // type. See pickerLabel/renderPickerOptions/resolvePickerId in api.js.
+  // type. See personPickerLabeler/renderPickerOptions/resolvePickerId in api.js.
   const directoryLoaded = apiFetch('/users/directory')
     .then((people) => {
       directoryByLogin = Object.fromEntries(people.map((person) => [person.login, person]));
+      const labelOf = personPickerLabeler(people);
       userEntries = people
         .slice()
         .sort((a, b) =>
@@ -600,7 +601,7 @@ if (canManageMovements) {
         )
         .map((person) => ({
           id: person.login,
-          label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+          label: labelOf(person),
           member: person.member,
           formerMember: person.former_member,
         }));
@@ -612,7 +613,7 @@ if (canManageMovements) {
     .then((activities) => {
       activityEntries = activities.map((activity) => ({
         id: activity.id,
-        label: pickerLabel(`${formatDate(activity.start_date)} — ${activity.title}`, activity.id),
+        label: `${formatDate(activity.start_date)} — ${activity.title}`,
       }));
       document.getElementById('mv-activity-options').innerHTML =
         renderPickerOptions(activityEntries);

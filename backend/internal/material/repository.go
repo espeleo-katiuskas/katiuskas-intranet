@@ -78,6 +78,8 @@ var (
 	ErrRecipientNotMemberOrFormer = errors.New("a sale can only be for a member or a former member")
 	// ErrModelWithoutBrand means a model was given with no brand: a model is the model of a brand.
 	ErrModelWithoutBrand = errors.New("a model can only be given when there is a brand")
+	// ErrInvalidItemCode means a code made only of digits, which a listing could take for an id.
+	ErrInvalidItemCode = errors.New("a code cannot be made only of digits")
 	// ErrDuplicateItemCode means another item already has the code.
 	ErrDuplicateItemCode = errors.New("another item already has this code")
 )

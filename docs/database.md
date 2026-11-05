@@ -544,6 +544,9 @@ Constraints:
 Indexes:
 
 - `idx_activities_start_date` sobre `(start_date)`
+- `activities_start_date_title_key`, unique, over `(start_date, lower(btrim(title)))`: two activities
+  cannot start the same day with the same title, ignoring case and the spaces around it (409
+  `duplicate_activity`)
 
 ### `activity_participants`
 
@@ -701,6 +704,9 @@ Constraints:
 - `rope_and_bag_require_brand_model`: `(kind = 'general') OR ((brand IS NOT NULL) AND (model IS
   NOT NULL))`
 - `rope_and_bag_require_code`: `(kind = 'general') OR (code IS NOT NULL)`
+- `material_items_code_not_empty`: `code IS NULL OR btrim(code) <> ''`
+- `material_items_code_not_only_digits`: `code IS NULL OR code !~ '^[0-9]+$'` (a listing writes `#<code>`,
+  or `#<id>` with no code)
 - `model_needs_brand`: `(model IS NULL) OR (brand IS NOT NULL)`
 - `rope_fields_only_for_rope`: `(kind = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
   NULL) AND (manufacture_year IS NULL) AND (length_m IS NULL))`
@@ -1387,3 +1393,7 @@ at the end; that database has to be recreated when a new migration appears.
   `CASCADE`, two `SET NULL` and the rest the default)
 - `00050_activity_guests.sql`: `activity_guests`
 - `00051_activities_max_participants.sql`: `activities.max_participants`
+- `00052_activity_title_and_material_code_constraints.sql`: unique index on `(start_date,
+  lower(btrim(title)))` of `activities`; and `material_items.code` is never empty nor only digits
+  (`material_items_code_not_empty`, `material_items_code_not_only_digits`): the migration turns
+  blank codes into none and stops, naming the items, if one is made of digits

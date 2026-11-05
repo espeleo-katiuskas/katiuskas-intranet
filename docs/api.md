@@ -356,7 +356,8 @@ Directiva).
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`, `invalid_max_participants`, `unknown_participant`; 403 `forbidden`; 404
     `not_found`; 409 `not_a_member` (a participant who is not a member now), `activity_full` (more
-    initial participants than `max_participants`)
+    initial participants than `max_participants`), `duplicate_activity` (that title already starts
+    that day)
 - **GET** `/activities/{id}` — *Any baseline role*. One activity.
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`
@@ -369,7 +370,7 @@ Directiva).
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
     `invalid_visibility`, `invalid_max_participants`; 403 `forbidden`; 404 `not_found`; 409
-    `max_below_attendance` (a limit lower than the people going)
+    `max_below_attendance` (a limit lower than the people going), `duplicate_activity`
 - **DELETE** `/activities/{id}` — *Organizer, admin or board*. Deletes an activity, but only one
   with nothing attached: with participants, resources or material movements it is refused until
   those are removed. To take it out of sight without deleting it, cancel it with `PATCH`.
@@ -470,7 +471,7 @@ files (up to 25 MiB).
     text counts as no value)
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `unknown_type`, `invalid_date`, `single_unit_item`,
-    `invalid_item_fields`, `model_without_brand`; 409 `duplicate_item_code`
+    `invalid_item_fields`, `model_without_brand`, `invalid_item_code`; 409 `duplicate_item_code`
 - **PUT** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
   editable field with the body's (the brand, model, code, description, `loanable`, prices and the
   rope or bag fields of its kind). General material can change its type (`type_id`, which may be
@@ -481,7 +482,7 @@ files (up to 25 MiB).
     optional
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_type`, `kind_change`, `invalid_item_fields`,
-    `model_without_brand`; 404 `not_found`; 409 `duplicate_item_code`
+    `model_without_brand`, `invalid_item_code`; 404 `not_found`; 409 `duplicate_item_code`
 - **DELETE** `/material/items/{id}` — *Admin*. Deletes an item that has no
   history: the acquisition it was created with goes with it, but any other movement (a loan, a
   rental, a sale, more stock, a loss...) makes it refuse.

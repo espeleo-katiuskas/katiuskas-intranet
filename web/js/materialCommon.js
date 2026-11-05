@@ -16,6 +16,16 @@ const bagTypeLabels = {
 // is false only in the items table, where the Tipo column already
 // shows the item's type and repeating it here would be redundant.
 function itemLabel(item, { includeType = true } = {}) {
+  return `${itemName(item, { includeType })} ${escapeHtml(itemRef(item))}`;
+}
+
+// What tells an item from another that looks the same: "#<code>" or, for an item with no code,
+// "#<id>". A code is never only digits, so the two cannot be mistaken.
+function itemRef(item) {
+  return `#${item.code ?? item.id}`;
+}
+
+function itemName(item, { includeType = true } = {}) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   if (item.kind === 'rope') {
     const parts = [
@@ -39,4 +49,4 @@ function itemLabel(item, { includeType = true } = {}) {
   return escapeHtml(parts.filter(Boolean).join(' — '));
 }
 
-export { bagTypeLabels, itemLabel, ropeTypeLabels };
+export { bagTypeLabels, itemLabel, itemRef, ropeTypeLabels };

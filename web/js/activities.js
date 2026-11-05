@@ -2,7 +2,7 @@ import {
   apiFetch,
   escapeHtml,
   formatDate,
-  pickerLabel,
+  personPickerLabeler,
   renderPickerOptions,
   resolvePickerId,
   typeLabels,
@@ -32,10 +32,8 @@ async function loadDirectory() {
       .sort((a, b) =>
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
       );
-    const entryOf = (person) => ({
-      id: person.login,
-      label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
-    });
+    const labelOf = personPickerLabeler(directory);
+    const entryOf = (person) => ({ id: person.login, label: labelOf(person) });
     personEntries = sorted.map(entryOf);
     memberEntries = sorted.filter((person) => person.member).map(entryOf);
   } catch {

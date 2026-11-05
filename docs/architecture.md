@@ -693,6 +693,9 @@ only admin/board), who can also sign up the initial participants in one go.
   which queries the activity to compare `leader_id` with the authenticated user).
 - The type (`caving`, `canyoning`, `training`, `social`, `other`) can also be changed when
   editing.
+- **One title a day.** Two activities cannot start the same day with the same title, ignoring case
+  and the spaces around it (unique index, 409 `duplicate_activity` on creating or editing): the
+  pickers that list activities show the date and the title only.
 - **Limit of people.** An activity may have a `max_participants`: the members signed up and the
   guests together. Nobody can be signed up or added as a guest past it (409 `activity_full`; checked
   in Go under a lock of the activity's row, so two people at once cannot both take the last place),
@@ -814,7 +817,9 @@ not its quantities, which only movements change, and its type only within genera
 to or from Cuerda and Saca, 400 `kind_change`) is for the same three. Deleting one
 (`DELETE /material/items/{id}`) is for admin alone, and only while it has no movements besides the
 acquisition it was created with, which goes with it (409 `item_has_movements` otherwise). An item's
-`code` is unique (409 `duplicate_item_code`). The list of types itself is changed by admin
+`code` is unique (409 `duplicate_item_code`), is never empty (blank counts as none) and is not made only of
+digits (400 `invalid_item_code`): the listings write it after the item as "#<code>", or "#<id>" when there is none, and a
+code of digits could be taken for an id. The list of types itself is changed by admin
 alone (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and
 Saca can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted
 (409 `type_in_use`).

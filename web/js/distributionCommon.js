@@ -9,7 +9,7 @@ import {
   formatCurrency,
   formatDate,
   formatDateTime,
-  pickerLabel,
+  personPickerLabeler,
   resolvePickerId,
 } from './api.js';
 
@@ -393,11 +393,9 @@ async function loadPeople(distributionId, purpose = null) {
   if (purpose) {
     try {
       const members = await apiFetch(`/distributions/${distributionId}/people?for=${purpose}`);
+      const labelOf = personPickerLabeler(members);
       entries = members
-        .map((p) => ({
-          id: p.login,
-          label: pickerLabel(`${p.first_name} ${p.last_name}`, p.login),
-        }))
+        .map((p) => ({ id: p.login, label: labelOf(p) }))
         .sort((a, b) => a.label.localeCompare(b.label, 'es'));
     } catch {
       // No picker: the page says so when somebody tries to choose.

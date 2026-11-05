@@ -5,7 +5,7 @@ import {
   apiFetchForm,
   escapeHtml,
   formatDate,
-  pickerLabel,
+  personPickerLabeler,
   renderPickerOptions,
   resolvePickerId,
   typeLabels,
@@ -20,6 +20,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { itemLabel, itemRef } from './materialCommon.js';
 import { renderMarkdown } from './markdown.js';
 import { formatSize, downloadBlob } from './fileBrowser.js';
 
@@ -240,10 +241,8 @@ async function loadDirectory() {
       .sort((a, b) =>
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'es'),
       );
-    const entryOf = (person) => ({
-      id: person.login,
-      label: `${person.first_name} ${person.last_name} #${person.login}`,
-    });
+    const labelOf = personPickerLabeler(directory);
+    const entryOf = (person) => ({ id: person.login, label: labelOf(person) });
     personEntries = sorted.map(entryOf);
     memberEntries = sorted.filter((person) => person.member).map(entryOf);
     const loanUserOptions = document.getElementById('loan-user-options');
@@ -503,46 +502,15 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // hunting the item down on the material page. Item type/rope/bag
 // labels are duplicated from js/material.js and js/member.js, the
 // same way those two already duplicate them from each other.
-const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = {
-  caving: 'Espeleología',
-  canyoning: 'Cañones',
-  quick: 'Rápida',
-  special: 'Especial',
-};
-
-function itemLabel(item) {
-  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.kind === 'rope') {
-    const parts = [
-      brandModel || null,
-      `${item.diameter_mm} mm`,
-      ropeTypeLabels[item.rope_type] ?? item.rope_type,
-      item.manufacture_year,
-      item.length_m ? `${item.length_m} m` : null,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  if (item.kind === 'bag') {
-    const parts = [
-      brandModel || null,
-      `${item.capacity_liters} L`,
-      bagTypeLabels[item.bag_type] ?? item.bag_type,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  const parts = [item.type_name, brandModel || null, item.description || null];
-  return escapeHtml(parts.filter(Boolean).join(' — '));
-}
 
 // Plain-text counterpart of itemLabel for the picker's <option> values —
-// renderPickerOptions/pickerLabel already escape it, so this must not.
+// renderPickerOptions already escapes it, so this must not.
 function itemPickerText(item) {
   const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
   const parts =
     item.kind === 'general'
       ? [item.type_name, brandModel || null, item.description || null]
-      : [item.type_name, brandModel || null, item.code];
+      : [item.type_name, brandModel || null];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -558,7 +526,7 @@ async function loadItems() {
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     itemEntries = items.map((item) => ({
       id: item.id,
-      label: pickerLabel(itemPickerText(item), item.id),
+      label: `${itemPickerText(item)} ${itemRef(item)}`,
     }));
     refreshLoanChoices();
   } catch {

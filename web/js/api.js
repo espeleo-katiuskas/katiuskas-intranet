@@ -756,6 +756,20 @@ function pickerLabel(text, id) {
   return `${text} #${id}`;
 }
 
+// How the people of a list read in a picker: just "Nombre Apellidos", and "#login" after it only
+// for those who share their name with somebody else in the list (so the two can be told apart and
+// what is typed still resolves to one person). Gets the whole list the pickers are made from and
+// returns what to write for each person.
+function personPickerLabeler(people) {
+  const key = (p) => `${p.first_name} ${p.last_name}`.trim().toLowerCase();
+  const count = new Map();
+  for (const p of people) count.set(key(p), (count.get(key(p)) ?? 0) + 1);
+  return (p) => {
+    const name = `${p.first_name} ${p.last_name}`;
+    return count.get(key(p)) > 1 ? pickerLabel(name, p.login) : name;
+  };
+}
+
 function renderPickerOptions(entries) {
   return entries.map((e) => `<option value="${escapeHtml(e.label)}"></option>`).join('');
 }
@@ -805,6 +819,7 @@ export {
   formatDateTime,
   formatCurrency,
   pickerLabel,
+  personPickerLabeler,
   renderPickerOptions,
   resolvePickerId,
 };

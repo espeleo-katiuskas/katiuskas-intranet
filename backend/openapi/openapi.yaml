@@ -1493,7 +1493,9 @@ paths:
         "409":
           description: >
             not_a_member — one of the given participant_logins isn't a member now;
-            or activity_full — there are more participant_logins than max_participants.
+            or activity_full — there are more participant_logins than max_participants;
+            or duplicate_activity — there is already an activity with that title (ignoring case
+            and surrounding spaces) starting that day.
 
   /activities/{id}:
     get:
@@ -1539,7 +1541,9 @@ paths:
         "404":
           description: not_found — the activity doesn't exist, or leader_login doesn't belong to anyone.
         "409":
-          description: max_below_attendance — max_participants is lower than the people already going (members and guests).
+          description: >
+            max_below_attendance — max_participants is lower than the people already going (members and guests);
+            or duplicate_activity — another activity already has that title on that start date.
 
     delete:
       summary: Delete an activity
@@ -3129,7 +3133,8 @@ paths:
             a bag needs bag_type/capacity_liters, a general item needs
             a description, and none of a rope or bag's own
             fields may be set on the other two kinds), or
-            model_without_brand (a model was given without a brand).
+            model_without_brand (a model was given without a brand), or
+            invalid_item_code (a code made only of digits; an empty one is the same as none).
         "409": { description: duplicate_item_code — another item already has that code. }
 
   /material/items/{id}:
@@ -3156,7 +3161,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields or model_without_brand." }
+        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields, model_without_brand or invalid_item_code (a code made only of digits)." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code. }

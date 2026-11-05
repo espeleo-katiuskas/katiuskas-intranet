@@ -29,6 +29,9 @@ var (
 	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
 	// ErrHolidayNotFound means the given holiday id doesn't exist.
 	ErrHolidayNotFound = errors.New("holiday not found")
+	// ErrDuplicateActivity means there is already an activity with that title starting that day.
+	ErrDuplicateActivity = errors.New("there is already an activity with that title on that date")
+
 	// ErrDuplicateHoliday means a holiday already exists on that date —
 	// see the holidays.date UNIQUE constraint.
 	ErrDuplicateHoliday = errors.New("a holiday already exists on that date")
@@ -43,6 +46,19 @@ var (
 
 const foreignKeyViolationCode = "23503"
 const uniqueViolationCode = "23505"
+
+// duplicateActivityIndex is the unique index on (start_date, title) of activities.
+const duplicateActivityIndex = "activities_start_date_title_key"
+
+// asDuplicateActivity says ErrDuplicateActivity for a violation of that index and leaves any other
+// error as it is.
+func asDuplicateActivity(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == duplicateActivityIndex {
+		return ErrDuplicateActivity
+	}
+	return err
+}
 
 // activitySelect is appended to every query that returns one or more
 // Activity rows other than Create's INSERT ... RETURNING (which can't
@@ -100,7 +116,7 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 	`, in.Title, in.Type, in.StartDate, in.EndDate, in.Description, in.LeaderID, in.Visibility, in.MaxParticipants,
 	).Scan(&a.ID, &a.Title, &a.Type, &a.StartDate, &a.EndDate, &a.Description, &a.Cancelled, &a.LeaderID, &a.Visibility, &a.MaxParticipants)
 	if err != nil {
-		return Activity{}, err
+		return Activity{}, asDuplicateActivity(err)
 	}
 
 	for _, userID := range in.ParticipantUserIDs {
@@ -317,7 +333,7 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Acti
 		UPDATE activities SET title=$1, type=$2, start_date=$3, end_date=$4, description=$5, cancelled=$6, visibility=$7, leader_id=$8, max_participants=$9 WHERE id=$10
 	`, a.Title, a.Type, a.StartDate, a.EndDate, a.Description, a.Cancelled, a.Visibility, a.LeaderID, a.MaxParticipants, id)
 	if err != nil {
-		return a, err
+		return a, asDuplicateActivity(err)
 	}
 	if in.LeaderID != nil {
 		// a.LeaderLogin still holds the *previous* leader's login — it

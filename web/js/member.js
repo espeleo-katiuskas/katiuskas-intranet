@@ -17,6 +17,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { itemLabel } from './materialCommon.js';
 import { initSessionsPanel } from './sessionsPanel.js';
 import { initUserFilesBrowser } from './userFiles.js';
 import { initLicenseFiles } from './licenseFiles.js';
@@ -1110,40 +1111,6 @@ const movementStatusLabels = {
   overdue: 'Vencido',
   cancelled: 'Cancelado',
 };
-const ropeTypeLabels = { caving: 'Espeleología', canyoning: 'Cañones' };
-const bagTypeLabels = {
-  caving: 'Espeleología',
-  canyoning: 'Cañones',
-  quick: 'Rápida',
-  special: 'Especial',
-};
-
-// A rope/bag is identified by brand+model (plus its type-specific
-// attributes); a general item may have no known brand/model at all, so its
-// type — always set — anchors the label instead.
-function itemLabel(item) {
-  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  if (item.kind === 'rope') {
-    const parts = [
-      brandModel || null,
-      `${item.diameter_mm} mm`,
-      ropeTypeLabels[item.rope_type] ?? item.rope_type,
-      item.manufacture_year,
-      item.length_m ? `${item.length_m} m` : null,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  if (item.kind === 'bag') {
-    const parts = [
-      brandModel || null,
-      `${item.capacity_liters} L`,
-      bagTypeLabels[item.bag_type] ?? item.bag_type,
-    ];
-    return escapeHtml(parts.filter(Boolean).join(' · '));
-  }
-  const parts = [item.type_name, brandModel || null, item.description || null];
-  return escapeHtml(parts.filter(Boolean).join(' — '));
-}
 
 // Only a rental ever carries a returned_at — a loan's own "returned"
 // state is the sum of separate 'return' movements (visible as their

@@ -1819,3 +1819,47 @@ func TestHandlerMaxParticipantsCountsMembersAndGuests(t *testing.T) {
 		t.Errorf("a guest with no limit: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandlerTwoActivitiesCannotShareDateAndTitle(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	admin := testutil.InsertMember(t, tx)
+	token := tokenFor(t, authn, admin.ID, "admin")
+	create := func(title, start string) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
+			"title": title, "type": "social", "start_date": start, "end_date": start,
+		})
+	}
+	first := create("Cena de Navidad", "2026-12-20")
+	if first.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", first.Code, first.Body.String())
+	}
+	// The same title on the same day, whatever the case or the spaces around it, is refused.
+	for _, title := range []string{"Cena de Navidad", "  cena de navidad "} {
+		rec := create(title, "2026-12-20")
+		if rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_activity" {
+			t.Errorf("%q: expected 409 duplicate_activity, got %d: %s", title, rec.Code, rec.Body.String())
+		}
+	}
+	// Another day, or another title, is fine.
+	other := create("Cena de Navidad", "2026-12-21")
+	if other.Code != http.StatusCreated {
+		t.Fatalf("the same title on another day: %d: %s", other.Code, other.Body.String())
+	}
+	if rec := create("Comida de Navidad", "2026-12-20"); rec.Code != http.StatusCreated {
+		t.Errorf("another title on the same day: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Moving one onto the other is refused too, by its date or by its title.
+	var moved activities.Activity
+	if err := json.Unmarshal(other.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d", moved.ID)
+	rec := doRequest(mux, http.MethodPatch, path, token, map[string]any{"start_date": "2026-12-20", "end_date": "2026-12-20"})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_activity" {
+		t.Errorf("moving onto a taken date: expected 409 duplicate_activity, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPatch, path, token, map[string]any{"title": "Comida de Navidad"}); rec.Code != http.StatusOK {
+		t.Errorf("renaming to a title free that day: %d: %s", rec.Code, rec.Body.String())
+	}
+}

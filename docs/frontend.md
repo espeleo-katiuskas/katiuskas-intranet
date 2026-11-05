@@ -69,6 +69,17 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
+**How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for the
+people who share it with somebody else in the same list, so the two can be told apart and what is typed
+still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list the
+picker is made from, not the part of it that is offered). Pickers of other things (activities,
+material items) still carry their "#id".
+
+**How a piece of material reads.** Every listing of material (`/material`, `/material-prestado`, the
+loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`),
+which ends with "#<code>" or, for an item with no code, "#<id>" (`itemRef`); the picker of the loans
+of `/actividad` ends the same way. A code is never only digits, so the two cannot be mistaken.
+
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):
 the participants of an activity — "Añadir participante" on `/actividad` and the participants of

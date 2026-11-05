@@ -1448,3 +1448,46 @@ func TestHandlerDeleteMovement(t *testing.T) {
 		t.Errorf("a bad id: %d", rec.Code)
 	}
 }
+
+func TestHandlerAnItemCodeCannotBeOnlyDigitsNorEmpty(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 3, "board")
+	general := func(code any) map[string]any {
+		return map[string]any{
+			"type_id": testutil.MaterialTypeID(t, tx, "Mosquetones"), "description": "Mosquetón", "code": code,
+		}
+	}
+	for _, code := range []string{"123", " 007 "} {
+		rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, general(code))
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_code" {
+			t.Errorf("code %q: expected 400 invalid_item_code, got %d: %s", code, rec.Code, rec.Body.String())
+		}
+	}
+	// A code with a letter or a dash is fine, and an empty one means none.
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, general("C-12")); rec.Code != http.StatusCreated {
+		t.Fatalf("code C-12: %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, general("  "))
+	if rec.Code != http.StatusCreated || strings.Contains(rec.Body.String(), `"code"`) {
+		t.Errorf("an empty code should be none: %d: %s", rec.Code, rec.Body.String())
+	}
+	var item material.Item
+	_ = json.Unmarshal(rec.Body.Bytes(), &item)
+	path := fmt.Sprintf("/api/v1/material/items/%d", item.ID)
+	if rec := doRequest(mux, http.MethodPut, path, boardToken, general("42")); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_code" {
+		t.Errorf("editing to digits: %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The database refuses both too, whatever goes around the API.
+	for _, code := range []string{"", "99"} {
+		sp, err := tx.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = sp.Exec(context.Background(), `UPDATE material_items SET code = $1 WHERE id = $2`, code, item.ID)
+		_ = sp.Rollback(context.Background())
+		if err == nil {
+			t.Errorf("the database accepted the code %q", code)
+		}
+	}
+}

@@ -4,7 +4,7 @@ import {
   escapeHtml,
   formatDate,
   formatDateTime,
-  pickerLabel,
+  personPickerLabeler,
   resolvePickerId,
   roleLabel,
   showFeedback,
@@ -58,8 +58,9 @@ function roleDetail(role) {
       '<p class="hint">Se asigna solo, según el historial de socio: no se da ni se quita a mano.</p>';
   } else {
     const candidates = people.filter((p) => !p.roles.includes(role.name));
+    const labelOf = personPickerLabeler(people);
     const options = candidates
-      .map((p) => `<option value="${escapeHtml(pickerLabel(fullName(p), p.login))}"></option>`)
+      .map((p) => `<option value="${escapeHtml(labelOf(p))}"></option>`)
       .join('');
     add = `
       <div class="role-add-row">
@@ -149,7 +150,8 @@ roleBody.addEventListener('click', async (event) => {
   } else if (assign) {
     const roleId = Number(assign.dataset.assignRole);
     const input = roleBody.querySelector(`input[data-role-search="${roleId}"]`);
-    const entries = people.map((p) => ({ id: p.login, label: pickerLabel(fullName(p), p.login) }));
+    const labelOf = personPickerLabeler(people);
+    const entries = people.map((p) => ({ id: p.login, label: labelOf(p) }));
     const login = resolvePickerId(entries, input.value);
     if (!login) {
       showError('Elige a una persona de la lista.');

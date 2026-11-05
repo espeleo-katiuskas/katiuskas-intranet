@@ -28,6 +28,9 @@ const texts = {
   invalid_id: 'El identificador no es válido.',
   invalid_date: 'La fecha no es válida.',
   invalid_date_range: 'La fecha de fin no puede ser anterior a la de inicio.',
+  invalid_item_code:
+    'El código no puede ser solo números: añádele alguna letra o un guion (por ejemplo, C-12).',
+  duplicate_activity: 'Ya hay una actividad con ese título que empieza ese día.',
   invalid_type: 'El tipo no es válido.',
   invalid_name: 'Hace falta un nombre válido.',
   invalid_status: 'El estado no es válido.',

@@ -9,7 +9,7 @@ import {
   showNotFound,
   stopAsNotFound,
   hasAnyRole,
-  pickerLabel,
+  personPickerLabeler,
   renderPickerOptions,
   resolvePickerId,
 } from './api.js';
@@ -72,6 +72,7 @@ let licenseTypesById = {};
 async function loadCatalogs() {
   try {
     const directory = await apiFetch('/users/directory');
+    const labelOf = personPickerLabeler(directory);
     userEntries = directory
       .slice()
       .sort((a, b) =>
@@ -79,7 +80,7 @@ async function loadCatalogs() {
       )
       .map((person) => ({
         id: person.login,
-        label: pickerLabel(`${person.first_name} ${person.last_name}`, person.login),
+        label: labelOf(person),
       }));
     if (isRealAdmin) {
       for (const id of [

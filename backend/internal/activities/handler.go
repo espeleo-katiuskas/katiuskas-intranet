@@ -207,6 +207,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", err.Error())
 		return
 	}
+	if errors.Is(err, ErrDuplicateActivity) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_activity", err.Error())
+		return
+	}
 	if errors.Is(err, ErrParticipantNotFound) {
 		httpapi.WriteError(w, http.StatusBadRequest, "unknown_participant", err.Error())
 		return
@@ -359,6 +363,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrInvalidDateRange) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date_range", err.Error())
+		return
+	}
+	if errors.Is(err, ErrDuplicateActivity) {
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_activity", err.Error())
 		return
 	}
 	if errors.Is(err, ErrNotFound) {
