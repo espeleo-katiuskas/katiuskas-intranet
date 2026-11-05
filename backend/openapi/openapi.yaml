@@ -1197,13 +1197,14 @@ paths:
               properties:
                 position: { $ref: "#/components/schemas/BoardPosition" }
                 start_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true, description: "Last day of the term; omitted or null for an open term. Never before start_date." }
       responses:
         "201":
           description: Board term created
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
-        "400": { description: invalid_body (malformed JSON), invalid_date (start_date missing or not YYYY-MM-DD) or invalid_position (position isn't one of the BoardPosition values). }
+        "400": { description: invalid_body (malformed JSON), invalid_date (start_date missing or not YYYY-MM-DD, end_date not YYYY-MM-DD or before start_date) or invalid_position (position isn't one of the BoardPosition values). }
         "403": { description: Only admin can start a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":

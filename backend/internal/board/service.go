@@ -14,6 +14,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Member, error) {
 	if !in.Position.Valid() {
 		return Member{}, ErrInvalidPosition
 	}
+	if in.EndDate != nil && in.EndDate.Before(in.StartDate) {
+		return Member{}, ErrEndBeforeStart
+	}
 	return s.repo.Create(ctx, in)
 }
 
@@ -27,6 +30,9 @@ func (s *Service) Get(ctx context.Context, id int64) (Member, error) {
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Member, error) {
 	if !in.Position.Valid() {
 		return Member{}, ErrInvalidPosition
+	}
+	if in.EndDate != nil && in.EndDate.Before(in.StartDate) {
+		return Member{}, ErrEndBeforeStart
 	}
 	return s.repo.Update(ctx, id, in)
 }

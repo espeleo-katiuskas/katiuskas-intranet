@@ -318,9 +318,9 @@ Directiva).
   of a person.
   - returns: 200 `[BoardMember]`
 - **POST** `/users/{login}/board-members` — *Admin*. Opens a board position.
-  - body: `position*`, `start_date*`
+  - body: `position*`, `start_date*`, `end_date` (omit for an open term; never before `start_date`)
   - returns: 201 `BoardMember`
-  - errors: 400 `invalid_body`; 409 `overlapping_period`
+  - errors: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
 - **PATCH** `/board-members/{id}` — *Admin*. Corrects the position or the dates, or closes it.
   - body: `position*`, `start_date*`, `end_date`
   - returns: 200 `BoardMember`

@@ -18,6 +18,9 @@ var (
 	// ErrOverlap means this person already has an open (or overlapping)
 	// board term — someone can't hold two positions, or the same
 	// position twice, at once.
+	// ErrEndBeforeStart is a term that would end before it starts.
+	ErrEndBeforeStart = errors.New("end_date cannot be before start_date")
+
 	ErrOverlap = errors.New("board term overlaps an existing one for this person")
 )
 
@@ -36,10 +39,10 @@ func NewRepository(pool db.PGX) *Repository {
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Member, error) {
 	var m Member
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO board_members (user_id, position, start_date)
-		VALUES ($1,$2,$3)
+		INSERT INTO board_members (user_id, position, start_date, end_date)
+		VALUES ($1,$2,$3,$4)
 		RETURNING id, user_id, position, start_date, end_date
-	`, in.UserID, in.Position, in.StartDate,
+	`, in.UserID, in.Position, in.StartDate, in.EndDate,
 	).Scan(&m.ID, &m.UserID, &m.Position, &m.StartDate, &m.EndDate)
 
 	var pgErr *pgconn.PgError

@@ -60,6 +60,7 @@ type CreateInput struct {
 	UserID    int64
 	Position  Position
 	StartDate time.Time
+	EndDate   *time.Time // nil: the term is open
 }
 
 // UpdateInput corrects a board term's dates and position — all three

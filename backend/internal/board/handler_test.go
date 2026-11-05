@@ -536,3 +536,33 @@ func TestHandlerHistoryListsEveryTermWithoutContactData(t *testing.T) {
 		t.Errorf("expected an unauthenticated request to be refused, got %d", rec.Code)
 	}
 }
+
+// TestHandlerCreateKeepsAnEndDate covers a term entered after the fact: end_date is stored, and one
+// before start_date or malformed is a 400.
+func TestHandlerCreateKeepsAnEndDate(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	target := testutil.InsertUser(t, tx, "")
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	path := fmt.Sprintf("/api/v1/users/%s/board-members", target.Login)
+
+	for _, end := range []string{"2019-12-31", "not-a-date"} {
+		rec := doRequest(mux, http.MethodPost, path, adminToken,
+			map[string]string{"position": "secretary", "start_date": "2020-01-01", "end_date": end})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("end_date %q: expected 400, got %d: %s", end, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := doRequest(mux, http.MethodPost, path, adminToken,
+		map[string]string{"position": "secretary", "start_date": "2020-01-01", "end_date": "2022-06-30"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created board.Member
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.EndDate == nil || created.EndDate.Format("2006-01-02") != "2022-06-30" {
+		t.Errorf("expected end_date 2022-06-30, got %v", created.EndDate)
+	}
+}

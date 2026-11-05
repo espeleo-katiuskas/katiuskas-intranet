@@ -121,6 +121,20 @@ func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
+// parseOptionalEndDate reads an end_date that may be missing, null or empty (an open term). On a
+// malformed one it answers 400 itself and reports false.
+func parseOptionalEndDate(w http.ResponseWriter, raw *string) (*time.Time, bool) {
+	if raw == nil || *raw == "" {
+		return nil, true
+	}
+	d, err := time.Parse("2006-01-02", *raw)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
+		return nil, false
+	}
+	return &d, true
+}
+
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	login := r.PathValue("login")
 	userID, ok := h.resolveUserLogin(w, r)
@@ -130,6 +144,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Position  Position `json:"position"`
 		StartDate string   `json:"start_date"`
+		EndDate   *string  `json:"end_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -140,11 +155,19 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
 		return
 	}
+	endDate, ok := parseOptionalEndDate(w, body.EndDate)
+	if !ok {
+		return
+	}
 	m, err := h.service.Create(r.Context(), CreateInput{
-		UserID: userID, Position: body.Position, StartDate: startDate,
+		UserID: userID, Position: body.Position, StartDate: startDate, EndDate: endDate,
 	})
 	if errors.Is(err, ErrInvalidPosition) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_position", err.Error())
+		return
+	}
+	if errors.Is(err, ErrEndBeforeStart) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", err.Error())
 		return
 	}
 	if errors.Is(err, ErrOverlap) {
@@ -185,14 +208,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "start_date must be YYYY-MM-DD")
 		return
 	}
-	var endDate *time.Time
-	if body.EndDate != nil && *body.EndDate != "" {
-		d, err := time.Parse("2006-01-02", *body.EndDate)
-		if err != nil {
-			httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", "end_date must be YYYY-MM-DD")
-			return
-		}
-		endDate = &d
+	endDate, ok := parseOptionalEndDate(w, body.EndDate)
+	if !ok {
+		return
 	}
 
 	// Fetched before applying anything, purely to describe exactly what
@@ -210,6 +228,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrInvalidPosition) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_position", err.Error())
+		return
+	}
+	if errors.Is(err, ErrEndBeforeStart) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_date", err.Error())
 		return
 	}
 	if errors.Is(err, ErrOverlap) {
