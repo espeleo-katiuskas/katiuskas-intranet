@@ -79,14 +79,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/accounts", h.authenticator.Protect(h.createAccount, "admin", "money"))
 	mux.Handle("GET /api/v1/accounts/{id}", h.authenticator.Protect(h.getAccount))
 	mux.Handle("GET /api/v1/accounts/{id}/transactions", h.authenticator.Protect(h.listAccountEntries))
-	mux.Handle("PATCH /api/v1/accounts/{id}", h.authenticator.Protect(h.updateAccount, "admin", "money"))
+	mux.Handle("PUT /api/v1/accounts/{id}", h.authenticator.Protect(h.updateAccount, "admin", "money"))
 	mux.Handle("DELETE /api/v1/accounts/{id}", h.authenticator.Protect(h.deleteAccount, "admin", "money"))
 	mux.Handle("POST /api/v1/accounts/{id}/move", h.authenticator.Protect(h.moveAccount, "admin", "money"))
 
 	mux.Handle("GET /api/v1/transactions", h.authenticator.Protect(h.listTransactions))
 	mux.Handle("POST /api/v1/transactions", h.authenticator.Protect(h.createTransaction, "admin", "money"))
 	mux.Handle("GET /api/v1/transactions/{id}", h.authenticator.Protect(h.getTransaction))
-	mux.Handle("PATCH /api/v1/transactions/{id}", h.authenticator.Protect(h.updateTransaction, "admin", "money"))
+	mux.Handle("PUT /api/v1/transactions/{id}", h.authenticator.Protect(h.updateTransaction, "admin", "money"))
 	mux.Handle("DELETE /api/v1/transactions/{id}", h.authenticator.Protect(h.deleteTransaction, "admin", "money"))
 }
 

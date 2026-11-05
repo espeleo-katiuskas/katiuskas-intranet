@@ -346,11 +346,11 @@ func TestUpdateAccountRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	body := map[string]string{"name": "Caja chica", "code": "571"}
 
 	boardToken := testutil.TokenFor(resolver, 2, "board")
-	if rec := doRequest(mux, http.MethodPatch, path, boardToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPut, path, boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating an account, got %d", rec.Code)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, path, adminToken, body)
+	rec := doRequest(mux, http.MethodPut, path, adminToken, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -485,7 +485,7 @@ func TestUpdateAccountReplacesTheFlagsAndAnOmittedOneMeansFalse(t *testing.T) {
 	}
 	path := "/api/v1/accounts/" + itoa(a.ID)
 
-	rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_licenses": true})
+	rec = doRequest(mux, http.MethodPut, path, adminToken, map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_licenses": true})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -505,7 +505,7 @@ func TestUpdateAccountNotificationNamesAChangedFlag(t *testing.T) {
 	notifier.waitForMessage(t)
 	notifier.reset()
 
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/accounts/"+itoa(a.ID), adminToken,
+	rec := doRequest(mux, http.MethodPut, "/api/v1/accounts/"+itoa(a.ID), adminToken,
 		map[string]any{"name": "Cuotas", "code": "700", "type": "income", "allows_dues": true})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -655,11 +655,11 @@ func TestUpdateTransactionRequiresAdminOrMoneyNotBoard(t *testing.T) {
 	body := transactionBody(created.OccurredAt, "Corregida", entry(caja.ID, 20), entry(cuotas.ID, -20))
 
 	boardToken := testutil.TokenFor(resolver, 2, "board")
-	if rec := doRequest(mux, http.MethodPatch, path, boardToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPut, path, boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a transaction, got %d", rec.Code)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, path, adminToken, body)
+	rec := doRequest(mux, http.MethodPut, path, adminToken, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1006,7 +1006,7 @@ func TestAccountTypeIsOptionalValidatedAndReplacedByUpdate(t *testing.T) {
 			t.Errorf("%q on create: expected 400 invalid_type, got %d %s", bad, rec.Code, rec.Body.String())
 		}
 		path := "/api/v1/accounts/" + itoa(created["Caja"].ID)
-		rec = doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja", "type": bad})
+		rec = doRequest(mux, http.MethodPut, path, adminToken, map[string]any{"name": "Caja", "type": bad})
 		if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_type" {
 			t.Errorf("%q on update: expected 400 invalid_type, got %d %s", bad, rec.Code, rec.Body.String())
 		}
@@ -1031,10 +1031,10 @@ func TestAccountTypeIsOptionalValidatedAndReplacedByUpdate(t *testing.T) {
 
 	// An edit replaces it: another one, and none when it is left out.
 	path := "/api/v1/accounts/" + itoa(created["Caja"].ID)
-	if a := decodeAccount(doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja", "type": "expense"})); typeOf(a) != "expense" {
+	if a := decodeAccount(doRequest(mux, http.MethodPut, path, adminToken, map[string]any{"name": "Caja", "type": "expense"})); typeOf(a) != "expense" {
 		t.Errorf("expected the type to change: %+v", a)
 	}
-	if a := decodeAccount(doRequest(mux, http.MethodPatch, path, adminToken, map[string]any{"name": "Caja"})); a.Type != nil {
+	if a := decodeAccount(doRequest(mux, http.MethodPut, path, adminToken, map[string]any{"name": "Caja"})); a.Type != nil {
 		t.Errorf("leaving it out should clear it: %+v", a)
 	}
 
@@ -1086,7 +1086,7 @@ func TestHandlerDistributionDefaultAccountIsUnique(t *testing.T) {
 	if got := defaults(); len(got) != 1 || got[0] != "Lotería" {
 		t.Fatalf("creating another default should replace it, got %v", got)
 	}
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "income", "distribution_default": true})
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "income", "distribution_default": true})
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"distribution_default":true`) {
 		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1094,7 +1094,7 @@ func TestHandlerDistributionDefaultAccountIsUnique(t *testing.T) {
 		t.Fatalf("editing should move the mark, got %v", got)
 	}
 	// Only an income account can be the default, or lose that type while it is.
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "asset", "distribution_default": true})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos", "type": "asset", "distribution_default": true})
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "not_income_for_distributions") {
 		t.Fatalf("expected 409 not_income_for_distributions, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1102,7 +1102,7 @@ func TestHandlerDistributionDefaultAccountIsUnique(t *testing.T) {
 		t.Fatalf("expected 409 creating an asset default, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// Editing without it turns it off (PATCH replaces every field).
-	doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos"})
+	doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken, map[string]any{"name": "Repartos"})
 	if got := defaults(); len(got) != 0 {
 		t.Fatalf("expected no default, got %v", got)
 	}
@@ -1204,7 +1204,7 @@ func TestAccountsEitherHaveChildrenOrTransactions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	rec = doRequest(mux, http.MethodPatch, "/api/v1/transactions/"+itoa(created.ID), token,
+	rec = doRequest(mux, http.MethodPut, "/api/v1/transactions/"+itoa(created.ID), token,
 		transactionBody(time.Now(), "Movimiento", entry(bancos.ID, 5), entry(caja.ID, -5)))
 	if rec.Code != http.StatusConflict || errorCode(t, rec) != "account_has_children" {
 		t.Fatalf("expected 409 editing a transaction onto a group, got %d: %s", rec.Code, rec.Body.String())
@@ -1215,12 +1215,12 @@ func TestAccountsEitherHaveChildrenOrTransactions(t *testing.T) {
 		t.Fatalf("expected 409 parent_has_entries creating, got %d: %s", rec.Code, rec.Body.String())
 	}
 	other := createAccount(t, mux, token, "Otra", "")
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": caja.ID})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": caja.ID})
 	if rec.Code != http.StatusConflict || errorCode(t, rec) != "parent_has_entries" {
 		t.Fatalf("expected 409 parent_has_entries editing, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// An account with no entries can still be moved under a group.
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": bancos.ID})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", other.ID), token, map[string]any{"name": "Otra", "parent_id": bancos.ID})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 moving under a group, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1282,7 +1282,7 @@ func TestAccountsWithoutTypeInheritTheirParents(t *testing.T) {
 	}
 	// Changing the type of a parent changes the whole subtree, which is refused while
 	// the default account is under it.
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
 	if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_income_for_distributions" {
 		t.Fatalf("expected 409 changing the type above the default, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1290,7 +1290,7 @@ func TestAccountsWithoutTypeInheritTheirParents(t *testing.T) {
 		t.Fatalf("the refused change must not stick, got %q", got)
 	}
 	// Moving the default account under an expense parent is refused too.
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", leaf.ID), token, map[string]any{"name": "Lotería", "parent_id": own.ID, "distribution_default": true})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", leaf.ID), token, map[string]any{"name": "Lotería", "parent_id": own.ID, "distribution_default": true})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 moving the default under an expense, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1400,7 +1400,7 @@ func TestAccountsForDuesAndLicensesHaveToBeIncome(t *testing.T) {
 		t.Fatalf("expected 201 inheriting income, got %d: %s", rec.Code, rec.Body.String())
 	}
 	// The type above can't change out from under it.
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", root.ID), token, map[string]any{"name": "Ingresos", "type": "asset"})
 	if rec.Code != http.StatusConflict || errorCode(t, rec) != "not_income_for_dues_licenses" {
 		t.Fatalf("expected 409 changing the type above it, got %d: %s", rec.Code, rec.Body.String())
 	}

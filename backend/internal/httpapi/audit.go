@@ -46,7 +46,7 @@ func NotifyAsync(notifier MutationNotifier, text string) {
 // DiffFields compares the named fields of before and after — two
 // values of the same struct type — and returns one line per field that
 // actually differs, formatted "name: before → after". It's what every
-// PATCH-style mutation notification in this app uses to describe
+// PUT/PATCH-style mutation notification in this app uses to describe
 // exactly what changed, without hand-writing a diff for every
 // resource's own fields.
 //

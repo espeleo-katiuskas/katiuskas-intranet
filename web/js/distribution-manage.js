@@ -113,7 +113,7 @@ async function distributionChanged() {
 async function setStatus(status) {
   try {
     distribution = await apiFetch(base, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(bodyFrom(distribution, { status })),
     });
     // Leaving a draft is when the orders (everybody's own, if it is for all members) appear; going
@@ -225,7 +225,7 @@ editForm.addEventListener('submit', async (event) => {
   submit.disabled = true;
   try {
     distribution = await apiFetch(base, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(readDistributionForm(editForm)),
     });
     editDialog.close();

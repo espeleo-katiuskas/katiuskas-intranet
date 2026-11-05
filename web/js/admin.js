@@ -747,7 +747,7 @@ clubInfoForm.addEventListener('submit', async (event) => {
   const editing = editingClubInfoId != null;
   try {
     await apiFetch(editing ? `/club-info/${editingClubInfoId}` : '/club-info', {
-      method: editing ? 'PATCH' : 'POST',
+      method: editing ? 'PUT' : 'POST',
       body: JSON.stringify({
         label: text('label'),
         value: text('value'),

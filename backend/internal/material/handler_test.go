@@ -231,10 +231,10 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 		t.Fatalf("decode rental: %v", err)
 	}
 	returnPath := fmt.Sprintf("/api/v1/material/movements/%d/return", rental.ID)
-	if rec := doRequest(mux, http.MethodPatch, returnPath, memberToken, nil); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPost, returnPath, memberToken, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("expected a plain member to be forbidden from returning a movement, got %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPatch, returnPath, materialMemberToken, nil); rec.Code != http.StatusOK {
+	if rec := doRequest(mux, http.MethodPost, returnPath, materialMemberToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("expected material+member to register a return, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
@@ -922,7 +922,7 @@ func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 	notifier.waitForNthMessage(t, 1)
 
 	returnPath := fmt.Sprintf("/api/v1/material/movements/%d/return", rental.ID)
-	if rec := doRequest(mux, http.MethodPatch, returnPath, boardToken, nil); rec.Code != http.StatusOK {
+	if rec := doRequest(mux, http.MethodPost, returnPath, boardToken, nil); rec.Code != http.StatusOK {
 		t.Fatalf("return rental: %d: %s", rec.Code, rec.Body.String())
 	}
 
@@ -966,11 +966,11 @@ func TestHandlerUpdateItem(t *testing.T) {
 	}
 
 	for name, token := range map[string]string{"a member": memberToken, "the material role alone": materialAloneToken} {
-		if rec := doRequest(mux, http.MethodPatch, path, token, edited); rec.Code != http.StatusForbidden {
+		if rec := doRequest(mux, http.MethodPut, path, token, edited); rec.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be forbidden from editing, got %d", name, rec.Code)
 		}
 	}
-	rec = doRequest(mux, http.MethodPatch, path, materialMemberToken, edited)
+	rec = doRequest(mux, http.MethodPut, path, materialMemberToken, edited)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -992,14 +992,14 @@ func TestHandlerUpdateItem(t *testing.T) {
 
 	// The same constraints as when it was created.
 	bad := map[string]any{"description": nil}
-	rec = doRequest(mux, http.MethodPatch, path, boardToken, bad)
+	rec = doRequest(mux, http.MethodPut, path, boardToken, bad)
 	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
 		t.Errorf("a general item without a description: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
+	if rec := doRequest(mux, http.MethodPut, "/api/v1/material/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
 		t.Errorf("an item that does not exist: %d", rec.Code)
 	}
-	if rec := doRequest(mux, http.MethodPatch, "/api/v1/material/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
+	if rec := doRequest(mux, http.MethodPut, "/api/v1/material/items/abc", boardToken, edited); rec.Code != http.StatusBadRequest {
 		t.Errorf("a bad id: %d", rec.Code)
 	}
 }
@@ -1022,7 +1022,7 @@ func TestHandlerItemTypeCanOnlyChangeWithinGeneral(t *testing.T) {
 		return item
 	}
 	patch := func(item material.Item, body map[string]any) *httptest.ResponseRecorder {
-		return doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, body)
+		return doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, body)
 	}
 	cuerda, saca, placas := testutil.MaterialTypeID(t, tx, "Cuerda"), testutil.MaterialTypeID(t, tx, "Saca"), testutil.MaterialTypeID(t, tx, "Placas")
 
@@ -1089,12 +1089,12 @@ func TestHandlerItemCodeAlreadyTaken(t *testing.T) {
 	var item material.Item
 	_ = json.Unmarshal(second.Body.Bytes(), &item)
 	edit := rope("C-1")
-	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
+	if rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, edit); rec.Code != http.StatusConflict || errorCode(t, rec) != "duplicate_item_code" {
 		t.Errorf("editing to a code in use: %d %s", rec.Code, rec.Body.String())
 	}
 	// Keeping its own code is fine.
 	own := rope("C-2")
-	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
+	if rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/material/items/%d", item.ID), boardToken, own); rec.Code != http.StatusOK {
 		t.Errorf("editing with its own code: %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -1196,7 +1196,7 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 		for k, v := range extra {
 			b[k] = v
 		}
-		return doRequest(mux, http.MethodPatch, path, boardToken, b)
+		return doRequest(mux, http.MethodPut, path, boardToken, b)
 	}
 	if rec := edit(map[string]any{"model": "Vertex"}); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "model_without_brand" {
 		t.Errorf("editing to a model without a brand: %d %s", rec.Code, rec.Body.String())

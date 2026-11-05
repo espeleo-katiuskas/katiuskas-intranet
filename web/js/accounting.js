@@ -252,7 +252,7 @@ editAccountForm.addEventListener('submit', async (event) => {
   submitButton.disabled = true;
   try {
     await apiFetch(`/accounts/${editingAccountId}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(body),
     });
     showFeedback('Cuenta actualizada.');

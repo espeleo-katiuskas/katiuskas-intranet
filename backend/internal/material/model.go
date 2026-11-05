@@ -177,8 +177,8 @@ type CreateItemInput struct {
 	CapacityLiters     *float64
 }
 
-// UpdateItemInput is what PATCH /items/{id} replaces: every field an item can be edited in, all at
-// once (the same "resend everything" as the other PATCHes), but for the type, which may be left out
+// UpdateItemInput is what PUT /material/items/{id} replaces: every field an item can be edited in, all at
+// once (the same "resend everything" as the other PUTs), but for the type, which may be left out
 // to keep it. Not the item's kind, which is what its
 // shape and required fields hang from, and not its quantities, which only movements change.
 type UpdateItemInput struct {

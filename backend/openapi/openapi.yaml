@@ -8,6 +8,13 @@ info:
     frontend today and intended for a future mobile app and terminal client
     as well.
 
+    Methods mean the same everywhere. GET reads and changes nothing.
+    POST creates a resource in a collection, or runs an action that no
+    other method describes. PUT replaces a whole resource (or ordered
+    list) at a known URL and is idempotent. PATCH changes only the fields
+    that are sent. DELETE removes the resource at the URL, or undoes
+    something, and has no body.
+
     Every endpoint below that requires bearerAuth requires the caller to
     hold at least one of admin, board, or member — this is a floor that
     applies on top of whatever more specific roles an endpoint's own
@@ -892,7 +899,7 @@ paths:
         on file), and keeps using POST /users/{login}/memberships for
         that instead. Editing or removing a due isn't supported. The
         transaction must also have an entry on an account marked
-        allows_dues (see PATCH /accounts/{id}) — checked before anything
+        allows_dues (see PUT /accounts/{id}) — checked before anything
         else, so a rejected due never starts a membership period either.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -941,7 +948,7 @@ paths:
       summary: List a person's federative licenses
       description: >
         Open to that person themselves, or to admin/board — nobody else,
-        even though POST/PATCH/DELETE on a license are admin-only
+        even though POST/PUT/DELETE on a license are admin-only
         regardless of whose it is.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -973,10 +980,10 @@ paths:
         forbidden otherwise. transaction_id is optional: when given it
         must name the transaction that recorded the payment for this
         license (see POST /transactions), and that transaction must also
-        have an entry on an account marked allows_licenses (see PATCH
+        have an entry on an account marked allows_licenses (see PUT
         /accounts/{id}); leave it out for a license the club didn't
         collect (someone federated elsewhere). It's never changed
-        afterward (PATCH has no transaction_id of its own).
+        afterward (PUT has no transaction_id of its own).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: login, in: path, required: true, schema: { type: string } }
@@ -1017,7 +1024,7 @@ paths:
             allows_licenses).
 
   /licenses/{id}:
-    patch:
+    put:
       summary: Correct a license
       description: >
         Admin-only. Unlike POST, this doesn't re-check that the person
@@ -1103,7 +1110,7 @@ paths:
                 items: { $ref: "#/components/schemas/Membership" }
 
   /memberships/{id}:
-    patch:
+    put:
       summary: Correct a membership period's dates (or end it)
       description: >
         Admin-only. start_date is always required and replaces the
@@ -1247,7 +1254,7 @@ paths:
                 items: { $ref: "#/components/schemas/BoardMember" }
 
   /board-members/{id}:
-    patch:
+    put:
       summary: Correct a board term's position or dates (or end it)
       description: >
         Admin-only. position and start_date are always required and
@@ -1374,7 +1381,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   /leaves/{id}:
-    patch:
+    put:
       summary: Correct a temporary leave's dates or reason
       description: >
         Admin-only. start_date is always required and end_date always
@@ -2123,7 +2130,7 @@ paths:
         "409": { description: reorder_mismatch. }
 
   /club-info/{id}:
-    patch:
+    put:
       summary: Change an item
       description: >
         Admin only. Replaces the label, value and copy button (a copy_value or copy_label left out
@@ -2293,7 +2300,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
         "404": { $ref: "#/components/responses/NotFound" }
-    patch:
+    put:
       summary: Edit a distribution
       description: >
         Requires admin or board. Replaces every field of the creation body
@@ -3083,7 +3090,7 @@ paths:
         "409": { description: duplicate_item_code — another item already has that code. }
 
   /material/items/{id}:
-    patch:
+    put:
       summary: Edit an item
       description: >
         Requires the admin, board or material role. Replaces every editable field (brand, model, code,
@@ -3353,7 +3360,7 @@ paths:
         "409": { description: movement_needed — other movements depend on it. }
 
   /material/movements/{id}/return:
-    patch:
+    post:
       summary: Record a return against an active rental
       description: >
         Requires the admin, board, or material role. Closes an active
@@ -3562,7 +3569,7 @@ paths:
               schema: { $ref: "#/components/schemas/Account" }
         "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
-    patch:
+    put:
       summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
@@ -3783,7 +3790,7 @@ paths:
                         items: { $ref: "#/components/schemas/License" }
         "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
-    patch:
+    put:
       summary: Correct a transaction's description, timestamp, or entries
       description: >
         Requires admin or the money role. description, occurred_at and
@@ -4126,7 +4133,7 @@ components:
             (null membership_end_date) — a leave doesn't end the period it
             belongs to, so this is the only way to tell "activo" apart from
             "baja temporal". Read-only here — set through
-            POST /users/{login}/leaves and PATCH/DELETE /leaves/{id}.
+            POST /users/{login}/leaves and PUT/DELETE /leaves/{id}.
         last_due_year:
           type: integer
           nullable: true
@@ -4608,7 +4615,7 @@ components:
         status:
           type: string
           enum: [draft, open, closed, done]
-          description: Only on PATCH.
+          description: Only on PUT.
 
     IdentifierField:
       type: object
@@ -4962,7 +4969,7 @@ components:
           format: date
           nullable: true
           description: >
-            When an active rental was closed via PATCH
+            When an active rental was closed via POST
             .../return — rental only, always all-or-nothing. Always
             null for every other type, loan included.
         price:
@@ -5048,7 +5055,7 @@ components:
         ledger account; parent_id nests it under a broader one (null for a
         top-level account) — the frontend builds any tree view it wants
         client-side from this. balance/last_transaction_at are only
-        ever present from GET /accounts (never on GET/POST/PATCH
+        ever present from GET /accounts (never on GET/POST/PUT
         /accounts/{id}) — this account's activity, summing every entry
         ever posted to it and the latest of them; for an account that
         has child accounts (and so no entries of its own) the sum, and
@@ -5069,7 +5076,7 @@ components:
         type:
           type: string
           enum: [asset, income, expense]
-          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. This is the account's own type, the one PATCH replaces.
+          description: What the account is mainly for (money the club really has, mainly income, mainly expense); absent when it has none. This is the account's own type, the one PUT replaces.
         effective_type:
           type: string
           enum: [asset, income, expense]

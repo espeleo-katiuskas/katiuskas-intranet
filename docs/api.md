@@ -48,9 +48,22 @@ Contents:
   malformed JSON is always `400 invalid_body` and an unexpected failure `500 internal_error`; they
   are not repeated on each route. The codes below come from the OpenAPI and were extracted from it
   automatically.
-- **Replacement in `PATCH`**: in almost all of them, what is not sent is turned off or emptied
-  (the whole record is replaced), not left as it was. The opposite is said in the route's
-  description.
+- **Methods**: each one means the same in every route.
+  - `GET` reads. It changes nothing (apart from the session's usual renewal on use), it has no
+    body and repeating it gives the same answer.
+  - `POST` creates a new resource in a collection (`201`), or runs an action that none of the
+    others describes (a sign-in, a payment, a delivery, a reversal…; `200` or `204`). Repeating it
+    does it again.
+  - `PUT` replaces the whole resource, or a whole ordered list, at a URL that is already known: what
+    is not sent is not kept. Repeating it leaves the same result.
+  - `PATCH` changes only the fields that are sent; what is left out stays as it was.
+  - `DELETE` removes the resource at the URL, or undoes something (`204`, no body). Whatever
+    selects what to undo goes in the URL or the query string. A resource that is in use is
+    refused with `409` instead of being removed with what depends on it.
+- **`PUT` of a record**: the resources that are edited as a whole form (a period, a license, an
+  account, a transaction, an item of the material, a distribution…) are replaced with `PUT`: what is
+  not sent is emptied or turned off. The few parts that a `PUT` leaves as they are when not sent are
+  said in the route's description.
 - **Paging**: the listings that grow without limit accept `limit` and `offset`. An out-of-range
   value goes back to the default (50 almost always) instead of giving an error.
 - **Notation**: in bodies, a `*` marks the required field.
@@ -128,7 +141,7 @@ can sign in; only admin changes them.
   - body: `label*`, `value*`, `copy_value`, `copy_label`
   - returns: 201 `ClubInfoItem`
   - errors: 400 `invalid_label`, `invalid_value`, `invalid_copy`
-- **PATCH** `/club-info/{id}` — *Admin*. Replaces the item's fields (a `copy_value` or `copy_label`
+- **PUT** `/club-info/{id}` — *Admin*. Replaces the item's fields (a `copy_value` or `copy_label`
   left out turns the button off); it keeps its place.
   - body: the same as creating
   - returns: 200 `ClubInfoItem`
@@ -256,7 +269,7 @@ Directiva).
   - errors: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
 - **GET** `/memberships` — *Admin or board*. Who is a member today.
   - returns: 200 `[Membership]`
-- **PATCH** `/memberships/{id}` — *Admin*. Corrects the dates of a period or closes it.
+- **PUT** `/memberships/{id}` — *Admin*. Corrects the dates of a period or closes it.
   - body: `start_date*`, `end_date`, `end_reason`
   - returns: 200 `Membership`
   - errors: 400 `invalid_id`; 409 `overlapping_period`, `outside_membership_period`
@@ -285,7 +298,7 @@ Directiva).
   - errors: 400 `invalid_body`, `missing_fields`, `invalid_date`, `invalid_license_type`,
     `invalid_other_detail`, `unknown_transaction`; 409 `not_active_member`,
     `transaction_not_for_licenses`
-- **PATCH** `/licenses/{id}` — *Admin*. Corrects a license.
+- **PUT** `/licenses/{id}` — *Admin*. Corrects a license.
   - body: `license_type_id*`, `other_detail`, `issued_date*`, `year*`
   - returns: 200 `License`
   - errors: 400 `invalid_id`, `invalid_body`, `missing_fields`, `invalid_date`,
@@ -302,7 +315,7 @@ Directiva).
   - body: `start_date*`, `end_date`, `reason`
   - returns: 201 `Leave`
   - errors: 400 `invalid_body`; 409 `outside_membership_period`, `overlapping_period`
-- **PATCH** `/leaves/{id}` — *Admin*. Corrects a temporary leave.
+- **PUT** `/leaves/{id}` — *Admin*. Corrects a temporary leave.
   - body: `start_date*`, `end_date`, `reason`
   - returns: 200 `Leave`
   - errors: 400 `invalid_id`; 409 `outside_membership_period`, `overlapping_period`
@@ -321,7 +334,7 @@ Directiva).
   - body: `position*`, `start_date*`, `end_date` (omit for an open term; never before `start_date`)
   - returns: 201 `BoardMember`
   - errors: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
-- **PATCH** `/board-members/{id}` — *Admin*. Corrects the position or the dates, or closes it.
+- **PUT** `/board-members/{id}` — *Admin*. Corrects the position or the dates, or closes it.
   - body: `position*`, `start_date*`, `end_date`
   - returns: 200 `BoardMember`
   - errors: 400 `invalid_id`; 409 `overlapping_period`
@@ -458,7 +471,7 @@ files (up to 25 MiB).
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `unknown_type`, `invalid_date`, `single_unit_item`,
     `invalid_item_fields`, `model_without_brand`; 409 `duplicate_item_code`
-- **PATCH** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
+- **PUT** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
   editable field with the body's (the brand, model, code, description, `loanable`, prices and the
   rope or bag fields of its kind). General material can change its type (`type_id`, which may be
   left out to keep it), but only to another general one: a rope or a bag stays Cuerda or Saca and
@@ -513,7 +526,7 @@ files (up to 25 MiB).
   available again).
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `movement_needed`
-- **PATCH** `/material/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
+- **POST** `/material/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
   - returns: 200 `Movement`
   - errors: 400 `invalid_id`; 404 `not_found`
 - **GET** `/users/{login}/material/movements` — *The person themselves, admin, board or material*.
@@ -546,7 +559,7 @@ changes it.
 - **GET** `/distributions/{id}` — *Any baseline role*. One distribution (a draft is 404 for everyone
   but admin and board, and so is one the caller's role is below its `visibility`).
   - returns: 200 `Distribution`
-- **PATCH** `/distributions/{id}` — *Admin or board*. Replaces all the fields (`options`,
+- **PUT** `/distributions/{id}` — *Admin or board*. Replaces all the fields (`options`,
   `articles`, `status` and `visibility` are left as they are when not sent); it also serves to
   change the status one step (or two, between `draft` and `closed`, in a distribution with nothing
   for the members to ask: for all members, no options and no extras). Only admin changes
@@ -573,10 +586,11 @@ changes it.
   - returns: 201 `DistributionUnit`
   - errors: 400 `invalid_choices`; 409 `not_open`
 - **PATCH** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it, admin,
-  board or material*. Changes the choices or the quantity.
+  board or material*. Changes the choices (`choices`, replacing them all) or the quantity
+  (`quantity`, in an article's row); one of the two has to be sent.
   - body: `choices`, `quantity`
   - returns: 200 `DistributionUnit`
-  - errors: 400 `invalid_choices`, `invalid_quantity`; 409 `not_open`
+  - errors: 400 `invalid_choices`, `invalid_quantity`, `missing_fields`; 409 `not_open`
 - **DELETE** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it,
   admin, board or material*. Removes an order (not the automatic one of a distribution for
   everybody, nor one with something paid).
@@ -683,7 +697,7 @@ case and accents).
 - **GET** `/accounts/{id}` — *Any baseline role*. One account.
   - returns: 200 `Account`
   - errors: 400 `invalid_id`
-- **PATCH** `/accounts/{id}` — *Admin or money*. Corrects name, code, parent account, type and
+- **PUT** `/accounts/{id}` — *Admin or money*. Corrects name, code, parent account, type and
   flags. Replaces all the fields.
   - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
     `distribution_default`, `hidden`
@@ -716,7 +730,7 @@ case and accents).
   dues and licenses it paid.
   - returns: 200 `JSON`
   - errors: 400 `invalid_id`
-- **PATCH** `/transactions/{id}` — *Admin or money*. Replaces description, date and entries.
+- **PUT** `/transactions/{id}` — *Admin or money*. Replaces description, date and entries.
   - body: `description*`, `occurred_at*`, `entries*`
   - returns: 200 `Transaction`
   - errors: 400 `invalid_id`; 409 `unbalanced`

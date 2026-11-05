@@ -516,7 +516,7 @@ overlap.
 - This way, somebody who has been in the club several times still shows their original joining
   date, and the list of people can show and sort by joining/leaving date without a separate
   request per person.
-- Correcting a period (`PATCH /memberships/{id}`) revalidates against it the temporary leaves of
+- Correcting a period (`PUT /memberships/{id}`) revalidates against it the temporary leaves of
   that same person that fell inside the period *as it was before* the edit: narrowing a period
   cannot be blocked by a leave that belongs to another period of theirs.
 - Deleting a period (`DELETE /memberships/{id}`) does not cascade: nothing references it. It is
@@ -633,7 +633,7 @@ validation lives in `licenses.Service.Create`, because a `CHECK` cannot reach
 **Correction**
 
 - `/licenses/{id}` goes by license id, not nested under the user, like `/leaves/{id}`.
-- `PATCH` does not require membership in the year again, because it corrects an existing license
+- `PUT` does not require membership in the year again, because it corrects an existing license
   instead of assigning a new one; it keeps working even if the person has already left.
 
 **Use elsewhere**
@@ -792,7 +792,7 @@ movements go in a single table with a type discriminator instead of a table per 
 **Rules**
 
 - A rental is priced per week (`rental_price_per_week`), not per day, and is closed in one go with
-  `returned_at` and `status='active'→'completed'`. `PATCH /material/movements/{id}/return` only
+  `returned_at` and `status='active'→'completed'`. `POST /material/movements/{id}/return` only
   applies to an open rental.
 - A loan or a return is always linked to an activity (`material_movements.activity_id`, required by
   another `CHECK`).
@@ -809,7 +809,7 @@ movements go in a single table with a type discriminator instead of a table per 
 delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
 loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
 is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
-catalog and editing it (`PATCH /material/items/{id}`:
+catalog and editing it (`PUT /material/items/{id}`:
 not its quantities, which only movements change, and its type only within general material, never
 to or from Cuerda and Saca, 400 `kind_change`) is for the same three. Deleting one
 (`DELETE /material/items/{id}`) is for admin alone, and only while it has no movements besides the
@@ -846,7 +846,7 @@ the API but not write it, except for asking for units and editing their own).
   share can do so once it is finished; in `draft` it is not (409 `not_deliverable`).
 - **Options** (`distribution_options`): what has to be chosen, with its possible values
   ("Talla": S, M, L). A distribution has as many as it needs, or none. They can be changed as
-  long as nobody has asked for anything; afterwards, a `PATCH` that resends them identical does
+  long as nobody has asked for anything; afterwards, a `PUT` that resends them identical does
   not count as changing them, but a different one gives 409 `has_units`.
 - **Articles** (`distribution_articles`, migration `00024`): instead of being a single item with
   its own price, a distribution can hand out several that each member asks for in whatever
@@ -1117,7 +1117,7 @@ the rules.
 **Type.** An account may have a type of its own (`asset`: its balance is money the club really
 has; `income`: used mostly for what comes in; `expense`: mostly for what goes out). An account
 with no type of its own has that of its parent account, and so on upwards: that is its effective
-type (`effective_type` in the API, read-only; `type` is the own one, the one a `PATCH` replaces).
+type (`effective_type` in the API, read-only; `type` is the own one, the one a `PUT` replaces).
 The rules that depend on the type always use the effective one:
 
 - The account a distribution is paid into has to be `asset`.
@@ -1136,7 +1136,7 @@ other edits; they have to be given a type the next time they are edited.
 account of their own are recorded; only one account has it, and marking one takes it away from
 whichever had it. `hidden` marks an account that is no longer used: it cannot be deleted if it has
 history, so it is hidden from the chart and from the frontend's pickers (which show it only on
-request) without touching what is recorded against it. Like the rest of the fields, a `PATCH`
+request) without touching what is recorded against it. Like the rest of the fields, a `PUT`
 replaces the flags: leaving one out turns it off.
 
 **Hierarchy.**
@@ -1149,7 +1149,7 @@ replaces the flags: leaving one out turns it off.
   left alone.
 - `DELETE /accounts/{id}` only works if the account has no child accounts and no entries
   (409 `account_in_use`).
-- `PATCH` rejects with 409 `circular_parent` a `parent_id` that is the account itself or one of
+- `PUT` rejects with 409 `circular_parent` a `parent_id` that is the account itself or one of
   its descendants.
 - `POST /accounts/{id}/move` swaps the position with the sibling immediately before or after it,
   with no error if it is already the first or the last of its group.
@@ -1161,7 +1161,7 @@ replaces the flags: leaving one out turns it off.
   it is checked by a constraint trigger deferred until `COMMIT` (see [`database.md`](database.md)).
 - An account cannot appear twice within one transaction: its single entry already says everything
   that went through it.
-- Correcting a transaction (`PATCH`) replaces its description, its date and the whole set of
+- Correcting a transaction (`PUT`) replaces its description, its date and the whole set of
   entries at once; there is no editing of a single entry.
 - Documents (tickets, invoices) can be attached to a transaction, up to 10 MiB each: the metadata in
   the database (`transaction_files`), the bytes on disk (`TRANSACTION_FILES_ROOT`). Everybody who

@@ -33,7 +33,7 @@ func newOpenLottery(t *testing.T, e *env, admin person) distributions.Distributi
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, lottery()), http.StatusCreated))
 	body := lottery()
 	body["status"] = "open"
-	return decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	return decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 }
 
 func ask(e *env, d distributions.Distribution, by person, article int, quantity int) *httptest.ResponseRecorder {
@@ -154,7 +154,7 @@ func TestTheLimitOfAnArticleIsTheTotalAcrossEveryone(t *testing.T) {
 	body["articles"] = []map[string]any{{"name": "Papeleta", "price": 5, "max_total": 10}, {"name": "Décimo", "price": 20}}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
 	body["status"] = "open"
-	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 
 	first := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 6), http.StatusCreated))
 	// Four left: five is too many, even for somebody who has nothing yet.
@@ -234,7 +234,7 @@ func TestArticlesAreFixedOnceSomebodyAskedButTheirLimitsCanChange(t *testing.T) 
 		body := lottery()
 		body["status"] = "open"
 		body["articles"] = articles
-		return e.do("PATCH", distributionPath(d.ID), admin.token, body)
+		return e.do("PUT", distributionPath(d.ID), admin.token, body)
 	}
 	// Sending everything back as it was is no change.
 	mustStatus(t, update(lottery()["articles"].([]map[string]any)), http.StatusOK)
@@ -254,18 +254,18 @@ func TestArticlesAreFixedOnceSomebodyAskedButTheirLimitsCanChange(t *testing.T) 
 	empty := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, lottery()), http.StatusCreated))
 	body := lottery()
 	body["articles"] = []map[string]any{{"name": "Camiseta", "price": 12}}
-	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(empty.ID), admin.token, body), http.StatusOK))
+	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(empty.ID), admin.token, body), http.StatusOK))
 	if len(got.Articles) != 1 || got.Articles[0].Name != "Camiseta" {
 		t.Errorf("unexpected articles: %+v", got.Articles)
 	}
 	// Leaving the field out leaves them as they are.
 	delete(body, "articles")
-	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(empty.ID), admin.token, body), http.StatusOK))
+	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(empty.ID), admin.token, body), http.StatusOK))
 	if len(got.Articles) != 1 {
 		t.Errorf("articles should have been left alone: %+v", got.Articles)
 	}
 	body["articles"] = []map[string]any{}
-	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(empty.ID), admin.token, body), http.StatusOK))
+	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(empty.ID), admin.token, body), http.StatusOK))
 	if len(got.Articles) != 0 {
 		t.Errorf("expected no articles: %+v", got.Articles)
 	}
@@ -277,13 +277,13 @@ func TestAnArticleDistributionCantBecomeOneWithExtrasOrOptions(t *testing.T) {
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, lottery()), http.StatusCreated))
 	body := lottery()
 	body["extra_price"] = 3
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "articles_conflict")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "articles_conflict")
 	// Leaving articles out keeps them, so the same rule applies.
 	body = lottery()
 	delete(body, "articles")
 	body["audience"] = "all_members"
 	body["cutoff_date"] = "2026-10-01"
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "articles_conflict")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "articles_conflict")
 }
 
 func TestCollectionAndPaymentOfArticleRowsAndDeletingThem(t *testing.T) {
@@ -313,7 +313,7 @@ func TestBackToDraftDeletesTheArticleRowsToo(t *testing.T) {
 	mustStatus(t, ask(e, d, member, 0, 5), http.StatusCreated)
 	body := lottery()
 	body["status"] = "draft"
-	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 	if got.UnitCount != 0 || got.Articles[0].Requested != 0 {
 		t.Errorf("everything asked for should be gone: %+v", got)
 	}
@@ -330,7 +330,7 @@ func TestAnArticleMayLimitWhatOnePersonCanHave(t *testing.T) {
 		t.Fatalf("unexpected article: %+v", d.Articles[0])
 	}
 	body["status"] = "open"
-	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 
 	expect(t, ask(e, d, a, 0, 6), http.StatusConflict, "article_person_limit")
 	u := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 5), http.StatusCreated))
@@ -344,12 +344,12 @@ func TestAnArticleMayLimitWhatOnePersonCanHave(t *testing.T) {
 	// biggest request is, not below.
 	update := func(max int) *httptest.ResponseRecorder {
 		body["articles"] = []map[string]any{{"name": "Décimo", "price": 20, "max_per_person": max}}
-		return e.do("PATCH", distributionPath(d.ID), admin.token, body)
+		return e.do("PUT", distributionPath(d.ID), admin.token, body)
 	}
 	expect(t, update(1), http.StatusConflict, "cap_below_requested")
 	mustStatus(t, update(2), http.StatusOK)
 	body["articles"] = []map[string]any{{"name": "Décimo", "price": 20, "max_per_person": 0}}
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "invalid_articles")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusBadRequest, "invalid_articles")
 }
 
 func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
@@ -365,7 +365,7 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 	}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
 	body["status"] = "open"
-	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	d = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 	papeletas := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 0, 3), http.StatusCreated))
 	other := decode[distributions.Unit](t, mustStatus(t, ask(e, d, b, 0, 2), http.StatusCreated))
 	stickers := decode[distributions.Unit](t, mustStatus(t, ask(e, d, a, 1, 2), http.StatusCreated))
@@ -376,7 +376,7 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 	// They are written down in any state but draft, done included.
 	for _, status := range []string{"closed", "done"} {
 		body["status"] = status
-		mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK)
+		mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK)
 	}
 
 	// Only staff, material included, write them; a member can't.
@@ -413,7 +413,7 @@ func TestItemsOfAnArticleWithNumbersNeedThemBeforeCollection(t *testing.T) {
 	}
 	// Turning numbers on or off stays possible after people have asked.
 	body["articles"] = []map[string]any{{"name": "Papeleta", "price": 5}, {"name": "Pegatina", "price": 1}}
-	got2 := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	got2 := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 	if got2.Articles[0].HasIdentifiers {
 		t.Errorf("numbers should be off: %+v", got2.Articles[0])
 	}
@@ -436,7 +436,7 @@ func newDeliveringLottery(t *testing.T, e *env, admin person, body map[string]an
 	t.Helper()
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
 	body["status"] = "open"
-	return decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, body), http.StatusOK))
+	return decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, body), http.StatusOK))
 }
 
 func TestDescribedNumbersSetWhatThereIsToGiveOut(t *testing.T) {
@@ -622,7 +622,7 @@ func TestNumbersCanGrowButNotTakeAwayWhatSomebodyHas(t *testing.T) {
 		body := lotteryWithNumbers()
 		body["status"] = "open"
 		body["articles"].([]map[string]any)[1]["identifier_fields"] = []map[string]any{{"name": "Serie", "spec": serie}, {"name": "Fracción", "spec": "1-10"}}
-		return e.do("PATCH", distributionPath(d.ID), admin.token, body)
+		return e.do("PUT", distributionPath(d.ID), admin.token, body)
 	}
 	// Another series bought: it is added, and with it what there is to give out.
 	got := decode[distributions.Distribution](t, mustStatus(t, update("124-133, 137, 140"), http.StatusOK))

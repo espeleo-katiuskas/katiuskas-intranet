@@ -296,7 +296,7 @@ func TestHandlerUpdateRequiresAdmin(t *testing.T) {
 
 	boardToken := testutil.TokenFor(resolver, 2, "board")
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, path, boardToken,
+	rec := doRequest(mux, http.MethodPut, path, boardToken,
 		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a license, got %d: %s", rec.Code, rec.Body.String())
@@ -308,7 +308,7 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	typeID := testutil.LicenseTypeID(t, tx, "A BASICA")
 
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/licenses/999999999", adminToken,
+	rec := doRequest(mux, http.MethodPut, "/api/v1/licenses/999999999", adminToken,
 		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
@@ -342,7 +342,7 @@ func TestHandlerUpdateDoesNotRecheckMembershipStatus(t *testing.T) {
 	// (starting 2020-01-01) — Create would reject this date outright,
 	// but Update must accept it.
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, path, adminToken,
+	rec := doRequest(mux, http.MethodPut, path, adminToken,
 		map[string]any{"license_type_id": typeID, "issued_date": "1999-01-01", "year": 1999})
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200 despite the issued_date falling outside any membership period, got %d: %s", rec.Code, rec.Body.String())
@@ -470,7 +470,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 	notifier.reset()
 
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, path, adminToken,
+	rec := doRequest(mux, http.MethodPut, path, adminToken,
 		map[string]any{"license_type_id": typeID, "issued_date": "2026-06-01", "year": 2026})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -505,7 +505,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 	notifier.reset()
 
 	path := fmt.Sprintf("/api/v1/licenses/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, path, adminToken,
+	rec := doRequest(mux, http.MethodPut, path, adminToken,
 		map[string]any{"license_type_id": typeID, "issued_date": "2026-01-01", "year": 2026})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

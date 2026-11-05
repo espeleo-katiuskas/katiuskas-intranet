@@ -104,7 +104,7 @@ rentedBody.addEventListener('click', async (event) => {
   if (!button) return;
   button.disabled = true;
   try {
-    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'POST' });
     showFeedback('Devolución registrada.');
     await load();
   } catch (err) {

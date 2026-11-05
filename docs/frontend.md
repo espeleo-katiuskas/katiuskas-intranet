@@ -45,7 +45,7 @@ dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditIt
 title and the button change, the type is fixed for a rope or a bag (the field is disabled) and, for
 general material, can be changed to another general type (Cuerda and Saca are not offered), the
 quantity and the date of acquisition are left out (the stock is what its movements say) and the form
-is filled with the item; it sends `PATCH /material/items/{id}`, which replaces every field. The
+is filled with the item; it sends `PUT /material/items/{id}`, which replaces every field. The
 "Tipo" select lists every type from `GET /material/types` (Cuerda and Saca first); the fields shown
 depend on the *kind* of the chosen type (rope fields for Cuerda, bag fields for Saca, description
 and quantity for any other), each option carrying it in `data-kind`. Brand, model and code are in
@@ -401,7 +401,7 @@ even has it) that goes to the management page.
 page to manage a distribution. At the top, after the title, the state and the description, are the
 buttons that act on the distribution itself: "Volver a …" / "Pasar a …" (one step at a time, except
 that a distribution with nothing for the members to ask skips "Se puede pedir", `neighbours`:
-`bodyFrom` rebuilds the whole body, as `PATCH` replaces every field; going back to a draft, and
+`bodyFrom` rebuilds the whole body, as `PUT` replaces every field; going back to a draft, and
 deleting, ask for confirmation naming what would really be lost: the orders that are not an empty
 own order of a member in a distribution for all members, which is only a placeholder made again on
 leaving the draft (`ordersWithSomethingToLose`), and say nothing about orders when there are none of
@@ -475,7 +475,7 @@ specific for a code still reads `err.code` (`distributionCommon.js`'s `apiErrorT
 `accountTree.js`'s `accountingErrorText`). A new error code in the API needs its entry in that
 catalog.
 
-`/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PATCH /accounts`
+`/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PUT /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,
 and last movement date (each name a plain `<a href="/cuenta?id=…">` into that one account's own
 detail page, below). There is deliberately no code column, nor codes in the parent pickers: a code
@@ -485,7 +485,7 @@ one's name/code/parent (one shared edit dialog, `openEditAccountDialog`), and sw
 among its own siblings. Both dialogs carry three checkboxes, "Para cuotas anuales", "Para licencias"
 and "Oculta" (`allows_dues`/`allows_licenses`/`hidden`, styled by `.checkbox-label` in `style.css`
 so the box sits next to its text instead of being stretched by `.field input`'s `width: 100%`),
-always sent explicitly — unchecked is `false`, not omitted, since `PATCH` replaces every field — and
+always sent explicitly — unchecked is `false`, not omitted, since `PUT` replaces every field — and
 each row shows a small "Cuotas"/"Licencias"/"Oculta" badge next to the account's name for whichever
 are on, so which accounts a transaction can record those against is visible without opening each
 one. `js/accountTree.js` holds the `childrenByParent`/`flattenAccountTree` pair both this page and
@@ -666,7 +666,7 @@ dialog (`POST /holidays`; a date that already has one is the API's 409 `duplicat
 "Copiar del año anterior", which POSTs last year's holidays on the same day and month except where
 the year already has one (movable ones such as Semana Santa are fixed by hand; there is no edit) and
 a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST /club-info`,
-`PATCH`/`DELETE /club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑
+`PUT`/`DELETE /club-info/{id}`, `PUT /club-info/order`), in a table with "Editar" and "Borrar", ↑
 ↓ to put them in order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by
 creating and editing (a label, a value and, optionally, a text for a copy button and the button's
 own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE

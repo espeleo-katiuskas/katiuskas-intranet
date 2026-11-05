@@ -168,7 +168,7 @@ func TestOnlyAdminWrites(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/club-info/%d", item.ID)
 	for _, token := range []string{e.member, e.board} {
 		expect(t, e.do("POST", "/api/v1/club-info", token, body), http.StatusForbidden, "forbidden")
-		expect(t, e.do("PATCH", path, token, body), http.StatusForbidden, "forbidden")
+		expect(t, e.do("PUT", path, token, body), http.StatusForbidden, "forbidden")
 		expect(t, e.do("DELETE", path, token, nil), http.StatusForbidden, "forbidden")
 		expect(t, e.do("PUT", "/api/v1/club-info/order", token, map[string]any{"item_ids": []int64{item.ID}}), http.StatusForbidden, "forbidden")
 	}
@@ -213,7 +213,7 @@ func TestUpdateReplacesAndTheNotificationSaysWhatChanged(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/v1/club-info/%d", item.ID)
 
-	rec := e.do("PATCH", path, e.admin, map[string]any{"label": "Bizum", "value": "622 222 222"})
+	rec := e.do("PUT", path, e.admin, map[string]any{"label": "Bizum", "value": "622 222 222"})
 	expect(t, rec, http.StatusOK, "")
 	updated := decode[clubinfo.Item](t, rec)
 	if updated.Value != "622 222 222" || updated.CopyValue != nil || updated.CopyLabel != nil || updated.Position != item.Position {
@@ -231,10 +231,10 @@ func TestUpdateReplacesAndTheNotificationSaysWhatChanged(t *testing.T) {
 	}
 
 	// Sending the same again changes nothing, so it says nothing.
-	expect(t, e.do("PATCH", path, e.admin, map[string]any{"label": "Bizum", "value": "622 222 222"}), http.StatusOK, "")
-	expect(t, e.do("PATCH", "/api/v1/club-info/999999", e.admin, map[string]any{"label": "a", "value": "b"}), http.StatusNotFound, "not_found")
-	expect(t, e.do("PATCH", "/api/v1/club-info/abc", e.admin, map[string]any{"label": "a", "value": "b"}), http.StatusBadRequest, "invalid_id")
-	expect(t, e.do("PATCH", path, e.admin, map[string]any{"label": "", "value": "b"}), http.StatusBadRequest, "invalid_label")
+	expect(t, e.do("PUT", path, e.admin, map[string]any{"label": "Bizum", "value": "622 222 222"}), http.StatusOK, "")
+	expect(t, e.do("PUT", "/api/v1/club-info/999999", e.admin, map[string]any{"label": "a", "value": "b"}), http.StatusNotFound, "not_found")
+	expect(t, e.do("PUT", "/api/v1/club-info/abc", e.admin, map[string]any{"label": "a", "value": "b"}), http.StatusBadRequest, "invalid_id")
+	expect(t, e.do("PUT", path, e.admin, map[string]any{"label": "", "value": "b"}), http.StatusBadRequest, "invalid_label")
 	time.Sleep(50 * time.Millisecond)
 	e.notifier.mu.Lock()
 	extra := len(e.notifier.sent)

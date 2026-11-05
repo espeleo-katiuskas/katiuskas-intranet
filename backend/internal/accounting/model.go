@@ -56,7 +56,7 @@ type Account struct {
 	Name     string  `json:"name"`
 	Code     *string `json:"code,omitempty"`
 	ParentID *int64  `json:"parent_id,omitempty"`
-	// Type is the account's own type, the one a PATCH replaces; EffectiveType is the
+	// Type is the account's own type, the one a PUT replaces; EffectiveType is the
 	// one that counts — its own, or else its parent's (recursively) — and what every
 	// rule about the type uses. Absent when neither it nor any ancestor has one.
 	Type           *AccountType `json:"type,omitempty"`

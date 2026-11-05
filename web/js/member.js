@@ -728,7 +728,7 @@ if (isRealAdmin) {
         successMessage: 'Baja registrada.',
         onSave: (date) =>
           apiFetch(`/memberships/${openMembership.id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify({
               start_date: openMembership.start_date.slice(0, 10),
               end_date: date,
@@ -748,7 +748,7 @@ if (isRealAdmin) {
         successMessage: 'Baja temporal finalizada.',
         onSave: (date) =>
           apiFetch(`/leaves/${openLeave.id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify({
               start_date: openLeave.start_date.slice(0, 10),
               end_date: date,
@@ -771,7 +771,7 @@ if (isRealAdmin) {
         successMessage: 'Baja definitiva registrada.',
         onSave: async (date) => {
           await apiFetch(`/leaves/${openLeave.id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify({
               start_date: openLeave.start_date.slice(0, 10),
               end_date: date,
@@ -779,7 +779,7 @@ if (isRealAdmin) {
             }),
           });
           await apiFetch(`/memberships/${openMembership.id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify({
               start_date: openMembership.start_date.slice(0, 10),
               end_date: date,
@@ -801,7 +801,7 @@ document.getElementById('save-edit-board').addEventListener('click', async () =>
   button.disabled = true;
   try {
     await apiFetch(`/board-members/${editingBoardMemberId}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(body),
     });
     showFeedback('Cargo actualizado.');
@@ -833,7 +833,7 @@ document.getElementById('save-edit-license').addEventListener('click', async () 
   button.disabled = true;
   try {
     await apiFetch(`/licenses/${editingLicenseId}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(body),
     });
     showFeedback('Licencia actualizada.');
@@ -872,7 +872,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       successMessage: 'Alta actualizada.',
       onSave: (date) =>
         apiFetch(`/memberships/${m.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({
             start_date: date,
             end_date: m.end_date ? m.end_date.slice(0, 10) : null,
@@ -901,7 +901,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       successMessage: 'Baja actualizada.',
       onSave: (date) =>
         apiFetch(`/memberships/${m.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: date }),
         }),
     });
@@ -916,7 +916,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       '¿Deshacer esta baja? La persona volverá a estar de alta.',
       () =>
         apiFetch(`/memberships/${m.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({ start_date: m.start_date.slice(0, 10), end_date: null }),
         }),
     );
@@ -932,7 +932,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       successMessage: 'Baja temporal actualizada.',
       onSave: (date) =>
         apiFetch(`/leaves/${l.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({
             start_date: date,
             end_date: l.end_date ? l.end_date.slice(0, 10) : null,
@@ -965,7 +965,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       successMessage: 'Baja temporal actualizada.',
       onSave: (date) =>
         apiFetch(`/leaves/${l.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({
             start_date: l.start_date.slice(0, 10),
             end_date: date,
@@ -984,7 +984,7 @@ document.getElementById('timeline-list').addEventListener('click', async (event)
       '¿Deshacer el fin de esta baja temporal? Volverá a estar en curso.',
       () =>
         apiFetch(`/leaves/${l.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify({
             start_date: l.start_date.slice(0, 10),
             end_date: null,
@@ -1231,7 +1231,7 @@ if (isRealAdmin) {
         successMessage: 'Cargo finalizado.',
         onSave: (date) =>
           apiFetch(`/board-members/${currentBoardTerm.id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify({
               position: currentBoardTerm.position,
               start_date: currentBoardTerm.start_date.slice(0, 10),

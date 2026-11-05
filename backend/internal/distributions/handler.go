@@ -44,7 +44,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/distributions", h.authenticator.Protect(h.list))
 	mux.Handle("POST /api/v1/distributions", h.authenticator.Protect(h.create, "admin", "board"))
 	mux.Handle("GET /api/v1/distributions/{id}", h.authenticator.Protect(h.get))
-	mux.Handle("PATCH /api/v1/distributions/{id}", h.authenticator.Protect(h.update, "admin", "board"))
+	mux.Handle("PUT /api/v1/distributions/{id}", h.authenticator.Protect(h.update, "admin", "board"))
 	mux.Handle("DELETE /api/v1/distributions/{id}", h.authenticator.Protect(h.delete, "admin"))
 
 	mux.Handle("GET /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.listPayments, "admin", "board"))
@@ -609,6 +609,10 @@ func (h *Handler) updateUnit(w http.ResponseWriter, r *http.Request) {
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado a %d la cantidad de «%s» para %s en «%s».",
 			h.actorLogin(r.Context()), updated.Quantity, *updated.ArticleName, unit.BeneficiaryLogin, d.Name))
 		httpapi.WriteJSON(w, http.StatusOK, updated)
+		return
+	}
+	if body.Choices == nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_fields", "send choices (or quantity, for an article)")
 		return
 	}
 	updated, err := h.service.UpdateChoices(r.Context(), d.ID, unit.ID, body.Choices, current.ID, canSeeEveryone(current))

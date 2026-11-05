@@ -54,14 +54,14 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // person's data) but not start, correct, or end one.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/memberships", h.authenticator.Protect(h.listActive, "admin", "board"))
-	mux.Handle("PATCH /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin"))
+	mux.Handle("PUT /api/v1/memberships/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("DELETE /api/v1/memberships/{id}", h.authenticator.Protect(h.delete, "admin"))
 	mux.Handle("GET /api/v1/users/{login}/memberships", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/memberships", h.authenticator.Protect(h.create, "admin"))
 
 	mux.Handle("GET /api/v1/users/{login}/leaves", h.authenticator.Protect(h.listLeavesByUser))
 	mux.Handle("POST /api/v1/users/{login}/leaves", h.authenticator.Protect(h.createLeave, "admin"))
-	mux.Handle("PATCH /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
+	mux.Handle("PUT /api/v1/leaves/{id}", h.authenticator.Protect(h.updateLeave, "admin"))
 	mux.Handle("DELETE /api/v1/leaves/{id}", h.authenticator.Protect(h.deleteLeave, "admin"))
 	mux.Handle("DELETE /api/v1/dues/{id}", h.authenticator.Protect(h.deleteDue, "admin"))
 
@@ -282,7 +282,7 @@ func (h *Handler) listLeavesByUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // leaveOwnerLogin resolves the login of whoever userID is, for the
-// leave-related mutation notifications below (PATCH/DELETE /leaves/{id}
+// leave-related mutation notifications below (PUT/DELETE /leaves/{id}
 // aren't scoped under a known /users/{login} the way listLeavesByUser/
 // createLeave are, so the login has to be looked up). Returns ""
 // (silently skipped by the caller) on any failure, the same best-effort

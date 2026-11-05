@@ -212,11 +212,11 @@ func TestHandlerUpdateRequiresAdminNotBoard(t *testing.T) {
 	body := map[string]string{"position": "secretary", "start_date": "2020-01-01", "end_date": "2022-01-01"}
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
-	if rec := doRequest(mux, http.MethodPatch, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPut, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a board term, got %d", rec.Code)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken, body)
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -237,7 +237,7 @@ func TestHandlerUpdateRejectsNonNumericID(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
 	body := map[string]string{"position": "secretary", "start_date": "2020-01-01"}
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/board-members/not-a-number", adminToken, body)
+	rec := doRequest(mux, http.MethodPut, "/api/v1/board-members/not-a-number", adminToken, body)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -248,7 +248,7 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
 	body := map[string]string{"position": "secretary", "start_date": "2020-01-01"}
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/board-members/999999", adminToken, body)
+	rec := doRequest(mux, http.MethodPut, "/api/v1/board-members/999999", adminToken, body)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -413,7 +413,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 	notifier.reset()
 
 	updatePath := fmt.Sprintf("/api/v1/board-members/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken,
 		map[string]string{"position": "secretary", "start_date": "2020-01-01", "end_date": "2022-01-01"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -444,7 +444,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 	notifier.reset()
 
 	updatePath := fmt.Sprintf("/api/v1/board-members/%d", created.ID)
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken,
 		map[string]string{"position": "secretary", "start_date": "2020-01-01"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -483,7 +483,7 @@ func TestHandlerRejectsAnUnknownPosition(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &m); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	rec = doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/board-members/%d", m.ID), adminToken, map[string]string{"position": "", "start_date": "2020-01-01"})
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/board-members/%d", m.ID), adminToken, map[string]string{"position": "", "start_date": "2020-01-01"})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_position on update, got %d: %s", rec.Code, rec.Body.String())
 	}

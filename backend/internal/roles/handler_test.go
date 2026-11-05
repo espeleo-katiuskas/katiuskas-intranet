@@ -186,6 +186,12 @@ func TestHandlerAdminCanGrantNonAdminRoles(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to grant a non-admin role, got %d: %s", rec.Code, rec.Body.String())
 	}
+	// Granting what the person already has changes nothing.
+	again := rolesDoRequest(mux, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/roles", target.Login), adminToken,
+		map[string]int64{"role_id": materialRoleID})
+	if again.Code != http.StatusNoContent {
+		t.Errorf("expected the same grant again to be 204, got %d: %s", again.Code, again.Body.String())
+	}
 }
 
 func TestHandlerAssignAndRemoveRejectAutomaticRoles(t *testing.T) {

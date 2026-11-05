@@ -130,7 +130,7 @@ func movementVerb(t MovementType) string {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/material/items", h.authenticator.Protect(h.listItems))
 	mux.Handle("POST /api/v1/material/items", h.authenticator.Protect(h.createItem, "admin", "board", "material"))
-	mux.Handle("PATCH /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
+	mux.Handle("PUT /api/v1/material/items/{id}", h.authenticator.Protect(h.updateItem, "admin", "board", "material"))
 	mux.Handle("DELETE /api/v1/material/items/{id}", h.authenticator.Protect(h.deleteItem, "admin"))
 	mux.Handle("GET /api/v1/material/items/{id}/movements", h.authenticator.Protect(h.listItemMovements))
 
@@ -143,7 +143,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.Handle("GET /api/v1/material/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/material/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
-	mux.Handle("PATCH /api/v1/material/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
+	mux.Handle("POST /api/v1/material/movements/{id}/return", h.authenticator.Protect(h.returnMovement, "admin", "board", "material"))
 	mux.Handle("DELETE /api/v1/material/movements/{id}", h.authenticator.Protect(h.deleteMovement, "admin"))
 
 	mux.Handle("GET /api/v1/users/{login}/material/movements", h.authenticator.Protect(h.listMovementsByUser))

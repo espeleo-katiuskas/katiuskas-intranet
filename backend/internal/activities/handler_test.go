@@ -316,6 +316,10 @@ func TestHandlerJoinSelfVersusAddingSomeoneElse(t *testing.T) {
 		t.Errorf("expected a member to sign someone else up to a public activity (204), got %d: %s", rec.Code, rec.Body.String())
 	}
 	// admin/board can add anyone.
+	// Signing up somebody who is already in changes nothing.
+	if rec := doRequest(mux, http.MethodPost, participantsPath, memberToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
+		t.Fatalf("expected signing up the same person again to be 204, got %d", rec.Code)
+	}
 	if rec := doRequest(mux, http.MethodPost, participantsPath, adminToken, map[string]any{"login": other.Login}); rec.Code != http.StatusNoContent {
 		t.Errorf("expected admin to add someone else (204), got %d: %s", rec.Code, rec.Body.String())
 	}

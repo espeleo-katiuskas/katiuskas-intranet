@@ -60,7 +60,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/board-members", h.authenticator.Protect(h.listActive, "admin", "board", "member"))
 	mux.Handle("GET /api/v1/board-members/history", h.authenticator.Protect(h.listHistory, "admin", "board", "member"))
-	mux.Handle("PATCH /api/v1/board-members/{id}", h.authenticator.Protect(h.update, "admin"))
+	mux.Handle("PUT /api/v1/board-members/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("DELETE /api/v1/board-members/{id}", h.authenticator.Protect(h.delete, "admin"))
 	mux.Handle("GET /api/v1/users/{login}/board-members", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/board-members", h.authenticator.Protect(h.create, "admin"))

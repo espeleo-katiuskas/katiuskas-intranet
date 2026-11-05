@@ -50,13 +50,13 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 	return login
 }
 
-// POST/PATCH/DELETE are admin-only: board can see everyone's licenses
+// POST/PUT/DELETE are admin-only: board can see everyone's licenses
 // (read-only, like the rest of a person's data) but not assign, correct,
 // or remove one.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/licenses", h.authenticator.Protect(h.listByUser))
 	mux.Handle("POST /api/v1/users/{login}/licenses", h.authenticator.Protect(h.create, "admin"))
-	mux.Handle("PATCH /api/v1/licenses/{id}", h.authenticator.Protect(h.update, "admin"))
+	mux.Handle("PUT /api/v1/licenses/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("DELETE /api/v1/licenses/{id}", h.authenticator.Protect(h.delete, "admin"))
 	mux.Handle("GET /api/v1/license-types", h.authenticator.Protect(h.listTypes, "admin"))
 }

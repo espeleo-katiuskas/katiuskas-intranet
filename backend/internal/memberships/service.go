@@ -54,7 +54,7 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Members
 }
 
 // Get is the single-record counterpart to ListByUser/ListActive — used
-// by Handler.update to snapshot a membership before applying a PATCH,
+// by Handler.update to snapshot a membership before applying a PUT,
 // so it can describe exactly what changed in the mutation notification
 // afterward.
 func (s *Service) Get(ctx context.Context, id int64) (Membership, error) {

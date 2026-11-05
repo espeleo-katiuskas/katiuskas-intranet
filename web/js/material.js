@@ -390,7 +390,7 @@ async function handleReturn(button) {
   // reload below wipes the whole items table.
   const itemId = button.closest('[data-item-movements-panel]')?.dataset.itemMovementsPanel;
   try {
-    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'PATCH' });
+    await apiFetch(`/material/movements/${button.dataset.return}/return`, { method: 'POST' });
     showFeedback('Devolución registrada.');
     await loadItems();
     if (itemId) await expandItemMovements(Number(itemId));
@@ -564,7 +564,7 @@ if (canManageMovements) {
     try {
       if (editing) {
         await apiFetch(`/material/items/${editing.id}`, {
-          method: 'PATCH',
+          method: 'PUT',
           body: JSON.stringify(body),
         });
       } else {

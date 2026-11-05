@@ -956,7 +956,7 @@ editTransactionForm.addEventListener('submit', async (event) => {
   try {
     const lines = transactionLines.et.read();
     await apiFetch(`/transactions/${editingTransactionId}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(entriesBody(dateValue, description, lines)),
     });
     // editingTransactionId itself never changes on a PATCH, so any

@@ -133,12 +133,12 @@ func TestThePaymentAccountsAreChecked(t *testing.T) {
 	own := e.newAccount(t, "Ingresos propios", "income")
 	notIncome := lottery()
 	notIncome["account_id"] = e.cash
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, notIncome), http.StatusBadRequest, "account_not_income")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, notIncome), http.StatusBadRequest, "account_not_income")
 	expect(t, e.do("POST", "/api/v1/distributions", admin.token, notIncome), http.StatusBadRequest, "account_not_income")
 	b := lottery()
 	b["status"] = "open"
 	b["account_id"] = own
-	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusOK))
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, b), http.StatusOK))
 	if got.AccountID == nil || *got.AccountID != own || deref(got.AccountName) != "Ingresos propios" {
 		t.Errorf("unexpected account: %+v", got)
 	}
@@ -153,7 +153,7 @@ func TestThePaymentAccountsAreChecked(t *testing.T) {
 
 	// An unknown account for the distribution itself.
 	b["account_id"] = 999999
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusBadRequest, "unknown_account")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, b), http.StatusBadRequest, "unknown_account")
 }
 
 func TestWithoutAnAccountForTheDistributionPayingIsRefused(t *testing.T) {
@@ -299,7 +299,7 @@ func TestAccountsThatGroupOthersCantBePaidInOrNamed(t *testing.T) {
 	child(income, "Ingresos hijos", "income")
 	b := lottery()
 	b["account_id"] = income
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusConflict, "account_has_children")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, b), http.StatusConflict, "account_has_children")
 }
 
 func TestAccountsInheritTheirTypeForPaymentsAndDistributions(t *testing.T) {
@@ -324,8 +324,8 @@ func TestAccountsInheritTheirTypeForPaymentsAndDistributions(t *testing.T) {
 	b := lottery()
 	b["status"] = "open"
 	b["account_id"] = sub(income, "Lotería")
-	mustStatus(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusOK)
+	mustStatus(t, e.do("PUT", distributionPath(d.ID), admin.token, b), http.StatusOK)
 	// Under an asset, it isn't.
 	b["account_id"] = sub(e.cash, "Otra del banco")
-	expect(t, e.do("PATCH", distributionPath(d.ID), admin.token, b), http.StatusBadRequest, "account_not_income")
+	expect(t, e.do("PUT", distributionPath(d.ID), admin.token, b), http.StatusBadRequest, "account_not_income")
 }

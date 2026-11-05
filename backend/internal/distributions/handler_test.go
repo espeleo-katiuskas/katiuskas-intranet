@@ -209,7 +209,7 @@ func setStatus(t *testing.T, e *env, admin person, id int64, status string) dist
 	t.Helper()
 	body := shirt()
 	body["status"] = status
-	rec := mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", id), admin.token, body), http.StatusOK)
+	rec := mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", id), admin.token, body), http.StatusOK)
 	return decode[distributions.Distribution](t, rec)
 }
 
@@ -298,7 +298,7 @@ func TestSignupDistributionMayHaveACutoffDateOrNot(t *testing.T) {
 		}
 		setPath := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
 		body["status"] = "open"
-		mustStatus(t, e.do("PATCH", setPath, admin.token, body), http.StatusOK)
+		mustStatus(t, e.do("PUT", setPath, admin.token, body), http.StatusOK)
 		// Without a date it is for the members of today; with one, for those of
 		// that day. Somebody who was never a member can't have it either way.
 		expect(t, register(e, d.ID, outsider, map[string]any{}), http.StatusConflict, "not_eligible")
@@ -346,7 +346,7 @@ func TestPeoplePickersOfferOnlyMembers(t *testing.T) {
 	// Without a cutoff date, the members of today.
 	body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1, "status": "open"}
 	s := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", s.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", s.ID), admin.token, body), http.StatusOK)
 	now := map[string]bool{}
 	for _, p := range decode[[]distributions.Person](t, mustStatus(t, e.do("GET", fmt.Sprintf("/api/v1/distributions/%d/people?for=order", s.ID), both.token, nil), http.StatusOK)) {
 		now[p.Login] = true
@@ -393,9 +393,9 @@ func TestStatusMovesOneStepAtATime(t *testing.T) {
 
 	body := shirt()
 	body["status"] = "closed"
-	expect(t, e.do("PATCH", path, admin.token, body), http.StatusConflict, "invalid_status_transition")
+	expect(t, e.do("PUT", path, admin.token, body), http.StatusConflict, "invalid_status_transition")
 	body["status"] = "later"
-	expect(t, e.do("PATCH", path, admin.token, body), http.StatusBadRequest, "invalid_status")
+	expect(t, e.do("PUT", path, admin.token, body), http.StatusBadRequest, "invalid_status")
 	for _, status := range []string{"open", "closed", "open", "closed", "done", "closed"} {
 		if got := setStatus(t, e, admin, d.ID, status); string(got.Status) != status {
 			t.Fatalf("expected %s, got %s", status, got.Status)
@@ -417,7 +417,7 @@ func TestNothingToAskSkipsOpen(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
 	patch := func(body map[string]any, status string) *httptest.ResponseRecorder {
 		body["status"] = status
-		return e.do("PATCH", path, admin.token, body)
+		return e.do("PUT", path, admin.token, body)
 	}
 
 	if got := decode[distributions.Distribution](t, mustStatus(t, patch(plain(), "closed"), http.StatusOK)); got.Status != distributions.StatusClosed {
@@ -445,7 +445,7 @@ func TestNothingToAskSkipsOpen(t *testing.T) {
 	} {
 		x := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
 		body["status"] = "closed"
-		expect(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", x.ID), admin.token, body), http.StatusConflict, "invalid_status_transition")
+		expect(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", x.ID), admin.token, body), http.StatusConflict, "invalid_status_transition")
 	}
 }
 
@@ -468,7 +468,7 @@ func TestUnitsAreHandedOutInEveryStateButDraft(t *testing.T) {
 			b[k] = v
 		}
 		b["status"] = status
-		return e.do("PATCH", path, admin.token, b)
+		return e.do("PUT", path, admin.token, b)
 	}
 	// No shortcut for a distribution with nothing to ask: it moves a step at a time.
 	expect(t, patch("done"), http.StatusConflict, "invalid_status_transition")
@@ -633,7 +633,7 @@ func TestDeadlineStopsMembersButNotStaff(t *testing.T) {
 	body["closes_at"] = time.Now().Add(-time.Hour).Format(time.RFC3339)
 	body["status"] = "open"
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 
 	expect(t, register(e, d.ID, member, map[string]any{"choices": map[string]string{"Talla": "M"}}), http.StatusConflict, "not_open")
 	mustStatus(t, register(e, d.ID, admin, map[string]any{"beneficiary_login": other.Login, "choices": map[string]string{"Talla": "M"}}), http.StatusCreated)
@@ -671,7 +671,7 @@ func TestExtrasPriceCapAndWhoAddedThem(t *testing.T) {
 	body := shirt()
 	body["extra_price"] = 20
 	body["status"] = "open"
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 	units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK))
 	for _, u := range units {
 		if u.IsExtra && u.Price != 8 {
@@ -686,7 +686,7 @@ func TestExtrasNotAllowedWithoutExtraPrice(t *testing.T) {
 	member := e.newPerson(t, "2020-01-01", "member")
 	body := map[string]any{"name": "Taza", "audience": "all_members", "cutoff_date": "2026-10-01", "price": 3, "status": "open"}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 
 	expect(t, register(e, d.ID, member, map[string]any{"is_extra": true}), http.StatusConflict, "extras_not_allowed")
 	// Nothing to choose, so there is nothing to ask for: the unit is already there.
@@ -733,6 +733,8 @@ func TestChangingAndRemovingAUnit(t *testing.T) {
 
 	expect(t, e.do("PATCH", path, stranger.token, map[string]any{"choices": map[string]string{"Talla": "S"}}), http.StatusForbidden, "forbidden")
 	expect(t, e.do("DELETE", path, stranger.token, nil), http.StatusForbidden, "forbidden")
+	// A PATCH changes what it carries, so one that carries nothing to change is refused.
+	expect(t, e.do("PATCH", path, parent.token, map[string]any{}), http.StatusBadRequest, "missing_fields")
 	expect(t, e.do("PATCH", path, parent.token, map[string]any{"choices": map[string]string{"Talla": "XXL"}}), http.StatusBadRequest, "invalid_choices")
 
 	// The child (whom it is for) can change it; who entered it stays the parent.
@@ -814,7 +816,7 @@ func TestOrderOfADraftForAllMembersCountsEveryoneWhoQualifies(t *testing.T) {
 
 	// Open, they are real, and the same numbers are no longer provisional.
 	body["status"] = "open"
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 	order = decode[distributions.Order](t, mustStatus(t, e.do("GET", path, board.token, nil), http.StatusOK))
 	if order.Provisional || order.TotalUnits != 3 || order.TotalAmount != 15 {
 		t.Errorf("once open the numbers should be the same and real: %+v", order)
@@ -915,7 +917,7 @@ func TestOptionsAreLockedOnceUnitsExistButTheDistributionCanBeDeleted(t *testing
 	// While it is a draft nobody has a unit, so the options can be replaced.
 	body := shirt()
 	body["options"] = []map[string]any{{"name": "Talla", "values": []string{"M", "L"}}, {"name": "Color", "values": []string{"rojo"}}}
-	updated := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK))
+	updated := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK))
 	if len(updated.Options) != 2 || updated.Options[1].Name != "Color" {
 		t.Errorf("unexpected options: %+v", updated.Options)
 	}
@@ -923,17 +925,17 @@ func TestOptionsAreLockedOnceUnitsExistButTheDistributionCanBeDeleted(t *testing
 	// Opening it gives every member their own unit, and from then on the options
 	// are what those units' choices are values of.
 	body["status"] = "open"
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK)
 	mustStatus(t, register(e, d.ID, member, map[string]any{"choices": map[string]string{"Talla": "M", "Color": "rojo"}}), http.StatusCreated)
 
 	// Sending back exactly what is there is fine; a different set is not.
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK)
 	body["options"] = []map[string]any{{"name": "Talla", "values": []string{"M", "L", "XL"}}, {"name": "Color", "values": []string{"rojo"}}}
-	expect(t, e.do("PATCH", path, admin.token, body), http.StatusConflict, "has_units")
+	expect(t, e.do("PUT", path, admin.token, body), http.StatusConflict, "has_units")
 	// Leaving them out keeps them, so the rest can still be edited.
 	delete(body, "options")
 	body["name"] = "Camiseta 2026"
-	kept := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK))
+	kept := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK))
 	if kept.Name != "Camiseta 2026" || len(kept.Options) != 2 {
 		t.Errorf("unexpected distribution: %+v", kept)
 	}
@@ -1036,7 +1038,7 @@ func TestPriceChangeReachesUntouchedAutomaticUnitsOnly(t *testing.T) {
 	price := func(login string) float64 { return unitFor(t, e, admin, d.ID, login).Price }
 	body := shirt()
 	body["price"] = 5
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK) // still open
+	mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK) // still open
 	if price(idle.Login) != 5 || price(chooser.Login) != 0 || price(payer.Login) != 0 {
 		t.Errorf("only the untouched unit should follow the price: idle %v, chosen %v, paid %v",
 			price(idle.Login), price(chooser.Login), price(payer.Login))
@@ -1062,7 +1064,7 @@ func TestBackToDraftDeletesEveryUnit(t *testing.T) {
 	back := func() *httptest.ResponseRecorder {
 		body := shirt()
 		body["status"] = "draft"
-		return e.do("PATCH", path, admin.token, body)
+		return e.do("PUT", path, admin.token, body)
 	}
 	count := func() int {
 		return len(decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)))
@@ -1091,7 +1093,7 @@ func TestBackToDraftDeletesEveryUnit(t *testing.T) {
 	body := shirt()
 	body["options"] = []map[string]any{{"name": "Talla", "values": []string{"M", "L"}}}
 	body["status"] = "open"
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK)
 	if count() != 2 {
 		t.Errorf("opening again should make an own unit each, got %d", count())
 	}
@@ -1109,11 +1111,11 @@ func TestBackToDraftDeletesTheSignUpsToo(t *testing.T) {
 	body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1, "extra_price": 2, "status": "open"}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
 	path := fmt.Sprintf("/api/v1/distributions/%d", d.ID)
-	mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK)
 	mustStatus(t, register(e, d.ID, member, map[string]any{}), http.StatusCreated)
 	mustStatus(t, register(e, d.ID, member, map[string]any{"is_extra": true}), http.StatusCreated)
 	body["status"] = "draft"
-	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path, admin.token, body), http.StatusOK))
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", path, admin.token, body), http.StatusOK))
 	if got.UnitCount != 0 {
 		t.Errorf("a draft keeps no sign-ups, got %d units", got.UnitCount)
 	}
@@ -1136,7 +1138,7 @@ func TestSwitchingToSignupDeletesTheUntouchedAutomaticUnits(t *testing.T) {
 		body := shirt()
 		body["audience"] = "signup"
 		body["status"] = "open"
-		return e.do("PATCH", path, admin.token, body)
+		return e.do("PUT", path, admin.token, body)
 	}
 	logins := func() map[string]bool {
 		got := map[string]bool{}
@@ -1231,7 +1233,7 @@ func TestSignupDistributionsMakeNoUnitsOnTheirOwn(t *testing.T) {
 	e.newPerson(t, "2020-01-01", "member")
 	body := map[string]any{"name": "Pegatinas", "audience": "signup", "price": 1, "status": "open"}
 	d := decode[distributions.Distribution](t, mustStatus(t, e.do("POST", "/api/v1/distributions", admin.token, body), http.StatusCreated))
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 	if units := decode[[]distributions.Unit](t, mustStatus(t, e.do("GET", unitsPath(d.ID), admin.token, nil), http.StatusOK)); len(units) != 0 {
 		t.Errorf("nobody signed up, so there should be no units: %+v", units)
 	}
@@ -1244,12 +1246,12 @@ func TestEditNotificationListsWhatChanged(t *testing.T) {
 	e.notifier.waitForMessage(t)
 	body := shirt()
 	body["price"] = 5
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 	if msg := e.notifier.waitForMessage(t); !strings.Contains(msg, "Price: 0 → 5") {
 		t.Errorf("unexpected notification: %q", msg)
 	}
 	// Sending it again unchanged says nothing.
-	mustStatus(t, e.do("PATCH", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
+	mustStatus(t, e.do("PUT", fmt.Sprintf("/api/v1/distributions/%d", d.ID), admin.token, body), http.StatusOK)
 	e.notifier.mu.Lock()
 	defer e.notifier.mu.Unlock()
 	time.Sleep(10 * time.Millisecond)
@@ -1350,12 +1352,12 @@ func TestVisibilityDefaultsToAllAndOnlyAdminChangesIt(t *testing.T) {
 	// Editing: a form that sends back what it is is fine, anything else needs admin.
 	same := shirt()
 	same["visibility"] = "all"
-	mustStatus(t, e.do("PATCH", path(d), board.token, same), http.StatusOK)
-	mustStatus(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusOK) // left out: kept
+	mustStatus(t, e.do("PUT", path(d), board.token, same), http.StatusOK)
+	mustStatus(t, e.do("PUT", path(d), board.token, shirt()), http.StatusOK) // left out: kept
 	changed := shirt()
 	changed["visibility"] = "material"
-	expect(t, e.do("PATCH", path(d), board.token, changed), http.StatusForbidden, "forbidden")
-	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK))
+	expect(t, e.do("PUT", path(d), board.token, changed), http.StatusForbidden, "forbidden")
+	got := decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", path(d), admin.token, changed), http.StatusOK))
 	if got.Visibility != distributions.VisibilityMaterial {
 		t.Errorf("admin should change it, got %q", got.Visibility)
 	}
@@ -1369,20 +1371,20 @@ func TestVisibilityDefaultsToAllAndOnlyAdminChangesIt(t *testing.T) {
 		t.Error("the notification should say that the visibility changed")
 	}
 	// Left out in a later edit, it stays.
-	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PATCH", path(d), admin.token, shirt()), http.StatusOK))
+	got = decode[distributions.Distribution](t, mustStatus(t, e.do("PUT", path(d), admin.token, shirt()), http.StatusOK))
 	if got.Visibility != distributions.VisibilityMaterial {
 		t.Errorf("leaving it out should keep it, got %q", got.Visibility)
 	}
 	changed["visibility"] = "secret"
-	expect(t, e.do("PATCH", path(d), admin.token, changed), http.StatusBadRequest, "invalid_visibility")
+	expect(t, e.do("PUT", path(d), admin.token, changed), http.StatusBadRequest, "invalid_visibility")
 
 	// Board can see one for board and edit everything but who sees it; not one for admin.
 	changed["visibility"] = "board"
-	mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK)
-	mustStatus(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusOK)
+	mustStatus(t, e.do("PUT", path(d), admin.token, changed), http.StatusOK)
+	mustStatus(t, e.do("PUT", path(d), board.token, shirt()), http.StatusOK)
 	changed["visibility"] = "admin"
-	mustStatus(t, e.do("PATCH", path(d), admin.token, changed), http.StatusOK)
-	expect(t, e.do("PATCH", path(d), board.token, shirt()), http.StatusNotFound, "not_found")
+	mustStatus(t, e.do("PUT", path(d), admin.token, changed), http.StatusOK)
+	expect(t, e.do("PUT", path(d), board.token, shirt()), http.StatusNotFound, "not_found")
 }
 
 // Visibility does not make a draft visible: drafts are for admin and board whatever it says.

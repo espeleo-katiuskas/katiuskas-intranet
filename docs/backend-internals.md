@@ -358,7 +358,7 @@ for admin/board, members ask for units only while `open`, `visibility` (`all`, `
 `admin`, migration `00035`) keeps whoever is below the level it names from seeing it at all
 (`canSee`/`visibleTo` and `Handler.visible`/`accessible`: every route about the distribution answers
 404, the list leaves it out; a draft stays for admin/board whatever it says; only admin sets it,
-board sending anything but the current value gets 403, and leaving it out of a PATCH keeps it),
+board sending anything but the current value gets 403, and leaving it out of a PUT keeps it),
 `closed` freezes what members can ask for (staff can still enter and change orders, see below), and
 units can be handed out — collections recorded, numbers written down — in any state but `draft`
 (`Status.Deliverable`, `ErrNotDeliverable`, 409 `not_deliverable`), since the order often arrives
@@ -548,7 +548,7 @@ escape-hatch entry ("Otra") requires an `other_detail` string saying which licen
 actually is; every other entry forbids one (shared validation:
 `licenses.normalizeOtherDetail`, used by both `Create` and `Update`). The catalog itself
 is `GET /license-types` (admin-only, like `POST`: it only feeds the "assign a license"
-form). `PATCH`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license
+form). `PUT`/`DELETE /licenses/{id}` (admin-only) correct or remove an assigned license
 without re-checking membership status the way `POST` does — that gate is for assigning a
 *new* license, not fixing a typo on one someone already has. `POST`'s own gate
 (`memberships.Repository.WasMemberDuringYear`) checks that the person was a socio at some
@@ -641,13 +641,13 @@ that invariant can't be a foreign key anymore, so
 `memberships.Repository. findContainingMembership` checks it in Go on every
 `CreateLeave`/`UpdateLeave`, by finding which single period (if any) covers the given
 dates; there's at most one, since a person's own periods never overlap. Shrinking a
-membership period (`PATCH /memberships/{id}`) re-validates every one of that person's
+membership period (`PUT /memberships/{id}`) re-validates every one of that person's
 leaves that currently falls within the period *as it stood before* the edit — not every
 leave they've ever had — so narrowing one period can't be blocked by a leave that actually
 belongs to a different one of their own periods.
 `POST /users/{login}/leaves`/`GET .../leaves` are admin-only-to-write,
 self-or-admin/board-to-read (like the person's memberships, licenses and dues, so
-`/perfil` can show the same history as `/socio`) — `PATCH`/`DELETE /leaves/{id}` stay
+`/perfil` can show the same history as `/socio`) — `PUT`/`DELETE /leaves/{id}` stay
 addressed by the leave's own id. `DELETE /memberships/{id}` (admin-only) removes a
 membership period outright — nothing references one by foreign key, so it never cascades —
 meant for the frontend's own "undo my last action" story on `/socio` (see Frontend
@@ -696,7 +696,7 @@ name, tax id, address, bank account, the Bizum number...) as rows of `club_info_
 is not meant to be in the repository. Each is a `label`, a `value` and, optionally, a button that
 copies another text (`copy_value`, `copy_label`: the tax id without its dash, the IBAN without
 spaces). `GET /club-info` is open to any baseline role (it is what the home page draws); `POST`,
-`PATCH`, `DELETE` and `PUT /club-info/order` are admin only. An update replaces every field, so a
+`PUT /club-info/{id}`, `DELETE` and `PUT /club-info/order` are admin only. An update replaces every field, so a
 `copy_value` left out turns the button off, and keeps the item's place; a new one goes last, and the
 order is replaced as a whole from every id (`Repository.Reorder`, `409 reorder_mismatch` for
 anything else), like the memoria's. Blank texts are trimmed away and a blank copy text means no
@@ -1075,15 +1075,15 @@ allowed to record membership dues or federative licenses, enforced by
 `memberships.Service.RecordDue` and `licenses.Service.Create` (see **Membership dues**/**Licenses**
 above) and always present in every `Account` JSON, `false` included, unlike the omitted-when-absent
 `code`/`parent_id`; like every other field, `UpdateAccountInput` replaces them wholesale, so a
-`PATCH` that leaves one out turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
+`PUT` that leaves one out turns it off) and `hidden` (migration `00019_accounts_hidden.sql`, same
 always-present/replaced-wholesale shape): an account that's no longer used. An account may also have
 a `type` (migration `00031_accounts_type.sql`, the `account_type` enum: `asset` — its balance is
 money the club really has —, `income`, `expense`; optional and left out of the JSON when absent like
-`code`, a blank one normalized to none by `normalizeType`, `PATCH` replacing it, an unknown one 400
+`code`, a blank one normalized to none by `normalizeType`, `PUT` replacing it, an unknown one 400
 `invalid_type`): it is shown on `/cuenta`'s header (`accountTypes` in `accountTree.js`), chosen in
 the create/edit dialogs, and the account a distribution's payment is made in has to be an `asset`.
 An account with no type of its own has its parent's, and so on up (migration `00034`, SQL function
-`account_effective_type`): `type` in the JSON is the own one, the one `PATCH` replaces, and
+`account_effective_type`): `type` in the JSON is the own one, the one `PUT` replaces, and
 `effective_type` the one that counts, which every rule (the asset paid in, the income account of a
 distribution, `distribution_default`) and the frontend's pickers and `/cuenta`'s header use. Since a
 change of type, of parent or a new account can alter a whole subtree, `finishAccountChange`
@@ -1093,7 +1093,7 @@ and an account marked `allows_dues`/`allows_licenses` (409 `not_income_for_dues_
 rolls back if not. Only that subtree is checked, so accounts that were marked before this rule (none
 had a type then) don't block edits elsewhere; they have to be given type income the next time they
 are edited. `distribution_default` (migration `00032`, always present in the JSON, replaced
-wholesale by `PATCH`, with a "Repartos" badge and a checkbox in the dialogs) marks the account
+wholesale by `PUT`, with a "Repartos" badge and a checkbox in the dialogs) marks the account
 distributions record their payments in when they have none of their own. One with entries can't be
 deleted — they're history — so it's flagged instead, and *only the frontend acts on it*: the API
 lists, reads, edits and posts to a hidden account like any other. `DELETE /accounts/{id}`
@@ -1116,7 +1116,7 @@ posted to it) and `last_transaction_at` (the most recent one's `occurred_at`) �
 groups others, which has no entries of its own, those of everything below it (a `closure` CTE of
 every account with its descendants), so a group shows the sum of its children's balances and the
 latest of their last movements — and never present on any other `accounts` route
-(`GET`/`POST`/`PATCH /accounts/{id}` are all just the row itself, no extra join); a `LEFT JOIN`
+(`GET`/`POST`/`PUT /accounts/{id}` are all just the row itself, no extra join); a `LEFT JOIN`
 against `transaction_entries`/`transactions` means an account with no entries at all still gets one
 row back rather than being silently missing, `COALESCE`d to a zero `balance` (a real, computed zero
 — never absent the way it is everywhere else `Account` shows up) while `last_transaction_at` is

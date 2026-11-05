@@ -216,12 +216,12 @@ func TestHandlerUpdateRequiresAdminNotBoard(t *testing.T) {
 	body := map[string]string{"start_date": "2020-01-01", "end_date": "2022-01-01"}
 
 	boardToken := testutil.TokenFor(resolver, 1, "board")
-	if rec := doRequest(mux, http.MethodPatch, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPut, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a membership, got %d", rec.Code)
 	}
 
 	adminToken := testutil.TokenFor(resolver, 2, "admin")
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken, body)
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -241,7 +241,7 @@ func TestHandlerUpdateRejectsNonNumericID(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/memberships/not-a-number", adminToken,
+	rec := doRequest(mux, http.MethodPut, "/api/v1/memberships/not-a-number", adminToken,
 		map[string]string{"start_date": "2020-01-01"})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 invalid_id, got %d: %s", rec.Code, rec.Body.String())
@@ -252,7 +252,7 @@ func TestHandlerUpdateNotFound(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/memberships/999999", adminToken,
+	rec := doRequest(mux, http.MethodPut, "/api/v1/memberships/999999", adminToken,
 		map[string]string{"start_date": "2020-01-01"})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
@@ -324,7 +324,7 @@ func TestHandlerUpdateRejectsShrinkingPeriodPastAnExistingLeave(t *testing.T) {
 	}
 
 	updatePath := fmt.Sprintf("/api/v1/memberships/%d", m.ID)
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken,
 		map[string]string{"start_date": "2020-01-01", "end_date": "2020-06-15"})
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409 outside_membership_period, got %d: %s", rec.Code, rec.Body.String())
@@ -518,7 +518,7 @@ func TestHandlerCreateLeaveRejectsOpenEndedWhenMembershipClosed(t *testing.T) {
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
 	updatePath := fmt.Sprintf("/api/v1/memberships/%d", m.ID)
-	if rec := doRequest(mux, http.MethodPatch, updatePath, adminToken,
+	if rec := doRequest(mux, http.MethodPut, updatePath, adminToken,
 		map[string]string{"start_date": "2020-01-01", "end_date": "2020-12-31"}); rec.Code != http.StatusOK {
 		t.Fatalf("close membership: %d: %s", rec.Code, rec.Body.String())
 	}
@@ -548,7 +548,7 @@ func TestHandlerUpdateLeaveCanClearEndDate(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/leaves/%d", created.ID), adminToken,
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/leaves/%d", created.ID), adminToken,
 		map[string]string{"start_date": "2020-06-01"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -582,11 +582,11 @@ func TestHandlerUpdateLeaveRequiresAdminNotBoard(t *testing.T) {
 	body := map[string]string{"start_date": "2020-06-05", "end_date": "2020-07-05"}
 
 	boardToken := testutil.TokenFor(resolver, 2, "board")
-	if rec := doRequest(mux, http.MethodPatch, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
+	if rec := doRequest(mux, http.MethodPut, updatePath, boardToken, body); rec.Code != http.StatusForbidden {
 		t.Errorf("expected board to be forbidden from updating a leave, got %d", rec.Code)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, updatePath, adminToken, body)
+	rec := doRequest(mux, http.MethodPut, updatePath, adminToken, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -596,7 +596,7 @@ func TestHandlerUpdateLeaveNotFound(t *testing.T) {
 	mux, resolver, _ := newHandlerTestServer(t)
 	adminToken := testutil.TokenFor(resolver, 1, "admin")
 
-	rec := doRequest(mux, http.MethodPatch, "/api/v1/leaves/999999", adminToken,
+	rec := doRequest(mux, http.MethodPut, "/api/v1/leaves/999999", adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-06-30"})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 not_found, got %d: %s", rec.Code, rec.Body.String())
@@ -670,7 +670,7 @@ func TestHandlerUpdateNotifiesTelegramWithFieldDiff(t *testing.T) {
 	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
 	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
 
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
 		map[string]string{"start_date": "2020-01-01", "end_date": "2020-12-31", "end_reason": "voluntaria"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -697,7 +697,7 @@ func TestHandlerUpdateWithNoActualChangeSendsNoNotification(t *testing.T) {
 	notifier.waitForMessage(t) // discard createMembership's own "alta" notification
 	adminToken := testutil.TokenFor(resolver, actor.ID, "admin")
 
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/memberships/%d", m.ID), adminToken,
 		map[string]string{"start_date": "2020-01-01"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -749,7 +749,7 @@ func TestHandlerUpdateLeaveNotifiesTelegramWithFieldDiff(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/leaves/%d", leave.ID), adminToken,
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/leaves/%d", leave.ID), adminToken,
 		map[string]string{"start_date": "2020-06-01", "end_date": "2020-07-15"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
