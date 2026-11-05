@@ -180,7 +180,39 @@ newActivityDialog.addEventListener('close', () => {
   renderParticipantChips();
 });
 
-document.getElementById('toggle-new-activity').addEventListener('click', () => {
+// The dates a new activity starts with: the start is the first day, from today on, that is a weekend or a
+// holiday, and the end the last day of that run of days off (the day before the first working day after
+// the start), so a plain activity covers the whole stretch. `holidays` are the dates (YYYY-MM-DD) of the
+// holidays; without them only weekends count.
+function localISODate(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function defaultActivityDates(holidays, today = new Date()) {
+  const dayOff = (date) =>
+    date.getDay() === 0 || date.getDay() === 6 || holidays.has(localISODate(date));
+  const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // A day off always comes within a week, and a run of them is never long; the bound only guards a
+  // list of holidays that covers everything.
+  for (let i = 0; i < 366 && !dayOff(day); i++) day.setDate(day.getDate() + 1);
+  const start = localISODate(day);
+  for (let i = 0; i < 366 && dayOff(day); i++) day.setDate(day.getDate() + 1);
+  day.setDate(day.getDate() - 1);
+  return { start, end: localISODate(day) };
+}
+
+document.getElementById('toggle-new-activity').addEventListener('click', async () => {
+  let holidays = new Set();
+  try {
+    const list = await apiFetch('/holidays');
+    holidays = new Set(list.map((h) => h.date.slice(0, 10)));
+  } catch {
+    // Without the holidays only weekends are counted: the dates are only a suggestion.
+  }
+  const { start, end } = defaultActivityDates(holidays);
+  document.getElementById('na-start-date').value = start;
+  document.getElementById('na-end-date').value = end;
   openModal(newActivityDialog);
 });
 

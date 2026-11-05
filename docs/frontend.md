@@ -110,6 +110,12 @@ participants). The "Quitar" button of a guest is for whoever invited them, the o
 board (`renderGuestRow`, as the API decides). A person who still has guests cannot leave or be
 removed from the activity: the error text says to remove them first (`has_guests`).
 
+**The dates of a new activity.** "Nueva actividad" (`/actividades`) opens with the dates filled in
+(`defaultActivityDates`, in `activities.js`, with the holidays of `GET /holidays`; if they cannot be read,
+only weekends count): the start is the first day, from today on (today included), that is a weekend or
+a holiday, and the end is the last day of that run of days off — the day before the first working day
+after the start. They are only a suggestion: both fields can be changed.
+
 **The limit of people.** "Nueva actividad" (`/actividades`) and "Editar actividad" (`/actividad`)
 have an optional "Máximo de apuntados" (`max_participants`): blank is no limit, and the edit form,
 which resends everything, sends `null` for a blank one. On `/actividad` the total line
