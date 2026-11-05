@@ -110,6 +110,16 @@ participants). The "Quitar" button of a guest is for whoever invited them, the o
 board (`renderGuestRow`, as the API decides). A person who still has guests cannot leave or be
 removed from the activity: the error text says to remove them first (`has_guests`).
 
+**The form to ask for something (`distribution-order-form.js`).** The "Pedir" form is one piece of code,
+`mountOrderForm`, which fills a `<form>` in: the "A nombre de" picker, one quantity per article or one
+`<select>` per option, the extra checkbox and the button, and sends the requests (one for each article
+with a quantity). It is mounted by `/reparto` (the name is optional: left empty it is for oneself) and
+by the **Pedidos** section of `/reparto-gestion`, above the checkbox of finished orders, in "Pedir a nombre
+de un socio" (`#order-box`; hidden in a draft and where there is nothing to ask for), where the name is
+required — whoever manages an order seldom asks for themselves — and the people offered are those who may
+have the distribution. After asking, the page reads its lists again. `optionSelects` and `readChoices`
+are also what the dialog to change an order uses.
+
 **The dates of a new activity.** "Nueva actividad" (`/actividades`) opens with the dates filled in
 (`defaultActivityDates`, in `activities.js`, with the holidays of `GET /holidays`; if they cannot be read,
 only weekends count): the start is the first day, from today on (today included), that is a weekend or
@@ -441,8 +451,8 @@ function that returns `reload`: changing the state or editing re-reads them all
 payments and the numbers (`onOrdersChanged`); the orders section also tells the page when it read a
 fresher distribution (what is left of each article changes with the orders), so the header is drawn
 again. The **Pedidos** section is everything about the orders in one place: on top `GET .../order`
-(what has to be bought), below it a list with one line per order (searchable by member or number;
-the ones with everything paid and handed out are hidden unless asked for) and a summary: what, how
+(what has to be bought), below it a list with one line per order (the ones with everything paid and handed out are hidden unless asked
+for) and a summary: what, how
 many are handed out and paid, what it costs. clicking the line (or Enter or Space on it,
 `toggleOrder`; the line is `tabindex="0"` with `aria-expanded`, styled like a line of the ledger of
 `/cuenta`: `.order-row`) unfolds its detail (`detail`, kept in `unfolded`, in a row of its own),

@@ -148,11 +148,10 @@
       devolver: solo los que tienen número se pueden pagar o entregar, y lo entregado y sin
       pagar se puede devolver (sale del pedido y su número queda libre).
     </p>
-    <div class="field-grid">
-      <div class="field">
-        <label for="orders-search">Buscar <span class="optional">(un socio o un número)</span></label>
-        <input id="orders-search" type="search" autocomplete="off" placeholder="Un nombre…">
-      </div>
+    <div id="order-box" hidden>
+      <h3>Pedir a nombre de un socio</h3>
+      <p class="hint" id="order-status"></p>
+      <form id="order-form"></form>
     </div>
     <p class="filter-bar">
       <label class="checkbox-label" for="show-done"><input id="show-done" type="checkbox"> <span>Ver también los pedidos terminados (todo pagado y entregado)</span></label>

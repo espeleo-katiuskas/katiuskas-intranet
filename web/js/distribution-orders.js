@@ -9,6 +9,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initModal, openModal } from './modal.js';
+import { mountOrderForm } from './distribution-order-form.js';
 import { createNumberPicker } from './numberPicker.js';
 import {
   apiErrorText,
@@ -19,6 +20,7 @@ import {
   sortIdentifiers,
   hasArticles,
   isUnchosen,
+  nothingToAsk,
   loadPeople,
   resolvePickerId,
   unitCost,
@@ -129,7 +131,6 @@ export async function initOrders(ctx) {
   // out) and, unfolded, the detail: the numbers to give it, a list of its numbered
   // items to choose from, and the actions.
   const list = document.getElementById('orders-list');
-  const searchBox = document.getElementById('orders-search');
   const showDone = document.getElementById('show-done');
 
   // Orders unfolded, what is ticked in each (numbers), and what was typed in the
@@ -320,14 +321,7 @@ export async function initOrders(ctx) {
   }
 
   function render() {
-    const needle = searchBox.value.trim().toLowerCase();
-    const shown = units.filter(
-      (u) =>
-        (!needle ||
-          u.beneficiary_name.toLowerCase().includes(needle) ||
-          assigned(u).some((i) => i.toLowerCase().includes(needle))) &&
-        (showDone.checked || !finished(u)),
-    );
+    const shown = units.filter((u) => showDone.checked || !finished(u));
     // What is ticked can only be what the order has, still.
     for (const u of units) {
       const chosen = tickedOf(u);
@@ -358,7 +352,6 @@ export async function initOrders(ctx) {
       : '';
   }
 
-  searchBox.addEventListener('input', render);
   showDone.addEventListener('change', render);
 
   // ----- editing the order -----
@@ -888,6 +881,7 @@ export async function initOrders(ctx) {
       units = all;
       renderOrder(order);
       render();
+      renderOrderBox();
       // What was done here (paying, handing out, numbering) changes the other sections too.
       if (notify) onOrdersChanged?.();
     } catch (err) {
@@ -899,13 +893,44 @@ export async function initOrders(ctx) {
     }
   }
 
+  // ----- asking in somebody's name -----
+  // The same form as the member's own page, but always for somebody else: the name is required. Staff
+  // ask at any time but in a draft, as the API does, and only the people who may have the
+  // distribution are offered.
+  let orderPeople = { entries: [], names: {} };
+  const orderBox = document.getElementById('order-box');
+  const orderForm = mountOrderForm({
+    form: document.getElementById('order-form'),
+    base,
+    getDistribution: () => distribution,
+    getPeople: () => orderPeople,
+    personRequired: true,
+    onOrdered: () => load(),
+    describeError: (err) => apiErrorText(err, distribution),
+  });
+
+  function renderOrderBox() {
+    orderBox.hidden =
+      !distribution || distribution.status === 'draft' || nothingToAsk(distribution);
+    if (orderBox.hidden) return;
+    document.getElementById('order-status').textContent =
+      distribution.status === 'open'
+        ? ''
+        : 'El reparto no está abierto, pero se puede pedir y cambiar pedidos igualmente.';
+    orderForm.render();
+  }
+
   const peopleRequest = loadPeople(id, 'pickup');
+  const orderPeopleRequest = loadPeople(id, 'order');
   const firstLoad = load(peopleRequest, { notify: false });
   people = await peopleRequest;
+  orderPeople = await orderPeopleRequest;
   document.getElementById('dd-person-options').innerHTML = people.entries
     .map((e) => `<option value="${escapeHtml(e.label)}"></option>`)
     .join('');
   await firstLoad;
+  // The people of the form arrive after the first drawing of it.
+  renderOrderBox();
   return {
     // The page changed the distribution (its state, its data): read the orders again.
     async reload(fresh) {
