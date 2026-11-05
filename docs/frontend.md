@@ -75,6 +75,16 @@ as the documents of the home page: it is one rule at the top of `style.css`, `:w
 the pills of `.section-index`…) still wins. A new kind of link that has to look different gives itself a
 class, not a rule on `a`.
 
+**Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a `<datalist>`,
+which the browser filters by itself without ignoring accents ("garcia" did not find "García").
+`initPickerSearch`, called by `initPage`, takes every such input over the first time it gets the focus: it
+removes its `list` attribute and shows its own menu (`.picker-menu`, right after the input so it also shows
+over a dialog) with the options of that datalist that contain every word typed, ignoring accents and case,
+with the arrow keys, Enter (which chooses, it does not send the form) and Escape (which closes the menu, not
+the dialog). Choosing writes the value into the input and fires `input` and `change`, so pages do not change.
+`resolvePickerId` also takes what was typed without choosing when it leaves one single entry, ignoring
+accents. A page only fills the datalist, as before.
+
 **How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for the
 people who share it with somebody else in the same list, so the two can be told apart and what is typed
 still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list the

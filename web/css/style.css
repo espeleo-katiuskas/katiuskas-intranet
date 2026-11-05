@@ -1769,3 +1769,31 @@ h2[id^="section-"] {
 .order-detail td > .order-items {
   margin-top: 6px;
 }
+
+/* The menu of a searchable picker (js/pickerSearch.js): right after its input, against the same positioned
+   ancestor, above whatever follows. */
+.picker-menu {
+  position: absolute;
+  z-index: 50;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.picker-menu li {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.picker-menu li:hover,
+.picker-menu li.active {
+  background: var(--surface-muted);
+}

@@ -776,7 +776,13 @@ function renderPickerOptions(entries) {
 function resolvePickerId(entries, typedValue) {
   const value = (typedValue ?? '').trim();
   const match = entries.find((e) => e.label === value);
-  return match ? match.id : null;
+  if (match) return match.id;
+  // What was typed without choosing from the menu still counts when it leaves one single person, ignoring
+  // accents and case ("garcia" for "García").
+  const words = normalizeForSearch(value).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+  const found = entries.filter((e) => words.every((w) => normalizeForSearch(e.label).includes(w)));
+  return found.length === 1 ? found[0].id : null;
 }
 
 export {
