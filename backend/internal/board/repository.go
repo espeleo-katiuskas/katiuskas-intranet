@@ -120,6 +120,34 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Member, er
 	return list, rows.Err()
 }
 
+// ListAll is every term there has been on the Junta Directiva, past and present, newest start
+// first, with the person's name: the history of the board. No email or phone — those are for
+// reaching the current board (ListActive), not the people who served long ago.
+func (r *Repository) ListAll(ctx context.Context) ([]Member, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT bm.id, bm.user_id, u.login, bm.position, bm.start_date, bm.end_date,
+			u.first_name, u.last_name
+		FROM board_members bm
+		JOIN users u ON u.id = bm.user_id
+		ORDER BY bm.start_date DESC, bm.id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []Member{}
+	for rows.Next() {
+		var m Member
+		if err := rows.Scan(&m.ID, &m.UserID, &m.UserLogin, &m.Position, &m.StartDate, &m.EndDate,
+			&m.FirstName, &m.LastName); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
 // ListActive is the current Junta Directiva: everyone with an open term
 // right now, across every position — including email/phone, since this
 // is also how a plain member is meant to find out how to reach them.

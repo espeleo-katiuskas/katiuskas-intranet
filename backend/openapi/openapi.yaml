@@ -1227,6 +1227,24 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/BoardMember" }
 
+  /board-members/history:
+    get:
+      summary: Every term there has been on the Junta Directiva
+      description: >
+        Open to admin, board and plain members. Past and present terms,
+        newest start first, with the person's name and position but no
+        email or phone. The web page builds a chronological history of
+        entries and departures from it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Every board term
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BoardMember" }
+
   /board-members/{id}:
     patch:
       summary: Correct a board term's position or dates (or end it)

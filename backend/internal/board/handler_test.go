@@ -488,3 +488,51 @@ func TestHandlerRejectsAnUnknownPosition(t *testing.T) {
 		t.Errorf("expected 400 invalid_position on update, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// The history lists every term, past and present, to anybody with a baseline role, with names but
+// without the contact data that the current board has.
+func TestHandlerHistoryListsEveryTermWithoutContactData(t *testing.T) {
+	mux, resolver, tx := newHandlerTestServer(t)
+	past := testutil.InsertUser(t, tx, "")
+	current := testutil.InsertUser(t, tx, "")
+	ctx := context.Background()
+	for _, row := range []struct {
+		userID     int64
+		position   string
+		start, end any
+	}{
+		{past.ID, "president", "2018-01-01", "2020-12-31"},
+		{current.ID, "president", "2021-01-01", nil},
+		{past.ID, "treasurer", "2021-01-01", "2022-06-30"},
+	} {
+		if _, err := tx.Exec(ctx, `INSERT INTO board_members (user_id, position, start_date, end_date) VALUES ($1, $2, $3, $4)`,
+			row.userID, row.position, row.start, row.end); err != nil {
+			t.Fatalf("insert term: %v", err)
+		}
+	}
+
+	for _, role := range []string{"admin", "board", "member"} {
+		rec := doRequest(mux, http.MethodGet, "/api/v1/board-members/history", testutil.TokenFor(resolver, 1, role), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected %s to read the history, got %d: %s", role, rec.Code, rec.Body.String())
+		}
+	}
+	rec := doRequest(mux, http.MethodGet, "/api/v1/board-members/history", testutil.TokenFor(resolver, 1, "member"), nil)
+	var list []board.Member
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 3 {
+		t.Fatalf("expected the 3 terms, got %d: %s", len(list), rec.Body.String())
+	}
+	// Newest start first; the ended ones are there too, with their end date.
+	if list[2].EndDate == nil || list[2].UserLogin != past.Login || list[2].Position != board.PositionPresident {
+		t.Errorf("expected the oldest term last, ended and with its person: %+v", list[2])
+	}
+	if strings.Contains(rec.Body.String(), `"email"`) || strings.Contains(rec.Body.String(), `"phone"`) {
+		t.Errorf("the history must not carry contact data: %s", rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/board-members/history", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected an unauthenticated request to be refused, got %d", rec.Code)
+	}
+}

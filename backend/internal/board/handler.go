@@ -59,6 +59,7 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 // profile, which board itself can no longer touch.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/board-members", h.authenticator.Protect(h.listActive, "admin", "board", "member"))
+	mux.Handle("GET /api/v1/board-members/history", h.authenticator.Protect(h.listHistory, "admin", "board", "member"))
 	mux.Handle("PATCH /api/v1/board-members/{id}", h.authenticator.Protect(h.update, "admin"))
 	mux.Handle("DELETE /api/v1/board-members/{id}", h.authenticator.Protect(h.delete, "admin"))
 	mux.Handle("GET /api/v1/users/{login}/board-members", h.authenticator.Protect(h.listByUser))
@@ -82,6 +83,17 @@ func (h *Handler) listActive(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.ListActive(r.Context())
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list board members")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// listHistory is every term there has been on the board, past and present, for whoever can see the
+// current one: who served, in which position and between which dates.
+func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListAll(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the board history")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)

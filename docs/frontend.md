@@ -714,6 +714,14 @@ that records a license with no transaction (`POST /users/{login}/licenses` witho
 federated elsewhere. Licenses the club does collect are registered from their transaction
 on `/cuenta`, as above.
 
+**The history of the Junta Directiva (`/junta`).** `board-history.js` asks `GET
+/board-members/history` and turns each term into up to two events: "<name> entra como <cargo>" on
+its start date and "Último día de <name> como <cargo>" on its `end_date`. They are sorted newest
+first (on the same day an entry comes before a last day), grouped under one heading per year. Open to
+any baseline role; names link to `/socio?login=…` only for admin and board. The home page links to
+it under the "Junta directiva" section, and the sidebar keeps "Inicio" highlighted
+(`ACTIVE_ALIASES`).
+
 ## Serving the frontend, and checking a page in a headless browser
 
 The frontend needs no rebuild — Caddy bind-mounts `web/` live (see `deploy/Caddyfile`),

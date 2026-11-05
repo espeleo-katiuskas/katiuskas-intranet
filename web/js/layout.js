@@ -98,6 +98,7 @@ const ACTIVE_ALIASES = {
   '/justificantes': '/contabilidad',
   '/reparto': '/repartos',
   '/reparto-gestion': '/repartos',
+  '/junta': '/',
 };
 
 function renderNavLink(item, activePath) {

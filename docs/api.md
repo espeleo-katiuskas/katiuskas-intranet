@@ -311,6 +311,9 @@ Directiva).
 - **GET** `/board-members` — *Any baseline role*. Current board (Junta Directiva), with position and
   contact.
   - returns: 200 `[BoardMember]`
+- **GET** `/board-members/history` — *Any baseline role*. Every term there has been on the Junta
+  Directiva, past and present, newest start first. Name and position only: no email or phone.
+  - returns: 200 `[BoardMember]` (`end_date` is the last day of a finished term)
 - **GET** `/users/{login}/board-members` — *The person themselves, admin or board*. Board positions
   of a person.
   - returns: 200 `[BoardMember]`

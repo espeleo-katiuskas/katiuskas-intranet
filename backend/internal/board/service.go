@@ -39,6 +39,11 @@ func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Member, error
 	return s.repo.ListByUser(ctx, userID)
 }
 
+// ListAll is the whole history of the board (see Repository.ListAll).
+func (s *Service) ListAll(ctx context.Context) ([]Member, error) {
+	return s.repo.ListAll(ctx)
+}
+
 func (s *Service) ListActive(ctx context.Context) ([]Member, error) {
 	return s.repo.ListActive(ctx)
 }
