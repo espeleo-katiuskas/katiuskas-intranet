@@ -182,12 +182,11 @@ and the "×" `.modal-close` button's own positioning) — never a `<div>` toggle
 `hidden="false"` in place on the same page the way every one of these used to work.
 `js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call each page
 makes per dialog: it wires every `[data-modal-close]` element inside (the "×", a form's
-own "Cancelar") and a click that lands on the dialog element's own box rather than
-bubbling from its content (the standard way to detect a backdrop click on a native
-`<dialog>`) to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
-own `close` event, which fires no matter *how* it closed (×, Cancelar, backdrop, Escape,
+own "Cancelar") to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
+own `close` event, which fires no matter *how* it closed (×, Cancelar, Escape,
 or a successful save that calls `close()` itself once done), so a caller's own submit
-handler never resets the form itself. Opening one is always page-specific and left to the
+handler never resets the form itself. A click on the backdrop does not close a dialog, on purpose: a
+click outside by mistake would lose what was typed. Opening one is always page-specific and left to the
 caller, through `openModal(dialog)` (same file: `showModal()` plus restoring the page's
 scroll position, which browsers otherwise reset to the top): a static "+ Nueva X" button
 calling it directly, or — for a dialog shared by every row of a list rather than one
@@ -201,7 +200,7 @@ modality, not a hand-rolled overlay to keep in sync) and closes it on Escape —
 Errors don't go to a banner: `showError` (`api.js`) opens a modal `<dialog id="error-dialog">`,
 created on demand, titled "Ha ocurrido un error", with the message and a "Cerrar" button. It is in
 the top layer over everything, even another open dialog, behind a dark backdrop, so the rest of the
-page can't be operated until it is closed (the button, Escape or a click on the backdrop); a second
+page can't be operated until it is closed (the button or Escape); a second
 error while it's open replaces the message. `showFeedback` is still the sticky `#feedback` banner
 for successes — pages no longer have an `#error` element.
 

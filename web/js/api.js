@@ -600,8 +600,7 @@ function showFeedback(message) {
 // into a modal <dialog> of its own, in the top layer over everything —
 // including another dialog that happens to be open, which it leaves dimmed
 // and inert underneath — behind a dark backdrop, and nothing else can be
-// operated until it is closed (the "Cerrar" button, Escape or a click on the
-// backdrop). Created the first time it's needed, so no page carries markup
+// operated until it is closed (the "Cerrar" button or Escape). Created the first time it's needed, so no page carries markup
 // for it; a second error while it's open replaces the message.
 function errorDialog() {
   let dialog = document.getElementById('error-dialog');
@@ -618,9 +617,6 @@ function errorDialog() {
       <button type="button" class="btn btn-primary" data-error-close>Cerrar</button>
     </div>`;
   dialog.querySelector('[data-error-close]').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) dialog.close();
-  });
   document.body.append(dialog);
   return dialog;
 }
