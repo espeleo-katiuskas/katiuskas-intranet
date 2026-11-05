@@ -647,6 +647,18 @@ changes it.
   - body: `account_id`, `unit_ids`, `payments`
   - returns: 204
   - errors: 400 `no_units`; 409 `already_paid`
+- **POST** `/distributions/{id}/sales` — *Admin or board*. A sale over the counter, for a
+  distribution with articles that is no longer a draft: enters the order of the person, gives it
+  its numbers, collects the money and hands it over, in one go. Only whoever may have the
+  distribution can be sold to (`not_eligible`); numbers asked for by name come first and the rest
+  are the next free ones. If a step fails, what the sale already did is undone. When the person
+  already had a row of the article, only what the sale adds is paid and handed out.
+  - body: `beneficiary_login*`, `article_id*`, `quantity*`, `identifiers`, `paid`, `account_id`
+    (required when `paid` and the article costs something), `delivered`
+  - returns: 201 `DistributionUnit`
+  - errors: 400 `account_required`, `unknown_account`, `invalid_identifiers`; 404 `not_found`;
+    409 `not_eligible`, `not_deliverable`, `article_exhausted`, `not_enough_numbers`,
+    `identifier_taken`, `identifiers_missing`
 - **POST** `/distributions/{id}/units/{unitID}/payment/reversal` — *Admin or board*. Takes off a
   payment: nothing is deleted, the reverse is recorded (a payment of the other sign in the log of
   payments and a reverse transaction in the accounting).

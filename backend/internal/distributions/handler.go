@@ -64,6 +64,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/distributions/{id}/articles/{articleID}/numbers", h.authenticator.Protect(h.numbers, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/return", h.authenticator.Protect(h.returnUnits, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/distributions/{id}/payments", h.authenticator.Protect(h.markPaid, "admin", "board"))
+	// A sale over the counter: the order, its numbers, the payment and the hand-over in one go.
+	mux.Handle("POST /api/v1/distributions/{id}/sales", h.authenticator.Protect(h.sell, "admin", "board"))
 	// Taking off a payment does not delete anything: it records the reverse (a payment of the other
 	// sign in the log and a reverse transaction in the accounting), so it is a POST.
 	mux.Handle("POST /api/v1/distributions/{id}/units/{unitID}/payment/reversal", h.authenticator.Protect(h.clearPaid, "admin", "board"))
@@ -546,6 +548,67 @@ func (h *Handler) registerUnit(w http.ResponseWriter, r *http.Request) {
 	} else {
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha pedido %s para %s.", h.actorLogin(r.Context()), what, beneficiaryLogin))
 	}
+	httpapi.WriteJSON(w, http.StatusCreated, unit)
+}
+
+// sell is a sale over the counter, which would otherwise take an order, numbering, a payment and a
+// delivery one after the other: it does all of them at once for the person in the body.
+func (h *Handler) sell(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		BeneficiaryLogin string            `json:"beneficiary_login"`
+		IsExtra          bool              `json:"is_extra"`
+		Choices          map[string]string `json:"choices"`
+		ArticleID        *int64            `json:"article_id"`
+		Quantity         int               `json:"quantity"`
+		Identifiers      []string          `json:"identifiers"`
+		Paid             bool              `json:"paid"`
+		AccountID        int64             `json:"account_id"`
+		Delivered        bool              `json:"delivered"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	d, ok := h.accessible(w, r, id)
+	if !ok {
+		return
+	}
+	beneficiaryID, err := h.users.UserIDForLogin(r.Context(), body.BeneficiaryLogin)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return
+	}
+	current, _ := auth.UserFromContext(r.Context())
+	unit, err := h.service.Sell(r.Context(), SaleInput{
+		DistributionID: id, BeneficiaryID: beneficiaryID, StaffID: current.ID, IsExtra: body.IsExtra,
+		Choices: body.Choices, ArticleID: body.ArticleID, Quantity: body.Quantity, Identifiers: body.Identifiers,
+		Paid: body.Paid, AccountID: body.AccountID, Delivered: body.Delivered,
+	})
+	if err != nil {
+		writeError(w, err, "could not record the sale")
+		return
+	}
+	what := "«" + d.Name + "»"
+	if unit.ArticleName != nil {
+		what = fmt.Sprintf("%d × «%s» de %s", body.Quantity, *unit.ArticleName, what)
+	}
+	var did []string
+	if body.Paid {
+		did = append(did, "cobrado")
+	}
+	if body.Delivered {
+		did = append(did, "entregado")
+	}
+	done := ""
+	if len(did) > 0 {
+		done = " (" + strings.Join(did, " y ") + ")"
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🛒 %s ha vendido %s a %s%s.",
+		h.actorLogin(r.Context()), what, body.BeneficiaryLogin, done))
 	httpapi.WriteJSON(w, http.StatusCreated, unit)
 }
 

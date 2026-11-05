@@ -2829,6 +2829,49 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_deliverable or quantity_below_paid. }
 
+  /distributions/{id}/sales:
+    post:
+      summary: Sell over the counter
+      description: >
+        Requires admin or board. For a distribution with articles that is no
+        longer a draft: enters the order for `beneficiary_login` (who has to be
+        eligible, 409 not_eligible), gives it its numbers (the `identifiers`
+        asked for first, then the next free ones, for articles whose numbers
+        are described; free-text numbers have to be written in `identifiers`,
+        409 identifiers_missing), marks it paid in `account_id` when `paid` (the
+        account is required if the article costs something) and hands it to the
+        person when `delivered`. If a step fails, what the sale did before is
+        undone. If the person already had a row of the article, only what the
+        sale adds is paid and handed out.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [beneficiary_login, article_id, quantity]
+              properties:
+                beneficiary_login: { type: string }
+                article_id: { type: integer }
+                quantity: { type: integer, minimum: 1 }
+                identifiers: { type: array, items: { type: string } }
+                paid: { type: boolean }
+                account_id: { type: integer }
+                delivered: { type: boolean }
+      responses:
+        "201":
+          description: The person's row of the article, after the sale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistributionUnit" }
+        "400": { description: account_required, unknown_account, account_not_asset, invalid_quantity, invalid_identifiers or article_required. }
+        "403": { description: Neither admin nor board. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: not_eligible, not_deliverable, article_exhausted, article_person_limit, not_enough_numbers, identifier_taken or identifiers_missing. }
+
   /distributions/{id}/payments:
     get:
       summary: List the payments of a distribution

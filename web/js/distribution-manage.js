@@ -24,6 +24,7 @@ import {
 import { initNumbers } from './distribution-numbers.js';
 import { initOrders } from './distribution-orders.js';
 import { initPayments } from './distribution-payments.js';
+import { initSale } from './distribution-sale.js';
 
 // Everything for the people who manage one distribution (admin, board and material) in one page: at
 // the top what can be done to the distribution itself (take it to another state, edit it, delete
@@ -61,6 +62,8 @@ const hasNumbers = () => distribution.articles.some((a) => a.identifier_fields.l
 // The sections: each one has `reload`, for when the distribution changes. What data-roles removed
 // from the page (payments, for material) is not there to start.
 const sections = [];
+// The sale over the counter (admin and board), once its dialog is set up.
+let sale = null;
 
 // The states on each side of the current one. A distribution with nothing for the members to ask
 // skips "Se puede pedir": there is nothing to do in it, so draft and closed are next to each other (the API
@@ -77,6 +80,7 @@ function neighbours() {
 }
 
 function renderHeader() {
+  sale?.update(distribution);
   document.getElementById('distribution-title').textContent = distribution.name;
   document.title = `${distribution.name} — Gestionar — Club de Espeleología Katiuskas`;
   document.getElementById('distribution-meta').innerHTML = describeDistribution(distribution);
@@ -299,3 +303,13 @@ if (canMarkPaid) {
   );
 }
 await Promise.all(loading);
+sale = await initSale({
+  id,
+  base,
+  distribution,
+  // A sale changes the orders, the payments, the numbers and what is left of each article.
+  onSold: async () => {
+    distribution = await apiFetch(base);
+    await distributionChanged();
+  },
+});

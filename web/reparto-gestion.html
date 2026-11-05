@@ -22,6 +22,7 @@
 
   <!-- What can be done to the distribution itself: its state, its data, deleting it. -->
   <div class="panel-actions">
+    <button id="open-sale" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden>Venta directa</button>
     <button id="step-back" type="button" class="btn btn-secondary btn-small" data-roles="admin,board" hidden></button>
     <button id="step-forward" type="button" class="btn btn-primary btn-small" data-roles="admin,board" hidden></button>
     <button id="open-edit" type="button" class="btn btn-secondary btn-small" data-roles="admin,board">Editar</button>
@@ -237,6 +238,59 @@
       </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Entregar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="sale-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Venta directa</h3>
+    <p class="hint">Apunta lo que pide un socio, y si quieres lo cobras y se lo entregas, todo de una vez.</p>
+    <form id="sale-form">
+      <div class="field">
+        <label for="sd-person">Socio</label>
+        <input id="sd-person" type="text" list="sd-person-options" autocomplete="off" placeholder="Escribe un nombre…" required>
+        <datalist id="sd-person-options"></datalist>
+      </div>
+      <div class="field-grid">
+        <div class="field" id="sd-article-field">
+          <label for="sd-article">Artículo</label>
+          <select id="sd-article"></select>
+        </div>
+        <div class="field">
+          <label for="sd-quantity">Cantidad</label>
+          <input id="sd-quantity" type="number" min="1" max="100000" step="1" value="1" required>
+        </div>
+      </div>
+      <p class="hint" id="sd-total" aria-live="polite"></p>
+      <div id="sd-numbers" hidden>
+        <div class="field">
+          <label for="sd-filter">Números <span class="optional">(un trozo del número, para buscar)</span></label>
+          <input id="sd-filter" type="search" autocomplete="off">
+        </div>
+        <p class="hint">Si el socio quiere números concretos, púlsalos para marcarlos (con Mayús, marcas desde el último hasta este). Los que falten se dan por orden.</p>
+        <div id="sd-chips" class="number-picker"></div>
+        <p id="sd-count" class="hint" aria-live="polite"></p>
+      </div>
+      <div class="field" id="sd-typed" hidden>
+        <label for="sd-typed-input">Números <span class="optional">(separados por comas)</span></label>
+        <input id="sd-typed-input" type="text" autocomplete="off">
+      </div>
+      <div id="sd-money">
+        <p class="filter-bar">
+          <label class="checkbox-label" for="sd-paid"><input id="sd-paid" type="checkbox" checked> <span>Cobrar ahora</span></label>
+        </p>
+        <div class="field" id="sd-account-field">
+          <label for="sd-account">Cuenta en la que se ha pagado</label>
+          <select id="sd-account"></select>
+        </div>
+      </div>
+      <p class="filter-bar">
+        <label class="checkbox-label" for="sd-delivered"><input id="sd-delivered" type="checkbox" checked> <span>Entregar ahora</span></label>
+      </p>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary" id="sd-submit">Aceptar</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
       </div>
     </form>

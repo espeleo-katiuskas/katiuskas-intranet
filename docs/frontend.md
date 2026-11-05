@@ -405,7 +405,8 @@ that a distribution with nothing for the members to ask skips "Se puede pedir", 
 deleting, ask for confirmation naming what would really be lost: the orders that are not an empty
 own order of a member in a distribution for all members, which is only a placeholder made again on
 leaving the draft (`ordersWithSomethingToLose`), and say nothing about orders when there are none of
-those), "Editar" (the dialog, with its form) — all for admin and board — and "Borrar" (admin only:
+those), "Editar" (the dialog, with its form) — all for admin and board — "Venta directa" (admin and
+board, only in a distribution with articles that is not a draft: `distribution-sale.js`, below) and "Borrar" (admin only:
 `DELETE` is admin-only in the API, and the button is `data-roles="admin"`); a link "← Volver al
 reparto" goes back to the member's view. Under them, a row of links (`.section-index`) to its
 sections, which are what used to be three pages: **Pedidos**, **Pagos** (admin/board, and only when
@@ -434,7 +435,8 @@ which opens `numbers-dialog`: a button for each free number, in a row by the fir
 number when it has several (a series and its fractions), pressed to mark and unmark, with Shift to
 mark from the last one pressed to this one, a filter box, and never more marked than the order is
 missing — the rest are disabled — and the free numbers read again if the API refuses one because
-somebody took it meanwhile; for an article with free-text numbers, a field to type them) and the
+somebody took it meanwhile (all of it is `createNumberPicker` in `numberPicker.js`, which the sale
+over the counter uses too); for an article with free-text numbers, a field to type them) and the
 list of its numbered items, each with its paid / delivered state, to tick (`ticked`; "todos / sin
 pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or take the payment off
 (admin/board), hand out to the person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled
@@ -721,6 +723,18 @@ first (on the same day an entry comes before a last day), grouped under one head
 any baseline role; names link to `/socio?login=…` only for admin and board. The home page links to
 it under the "Junta directiva" section, and the sidebar keeps "Inicio" highlighted
 (`ACTIVE_ALIASES`).
+
+**The sale over the counter (`distribution-sale.js`).** For a member who asks for something and pays on
+the spot. "Venta directa", in the buttons of `/reparto-gestion` (admin and board; only in a
+distribution with articles that is not a draft: `update(distribution)` shows and hides it), opens
+`sale-dialog`: the member (a searchable field with who may have the distribution, `loadPeople(id,
+'order')`), the article (not shown when there is only one) and the quantity, with the total and what
+is left; for an article whose numbers are described, the buttons of `createNumberPicker` for the
+numbers the member asks for by name — the rest are given in order — and, for free-text numbers, a
+field to type them; for an article that costs something, "Cobrar ahora" with the account (the one
+used last, shared with the payment dialog of the orders) and, always, "Entregar ahora". Both are
+ticked by default, so the usual sale is: member, "Aceptar". It sends a single `POST .../sales`, shows
+the numbers given in the confirmation and has the page read its sections again (`onSold`).
 
 ## Serving the frontend, and checking a page in a headless browser
 
