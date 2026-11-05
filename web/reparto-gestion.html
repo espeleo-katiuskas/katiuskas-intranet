@@ -140,23 +140,14 @@
       <p class="subtitle" id="orders-progress"></p>
     </div>
   </div>
-  <div class="panel" id="orders-panel">
-    <p class="hint">
-      Cada línea es un pedido, con cuántas unidades son y cuántas están pagadas y entregadas;
-      al pinchar en la línea se despliega. Donde los artículos llevan número, se asigna número a lo
-      que falte y, en la lista de lo numerado, se marcan los que se quieren pagar, entregar o
-      devolver: solo los que tienen número se pueden pagar o entregar, y lo entregado y sin
-      pagar se puede devolver (sale del pedido y su número queda libre).
-    </p>
-    <div id="order-box" hidden>
-      <h3>Pedir a nombre de un socio</h3>
-      <p class="hint" id="order-status"></p>
-      <form id="order-form"></form>
-    </div>
-    <p class="filter-bar">
-      <label class="checkbox-label" for="show-done"><input id="show-done" type="checkbox"> <span>Ver también los pedidos terminados (todo pagado y entregado)</span></label>
-    </p>
+  <div class="panel" id="order-box" hidden>
+    <h3>Pedir a nombre de un socio</h3>
+    <p class="hint" id="order-status"></p>
+    <form id="order-form"></form>
   </div>
+  <p class="filter-bar">
+    <label class="checkbox-label" for="show-done"><input id="show-done" type="checkbox"> <span>Ver también los pedidos terminados (todo pagado y entregado)</span></label>
+  </p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Socio</th><th>Pedido</th><th>Entregadas</th><th>Pagadas</th><th>Importe</th></tr></thead>
