@@ -69,6 +69,12 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
+**Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only on hover,
+as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`, written with
+`:where()` so that it has no specificity and whatever styles its own links (the sidebar, `a.btn`, the cards,
+the pills of `.section-index`…) still wins. A new kind of link that has to look different gives itself a
+class, not a rule on `a`.
+
 **How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for the
 people who share it with somebody else in the same list, so the two can be told apart and what is typed
 still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list the

@@ -33,6 +33,18 @@
   display: none !important;
 }
 
+/* Links: always the same colour (visited or not) and underlined only on hover, as the documents of the home page.
+   :where() gives it no specificity, so any class that styles its own links (the sidebar, the buttons, the
+   cards…) still wins. */
+:where(a) {
+  color: var(--link);
+  text-decoration: none;
+}
+
+:where(a):hover {
+  text-decoration: underline;
+}
+
 .impersonation-banner {
   display: flex;
   align-items: center;
