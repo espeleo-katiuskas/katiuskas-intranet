@@ -746,22 +746,23 @@ a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST 
 creating and editing (a label, a value and, optionally, a text for a copy button and the button's
 own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE
 /material/types/{id}`: a table with the type, whether its description is required, its attributes
-and the buttons "Editar", "Atributos" and "Borrar"; a dialog shared by creating and editing has the
-name and "La descripción es obligatoria"; "Cuerda" and "Saca" are listed as "Fijo" with no buttons,
-and a type with material is refused with its own message). "Atributos" opens a dialog
-(`#material-attributes-dialog`) with the type's attributes, each with its kind (texto libre or
-lista de opciones), an "Obligatorio" checkbox, ↑ ↓ to order them (the order of their values in an
-item's name; each sends the whole new order to `PUT /material/types/{id}/attributes/order`),
-"Renombrar" and "Borrar" (`PATCH`/`DELETE /material/attributes/{id}`); an enum attribute shows its
-options as badges with ✎ (rename) and × (remove) and a box to add one
-(`POST /material/attributes/{id}/options`, `PATCH`/`DELETE /material/options/{id}`); a form at the
-bottom adds an attribute (name, texto libre or lista de opciones with one option per line,
-obligatorio). Every change reloads the types, and an error (an option in use, a change that would
-leave two items identical) is shown with its own message. The home page (`dashboard.js`,
-`loadClubInfo`) draws them from `GET
-/club-info`, with the copy buttons handled by one listener on the list since they are drawn after
-load: the data is not written in `index.html`, so an administrator changes it without a deploy and a
-private one (the Bizum number) is not in the repository. Admin/board get `FULL_COLUMNS` and
+and the buttons "Editar" and "Borrar"; "Cuerda" and "Saca" are listed as "Fijo" with no buttons,
+and a type with material is refused with its own message). One dialog, shared by creating and
+editing, has the name, "La descripción es obligatoria" and "Guardar" and, below, the type's
+attributes (`#material-attributes-section`, only once the type exists: saving a new one keeps the
+dialog open, now editing it). Each attribute shows its kind (texto libre or lista de opciones), an
+"Obligatorio" checkbox, ↑ ↓ to order them (the order of their values in an item's name; each sends
+the whole new order to `PUT /material/types/{id}/attributes/order`), "Renombrar" and "Borrar"
+(`PATCH`/`DELETE /material/attributes/{id}`); an enum attribute shows its options as badges with ✎
+(rename) and × (remove) and a box to add one (`POST /material/attributes/{id}/options`,
+`PATCH`/`DELETE /material/options/{id}`); a form at the bottom adds an attribute (name, texto libre
+or lista de opciones with one option per line, obligatorio). Attribute changes are applied at once,
+each its own request, and reload the types; an error (an option in use, a change that would leave
+two items identical) is shown with its own message. The home page (`dashboard.js`,
+`loadClubInfo`) draws them from `GET /club-info`, with the copy buttons handled by one listener on
+the list since they are drawn after load: the data is not written in `index.html`, so an
+administrator changes it without a deploy and a private one (the Bizum number) is not in the
+repository. Admin/board get `FULL_COLUMNS` and
 `FULL_FILTERS`; a plain member gets `MEMBER_COLUMNS`/`MEMBER_FILTERS`, limited to what
 `users.MemberListing` carries (see **Permission tiers**). Row filters ("Género", "Tipo de socio",
 "Categoría", "Cuota anual", "Federación") and the column toggles sit behind a "Filtros…" button, and

@@ -811,18 +811,22 @@ clubInfoBody.addEventListener('click', async (event) => {
 // PATCH/DELETE /material/types/{id}). Cuerda and Saca are fixed (they carry the rope and bag fields):
 // they are listed but cannot be renamed or deleted; a type with items can't go either. A general
 // type also says whether the description of its items is required, and has attributes (text or a
-// list of options, required or not) edited in their own dialog.
+// list of options, required or not), edited in the same dialog as its name.
 const materialTypesBody = document.getElementById('material-types-table-body');
 const materialTypeDialog = document.getElementById('material-type-dialog');
 const materialTypeForm = document.getElementById('material-type-form');
-const attributesDialog = document.getElementById('material-attributes-dialog');
+const attributesSection = document.getElementById('material-attributes-section');
 const attributesList = document.getElementById('material-attributes-list');
 const attributeForm = document.getElementById('material-attribute-form');
 let materialTypes = [];
 let editingMaterialTypeId = null; // null: the dialog is creating one
-let attributesTypeId = null; // the type whose attributes the dialog shows
 initModal(materialTypeDialog, materialTypeForm);
-initModal(attributesDialog, attributeForm);
+initModal(materialTypeDialog, attributeForm);
+// Closing the dialog leaves the new-attribute form as it was found.
+materialTypeDialog.addEventListener('close', () => {
+  document.getElementById('ma-options-field').hidden = true;
+  attributesSection.hidden = true;
+});
 
 function renderMaterialTypes() {
   materialTypesBody.innerHTML = materialTypes.length
@@ -838,7 +842,6 @@ function renderMaterialTypes() {
           <td class="nowrap">${
             general
               ? `<button type="button" class="btn btn-secondary btn-small" data-edit-material-type="${type.id}">Editar</button>
-            <button type="button" class="btn btn-secondary btn-small" data-material-attributes="${type.id}">Atributos</button>
             <button type="button" class="btn btn-danger btn-small" data-delete-material-type="${type.id}">Borrar</button>`
               : '<span class="badge">Fijo</span>'
           }</td>
@@ -852,7 +855,7 @@ async function loadMaterialTypes() {
   try {
     materialTypes = await apiFetch('/material/types');
     renderMaterialTypes();
-    if (attributesDialog.open) renderAttributes();
+    if (materialTypeDialog.open && editingMaterialTypeId != null) renderAttributes();
   } catch {
     materialTypesBody.innerHTML = '<tr><td colspan="4">No se pudieron cargar los tipos.</td></tr>';
   }
@@ -865,6 +868,9 @@ function openMaterialTypeDialog(type) {
     : 'Nuevo tipo';
   materialTypeForm.elements.name.value = type?.name ?? '';
   materialTypeForm.elements.description_required.checked = type?.description_required ?? true;
+  // The attributes belong to a type that exists: a new one gets them once it is saved.
+  attributesSection.hidden = !type;
+  if (type) renderAttributes();
   openModal(materialTypeDialog);
 }
 
@@ -878,16 +884,29 @@ materialTypeForm.addEventListener('submit', async (event) => {
   submitButton.disabled = true;
   const editing = editingMaterialTypeId != null;
   try {
-    await apiFetch(editing ? `/material/types/${editingMaterialTypeId}` : '/material/types', {
-      method: editing ? 'PATCH' : 'POST',
-      body: JSON.stringify({
-        name: materialTypeForm.elements.name.value.trim(),
-        description_required: materialTypeForm.elements.description_required.checked,
-      }),
-    });
-    materialTypeDialog.close();
-    showFeedback(editing ? 'Tipo guardado.' : 'Tipo añadido.');
-    await loadMaterialTypes();
+    const saved = await apiFetch(
+      editing ? `/material/types/${editingMaterialTypeId}` : '/material/types',
+      {
+        method: editing ? 'PATCH' : 'POST',
+        body: JSON.stringify({
+          name: materialTypeForm.elements.name.value.trim(),
+          description_required: materialTypeForm.elements.description_required.checked,
+        }),
+      },
+    );
+    if (editing) {
+      materialTypeDialog.close();
+      showFeedback('Tipo guardado.');
+      await loadMaterialTypes();
+    } else {
+      // A new type: the dialog stays open, now editing it, so its attributes can be added.
+      showFeedback('Tipo añadido. Ya puedes añadirle atributos.');
+      editingMaterialTypeId = saved.id;
+      document.getElementById('material-type-dialog-title').textContent = 'Editar tipo';
+      attributesSection.hidden = false;
+      await loadMaterialTypes();
+      renderAttributes();
+    }
   } catch (err) {
     showError(err.message);
   } finally {
@@ -898,9 +917,8 @@ materialTypeForm.addEventListener('submit', async (event) => {
 // The attributes of one type: each with its data type, whether it is required, its options (an enum
 // one), and the buttons to move, rename and delete it.
 function renderAttributes() {
-  const type = materialTypes.find((t) => t.id === attributesTypeId);
+  const type = materialTypes.find((t) => t.id === editingMaterialTypeId);
   if (!type) return;
-  document.getElementById('material-attributes-title').textContent = `Atributos de «${type.name}»`;
   attributesList.innerHTML = type.attributes.length
     ? type.attributes
         .map(
@@ -969,17 +987,13 @@ async function changeAttributes(path, method, body, feedback) {
 document.getElementById('ma-data-type').addEventListener('change', (event) => {
   document.getElementById('ma-options-field').hidden = event.target.value !== 'enum';
 });
-attributesDialog.addEventListener('close', () => {
-  document.getElementById('ma-options-field').hidden = true;
-});
-
 attributeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const submitButton = attributeForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   const isEnum = attributeForm.elements.data_type.value === 'enum';
   const ok = await changeAttributes(
-    `/material/types/${attributesTypeId}/attributes`,
+    `/material/types/${editingMaterialTypeId}/attributes`,
     'POST',
     {
       name: attributeForm.elements.name.value.trim(),
@@ -1015,14 +1029,14 @@ attributesList.addEventListener('change', async (event) => {
 attributesList.addEventListener('click', async (event) => {
   const move = event.target.closest('button[data-move-attribute]');
   if (move) {
-    const type = materialTypes.find((t) => t.id === attributesTypeId);
+    const type = materialTypes.find((t) => t.id === editingMaterialTypeId);
     const ids = type.attributes.map((a) => a.id);
     const from = ids.indexOf(Number(move.dataset.moveAttribute));
     const to = from + Number(move.dataset.direction);
     if (to < 0 || to >= ids.length) return;
     [ids[from], ids[to]] = [ids[to], ids[from]];
     await changeAttributes(
-      `/material/types/${attributesTypeId}/attributes/order`,
+      `/material/types/${editingMaterialTypeId}/attributes/order`,
       'PUT',
       { attribute_ids: ids },
       null,
@@ -1105,13 +1119,6 @@ materialTypesBody.addEventListener('click', async (event) => {
     openMaterialTypeDialog(
       materialTypes.find((c) => c.id === Number(edit.dataset.editMaterialType)),
     );
-    return;
-  }
-  const attributes = event.target.closest('button[data-material-attributes]');
-  if (attributes) {
-    attributesTypeId = Number(attributes.dataset.materialAttributes);
-    renderAttributes();
-    openModal(attributesDialog);
     return;
   }
   const del = event.target.closest('button[data-delete-material-type]');
