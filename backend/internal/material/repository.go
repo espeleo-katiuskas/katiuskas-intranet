@@ -814,11 +814,11 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, er
 }
 
 func (r *Repository) ListMovementsByItem(ctx context.Context, itemID int64) ([]Movement, error) {
-	return r.queryMovements(ctx, `WHERE m.item_id = $1 ORDER BY m.transacted_at DESC`, itemID)
+	return r.queryMovements(ctx, `WHERE m.item_id = $1 ORDER BY m.transacted_at DESC, m.id DESC`, itemID)
 }
 
 func (r *Repository) ListMovementsByStatus(ctx context.Context, status MovementStatus) ([]Movement, error) {
-	return r.queryMovements(ctx, `WHERE m.status = $1 ORDER BY m.transacted_at DESC`, status)
+	return r.queryMovements(ctx, `WHERE m.status = $1 ORDER BY m.transacted_at DESC, m.id DESC`, status)
 }
 
 // ListMovementsByUser returns every purchase, rental and loan a person
@@ -826,7 +826,7 @@ func (r *Repository) ListMovementsByStatus(ctx context.Context, status MovementS
 // that person's page. Acquisition/loss/abandonment/retirement/return
 // rows have no user_id, so they never match here.
 func (r *Repository) ListMovementsByUser(ctx context.Context, userID int64) ([]Movement, error) {
-	return r.queryMovements(ctx, `WHERE m.user_id = $1 ORDER BY m.transacted_at DESC`, userID)
+	return r.queryMovements(ctx, `WHERE m.user_id = $1 ORDER BY m.transacted_at DESC, m.id DESC`, userID)
 }
 
 // ListMovementsByActivity returns every movement tied to an activity —
@@ -835,7 +835,7 @@ func (r *Repository) ListMovementsByUser(ctx context.Context, userID int64) ([]M
 // tracked via a link between specific rows. Backs the activity page's
 // "material prestado" (grouped and summed client-side, item by item).
 func (r *Repository) ListMovementsByActivity(ctx context.Context, activityID int64) ([]Movement, error) {
-	return r.queryMovements(ctx, `WHERE m.activity_id = $1 ORDER BY m.transacted_at DESC`, activityID)
+	return r.queryMovements(ctx, `WHERE m.activity_id = $1 ORDER BY m.transacted_at DESC, m.id DESC`, activityID)
 }
 
 // queryMovements joins in the login of both the movement's recipient

@@ -3,6 +3,7 @@ package material_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -1397,4 +1398,57 @@ func paidInto(t *testing.T, tx pgx.Tx) *int64 {
 	t.Helper()
 	id := testutil.MaterialAccounts(t, tx)
 	return &id
+}
+
+// Movements of the same day come out newest first by id, in every listing: ordering by the date
+// alone would leave their order to the database.
+func TestMovementListingsBreakTiesById(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := material.NewRepository(tx)
+	ctx := context.Background()
+
+	item := createItem(t, tx, repo, 10)
+	user := testutil.InsertMember(t, tx)
+	activityID := testutil.InsertActivity(t, tx)
+	day := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	var ids []int64
+	for range 5 {
+		m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
+			ItemID: item.ID, UserID: &user.ID, Type: material.MovementLoan, Quantity: 1,
+			ActivityID: &activityID, TransactedAt: day,
+		})
+		if err != nil {
+			t.Fatalf("create loan: %v", err)
+		}
+		ids = append(ids, m.ID)
+	}
+	want := make([]int64, len(ids))
+	for i, id := range ids {
+		want[len(ids)-1-i] = id
+	}
+
+	loans := func(list []material.Movement, err error) []int64 {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []int64
+		for _, m := range list {
+			if m.Type == material.MovementLoan {
+				got = append(got, m.ID)
+			}
+		}
+		return got
+	}
+	for name, got := range map[string][]int64{
+		"by item":     loans(repo.ListMovementsByItem(ctx, item.ID)),
+		"by status":   loans(repo.ListMovementsByStatus(ctx, material.MovementCompleted)),
+		"by user":     loans(repo.ListMovementsByUser(ctx, user.ID)),
+		"by activity": loans(repo.ListMovementsByActivity(ctx, activityID)),
+	} {
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: expected the loans of the day by id descending %v, got %v", name, want, got)
+		}
+	}
 }
