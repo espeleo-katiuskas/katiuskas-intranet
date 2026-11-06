@@ -544,9 +544,9 @@ Constraints:
 Indexes:
 
 - `idx_activities_start_date` sobre `(start_date)`
-- `activities_start_date_title_key`, unique, over `(start_date, lower(btrim(title)))`: two activities
-  cannot start the same day with the same title, ignoring case and the spaces around it (409
-  `duplicate_activity`)
+- `activities_start_date_title_key`, unique, over `(start_date, lower(btrim(title)))`: two
+  activities cannot start the same day with the same title, ignoring case and the spaces around it
+  (409 `duplicate_activity`)
 
 ### `activity_participants`
 
@@ -705,8 +705,8 @@ Constraints:
   NOT NULL))`
 - `rope_and_bag_require_code`: `(kind = 'general') OR (code IS NOT NULL)`
 - `material_items_code_not_empty`: `code IS NULL OR btrim(code) <> ''`
-- `material_items_code_not_only_digits`: `code IS NULL OR code !~ '^[0-9]+$'` (a listing writes `#<code>`,
-  or `#<id>` with no code)
+- `material_items_code_not_only_digits`: `code IS NULL OR code !~ '^[0-9]+$'` (a listing writes
+  `#<code>`, or `#<id>` with no code)
 - `model_needs_brand`: `(model IS NULL) OR (brand IS NOT NULL)`
 - `rope_fields_only_for_rope`: `(kind = 'rope') OR ((rope_type IS NULL) AND (diameter_mm IS
   NULL) AND (manufacture_year IS NULL) AND (length_m IS NULL))`

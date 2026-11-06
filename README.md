@@ -60,8 +60,8 @@ Para entrar, ve a `http://localhost:64710/login`, escribe ese email y ese teléf
 mira los logs de la API (`docker compose logs api`) para encontrar el enlace de acceso —
 sin `SMTP_HOST` configurado, el correo se registra en el log en vez de enviarse de verdad.
 
-Para desarrollo sin Docker, `make run` sirve la API en `:64711` (necesita `DATABASE_URL`
-apuntando a un PostgreSQL accesible); más detalles en [`docs/architecture.md`](docs/architecture.md).
+Para desarrollo sin Docker, `make run` sirve la API en `:64711` (necesita `DATABASE_URL` apuntando a
+un PostgreSQL accesible); más detalles en [`docs/architecture.md`](docs/architecture.md).
 
 ## Tests
 

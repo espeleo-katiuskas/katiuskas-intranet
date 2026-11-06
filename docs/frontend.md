@@ -69,39 +69,40 @@ and *Retirada* if a unit is available, and *Devolución* only if some of it is o
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
 button.
 
-**Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only on hover,
-as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`, written with
-`:where()` so that it has no specificity and whatever styles its own links (the sidebar, `a.btn`, the cards,
-the pills of `.section-index`…) still wins. A new kind of link that has to look different gives itself a
-class, not a rule on `a`.
+**Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only
+on hover, as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`,
+written with `:where()` so that it has no specificity and whatever styles its own links (the
+sidebar, `a.btn`, the cards, the pills of `.section-index`…) still wins. A new kind of link that has
+to look different gives itself a class, not a rule on `a`.
 
-**Remembering the email at sign-in.** To save typing the address (slow on a phone), `login.html` offers the
-last five addresses that signed in on this browser, in `localStorage` (`katiuskas:login-emails`, newest
-first, no repeats whatever the case): when the email field is focused, the same menu as the pickers
-(`pickerSearch.js`) lists them, and choosing one moves the focus to the phone. Only the email is saved, not
-the phone, and only after a sign-in that worked: the address typed when asking for the link waits in
-`katiuskas:login-pending-email` and is moved to the list when this browser completes the sign-in — by the
-code, by the link opened in this tab, or, in the tab that asked, when another tab of the browser signs in.
-The field has `autocomplete="off"` (and a `name` that does not say "email"), so that the browser's own offer
-of addresses it has stored from other sites does not cover this menu; the phone has it too, so that it is
-always typed. A request that is never followed through
-is not remembered. It also works on the club's shared tablet
+**Remembering the email at sign-in.** To save typing the address (slow on a phone), `login.html`
+offers the last five addresses that signed in on this browser, in `localStorage`
+(`katiuskas:login-emails`, newest first, no repeats whatever the case): when the email field is
+focused, the same menu as the pickers (`pickerSearch.js`) lists them, and choosing one moves the
+focus to the phone. Only the email is saved, not the phone, and only after a sign-in that worked:
+the address typed when asking for the link waits in `katiuskas:login-pending-email` and is moved to
+the list when this browser completes the sign-in — by the code, by the link opened in this tab, or,
+in the tab that asked, when another tab of the browser signs in. The field has `autocomplete="off"`
+(and a `name` that does not say "email"), so that the browser's own offer of addresses it has stored
+from other sites does not cover this menu; the phone has it too, so that it is always typed. A
+request that is never followed through is not remembered. It also works on the club's shared tablet
 (`local.` address): whoever can use it can see the addresses of the others, which is accepted.
 
-**Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a `<datalist>`,
-which the browser filters by itself without ignoring accents ("garcia" did not find "García").
-`initPickerSearch`, called by `initPage`, takes every such input over the first time it gets the focus: it
-removes its `list` attribute and shows its own menu (`.picker-menu`, right after the input so it also shows
-over a dialog) with the options of that datalist that contain every word typed, ignoring accents and case,
-with the arrow keys, Enter (which chooses, it does not send the form) and Escape (which closes the menu, not
-the dialog). Choosing writes the value into the input and fires `input` and `change`, so pages do not change.
-`resolvePickerId` also takes what was typed without choosing when it leaves one single entry, ignoring
-accents. A page only fills the datalist, as before.
+**Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a
+`<datalist>`, which the browser filters by itself without ignoring accents ("garcia" did not find
+"García"). `initPickerSearch`, called by `initPage`, takes every such input over the first time it
+gets the focus: it removes its `list` attribute and shows its own menu (`.picker-menu`, right after
+the input so it also shows over a dialog) with the options of that datalist that contain every word
+typed, ignoring accents and case, with the arrow keys, Enter (which chooses, it does not send the
+form) and Escape (which closes the menu, not the dialog). Choosing writes the value into the input
+and fires `input` and `change`, so pages do not change. `resolvePickerId` also takes what was typed
+without choosing when it leaves one single entry, ignoring accents. A page only fills the datalist,
+as before.
 
-**How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for the
-people who share it with somebody else in the same list, so the two can be told apart and what is typed
-still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list the
-picker is made from, not the part of it that is offered). Pickers of other things (activities,
+**How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for
+the people who share it with somebody else in the same list, so the two can be told apart and what
+is typed still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list
+the picker is made from, not the part of it that is offered). Pickers of other things (activities,
 material items) still carry their "#id".
 
 **How a piece of material reads.** Every listing of material (`/material`, `/material-prestado`, the
@@ -139,21 +140,21 @@ participants). The "Quitar" button of a guest is for whoever invited them, the o
 board (`renderGuestRow`, as the API decides). A person who still has guests cannot leave or be
 removed from the activity: the error text says to remove them first (`has_guests`).
 
-**The form to ask for something (`distribution-order-form.js`).** The "Pedir" form is one piece of code,
-`mountOrderForm`, which fills a `<form>` in: the "A nombre de" picker, one quantity per article or one
-`<select>` per option, the extra checkbox and the button, and sends the requests (one for each article
-with a quantity). It is mounted by `/reparto` (the name is optional: left empty it is for oneself) and
-by the **Pedidos** section of `/reparto-gestion`, above the checkbox of finished orders, in "Pedir a nombre
-de un socio" (`#order-box`; hidden in a draft and where there is nothing to ask for), where the name is
-required — whoever manages an order seldom asks for themselves — and the people offered are those who may
-have the distribution. After asking, the page reads its lists again. `optionSelects` and `readChoices`
-are also what the dialog to change an order uses.
+**The form to ask for something (`distribution-order-form.js`).** The "Pedir" form is one piece of
+code, `mountOrderForm`, which fills a `<form>` in: the "A nombre de" picker, one quantity per
+article or one `<select>` per option, the extra checkbox and the button, and sends the requests (one
+for each article with a quantity). It is mounted by `/reparto` (the name is optional: left empty it
+is for oneself) and by the **Pedidos** section of `/reparto-gestion`, above the checkbox of finished
+orders, in "Pedir a nombre de un socio" (`#order-box`; hidden in a draft and where there is nothing
+to ask for), where the name is required — whoever manages an order seldom asks for themselves — and
+the people offered are those who may have the distribution. After asking, the page reads its lists
+again. `optionSelects` and `readChoices` are also what the dialog to change an order uses.
 
 **The dates of a new activity.** "Nueva actividad" (`/actividades`) opens with the dates filled in
-(`defaultActivityDates`, in `activities.js`, with the holidays of `GET /holidays`; if they cannot be read,
-only weekends count): the start is the first day, from today on (today included), that is a weekend or
-a holiday, and the end is the last day of that run of days off — the day before the first working day
-after the start. They are only a suggestion: both fields can be changed.
+(`defaultActivityDates`, in `activities.js`, with the holidays of `GET /holidays`; if they cannot be
+read, only weekends count): the start is the first day, from today on (today included), that is a
+weekend or a holiday, and the end is the last day of that run of days off — the day before the first
+working day after the start. They are only a suggestion: both fields can be changed.
 
 **The limit of people.** "Nueva actividad" (`/actividades`) and "Editar actividad" (`/actividad`)
 have an optional "Máximo de apuntados" (`max_participants`): blank is no limit, and the edit form,
@@ -207,34 +208,32 @@ may open in another tab. The saved address is used only if it is less than an ho
 path of this site (it starts with a single `/`, never `//` or `/\`, and is not `/login`), so it
 cannot take anybody elsewhere. Signing out on purpose forgets it.
 
-Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives
-it the right background/border/padding/spacing — `dialog.modal`'s own `css/style.css`
-rules only add what a plain `.panel` never needed: the dimmed `::backdrop`, a max-width,
-and the "×" `.modal-close` button's own positioning) — never a `<div>` toggled to
-`hidden="false"` in place on the same page the way every one of these used to work.
-`js/modal.js`'s `initPage`-sized `initModal(dialog, form?)` is the one call each page
-makes per dialog: it wires every `[data-modal-close]` element inside (the "×", a form's
-own "Cancelar") to `dialog.close()`, and — when a `form` is given — resets it on the dialog's
-own `close` event, which fires no matter *how* it closed (×, Cancelar, Escape,
-or a successful save that calls `close()` itself once done), so a caller's own submit
-handler never resets the form itself. A click on the backdrop does not close a dialog, on purpose: a
-click outside by mistake would lose what was typed. Opening one is always page-specific and left to the
-caller, through `openModal(dialog)` (same file: `showModal()` plus restoring the page's
-scroll position, which browsers otherwise reset to the top): a static "+ Nueva X" button
-calling it directly, or — for a dialog shared by every row of a list rather than one
-pre-rendered per row (`accounting.js`'s own account edit, `account.js`'s transaction edit,
-three of `member.js`'s timeline dialogs) — an `open*Dialog(record)` function that fills
-the shared dialog's fields from that one record first (`member.js`'s are
-`openStatusDialog`, `openEditBoardDialog` and `openEditLicenseDialog`). The platform
-itself is what actually makes the rest of the page unreachable while one is open (real
-modality, not a hand-rolled overlay to keep in sync) and closes it on Escape — nothing in
-`modal.js` or any page's own script needs to implement either. The same goes for errors:
-Errors don't go to a banner: `showError` (`api.js`) opens a modal `<dialog id="error-dialog">`,
-created on demand, titled "Ha ocurrido un error", with the message and a "Cerrar" button. It is in
-the top layer over everything, even another open dialog, behind a dark backdrop, so the rest of the
-page can't be operated until it is closed (the button or Escape); a second
-error while it's open replaces the message. `showFeedback` is still the sticky `#feedback` banner
-for successes — pages no longer have an `#error` element.
+Every "create X"/"edit X" form is a `<dialog class="panel modal">` (`.panel` already gives it the
+right background/border/padding/spacing — `dialog.modal`'s own `css/style.css` rules only add what a
+plain `.panel` never needed: the dimmed `::backdrop`, a max-width, and the "×" `.modal-close`
+button's own positioning) — never a `<div>` toggled to `hidden="false"` in place on the same page
+the way every one of these used to work. `js/modal.js`'s `initPage`-sized `initModal(dialog, form?)`
+is the one call each page makes per dialog: it wires every `[data-modal-close]` element inside (the
+"×", a form's own "Cancelar") to `dialog.close()`, and — when a `form` is given — resets it on the
+dialog's own `close` event, which fires no matter *how* it closed (×, Cancelar, Escape, or a
+successful save that calls `close()` itself once done), so a caller's own submit handler never
+resets the form itself. A click on the backdrop does not close a dialog, on purpose: a click outside
+by mistake would lose what was typed. Opening one is always page-specific and left to the caller,
+through `openModal(dialog)` (same file: `showModal()` plus restoring the page's scroll position,
+which browsers otherwise reset to the top): a static "+ Nueva X" button calling it directly, or —
+for a dialog shared by every row of a list rather than one pre-rendered per row (`accounting.js`'s
+own account edit, `account.js`'s transaction edit, three of `member.js`'s timeline dialogs) — an
+`open*Dialog(record)` function that fills the shared dialog's fields from that one record first
+(`member.js`'s are `openStatusDialog`, `openEditBoardDialog` and `openEditLicenseDialog`). The
+platform itself is what actually makes the rest of the page unreachable while one is open (real
+modality, not a hand-rolled overlay to keep in sync) and closes it on Escape — nothing in `modal.js`
+or any page's own script needs to implement either. The same goes for errors: Errors don't go to a
+banner: `showError` (`api.js`) opens a modal `<dialog id="error-dialog">`, created on demand, titled
+"Ha ocurrido un error", with the message and a "Cerrar" button. It is in the top layer over
+everything, even another open dialog, behind a dark backdrop, so the rest of the page can't be
+operated until it is closed (the button or Escape); a second error while it's open replaces the
+message. `showFeedback` is still the sticky `#feedback` banner for successes — pages no longer have
+an `#error` element.
 
 **Something that does not exist.** A page about one thing (`/actividad?id=…`, `/cuenta?id=…`,
 `/socio?login=…`, `/reparto?id=…` and its `-pedidos`, `-numeros` and `-pagos`, `/archivo?path=…` or
@@ -470,76 +469,76 @@ deleting, ask for confirmation naming what would really be lost: the orders that
 own order of a member in a distribution for all members, which is only a placeholder made again on
 leaving the draft (`ordersWithSomethingToLose`), and say nothing about orders when there are none of
 those), "Editar" (the dialog, with its form) — all for admin and board — "Venta directa" (admin and
-board, only in a distribution with articles that is not a draft: `distribution-sale.js`, below) and "Borrar" (admin only:
-`DELETE` is admin-only in the API, and the button is `data-roles="admin"`); a link "← Volver al
-reparto" goes back to the member's view. Under them, a row of links (`.section-index`) to its
-sections, which are what used to be three pages: **Pedidos**, **Pagos** (admin/board, and only when
-something has a price) and **Números** (only when some article has its numbers described; its link
-in the index says "Números"). All their headings are `<h2>`, and a section has none of its own where
-it would only repeat the link: the orders have "Resumen de lo pedido" and "Pedidos de los socios",
-and the numbering has one block per article titled "Números - <article>". The page hides the section
-and its link otherwise (`renderHeader`), also after an edit that changes it. Every control
-restricted by `data-roles` is *removed* from the page for anybody else, so each script reaches those
-through a null-safe lookup (a bare `getElementById(...).addEventListener` on one of them would throw
-before the rest of the page ran) and the payments section is only started for admin/board. The page
-reads the distribution once and gives it to the sections, each of which is a module with an `init…`
-function that returns `reload`: changing the state or editing re-reads them all
-(`distributionChanged`), and what is done in the orders (paying, handing out, numbering) reloads the
-payments and the numbers (`onOrdersChanged`); the orders section also tells the page when it read a
-fresher distribution (what is left of each article changes with the orders), so the header is drawn
-again. The **Pedidos** section is everything about the orders in one place: on top `GET .../order`
-(what has to be bought), below it a list with one line per order (the ones with everything paid and handed out are hidden unless asked
-for) and a summary: what, how
-many are handed out and paid, what it costs. clicking the line (or Enter or Space on it,
-`toggleOrder`; the line is `tabindex="0"` with `aria-expanded`, styled like a line of the ledger of
-`/cuenta`: `.order-row`) unfolds its detail (`detail`, kept in `unfolded`, in a row of its own),
-with no button for it: for an article with numbers (`isNumbered`) how many are without one (with
-"Asignar los siguientes libres" and, for an article whose numbers are described, "Elegir números…",
-which opens `numbers-dialog`: a button for each free number, in a row by the first part of the
-number when it has several (a series and its fractions), pressed to mark and unmark, with Shift to
-mark from the last one pressed to this one, a filter box, and never more marked than the order is
-missing — the rest are disabled — and the free numbers read again if the API refuses one because
-somebody took it meanwhile (all of it is `createNumberPicker` in `numberPicker.js`, which the sale
-over the counter uses too); for an article with free-text numbers, a field to type them) and the
-list of its numbered items, each with its paid / delivered state, to tick (`ticked`; "todos / sin
-pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or take the payment off
-(admin/board), hand out to the person asked in a dialog (`deliver-dialog`, "Entregado a", prefilled
-with the member the order is for; only members are offered), undo a delivery, return, take the
-numbers off. These actions are a line "Con lo marcado" (`markedActions`) that is there only while
-something is ticked and has only the buttons that would do something to what is ticked
-(`applicable`: "Marcar pagados" if some ticked number is unpaid, "Quitar pago" if some is paid,
-"Entregar" if some is not handed out, "Deshacer entrega" if some is, "Devolver" if some is handed
-out and unpaid, "Quitar números" if some is neither); each acts only on the ticked numbers it
-applies to, and the line is drawn again on each tick. The line "Pedido:" has "Pagar todo (importe)"
-and, while something can be handed out (`deliverable`), "Entregar todo", which asks in the same
-dialog who collects it. Elsewhere a count field (`quantityOf`) does the same as the ticks. Paying
-and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`: the
-non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`; skipped
-when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a distribution
-have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default account, named in
-its first option). Changing or removing an order (`canEditOrder`) is offered at any time but in a
-draft, as the API allows. Everything goes through the single `perform(act, unit)`, confirming before
-handing over unpaid units, undoing, returning or taking numbers off. Wherever the frontend lists
-numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and joined into ranges
-(`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an error message or an
-entry of the list of payments names). The Telegram messages about numbers say them the same way
-(`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that must keep giving
-the same order and ranges; each message says what it changed — numbers added, taken off or newly
-assigned — not what was typed). What is unfolded, ticked and typed survives redrawing. Both pickers
-("A nombre de", "Entregado a") offer only members, never everybody on file: `loadPeople(id,
-purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the members on the
-cutoff date (today's when there is none); `for=pickup`, also today's members — and only the names
-shown for who did what come from `/users/directory`. The API enforces the same (`not_eligible`,
-`invalid_collector`), the pickers just don't offer what would be refused. `api.js`'s `apiFetch` puts
-the API's error `code` on the thrown `Error`, and sets its message to the Spanish text for that code
-from `js/errorTexts.js` (the one catalog of every code the API can answer with; a function for the
-few whose message carries something to show, such as the names of the accounts a budget is missing,
-or the two totals that do not match), falling back to the API's own text for a code it does not
-know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that never reaches the server
-says so in Spanish instead of the browser's "Failed to fetch". A page that wants something more
-specific for a code still reads `err.code` (`distributionCommon.js`'s `apiErrorText`,
-`accountTree.js`'s `accountingErrorText`). A new error code in the API needs its entry in that
-catalog.
+board, only in a distribution with articles that is not a draft: `distribution-sale.js`, below) and
+"Borrar" (admin only: `DELETE` is admin-only in the API, and the button is `data-roles="admin"`); a
+link "← Volver al reparto" goes back to the member's view. Under them, a row of links
+(`.section-index`) to its sections, which are what used to be three pages: **Pedidos**, **Pagos**
+(admin/board, and only when something has a price) and **Números** (only when some article has its
+numbers described; its link in the index says "Números"). All their headings are `<h2>`, and a
+section has none of its own where it would only repeat the link: the orders have "Resumen de lo
+pedido" and "Pedidos de los socios", and the numbering has one block per article titled "Números -
+<article>". The page hides the section and its link otherwise (`renderHeader`), also after an edit
+that changes it. Every control restricted by `data-roles` is *removed* from the page for anybody
+else, so each script reaches those through a null-safe lookup (a bare
+`getElementById(...).addEventListener` on one of them would throw before the rest of the page ran)
+and the payments section is only started for admin/board. The page reads the distribution once and
+gives it to the sections, each of which is a module with an `init…` function that returns `reload`:
+changing the state or editing re-reads them all (`distributionChanged`), and what is done in the
+orders (paying, handing out, numbering) reloads the payments and the numbers (`onOrdersChanged`);
+the orders section also tells the page when it read a fresher distribution (what is left of each
+article changes with the orders), so the header is drawn again. The **Pedidos** section is
+everything about the orders in one place: on top `GET .../order` (what has to be bought), below it a
+list with one line per order (the ones with everything paid and handed out are hidden unless asked
+for) and a summary: what, how many are handed out and paid, what it costs. clicking the line (or
+Enter or Space on it, `toggleOrder`; the line is `tabindex="0"` with `aria-expanded`, styled like a
+line of the ledger of `/cuenta`: `.order-row`) unfolds its detail (`detail`, kept in `unfolded`, in
+a row of its own), with no button for it: for an article with numbers (`isNumbered`) how many are
+without one (with "Asignar los siguientes libres" and, for an article whose numbers are described,
+"Elegir números…", which opens `numbers-dialog`: a button for each free number, in a row by the
+first part of the number when it has several (a series and its fractions), pressed to mark and
+unmark, with Shift to mark from the last one pressed to this one, a filter box, and never more
+marked than the order is missing — the rest are disabled — and the free numbers read again if the
+API refuses one because somebody took it meanwhile (all of it is `createNumberPicker` in
+`numberPicker.js`, which the sale over the counter uses too); for an article with free-text numbers,
+a field to type them) and the list of its numbered items, each with its paid / delivered state, to
+tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or
+take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,
+"Entregado a", prefilled with the member the order is for; only members are offered), undo a
+delivery, return, take the numbers off. These actions are a line "Con lo marcado" (`markedActions`)
+that is there only while something is ticked and has only the buttons that would do something to
+what is ticked (`applicable`: "Marcar pagados" if some ticked number is unpaid, "Quitar pago" if
+some is paid, "Entregar" if some is not handed out, "Deshacer entrega" if some is, "Devolver" if
+some is handed out and unpaid, "Quitar números" if some is neither); each acts only on the ticked
+numbers it applies to, and the line is drawn again on each tick. The line "Pedido:" has "Pagar todo
+(importe)" and, while something can be handed out (`deliverable`), "Entregar todo", which asks in
+the same dialog who collects it. Elsewhere a count field (`quantityOf`) does the same as the ticks.
+Paying and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`:
+the non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`;
+skipped when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a
+distribution have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default
+account, named in its first option). Changing or removing an order (`canEditOrder`) is offered at
+any time but in a draft, as the API allows. Everything goes through the single `perform(act, unit)`,
+confirming before handing over unpaid units, undoing, returning or taking numbers off. Wherever the
+frontend lists numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and
+joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an
+error message or an entry of the list of payments names). The Telegram messages about numbers say
+them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that
+must keep giving the same order and ranges; each message says what it changed — numbers added, taken
+off or newly assigned — not what was typed). What is unfolded, ticked and typed survives redrawing.
+Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
+`loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the
+members on the cutoff date (today's when there is none); `for=pickup`, also today's members — and
+only the names shown for who did what come from `/users/directory`. The API enforces the same
+(`not_eligible`, `invalid_collector`), the pickers just don't offer what would be refused.
+`api.js`'s `apiFetch` puts the API's error `code` on the thrown `Error`, and sets its message to the
+Spanish text for that code from `js/errorTexts.js` (the one catalog of every code the API can answer
+with; a function for the few whose message carries something to show, such as the names of the
+accounts a budget is missing, or the two totals that do not match), falling back to the API's own
+text for a code it does not know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that
+never reaches the server says so in Spanish instead of the browser's "Failed to fetch". A page that
+wants something more specific for a code still reads `err.code` (`distributionCommon.js`'s
+`apiErrorText`, `accountTree.js`'s `accountingErrorText`). A new error code in the API needs its
+entry in that catalog.
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PUT /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,
@@ -780,25 +779,26 @@ that records a license with no transaction (`POST /users/{login}/licenses` witho
 federated elsewhere. Licenses the club does collect are registered from their transaction
 on `/cuenta`, as above.
 
-**The history of the Junta Directiva (`/junta`).** `board-history.js` asks `GET
-/board-members/history` and turns each term into up to two events: "<name> entra como <cargo>" on
-its start date and "Último día de <name> como <cargo>" on its `end_date`. They are sorted newest
-first (on the same day an entry comes before a last day), grouped under one heading per year. Open to
-any baseline role; names link to `/socio?login=…` only for admin and board. The home page links to
-it under the "Junta directiva" section, and the sidebar keeps "Inicio" highlighted
+**The history of the Junta Directiva (`/junta`).** `board-history.js` asks
+`GET /board-members/history` and turns each term into up to two events: "<name> entra como <cargo>"
+on its start date and "Último día de <name> como <cargo>" on its `end_date`. They are sorted newest
+first (on the same day an entry comes before a last day), grouped under one heading per year. Open
+to any baseline role; names link to `/socio?login=…` only for admin and board. The home page links
+to it under the "Junta directiva" section, and the sidebar keeps "Inicio" highlighted
 (`ACTIVE_ALIASES`).
 
-**The sale over the counter (`distribution-sale.js`).** For a member who asks for something and pays on
-the spot. "Venta directa", in the buttons of `/reparto-gestion` (admin and board; only in a
+**The sale over the counter (`distribution-sale.js`).** For a member who asks for something and pays
+on the spot. "Venta directa", in the buttons of `/reparto-gestion` (admin and board; only in a
 distribution with articles that is not a draft: `update(distribution)` shows and hides it), opens
-`sale-dialog`: the member (a searchable field with who may have the distribution, `loadPeople(id,
-'order')`), the article (not shown when there is only one) and the quantity, with the total and what
-is left; for an article whose numbers are described, the buttons of `createNumberPicker` for the
-numbers the member asks for by name — the rest are given in order — and, for free-text numbers, a
-field to type them; for an article that costs something, "Cobrar ahora" with the account (the one
-used last, shared with the payment dialog of the orders) and, always, "Entregar ahora". Both are
-ticked by default, so the usual sale is: member, "Aceptar". It sends a single `POST .../sales`, shows
-the numbers given in the confirmation and has the page read its sections again (`onSold`).
+`sale-dialog`: the member (a searchable field with who may have the distribution,
+`loadPeople(id, 'order')`), the article (not shown when there is only one) and the quantity, with
+the total and what is left; for an article whose numbers are described, the buttons of
+`createNumberPicker` for the numbers the member asks for by name — the rest are given in order —
+and, for free-text numbers, a field to type them; for an article that costs something, "Cobrar
+ahora" with the account (the one used last, shared with the payment dialog of the orders) and,
+always, "Entregar ahora". Both are ticked by default, so the usual sale is: member, "Aceptar". It
+sends a single `POST .../sales`, shows the numbers given in the confirmation and has the page read
+its sections again (`onSold`).
 
 ## Serving the frontend, and checking a page in a headless browser
 

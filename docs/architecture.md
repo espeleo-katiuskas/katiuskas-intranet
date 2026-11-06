@@ -812,17 +812,17 @@ movements go in a single table with a type discriminator instead of a table per 
 delete it and keep using `board`); **who material goes to**: a loan or a rental (and the return of a
 loan) is only for a `member` (a socio now), a sale for a member or a former member, and anybody else
 is refused (409 `recipient_not_member`, `recipient_not_member_or_former`); adding material to the
-catalog and editing it (`PUT /material/items/{id}`:
-not its quantities, which only movements change, and its type only within general material, never
-to or from Cuerda and Saca, 400 `kind_change`) is for the same three. Deleting one
-(`DELETE /material/items/{id}`) is for admin alone, and only while it has no movements besides the
-acquisition it was created with, which goes with it (409 `item_has_movements` otherwise). An item's
-`code` is unique (409 `duplicate_item_code`), is never empty (blank counts as none) and is not made only of
-digits (400 `invalid_item_code`): the listings write it after the item as "#<code>", or "#<id>" when there is none, and a
-code of digits could be taken for an id. The list of types itself is changed by admin
-alone (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and
-Saca can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted
-(409 `type_in_use`).
+catalog and editing it (`PUT /material/items/{id}`: not its quantities, which only movements change,
+and its type only within general material, never to or from Cuerda and Saca, 400 `kind_change`) is
+for the same three. Deleting one (`DELETE /material/items/{id}`) is for admin alone, and only while
+it has no movements besides the acquisition it was created with, which goes with it (409
+`item_has_movements` otherwise). An item's `code` is unique (409 `duplicate_item_code`), is never
+empty (blank counts as none) and is not made only of digits (400 `invalid_item_code`): the listings
+write it after the item as "#<code>", or "#<id>" when there is none, and a code of digits could be
+taken for an id. The list of types itself is changed by admin alone
+(`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and Saca
+can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted (409
+`type_in_use`).
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,
@@ -1030,11 +1030,11 @@ the API but not write it, except for asking for units and editing their own).
   What was paid before the list existed stays as one entry per order, with the date of its last
   payment (nothing earlier was stored). In the interface, the "Pagos" section of
   `/reparto-gestion?id=…` (only if the distribution has something to pay).
-- **Sale over the counter**: `POST /distributions/{id}/sales` (admin and board) does in one request what the
-  order, the numbering, the payment and the collection do separately, for one article: whoever is
-  sold to has to be eligible (as for asking), it needs a distribution that is not a draft, and it
-  only pays and hands out what it adds to the person's row of the article. If a step fails, what
-  the sale had done is undone.
+- **Sale over the counter**: `POST /distributions/{id}/sales` (admin and board) does in one request
+  what the order, the numbering, the payment and the collection do separately, for one article:
+  whoever is sold to has to be eligible (as for asking), it needs a distribution that is not a
+  draft, and it only pays and hands out what it adds to the person's row of the article. If a step
+  fails, what the sale had done is undone.
 - **Collection**: `POST /distributions/{id}/pickups`, in a batch, only with the distribution out
   of `draft` and only admin, board or material. A row can be partly collected
   (`picked_up_quantity`, from 0 to `quantity`, migration `00028`), as it can be partly paid:

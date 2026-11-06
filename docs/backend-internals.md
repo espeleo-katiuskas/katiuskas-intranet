@@ -459,19 +459,20 @@ known from the start. `GET /distributions` and `GET /distributions/{id}` add `el
 caller; `GET .../units` shows admin, board and material every unit and anybody else only the ones
 for them or entered by them.
 
-**Sale over the counter** (`POST /distributions/{id}/sales`, admin/board; `Service.Sell`, `sale.go`).
-What takes four steps in the orders — enter the order, give it numbers, mark it paid, hand it out —
-in one request, for the usual case of a member paying and taking the item at the club. It only works
-with articles and out of a draft. It checks what it can before writing (that the person is eligible,
-so `ErrNotEligible` comes before anything about collecting; the account when something has to be
-paid; the numbers written by hand when they are free text), then calls the same service methods as
-the separate routes, so every rule is the one of the separate step: `RegisterUnit` (as staff),
-`AddIdentifiers` for the numbers asked for by name, `assignNumbers` for the rest, `MarkPaid` and
-`Deliver`. It pays and hands out only the items the sale adds (the numbers it gave, or `quantity` of
-a counted row), not what the person had ordered before in the same row. The steps are separate
-database transactions, so if one fails the sale undoes the previous ones as far as it can (the
-payment through `ClearPaid`, the numbers, and the row: removed if the sale made it, put back to its
-old quantity if it already existed); the error reported is the one that made it fail.
+**Sale over the counter** (`POST /distributions/{id}/sales`, admin/board; `Service.Sell`,
+`sale.go`). What takes four steps in the orders — enter the order, give it numbers, mark it paid,
+hand it out — in one request, for the usual case of a member paying and taking the item at the club.
+It only works with articles and out of a draft. It checks what it can before writing (that the
+person is eligible, so `ErrNotEligible` comes before anything about collecting; the account when
+something has to be paid; the numbers written by hand when they are free text), then calls the same
+service methods as the separate routes, so every rule is the one of the separate step:
+`RegisterUnit` (as staff), `AddIdentifiers` for the numbers asked for by name, `assignNumbers` for
+the rest, `MarkPaid` and `Deliver`. It pays and hands out only the items the sale adds (the numbers
+it gave, or `quantity` of a counted row), not what the person had ordered before in the same row.
+The steps are separate database transactions, so if one fails the sale undoes the previous ones as
+far as it can (the payment through `ClearPaid`, the numbers, and the row: removed if the sale made
+it, put back to its old quantity if it already existed); the error reported is the one that made it
+fail.
 
 In a distribution for `all_members` nobody signs up: each member on the cutoff date has
 their own unit from the moment the distribution leaves `draft`
@@ -710,15 +711,15 @@ name, tax id, address, bank account, the Bizum number...) as rows of `club_info_
 is not meant to be in the repository. Each is a `label`, a `value` and, optionally, a button that
 copies another text (`copy_value`, `copy_label`: the tax id without its dash, the IBAN without
 spaces). `GET /club-info` is open to any baseline role (it is what the home page draws); `POST`,
-`PUT /club-info/{id}`, `DELETE` and `PUT /club-info/order` are admin only. An update replaces every field, so a
-`copy_value` left out turns the button off, and keeps the item's place; a new one goes last, and the
-order is replaced as a whole from every id (`Repository.Reorder`, `409 reorder_mismatch` for
-anything else), like the memoria's. Blank texts are trimmed away and a blank copy text means no
-button (`normalize`). The Telegram notices say what changes, values included, like those of any
-other resource (an edit lists each field with its old and new value, through `httpapi.DiffFields`
-over `auditableFields`): the channel is private and already carries personal data. The migration
-seeds nothing, so no datum is in the repository: the home page shows nothing until they are entered
-from `/admin`.
+`PUT /club-info/{id}`, `DELETE` and `PUT /club-info/order` are admin only. An update replaces every
+field, so a `copy_value` left out turns the button off, and keeps the item's place; a new one goes
+last, and the order is replaced as a whole from every id (`Repository.Reorder`,
+`409 reorder_mismatch` for anything else), like the memoria's. Blank texts are trimmed away and a
+blank copy text means no button (`normalize`). The Telegram notices say what changes, values
+included, like those of any other resource (an edit lists each field with its old and new value,
+through `httpapi.DiffFields` over `auditableFields`): the channel is private and already carries
+personal data. The migration seeds nothing, so no datum is in the repository: the home page shows
+nothing until they are entered from `/admin`.
 
 ## Admin status
 
