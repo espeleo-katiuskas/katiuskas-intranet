@@ -20,7 +20,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { itemLabel, itemRef } from './materialCommon.js';
+import { itemLabel, itemPickerText } from './materialCommon.js';
 import { renderMarkdown } from './markdown.js';
 import { formatSize, downloadBlob } from './fileBrowser.js';
 
@@ -503,17 +503,6 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // labels are duplicated from js/material.js and js/member.js, the
 // same way those two already duplicate them from each other.
 
-// Plain-text counterpart of itemLabel for the picker's <option> values —
-// renderPickerOptions already escapes it, so this must not.
-function itemPickerText(item) {
-  const brandModel = [item.brand, item.model].filter(Boolean).join(' ');
-  const parts =
-    item.kind === 'general'
-      ? [item.type_name, brandModel || null, item.description || null]
-      : [item.type_name, brandModel || null];
-  return parts.filter(Boolean).join(' · ');
-}
-
 let itemsById = {};
 let itemEntries = [];
 // Units of each item (by id) still out on loan for this activity — what can be returned to it.
@@ -526,7 +515,7 @@ async function loadItems() {
     itemsById = Object.fromEntries(items.map((item) => [item.id, item]));
     itemEntries = items.map((item) => ({
       id: item.id,
-      label: `${itemPickerText(item)} ${itemRef(item)}`,
+      label: itemPickerText(item),
     }));
     refreshLoanChoices();
   } catch {

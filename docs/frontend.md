@@ -109,17 +109,21 @@ as before.
 **How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for
 the people who share it with somebody else in the same list, so the two can be told apart and what
 is typed still resolves to one person (`personPickerLabeler` in `api.js`; it is given the whole list
-the picker is made from, not the part of it that is offered). Pickers of other things (activities,
-material items) still carry their "#id".
+the picker is made from, not the part of it that is offered). No other picker carries an "#id":
+the one of activities (in the movement dialog of `/material`) reads "<date> — <title>", which is
+unique (no two activities share a start date and title), and the ones of material are explained
+below.
 
 **How a piece of material reads.** Every listing of material (`/material`, `/material-prestado`, the
-loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`).
-General material is named by the API (`display_name`: the type, brand and model, the values of its
-attributes and the description, joined with " · "; in the table of `/material`, which has a "Tipo"
-column, the type is left out), and an item that lacks something its type now requires is marked
-"Incompleto" there. The label ends with "#<code>" or, for an item with no code, "#<id>" (`itemRef`);
-the picker of the loans of `/actividad` ends the same way. A code is never only digits, so the two
-cannot be mistaken.
+loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`),
+and the pickers of material (the loan picker of `/actividad`) with `itemPickerText`, which reads the
+same as a row of `/material`. There is no "#<id>": two items are never exactly the same (the API
+refuses it), so the type, the name and the code tell them apart. General material is named by the
+API (`display_name`: the type, brand and model, the values of its attributes and the description,
+joined with " · "); a rope or a bag by its brand and model and its own data. The label is the type,
+that name and, if the item has a code, "#<code>" (`itemRef`). The table of `/material` has its own
+"Tipo" and "Código" columns, so it shows only the name; an item that lacks something its type now
+requires is marked "Incompleto" there.
 
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):
