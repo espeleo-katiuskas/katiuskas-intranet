@@ -1,12 +1,12 @@
 package distributions_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
 )
@@ -1164,7 +1164,12 @@ func TestListOfPaymentsOfADistributionIsChronologicalWithItsRunningTotal(t *test
 		t.Errorf("unexpected page: %+v", page)
 	}
 	// A range of days leaves entries out without changing the totals of those it keeps.
-	today := time.Now().Format("2006-01-02")
+	// "Today" is the database's: the payments are stamped with its now() and the range is read in its
+	// time zone, which is not the machine's (around midnight they are different days).
+	var today string
+	if err := e.tx.QueryRow(context.Background(), `SELECT current_date::text`).Scan(&today); err != nil {
+		t.Fatal(err)
+	}
 	if in := list(lot, "?from="+today+"&to="+today); len(in) != 4 || in[0].TotalAfter != 50 {
 		t.Errorf("today should have them all: %+v", in)
 	}
