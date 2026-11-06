@@ -122,8 +122,9 @@ refuses it), so the type, the name and the code tell them apart. General materia
 API (`display_name`: the type, brand and model, the values of its attributes and the description,
 joined with " · "); a rope or a bag by its brand and model and its own data. The label is the type,
 that name and, if the item has a code, "#<code>" (`itemRef`). The table of `/material` has its own
-"Tipo" and "Código" columns, so it shows only the name; an item that lacks something its type now
-requires is marked "Incompleto" there.
+"Tipo" column, so its "Características" column starts at the name (and ends with the code, since
+there is no column for it); an item that lacks something its type now requires is marked
+"Incompleto" there.
 
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):

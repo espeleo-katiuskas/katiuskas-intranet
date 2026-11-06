@@ -14,10 +14,11 @@ const bagTypeLabels = {
 // material by the API's display_name (type, brand and model, attribute values, description). Two
 // items are never exactly the same, so with the type and the code (when it has one) the name tells
 // them apart: there is no "#<id>" any more. includeType is false only in the items table, which has
-// its own "Tipo" and "Código" columns, so neither is repeated there.
+// its own "Tipo" column, so the type is not repeated there; the code, if any, is part of the label
+// everywhere (the table has no column for it).
 function itemLabel(item, { includeType = true } = {}) {
   const name = escapeHtml(itemNameText(item, { includeType }));
-  return includeType && item.code ? `${name} ${escapeHtml(itemRef(item))}` : name;
+  return item.code ? `${name} ${escapeHtml(itemRef(item))}` : name;
 }
 
 // The same for a picker's <option>: plain text (renderPickerOptions escapes it), the type and the

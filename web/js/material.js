@@ -131,7 +131,6 @@ function renderItemRow(item) {
     <tr>
       <td>${escapeHtml(item.type_name)}</td>
       <td>${itemLabel(item, { includeType: false })}${item.incomplete && canManageMovements ? ' <span class="badge" title="Le falta algo que su tipo exige: edítalo para completarlo">Incompleto</span>' : ''}</td>
-      <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
       <td>
@@ -143,7 +142,7 @@ function renderItemRow(item) {
       </td>
     </tr>
     <tr data-item-movements-row="${item.id}" hidden>
-      <td colspan="6"><div class="detail-list" data-item-movements-panel="${item.id}"></div></td>
+      <td colspan="5"><div class="detail-list" data-item-movements-panel="${item.id}"></div></td>
     </tr>
   `;
 }
@@ -268,7 +267,7 @@ function renderFilteredItems() {
   const tableBody = document.getElementById('items-table-body');
   tableBody.innerHTML = filtered.length
     ? filtered.map(renderItemRow).join('')
-    : `<tr><td colspan="6">${allItems.length ? 'Ningún material coincide con la búsqueda.' : 'Todavía no hay material dado de alta.'}</td></tr>`;
+    : `<tr><td colspan="5">${allItems.length ? 'Ningún material coincide con la búsqueda.' : 'Todavía no hay material dado de alta.'}</td></tr>`;
 }
 
 document.getElementById('item-search').addEventListener('input', renderFilteredItems);
@@ -280,7 +279,7 @@ async function loadItems() {
     itemsById = Object.fromEntries(allItems.map((item) => [item.id, item]));
     renderFilteredItems();
   } catch {
-    tableBody.innerHTML = '<tr><td colspan="6">No se pudo cargar el material.</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el material.</td></tr>';
   }
 }
 
