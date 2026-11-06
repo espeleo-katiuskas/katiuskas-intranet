@@ -75,6 +75,16 @@ as the documents of the home page: it is one rule at the top of `style.css`, `:w
 the pills of `.section-index`…) still wins. A new kind of link that has to look different gives itself a
 class, not a rule on `a`.
 
+**Remembering the email at sign-in.** To save typing the address (slow on a phone), `login.html` offers the
+last five addresses that signed in on this browser, in `localStorage` (`katiuskas:login-emails`, newest
+first, no repeats whatever the case): when the email field is focused, the same menu as the pickers
+(`pickerSearch.js`) lists them, and choosing one moves the focus to the phone. Only the email is saved, not
+the phone, and only after a sign-in that worked: the address typed when asking for the link waits in
+`katiuskas:login-pending-email` and is moved to the list when this browser completes the sign-in — by the
+code, by the link opened in this tab, or, in the tab that asked, when another tab of the browser signs in.
+A request that is never followed through is not remembered. It also works on the club's shared tablet
+(`local.` address): whoever can use it can see the addresses of the others, which is accepted.
+
 **Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a `<datalist>`,
 which the browser filters by itself without ignoring accents ("garcia" did not find "García").
 `initPickerSearch`, called by `initPage`, takes every such input over the first time it gets the focus: it

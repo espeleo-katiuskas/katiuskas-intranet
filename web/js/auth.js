@@ -1,4 +1,5 @@
 import { goAfterLogin, setToken } from './api.js';
+import { initPickerSearch } from './pickerSearch.js';
 
 const API_BASE = '/api/v1';
 
@@ -8,6 +9,59 @@ const API_BASE = '/api/v1';
 if (window.location.hostname.toLowerCase().split('.')[0] === 'local') {
   document.getElementById('local-notice').hidden = false;
 }
+
+// The last addresses that signed in on this browser, so that the field offers them instead of having to
+// be typed (slow on a phone): only the email, not the phone, and only after a sign-in that worked. The
+// address typed when asking for the link waits in PENDING_KEY until this browser completes the sign-in
+// (by the code, or by the link opened in another tab of it), so a request that is never followed through
+// is not remembered.
+const EMAILS_KEY = 'katiuskas:login-emails';
+const PENDING_KEY = 'katiuskas:login-pending-email';
+const MAX_EMAILS = 5;
+
+function savedEmails() {
+  try {
+    const list = JSON.parse(localStorage.getItem(EMAILS_KEY) ?? '[]');
+    return Array.isArray(list) ? list.filter((e) => typeof e === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+// Puts the address first (once, whatever its case) and keeps the last MAX_EMAILS.
+function rememberEmail(email) {
+  const clean = (email ?? '').trim();
+  if (!clean) return;
+  try {
+    const rest = savedEmails().filter((e) => e.toLowerCase() !== clean.toLowerCase());
+    localStorage.setItem(EMAILS_KEY, JSON.stringify([clean, ...rest].slice(0, MAX_EMAILS)));
+  } catch {
+    // Without storage nothing is remembered: it is only a convenience.
+  }
+}
+
+// The sign-in worked: the address asked with is now one to remember.
+function signInSucceeded() {
+  try {
+    rememberEmail(localStorage.getItem(PENDING_KEY));
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // See rememberEmail.
+  }
+}
+
+const emailInput = document.getElementById('email');
+function fillEmailOptions() {
+  document.getElementById('email-options').innerHTML = savedEmails()
+    .map((e) => `<option value="${e.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></option>`)
+    .join('');
+}
+fillEmailOptions();
+initPickerSearch();
+// Choosing one of them leaves the phone, the part still to be typed.
+emailInput.addEventListener('change', () => {
+  if (savedEmails().includes(emailInput.value)) document.getElementById('phone').focus();
+});
 
 const consumingPanel = document.getElementById('consuming-panel');
 const consumingMessage = document.getElementById('consuming-message');
@@ -65,6 +119,7 @@ function watchForSignInElsewhere() {
       });
       if (response.ok) {
         redirecting = true;
+        signInSucceeded();
         goAfterLogin();
       }
     } catch {
@@ -143,6 +198,7 @@ async function consumeMagicLink(rawToken) {
     }
     const data = await response.json();
     setToken(data.token);
+    signInSucceeded();
     goAfterLogin();
   } catch {
     // consumingMessage lives inside #consuming-panel, which gets hidden
@@ -186,6 +242,11 @@ async function handleRequestSubmit(event) {
     }
     pendingEmail = email;
     pendingPhone = phone;
+    try {
+      localStorage.setItem(PENDING_KEY, email);
+    } catch {
+      // See rememberEmail.
+    }
     requestForm.hidden = true;
     codeErrorBox.hidden = true;
     codeInput.value = '';
@@ -218,6 +279,7 @@ async function handleCodeSubmit(event) {
     }
     const data = await response.json();
     setToken(data.token);
+    signInSucceeded();
     goAfterLogin();
   } catch {
     codeErrorBox.textContent = 'Código incorrecto o caducado.';
