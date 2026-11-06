@@ -567,6 +567,7 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		TransactedAt *string      `json:"transacted_at"`
 		ActivityID   *int64       `json:"activity_id"`
 		Notes        *string      `json:"notes"`
+		AccountID    *int64       `json:"account_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -607,6 +608,7 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 	m, err := h.service.CreateMovement(r.Context(), CreateMovementInput{
 		ItemID: body.ItemID, UserID: userID, Type: body.Type, Quantity: body.Quantity,
 		TransactedAt: transactedAt, RecordedBy: &recordedBy, ActivityID: body.ActivityID, Notes: body.Notes,
+		AccountID: body.AccountID,
 	})
 	if errors.Is(err, ErrNotFound) {
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "item not found")
@@ -648,6 +650,9 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusConflict, "recipient_not_member_or_former", err.Error())
 		return
 	}
+	if writeAccountError(w, err) {
+		return
+	}
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create movement")
 		return
@@ -669,6 +674,26 @@ func (h *Handler) createMovement(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusCreated, m)
 }
 
+// writeAccountError answers with the status and code of an error about the accounts of a sale or a
+// rental, and says whether it was one.
+func writeAccountError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, ErrAccountRequired):
+		httpapi.WriteError(w, http.StatusBadRequest, "account_required", err.Error())
+	case errors.Is(err, ErrUnknownAccount):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_account", err.Error())
+	case errors.Is(err, ErrAccountNotAsset):
+		httpapi.WriteError(w, http.StatusBadRequest, "account_not_asset", err.Error())
+	case errors.Is(err, ErrAccountHasChildren):
+		httpapi.WriteError(w, http.StatusConflict, "account_has_children", err.Error())
+	case errors.Is(err, ErrNoMaterialAccount):
+		httpapi.WriteError(w, http.StatusConflict, "no_material_account", err.Error())
+	default:
+		return false
+	}
+	return true
+}
+
 // returnMovement closes an active rental — the only type that still
 // reaches status 'active'. A loan's return is a separate 'return'
 // movement created via POST /movements instead (see createMovement).
@@ -686,6 +711,9 @@ func (h *Handler) deleteMovement(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, ErrMovementNeeded):
 		httpapi.WriteError(w, http.StatusConflict, "movement_needed", err.Error())
+		return
+	case errors.Is(err, ErrMovementTransactionHasFiles):
+		httpapi.WriteError(w, http.StatusConflict, "transaction_has_files", err.Error())
 		return
 	case err != nil:
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not delete movement")

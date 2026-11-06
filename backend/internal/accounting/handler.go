@@ -208,6 +208,8 @@ func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 		AllowsLicenses      bool    `json:"allows_licenses"`
 		Hidden              bool    `json:"hidden"`
 		DistributionDefault bool    `json:"distribution_default"`
+		MaterialRental      bool    `json:"material_rental"`
+		MaterialSale        bool    `json:"material_sale"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return CreateAccountInput{}, err
@@ -220,6 +222,7 @@ func decodeAccountBody(r *http.Request) (CreateAccountInput, error) {
 		Name: body.Name, Code: normalizeCode(body.Code), ParentID: body.ParentID, Type: accountType,
 		AllowsDues: body.AllowsDues, AllowsLicenses: body.AllowsLicenses, Hidden: body.Hidden,
 		DistributionDefault: body.DistributionDefault,
+		MaterialRental:      body.MaterialRental, MaterialSale: body.MaterialSale,
 	}, nil
 }
 
@@ -408,6 +411,8 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_code", err.Error())
 	case errors.Is(err, ErrNotIncomeForDistributions):
 		httpapi.WriteError(w, http.StatusConflict, "not_income_for_distributions", err.Error())
+	case errors.Is(err, ErrNotIncomeForMaterial):
+		httpapi.WriteError(w, http.StatusConflict, "not_income_for_material", err.Error())
 	case errors.Is(err, ErrAccountInUse):
 		httpapi.WriteError(w, http.StatusConflict, "account_in_use", err.Error())
 	case errors.Is(err, ErrCircularParent):
@@ -423,7 +428,7 @@ func writeAccountError(w http.ResponseWriter, err error) bool {
 // accountAuditableFields are the Account fields updateAccount's own
 // mutation notification diffs (see httpapi.DiffFields) — matching
 // UpdateAccountInput's field set exactly.
-var accountAuditableFields = []string{"Name", "Code", "ParentID", "Type", "AllowsDues", "AllowsLicenses", "Hidden", "DistributionDefault"}
+var accountAuditableFields = []string{"Name", "Code", "ParentID", "Type", "AllowsDues", "AllowsLicenses", "Hidden", "DistributionDefault", "MaterialRental", "MaterialSale"}
 
 // ---- Transactions ----
 
@@ -629,6 +634,8 @@ func writeTransactionError(w http.ResponseWriter, err error) bool {
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_licenses", err.Error())
 	case errors.Is(err, ErrTransactionHasFiles):
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_files", err.Error())
+	case errors.Is(err, ErrTransactionHasMaterialMovement):
+		httpapi.WriteError(w, http.StatusConflict, "transaction_has_material_movement", err.Error())
 	case errors.Is(err, ErrTransactionHasDistributionPayments):
 		httpapi.WriteError(w, http.StatusConflict, "transaction_has_distribution_payments", err.Error())
 	case errors.Is(err, ErrTooFewEntries):

@@ -419,6 +419,29 @@ func insertTestAccount(t *testing.T, tx pgx.Tx, code string, allowsDues, allowsL
 	return id
 }
 
+// MaterialAccounts makes sure the accounts a sale or a rental of material is recorded in exist — an
+// income account marked for rentals and another for sales — and returns the id of an asset account
+// to pay into. Calling it again in the same transaction finds them.
+func MaterialAccounts(t *testing.T, tx pgx.Tx) int64 {
+	t.Helper()
+	upsert := func(code, kind string, rental, sale bool) int64 {
+		var id int64
+		err := tx.QueryRow(context.Background(), `
+			INSERT INTO accounts (name, code, type, material_rental, material_sale, position)
+			VALUES ($1, $1, $2::account_type, $3, $4, 1)
+			ON CONFLICT (code) DO UPDATE SET type = EXCLUDED.type
+			RETURNING id
+		`, code, kind, rental, sale).Scan(&id)
+		if err != nil {
+			t.Fatalf("insert test account %q: %v", code, err)
+		}
+		return id
+	}
+	upsert("TEST-MATERIAL-RENTAL", "income", true, false)
+	upsert("TEST-MATERIAL-SALE", "income", false, true)
+	return upsert("TEST-MATERIAL-CASH", "asset", false, false)
+}
+
 // RoleID looks up a system role's id by name (they're seeded by migration
 // 00003: "admin", "board", "member", "former_member").
 func RoleID(t *testing.T, tx pgx.Tx, name string) int64 {

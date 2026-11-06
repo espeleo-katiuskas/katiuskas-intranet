@@ -1144,7 +1144,10 @@ other edits; they have to be given a type the next time they are edited.
 
 **Flags.** `distribution_default` is the account where the payments of distributions with no
 account of their own are recorded; only one account has it, and marking one takes it away from
-whichever had it. `hidden` marks an account that is no longer used: it cannot be deleted if it has
+whichever had it. `material_rental` and `material_sale` are the same for the rentals and the sales
+of material (a sale or a rental records a transaction: see "Material types and attributes" in
+`backend-internals.md`). `hidden` marks an account that is no longer used: it cannot be deleted if
+it has
 history, so it is hidden from the chart and from the frontend's pickers (which show it only on
 request) without touching what is recorded against it. Like the rest of the fields, a `PUT`
 replaces the flags: leaving one out turns it off.

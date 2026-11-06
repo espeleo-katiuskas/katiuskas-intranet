@@ -25,6 +25,9 @@ var (
 	// default account for distributions, or an account a distribution names, has
 	// to be an income account.
 	ErrNotIncomeForDistributions = errors.New("an account used for the payments of distributions has to be of type income")
+	// ErrNotIncomeForMaterial means the account would be (or stay) the one that records the
+	// rentals or the sales of material without being of type income.
+	ErrNotIncomeForMaterial = errors.New("an account used for the rentals or sales of material has to be of type income")
 	// ErrAccountHasChildren means an entry was posted to an account that has child
 	// accounts, and ErrParentHasEntries an account was given as parent (on create
 	// or edit) when it already has entries: an account either groups others or
@@ -48,6 +51,9 @@ var (
 	// outlives the record of how it was paid). Its dues, by contrast,
 	// are removed with it.
 	ErrTransactionHasLicenses = errors.New("transaction is still the payment of one or more licenses")
+	// ErrTransactionHasMaterialMovement means the transaction is the one a sale or a rental of
+	// material recorded: deleting that movement deletes it, not the other way round.
+	ErrTransactionHasMaterialMovement = errors.New("transaction was recorded by a sale or rental of material: delete the movement instead")
 	// ErrTransactionHasDistributionPayments means the transaction recorded the
 	// payment of something in a distribution and can't be deleted: deleting one
 	// undoes those payments, but the orders have changed since and no longer allow
@@ -154,14 +160,26 @@ func (r *Repository) CreateAccount(ctx context.Context, in CreateAccountInput) (
 			return Account{}, err
 		}
 	}
+	if in.MaterialRental {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET material_rental = false WHERE material_rental`); err != nil {
+			return Account{}, err
+		}
+	}
+	if in.MaterialSale {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET material_sale = false WHERE material_sale`); err != nil {
+			return Account{}, err
+		}
+	}
 	var a Account
 	err = tx.QueryRow(ctx, `
-		INSERT INTO accounts (name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, position)
-		SELECT $1, $2, $3, $7, $4, $5, $6, $8, COALESCE(MAX(position), 0) + 1
+		INSERT INTO accounts (name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default,
+			material_rental, material_sale, position)
+		SELECT $1, $2, $3, $7, $4, $5, $6, $8, $9, $10, COALESCE(MAX(position), 0) + 1
 		FROM accounts WHERE parent_id IS NOT DISTINCT FROM $3
-		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default
+		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, material_rental, material_sale
 	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, in.Type, in.DistributionDefault,
-	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
+		in.MaterialRental, in.MaterialSale,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.MaterialRental, &a.MaterialSale)
 	if pgConstraint(err) == "parent_has_entries" {
 		return Account{}, ErrParentHasEntries
 	}
@@ -192,7 +210,7 @@ func finishAccountChange(ctx context.Context, tx pgx.Tx, a *Account) error {
 	if err := tx.QueryRow(ctx, `SELECT account_effective_type($1)`, a.ID).Scan(&a.EffectiveType); err != nil {
 		return err
 	}
-	var distributionsBroken, duesLicensesBroken bool
+	var distributionsBroken, duesLicensesBroken, materialBroken bool
 	if err := tx.QueryRow(ctx, `
 		WITH RECURSIVE subtree AS (
 			SELECT id FROM accounts WHERE id = $1
@@ -213,8 +231,13 @@ func finishAccountChange(ctx context.Context, tx pgx.Tx, a *Account) error {
 				SELECT 1 FROM accounts
 				WHERE id IN (SELECT id FROM subtree) AND (allows_dues OR allows_licenses)
 				  AND account_effective_type(id) IS DISTINCT FROM 'income'
+			),
+			EXISTS (
+				SELECT 1 FROM accounts
+				WHERE id IN (SELECT id FROM subtree) AND (material_rental OR material_sale)
+				  AND account_effective_type(id) IS DISTINCT FROM 'income'
 			)
-	`, a.ID).Scan(&distributionsBroken, &duesLicensesBroken); err != nil {
+	`, a.ID).Scan(&distributionsBroken, &duesLicensesBroken, &materialBroken); err != nil {
 		return err
 	}
 	if distributionsBroken {
@@ -223,14 +246,17 @@ func finishAccountChange(ctx context.Context, tx pgx.Tx, a *Account) error {
 	if duesLicensesBroken {
 		return ErrNotIncomeForDuesLicenses
 	}
+	if materialBroken {
+		return ErrNotIncomeForMaterial
+	}
 	return nil
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id int64) (Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default FROM accounts WHERE id = $1
-	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
+		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, material_rental, material_sale FROM accounts WHERE id = $1
+	`, id).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.MaterialRental, &a.MaterialSale)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -284,7 +310,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 			UNION ALL
 			SELECT closure.ancestor, a.id FROM accounts a JOIN closure ON a.parent_id = closure.descendant
 		)
-		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden, a.distribution_default,
+		SELECT a.id, a.name, a.code, a.parent_id, a.type, a.allows_dues, a.allows_licenses, a.hidden, a.distribution_default, a.material_rental, a.material_sale,
 			account_effective_type(a.id),
 			COALESCE(SUM(te.amount), 0) AS balance,
 			MAX(t.occurred_at) AS last_transaction_at
@@ -305,7 +331,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		var balance float64
-		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.EffectiveType, &balance, &a.LastTransactionAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.MaterialRental, &a.MaterialSale, &a.EffectiveType, &balance, &a.LastTransactionAt); err != nil {
 			return nil, err
 		}
 		a.Balance = &balance
@@ -436,14 +462,25 @@ func (r *Repository) UpdateAccount(ctx context.Context, id int64, in UpdateAccou
 			return Account{}, err
 		}
 	}
+	if in.MaterialRental {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET material_rental = false WHERE material_rental AND id <> $1`, id); err != nil {
+			return Account{}, err
+		}
+	}
+	if in.MaterialSale {
+		if _, err := tx.Exec(ctx, `UPDATE accounts SET material_sale = false WHERE material_sale AND id <> $1`, id); err != nil {
+			return Account{}, err
+		}
+	}
 	var a Account
 	err = tx.QueryRow(ctx, `
 		UPDATE accounts SET name = $1, code = $2, parent_id = $3, type = $8, allows_dues = $4, allows_licenses = $5, hidden = $6,
-			distribution_default = $9
+			distribution_default = $9, material_rental = $10, material_sale = $11
 		WHERE id = $7
-		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default
+		RETURNING id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, material_rental, material_sale
 	`, in.Name, in.Code, in.ParentID, in.AllowsDues, in.AllowsLicenses, in.Hidden, id, in.Type, in.DistributionDefault,
-	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault)
+		in.MaterialRental, in.MaterialSale,
+	).Scan(&a.ID, &a.Name, &a.Code, &a.ParentID, &a.Type, &a.AllowsDues, &a.AllowsLicenses, &a.Hidden, &a.DistributionDefault, &a.MaterialRental, &a.MaterialSale)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrAccountNotFound
 	}
@@ -553,7 +590,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, position FROM accounts
+		SELECT id, name, code, parent_id, type, allows_dues, allows_licenses, hidden, distribution_default, material_rental, material_sale, position FROM accounts
 		WHERE parent_id IS NOT DISTINCT FROM $1
 		ORDER BY id
 		FOR UPDATE
@@ -572,7 +609,7 @@ func (r *Repository) MoveAccount(ctx context.Context, id int64, direction MoveDi
 	siblings := []sibling{}
 	for rows.Next() {
 		var s sibling
-		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.Type, &s.AllowsDues, &s.AllowsLicenses, &s.Hidden, &s.DistributionDefault, &s.position); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.ParentID, &s.Type, &s.AllowsDues, &s.AllowsLicenses, &s.Hidden, &s.DistributionDefault, &s.MaterialRental, &s.MaterialSale, &s.position); err != nil {
 			return Account{}, err
 		}
 		if s.ID == id {
@@ -826,6 +863,9 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id int64) error {
 		}
 		if errors.As(err, &pgErr) && pgErr.TableName == "transaction_files" {
 			return ErrTransactionHasFiles
+		}
+		if errors.As(err, &pgErr) && pgErr.TableName == "material_movements" {
+			return ErrTransactionHasMaterialMovement
 		}
 		return ErrTransactionHasLicenses
 	}

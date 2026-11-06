@@ -829,9 +829,13 @@ validates it against what the activity still has unreturned.
 | `recorded_by` | bigint | yes |  |
 | `activity_id` | bigint | yes |  |
 | `notes` | text | yes |  |
+| `transaction_id` | bigint | yes |  |
 
 Notes on the columns:
 
+- `transaction_id`: The accounting transaction that a sale or a rental wrote (the money paid in
+  against the income account of material); empty for the other types and for one that costs
+  nothing. It is the only movement that has that transaction.
 - `type`: `loan` (loan to an activity), `rental`, `sale`, `acquisition` (stock comes in), `loss`,
   `abandonment` and `retirement` (leave without a sale) and `return` (return of a loan).
 - `returned_at`: Only on rentals, which are the only ones that stay `active` until closed.
@@ -843,6 +847,10 @@ Constraints:
 - `item_id` → `material_items(id)`
 - `recorded_by` → `users(id)`
 - `user_id` → `users(id)`
+- `transaction_id` → `transactions(id)` (`ON DELETE RESTRICT`), unique when present
+  (`idx_material_movements_transaction`)
+- `transaction_only_for_rental_and_sale`: `(transaction_id IS NULL) OR (type IN (['rental',
+  'sale']))`
 - `activity_required_for_loan_and_return`: `(type NOT IN (['loan', 'return'])) OR (activity_id IS
   NOT NULL)`
 - `price_only_for_rental_and_sale`: `(type IN (['rental', 'sale'])) OR (price IS NULL)`
@@ -1155,6 +1163,8 @@ is its own or, if it has none, that of its parent account, and so on upwards (fu
 | `hidden` | boolean | no | false |
 | `type` | account_type | yes |  |
 | `distribution_default` | boolean | no | false |
+| `material_rental` | boolean | no | false |
+| `material_sale` | boolean | no | false |
 
 Notes on the columns:
 
@@ -1168,6 +1178,9 @@ Notes on the columns:
   account.
 - `distribution_default`: The account where payments of distributions without an account of their
   own are recorded. Only one; it has to be of type `income`.
+- `material_rental`, `material_sale`: The account where the rentals, and the sales, of material are
+  recorded (the income side of the transaction a sale or a rental writes). Only one of each; both
+  have to be of type `income`.
 
 Constraints:
 
@@ -1179,6 +1192,8 @@ Indexes:
 
 - unique `idx_accounts_distribution_default` sobre `(distribution_default)` when
   `distribution_default`
+- unique `idx_accounts_material_rental` sobre `(material_rental)` when `material_rental`, and
+  `idx_accounts_material_sale` likewise
 - `idx_accounts_parent_id_position` sobre `(parent_id, position)`
 
 Triggers:
@@ -1480,3 +1495,5 @@ at the end; that database has to be recreated when a new migration appears.
 - `00054_material_types_position.sql`: `material_types.position` (filled with the old order: Cuerda
   and Saca, then by name) and the trigger that keeps the fixed types fixed now lets their position
   change
+- `00055_material_accounting.sql`: `accounts.material_rental` and `accounts.material_sale` (one
+  account each, partial unique indexes) and `material_movements.transaction_id`

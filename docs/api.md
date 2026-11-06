@@ -569,20 +569,30 @@ files (up to 25 MiB).
   - errors: 400 `invalid_activity_id`
 - **POST** `/material/movements` — *Admin, board or material*. Records a movement (loan, rental,
   sale, joining, write-off, return).
-  - body: `item_id*`, `login`, `type*`, `quantity`, `transacted_at`, `activity_id`, `notes`
+  - body: `item_id*`, `login`, `type*`, `quantity`, `transacted_at`, `activity_id`, `notes`,
+    `account_id`. **A sale or a rental that costs something is recorded in accounting**: the price
+    of the item times `quantity` (a rental charges its first week) goes into `account_id`, an
+    `asset` account, and out of the income account marked `material_sale` or `material_rental`, in
+    one transaction written together with the movement (its `transaction_id`). `account_id` is
+    required for those (400 `account_required`) and ignored by the other types; what costs nothing
+    needs no account and records nothing
   - returns: 201 `Movement`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_type`, `login_required`,
-    `recipient_not_allowed`, `activity_required`; 404 `not_found`; 409 `insufficient_stock`,
-    `not_loanable`, `not_rentable`, `single_unit_item`, `return_exceeds_loaned`,
+    `recipient_not_allowed`, `activity_required`, `account_required`, `unknown_account`,
+    `account_not_asset`; 404 `not_found`; 409 `insufficient_stock`,
+    `not_loanable`, `not_rentable`, `not_sellable`, `single_unit_item`, `return_exceeds_loaned`,
     `recipient_not_member` (a loan or a rental for somebody who is not a member now),
-    `recipient_not_member_or_former` (a sale for somebody who is neither a member nor a former one)
+    `recipient_not_member_or_former` (a sale for somebody who is neither a member nor a former one),
+    `account_has_children`, `no_material_account` (no account is marked for the rentals or the
+    sales of material)
 - **DELETE** `/material/movements/{id}` — *Admin*. Deletes a movement recorded by mistake. Stock is
   what the movements add up to, so it is refused when others depend on it: a negative stock (an
   acquisition or a return that later sales or loans were made on) or, for some activity, more
   returned than lent. The item's status is recomputed (deleting the sale that emptied it makes it
-  available again).
+  available again). The transaction a sale or rental recorded is deleted with it, unless it has
+  files attached.
   - returns: 204
-  - errors: 400 `invalid_id`; 404 `not_found`; 409 `movement_needed`
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `movement_needed`, `transaction_has_files`
 - **POST** `/material/movements/{id}/return` — *Admin, board or material*. Closes an open rental.
   - returns: 200 `Movement`
   - errors: 400 `invalid_id`; 404 `not_found`
@@ -759,19 +769,23 @@ case and accents).
   - returns: 200 `[Account]`
 - **POST** `/accounts` — *Admin or money*. Creates an account.
   - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
-    `distribution_default`, `hidden`
+    `distribution_default`, `material_rental`, `material_sale`, `hidden`. At most one account is
+    `distribution_default`, one `material_rental` (where the rentals of material are recorded) and
+    one `material_sale`: marking one takes the mark off the other. They have to be `income`
   - returns: 201 `Account`
   - errors: 400 `invalid_body`, `missing_fields`, `invalid_type`, `unknown_parent_account`; 409
-    `duplicate_code`, `parent_has_entries`
+    `duplicate_code`, `parent_has_entries`, `not_income_for_distributions`,
+    `not_income_for_material`
 - **GET** `/accounts/{id}` — *Any baseline role*. One account.
   - returns: 200 `Account`
   - errors: 400 `invalid_id`
 - **PUT** `/accounts/{id}` — *Admin or money*. Corrects name, code, parent account, type and
   flags. Replaces all the fields.
   - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
-    `distribution_default`, `hidden`
+    `distribution_default`, `material_rental`, `material_sale`, `hidden`
   - returns: 200 `Account`
-  - errors: 400 `invalid_id`; 409 `duplicate_code`
+  - errors: 400 `invalid_id`; 409 `duplicate_code`, `not_income_for_distributions`,
+    `not_income_for_material`
 - **DELETE** `/accounts/{id}` — *Admin or money*. Deletes an account with no children and no
   entries.
   - returns: 204
@@ -807,7 +821,9 @@ case and accents).
   of a distribution, it undoes it.
   - returns: 204
   - errors: 400 `invalid_id`; 409 `transaction_has_licenses`,
-    `transaction_has_distribution_payments`, `transaction_has_files` (remove its files first)
+    `transaction_has_distribution_payments`, `transaction_has_files` (remove its files first),
+    `transaction_has_material_movement` (a sale or rental of material recorded it: delete the
+    movement, which deletes it)
 
 ### Files attached to transactions
 
@@ -1439,6 +1455,7 @@ and `value` is always the text to show (the option's label, for an enum).
 | `recorded_by_login` | text |
 | `activity_id` | integer |
 | `notes` | text |
+| `transaction_id` | integer |
 
 ### `LibraryEntry`
 
@@ -1485,6 +1502,8 @@ and `value` is always the text to show (the option's label, for an enum).
 | `allows_dues` | boolean |
 | `allows_licenses` | boolean |
 | `distribution_default` | boolean |
+| `material_rental` | boolean |
+| `material_sale` | boolean |
 | `hidden` | boolean |
 | `balance` | number |
 | `last_transaction_at` | datetime |

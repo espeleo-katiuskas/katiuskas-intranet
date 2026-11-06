@@ -3546,7 +3546,12 @@ paths:
         total_quantity/available_quantity/outstanding_loan_quantity on
         the item are always recomputed from its movement history, never
         stored, so they can never drift from what this endpoint
-        actually recorded.
+        actually recorded. A sale or a rental that costs something is
+        recorded in accounting, in the same database transaction: the item's
+        price times quantity (a rental charges its first week) goes into
+        account_id (an asset account) and out of the income account marked
+        material_sale or material_rental, and the movement carries the
+        transaction's id. What costs nothing records nothing and needs no account.
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -3576,6 +3581,11 @@ paths:
                   description: >
                     Free text, mainly useful on loss/abandonment/
                     retirement to say why.
+                account_id:
+                  type: integer
+                  description: >
+                    The asset account a sale or a rental was paid into. Required for those
+                    when they cost something; ignored by the other types.
       responses:
         "201":
           description: Movement created
@@ -3587,8 +3597,11 @@ paths:
             invalid_body, invalid_date (transacted_at not YYYY-MM-DD),
             invalid_type, login_required (rental without a login),
             recipient_not_allowed (a login given for
-            acquisition/loss/abandonment/retirement), or
-            activity_required (loan or return without activity_id).
+            acquisition/loss/abandonment/retirement),
+            activity_required (loan or return without activity_id),
+            account_required (a sale or rental that costs something, with no account_id),
+            unknown_account (account_id does not exist) or
+            account_not_asset (it is not of type asset).
         "404":
           description: not_found (item_id doesn't exist), or the given login doesn't belong to anyone.
         "409":
@@ -3612,7 +3625,8 @@ paths:
         movements add up to, so the delete is refused (409 movement_needed) when others depend on it:
         it would leave a negative stock (an acquisition or a return that later sales or loans were
         made on) or, for some activity, more returned than lent. The item's status is recomputed
-        afterwards (deleting the sale that emptied it makes it available again).
+        afterwards (deleting the sale that emptied it makes it available again). The accounting
+        transaction a sale or a rental recorded is deleted with it.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3621,7 +3635,7 @@ paths:
         "400": { description: invalid_id. }
         "403": { description: Requires admin. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: movement_needed — other movements depend on it. }
+        "409": { description: movement_needed — other movements depend on it; transaction_has_files — the transaction it recorded has files attached. }
 
   /material/movements/{id}/return:
     post:
@@ -3792,6 +3806,17 @@ paths:
                     Marks this account as one a transaction can use to
                     record federative licenses: see POST
                     /users/{login}/licenses. Omitted means false.
+                material_rental:
+                  type: boolean
+                  default: false
+                  description: >
+                    Marks this account (which has to be of type income, else 409
+                    not_income_for_material) as the one the rentals of material are recorded in.
+                    At most one account has it: marking one takes the mark off the other.
+                material_sale:
+                  type: boolean
+                  default: false
+                  description: The same for the sales of material.
                 distribution_default:
                   type: boolean
                   default: false
@@ -3837,7 +3862,7 @@ paths:
       summary: Correct an account's name, code, parent, or what it's for
       description: >
         Requires admin or the money role (see POST /accounts).
-        name/code/parent_id/type/allows_dues/allows_licenses/distribution_default/hidden always replace
+        name/code/parent_id/type/allows_dues/allows_licenses/distribution_default/material_rental/material_sale/hidden always replace
         the current values — omitting, nulling, or blanking code or type clears
         it, the same as an account that never had one, and omitting
         any flag turns it off rather than keeping it (400 invalid_type for a
@@ -3860,6 +3885,8 @@ paths:
                 allows_dues: { type: boolean, default: false }
                 allows_licenses: { type: boolean, default: false }
                 distribution_default: { type: boolean, default: false }
+                material_rental: { type: boolean, default: false }
+                material_sale: { type: boolean, default: false }
                 hidden: { type: boolean, default: false }
       responses:
         "200":
@@ -4107,7 +4134,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — transaction_has_distribution_payments — its payments in a distribution can no longer be undone — or transaction_has_files — files are still attached to it. }
+        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — transaction_has_distribution_payments — its payments in a distribution can no longer be undone — transaction_has_material_movement — a sale or rental of material recorded it, delete the movement instead — or transaction_has_files — files are still attached to it. }
 
 components:
   securitySchemes:
@@ -5320,6 +5347,10 @@ components:
           description: >
             Free text, mainly useful on loss/abandonment/retirement to
             say why.
+        transaction_id:
+          type: integer
+          nullable: true
+          description: The accounting transaction a sale or a rental recorded; absent for the other types and for one that costs nothing.
 
     LibraryEntry:
       type: object
@@ -5413,6 +5444,8 @@ components:
         allows_dues: { type: boolean, description: A transaction with an entry on this account can record membership dues. }
         allows_licenses: { type: boolean, description: A transaction with an entry on this account can record federative licenses. }
         distribution_default: { type: boolean, description: The account the payments of distributions with no account of their own are recorded in; at most one account has it. }
+        material_rental: { type: boolean, description: The account the rentals of material are recorded in; at most one account has it. }
+        material_sale: { type: boolean, description: The account the sales of material are recorded in; at most one account has it. }
         hidden: { type: boolean, description: The account is no longer used; clients leave it out unless asked. }
         balance:
           type: number

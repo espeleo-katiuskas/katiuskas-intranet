@@ -218,8 +218,12 @@ movements*. API under `/material/…` (`/material/items`, `/material/movements`,
 required or optional; values kept by id in `material_items.attributes`) and says whether the
 description is required; no two items may be exactly the same (`material_items_identity_key`), and
 the API builds the item's `display_name` from its type, brand, model, attribute values and
-description (`docs/backend-internals.md`, "Material types and attributes"). Don't bring back `inventory`, `gear` or bare `item_`/`movement_`
-names for it.
+description (`docs/backend-internals.md`, "Material types and attributes"). **A sale or a rental
+that costs something is recorded in accounting** in the same database transaction: the asset
+account paid into (`account_id`, in the request) against the income account marked
+`accounts.material_sale` / `material_rental`, and the movement keeps the `transaction_id`; deleting
+that transaction is refused, deleting the movement deletes it. Don't bring back `inventory`, `gear`
+or bare `item_`/`movement_` names for it.
 
 **Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over
 one or more leaf accounts of that type; both parts must add up to the same and every non-hidden

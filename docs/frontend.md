@@ -82,7 +82,14 @@ has a rental price and a unit available, *Venta* if it has a sale price and a un
 *Adquisición* only for general material (ropes and bags are a single unit), *Pérdida*, *Abandono*
 and *Retirada* if a unit is available, and *Devolución* only if some of it is out on loan (a rental
 is closed with the "Devolver" button instead). An item with nothing to offer has no "+ Movimiento"
-button.
+button. A *Venta* or *Alquiler* that costs something is recorded in accounting, so the dialog also
+asks for "Cuenta en la que se ingresa" (`#mv-account`): the asset accounts that are not hidden and
+group no others, read once from `GET /accounts` when the dialog is first opened, with the last one
+used remembered in `localStorage` (`katiuskas:material-account`). The field shows the total beside
+its label — the price times the quantity — and is hidden for what costs nothing and for the other
+types (`updateMovementAccountField`). The account goes in the request as `account_id`; if no account
+is marked for the rentals or the sales of material (in Contabilidad) the API answers
+`no_material_account`.
 
 **Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only
 on hover, as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`,
@@ -571,13 +578,16 @@ detail page, below). There is deliberately no code column, nor codes in the pare
 only shows on that account's own `/cuenta` page, though the create/edit dialogs still have the field
 to set it. The page also has the controls to create an account ("+ Nueva cuenta" dialog), correct
 one's name/code/parent (one shared edit dialog, `openEditAccountDialog`), and swap it up or down
-among its own siblings. Both dialogs carry three checkboxes, "Para cuotas anuales", "Para licencias"
-and "Oculta" (`allows_dues`/`allows_licenses`/`hidden`, styled by `.checkbox-label` in `style.css`
-so the box sits next to its text instead of being stretched by `.field input`'s `width: 100%`),
-always sent explicitly — unchecked is `false`, not omitted, since `PUT` replaces every field — and
-each row shows a small "Cuotas"/"Licencias"/"Oculta" badge next to the account's name for whichever
-are on, so which accounts a transaction can record those against is visible without opening each
-one. `js/accountTree.js` holds the `childrenByParent`/`flattenAccountTree` pair both this page and
+among its own siblings. Both dialogs carry checkboxes — "Para cuotas anuales", "Para licencias", the
+default account of the distributions, "Alquileres de material", "Ventas de material" and "Oculta"
+(`allows_dues`/`allows_licenses`/`distribution_default`/`material_rental`/`material_sale`/`hidden`,
+styled by `.checkbox-label` in `style.css` so the box sits next to its text instead of being
+stretched by `.field input`'s `width: 100%`), always sent explicitly — unchecked is `false`, not
+omitted, since `PUT` replaces every field — and each row shows a small
+"Cuotas"/"Licencias"/"Repartos"/"Alquiler de material"/"Venta de material"/"Oculta" badge next to
+the account's name for whichever are on, so which accounts a transaction can record those against is
+visible without opening each one. `js/accountTree.js` holds the
+`childrenByParent`/`flattenAccountTree` pair both this page and
 `account.js` need: `GET /accounts` already comes back as a pre-order, depth-first walk (see the
 `accounts` bullet under [Accounting](backend-internals.md#accounting)), so filtering that flat list
 down to a single `parent_id`, in the order it already arrives in, *is* that group's own sibling

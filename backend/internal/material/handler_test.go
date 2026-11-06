@@ -224,7 +224,7 @@ func TestHandlerMovementsAllowMaterialPlusMemberButNotMaterialAlone(t *testing.T
 	// Loan never reaches 'active' (only rental does), so the return
 	// permission check below needs a rental to actually close.
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", materialMemberToken, map[string]any{
-		"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1,
+		"item_id": item.ID, "login": user.Login, "type": "rental", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
@@ -260,7 +260,7 @@ func TestHandlerListMovementsByUserSelfOrPrivilegedOnly(t *testing.T) {
 		t.Fatalf("decode item: %v", err)
 	}
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
-		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1,
+		"item_id": item.ID, "login": target.Login, "type": "sale", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create movement: %d: %s", rec.Code, rec.Body.String())
@@ -522,7 +522,7 @@ func TestHandlerCreateMovementRequiresLoginForRental(t *testing.T) {
 	}
 
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
-		"item_id": item.ID, "type": "rental", "quantity": 1,
+		"item_id": item.ID, "type": "rental", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for a rental without a login, got %d: %s", rec.Code, rec.Body.String())
@@ -574,7 +574,7 @@ func TestHandlerCreateMovementAllowsSaleWithoutLogin(t *testing.T) {
 	}
 
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
-		"item_id": item.ID, "type": "sale", "quantity": 1,
+		"item_id": item.ID, "type": "sale", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 for a sale without a login, got %d: %s", rec.Code, rec.Body.String())
@@ -876,7 +876,7 @@ func TestHandlerCreateMovementNotifiesTelegramWithBorrower(t *testing.T) {
 	notifier.waitForMessage(t) // the createItem notification, checked in its own test
 
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
-		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
+		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
@@ -911,7 +911,7 @@ func TestHandlerReturnMovementNotifiesTelegram(t *testing.T) {
 	}
 
 	rec = doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, map[string]any{
-		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1,
+		"item_id": item.ID, "login": borrower.Login, "type": "rental", "quantity": 1, "account_id": paidInto(t, tx),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create rental: %d: %s", rec.Code, rec.Body.String())
@@ -1128,6 +1128,9 @@ func TestHandlerMovementRecipientsMustBeMembers(t *testing.T) {
 		body := map[string]any{"item_id": item.ID, "type": kind, "quantity": 1, "login": who.Login}
 		if kind == "loan" || kind == "return" {
 			body["activity_id"] = activityID
+		}
+		if kind == "rental" || kind == "sale" {
+			body["account_id"] = paidInto(t, tx)
 		}
 		return doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 	}
@@ -1381,6 +1384,9 @@ func TestHandlerDeleteMovement(t *testing.T) {
 	record := func(body map[string]any) material.Movement {
 		t.Helper()
 		body["item_id"] = item.ID
+		if body["type"] == "sale" || body["type"] == "rental" {
+			body["account_id"] = paidInto(t, tx)
+		}
 		rec := doRequest(mux, http.MethodPost, "/api/v1/material/movements", boardToken, body)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("record %v: %d %s", body, rec.Code, rec.Body.String())

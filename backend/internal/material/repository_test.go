@@ -131,7 +131,7 @@ func TestSaleMarksItemSoldWhenStockReachesZero(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	}); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestAcquisitionRestocksAndClearsTerminalStatus(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	}); err != nil {
 		t.Fatalf("create sale: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestCreateMovementSaleRecipientIsOptional(t *testing.T) {
 	item := createItem(t, tx, repo, 1)
 
 	m, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if err != nil {
 		t.Fatalf("create sale without a recipient: %v", err)
@@ -429,7 +429,7 @@ func TestReturnMovementRestoresStock(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if err != nil {
 		t.Fatalf("create rental: %v", err)
@@ -470,7 +470,7 @@ func TestReturnMovementNotFoundOrAlreadyClosed(t *testing.T) {
 	item := createItem(t, tx, repo, 1)
 	user := testutil.InsertMember(t, tx)
 	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if err != nil {
 		t.Fatalf("create rental: %v", err)
@@ -526,7 +526,7 @@ func TestListMovementsByItemAndStatus(t *testing.T) {
 		t.Fatalf("create loan: %v", err)
 	}
 	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -755,7 +755,7 @@ func TestListMovementsByUser(t *testing.T) {
 		t.Fatalf("create loan for person: %v", err)
 	}
 	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &other.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &other.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	}); err != nil {
 		t.Fatalf("create sale for other: %v", err)
 	}
@@ -795,7 +795,7 @@ func TestCreateMovementRentalDoesNotRequireActivity(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 	}); err != nil {
 		t.Errorf("expected a rental without an activity to succeed, got %v", err)
 	}
@@ -810,7 +810,7 @@ func TestCreateMovementSaleDoesNotRequireActivity(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	if _, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	}); err != nil {
 		t.Errorf("expected a sale without an activity to succeed, got %v", err)
 	}
@@ -1095,7 +1095,7 @@ func TestRentalRejectedWhenItemNotRentable(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	_, err = repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if !errors.Is(err, material.ErrNotRentable) {
 		t.Errorf("expected ErrNotRentable, got %v", err)
@@ -1122,7 +1122,7 @@ func TestSaleRejectedWhenItemNotSellable(t *testing.T) {
 	user := testutil.InsertMember(t, tx)
 
 	_, err = repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if !errors.Is(err, material.ErrNotSellable) {
 		t.Errorf("expected ErrNotSellable, got %v", err)
@@ -1304,7 +1304,7 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 	activityID := testutil.InsertActivity(t, tx)
 
 	rental, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementRental, Quantity: 1, AccountID: paidInto(t, tx),
 		ActivityID: &activityID,
 	})
 	if err != nil {
@@ -1315,7 +1315,7 @@ func TestMovementPriceIsAlwaysTakenFromTheItem(t *testing.T) {
 	}
 
 	sale, err := repo.CreateMovement(ctx, material.CreateMovementInput{
-		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1,
+		ItemID: item.ID, UserID: &user.ID, Type: material.MovementSale, Quantity: 1, AccountID: paidInto(t, tx),
 	})
 	if err != nil {
 		t.Fatalf("create sale: %v", err)
@@ -1390,3 +1390,11 @@ func TestModelNeedsBrandConstraint(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// paidInto is the account a sale or a rental is paid into in these tests: it also makes sure the
+// income accounts marked for rentals and for sales exist.
+func paidInto(t *testing.T, tx pgx.Tx) *int64 {
+	t.Helper()
+	id := testutil.MaterialAccounts(t, tx)
+	return &id
+}

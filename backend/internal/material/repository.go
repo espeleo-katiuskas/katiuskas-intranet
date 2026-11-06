@@ -648,10 +648,10 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 		INSERT INTO material_movements (item_id, user_id, type, quantity, transacted_at, price, status, recorded_by, activity_id, notes)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
-			price, status, recorded_by, activity_id, notes
+			price, status, recorded_by, activity_id, notes, transaction_id
 	`, in.ItemID, in.UserID, in.Type, in.Quantity, in.TransactedAt, price, status, in.RecordedBy, in.ActivityID, in.Notes,
 	).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
-		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
+		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes, &m.TransactionID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == activityRequiredConstraint {
 		return Movement{}, ErrActivityRequired
@@ -662,6 +662,14 @@ func (r *Repository) CreateMovement(ctx context.Context, in CreateMovementInput)
 
 	if affectsItemStatus(in.Type) {
 		if err := r.syncItemStatusAfterMovement(ctx, tx, in.ItemID, in.Type); err != nil {
+			return Movement{}, err
+		}
+	}
+
+	// A sale or a rental that costs something is recorded in the accounting, in this same
+	// transaction: both are written or neither.
+	if in.Type == MovementSale || in.Type == MovementRental {
+		if err := r.recordMovementTransaction(ctx, tx, &m, in.AccountID); err != nil {
 			return Movement{}, err
 		}
 	}
@@ -698,9 +706,9 @@ func (r *Repository) DeleteMovement(ctx context.Context, id int64) (Movement, er
 	err = tx.QueryRow(ctx, `
 		DELETE FROM material_movements WHERE id = $1
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
-			price, status, recorded_by, activity_id, notes
+			price, status, recorded_by, activity_id, notes, transaction_id
 	`, id).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
-		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
+		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes, &m.TransactionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Movement{}, ErrNotFound
 	}
@@ -729,6 +737,12 @@ func (r *Repository) DeleteMovement(ctx context.Context, id int64) (Movement, er
 
 	if err := r.resyncItemStatus(ctx, tx, itemID, available); err != nil {
 		return Movement{}, err
+	}
+	// The transaction a sale or a rental recorded goes with it.
+	if m.TransactionID != nil {
+		if err := deleteMovementTransaction(ctx, tx, *m.TransactionID); err != nil {
+			return Movement{}, err
+		}
 	}
 	return m, tx.Commit(ctx)
 }
@@ -782,9 +796,9 @@ func (r *Repository) ReturnMovement(ctx context.Context, id int64) (Movement, er
 		UPDATE material_movements SET returned_at = now(), status = 'completed'
 		WHERE id = $1 AND status = 'active'
 		RETURNING id, item_id, user_id, type, quantity, transacted_at, returned_at,
-			price, status, recorded_by, activity_id, notes
+			price, status, recorded_by, activity_id, notes, transaction_id
 	`, id).Scan(&m.ID, &m.ItemID, &m.UserID, &m.Type, &m.Quantity, &m.TransactedAt,
-		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes)
+		&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.ActivityID, &m.Notes, &m.TransactionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Movement{}, ErrNotFound
 	}
@@ -833,7 +847,7 @@ func (r *Repository) ListMovementsByActivity(ctx context.Context, activityID int
 func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg any) ([]Movement, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.item_id, m.user_id, u.login, m.type, m.quantity, m.transacted_at,
-			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes
+			m.returned_at, m.price, m.status, m.recorded_by, ru.login, m.activity_id, m.notes, m.transaction_id
 		FROM material_movements m
 		LEFT JOIN users u ON u.id = m.user_id
 		LEFT JOIN users ru ON ru.id = m.recorded_by
@@ -847,7 +861,7 @@ func (r *Repository) queryMovements(ctx context.Context, whereClause string, arg
 	for rows.Next() {
 		var m Movement
 		if err := rows.Scan(&m.ID, &m.ItemID, &m.UserID, &m.UserLogin, &m.Type, &m.Quantity, &m.TransactedAt,
-			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes); err != nil {
+			&m.ReturnedAt, &m.Price, &m.Status, &m.RecordedBy, &m.RecordedByLogin, &m.ActivityID, &m.Notes, &m.TransactionID); err != nil {
 			return nil, err
 		}
 		list = append(list, m)

@@ -2,6 +2,7 @@ import {
   hasAnyRole,
   apiFetch,
   escapeHtml,
+  formatCurrency,
   formatDate,
   normalizeForSearch,
   personPickerLabeler,
@@ -181,6 +182,44 @@ async function expandItemMovements(itemId) {
 // unit — the server forces it anyway).
 let movementItemId = null;
 
+// A sale or a rental that costs something is recorded in the accounting: the dialog asks for the
+// asset account (caja, banco…) the money goes into, read once and remembered between uses.
+const LAST_ACCOUNT_KEY = 'katiuskas:material-account';
+let assetAccounts = null;
+
+async function loadAssetAccounts() {
+  if (assetAccounts) return;
+  const all = await apiFetch('/accounts');
+  const groups = new Set(all.map((a) => a.parent_id));
+  assetAccounts = all.filter((a) => a.effective_type === 'asset' && !a.hidden && !groups.has(a.id));
+}
+
+// What the movement being filled in costs: the item's price of its type, times the quantity (a rental
+// charges its first week).
+function movementTotal() {
+  const item = itemsById[movementItemId];
+  const type = document.getElementById('mv-type').value;
+  if (!item) return 0;
+  const price =
+    type === 'sale' ? item.sale_price : type === 'rental' ? item.rental_price_per_week : null;
+  const quantity = document.getElementById('mv-quantity-field').hidden
+    ? 1
+    : Number(document.getElementById('mv-quantity').value) || 1;
+  return (price ?? 0) * quantity;
+}
+
+// The account field is there only for what costs something.
+function updateMovementAccountField() {
+  const total = movementTotal();
+  const field = document.getElementById('mv-account-field');
+  const select = document.getElementById('mv-account');
+  field.hidden = total <= 0;
+  select.required = !field.hidden;
+  document.getElementById('mv-total').textContent = field.hidden
+    ? ''
+    : `(${formatCurrency(total)})`;
+}
+
 function updateMovementFormVisibility() {
   const type = document.getElementById('mv-type').value;
   // A rental can optionally be tied to an activity (a loan always is,
@@ -209,6 +248,7 @@ function updateMovementFormVisibility() {
   userInput.required = requiresRecipient;
   document.getElementById('mv-user-hint').hidden = requiresRecipient || forbidsRecipient;
   refreshUserOptions();
+  updateMovementAccountField();
 }
 
 // Who can be picked as the "Socio" depends on the type: a loan or a rental (and the return of a loan)
@@ -231,12 +271,32 @@ function refreshUserOptions() {
 // The dialogs only exist for whoever manages the material (the others get them removed by data-roles).
 if (canManageMovements) {
   document.getElementById('mv-type').addEventListener('change', updateMovementFormVisibility);
+  document.getElementById('mv-quantity').addEventListener('input', updateMovementAccountField);
 }
 
-function openNewMovementDialog(itemId) {
+async function openNewMovementDialog(itemId) {
   const item = itemsById[itemId];
   if (!item) return;
   movementItemId = itemId;
+  try {
+    await loadAssetAccounts();
+  } catch {
+    showError('No se pudo cargar la lista de cuentas.');
+    return;
+  }
+  const remembered = (() => {
+    try {
+      return localStorage.getItem(LAST_ACCOUNT_KEY);
+    } catch {
+      return null;
+    }
+  })();
+  document.getElementById('mv-account').innerHTML = assetAccounts
+    .map(
+      (a) =>
+        `<option value="${a.id}"${String(a.id) === remembered ? ' selected' : ''}>${escapeHtml(a.name)}</option>`,
+    )
+    .join('');
   document.getElementById('new-movement-item-label').innerHTML = itemLabel(item);
   const isSingleUnit = item.kind === 'rope' || item.kind === 'bag';
   document.getElementById('mv-quantity-field').hidden = isSingleUnit;
@@ -359,6 +419,15 @@ newMovementForm?.addEventListener('submit', async (event) => {
     activity_id: activityId,
     notes: notesInput.value.trim() || null,
   };
+  const accountSelect = document.getElementById('mv-account');
+  if (!document.getElementById('mv-account-field').hidden) {
+    body.account_id = Number(accountSelect.value);
+    try {
+      localStorage.setItem(LAST_ACCOUNT_KEY, accountSelect.value);
+    } catch {
+      // Remembering the account is a convenience only.
+    }
+  }
 
   const submitButton = newMovementForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;

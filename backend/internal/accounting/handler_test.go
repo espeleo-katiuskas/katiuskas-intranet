@@ -1408,3 +1408,71 @@ func TestAccountsForDuesAndLicensesHaveToBeIncome(t *testing.T) {
 		t.Errorf("expected the inherited income type, got %+v", cuotas.EffectiveType)
 	}
 }
+
+// The accounts that record the rentals and the sales of material are each at most one: marking
+// another takes the mark off the first, however it is done, and both have to be of type income.
+func TestHandlerMaterialAccountsAreUniqueAndIncome(t *testing.T) {
+	mux, resolver, _ := newHandlerTestServer(t)
+	adminToken := testutil.TokenFor(resolver, 1, "admin")
+	create := func(name, kind string, flags map[string]any) accounting.Account {
+		t.Helper()
+		body := map[string]any{"name": name, "type": kind}
+		for k, v := range flags {
+			body[k] = v
+		}
+		rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d: %s", name, rec.Code, rec.Body.String())
+		}
+		var a accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	marked := func() (rental, sale []string) {
+		t.Helper()
+		rec := doRequest(mux, http.MethodGet, "/api/v1/accounts", adminToken, nil)
+		var all []accounting.Account
+		if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range all {
+			if a.MaterialRental {
+				rental = append(rental, a.Name)
+			}
+			if a.MaterialSale {
+				sale = append(sale, a.Name)
+			}
+		}
+		return rental, sale
+	}
+
+	first := create("Alquileres", "income", map[string]any{"material_rental": true, "material_sale": true})
+	if rental, sale := marked(); len(rental) != 1 || len(sale) != 1 {
+		t.Fatalf("expected one of each, got %v %v", rental, sale)
+	}
+	// Each flag moves on its own.
+	create("Ventas", "income", map[string]any{"material_sale": true})
+	if rental, sale := marked(); len(rental) != 1 || rental[0] != "Alquileres" || len(sale) != 1 || sale[0] != "Ventas" {
+		t.Fatalf("creating a sale account should take only the sale mark, got %v %v", rental, sale)
+	}
+	rec := doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken,
+		map[string]any{"name": "Alquileres", "type": "income", "material_sale": true})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"material_sale":true`) {
+		t.Fatalf("edit: %d: %s", rec.Code, rec.Body.String())
+	}
+	if rental, sale := marked(); len(rental) != 0 || len(sale) != 1 || sale[0] != "Alquileres" {
+		t.Fatalf("editing replaces every field and moves the mark, got %v %v", rental, sale)
+	}
+	// Only an income account can have them, or lose that type while it does.
+	rec = doRequest(mux, http.MethodPut, fmt.Sprintf("/api/v1/accounts/%d", first.ID), adminToken,
+		map[string]any{"name": "Alquileres", "type": "asset", "material_sale": true})
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "not_income_for_material") {
+		t.Fatalf("expected 409 not_income_for_material, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doRequest(mux, http.MethodPost, "/api/v1/accounts", adminToken,
+		map[string]any{"name": "Caja", "type": "asset", "material_rental": true}); rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 creating an asset rental account, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

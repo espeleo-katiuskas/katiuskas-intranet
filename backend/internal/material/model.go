@@ -299,6 +299,9 @@ type Movement struct {
 	// Notes is free text, mainly useful on loss/abandonment/retirement
 	// to say why ("cuerda gastada", "se quedó instalada en la sima X").
 	Notes *string `json:"notes,omitempty"`
+	// TransactionID is the accounting transaction a sale or a rental recorded (nil for the other
+	// types, and for a sale or rental that costs nothing).
+	TransactionID *int64 `json:"transaction_id,omitempty"`
 }
 
 // CreateMovementInput has no Price field: it's never given by the
@@ -314,4 +317,7 @@ type CreateMovementInput struct {
 	RecordedBy   *int64
 	ActivityID   *int64
 	Notes        *string
+	// AccountID is the asset account a sale or a rental was paid into; it is required when the
+	// movement costs something, and ignored by the other types (see Repository.CreateMovement).
+	AccountID *int64
 }

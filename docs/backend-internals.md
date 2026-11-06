@@ -726,6 +726,27 @@ the description at the end, joined with " · ": "Mosquetones · Petzl Attache ·
 asimétrico · con seguro". The catalog is read once per request (`loadTypes`, three small queries),
 not once per item, so listing hundreds of items costs the same as listing one.
 
+**Sales and rentals are recorded in accounting** (migration `00055_material_accounting.sql`), as the
+payment of a distribution is. `POST /material/movements` takes `account_id`, the asset account the
+money was paid into, and `CreateMovement` writes, in the same database transaction as the movement,
+a transaction with two entries by direct SQL (`recordMovementTransaction`, `accounting.go`: the
+package does not import `accounting`): the asset `+total`, the income account marked
+`accounts.material_sale` or `accounts.material_rental` `−total`, dated `transacted_at`, with a
+description in Spanish ("Venta de 2 × Mosquetones · Petzl Attache a Nombre Apellidos"; "Alquiler
+de …") and the movement's `transaction_id` pointing at it. The total is the movement's `price` (the
+item's price when it was made) times `quantity`; a rental charges its first week, since how long it
+lasts is not known. What costs nothing records nothing and needs no account. The account has to
+exist (`ErrUnknownAccount`), be of type `asset` (`ErrAccountNotAsset`), have no children
+(`ErrAccountHasChildren`) and be given when money moves (`ErrAccountRequired`); an income account
+has to be marked for that type (`ErrNoMaterialAccount`, 409 `no_material_account`). The two marks
+work like `distribution_default`: at most one account each (partial unique indexes), marking one in
+`accounting.Repository.Create`/`UpdateAccount` takes it off the other, and both have to be
+`income` (409 `not_income_for_material`, checked by `finishAccountChange`). Unlike a distribution's
+payment, deleting the *transaction* is refused (409 `transaction_has_material_movement`, from the
+foreign key): the movement is deleted instead (`DELETE /material/movements/{id}`), which deletes
+its transaction and entries in the same database transaction — unless the transaction has files
+attached (409 `transaction_has_files`). A rental's return changes nothing in accounting.
+
 ## Document library
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos, actas...)

@@ -174,6 +174,12 @@ const texts = {
     'Una cuenta para cuotas anuales o licencias tiene que ser de tipo «ingresos».',
   not_income_for_distributions:
     'La cuenta de los pagos de un reparto tiene que ser de tipo «ingresos».',
+  not_income_for_material:
+    'La cuenta de los alquileres o las ventas de material tiene que ser de tipo «ingresos».',
+  no_material_account:
+    'No hay ninguna cuenta marcada para los alquileres o las ventas de material (se marca en Contabilidad).',
+  transaction_has_material_movement:
+    'Esta transacción la registró una venta o un alquiler de material: borra el movimiento en /material y se borrará con él.',
   transaction_has_licenses:
     'Esta transacción es el pago de una o más licencias, así que no se puede borrar.',
   transaction_has_distribution_payments:

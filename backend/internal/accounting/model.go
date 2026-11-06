@@ -69,6 +69,11 @@ type Account struct {
 	// migration 00032_distribution_accounts.sql). Marking one takes the mark off
 	// whichever had it.
 	DistributionDefault bool `json:"distribution_default"`
+	// MaterialRental and MaterialSale mark the one account (at most one each) that records the
+	// rentals and the sales of material (migration 00055_material_accounting.sql). Marking one
+	// takes the mark off whichever had it.
+	MaterialRental bool `json:"material_rental"`
+	MaterialSale   bool `json:"material_sale"`
 	// Balance and LastTransactionAt are this account's activity — the sum of
 	// every entry ever posted to it and when the most recent one occurred
 	// (nil if never) — and, for an account that groups others, which has no
@@ -94,6 +99,8 @@ type CreateAccountInput struct {
 	AllowsLicenses      bool
 	Hidden              bool
 	DistributionDefault bool
+	MaterialRental      bool
+	MaterialSale        bool
 }
 
 // UpdateAccountInput replaces every field at once — the same
@@ -116,6 +123,8 @@ type UpdateAccountInput struct {
 	AllowsLicenses      bool
 	Hidden              bool
 	DistributionDefault bool
+	MaterialRental      bool
+	MaterialSale        bool
 }
 
 // MoveDirection is which adjacent sibling (same parent_id) to swap an
