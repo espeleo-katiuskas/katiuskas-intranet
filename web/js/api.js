@@ -65,8 +65,22 @@ async function initSession() {
     redirectToLogin();
     return false;
   }
+  let me;
   try {
-    const me = await apiFetch('/auth/me');
+    me = await checkSession();
+  } catch (err) {
+    if (isTransientFailure(err)) {
+      // The session was not rejected: the server could not be asked (no network, restarting, busy). The
+      // token stays, and the page waits and tries again instead of signing anybody out.
+      showConnectionProblem();
+      return new Promise(() => {});
+    }
+    localStorage.removeItem('token');
+    token = null;
+    redirectToLogin();
+    return false;
+  }
+  try {
     cachedUser = {
       login: me.login,
       firstName: me.first_name ?? '',
@@ -91,11 +105,49 @@ async function initSession() {
     }
     return true;
   } catch {
-    localStorage.removeItem('token');
-    token = null;
-    redirectToLogin();
+    // Something of the page itself, not the session: the token is not to blame.
     return false;
   }
+}
+
+// What says the session is still good (GET /auth/me). A failure that is not the server answering "no" —
+// no network, a restart in the middle of a deploy, a 5xx, too many requests — is tried again a couple of
+// times before giving up, since it is usually over in a moment.
+const SESSION_RETRY_DELAYS_MS = [1000, 2000];
+
+function isTransientFailure(err) {
+  return Boolean(err.network) || err.status >= 500 || err.status === 408 || err.status === 429;
+}
+
+async function checkSession() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiFetch('/auth/me');
+    } catch (err) {
+      if (!isTransientFailure(err) || attempt >= SESSION_RETRY_DELAYS_MS.length) throw err;
+      await new Promise((resolve) => setTimeout(resolve, SESSION_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+// The intranet could not be reached and the session is not in doubt: a notice over the page (which cannot
+// work without the API anyway) that tries again by itself and has a button to do it now. Nothing is
+// forgotten: the token is still there.
+function showConnectionProblem() {
+  const notice = document.createElement('div');
+  notice.className = 'connection-problem';
+  notice.setAttribute('role', 'alert');
+  notice.innerHTML = `
+    <div class="panel">
+      <h2>No se puede conectar con la intranet</h2>
+      <p>Tu sesión sigue abierta. Puede ser un fallo de la conexión o una actualización en curso: se volverá a intentar sola en unos segundos.</p>
+      <button type="button" class="btn btn-primary" id="connection-retry">Reintentar ahora</button>
+    </div>`;
+  document.body.append(notice);
+  notice
+    .querySelector('#connection-retry')
+    .addEventListener('click', () => window.location.reload());
+  setTimeout(() => window.location.reload(), 8000);
 }
 
 // Shown on every page while impersonating, so it's never something only
@@ -251,9 +303,12 @@ async function fetchOrExplain(url, options) {
   try {
     return await fetch(url, options);
   } catch {
-    throw new Error(
+    const error = new Error(
       'No se ha podido conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.',
     );
+    // It never reached the server: says nothing about the session (see initSession).
+    error.network = true;
+    throw error;
   }
 }
 
@@ -268,6 +323,7 @@ async function errorOf(response) {
       'Ha ocurrido un error inesperado.',
   );
   error.code = body?.error?.code;
+  error.status = response.status;
   return error;
 }
 

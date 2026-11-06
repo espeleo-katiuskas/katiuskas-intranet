@@ -189,6 +189,15 @@ the activity, a "Cancelar actividad" button next to "Editar actividad", after a 
 with `cancelled: false`; the edit dialog has no state field) and `member.js` use it, and
 `material.js` asks for `?active=true` for its activity picker.
 
+**A session that cannot be checked is not a session that is gone.** `initSession()` throws the token
+away and goes to `/login` only when the server answers that it does not accept it (a 4xx).
+When `GET /auth/me` fails for a reason that says nothing about the session — no network
+(`error.network`), a 5xx (a restart in the middle of a deploy, say), a 408 or a 429 — it tries again
+twice (after 1 and 2 seconds, `checkSession`) and, if it still fails, covers the page with "No se
+puede conectar con la intranet" (`showConnectionProblem`), which keeps the token, reloads by itself
+after 8 seconds and has a "Reintentar ahora" button. Before, any failure of that request signed the
+person out of a session that was still valid on the server.
+
 **Going back to the page that was asked for.** When `initSession()` finds no session (no token, or
 `GET /auth/me` rejects it), it keeps the address asked for (path and query, except `/` and
 `/login`) in `localStorage` under `katiuskas:return-to`, with the time, and sends the person to
