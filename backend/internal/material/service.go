@@ -74,6 +74,10 @@ func (s *Service) DeleteType(ctx context.Context, id int64) (MaterialType, error
 	return s.repo.DeleteType(ctx, id)
 }
 
+func (s *Service) ReorderTypes(ctx context.Context, ids []int64) error {
+	return s.repo.ReorderTypes(ctx, ids)
+}
+
 func (s *Service) GetMaterialType(ctx context.Context, id int64) (MaterialType, error) {
 	return s.repo.GetMaterialType(ctx, id)
 }

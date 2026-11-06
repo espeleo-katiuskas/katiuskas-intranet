@@ -514,7 +514,7 @@ if (canManageMovements) {
   typeSelect.addEventListener('change', updateKindFieldsVisibility);
   updateKindFieldsVisibility();
 
-  // The types come with the fixed ones first (Cuerda, Saca), then the rest by name; each option
+  // The types come in the order an admin has set (Cuerda and Saca first until moved); each option
   // remembers its kind.
   apiFetch('/material/types')
     .then((types) => {

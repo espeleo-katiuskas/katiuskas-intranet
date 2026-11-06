@@ -681,6 +681,9 @@ The package is `internal/material`, page `/material`. A material item has a *typ
 of each, and their items are individual objects with their own columns (code, make and model,
 `diameter_mm`, `capacity_liters`...); every other type is `general`, which an admin adds, renames
 and deletes from `/admin`, and its items are stock (`total_quantity` comes from the movements).
+The types have an order (`material_types.position`, changed with `PUT /material/types/order`, which
+takes every type once, Cuerda and Saca included): it is the order of `GET /material/types`, so of
+the "Tipo" list of the item form, and of the items in the catalog; a new type goes last.
 
 **Attributes.** A general type defines attributes (`material_type_attributes`): colour, closure,
 shape... Each is `text` (any value) or `enum` (one of the type's options in

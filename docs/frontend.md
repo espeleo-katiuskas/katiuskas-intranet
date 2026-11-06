@@ -46,17 +46,18 @@ title and the button change, the type is fixed for a rope or a bag (the field is
 general material, can be changed to another general type (Cuerda and Saca are not offered), the
 quantity and the date of acquisition are left out (the stock is what its movements say) and the form
 is filled with the item; it sends `PUT /material/items/{id}`, which replaces every field (the
-attributes included). The "Tipo" select lists every type from `GET /material/types` (Cuerda and
-Saca first); the fields shown depend on the *kind* of the chosen type (rope fields for Cuerda, bag
-fields for Saca, description and quantity for any other), each option carrying it in `data-kind`.
-Brand, model and code are in the form for every type, required only for ropes and bags; the model
-field stays disabled (and empty) while there is no brand. The attributes of the chosen type
-(`attributes` in `GET /material/types`) are drawn by `syncTypeFields` before the description, one
-field each: a text box, or a list of the attribute's options (`attribute_<id>` is the name of the
-field), with "(opcional)" on the optional ones and `required` on the others; they are drawn again
-whenever the type changes, so the values typed for another type's attributes are dropped. The same
-function says whether the description is required (`description_required` of the type; "(opcional)"
-is shown next to its label otherwise). Only the attributes with a value go in the request.
+attributes included). The "Tipo" select lists every type from `GET /material/types` (in the order an
+admin has set); the fields shown depend on the *kind* of the chosen type (rope fields for Cuerda,
+bag fields for Saca, description and quantity for any other), each option carrying it in
+`data-kind`. Brand, model and code are in the form for every type, required only for ropes and bags;
+the model field stays disabled (and empty) while there is no brand. The attributes of the chosen
+type (`attributes` in `GET /material/types`) are drawn by `syncTypeFields` before the description,
+one field each: a text box, or a list of the attribute's options (`attribute_<id>` is the name of
+the field), with "(opcional)" on the optional ones and `required` on the others; they are drawn
+again whenever the type changes, so the values typed for another type's attributes are dropped. The
+same function says whether the description is required (`description_required` of the type;
+"(opcional)" is shown next to its label otherwise). Only the attributes with a value go in the
+request.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
@@ -746,8 +747,10 @@ a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST 
 creating and editing (a label, a value and, optionally, a text for a copy button and the button's
 own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE
 /material/types/{id}`: a table with the type, whether its description is required, its attributes
-and the buttons "Editar" and "Borrar"; "Cuerda" and "Saca" are listed as "Fijo" with no buttons,
-and a type with material is refused with its own message). One dialog, shared by creating and
+and the buttons ↑ ↓, "Editar" and "Borrar"; "Cuerda" and "Saca" are listed as "Fijo" with no
+edit or delete buttons, and a type with material is refused with its own message). ↑ ↓ set the
+order of the types, which is the one of the "Tipo" list of `/material` (each sends the whole new
+order to `PUT /material/types/order`; Cuerda and Saca move too). One dialog, shared by creating and
 editing, has the name, "La descripción es obligatoria" and "Guardar" and, below, the type's
 attributes (`#material-attributes-section`, only once the type exists: saving a new one keeps the
 dialog open, now editing it). Each attribute shows its kind (texto libre or lista de opciones), an

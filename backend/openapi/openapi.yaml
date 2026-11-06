@@ -3193,8 +3193,8 @@ paths:
       summary: List the types of material
       description: >
         Any baseline role (admin, board or member), like GET /material/items, whose items each
-        name one of these. Cuerda (kind rope) and Saca (kind
-        bag) come first, then the rest (kind general) by name. Each carries its attributes (in the
+        name one of these, in the order an admin has set (PUT /material/types/order; Cuerda and Saca
+        start first, and a new type goes last), which is the order of the "Tipo" list. Each carries its attributes (in the
         order their values are written in an item's name) with the options of the enum ones.
       security: [{ bearerAuth: [] }]
       responses:
@@ -3231,6 +3231,33 @@ paths:
         "400": { description: invalid_body (also a blank name). }
         "403": { description: Requires admin. }
         "409": { description: duplicate_type — another type has that name. }
+
+  /material/types/order:
+    put:
+      summary: Reorder the types of material
+      description: >
+        Admin only. type_ids must be every type once, Cuerda and Saca included (they can be moved,
+        not renamed or deleted). The order is that of GET /material/types and of the "Tipo" list.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type_ids]
+              properties:
+                type_ids: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          description: The types in the new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MaterialType" }
+        "400": { description: invalid_body (the list is not exactly the types, once each). }
+        "403": { description: Requires admin. }
 
   /material/types/{id}:
     patch:
@@ -5089,6 +5116,7 @@ components:
         id: { type: integer }
         name: { type: string }
         kind: { type: string, enum: [rope, bag, general] }
+        position: { type: integer, description: 0-based place in the list of types. }
         description_required:
           type: boolean
           description: Whether the items of the type must have a description (general types; meaningless for Cuerda and Saca, whose description is always optional).

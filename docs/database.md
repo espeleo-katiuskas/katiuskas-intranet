@@ -743,11 +743,17 @@ without deploying.
 | `name` | text | no |  |
 | `kind` | material_kind | no | 'general' |
 | `description_required` | boolean | no | true |
+| `position` | integer | no |  |
 
 Constraints:
 
 - primary key (id)
 - unique (name)
+
+`position` is the type's place in the list, set by an admin (the "Tipo" list of the item form and
+the order of the catalog); a new type goes last. Cuerda and Saca have one like the rest: the
+trigger that keeps them fixed refuses to change their name, kind or `description_required`, or to
+delete them, but not their position.
 
 `description_required` says whether the items of a general type must have a description; the
 description of a rope or a bag is always optional, whatever it says there.
@@ -1471,3 +1477,6 @@ at the end; that database has to be recreated when a new migration appears.
   `material_type_attributes` and `material_attribute_options`, `material_items.attributes`, the
   unique index `material_items_identity_key` and the removal of `general_requires_description`. The
   index makes the migration fail, as it should, if two items are already exactly the same
+- `00054_material_types_position.sql`: `material_types.position` (filled with the old order: Cuerda
+  and Saca, then by name) and the trigger that keeps the fixed types fixed now lets their position
+  change

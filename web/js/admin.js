@@ -831,7 +831,7 @@ materialTypeDialog.addEventListener('close', () => {
 function renderMaterialTypes() {
   materialTypesBody.innerHTML = materialTypes.length
     ? materialTypes
-        .map((type) => {
+        .map((type, i) => {
           const general = type.kind === 'general';
           const names = type.attributes.map((a) => escapeHtml(a.name)).join(', ');
           return `
@@ -839,12 +839,14 @@ function renderMaterialTypes() {
           <td>${escapeHtml(type.name)}</td>
           <td>${general ? (type.description_required ? 'Obligatoria' : 'Opcional') : '—'}</td>
           <td>${general ? names || '—' : '—'}</td>
-          <td class="nowrap">${
-            general
-              ? `<button type="button" class="btn btn-secondary btn-small" data-edit-material-type="${type.id}">Editar</button>
+          <td class="nowrap">
+            <button type="button" class="btn btn-secondary btn-small" data-move-material-type="${type.id}" data-direction="-1" aria-label="Subir" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="btn btn-secondary btn-small" data-move-material-type="${type.id}" data-direction="1" aria-label="Bajar" ${i === materialTypes.length - 1 ? 'disabled' : ''}>↓</button>${
+              general
+                ? `<button type="button" class="btn btn-secondary btn-small" data-edit-material-type="${type.id}">Editar</button>
             <button type="button" class="btn btn-danger btn-small" data-delete-material-type="${type.id}">Borrar</button>`
-              : '<span class="badge">Fijo</span>'
-          }</td>
+                : '<span class="badge">Fijo</span>'
+            }</td>
         </tr>`;
         })
         .join('')
@@ -1114,6 +1116,27 @@ attributesList.addEventListener('click', async (event) => {
 });
 
 materialTypesBody.addEventListener('click', async (event) => {
+  // ↑ ↓: the order of the types is the one of the "Tipo" list of /material; each sends the whole new
+  // order. Cuerda and Saca can be moved too.
+  const move = event.target.closest('button[data-move-material-type]');
+  if (move) {
+    const ids = materialTypes.map((t) => t.id);
+    const from = ids.indexOf(Number(move.dataset.moveMaterialType));
+    const to = from + Number(move.dataset.direction);
+    if (to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    move.disabled = true;
+    try {
+      await apiFetch('/material/types/order', {
+        method: 'PUT',
+        body: JSON.stringify({ type_ids: ids }),
+      });
+    } catch (err) {
+      showError(err.message);
+    }
+    await loadMaterialTypes();
+    return;
+  }
   const edit = event.target.closest('button[data-edit-material-type]');
   if (edit) {
     openMaterialTypeDialog(

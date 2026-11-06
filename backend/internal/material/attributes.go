@@ -57,20 +57,20 @@ type querier interface {
 }
 
 // loadTypes reads the catalog of types with their attributes and options: every type, or the one
-// with the given id. The fixed types (Cuerda, Saca) come first, then the rest by name; the
-// attributes in their order, the options by label.
+// with the given id. The types come in their order (position), the attributes in theirs, the
+// options by label.
 func loadTypes(ctx context.Context, q querier, typeID *int64) ([]MaterialType, error) {
 	rows, err := q.Query(ctx, `
-		SELECT id, name, kind, description_required FROM material_types
+		SELECT id, name, kind, description_required, position FROM material_types
 		WHERE $1::bigint IS NULL OR id = $1
-		ORDER BY kind = 'general', kind, name`, typeID)
+		ORDER BY position, id`, typeID)
 	if err != nil {
 		return nil, err
 	}
 	types := []MaterialType{}
 	for rows.Next() {
 		var t MaterialType
-		if err := rows.Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired, &t.Position); err != nil {
 			rows.Close()
 			return nil, err
 		}

@@ -99,11 +99,13 @@ type AttributeValue struct {
 // rest (kind general), which an admin adds, renames and deletes — mosquetones, spits, placas…
 // A general type has attributes, and says whether its items must have a description.
 type MaterialType struct {
-	ID                  int64       `json:"id"`
-	Name                string      `json:"name"`
-	Kind                ItemKind    `json:"kind"`
-	DescriptionRequired bool        `json:"description_required"`
-	Attributes          []Attribute `json:"attributes"`
+	ID                  int64    `json:"id"`
+	Name                string   `json:"name"`
+	Kind                ItemKind `json:"kind"`
+	DescriptionRequired bool     `json:"description_required"`
+	// Position is the type's place in the list (0-based), which an admin sets.
+	Position   int         `json:"position"`
+	Attributes []Attribute `json:"attributes"`
 }
 
 // MovementType is either an exchange with a specific person — rental

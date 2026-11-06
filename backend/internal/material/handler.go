@@ -149,6 +149,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// admin only (/admin), and never Cuerda or Saca.
 	mux.Handle("GET /api/v1/material/types", h.authenticator.Protect(h.listMaterialTypes))
 	mux.Handle("POST /api/v1/material/types", h.authenticator.Protect(h.createType, "admin"))
+	mux.Handle("PUT /api/v1/material/types/order", h.authenticator.Protect(h.reorderTypes, "admin"))
 	mux.Handle("PATCH /api/v1/material/types/{id}", h.authenticator.Protect(h.updateType, "admin"))
 	mux.Handle("DELETE /api/v1/material/types/{id}", h.authenticator.Protect(h.deleteType, "admin"))
 

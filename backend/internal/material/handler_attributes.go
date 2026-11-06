@@ -208,3 +208,26 @@ func (h *Handler) notifyOption(r *http.Request, format, label string, attributeI
 func escapePercent(s string) string {
 	return strings.ReplaceAll(s, "%", "%%")
 }
+
+// reorderTypes sets the order of the types of material (the "Tipo" list of the item form).
+func (h *Handler) reorderTypes(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TypeIDs []int64 `json:"type_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "invalid JSON body")
+		return
+	}
+	if err := h.service.ReorderTypes(r.Context(), body.TypeIDs); err != nil {
+		writeTypeError(w, err, "reorder")
+		return
+	}
+	list, err := h.service.ListMaterialTypes(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list material types")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha cambiado el orden de los tipos de material.",
+		h.actorLogin(r.Context())))
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}

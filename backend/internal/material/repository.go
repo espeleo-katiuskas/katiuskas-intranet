@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -346,7 +347,7 @@ func (r *Repository) GetItem(ctx context.Context, id int64) (Item, error) {
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+itemSelect+`
-		ORDER BY mt.kind = 'general', mt.kind, mt.name, i.brand, i.model, i.id
+		ORDER BY mt.position, i.brand, i.model, i.id
 	`)
 	if err != nil {
 		return nil, err
@@ -368,8 +369,8 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 	return list, r.decorateItems(ctx, list)
 }
 
-// ListMaterialTypes returns the catalog of types of material with their attributes: the fixed ones
-// (Cuerda, Saca) first, then the rest by name.
+// ListMaterialTypes returns the catalog of types of material with their attributes, in the order an
+// admin has set (see ReorderTypes).
 func (r *Repository) ListMaterialTypes(ctx context.Context) ([]MaterialType, error) {
 	return loadTypes(ctx, r.pool, nil)
 }
@@ -384,7 +385,7 @@ func (r *Repository) typeQuery(ctx context.Context, sql string, args ...any) (Ma
 	}
 	defer tx.Rollback(ctx)
 	var t MaterialType
-	if err := tx.QueryRow(ctx, sql, args...).Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired); err != nil {
+	if err := tx.QueryRow(ctx, sql, args...).Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired, &t.Position); err != nil {
 		return MaterialType{}, typeError(err)
 	}
 	t.Attributes = []Attribute{}
@@ -393,8 +394,9 @@ func (r *Repository) typeQuery(ctx context.Context, sql string, args ...any) (Ma
 
 // CreateType adds a type to the catalog; it is always a general one (the fixed two are seeded).
 func (r *Repository) CreateType(ctx context.Context, name string, descriptionRequired bool) (MaterialType, error) {
-	return r.typeQuery(ctx, `INSERT INTO material_types (name, description_required) VALUES ($1, $2)
-		RETURNING id, name, kind, description_required`, name, descriptionRequired)
+	return r.typeQuery(ctx, `INSERT INTO material_types (name, description_required, position)
+		VALUES ($1, $2, COALESCE((SELECT max(position) + 1 FROM material_types), 0))
+		RETURNING id, name, kind, description_required, position`, name, descriptionRequired)
 }
 
 // UpdateType changes a type's name and/or whether its items must have a description; nil leaves a
@@ -404,7 +406,7 @@ func (r *Repository) UpdateType(ctx context.Context, id int64, name *string, des
 	if _, err := r.typeQuery(ctx, `
 		UPDATE material_types SET name = COALESCE($2, name),
 			description_required = COALESCE($3, description_required)
-		WHERE id = $1 RETURNING id, name, kind, description_required`, id, name, descriptionRequired); err != nil {
+		WHERE id = $1 RETURNING id, name, kind, description_required, position`, id, name, descriptionRequired); err != nil {
 		return MaterialType{}, err
 	}
 	return r.GetMaterialType(ctx, id)
@@ -426,8 +428,8 @@ func (r *Repository) DeleteType(ctx context.Context, id int64) (MaterialType, er
 			return typeError(err)
 		}
 		err := tx.QueryRow(ctx, `DELETE FROM material_types WHERE id = $1
-			RETURNING id, name, kind, description_required`, id).
-			Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired)
+			RETURNING id, name, kind, description_required, position`, id).
+			Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired, &t.Position)
 		if err != nil {
 			return typeError(err)
 		}
@@ -435,6 +437,33 @@ func (r *Repository) DeleteType(ctx context.Context, id int64) (MaterialType, er
 	})
 	t.Attributes = []Attribute{}
 	return t, err
+}
+
+// ReorderTypes sets the order of the types of material: ids must be all of them, once each. Cuerda
+// and Saca are moved like the rest.
+func (r *Repository) ReorderTypes(ctx context.Context, ids []int64) error {
+	return r.inTx(ctx, func(tx pgx.Tx) error {
+		types, err := loadTypes(ctx, tx, nil)
+		if err != nil {
+			return err
+		}
+		have := make([]int64, 0, len(types))
+		for _, t := range types {
+			have = append(have, t.ID)
+		}
+		want := slices.Clone(ids)
+		slices.Sort(have)
+		slices.Sort(want)
+		if !slices.Equal(have, want) {
+			return ErrInvalidOrder
+		}
+		for position, id := range ids {
+			if _, err := tx.Exec(ctx, `UPDATE material_types SET position = $2 WHERE id = $1`, id, position); err != nil {
+				return typeError(err)
+			}
+		}
+		return nil
+	})
 }
 
 // typeError maps the errors of the type queries to this package's own.

@@ -498,14 +498,20 @@ files (up to 25 MiB).
   rental, a sale, more stock, a loss...) makes it refuse.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `item_has_movements`
-- **GET** `/material/types` — *Any baseline role*. Types of material: Cuerda and Saca first,
-  then the rest by name, each with its attributes and their options.
+- **GET** `/material/types` — *Any baseline role*. Types of material in the order an admin has set
+  (Cuerda and Saca start first; a new type goes last), each with its attributes and their options.
   - returns: 200 `[MaterialType]`
 - **POST** `/material/types` — *Admin*. Adds a type (always general; the name is trimmed), with no
   attributes yet.
   - body: `name*`, `description_required` (default `true`)
   - returns: 201 `MaterialType`
   - errors: 400 `invalid_body` (blank name); 409 `duplicate_type`
+- **PUT** `/material/types/order` — *Admin*. Sets the order of the types, which is also the order
+  of the "Tipo" list of the item form and of the items in the catalog. Cuerda and Saca can be moved
+  too.
+  - body: `type_ids*`: every type, once each
+  - returns: 200 `[MaterialType]`
+  - errors: 400 `invalid_body` (the list is not exactly the types)
 - **PATCH** `/material/types/{id}` — *Admin*. Renames a type and/or says whether the description of
   its items is required (a field left out stays as it is; at least one is needed). Its items
   follow. Making the description required leaves the items without one as they are: they show as
@@ -1324,6 +1330,7 @@ Nested fields:
 | `id` | integer |
 | `name` | text |
 | `kind` | rope/bag/general |
+| `position` | integer |
 | `description_required` | boolean |
 | `attributes` | `[MaterialAttribute]` |
 

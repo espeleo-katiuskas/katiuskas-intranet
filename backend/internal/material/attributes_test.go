@@ -257,3 +257,48 @@ func TestDeleteTypeWithAttributes(t *testing.T) {
 	}
 	_ = tx
 }
+
+// The types of material have an order an admin sets, Cuerda and Saca included, and a new one goes
+// last.
+func TestReorderTypes(t *testing.T) {
+	mux, authn, _ := newTestServer(t)
+	admin := tokenFor(t, authn, 1, "admin")
+	board := tokenFor(t, authn, 2, "board")
+	list := func() []material.MaterialType {
+		return decodeInto[[]material.MaterialType](t, doRequest(mux, http.MethodGet, "/api/v1/material/types", admin, nil))
+	}
+	before := list()
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/types", admin, map[string]any{"name": "Cintas"})
+	expectStatus(t, rec, http.StatusCreated, "")
+	if added := decodeInto[material.MaterialType](t, rec); added.Position != len(before) {
+		t.Errorf("a new type goes last: position %d of %d", added.Position, len(before))
+	}
+	types := list()
+	if types[len(types)-1].Name != "Cintas" {
+		t.Fatalf("the new type is not last: %+v", types)
+	}
+
+	// Reversed, with Cuerda and Saca at the end.
+	ids := []int64{}
+	for i := len(types) - 1; i >= 0; i-- {
+		ids = append(ids, types[i].ID)
+	}
+	expectStatus(t, doRequest(mux, http.MethodPut, "/api/v1/material/types/order", board, map[string]any{"type_ids": ids}), http.StatusForbidden, "")
+	rec = doRequest(mux, http.MethodPut, "/api/v1/material/types/order", admin, map[string]any{"type_ids": ids})
+	expectStatus(t, rec, http.StatusOK, "")
+	got := decodeInto[[]material.MaterialType](t, rec)
+	for i, ty := range got {
+		if ty.ID != ids[i] || ty.Position != i {
+			t.Fatalf("order after reordering: %+v", got)
+		}
+	}
+	if got[len(got)-1].Kind == material.ItemKindGeneral {
+		t.Errorf("Cuerda and Saca were moved to the end: %+v", got)
+	}
+	// They still cannot be renamed.
+	expectStatus(t, doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/material/types/%d", got[len(got)-1].ID), admin,
+		map[string]any{"name": "Otra"}), http.StatusConflict, "fixed_type")
+	// All the types, once each.
+	expectStatus(t, doRequest(mux, http.MethodPut, "/api/v1/material/types/order", admin, map[string]any{"type_ids": ids[1:]}),
+		http.StatusBadRequest, "invalid_body")
+}
