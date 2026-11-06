@@ -1027,8 +1027,9 @@ func TestItemRentableAndSellableAreComputedFromPrice(t *testing.T) {
 		t.Errorf("expected neither rentable nor sellable with no prices set, got %+v", withoutPrices)
 	}
 
+	withPricesDescription := "Casco con precios"
 	withPrices, err := repo.CreateItem(ctx, material.CreateItemInput{
-		TypeID: typeID, Description: &description,
+		TypeID: typeID, Description: &withPricesDescription,
 		InitialQuantity: 1, Loanable: true, RentalPricePerWeek: &rentalPrice, SalePrice: &salePrice,
 	})
 	if err != nil {
@@ -1195,7 +1196,7 @@ func TestFixedTypesCannotChange(t *testing.T) {
 
 	for _, name := range []string{"Cuerda", "Saca"} {
 		id := testutil.MaterialTypeID(t, tx, name)
-		if _, err := repo.RenameType(ctx, id, name+" 2"); !errors.Is(err, material.ErrFixedType) {
+		if _, err := repo.UpdateType(ctx, id, ptr(name+" 2"), nil); !errors.Is(err, material.ErrFixedType) {
 			t.Errorf("renaming %s: expected ErrFixedType, got %v", name, err)
 		}
 		if _, err := repo.DeleteType(ctx, id); !errors.Is(err, material.ErrFixedType) {
@@ -1218,18 +1219,18 @@ func TestTypeCRUD(t *testing.T) {
 	repo := material.NewRepository(tx)
 	ctx := context.Background()
 
-	created, err := repo.CreateType(ctx, "Cintas")
+	created, err := repo.CreateType(ctx, "Cintas", true)
 	if err != nil || created.Kind != material.ItemKindGeneral {
 		t.Fatalf("create: %+v %v", created, err)
 	}
-	if _, err := repo.CreateType(ctx, "Cintas"); !errors.Is(err, material.ErrDuplicateType) {
+	if _, err := repo.CreateType(ctx, "Cintas", true); !errors.Is(err, material.ErrDuplicateType) {
 		t.Errorf("expected ErrDuplicateType, got %v", err)
 	}
-	renamed, err := repo.RenameType(ctx, created.ID, "Cintas planas")
+	renamed, err := repo.UpdateType(ctx, created.ID, ptr("Cintas planas"), nil)
 	if err != nil || renamed.Name != "Cintas planas" {
 		t.Fatalf("rename: %+v %v", renamed, err)
 	}
-	if _, err := repo.RenameType(ctx, 999999, "X"); !errors.Is(err, material.ErrTypeNotFound) {
+	if _, err := repo.UpdateType(ctx, 999999, ptr("X"), nil); !errors.Is(err, material.ErrTypeNotFound) {
 		t.Errorf("expected ErrTypeNotFound, got %v", err)
 	}
 
@@ -1387,3 +1388,5 @@ func TestModelNeedsBrandConstraint(t *testing.T) {
 		t.Fatalf("expected the model_needs_brand constraint to refuse it, got %v", err)
 	}
 }
+
+func ptr[T any](v T) *T { return &v }

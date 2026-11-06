@@ -466,43 +466,93 @@ files (up to 25 MiB).
   make a rope and a bag; any other type, general material).
   - body: `type_id*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
     `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
-    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`. `brand`, `model` and `code` are
-    required for a rope or bag and optional for general material; a `model` needs a `brand` (blank
-    text counts as no value)
+    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `attributes`. `brand`, `model`
+    and `code` are required for a rope or bag and optional for general material; a `model` needs a
+    `brand` (blank text counts as no value). The `description` of general material is required only
+    if its type says so (`description_required`). `attributes` are the values for the type's
+    attributes, `[{attribute_id, option_id | value}]` (`option_id` for an enum attribute, `value`
+    for a text one; a blank value counts as none): every required attribute of the type must have
+    one, and only a general type has attributes. No two items can be exactly the same (type, brand,
+    model, code, description and attributes; the quantity is not part of it): more units of an
+    item are an acquisition
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `unknown_type`, `invalid_date`, `single_unit_item`,
-    `invalid_item_fields`, `model_without_brand`, `invalid_item_code`; 409 `duplicate_item_code`
+    `invalid_item_fields`, `model_without_brand`, `invalid_item_code`,
+    `item_description_required`, `missing_attribute`, `invalid_attribute` (an attribute that is not
+    the type's, given twice, an option of another attribute, a value of the wrong kind);
+    409 `duplicate_item_code`, `duplicate_material`
 - **PUT** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
-  editable field with the body's (the brand, model, code, description, `loanable`, prices and the
-  rope or bag fields of its kind). General material can change its type (`type_id`, which may be
-  left out to keep it), but only to another general one: a rope or a bag stays Cuerda or Saca and
-  nothing becomes one of them (`kind_change`). The quantities, which only movements change, are not
-  editable (a `total_quantity` in the body is ignored).
+  editable field with the body's (the brand, model, code, description, attributes, `loanable`,
+  prices and the rope or bag fields of its kind). General material can change its type (`type_id`,
+  which may be left out to keep it), but only to another general one: a rope or a bag stays Cuerda
+  or Saca and nothing becomes one of them (`kind_change`). The quantities, which only movements
+  change, are not editable (a `total_quantity` in the body is ignored).
   - body: the same as creating, without `acquired_at` and `total_quantity`, and with `type_id`
     optional
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_type`, `kind_change`, `invalid_item_fields`,
-    `model_without_brand`, `invalid_item_code`; 404 `not_found`; 409 `duplicate_item_code`
+    `model_without_brand`, `invalid_item_code`, `item_description_required`, `missing_attribute`,
+    `invalid_attribute`; 404 `not_found`; 409 `duplicate_item_code`, `duplicate_material`
 - **DELETE** `/material/items/{id}` — *Admin*. Deletes an item that has no
   history: the acquisition it was created with goes with it, but any other movement (a loan, a
   rental, a sale, more stock, a loss...) makes it refuse.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `item_has_movements`
 - **GET** `/material/types` — *Any baseline role*. Types of material: Cuerda and Saca first,
-  then the rest by name.
+  then the rest by name, each with its attributes and their options.
   - returns: 200 `[MaterialType]`
-- **POST** `/material/types` — *Admin*. Adds a type (always general; the name is trimmed).
-  - body: `name*`
+- **POST** `/material/types` — *Admin*. Adds a type (always general; the name is trimmed), with no
+  attributes yet.
+  - body: `name*`, `description_required` (default `true`)
   - returns: 201 `MaterialType`
   - errors: 400 `invalid_body` (blank name); 409 `duplicate_type`
-- **PATCH** `/material/types/{id}` — *Admin*. Renames a type; its items follow.
-  - body: `name*`
+- **PATCH** `/material/types/{id}` — *Admin*. Renames a type and/or says whether the description of
+  its items is required (a field left out stays as it is; at least one is needed). Its items
+  follow. Making the description required leaves the items without one as they are: they show as
+  `incomplete` until edited.
+  - body: `name`, `description_required`
   - returns: 200 `MaterialType`
   - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `duplicate_type`, `fixed_type`
     (Cuerda and Saca)
-- **DELETE** `/material/types/{id}` — *Admin*. Deletes a type no item has.
+- **DELETE** `/material/types/{id}` — *Admin*. Deletes a type no item has, with its attributes and
+  their options.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `type_in_use`, `fixed_type`
+- **POST** `/material/types/{id}/attributes` — *Admin*. Adds an attribute at the end of a general
+  type's list: free text (`text`) or one of a list of options (`enum`), required or optional. The
+  data type cannot change afterwards.
+  - body: `name*`, `data_type*` (`text` or `enum`), `required` (default `false`), `options` (a list
+    of labels, only for `enum`)
+  - returns: 201 `MaterialAttribute`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `duplicate_attribute`,
+    `duplicate_option`, `fixed_type`
+- **PUT** `/material/types/{id}/attributes/order` — *Admin*. Sets the order of the type's
+  attributes, which is the order of their values in an item's name.
+  - body: `attribute_ids*`: every attribute of the type, once each
+  - returns: 200 `MaterialType`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`
+- **PATCH** `/material/attributes/{id}` — *Admin*. Renames an attribute and/or makes it required or
+  optional (a field left out stays as it is; at least one is needed). Making it required leaves
+  the items without a value as they are (`incomplete`).
+  - body: `name`, `required`
+  - returns: 200 `MaterialAttribute`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `duplicate_attribute`
+- **DELETE** `/material/attributes/{id}` — *Admin*. Deletes an attribute and the value every item of
+  the type has for it; refused if that would leave two items exactly the same.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `would_duplicate_items`
+- **POST** `/material/attributes/{id}/options` — *Admin*. Adds an option to an enum attribute.
+  - body: `label*`
+  - returns: 201 `MaterialAttributeOption`
+  - errors: 400 `invalid_id`, `invalid_body` (blank label, or not an enum attribute);
+    404 `not_found`; 409 `duplicate_option`
+- **PATCH** `/material/options/{id}` — *Admin*. Renames an option; the items that have it follow.
+  - body: `label*`
+  - returns: 200 `MaterialAttributeOption`
+  - errors: 400 `invalid_id`, `invalid_body`; 404 `not_found`; 409 `duplicate_option`
+- **DELETE** `/material/options/{id}` — *Admin*. Deletes an option no item has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `option_in_use`
 - **GET** `/material/items/{id}/movements` — *Any baseline role*. Movement history of an item.
   - returns: 200 `[Movement]`
   - errors: 400 `invalid_id`
@@ -1274,6 +1324,44 @@ Nested fields:
 | `id` | integer |
 | `name` | text |
 | `kind` | rope/bag/general |
+| `description_required` | boolean |
+| `attributes` | `[MaterialAttribute]` |
+
+`description_required` says whether the items of the type must have a description; it only
+matters for general types (the description of a rope or a bag is always optional). `attributes`
+come in the order of the values in an item's name, and are always empty for Cuerda and Saca.
+
+### `MaterialAttribute`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `data_type` | text/enum |
+| `required` | boolean |
+| `position` | integer |
+| `options` | `[MaterialAttributeOption]` |
+
+`options` are the accepted values of an `enum` attribute, by label, and `null` for a `text` one.
+
+### `MaterialAttributeOption`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `label` | text |
+
+### `ItemAttributeValue`
+
+| Field | Type |
+|---|---|
+| `attribute_id` | integer |
+| `name` | text |
+| `option_id` | integer |
+| `value` | text |
+
+In a request, `attribute_id` plus `option_id` (enum) or `value` (text). In a response, `name` too,
+and `value` is always the text to show (the option's label, for an enum).
 
 ### `Item`
 
@@ -1287,6 +1375,9 @@ Nested fields:
 | `model` | text |
 | `code` | text |
 | `description` | text |
+| `attributes` | `[ItemAttributeValue]` |
+| `display_name` | text |
+| `incomplete` | boolean |
 | `total_quantity` | integer |
 | `available_quantity` | integer |
 | `outstanding_loan_quantity` | integer |
@@ -1312,6 +1403,7 @@ Nested fields:
 | `model` | text |
 | `code` | text |
 | `description` | text |
+| `attributes` | `[ItemAttributeValue]` |
 | `acquired_at` | date |
 | `total_quantity` | integer |
 | `loanable` | boolean |

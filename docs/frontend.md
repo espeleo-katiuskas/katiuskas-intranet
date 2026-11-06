@@ -45,12 +45,18 @@ dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditIt
 title and the button change, the type is fixed for a rope or a bag (the field is disabled) and, for
 general material, can be changed to another general type (Cuerda and Saca are not offered), the
 quantity and the date of acquisition are left out (the stock is what its movements say) and the form
-is filled with the item; it sends `PUT /material/items/{id}`, which replaces every field. The
-"Tipo" select lists every type from `GET /material/types` (Cuerda and Saca first); the fields shown
-depend on the *kind* of the chosen type (rope fields for Cuerda, bag fields for Saca, description
-and quantity for any other), each option carrying it in `data-kind`. Brand, model and code are in
-the form for every type, required only for ropes and bags; the model field stays disabled (and
-empty) while there is no brand.
+is filled with the item; it sends `PUT /material/items/{id}`, which replaces every field (the
+attributes included). The "Tipo" select lists every type from `GET /material/types` (Cuerda and
+Saca first); the fields shown depend on the *kind* of the chosen type (rope fields for Cuerda, bag
+fields for Saca, description and quantity for any other), each option carrying it in `data-kind`.
+Brand, model and code are in the form for every type, required only for ropes and bags; the model
+field stays disabled (and empty) while there is no brand. The attributes of the chosen type
+(`attributes` in `GET /material/types`) are drawn by `syncTypeFields` before the description, one
+field each: a text box, or a list of the attribute's options (`attribute_<id>` is the name of the
+field), with "(opcional)" on the optional ones and `required` on the others; they are drawn again
+whenever the type changes, so the values typed for another type's attributes are dropped. The same
+function says whether the description is required (`description_required` of the type; "(opcional)"
+is shown next to its label otherwise). Only the attributes with a value go in the request.
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
@@ -106,9 +112,13 @@ the picker is made from, not the part of it that is offered). Pickers of other t
 material items) still carry their "#id".
 
 **How a piece of material reads.** Every listing of material (`/material`, `/material-prestado`, the
-loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`),
-which ends with "#<code>" or, for an item with no code, "#<id>" (`itemRef`); the picker of the loans
-of `/actividad` ends the same way. A code is never only digits, so the two cannot be mistaken.
+loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`).
+General material is named by the API (`display_name`: the type, brand and model, the values of its
+attributes and the description, joined with " · "; in the table of `/material`, which has a "Tipo"
+column, the type is left out), and an item that lacks something its type now requires is marked
+"Incompleto" there. The label ends with "#<code>" or, for an item with no code, "#<id>" (`itemRef`);
+the picker of the loans of `/actividad` ends the same way. A code is never only digits, so the two
+cannot be mistaken.
 
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):
@@ -735,9 +745,20 @@ a "Datos de interés" one: the labelled values the home page shows (`GET`/`POST 
 ↓ to put them in order (each sends the whole new order) and a "+ Nuevo dato" dialog shared by
 creating and editing (a label, a value and, optionally, a text for a copy button and the button's
 own text) and a "Tipos de material" one (`GET`/`POST /material/types`, `PATCH`/`DELETE
-/material/types/{id}`: a table with "Renombrar" and "Borrar" and a dialog shared by creating and
-renaming; "Cuerda" and "Saca" are listed as "Fijo" with no buttons, and a type with material is
-refused with its own message). The home page (`dashboard.js`, `loadClubInfo`) draws them from `GET
+/material/types/{id}`: a table with the type, whether its description is required, its attributes
+and the buttons "Editar", "Atributos" and "Borrar"; a dialog shared by creating and editing has the
+name and "La descripción es obligatoria"; "Cuerda" and "Saca" are listed as "Fijo" with no buttons,
+and a type with material is refused with its own message). "Atributos" opens a dialog
+(`#material-attributes-dialog`) with the type's attributes, each with its kind (texto libre or
+lista de opciones), an "Obligatorio" checkbox, ↑ ↓ to order them (the order of their values in an
+item's name; each sends the whole new order to `PUT /material/types/{id}/attributes/order`),
+"Renombrar" and "Borrar" (`PATCH`/`DELETE /material/attributes/{id}`); an enum attribute shows its
+options as badges with ✎ (rename) and × (remove) and a box to add one
+(`POST /material/attributes/{id}/options`, `PATCH`/`DELETE /material/options/{id}`); a form at the
+bottom adds an attribute (name, texto libre or lista de opciones with one option per line,
+obligatorio). Every change reloads the types, and an error (an option in use, a change that would
+leave two items identical) is shown with its own message. The home page (`dashboard.js`,
+`loadClubInfo`) draws them from `GET
 /club-info`, with the copy buttons handled by one listener on the list since they are drawn after
 load: the data is not written in `index.html`, so an administrator changes it without a deploy and a
 private one (the Bizum number) is not in the repository. Admin/board get `FULL_COLUMNS` and

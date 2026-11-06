@@ -109,6 +109,16 @@ const texts = {
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
   model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
+  duplicate_material:
+    'Ya hay otro material exactamente igual (mismo tipo, marca, modelo, código, descripción y atributos). Si tienes más unidades, súmalas a ese material.',
+  item_description_required: 'La descripción es obligatoria para este tipo de material.',
+  missing_attribute: 'Falta un atributo obligatorio del tipo de material.',
+  invalid_attribute: 'Alguno de los atributos no corresponde al tipo de material elegido.',
+  duplicate_attribute: 'Ese tipo ya tiene un atributo con ese nombre.',
+  duplicate_option: 'Ese atributo ya tiene una opción con ese nombre.',
+  option_in_use: 'Hay material con esa opción: no se puede quitar.',
+  would_duplicate_items:
+    'Con este cambio habría dos materiales exactamente iguales del mismo tipo: distínguelos antes.',
   duplicate_type: 'Ya hay otro tipo de material con ese nombre.',
   type_in_use: 'El tipo tiene material y no se puede borrar.',
   fixed_type: 'Los tipos «Cuerda» y «Saca» son fijos: no se pueden renombrar ni borrar.',

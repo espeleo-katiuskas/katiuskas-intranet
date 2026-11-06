@@ -205,14 +205,14 @@
   <div class="section-header">
     <div>
       <h2 id="section-material-types">Tipos de material</h2>
-      <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar.</p>
+      <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar. Cada tipo puede tener atributos (color, forma, tipo de cierre…) y decide si la descripción de su material es obligatoria.</p>
     </div>
     <button id="toggle-new-material-type" type="button" class="btn btn-secondary btn-small">+ Nuevo tipo</button>
   </div>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Tipo</th><th></th></tr>
+        <tr><th>Tipo</th><th>Descripción</th><th>Atributos</th><th></th></tr>
       </thead>
       <tbody id="material-types-table-body"></tbody>
     </table>
@@ -225,9 +225,45 @@
         <label for="mt-name">Nombre</label>
         <input id="mt-name" name="name" type="text" maxlength="100" required>
       </div>
+      <div class="field">
+        <label class="checkbox-label" for="mt-description-required"><input id="mt-description-required" name="description_required" type="checkbox" checked> La descripción es obligatoria</label>
+      </div>
       <div class="panel-actions">
         <button type="submit" class="btn btn-primary">Guardar</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="material-attributes-dialog" class="panel modal">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3 id="material-attributes-title">Atributos</h3>
+    <p class="subtitle">Cada atributo es un texto libre o una lista de opciones, y puede ser obligatorio. El orden es el de los valores en el nombre del material, que se escribe solo con los valores («Mosquetones · aluminio · asimétrico»).</p>
+    <div id="material-attributes-list"></div>
+    <h4>Nuevo atributo</h4>
+    <form id="material-attribute-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="ma-name">Nombre</label>
+          <input id="ma-name" name="name" type="text" maxlength="100" required>
+        </div>
+        <div class="field">
+          <label for="ma-data-type">Valores</label>
+          <select id="ma-data-type" name="data_type">
+            <option value="text">Texto libre</option>
+            <option value="enum">Lista de opciones</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="checkbox-label" for="ma-required"><input id="ma-required" name="required" type="checkbox"> Obligatorio</label>
+        </div>
+        <div class="field span-2" id="ma-options-field" hidden>
+          <label for="ma-options">Opciones <span class="optional">(una por línea)</span></label>
+          <textarea id="ma-options" name="options" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Añadir atributo</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cerrar</button>
       </div>
     </form>
   </dialog>

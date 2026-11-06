@@ -83,22 +83,33 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 	return login
 }
 
-// itemLabel picks whatever actually identifies item for a mutation
-// notification — rope/bag are always brand+model (both required for
-// those types), general falls back to its description when brand/model
-// are absent (both optional there), and code is the last resort so a
-// notification is never just empty.
+// itemLabel names an item for a mutation notification: its display name (type, make and model,
+// attributes, description).
 func itemLabel(item Item) string {
-	if item.Brand != nil && item.Model != nil {
-		return *item.Brand + " " + *item.Model
-	}
-	if item.Description != nil && *item.Description != "" {
-		return *item.Description
-	}
-	if item.Code != nil {
-		return *item.Code
+	if item.DisplayName != "" {
+		return item.DisplayName
 	}
 	return fmt.Sprintf("item#%d", item.ID)
+}
+
+// attributesLine says what changed in an item's attributes, for the notification of an edit, or ""
+// if nothing did.
+func attributesLine(before, after Item) string {
+	render := func(it Item) string {
+		parts := []string{}
+		for _, v := range it.Attributes {
+			parts = append(parts, v.Name+" = "+v.Value)
+		}
+		if len(parts) == 0 {
+			return "(vacío)"
+		}
+		return strings.Join(parts, ", ")
+	}
+	b, a := render(before), render(after)
+	if b == a {
+		return ""
+	}
+	return fmt.Sprintf("Attributes: %s → %s", b, a)
 }
 
 // movementVerb names what a movement type does, in Spanish, for the
@@ -138,8 +149,17 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// admin only (/admin), and never Cuerda or Saca.
 	mux.Handle("GET /api/v1/material/types", h.authenticator.Protect(h.listMaterialTypes))
 	mux.Handle("POST /api/v1/material/types", h.authenticator.Protect(h.createType, "admin"))
-	mux.Handle("PATCH /api/v1/material/types/{id}", h.authenticator.Protect(h.renameType, "admin"))
+	mux.Handle("PATCH /api/v1/material/types/{id}", h.authenticator.Protect(h.updateType, "admin"))
 	mux.Handle("DELETE /api/v1/material/types/{id}", h.authenticator.Protect(h.deleteType, "admin"))
+
+	// The attributes of a type and the options of an enum attribute: admin only, like the types.
+	mux.Handle("POST /api/v1/material/types/{id}/attributes", h.authenticator.Protect(h.createAttribute, "admin"))
+	mux.Handle("PUT /api/v1/material/types/{id}/attributes/order", h.authenticator.Protect(h.reorderAttributes, "admin"))
+	mux.Handle("PATCH /api/v1/material/attributes/{id}", h.authenticator.Protect(h.updateAttribute, "admin"))
+	mux.Handle("DELETE /api/v1/material/attributes/{id}", h.authenticator.Protect(h.deleteAttribute, "admin"))
+	mux.Handle("POST /api/v1/material/attributes/{id}/options", h.authenticator.Protect(h.createOption, "admin"))
+	mux.Handle("PATCH /api/v1/material/options/{id}", h.authenticator.Protect(h.renameOption, "admin"))
+	mux.Handle("DELETE /api/v1/material/options/{id}", h.authenticator.Protect(h.deleteOption, "admin"))
 
 	mux.Handle("GET /api/v1/material/movements", h.authenticator.Protect(h.listMovements, "admin", "board", "material"))
 	mux.Handle("POST /api/v1/material/movements", h.authenticator.Protect(h.createMovement, "admin", "board", "material"))
@@ -173,22 +193,23 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		TypeID             int64     `json:"type_id"`
-		Brand              *string   `json:"brand"`
-		Model              *string   `json:"model"`
-		Code               *string   `json:"code"`
-		Description        *string   `json:"description"`
-		AcquiredAt         *string   `json:"acquired_at"`
-		TotalQuantity      int32     `json:"total_quantity"`
-		Loanable           *bool     `json:"loanable"`
-		RentalPricePerWeek *float64  `json:"rental_price_per_week"`
-		SalePrice          *float64  `json:"sale_price"`
-		RopeType           *RopeType `json:"rope_type"`
-		DiameterMM         *float64  `json:"diameter_mm"`
-		ManufactureYear    *int32    `json:"manufacture_year"`
-		LengthM            *int32    `json:"length_m"`
-		BagType            *BagType  `json:"bag_type"`
-		CapacityLiters     *float64  `json:"capacity_liters"`
+		TypeID             int64            `json:"type_id"`
+		Brand              *string          `json:"brand"`
+		Model              *string          `json:"model"`
+		Code               *string          `json:"code"`
+		Description        *string          `json:"description"`
+		Attributes         []AttributeValue `json:"attributes"`
+		AcquiredAt         *string          `json:"acquired_at"`
+		TotalQuantity      int32            `json:"total_quantity"`
+		Loanable           *bool            `json:"loanable"`
+		RentalPricePerWeek *float64         `json:"rental_price_per_week"`
+		SalePrice          *float64         `json:"sale_price"`
+		RopeType           *RopeType        `json:"rope_type"`
+		DiameterMM         *float64         `json:"diameter_mm"`
+		ManufactureYear    *int32           `json:"manufacture_year"`
+		LengthM            *int32           `json:"length_m"`
+		BagType            *BagType         `json:"bag_type"`
+		CapacityLiters     *float64         `json:"capacity_liters"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -209,41 +230,17 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 	}
 	item, err := h.service.CreateItem(r.Context(), CreateItemInput{
 		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code,
-		Description: body.Description, AcquiredAt: acquiredAt, InitialQuantity: body.TotalQuantity,
+		Description: body.Description, Attributes: body.Attributes, AcquiredAt: acquiredAt, InitialQuantity: body.TotalQuantity,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
 		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
-	if errors.Is(err, ErrTypeNotFound) {
-		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
-		return
-	}
-	if errors.Is(err, ErrSingleUnitItem) {
-		httpapi.WriteError(w, http.StatusBadRequest, "single_unit_item", err.Error())
-		return
-	}
-	if errors.Is(err, ErrInvalidItemFields) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
-		return
-	}
-	if errors.Is(err, ErrModelWithoutBrand) {
-		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
-		return
-	}
-	if errors.Is(err, ErrInvalidItemCode) {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_code", err.Error())
-		return
-	}
-	if errors.Is(err, ErrDuplicateItemCode) {
-		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
-		return
-	}
 	if err != nil {
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not create item")
+		writeItemError(w, err, "create")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el material «%s» (%s, x%d).",
-		h.actorLogin(r.Context()), itemLabel(item), item.TypeName, item.TotalQuantity))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🆕 %s ha añadido el material «%s» (x%d).",
+		h.actorLogin(r.Context()), itemLabel(item), item.TotalQuantity))
 	httpapi.WriteJSON(w, http.StatusCreated, item)
 }
 
@@ -264,20 +261,21 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Brand              *string   `json:"brand"`
-		Model              *string   `json:"model"`
-		Code               *string   `json:"code"`
-		Description        *string   `json:"description"`
-		Loanable           *bool     `json:"loanable"`
-		RentalPricePerWeek *float64  `json:"rental_price_per_week"`
-		SalePrice          *float64  `json:"sale_price"`
-		RopeType           *RopeType `json:"rope_type"`
-		DiameterMM         *float64  `json:"diameter_mm"`
-		ManufactureYear    *int32    `json:"manufacture_year"`
-		LengthM            *int32    `json:"length_m"`
-		BagType            *BagType  `json:"bag_type"`
-		CapacityLiters     *float64  `json:"capacity_liters"`
-		TypeID             *int64    `json:"type_id"`
+		Brand              *string          `json:"brand"`
+		Model              *string          `json:"model"`
+		Code               *string          `json:"code"`
+		Description        *string          `json:"description"`
+		Attributes         []AttributeValue `json:"attributes"`
+		Loanable           *bool            `json:"loanable"`
+		RentalPricePerWeek *float64         `json:"rental_price_per_week"`
+		SalePrice          *float64         `json:"sale_price"`
+		RopeType           *RopeType        `json:"rope_type"`
+		DiameterMM         *float64         `json:"diameter_mm"`
+		ManufactureYear    *int32           `json:"manufacture_year"`
+		LengthM            *int32           `json:"length_m"`
+		BagType            *BagType         `json:"bag_type"`
+		CapacityLiters     *float64         `json:"capacity_liters"`
+		TypeID             *int64           `json:"type_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -290,38 +288,20 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 	before, beforeErr := h.service.GetItem(r.Context(), id)
 	item, err := h.service.UpdateItem(r.Context(), id, UpdateItemInput{
 		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
-		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
+		Attributes: body.Attributes, Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
 		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
 		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
-	switch {
-	case errors.Is(err, ErrNotFound):
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
-		return
-	case errors.Is(err, ErrTypeNotFound):
-		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
-		return
-	case errors.Is(err, ErrKindChange):
-		httpapi.WriteError(w, http.StatusBadRequest, "kind_change", err.Error())
-		return
-	case errors.Is(err, ErrInvalidItemFields):
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
-		return
-	case errors.Is(err, ErrModelWithoutBrand):
-		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
-		return
-	case errors.Is(err, ErrInvalidItemCode):
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_code", err.Error())
-		return
-	case errors.Is(err, ErrDuplicateItemCode):
-		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
-		return
-	case err != nil:
-		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not update item")
+	if err != nil {
+		writeItemError(w, err, "update")
 		return
 	}
 	if beforeErr == nil {
-		if diff := httpapi.DiffFields(before, item, itemAuditFields...); len(diff) > 0 {
+		diff := httpapi.DiffFields(before, item, itemAuditFields...)
+		if line := attributesLine(before, item); line != "" {
+			diff = append(diff, line)
+		}
+		if len(diff) > 0 {
 			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el material «%s»:\n%s",
 				h.actorLogin(r.Context()), itemLabel(before), strings.Join(diff, "\n")))
 		}
@@ -360,10 +340,43 @@ func (h *Handler) deleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if itemErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el material «%s» (%s).",
-			h.actorLogin(r.Context()), itemLabel(item), item.TypeName))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el material «%s».",
+			h.actorLogin(r.Context()), itemLabel(item)))
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeItemError answers with the status and code of an error of the routes that create or edit an
+// item.
+func writeItemError(w http.ResponseWriter, err error, what string) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
+	case errors.Is(err, ErrTypeNotFound):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_type", err.Error())
+	case errors.Is(err, ErrSingleUnitItem):
+		httpapi.WriteError(w, http.StatusBadRequest, "single_unit_item", err.Error())
+	case errors.Is(err, ErrKindChange):
+		httpapi.WriteError(w, http.StatusBadRequest, "kind_change", err.Error())
+	case errors.Is(err, ErrInvalidItemFields):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_fields", err.Error())
+	case errors.Is(err, ErrModelWithoutBrand):
+		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
+	case errors.Is(err, ErrInvalidItemCode):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_code", err.Error())
+	case errors.Is(err, ErrDescriptionRequired):
+		httpapi.WriteError(w, http.StatusBadRequest, "item_description_required", err.Error())
+	case errors.Is(err, ErrMissingAttribute):
+		httpapi.WriteError(w, http.StatusBadRequest, "missing_attribute", err.Error())
+	case errors.Is(err, ErrInvalidAttribute):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_attribute", err.Error())
+	case errors.Is(err, ErrDuplicateItemCode):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_item_code", err.Error())
+	case errors.Is(err, ErrDuplicateItem):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_material", err.Error())
+	default:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not "+what+" item")
+	}
 }
 
 // writeTypeError answers with the status and code of an error of the type routes.
@@ -379,6 +392,18 @@ func writeTypeError(w http.ResponseWriter, err error, what string) {
 		httpapi.WriteError(w, http.StatusConflict, "duplicate_type", err.Error())
 	case errors.Is(err, ErrTypeInUse):
 		httpapi.WriteError(w, http.StatusConflict, "type_in_use", err.Error())
+	case errors.Is(err, ErrAttributeNotFound), errors.Is(err, ErrOptionNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", err.Error())
+	case errors.Is(err, ErrBlankName), errors.Is(err, ErrInvalidDataType), errors.Is(err, ErrNotEnum), errors.Is(err, ErrInvalidOrder):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", err.Error())
+	case errors.Is(err, ErrDuplicateAttribute):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_attribute", err.Error())
+	case errors.Is(err, ErrDuplicateOption):
+		httpapi.WriteError(w, http.StatusConflict, "duplicate_option", err.Error())
+	case errors.Is(err, ErrOptionInUse):
+		httpapi.WriteError(w, http.StatusConflict, "option_in_use", err.Error())
+	case errors.Is(err, ErrWouldDuplicateItems):
+		httpapi.WriteError(w, http.StatusConflict, "would_duplicate_items", err.Error())
 	default:
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not "+what+" the type")
 	}
@@ -386,13 +411,18 @@ func writeTypeError(w http.ResponseWriter, err error, what string) {
 
 func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
+		Name                string `json:"name"`
+		DescriptionRequired *bool  `json:"description_required"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "invalid JSON body")
 		return
 	}
-	t, err := h.service.CreateType(r.Context(), body.Name)
+	descriptionRequired := true
+	if body.DescriptionRequired != nil {
+		descriptionRequired = *body.DescriptionRequired
+	}
+	t, err := h.service.CreateType(r.Context(), body.Name, descriptionRequired)
 	if err != nil {
 		writeTypeError(w, err, "create")
 		return
@@ -402,28 +432,41 @@ func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusCreated, t)
 }
 
-func (h *Handler) renameType(w http.ResponseWriter, r *http.Request) {
+// updateType renames a type and/or changes whether its items must have a description.
+func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name                *string `json:"name"`
+		DescriptionRequired *bool   `json:"description_required"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "invalid JSON body")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || (body.Name == nil && body.DescriptionRequired == nil) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "give a name and/or description_required")
 		return
 	}
-	before, beforeErr := h.typeName(r.Context(), id)
-	t, err := h.service.RenameType(r.Context(), id, body.Name)
+	before, beforeErr := h.service.GetMaterialType(r.Context(), id)
+	t, err := h.service.UpdateType(r.Context(), id, body.Name, body.DescriptionRequired)
 	if err != nil {
-		writeTypeError(w, err, "rename")
+		writeTypeError(w, err, "update")
 		return
 	}
-	if beforeErr == nil && before != t.Name {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha cambiado el nombre del tipo de material «%s» por «%s».",
-			h.actorLogin(r.Context()), before, t.Name))
+	if beforeErr == nil {
+		actor := h.actorLogin(r.Context())
+		if before.Name != t.Name {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha cambiado el nombre del tipo de material «%s» por «%s».",
+				actor, before.Name, t.Name))
+		}
+		if before.DescriptionRequired != t.DescriptionRequired {
+			state := "ya no es obligatoria"
+			if t.DescriptionRequired {
+				state = "pasa a ser obligatoria"
+			}
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha cambiado el tipo de material «%s»: la descripción %s.",
+				actor, t.Name, state))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, t)
 }
@@ -442,20 +485,6 @@ func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗂️ %s ha borrado el tipo de material «%s».",
 		h.actorLogin(r.Context()), t.Name))
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// typeName is a type's current name, for the notification of a rename.
-func (h *Handler) typeName(ctx context.Context, id int64) (string, error) {
-	list, err := h.service.ListMaterialTypes(ctx)
-	if err != nil {
-		return "", err
-	}
-	for _, t := range list {
-		if t.ID == id {
-			return t.Name, nil
-		}
-	}
-	return "", ErrTypeNotFound
 }
 
 func (h *Handler) listItemMovements(w http.ResponseWriter, r *http.Request) {

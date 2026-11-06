@@ -15,8 +15,8 @@ Contents:
   `license_types`, `board_members`
 - [Activities](#activities): `activities`, `activity_participants`, `activity_guests`,
   `activity_resources`, `holidays`
-- [Material](#material): `material_items`, `material_types`, `material_movements`,
-  `material_item_quantities`
+- [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
+  `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
   `distribution_units`, `distribution_unit_identifiers`, `distribution_payments`
 - [Accounting](#accounting): `accounts`, `transactions`, `transaction_entries`
@@ -65,6 +65,7 @@ activities ──< activity_resources, activity_participants, activity_guests, m
 activity_participants ──< activity_guests   (the person who invites them)
 material_items ──< material_movements        (material_item_quantities is a view of the two)
 license_types ──< licenses                material_types ──< material_items
+material_types ──< material_type_attributes ──< material_attribute_options
 
 distributions ──┬─< distribution_options
                 ├─< distribution_articles ──< distribution_unit_identifiers
@@ -114,7 +115,9 @@ what it deletes, the code does it itself, explicitly, in the same transaction:
 - `distribution_status` (`distributions.status`): draft, open, closed, done
 - `distribution_visibility` (`distributions.visibility`): all, material, board, admin
 - `gender` (`users.gender`): male, female
-- `material_kind` (`material_items.kind`, `material_types.kind`): rope, bag, general
+- `material_kind` (`material_items.kind`, `material_types.kind`, `material_type_attributes.kind`):
+  rope, bag, general
+- `material_attribute_type` (`material_type_attributes.data_type`): text, enum
 - `material_item_status` (`material_items.status`): available, on_loan, rented, sold, lost,
   abandoned, maintenance, retired
 - `material_movement_status` (`material_movements.status`): active, completed, overdue, cancelled
@@ -663,7 +666,8 @@ Constraints:
 Catalog of the club's material. Each item has a type (`type_id`, see `material_types`) and the type
 decides its `kind`, which decides which fields it carries: `rope` (the type Cuerda) and `bag` (the
 type Saca) are individual objects, each with its own code and make and model; `general` (every other
-type) is general material, with a description. Stock is never stored: it comes from the movements
+type) is general material, with a description (required or not, as its type says) and the
+attributes its type defines. Stock is never stored: it comes from the movements
 (`material_item_quantities`).
 
 | Column | Type | Null | Default |
@@ -675,6 +679,7 @@ type) is general material, with a description. Stock is never stored: it comes f
 | `model` | text | yes |  |
 | `code` | text | yes |  |
 | `description` | text | yes |  |
+| `attributes` | jsonb | no | '{}' |
 | `status` | material_item_status | no | 'available' |
 | `loanable` | boolean | no | true |
 | `rental_price_per_week` | numeric(10,2) | yes |  |
@@ -688,6 +693,10 @@ type) is general material, with a description. Stock is never stored: it comes f
 
 Notes on the columns:
 
+- `attributes`: The values of the attributes of the item's type, an object keyed by the attribute's
+  id (as text): a string for a `text` attribute, the option's id (a number) for an `enum` one. Only
+  attributes that have a value are there, never `null` or `""`; the API keeps it so. What an
+  attribute or option is called is read from the catalog, so renaming one changes every item.
 - `loanable`: Whether it can be lent to an activity.
 - `rental_price_per_week`: Rental rate per week.
 
@@ -700,7 +709,13 @@ Constraints:
 - `bag_requires_capacity`: `(kind <> 'bag') OR (capacity_liters IS NOT NULL)`
 - `bag_type_only_for_bag`: `(kind = 'bag') OR (bag_type IS NULL)`
 - `capacity_only_for_bag`: `(kind = 'bag') OR (capacity_liters IS NULL)`
-- `general_requires_description`: `(kind <> 'general') OR (description IS NOT NULL)`
+- `attributes_only_for_general`: `(kind = 'general') OR (attributes = '{}')`
+- `material_items_identity_key`: a unique index over `(type_id, brand, model, code,
+  md5(description), md5(attributes::text))` with `NULLS NOT DISTINCT`: no two items are exactly the
+  same (the stock is not part of it, identical units are one item with a quantity). The long texts
+  go in as their hash so that no row is too big for the index. Whether a general item needs a
+  description is not a constraint: it depends on its type (`material_types.description_required`)
+  and the service checks it
 - `rope_and_bag_require_brand_model`: `(kind = 'general') OR ((brand IS NOT NULL) AND (model IS
   NOT NULL))`
 - `rope_and_bag_require_code`: `(kind = 'general') OR (code IS NOT NULL)`
@@ -727,11 +742,66 @@ without deploying.
 | `id` | bigint | no | identity |
 | `name` | text | no |  |
 | `kind` | material_kind | no | 'general' |
+| `description_required` | boolean | no | true |
 
 Constraints:
 
 - primary key (id)
 - unique (name)
+
+`description_required` says whether the items of a general type must have a description; the
+description of a rope or a bag is always optional, whatever it says there.
+
+### `material_type_attributes`
+
+The attributes of a general type of material (colour, closure, shape...): each is free text or one
+of a list of options, and required or optional. Cuerda and Saca have none (they have their own
+columns).
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `type_id` | bigint | no |  |
+| `kind` | material_kind | no | 'general' |
+| `name` | text | no |  |
+| `data_type` | material_attribute_type | no |  |
+| `required` | boolean | no | false |
+| `position` | integer | no |  |
+
+Notes on the columns:
+
+- `position`: The order of the attribute's value in an item's name (the API puts new ones last and
+  renumbers when they are reordered).
+- `data_type`: Fixed once created, since the items store their values by it.
+
+Constraints:
+
+- primary key (id)
+- unique (type_id, name)
+- `(type_id, kind)` → `material_types(id, kind)`, with `kind = 'general'`: only a general type has
+  attributes
+- `name` is not blank
+
+Nothing cascades: deleting a type or an attribute deletes what hangs from it first, in Go.
+
+### `material_attribute_options`
+
+The values an `enum` attribute accepts.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `attribute_id` | bigint | no |  |
+| `label` | text | no |  |
+
+Constraints:
+
+- primary key (id)
+- unique (attribute_id, label)
+- `attribute_id` → `material_type_attributes(id)`
+- `label` is not blank
+
+An option that some item has cannot be deleted (checked in Go against `material_items.attributes`).
 
 ### `material_movements`
 
@@ -1397,3 +1467,7 @@ at the end; that database has to be recreated when a new migration appears.
   lower(btrim(title)))` of `activities`; and `material_items.code` is never empty nor only digits
   (`material_items_code_not_empty`, `material_items_code_not_only_digits`): the migration turns
   blank codes into none and stops, naming the items, if one is made of digits
+- `00053_material_type_attributes.sql`: `material_types.description_required`, the tables
+  `material_type_attributes` and `material_attribute_options`, `material_items.attributes`, the
+  unique index `material_items_identity_key` and the removal of `general_requires_description`. The
+  index makes the migration fail, as it should, if two items are already exactly the same

@@ -2,7 +2,10 @@
 // and every movement recorded against it.
 package material
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type ItemStatus string
 
@@ -52,13 +55,55 @@ const (
 	BagTypeSpecial   BagType = "special"
 )
 
+// AttributeDataType says what values an attribute accepts: any text, or one option of a list.
+type AttributeDataType string
+
+const (
+	AttributeText AttributeDataType = "text"
+	AttributeEnum AttributeDataType = "enum"
+)
+
+// AttributeOption is one of the values an enum attribute accepts.
+type AttributeOption struct {
+	ID    int64  `json:"id"`
+	Label string `json:"label"`
+}
+
+// Attribute is a field the items of a general type carry (colour, closure, shape...). Its position
+// is the order in which the values of an item are written in its name. The data type cannot change
+// once created: the values of the items are stored by it.
+type Attribute struct {
+	ID       int64             `json:"id"`
+	Name     string            `json:"name"`
+	DataType AttributeDataType `json:"data_type"`
+	Required bool              `json:"required"`
+	Position int               `json:"position"`
+	// Options are the accepted values of an enum attribute, by label; nil for a text one.
+	Options []AttributeOption `json:"options"`
+	// TypeID is the type the attribute belongs to (not in the JSON: it is listed under its type).
+	TypeID int64 `json:"-"`
+}
+
+// AttributeValue is the value an item has for an attribute: in a request, AttributeID plus OptionID
+// (enum) or Value (text); in a response, also the attribute's Name, and Value is always the text to
+// show (the option's label for an enum).
+type AttributeValue struct {
+	AttributeID int64  `json:"attribute_id"`
+	Name        string `json:"name,omitempty"`
+	OptionID    *int64 `json:"option_id,omitempty"`
+	Value       string `json:"value,omitempty"`
+}
+
 // MaterialType is one entry in the catalog of types of material (table material_types): the two
 // fixed ones, Cuerda (kind rope) and Saca (kind bag), which cannot be renamed or deleted, and the
 // rest (kind general), which an admin adds, renames and deletes — mosquetones, spits, placas…
+// A general type has attributes, and says whether its items must have a description.
 type MaterialType struct {
-	ID   int64    `json:"id"`
-	Name string   `json:"name"`
-	Kind ItemKind `json:"kind"`
+	ID                  int64       `json:"id"`
+	Name                string      `json:"name"`
+	Kind                ItemKind    `json:"kind"`
+	DescriptionRequired bool        `json:"description_required"`
+	Attributes          []Attribute `json:"attributes"`
 }
 
 // MovementType is either an exchange with a specific person — rental
@@ -112,11 +157,22 @@ type Item struct {
 	Model *string `json:"model,omitempty"`
 	// Code is required for rope and bag, optional for general.
 	Code *string `json:"code,omitempty"`
-	// Description is required for general (it may be the only thing that
-	// identifies an item with no known brand/model) and doubles as
-	// "Observaciones" in the frontend for rope/bag, where it's optional
-	// — same field underneath, just labelled differently per type.
+	// Description is required for a general item only if its type says so (MaterialType.
+	// DescriptionRequired) and doubles as "Observaciones" in the frontend for rope/bag, where it's
+	// optional — same field underneath, just labelled differently per type.
 	Description *string `json:"description,omitempty"`
+	// Attributes are the values the item has for its type's attributes, in the type's order; only
+	// those with a value are there. Always empty for a rope and a bag.
+	Attributes []AttributeValue `json:"attributes"`
+	// DisplayName is how the item is named everywhere: its type, make and model, the values of its
+	// attributes in order (the values only, not their names) and its description, joined with " · "
+	// ("Mosquetones · Petzl · Attache · aluminio · asimétrico · con seguro").
+	DisplayName string `json:"display_name"`
+	// Incomplete is true for a general item that lacks what its type requires now (a required
+	// attribute or the description): it was saved before the type asked for it. Editing it fixes it.
+	Incomplete bool `json:"incomplete"`
+	// rawAttributes is the stored jsonb, before it is turned into Attributes.
+	rawAttributes map[string]json.RawMessage
 	// TotalQuantity/AvailableQuantity/OutstandingLoanQuantity are never
 	// stored — they're computed from this item's own movement history
 	// (see the material_item_quantities view and
@@ -159,6 +215,8 @@ type CreateItemInput struct {
 	Model       *string
 	Code        *string
 	Description *string
+	// Attributes are the values for the type's attributes; only a general item can have any.
+	Attributes []AttributeValue
 	// InitialQuantity is how many units the item starts with — recorded
 	// as its first 'acquisition' movement rather than stored on the
 	// item row (see Repository.CreateItem). AcquiredAt backdates that
@@ -189,6 +247,7 @@ type UpdateItemInput struct {
 	Model              *string
 	Code               *string
 	Description        *string
+	Attributes         []AttributeValue
 	Loanable           bool
 	RentalPricePerWeek *float64
 	SalePrice          *float64

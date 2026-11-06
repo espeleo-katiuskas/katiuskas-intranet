@@ -2,6 +2,7 @@ package material
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -121,7 +122,7 @@ func NewRepository(pool db.PGX) *Repository {
 // drift from what actually happened the way stored, manually-updated
 // columns could.
 const itemSelect = `
-	i.id, i.kind, i.type_id, mt.name, i.brand, i.model, i.code, i.description,
+	i.id, i.kind, i.type_id, mt.name, i.brand, i.model, i.code, i.description, i.attributes,
 	q.total_quantity, q.available_quantity, q.outstanding_loan_quantity, i.status, i.loanable,
 	i.rental_price_per_week, i.sale_price,
 	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters
@@ -130,7 +131,8 @@ const itemSelect = `
 	JOIN material_types mt ON mt.id = i.type_id`
 
 func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
-	if err := row.Scan(&it.ID, &it.Kind, &it.TypeID, &it.TypeName, &it.Brand, &it.Model, &it.Code, &it.Description,
+	var rawAttributes []byte
+	if err := row.Scan(&it.ID, &it.Kind, &it.TypeID, &it.TypeName, &it.Brand, &it.Model, &it.Code, &it.Description, &rawAttributes,
 		&it.TotalQuantity, &it.AvailableQuantity, &it.OutstandingLoanQuantity, &it.Status, &it.Loanable,
 		&it.RentalPricePerWeek, &it.SalePrice,
 		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters,
@@ -139,7 +141,24 @@ func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
 	}
 	it.Rentable = it.RentalPricePerWeek != nil
 	it.Sellable = it.SalePrice != nil
-	return nil
+	return json.Unmarshal(rawAttributes, &it.rawAttributes)
+}
+
+// itemWriteError maps the database errors of an item's insert or update to this package's.
+func itemWriteError(err error, kind ItemKind) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch {
+		case pgErr.Code == checkViolationCode:
+			return fmt.Errorf("fields do not fit kind %q (violates %s): %w",
+				kind, pgErr.ConstraintName, ErrInvalidItemFields)
+		case pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == itemIdentityIndex:
+			return ErrDuplicateItem
+		case pgErr.Code == uniqueViolationCode:
+			return ErrDuplicateItemCode
+		}
+	}
+	return err
 }
 
 // CreateItem inserts the item row and its first 'acquisition' movement
@@ -162,62 +181,48 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	}
 	defer tx.Rollback(ctx)
 
-	var kind ItemKind
-	var typeName string
-	err = tx.QueryRow(ctx, `SELECT kind, name FROM material_types WHERE id = $1`, in.TypeID).Scan(&kind, &typeName)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Item{}, ErrTypeNotFound
-	}
+	types, err := loadTypes(ctx, tx, &in.TypeID)
 	if err != nil {
 		return Item{}, err
 	}
+	if len(types) == 0 {
+		return Item{}, ErrTypeNotFound
+	}
+	itemType := types[0]
+	kind := itemType.Kind
 	if (kind == ItemKindRope || kind == ItemKindBag) && initialQuantity != 1 {
 		return Item{}, ErrSingleUnitItem
 	}
-
-	var it Item
-	err = tx.QueryRow(ctx, `
-		INSERT INTO material_items (kind, type_id, brand, model, code, description, loanable,
-			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
-			bag_type, capacity_liters)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-		RETURNING id, brand, model, code, description, status, loanable,
-			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
-			bag_type, capacity_liters
-	`, kind, in.TypeID, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
-		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters,
-	).Scan(&it.ID, &it.Brand, &it.Model, &it.Code, &it.Description, &it.Status, &it.Loanable,
-		&it.RentalPricePerWeek, &it.SalePrice, &it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM,
-		&it.BagType, &it.CapacityLiters)
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit kind %q (violates %s): %w",
-				kind, pgErr.ConstraintName, ErrInvalidItemFields)
-		case uniqueViolationCode:
-			return Item{}, ErrDuplicateItemCode
-		}
-	}
+	attributes, err := checkItem(itemType, in.Description, in.Attributes)
 	if err != nil {
 		return Item{}, err
+	}
+
+	var id int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO material_items (kind, type_id, brand, model, code, description, attributes, loanable,
+			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
+			bag_type, capacity_liters)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+		RETURNING id
+	`, kind, in.TypeID, in.Brand, in.Model, in.Code, in.Description, attributes, in.Loanable,
+		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
+		in.BagType, in.CapacityLiters,
+	).Scan(&id)
+	if err != nil {
+		return Item{}, itemWriteError(err, kind)
 	}
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO material_movements (item_id, type, quantity, transacted_at, status)
 		VALUES ($1, 'acquisition', $2, $3, 'completed')
-	`, it.ID, initialQuantity, acquiredAt); err != nil {
+	`, id, initialQuantity, acquiredAt); err != nil {
 		return Item{}, err
 	}
-
-	it.Kind, it.TypeID, it.TypeName = kind, in.TypeID, typeName
-	it.Rentable = it.RentalPricePerWeek != nil
-	it.Sellable = it.SalePrice != nil
-	it.TotalQuantity = initialQuantity
-	it.AvailableQuantity = initialQuantity
-
-	return it, tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return Item{}, err
+	}
+	return r.GetItem(ctx, id)
 }
 
 // UpdateItem replaces the editable fields of an item (see UpdateItemInput) and answers with it as
@@ -231,54 +236,44 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 	}
 	defer tx.Rollback(ctx)
 
+	var typeID int64
 	var kind ItemKind
-	if in.TypeID != nil {
-		var itemKind, typeKind ItemKind
-		err := tx.QueryRow(ctx, `SELECT kind FROM material_items WHERE id = $1`, id).Scan(&itemKind)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Item{}, ErrNotFound
-		}
-		if err != nil {
-			return Item{}, err
-		}
-		err = tx.QueryRow(ctx, `SELECT kind FROM material_types WHERE id = $1`, *in.TypeID).Scan(&typeKind)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Item{}, ErrTypeNotFound
-		}
-		if err != nil {
-			return Item{}, err
-		}
-		// Cuerda and Saca are the only types of their kinds, so the same kind is the same type for
-		// them: only general material really moves.
-		if typeKind != itemKind {
-			return Item{}, ErrKindChange
-		}
-	}
-	err = tx.QueryRow(ctx, `
-		UPDATE material_items SET type_id=COALESCE($15, type_id), brand=$2, model=$3, code=$4, description=$5, loanable=$6,
-			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
-			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14
-		WHERE id = $1
-		RETURNING kind
-	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
-		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters, in.TypeID,
-	).Scan(&kind)
+	err = tx.QueryRow(ctx, `SELECT type_id, kind FROM material_items WHERE id = $1 FOR UPDATE`, id).Scan(&typeID, &kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, ErrNotFound
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case checkViolationCode:
-			return Item{}, fmt.Errorf("fields do not fit kind %q (violates %s): %w",
-				kind, pgErr.ConstraintName, ErrInvalidItemFields)
-		case uniqueViolationCode:
-			return Item{}, ErrDuplicateItemCode
-		}
-	}
 	if err != nil {
 		return Item{}, err
+	}
+	if in.TypeID != nil {
+		typeID = *in.TypeID
+	}
+	types, err := loadTypes(ctx, tx, &typeID)
+	if err != nil {
+		return Item{}, err
+	}
+	if len(types) == 0 {
+		return Item{}, ErrTypeNotFound
+	}
+	// Cuerda and Saca are the only types of their kinds, so the same kind is the same type for
+	// them: only general material really moves.
+	if types[0].Kind != kind {
+		return Item{}, ErrKindChange
+	}
+	attributes, err := checkItem(types[0], in.Description, in.Attributes)
+	if err != nil {
+		return Item{}, err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE material_items SET type_id=$15, brand=$2, model=$3, code=$4, description=$5, loanable=$6,
+			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
+			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, attributes=$16
+		WHERE id = $1
+	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
+		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
+		in.BagType, in.CapacityLiters, typeID, attributes)
+	if err != nil {
+		return Item{}, itemWriteError(err, kind)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Item{}, err
@@ -337,7 +332,15 @@ func (r *Repository) GetItem(ctx context.Context, id int64) (Item, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return it, ErrNotFound
 	}
-	return it, err
+	if err != nil {
+		return it, err
+	}
+	types, err := loadTypes(ctx, r.pool, &it.TypeID)
+	if err != nil || len(types) == 0 {
+		return it, err
+	}
+	decorate(&it, types[0])
+	return it, nil
 }
 
 func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
@@ -358,28 +361,17 @@ func (r *Repository) ListItems(ctx context.Context) ([]Item, error) {
 		}
 		list = append(list, it)
 	}
-	return list, rows.Err()
-}
-
-// ListMaterialTypes returns the catalog of types of material: the fixed ones (Cuerda, Saca) first,
-// then the rest by name.
-func (r *Repository) ListMaterialTypes(ctx context.Context) ([]MaterialType, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, kind FROM material_types ORDER BY kind = 'general', kind, name`)
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	rows.Close()
+	return list, r.decorateItems(ctx, list)
+}
 
-	list := []MaterialType{}
-	for rows.Next() {
-		var t MaterialType
-		if err := rows.Scan(&t.ID, &t.Name, &t.Kind); err != nil {
-			return nil, err
-		}
-		list = append(list, t)
-	}
-	return list, rows.Err()
+// ListMaterialTypes returns the catalog of types of material with their attributes: the fixed ones
+// (Cuerda, Saca) first, then the rest by name.
+func (r *Repository) ListMaterialTypes(ctx context.Context) ([]MaterialType, error) {
+	return loadTypes(ctx, r.pool, nil)
 }
 
 // typeQuery runs a statement that returns one type inside its own (sub)transaction, so a rejected
@@ -392,26 +384,57 @@ func (r *Repository) typeQuery(ctx context.Context, sql string, args ...any) (Ma
 	}
 	defer tx.Rollback(ctx)
 	var t MaterialType
-	if err := tx.QueryRow(ctx, sql, args...).Scan(&t.ID, &t.Name, &t.Kind); err != nil {
+	if err := tx.QueryRow(ctx, sql, args...).Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired); err != nil {
 		return MaterialType{}, typeError(err)
 	}
+	t.Attributes = []Attribute{}
 	return t, tx.Commit(ctx)
 }
 
 // CreateType adds a type to the catalog; it is always a general one (the fixed two are seeded).
-func (r *Repository) CreateType(ctx context.Context, name string) (MaterialType, error) {
-	return r.typeQuery(ctx, `INSERT INTO material_types (name) VALUES ($1) RETURNING id, name, kind`, name)
+func (r *Repository) CreateType(ctx context.Context, name string, descriptionRequired bool) (MaterialType, error) {
+	return r.typeQuery(ctx, `INSERT INTO material_types (name, description_required) VALUES ($1, $2)
+		RETURNING id, name, kind, description_required`, name, descriptionRequired)
 }
 
-// RenameType changes a type's name; its items follow, since they point at its id. The fixed types
-// are refused (the database refuses them too, with a trigger).
-func (r *Repository) RenameType(ctx context.Context, id int64, name string) (MaterialType, error) {
-	return r.typeQuery(ctx, `UPDATE material_types SET name = $2 WHERE id = $1 RETURNING id, name, kind`, id, name)
+// UpdateType changes a type's name and/or whether its items must have a description; nil leaves a
+// field as it is. Its items follow, since they point at its id. The fixed types are refused (the
+// database refuses them too, with a trigger).
+func (r *Repository) UpdateType(ctx context.Context, id int64, name *string, descriptionRequired *bool) (MaterialType, error) {
+	if _, err := r.typeQuery(ctx, `
+		UPDATE material_types SET name = COALESCE($2, name),
+			description_required = COALESCE($3, description_required)
+		WHERE id = $1 RETURNING id, name, kind, description_required`, id, name, descriptionRequired); err != nil {
+		return MaterialType{}, err
+	}
+	return r.GetMaterialType(ctx, id)
 }
 
-// DeleteType removes a type that no item has. The fixed types are refused.
+// DeleteType removes a type that no item has, with its attributes and their options. The fixed
+// types are refused.
 func (r *Repository) DeleteType(ctx context.Context, id int64) (MaterialType, error) {
-	return r.typeQuery(ctx, `DELETE FROM material_types WHERE id = $1 RETURNING id, name, kind`, id)
+	var t MaterialType
+	err := r.inTx(ctx, func(tx pgx.Tx) error {
+		// Nothing cascades, so what hangs from the type goes first. If the type turns out to be fixed
+		// or in use, the whole transaction is rolled back and nothing was removed.
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM material_attribute_options WHERE attribute_id IN
+				(SELECT id FROM material_type_attributes WHERE type_id = $1)`, id); err != nil {
+			return typeError(err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM material_type_attributes WHERE type_id = $1`, id); err != nil {
+			return typeError(err)
+		}
+		err := tx.QueryRow(ctx, `DELETE FROM material_types WHERE id = $1
+			RETURNING id, name, kind, description_required`, id).
+			Scan(&t.ID, &t.Name, &t.Kind, &t.DescriptionRequired)
+		if err != nil {
+			return typeError(err)
+		}
+		return nil
+	})
+	t.Attributes = []Attribute{}
+	return t, err
 }
 
 // typeError maps the errors of the type queries to this package's own.

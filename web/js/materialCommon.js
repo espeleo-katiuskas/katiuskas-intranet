@@ -45,8 +45,11 @@ function itemName(item, { includeType = true } = {}) {
     ];
     return escapeHtml(parts.filter(Boolean).join(' · '));
   }
-  const parts = [includeType ? item.type_name : null, brandModel || null, item.description || null];
-  return escapeHtml(parts.filter(Boolean).join(' — '));
+  // General material is named by the API (display_name): its type, make and model, the values of
+  // its attributes and its description, joined with " · ".
+  const full = item.display_name || item.type_name;
+  const prefix = `${item.type_name} · `;
+  return escapeHtml(!includeType && full.startsWith(prefix) ? full.slice(prefix.length) : full);
 }
 
 export { bagTypeLabels, itemLabel, itemRef, ropeTypeLabels };

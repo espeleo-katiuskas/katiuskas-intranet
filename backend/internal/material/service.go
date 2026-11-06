@@ -47,24 +47,97 @@ func cleanTypeName(name string) (string, error) {
 	return name, nil
 }
 
-func (s *Service) CreateType(ctx context.Context, name string) (MaterialType, error) {
+// CreateType adds a general type; its items must have a description unless descriptionRequired is
+// false.
+func (s *Service) CreateType(ctx context.Context, name string, descriptionRequired bool) (MaterialType, error) {
 	name, err := cleanTypeName(name)
 	if err != nil {
 		return MaterialType{}, err
 	}
-	return s.repo.CreateType(ctx, name)
+	return s.repo.CreateType(ctx, name, descriptionRequired)
 }
 
-func (s *Service) RenameType(ctx context.Context, id int64, name string) (MaterialType, error) {
-	name, err := cleanTypeName(name)
-	if err != nil {
-		return MaterialType{}, err
+// UpdateType renames a type and/or changes whether its items must have a description; nil leaves a
+// field as it is.
+func (s *Service) UpdateType(ctx context.Context, id int64, name *string, descriptionRequired *bool) (MaterialType, error) {
+	if name != nil {
+		cleaned, err := cleanTypeName(*name)
+		if err != nil {
+			return MaterialType{}, err
+		}
+		name = &cleaned
 	}
-	return s.repo.RenameType(ctx, id, name)
+	return s.repo.UpdateType(ctx, id, name, descriptionRequired)
 }
 
 func (s *Service) DeleteType(ctx context.Context, id int64) (MaterialType, error) {
 	return s.repo.DeleteType(ctx, id)
+}
+
+func (s *Service) GetMaterialType(ctx context.Context, id int64) (MaterialType, error) {
+	return s.repo.GetMaterialType(ctx, id)
+}
+
+func (s *Service) CreateAttribute(ctx context.Context, typeID int64, name string, dataType AttributeDataType,
+	required bool, options []string) (Attribute, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Attribute{}, ErrBlankName
+	}
+	cleaned := []string{}
+	for _, label := range options {
+		if label = strings.TrimSpace(label); label != "" {
+			cleaned = append(cleaned, label)
+		}
+	}
+	return s.repo.CreateAttribute(ctx, typeID, name, dataType, required, cleaned)
+}
+
+func (s *Service) UpdateAttribute(ctx context.Context, id int64, name *string, required *bool) (Attribute, error) {
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		if trimmed == "" {
+			return Attribute{}, ErrBlankName
+		}
+		name = &trimmed
+	}
+	return s.repo.UpdateAttribute(ctx, id, name, required)
+}
+
+func (s *Service) DeleteAttribute(ctx context.Context, id int64) (Attribute, error) {
+	return s.repo.DeleteAttribute(ctx, id)
+}
+
+func (s *Service) GetAttribute(ctx context.Context, id int64) (Attribute, error) {
+	return s.repo.GetAttribute(ctx, id)
+}
+
+func (s *Service) ReorderAttributes(ctx context.Context, typeID int64, ids []int64) error {
+	return s.repo.ReorderAttributes(ctx, typeID, ids)
+}
+
+func (s *Service) CreateOption(ctx context.Context, attributeID int64, label string) (AttributeOption, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return AttributeOption{}, ErrBlankName
+	}
+	return s.repo.CreateOption(ctx, attributeID, label)
+}
+
+func (s *Service) RenameOption(ctx context.Context, id int64, label string) (AttributeOption, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return AttributeOption{}, ErrBlankName
+	}
+	return s.repo.RenameOption(ctx, id, label)
+}
+
+func (s *Service) GetOption(ctx context.Context, id int64) (AttributeOption, Attribute, error) {
+	return s.repo.GetOption(ctx, id)
+}
+
+func (s *Service) DeleteOption(ctx context.Context, id int64) error {
+	return s.repo.DeleteOption(ctx, id)
 }
 
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {

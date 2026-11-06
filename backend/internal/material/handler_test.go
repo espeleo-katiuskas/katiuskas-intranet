@@ -169,7 +169,10 @@ func TestHandlerCreateItemRequiresAdminBoardOrMaterial(t *testing.T) {
 		}
 	}
 	for name, token := range map[string]string{"board": boardToken, "material (and member)": materialMemberToken} {
-		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, body); rec.Code != http.StatusCreated {
+		// Two items cannot be the same, so each creator adds its own.
+		own := generalItemBody(t, tx, 1)
+		own["description"] = "Casco de " + name
+		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", token, own); rec.Code != http.StatusCreated {
 			t.Errorf("expected %s to create an item, got %d: %s", name, rec.Code, rec.Body.String())
 		}
 		if rec := doRequest(mux, http.MethodGet, "/api/v1/material/types", token, nil); rec.Code != http.StatusOK {
@@ -993,7 +996,7 @@ func TestHandlerUpdateItem(t *testing.T) {
 	// The same constraints as when it was created.
 	bad := map[string]any{"description": nil}
 	rec = doRequest(mux, http.MethodPut, path, boardToken, bad)
-	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
+	if rec.Code != http.StatusBadRequest || errorCode(t, rec) != "item_description_required" {
 		t.Errorf("a general item without a description: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := doRequest(mux, http.MethodPut, "/api/v1/material/items/987654", boardToken, edited); rec.Code != http.StatusNotFound {
@@ -1167,7 +1170,7 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 		"a brand":           {"brand": "Petzl"},
 		"a brand and model": {"brand": "Petzl", "model": "Vertex"},
 		"all three":         {"brand": "Petzl", "model": "Vertex", "code": "H-1"},
-		"a blank model":     {"brand": "Petzl", "model": "   "},
+		"a blank model":     {"brand": "Black Diamond", "model": "   "},
 	} {
 		if rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(extra)); rec.Code != http.StatusCreated {
 			t.Errorf("general material with %s: %d %s", name, rec.Code, rec.Body.String())
@@ -1185,7 +1188,7 @@ func TestHandlerModelNeedsABrand(t *testing.T) {
 	}
 
 	// Editing follows the same rule, and a blank value is stored as not given.
-	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(map[string]any{"brand": "Petzl", "model": "Vertex"}))
+	rec := doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body(map[string]any{"brand": "Petzl", "model": "Attache"}))
 	var item material.Item
 	if err := json.Unmarshal(rec.Body.Bytes(), &item); err != nil {
 		t.Fatal(err)

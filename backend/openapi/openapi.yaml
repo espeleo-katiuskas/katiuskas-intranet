@@ -3130,12 +3130,18 @@ paths:
             invalid_item_fields (the given fields don't fit the kind of
             the item's type: its own required shape — a rope needs rope_type/diameter_mm/
             manufacture_year/length_m in addition to brand/model/code,
-            a bag needs bag_type/capacity_liters, a general item needs
-            a description, and none of a rope or bag's own
+            a bag needs bag_type/capacity_liters, and none of a rope or bag's own
             fields may be set on the other two kinds), or
             model_without_brand (a model was given without a brand), or
-            invalid_item_code (a code made only of digits; an empty one is the same as none).
-        "409": { description: duplicate_item_code — another item already has that code. }
+            invalid_item_code (a code made only of digits; an empty one is the same as none), or
+            item_description_required (a general item whose type requires a description has none),
+            missing_attribute (a required attribute of the type has no value) or
+            invalid_attribute (an attribute that is not the type's, given twice, an option of
+            another attribute, or a value of the wrong kind).
+        "409": >
+          duplicate_item_code — another item already has that code; or duplicate_material —
+          another item is exactly the same (same type, brand, model, code, description and
+          attributes: more units of it are a stock of more than one, added with an acquisition).
 
   /material/items/{id}:
     put:
@@ -3146,7 +3152,8 @@ paths:
         be left out to keep the type; general material can move to another general type, but a rope
         or a bag stays Cuerda or Saca and nothing becomes one of them (400 kind_change). The
         quantities are not editable (they are whatever its movements say), so a total_quantity in
-        the body is ignored. The same constraints as when it was created apply.
+        the body is ignored. The same constraints as when it was created apply, and the attributes
+        are resent in full (the ones left out are removed).
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3161,10 +3168,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields, model_without_brand or invalid_item_code (a code made only of digits)." }
+        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields, model_without_brand, invalid_item_code (a code made only of digits), item_description_required, missing_attribute or invalid_attribute." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: duplicate_item_code — another item already has that code. }
+        "409": { description: duplicate_item_code — another item already has that code; or duplicate_material — another item is exactly the same. }
     delete:
       summary: Delete an item
       description: >
@@ -3187,7 +3194,8 @@ paths:
       description: >
         Any baseline role (admin, board or member), like GET /material/items, whose items each
         name one of these. Cuerda (kind rope) and Saca (kind
-        bag) come first, then the rest (kind general) by name.
+        bag) come first, then the rest (kind general) by name. Each carries its attributes (in the
+        order their values are written in an item's name) with the options of the enum ones.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -3199,7 +3207,7 @@ paths:
                 items: { $ref: "#/components/schemas/MaterialType" }
     post:
       summary: Add a material type
-      description: Admin only. The name is trimmed; a type added is always general.
+      description: Admin only. The name is trimmed; a type added is always general and starts with no attributes.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -3210,6 +3218,10 @@ paths:
               required: [name]
               properties:
                 name: { type: string }
+                description_required:
+                  type: boolean
+                  default: true
+                  description: Whether the items of the type must have a description.
       responses:
         "201":
           description: The type
@@ -3222,8 +3234,12 @@ paths:
 
   /material/types/{id}:
     patch:
-      summary: Rename a material type
-      description: Admin only. Its items follow, since they point at its id. Cuerda and Saca are fixed.
+      summary: Edit a material type
+      description: >
+        Admin only. Renames it and/or changes whether its items must have a description (a field left
+        out stays as it is; at least one is needed). Its items follow, since they point at its id.
+        Cuerda and Saca are fixed. Making the description required does not touch the items that
+        have none: they are listed as incomplete until edited.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3233,12 +3249,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
               properties:
                 name: { type: string }
+                description_required: { type: boolean }
       responses:
         "200":
-          description: The type as renamed
+          description: The type as edited
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MaterialType" }
@@ -3248,7 +3264,9 @@ paths:
         "409": { description: duplicate_type — another type has that name. }
     delete:
       summary: Delete a material type
-      description: Admin only. Refused while any item has it, and always for Cuerda and Saca.
+      description: >
+        Admin only. Refused while any item has it, and always for Cuerda and Saca. Its attributes
+        and their options go with it.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -3258,6 +3276,177 @@ paths:
         "403": { description: Requires admin. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: type_in_use — some item has it; or fixed_type — it is Cuerda or Saca. }
+
+  /material/types/{id}/attributes:
+    post:
+      summary: Add an attribute to a material type
+      description: >
+        Admin only. The attribute goes at the end of the type's list. Only general types have
+        attributes. data_type is text (any value) or enum (one of a list of options, given here in
+        options or added later). It cannot be changed afterwards.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, data_type]
+              properties:
+                name: { type: string }
+                data_type: { type: string, enum: [text, enum] }
+                required: { type: boolean, default: false }
+                options: { type: array, items: { type: string }, description: Only for enum. }
+      responses:
+        "201":
+          description: The attribute
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialAttribute" }
+        "400": { description: invalid_id or invalid_body (a blank name, a data_type that is neither text nor enum, options for a text attribute). }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_attribute — the type has one with that name; duplicate_option — repeated options; fixed_type — Cuerda and Saca have no attributes. }
+
+  /material/types/{id}/attributes/order:
+    put:
+      summary: Reorder the attributes of a material type
+      description: >
+        Admin only. attribute_ids must be every attribute of the type exactly once; the order is the
+        one in which the values are written in an item's name.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attribute_ids]
+              properties:
+                attribute_ids: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          description: The type with its attributes in the new order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialType" }
+        "400": { description: invalid_id or invalid_body (the list is not exactly the type's attributes). }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /material/attributes/{id}:
+    patch:
+      summary: Edit an attribute
+      description: >
+        Admin only. Renames it and/or makes it required or optional (a field left out stays as it is;
+        at least one is needed). Making it required does not touch the items without a value: they
+        are listed as incomplete until edited.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                required: { type: boolean }
+      responses:
+        "200":
+          description: The attribute as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialAttribute" }
+        "400": { description: invalid_id or invalid_body. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_attribute — the type has another one with that name. }
+    delete:
+      summary: Delete an attribute
+      description: >
+        Admin only. The value every item of the type has for it goes too. Refused if that would leave
+        two items exactly the same.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: would_duplicate_items — two items of the type would become the same. }
+
+  /material/attributes/{id}/options:
+    post:
+      summary: Add an option to an enum attribute
+      description: Admin only.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string }
+      responses:
+        "201":
+          description: The option
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialAttributeOption" }
+        "400": { description: invalid_id or invalid_body (a blank label, or the attribute is not an enum one). }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_option — the attribute has one with that label. }
+
+  /material/options/{id}:
+    patch:
+      summary: Rename an option
+      description: Admin only. The items that have it follow, since they point at its id.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string }
+      responses:
+        "200":
+          description: The option as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialAttributeOption" }
+        "400": { description: invalid_id or invalid_body. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: duplicate_option. }
+    delete:
+      summary: Delete an option
+      description: Admin only. Refused while any item has it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+        "400": { description: invalid_id. }
+        "403": { description: Requires admin. }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: option_in_use — some item has it. }
 
   /material/items/{id}/movements:
     get:
@@ -4900,6 +5089,49 @@ components:
         id: { type: integer }
         name: { type: string }
         kind: { type: string, enum: [rope, bag, general] }
+        description_required:
+          type: boolean
+          description: Whether the items of the type must have a description (general types; meaningless for Cuerda and Saca, whose description is always optional).
+        attributes:
+          type: array
+          items: { $ref: "#/components/schemas/MaterialAttribute" }
+          description: In the order their values are written in an item's name. Always empty for Cuerda and Saca.
+
+    MaterialAttribute:
+      type: object
+      description: >
+        A field the items of a general type carry (colour, closure, shape...): free text or one of
+        a list of options, required or optional.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        data_type: { type: string, enum: [text, enum] }
+        required: { type: boolean }
+        position: { type: integer, description: 0-based place in the type's list. }
+        options:
+          type: array
+          nullable: true
+          items: { $ref: "#/components/schemas/MaterialAttributeOption" }
+          description: The accepted values of an enum attribute, by label; null for a text one.
+
+    MaterialAttributeOption:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+
+    ItemAttributeValue:
+      type: object
+      description: >
+        The value an item has for an attribute. In a request, attribute_id plus option_id (enum) or
+        value (text); a blank value is no value. In a response, name too, and value is always the
+        text to show (the option's label for an enum), with option_id for an enum one.
+      required: [attribute_id]
+      properties:
+        attribute_id: { type: integer }
+        name: { type: string, description: Response only. }
+        option_id: { type: integer, description: Enum attributes. }
+        value: { type: string, description: Text attributes (in a response, also the label of an enum's option). }
 
     Item:
       type: object
@@ -4911,7 +5143,9 @@ components:
         bag_type extends rope_type's caving/canyoning split with two
         purpose-based kinds, quick and special). general is a
         fungible stock item; brand/model/code may be unknown, though a model needs a brand, and
-        its description is always set. Every item has a type from
+        whether its description is required depends on its type (description_required). Its
+        type's attributes give it more fields. No two items are exactly the same (type, brand,
+        model, code, description and attributes; the quantity is not part of it). Every item has a type from
         GET /material/types, which decides its kind (Cuerda is rope, Saca is bag, any other general). rentable/sellable
         are computed from whether rental_price_per_week/sale_price is
         set — loanable is a separate flag, since a loan carries no price
@@ -4933,8 +5167,23 @@ components:
           type: string
           nullable: true
           description: >
-            Required for general. Doubles as "Observaciones" in the
+            Required for a general item only if its type says so. Doubles as "Observaciones" in the
             frontend for rope/bag, where it's optional.
+        attributes:
+          type: array
+          items: { $ref: "#/components/schemas/ItemAttributeValue" }
+          description: The values the item has, in the type's order; only those with a value. Always empty for a rope and a bag.
+        display_name:
+          type: string
+          description: >
+            How the item is named: its type, brand and model, the values of its attributes (the
+            values only) and its description, joined with " · ", e.g. "Mosquetones · Petzl Attache ·
+            aluminio · asimétrico · con seguro".
+        incomplete:
+          type: boolean
+          description: >
+            A general item that lacks what its type requires now (a required attribute or the
+            description) because it was saved before the type asked for it. Editing it fixes it.
         total_quantity: { type: integer, description: "Computed from this item's movement history — never stored." }
         available_quantity:
           type: integer
@@ -4970,7 +5219,11 @@ components:
         brand: { type: string, description: Required for rope/bag. }
         model: { type: string, description: Required for rope/bag; needs a brand. }
         code: { type: string, description: Required for rope/bag. }
-        description: { type: string, description: Required for general. }
+        description: { type: string, description: Required for a general item whose type requires it. }
+        attributes:
+          type: array
+          items: { $ref: "#/components/schemas/ItemAttributeValue" }
+          description: Values for the attributes of the type; each required one must have one. Only general types have attributes.
         acquired_at:
           type: string
           format: date

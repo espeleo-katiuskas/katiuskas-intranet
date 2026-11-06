@@ -117,6 +117,7 @@ function itemSearchText(item) {
       item.model,
       item.code,
       item.description,
+      ...(item.attributes ?? []).map((attribute) => attribute.value),
       ropeTypeLabels[item.rope_type],
       bagTypeLabels[item.bag_type],
     ]
@@ -129,7 +130,7 @@ function renderItemRow(item) {
   return `
     <tr>
       <td>${escapeHtml(item.type_name)}</td>
-      <td>${itemLabel(item, { includeType: false })}</td>
+      <td>${itemLabel(item, { includeType: false })}${item.incomplete && canManageMovements ? ' <span class="badge" title="Le falta algo que su tipo exige: edítalo para completarlo">Incompleto</span>' : ''}</td>
       <td>${item.code ? escapeHtml(item.code) : '—'}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
@@ -407,6 +408,8 @@ if (canManageMovements) {
   const descriptionField = document.getElementById('ni-description');
   // The dialog is shared: the id of the item it is editing, or null when it creates one.
   let editingItemId = null;
+  // The catalog of types, with the attributes of each (what the form of a general item asks for).
+  let materialTypes = [];
 
   // Only the controls specific to a kind (rope, bag, general) toggle required — the fields
   // shared by every kind (acquired_at, prices, loanable) stay as they are.
@@ -433,6 +436,43 @@ if (canManageMovements) {
     return typeSelect.selectedOptions[0]?.dataset.kind ?? 'general';
   }
 
+  function selectedType() {
+    return materialTypes.find((t) => String(t.id) === typeSelect.value);
+  }
+
+  // What depends on the chosen type besides its kind: whether the description is required, and one
+  // field per attribute of the type (a text box, or a list of its options), before the description.
+  // Called whenever the type changes, so the values typed for another type's attributes are dropped.
+  function syncTypeFields() {
+    const type = selectedType();
+    const kind = selectedKind();
+    const descriptionRequired = kind === 'general' && (type?.description_required ?? true);
+    descriptionField.required = descriptionRequired;
+    document.getElementById('ni-description-optional').hidden = descriptionRequired;
+    newItemForm.querySelectorAll('[data-attribute-field]').forEach((el) => {
+      el.remove();
+    });
+    const fields = (type?.attributes ?? []).map((attribute) => {
+      const field = document.createElement('div');
+      field.className = 'field';
+      field.dataset.attributeField = attribute.id;
+      const id = `ni-attribute-${attribute.id}`;
+      const optional = attribute.required ? '' : ' <span class="optional">(opcional)</span>';
+      const control =
+        attribute.data_type === 'enum'
+          ? `<select id="${id}" name="attribute_${attribute.id}" ${attribute.required ? 'required' : ''}>
+              <option value="">${attribute.required ? 'Elige…' : '—'}</option>
+              ${attribute.options
+                .map((o) => `<option value="${o.id}">${escapeHtml(o.label)}</option>`)
+                .join('')}
+            </select>`
+          : `<input id="${id}" name="attribute_${attribute.id}" type="text" ${attribute.required ? 'required' : ''}>`;
+      field.innerHTML = `<label for="${id}">${escapeHtml(attribute.name)}${optional}</label>${control}`;
+      return field;
+    });
+    descriptionField.closest('.field').before(...fields);
+  }
+
   function updateKindFieldsVisibility() {
     const kind = selectedKind();
     document.querySelectorAll('[data-kind-field]').forEach((el) => {
@@ -442,10 +482,9 @@ if (canManageMovements) {
       const input = document.getElementById(id);
       input.required = !input.closest('[data-kind-field]').hidden;
     }
-    // description is the required "Descripción" for general, and the
-    // optional "Observaciones" for rope/bag — see the two toggled
+    // description is the "Descripción" of general material (required or not, depending on its type:
+    // see syncTypeFields) and the optional "Observaciones" of a rope or a bag — see the two toggled
     // label spans above the textarea.
-    descriptionField.required = kind === 'general';
     // Brand, model and code are in every type's form, but only a rope or a bag must have them. A model
     // is the model of a brand: it can only be written once there is a brand.
     for (const id of ['ni-brand', 'ni-model', 'ni-code']) {
@@ -470,6 +509,7 @@ if (canManageMovements) {
       option.disabled = option.hidden =
         editingKind === 'general' && option.dataset.kind !== 'general';
     }
+    syncTypeFields();
   }
   typeSelect.addEventListener('change', updateKindFieldsVisibility);
   updateKindFieldsVisibility();
@@ -478,6 +518,7 @@ if (canManageMovements) {
   // remembers its kind.
   apiFetch('/material/types')
     .then((types) => {
+      materialTypes = types;
       typeSelect.innerHTML = types
         .map((t) => `<option value="${t.id}" data-kind="${t.kind}">${escapeHtml(t.name)}</option>`)
         .join('');
@@ -517,6 +558,9 @@ if (canManageMovements) {
     set('rental_price_per_week', item.rental_price_per_week);
     set('sale_price', item.sale_price);
     set('description', item.description);
+    for (const value of item.attributes ?? []) {
+      set(`attribute_${value.attribute_id}`, value.option_id ?? value.value);
+    }
     newItemForm.elements.loanable.checked = item.loanable;
     openModal(newItemDialog);
   };
@@ -551,6 +595,17 @@ if (canManageMovements) {
     } else if (kind === 'bag') {
       body.bag_type = formData.get('bag_type');
       body.capacity_liters = Number(formData.get('capacity_liters'));
+    }
+    // The attributes of the type: only those with a value are sent.
+    body.attributes = [];
+    for (const attribute of selectedType()?.attributes ?? []) {
+      const value = optionalText(`attribute_${attribute.id}`);
+      if (value === null) continue;
+      body.attributes.push(
+        attribute.data_type === 'enum'
+          ? { attribute_id: attribute.id, option_id: Number(value) }
+          : { attribute_id: attribute.id, value },
+      );
     }
     // A disabled select is not in the FormData: a rope or a bag keeps its type.
     if (formData.get('type_id')) body.type_id = Number(formData.get('type_id'));

@@ -214,7 +214,11 @@ and images are served inline.
 entry is a *material item* (`type`: `rope`, `bag`, `general`; `category` for `general`), moved by *material
 movements*. API under `/material/…` (`/material/items`, `/material/movements`, `/material/categories`,
 `/users/{login}/material/movements`), tables and types `material_*` (`material_items`, `material_movements`,
-`material_item_quantities`, `material_item_type`…). Don't bring back `inventory`, `gear` or bare `item_`/`movement_`
+`material_item_quantities`, `material_item_type`…). A general type has *attributes* (text or enum,
+required or optional; values kept by id in `material_items.attributes`) and says whether the
+description is required; no two items may be exactly the same (`material_items_identity_key`), and
+the API builds the item's `display_name` from its type, brand, model, attribute values and
+description (`docs/backend-internals.md`, "Material types and attributes"). Don't bring back `inventory`, `gear` or bare `item_`/`movement_`
 names for it.
 
 **Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over

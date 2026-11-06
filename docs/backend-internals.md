@@ -674,6 +674,55 @@ half" distinction to make: unlike a membership period or a leave, a board term i
 row covering both its own start and end (see `board.Member`), so deleting it always
 removes the whole term, not just clears a field back to open.
 
+## Material types and attributes
+
+The package is `internal/material`, page `/material`. A material item has a *type* from the catalog
+`material_types`, and the type decides its *kind*: Cuerda (`rope`) and Saca (`bag`) are fixed, one
+of each, and their items are individual objects with their own columns (code, make and model,
+`diameter_mm`, `capacity_liters`...); every other type is `general`, which an admin adds, renames
+and deletes from `/admin`, and its items are stock (`total_quantity` comes from the movements).
+
+**Attributes.** A general type defines attributes (`material_type_attributes`): colour, closure,
+shape... Each is `text` (any value) or `enum` (one of the type's options in
+`material_attribute_options`), and required or optional. An item keeps its values in the jsonb
+column `attributes`, keyed by the attribute's id: a string for a text attribute, the option's id
+for an enum one. Storing the option by id is what lets an admin rename an option and have every
+item follow; deleting one that an item has is refused (`option_in_use`). Only attributes that have
+a value are stored, never `null` or `""`: `buildAttributes` (`attributes.go`) trims texts, drops
+blanks and checks every value against the type's definition (an attribute that is not the type's,
+one given twice, an option of another attribute or a value of the wrong kind is `invalid_attribute`;
+a required one with no value is `missing_attribute`). It runs on create and update, inside the same
+transaction that reads the type, and `UpdateItem` always replaces the attributes with the body's,
+so changing an item's type simply sends the new type's. A rope and a bag take none (their type has
+none) and `attributes_only_for_general` backs that in the database. The data type of an attribute
+never changes after it is created, since the values are stored by it. Nothing cascades in the
+database (every foreign key is `RESTRICT`): deleting an attribute removes its options and its value
+from the items of the type, and deleting a type removes its attributes and options first.
+
+**Description.** `material_types.description_required` (default true, so every type kept behaving
+as before) says whether a general item must have a description (`item_description_required`). It is
+checked in `checkItem`, not by a constraint, since it depends on the type; for a rope or a bag the
+description ("Observaciones") is always optional. Making a type's description or an attribute
+required later does not touch the items already saved: the API marks the ones that lack it
+`incomplete`, and editing fixes them.
+
+**No two items the same.** The unique index `material_items_identity_key` over type, brand, model,
+code, a hash of the description and a hash of the attributes (with `NULLS NOT DISTINCT`) refuses an
+identical item (409 `duplicate_material`): identical units are one item with a quantity. That is why
+the values are normalised before they are stored: `"Petzl"` and `"Petzl "` would otherwise be two
+items. The same index guards the admin: deleting an attribute removes its value from the items of
+the type, and if that would make two of them identical the whole change is rolled back
+(`would_duplicate_items`). Changing the `required` flag, the name of an attribute or the label of an
+option can never make items identical.
+
+**How an item is named.** `display_name` is built by the API (`decorate`, `attributes.go`) so that
+every listing, movement and Telegram notification names an item the same way: the type, brand and
+model, the *values* of its attributes (not their names) in the order of the type's attributes
+(`position`, changed with `PUT /material/types/{id}/attributes/order`), and, for general material,
+the description at the end, joined with " · ": "Mosquetones · Petzl Attache · aluminio ·
+asimétrico · con seguro". The catalog is read once per request (`loadTypes`, three small queries),
+not once per item, so listing hundreds of items costs the same as listing one.
+
 ## Document library
 
 **Document library** (`internal/library`): serves club documents (estatutos, reglamentos, actas...)
