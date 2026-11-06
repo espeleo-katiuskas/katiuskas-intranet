@@ -12,7 +12,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { bagTypeLabels, itemLabel, ropeTypeLabels } from './materialCommon.js';
+import { itemLabel, itemPickerText } from './materialCommon.js';
 
 const user = await initPage();
 // Managing the material — adding equipment to the catalog, and its movements (loans, rentals,
@@ -108,22 +108,10 @@ function personLabel(login) {
 
 // Accent-insensitive substring match — "cañones" and "canones" should
 // both find the same items, and there'll be enough material (300+
-// expected) that a plain <select> stops being usable for finding one.
+// expected) that a plain <select> stops being usable for finding one. It looks in what the table
+// shows (the type and the "Características" cell, code included), so what is seen can be found.
 function itemSearchText(item) {
-  return normalizeForSearch(
-    [
-      item.type_name,
-      item.brand,
-      item.model,
-      item.code,
-      item.description,
-      ...(item.attributes ?? []).map((attribute) => attribute.value),
-      ropeTypeLabels[item.rope_type],
-      bagTypeLabels[item.bag_type],
-    ]
-      .filter(Boolean)
-      .join(' '),
-  );
+  return normalizeForSearch(itemPickerText(item));
 }
 
 function renderItemRow(item) {
