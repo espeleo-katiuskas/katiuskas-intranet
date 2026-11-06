@@ -82,7 +82,10 @@ first, no repeats whatever the case): when the email field is focused, the same 
 the phone, and only after a sign-in that worked: the address typed when asking for the link waits in
 `katiuskas:login-pending-email` and is moved to the list when this browser completes the sign-in — by the
 code, by the link opened in this tab, or, in the tab that asked, when another tab of the browser signs in.
-A request that is never followed through is not remembered. It also works on the club's shared tablet
+The field has `autocomplete="off"` (and a `name` that does not say "email"), so that the browser's own offer
+of addresses it has stored from other sites does not cover this menu; the phone has it too, so that it is
+always typed. A request that is never followed through
+is not remembered. It also works on the club's shared tablet
 (`local.` address): whoever can use it can see the addresses of the others, which is accepted.
 
 **Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a `<datalist>`,
