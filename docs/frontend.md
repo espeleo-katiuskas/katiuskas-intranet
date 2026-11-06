@@ -59,6 +59,14 @@ same function says whether the description is required (`description_required` o
 "(opcional)" is shown next to its label otherwise). Only the attributes with a value go in the
 request.
 
+**Which material the table lists.** The table of `/material` hides the items with no unit left,
+those that show "0 / 0" (`isGone` in `material.js`: sold, lost, abandoned or retired). They are no
+longer the club's and will not come back unless more of them is acquired, which makes them show
+again. A partial loss or sale leaves units, so the item stays. The checkbox "Mostrar también el
+material que ya no está (vendido, perdido, abandonado o retirado)" under the search box lists
+everything. It is a filter of the page (`GET /material/items` still returns every item), and the
+search applies on top of it.
+
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
 of `/material`: *Prestado*, the items whose loans have not all come back

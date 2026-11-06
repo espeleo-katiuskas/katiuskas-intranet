@@ -247,18 +247,24 @@ function openNewMovementDialog(itemId) {
   openModal(document.getElementById('new-movement-dialog'));
 }
 
+// Material with no unit left (shown as "0 / 0": sold, lost, abandoned or retired) is no longer the
+// club's and will not come back unless more of it is acquired, so the table hides it unless asked
+// to show all. A partial loss or sale leaves units, and the item stays.
+const isGone = (item) => item.total_quantity === 0;
+
 function renderFilteredItems() {
   const query = normalizeForSearch(document.getElementById('item-search').value);
-  const filtered = query
-    ? allItems.filter((item) => itemSearchText(item).includes(query))
-    : allItems;
+  const showAll = document.getElementById('show-all-items').checked;
+  const visible = showAll ? allItems : allItems.filter((item) => !isGone(item));
+  const filtered = query ? visible.filter((item) => itemSearchText(item).includes(query)) : visible;
   const tableBody = document.getElementById('items-table-body');
   tableBody.innerHTML = filtered.length
     ? filtered.map(renderItemRow).join('')
-    : `<tr><td colspan="5">${allItems.length ? 'Ningún material coincide con la búsqueda.' : 'Todavía no hay material dado de alta.'}</td></tr>`;
+    : `<tr><td colspan="5">${visible.length ? 'Ningún material coincide con la búsqueda.' : 'Todavía no hay material dado de alta.'}</td></tr>`;
 }
 
 document.getElementById('item-search').addEventListener('input', renderFilteredItems);
+document.getElementById('show-all-items').addEventListener('change', renderFilteredItems);
 
 async function loadItems() {
   const tableBody = document.getElementById('items-table-body');
