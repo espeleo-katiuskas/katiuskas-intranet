@@ -20,6 +20,7 @@ import {
   hasAnyRole,
 } from './api.js';
 import { initPickerSearch } from './pickerSearch.js';
+import { initStackedTables } from './stackedTables.js';
 import { initRoleOverride } from './roleOverride.js';
 
 // One entry per sidebar link, in display order. roles restricts who
@@ -143,6 +144,8 @@ async function initPage({ requireAnyRole } = {}) {
   renderShell();
   // The searchable pickers (an input over a datalist) match without caring about accents or case.
   initPickerSearch();
+  // The tables marked "stack-on-phone" become cards on a narrow screen.
+  initStackedTables();
   // initSession() itself redirects to /login and returns false on a
   // missing or rejected token — false, not a thrown error, so nothing
   // upstream stopped the previous per-page copy of this same sequence

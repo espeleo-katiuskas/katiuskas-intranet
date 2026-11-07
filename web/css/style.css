@@ -1121,6 +1121,25 @@ input[readonly] { background: var(--surface-muted); }
   flex: 0 0 20rem;
   color: var(--ink-muted);
 }
+
+/* What is long in a value (an address, a path) breaks instead of widening the page. */
+.status-groups .detail-row > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* On a phone the name's column of 20rem would leave the value no room: the name goes above it. */
+@media (max-width: 640px) {
+  .status-groups .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .status-groups .detail-row > :first-child {
+    flex: none;
+  }
+}
 .account-hidden td { opacity: 0.6; }
 .load-more { text-align: center; margin: 12px 0; }
 
@@ -1814,4 +1833,86 @@ h2[id^="section-"] {
 .connection-problem .panel {
   max-width: 28rem;
   text-align: center;
+}
+
+/* On a phone a table with class "stack-on-phone" (js/stackedTables.js) is a card per row: each cell is a
+   line with the name of its column above the value, so nothing, buttons included, is left off to the right
+   to scroll to. Its header keeps only the sortable columns, as buttons to sort by. */
+@media (max-width: 640px) {
+  .section-header {
+    flex-wrap: wrap;
+  }
+
+  .section-header .btn {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  table.stack-on-phone,
+  .stack-on-phone tbody,
+  .stack-on-phone tr,
+  .stack-on-phone td {
+    display: block;
+  }
+
+  .stack-on-phone th:not([data-sort-key]),
+  .stack-on-phone thead tr:not(:has(th[data-sort-key])) {
+    display: none;
+  }
+
+  .stack-on-phone thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+
+  .stack-on-phone thead tr::before {
+    content: 'Ordenar por';
+    padding: 10px 0;
+    color: var(--ink-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .stack-on-phone tbody tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .stack-on-phone td {
+    padding: 3px 12px;
+    border-bottom: none;
+  }
+
+  .stack-on-phone td:empty {
+    display: none;
+  }
+
+  .stack-on-phone td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--ink-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+/* The rows of the attributes of a type (/admin): a name, its kind, "Obligatorio" and four buttons, or the
+   options and a box to add one. They wrap instead of running past the edge of the dialog on a phone. */
+#material-attributes-list .detail-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px 12px;
+}
+
+#material-attributes-list .detail-row .nowrap {
+  white-space: normal;
+}
+
+#material-attributes-list input[data-new-option-label] {
+  min-width: 0;
+  width: 9rem;
 }

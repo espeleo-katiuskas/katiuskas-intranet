@@ -99,6 +99,17 @@ types (`updateMovementAccountField`). The account goes in the request as `accoun
 is marked for the rentals or the sales of material (in Contabilidad) the API answers
 `no_material_account`.
 
+**Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
+on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (the five
+of `/admin`) is drawn instead, under 640px, as a card per row: `js/stackedTables.js`, started by
+`initPage`, gives every cell `data-label` with the text of its column's header (again whenever the
+rows are redrawn, with a `MutationObserver`), and `style.css` shows each cell as its label above its
+value; the header keeps only the sortable columns, as a row "Ordenar por" of buttons, and the other
+headers go. A cell that spans the row (the "nothing here" message) and an empty one carry no label.
+The rows of "Estado del sistema" put the name above the value under that width, since its fixed
+column of 20rem left the value no room, and `.section-header` lets its button wrap below the title
+instead of squeezing it.
+
 **Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only
 on hover, as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`,
 written with `:where()` so that it has no specificity and whatever styles its own links (the
