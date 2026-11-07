@@ -115,6 +115,30 @@ function itemSearchText(item) {
   return normalizeForSearch(itemPickerText(item));
 }
 
+// A word of the search like ">30", ">30m", "<20" or "<20m" does not look for text: it keeps the ropes longer
+// (">") or shorter ("<") than that many metres, and drops everything that is not a rope. The rest of the
+// search is looked for as text, as always. Both are strict: ">30" leaves out a rope of exactly 30 m.
+const lengthWord = /^([<>])(\d+)m?$/i;
+
+function parseSearch(raw) {
+  const lengths = [];
+  const words = [];
+  for (const word of raw.trim().split(/\s+/).filter(Boolean)) {
+    const match = lengthWord.exec(word);
+    if (match) lengths.push({ longer: match[1] === '>', metres: Number(match[2]) });
+    else words.push(word);
+  }
+  return { text: normalizeForSearch(words.join(' ')), lengths };
+}
+
+function matchesSearch(item, { text, lengths }) {
+  const fits = ({ longer, metres }) => {
+    if (item.kind !== 'rope') return false;
+    return longer ? item.length_m > metres : item.length_m < metres;
+  };
+  return lengths.every(fits) && (!text || itemSearchText(item).includes(text));
+}
+
 function renderItemRow(item) {
   return `
     <tr>
@@ -313,10 +337,13 @@ async function openNewMovementDialog(itemId) {
 const isGone = (item) => item.total_quantity === 0;
 
 function renderFilteredItems() {
-  const query = normalizeForSearch(document.getElementById('item-search').value);
+  const search = parseSearch(document.getElementById('item-search').value);
   const showAll = document.getElementById('show-all-items').checked;
   const visible = showAll ? allItems : allItems.filter((item) => !isGone(item));
-  const filtered = query ? visible.filter((item) => itemSearchText(item).includes(query)) : visible;
+  const filtered =
+    search.text || search.lengths.length
+      ? visible.filter((item) => matchesSearch(item, search))
+      : visible;
   const tableBody = document.getElementById('items-table-body');
   tableBody.innerHTML = filtered.length
     ? filtered.map(renderItemRow).join('')

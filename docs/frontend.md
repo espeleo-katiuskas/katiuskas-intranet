@@ -67,6 +67,14 @@ material que ya no está (vendido, perdido, abandonado o retirado)" under the se
 everything. It is a filter of the page (`GET /material/items` still returns every item), and the
 search applies on top of it.
 
+**Searching the material.** The search box of `/material` looks in what the table shows
+(`itemSearchText`: the type and the "Características" cell, code included), ignoring accents and
+case. A word of the form `>N`, `>Nm`, `<N` or `<Nm` (N a natural number) is not looked for as text:
+it keeps the ropes longer (`>`) or shorter (`<`) than N metres and drops everything that is not a
+rope (`parseSearch`, `matchesSearch` in `material.js`). The comparison is strict, so `>30` leaves
+out a rope of exactly 30 m, and several such words add up (`>25m <40`); the rest of the words are
+looked for as text as usual (`>30 petzl`). The box's tooltip explains it.
+
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
 of `/material`: *Prestado*, the items whose loans have not all come back
