@@ -8,8 +8,9 @@ import { normalizeForSearch } from './api.js';
 // document), and leaves what a page does with the input as it was: choosing an option writes its value into
 // the input and fires `input` and `change`, so the page cannot tell it from the browser's own.
 //
-// The menu is placed right after the input, so inside a <dialog> (in the top layer) it stays above it.
-const MAX_SHOWN = 50;
+// The menu is placed right after the input, so inside a <dialog> (in the top layer) it stays above it. It lists
+// every option that matches, however many (the menu scrolls): a cap would leave people out of a picker that
+// is opened to choose among all of them.
 
 let menu = null;
 let current = null; // The input the menu is for.
@@ -22,12 +23,10 @@ function optionsOf(input) {
 
 function matches(input) {
   const words = normalizeForSearch(input.value).split(/\s+/).filter(Boolean);
-  return optionsOf(input)
-    .filter((value) => {
-      const text = normalizeForSearch(value);
-      return words.every((w) => text.includes(w));
-    })
-    .slice(0, MAX_SHOWN);
+  return optionsOf(input).filter((value) => {
+    const text = normalizeForSearch(value);
+    return words.every((w) => text.includes(w));
+  });
 }
 
 function hide() {

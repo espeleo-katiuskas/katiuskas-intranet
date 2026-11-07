@@ -115,11 +115,11 @@ request that is never followed through is not remembered. It also works on the c
 "García"). `initPickerSearch`, called by `initPage`, takes every such input over the first time it
 gets the focus: it removes its `list` attribute and shows its own menu (`.picker-menu`, right after
 the input so it also shows over a dialog) with the options of that datalist that contain every word
-typed, ignoring accents and case, with the arrow keys, Enter (which chooses, it does not send the
-form) and Escape (which closes the menu, not the dialog). Choosing writes the value into the input
-and fires `input` and `change`, so pages do not change. `resolvePickerId` also takes what was typed
-without choosing when it leaves one single entry, ignoring accents. A page only fills the datalist,
-as before.
+typed, ignoring accents and case — all of them, however many: the menu scrolls —, with the arrow
+keys, Enter (which chooses, it does not send the form) and Escape (which closes the menu, not the
+dialog). Choosing writes the value into the input and fires `input` and `change`, so pages do not
+change. `resolvePickerId` also takes what was typed without choosing when it leaves one single
+entry, ignoring accents. A page only fills the datalist, as before.
 
 **How a person reads in a picker.** Just "Nombre Apellidos". A "#login" goes after the name only for
 the people who share it with somebody else in the same list, so the two can be told apart and what
