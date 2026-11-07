@@ -78,16 +78,19 @@ func TestBuildRouterAssemblesAndAnswers(t *testing.T) {
 }
 
 func TestStartupMessageSaysWhatIsKnownAboutTheBuild(t *testing.T) {
-	// Mid-morning UTC, so the date is the same wherever the test runs.
-	commit := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	// The message is in the server's time zone: fix it, so the test gives the same anywhere.
+	local := time.Local
+	time.Local = time.FixedZone("test", 2*60*60)
+	defer func() { time.Local = local }()
+	commit := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC) // 12:00 there
 	cases := []struct {
 		name  string
 		build adminstatus.Build
 		want  string
 	}{
-		{"both", adminstatus.Build{Version: "v0.3.6", CommitTime: commit}, "🚀 API started (version v0.3.6, commit del 17-10-2026)"},
+		{"both", adminstatus.Build{Version: "v0.3.6", CommitTime: commit}, "🚀 API started (version v0.3.6, commit del 17-10-2026 12:00)"},
 		{"version only", adminstatus.Build{Version: "v0.3.6"}, "🚀 API started (version v0.3.6)"},
-		{"date only", adminstatus.Build{CommitTime: commit}, "🚀 API started (commit del 17-10-2026)"},
+		{"date only", adminstatus.Build{CommitTime: commit}, "🚀 API started (commit del 17-10-2026 12:00)"},
 		{"nothing known", adminstatus.Build{}, "🚀 API started"},
 	}
 	for _, c := range cases {

@@ -2,7 +2,6 @@ import {
   apiFetch,
   currentUser,
   escapeHtml,
-  formatDate,
   formatDateTime,
   personPickerLabeler,
   resolvePickerId,
@@ -422,7 +421,7 @@ const yesNo = (value) => (value ? 'Sí' : 'No');
 function renderStatus(status) {
   const app = status.app;
   const revision = app.vcs_revision
-    ? `${escapeHtml(app.vcs_revision.slice(0, 8))}${app.vcs_modified ? ' (con cambios sin commitear)' : ''}${app.vcs_time ? `, del ${formatDate(app.vcs_time)}` : ''}`
+    ? `${escapeHtml(app.vcs_revision.slice(0, 8))}${app.vcs_modified ? ' (con cambios sin commitear)' : ''}${app.vcs_time ? `, del ${formatDateTime(app.vcs_time)}` : ''}`
     : '—';
   const db = status.database;
   const settings = status.settings;

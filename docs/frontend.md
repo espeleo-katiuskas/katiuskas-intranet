@@ -742,7 +742,8 @@ an anchor to its `<h2 id="section-…">`: add a section, add its link), and for 
 del sistema" section — a block of at most 960px, each name in a column of its own with the value
 next to it and a faint line under each row, since the names and values are short (`GET
 /admin/status`, see **Admin status**: on top, what is wrong right now (`problems`, in a red box) or
-"No se ha detectado ningún problema"; then version and commit, database and migration, email,
+"No se ha detectado ningún problema"; then version and commit (with the date and time of the commit,
+in the viewer's own time zone), database and migration, email,
 Telegram, timeouts, directories and, in "Espacio en disco", how full the disks that hold them are,
 with an "Actualizar" button), a "Roles" section (`GET`/`POST`/`DELETE /roles`; a "Ver" under each
 role unfolds who holds it, taken from `GET /users` — admin sees everybody with their `roles` — with

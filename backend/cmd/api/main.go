@@ -40,15 +40,16 @@ import (
 )
 
 // startupMessage is what the startup notification says: "🚀 API started", and
-// when known which version it is and from when the last commit is, e.g. "🚀 API
-// started (version v0.3.6, commit del 17-10-2026)".
+// when known which version it is and from when the last commit is (date and time,
+// in the server's time zone), e.g. "🚀 API started (version v0.3.6, commit del
+// 17-10-2026 12:00)".
 func startupMessage(build adminstatus.Build) string {
 	var details []string
 	if build.Version != "" {
 		details = append(details, "version "+build.Version)
 	}
 	if !build.CommitTime.IsZero() {
-		details = append(details, "commit del "+build.CommitTime.Local().Format("02-01-2006"))
+		details = append(details, "commit del "+build.CommitTime.Local().Format("02-01-2006 15:04"))
 	}
 	if len(details) == 0 {
 		return "🚀 API started"
