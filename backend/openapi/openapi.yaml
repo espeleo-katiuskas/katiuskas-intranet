@@ -4241,6 +4241,17 @@ components:
               total_bytes: { type: integer, format: int64 }
               free_bytes: { type: integer, format: int64, description: What a normal user can still use. }
               used_percent: { type: integer, description: What df shows (rounded up). }
+        activity:
+          type: object
+          description: >
+            How much the API is used; left out if it cannot be read. users: the different people
+            with a session used in the period (a session counts in the period of its last use only;
+            an administrator acting as somebody else does not count). requests: those answered
+            under /api/ (the health check apart, whatever the answer), from the counts kept per
+            minute, so a few seconds may be missing.
+          properties:
+            users: { $ref: "#/components/schemas/ActivityPeriods" }
+            requests: { $ref: "#/components/schemas/ActivityPeriods" }
         problems:
           type: array
           description: >
@@ -4248,6 +4259,13 @@ components:
             storage directory that does not exist, a disk at or above DISK_ALERT_PERCENT. Empty
             when all is well. The same list the monitor warns about through Telegram.
           items: { type: string }
+
+    ActivityPeriods:
+      type: object
+      properties:
+        last_hour: { type: integer, format: int64 }
+        last_day: { type: integer, format: int64 }
+        last_month: { type: integer, format: int64 }
 
     Token:
       type: object

@@ -23,6 +23,7 @@ Contents:
 - [Club information](#club-information): `club_info_items`
 - [Transaction files](#transaction-files): `transaction_files`
 - [Budgets](#budgets): `budgets`, `budget_items`, `budget_item_accounts`
+- [Request counts](#request-counts): `request_counts`
 - [Functions, triggers and extensions](#functions-triggers-and-extensions)
 - [Seeded data](#seeded-data)
 - [Migrations](#migrations)
@@ -1380,6 +1381,25 @@ Constraints: primary key `(item_id, account_id)`; `(item_id, budget_id)` referen
 account in a budget cannot be deleted); unique `(budget_id, account_id)`, so an account is in one
 item per budget.
 
+## Request counts
+
+### `request_counts`
+
+How many requests the API has answered, per minute, for the activity figures of `/admin`. Only the
+minutes with any requests have a row. The API counts in memory and adds to the table every few
+seconds (`internal/requestcount`), so what is stored is a few seconds behind and a restart loses
+those seconds. Nothing is ever deleted.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `minute` | timestamptz | no |  |
+| `requests` | bigint | no |  |
+
+Constraints:
+
+- primary key (minute)
+- `requests > 0`
+
 ## Functions, triggers and extensions
 
 - **Extension `btree_gist`** (migration 00001): makes possible the `EXCLUDE USING gist` constraint
@@ -1497,3 +1517,4 @@ at the end; that database has to be recreated when a new migration appears.
   change
 - `00055_material_accounting.sql`: `accounts.material_rental` and `accounts.material_sale` (one
   account each, partial unique indexes) and `material_movements.transaction_id`
+- `00056_request_counts.sql`: `request_counts`

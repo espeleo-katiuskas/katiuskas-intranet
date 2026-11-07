@@ -38,7 +38,8 @@ Contents:
 recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`, `roles`,
 `memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`,
 `tokens`, `accounting`, `clubinfo`, `budgets`, `transactionfiles`; `adminstatus` is the odd one out,
-see below), each split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The
+see below, and `requestcount` is a middleware, not a resource), each split into `model.go` /
+`repository.go` (pgx) / `service.go` / `handler.go`. The
 domain layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
 owns and registers its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
 **`internal/library`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
@@ -828,6 +829,19 @@ and again once a day while one remains, not at every look. A problem is identifi
 that leaves out the details in its text (a disk going from 91 % to 92 % is the same problem).
 It can only warn while the API is running: that the API itself, a backup or a deployment fails
 is told by systemd (`docs/environments.md`, "Alerts when something fails").
+
+**Activity** (`activity`, only in the response of `GET /admin/status`, not in what the monitor
+looks at): how many different people and how many requests there were in the last hour, day and
+month. People are counted from `tokens.last_used_at` — the session's last use, so a session counts
+in the period of its last use only —, one person once however many sessions they have, leaving out
+the sessions of an administrator acting as somebody else (`impersonated_by`). Requests come from
+`request_counts`, filled by `internal/requestcount`: a middleware that wraps the whole router in
+`cmd/api` counts, in memory and per minute, every request under `/api/` except
+`/api/v1/health` (it counts when the request arrives, so refused, failed and non-existent routes
+count too), and a loop adds the counts to the table (`INSERT … ON CONFLICT DO UPDATE`, additive)
+every 15 seconds; with the database failing the counts stay in memory for the next flush. The
+process has no graceful shutdown, so a restart loses the last few seconds. If the figures cannot be
+read, `activity` is left out and the rest of the status is answered as usual.
 
 ## Telegram
 

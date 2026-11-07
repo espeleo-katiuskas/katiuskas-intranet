@@ -204,3 +204,74 @@ func TestStatusListsAreNeverNull(t *testing.T) {
 		}
 	}
 }
+
+// The activity figures: the people who used a session in each period, once each and leaving out an
+// administrator acting as somebody else, and the requests the API has counted.
+func TestStatusReportsTheActivity(t *testing.T) {
+	mux, resolver, tx := newServer(t, adminstatus.Info{})
+	ctx := context.Background()
+	// last_used_at of each session, relative to now.
+	session := func(user testutil.TestUser, lastUsed string, impersonatedBy *int64) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO tokens (user_id, token_hash, expires_at, last_used_at, impersonated_by)
+			VALUES ($1, md5(random()::text), now() + interval '1 day', now() - $2::interval, $3)
+		`, user.ID, lastUsed, impersonatedBy); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := testutil.InsertMember(t, tx)   // used 10 minutes ago, on two sessions
+	today := testutil.InsertMember(t, tx) // 5 hours ago
+	month := testutil.InsertMember(t, tx) // 10 days ago
+	old := testutil.InsertMember(t, tx)   // 2 months ago
+	never := testutil.InsertMember(t, tx) // a session never used
+	admin := testutil.InsertMember(t, tx) // acting as `now`: not their activity
+	session(now, "10 minutes", nil)
+	session(now, "20 minutes", nil)
+	session(today, "5 hours", nil)
+	session(month, "10 days", nil)
+	session(old, "2 months", nil)
+	if _, err := tx.Exec(ctx, `INSERT INTO tokens (user_id, token_hash, expires_at) VALUES ($1, 'never-used', now() + interval '1 day')`, never.ID); err != nil {
+		t.Fatal(err)
+	}
+	session(admin, "1 minute", &now.ID)
+
+	for _, c := range []struct {
+		ago      string
+		requests int
+	}{{"5 minutes", 100}, {"50 minutes", 20}, {"3 hours", 7}, {"5 days", 3}, {"2 months", 1000}} {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO request_counts (minute, requests) VALUES (date_trunc('minute', now() - $1::interval), $2)
+		`, c.ago, c.requests); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Activity struct {
+			Users    map[string]int64 `json:"users"`
+			Requests map[string]int64 `json:"requests"`
+		} `json:"activity"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	// Whoever the other tests of this database left behind is not here: it is a transaction that is
+	// rolled back.
+	wantUsers := map[string]int64{"last_hour": 1, "last_day": 2, "last_month": 3}
+	wantRequests := map[string]int64{"last_hour": 120, "last_day": 127, "last_month": 130}
+	for key, want := range wantUsers {
+		if got := body.Activity.Users[key]; got != want {
+			t.Errorf("users %s: expected %d, got %d", key, want, got)
+		}
+	}
+	for key, want := range wantRequests {
+		if got := body.Activity.Requests[key]; got != want {
+			t.Errorf("requests %s: expected %d, got %d", key, want, got)
+		}
+	}
+}

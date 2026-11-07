@@ -30,6 +30,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/requestcount"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegrambot"
@@ -126,8 +127,12 @@ func main() {
 	}
 	cancelStartup()
 
+	// The requests are counted (per minute, kept in the database) for the activity figures of /admin.
+	counter := requestcount.New(pool)
+	go counter.Run(ctx)
+
 	slog.Info("starting server", "addr", cfg.HTTPAddr)
-	if err := http.ListenAndServe(cfg.HTTPAddr, router); err != nil {
+	if err := http.ListenAndServe(cfg.HTTPAddr, counter.Middleware(router)); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

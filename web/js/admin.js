@@ -418,6 +418,18 @@ function statusGroup(title, rows) {
 
 const yesNo = (value) => (value ? 'Sí' : 'No');
 
+// "Actividad": how many different people used the intranet and how many requests it answered in the
+// last hour, day and month.
+function activityGroup(activity) {
+  const number = (n) => n.toLocaleString('es');
+  const periods = (counts) =>
+    `${number(counts.last_hour)} en la última hora, ${number(counts.last_day)} en el último día, ${number(counts.last_month)} en el último mes`;
+  return statusGroup('Actividad', [
+    ['Personas distintas', periods(activity.users)],
+    ['Peticiones', periods(activity.requests)],
+  ]);
+}
+
 function renderStatus(status) {
   const app = status.app;
   const revision = app.vcs_revision
@@ -449,6 +461,7 @@ function renderStatus(status) {
       ['Go', escapeHtml(app.go_version)],
       ['Arrancó', `${formatDateTime(app.started_at)} (${ago(app.started_at)})`],
     ]),
+    ...(status.activity ? [activityGroup(status.activity)] : []),
     statusGroup('Base de datos', [
       [
         'Estado',

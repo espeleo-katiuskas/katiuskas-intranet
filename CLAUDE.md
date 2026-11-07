@@ -129,7 +129,9 @@ package per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `act
 `transactionfiles`), each `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`; only
 `handler.go` knows HTTP. Each package registers its routes with `RegisterRoutes(mux)`, wired in
 `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a read-only directory tree from
-disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads.
+disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads
+(the people and requests of its "Actividad" come from `tokens.last_used_at` and from
+`request_counts`, which the `requestcount` middleware in `cmd/api` fills).
 Packages that can't import each other use small local interfaces satisfied structurally
 (`UserLookup`, `DuesLookup`, `LicensesLookup`…).
 

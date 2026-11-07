@@ -114,10 +114,15 @@ type statusResponse struct {
 	// Problems says, in words, what is wrong right now (the same list the
 	// monitor warns about); empty when everything is fine.
 	Problems []string `json:"problems"`
+	// Activity is how much the API is used (people and requests in the last hour, day and month);
+	// absent if it could not be read. Only the status page asks for it, not the monitor.
+	Activity *activityStatus `json:"activity,omitempty"`
 }
 
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
-	httpapi.WriteJSON(w, http.StatusOK, h.build(r.Context()))
+	resp := h.build(r.Context())
+	resp.Activity = h.activity(r.Context())
+	httpapi.WriteJSON(w, http.StatusOK, resp)
 }
 
 // build looks at everything that can change while the process runs.

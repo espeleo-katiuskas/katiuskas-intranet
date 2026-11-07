@@ -126,8 +126,9 @@ if the person has linked Telegram, by Telegram too.
   person's own roles; 204 also when there was no change to undo.
   - errors: 403 `forbidden`; 409 `impersonating`
 - **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts,
-  directories and how full their disks are, and what is wrong right now, of the running process.
-  Never includes secrets.
+  directories and how full their disks are, what is wrong right now, and how much the API is used
+  (people and requests in the last hour, day and month), of the running process. Never includes
+  secrets.
   - returns: 200 `AdminStatus`
 
 ## Club information
@@ -909,6 +910,7 @@ Nested fields:
 | `storage` | [object] |
 | `disks` | [object] |
 | `problems` | [text] |
+| `activity` | object |
 
 Nested fields:
 
@@ -922,6 +924,11 @@ Nested fields:
 - `storage`: `[{name, path, exists}]`
 - `disks`: `[{paths, total_bytes, free_bytes, used_percent}]`, one per filesystem that holds some of
   the storage directories
+- `activity`: `{users, requests}`, each `{last_hour, last_day, last_month}`; left out if it cannot
+  be read. `users` counts the different people with a session used in the period (a session counts
+  in the period of its last use only; an administrator acting as somebody else does not count) and
+  `requests` those the API answered under `/api/`, the health check apart, whatever the answer,
+  from the counts it keeps per minute (a few seconds may not be stored yet)
 - `problems` is a list of sentences in Spanish saying what is wrong (database not answering, a
   missing directory, a disk at `DISK_ALERT_PERCENT` or more); empty when all is well
 
