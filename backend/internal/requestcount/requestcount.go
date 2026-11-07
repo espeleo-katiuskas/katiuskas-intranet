@@ -1,8 +1,9 @@
 // Package requestcount counts the requests the API answers, per minute, and keeps the counts in
 // the database (table request_counts) so that /admin can say how many there were in the last hour,
 // day and month. Counting is in memory, one increment per request; a background loop adds what has
-// accumulated to the table every few seconds, so a request costs no query and a restart loses at
-// most the last few seconds.
+// accumulated to the table every few minutes, so a request costs no query. What is still in memory
+// is stored when the API shuts down in an orderly way (cmd/api) and, for /admin, whenever the figures
+// are read; only a crash or a kill loses the last few minutes.
 package requestcount
 
 import (
@@ -21,7 +22,7 @@ import (
 const healthPath = "/api/v1/health"
 
 // flushEvery is how often the counts are added to the table.
-const flushEvery = 15 * time.Second
+const flushEvery = 5 * time.Minute
 
 type Counter struct {
 	pool db.PGX
@@ -82,18 +83,15 @@ func (c *Counter) Flush(ctx context.Context) error {
 	return failed
 }
 
-// Run flushes every few seconds until ctx is done, and once more then.
+// Run flushes every few minutes until ctx is done. It does not flush when it stops: the requests
+// still being answered then are counted already, but the last Flush is up to whoever shuts the
+// server down, once those requests are over.
 func (c *Counter) Run(ctx context.Context) {
 	ticker := time.NewTicker(flushEvery)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := c.Flush(flushCtx); err != nil {
-				slog.Error("store the request counts", "error", err)
-			}
-			cancel()
 			return
 		case <-ticker.C:
 			if err := c.Flush(ctx); err != nil {

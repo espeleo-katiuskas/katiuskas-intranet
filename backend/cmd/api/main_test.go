@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -97,5 +99,78 @@ func TestStartupMessageSaysWhatIsKnownAboutTheBuild(t *testing.T) {
 		if got := startupMessage(c.build); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// On a signal the server stops taking requests but lets the one being answered finish, and only
+// then does what is left to do before exiting.
+func TestServeFinishesTheRequestsInFlightBeforeTheLastWrites(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := listener.Addr().String()
+	listener.Close()
+
+	started := make(chan struct{})
+	var order []string
+	var mu sync.Mutex
+	note := func(what string) {
+		mu.Lock()
+		defer mu.Unlock()
+		order = append(order, what)
+	}
+	server := &http.Server{Addr: addr, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		time.Sleep(200 * time.Millisecond)
+		note("request done")
+		w.WriteHeader(http.StatusOK)
+	})}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- serve(ctx, server, 5*time.Second, func(context.Context) { note("finish") })
+	}()
+
+	var response *http.Response
+	requested := make(chan error, 1)
+	go func() {
+		var err error
+		for range 50 { // the server may not be listening yet
+			response, err = http.Get("http://" + addr + "/")
+			if err == nil {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		requested <- err
+	}()
+	<-started
+	cancel()
+
+	if err := <-served; err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	if err := <-requested; err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("the request in flight was not answered: %v %v", err, response)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != "request done" || order[1] != "finish" {
+		t.Errorf("expected the request to finish before the last writes, got %v", order)
+	}
+}
+
+// A server that cannot start is an error, not a shutdown.
+func TestServeReportsAServerThatFails(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer taken.Close()
+	server := &http.Server{Addr: taken.Addr().String(), Handler: http.NotFoundHandler()}
+	if err := serve(context.Background(), server, time.Second, func(context.Context) {}); err == nil {
+		t.Error("expected an error for an address already in use")
 	}
 }

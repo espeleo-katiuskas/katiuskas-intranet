@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounting"
@@ -76,7 +78,10 @@ func main() {
 	logger = slog.New(telegram.NewLogHandler(logger.Handler(), telegramSender, slog.LevelError))
 	slog.SetDefault(logger)
 
-	ctx := context.Background()
+	// SIGTERM (systemd, docker stop) and SIGINT start an orderly shutdown (see serve) instead of
+	// killing the process: the context is cancelled, which also stops the bot and the monitor.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("connect to database", "error", err)
@@ -130,11 +135,65 @@ func main() {
 	// The requests are counted (per minute, kept in the database) for the activity figures of /admin.
 	counter := requestcount.New(pool)
 	go counter.Run(ctx)
+	adminStatus.SetFlusher(counter)
 
 	slog.Info("starting server", "addr", cfg.HTTPAddr)
-	if err := http.ListenAndServe(cfg.HTTPAddr, counter.Middleware(router)); err != nil {
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: counter.Middleware(router)}
+	if err := serve(ctx, server, shutdownTimeout, func(ctx context.Context) {
+		// What the requests that were still going on started in the background, and the counts that
+		// are still in memory: the last thing to do before the pool is closed.
+		waitWithin(ctx, httpapi.WaitBackground)
+		waitWithin(ctx, authHandler.WaitForBackgroundSends)
+		if err := counter.Flush(ctx); err != nil {
+			slog.Error("store the request counts", "error", err)
+		}
+	}); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
+	}
+	slog.Info("stopped")
+}
+
+// shutdownTimeout is how long an orderly shutdown may take, all of it: the requests still being
+// answered, what they started in the background and the last writes. systemd waits 90 s before it
+// kills, and docker-compose.yml asks for 30 s.
+const shutdownTimeout = 25 * time.Second
+
+// serve runs the server until it fails or ctx is cancelled (a signal). In that case it shuts it down in
+// an orderly way: it stops accepting connections, lets the requests being answered finish, and then
+// runs finish with what is left of timeout, to wait for what they started in the background and to store
+// what is only in memory. It answers with the error of the server, if it failed, and nil after an
+// orderly shutdown (also when the timeout ran out first: that is logged).
+func serve(ctx context.Context, server *http.Server, timeout time.Duration, finish func(ctx context.Context)) error {
+	failed := make(chan error, 1)
+	go func() { failed <- server.ListenAndServe() }()
+	select {
+	case err := <-failed:
+		return err
+	case <-ctx.Done():
+	}
+
+	slog.Info("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shut the server down", "error", err)
+	}
+	finish(shutdownCtx)
+	return nil
+}
+
+// waitWithin runs wait, which has no way to be interrupted, and gives up when ctx is done.
+func waitWithin(ctx context.Context, wait func()) {
+	done := make(chan struct{})
+	go func() {
+		wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		slog.Warn("shutting down without waiting for the background work to end")
 	}
 }
 

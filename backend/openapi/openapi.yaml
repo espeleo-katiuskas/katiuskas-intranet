@@ -4248,7 +4248,7 @@ components:
             with a session used in the period (a session counts in the period of its last use only;
             an administrator acting as somebody else does not count). requests: those answered
             under /api/ (the health check apart, whatever the answer), from the counts kept per
-            minute, so a few seconds may be missing.
+            minute, stored before they are read so they are up to date.
           properties:
             users: { $ref: "#/components/schemas/ActivityPeriods" }
             requests: { $ref: "#/components/schemas/ActivityPeriods" }

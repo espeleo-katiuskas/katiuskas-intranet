@@ -839,9 +839,29 @@ the sessions of an administrator acting as somebody else (`impersonated_by`). Re
 `cmd/api` counts, in memory and per minute, every request under `/api/` except
 `/api/v1/health` (it counts when the request arrives, so refused, failed and non-existent routes
 count too), and a loop adds the counts to the table (`INSERT … ON CONFLICT DO UPDATE`, additive)
-every 15 seconds; with the database failing the counts stay in memory for the next flush. The
-process has no graceful shutdown, so a restart loses the last few seconds. If the figures cannot be
-read, `activity` is left out and the rest of the status is answered as usual.
+every five minutes; with the database failing the counts stay in memory for the next flush. What is
+still in memory is also stored when the API shuts down (see **Orderly shutdown**) and before
+`GET /admin/status` reads the figures (`Handler.SetFlusher`), so what the page shows is up to date;
+only a crash or a kill loses the last few minutes. If the figures cannot be read, `activity` is left
+out and the rest of the status is answered as usual.
+
+## Orderly shutdown
+
+`cmd/api` runs the server with `http.Server` and a context cancelled by SIGTERM or SIGINT
+(`signal.NotifyContext`; systemd and `docker stop` send SIGTERM), and `serve` does, in this order:
+`Shutdown` (it stops accepting connections and lets the requests being answered finish), then
+`finish`, which waits for the work those requests started in the background — the Telegram
+notifications and the sends of `authapi`, tracked by `httpapi.Go`/`httpapi.WaitBackground` and
+`authapi.Handler.WaitForBackgroundSends` — and stores the request counts that are still in memory
+(`requestcount.Counter.Flush`); the connection pool is closed last. All of it has `shutdownTimeout`
+(25 s) to end; what is not over by then is given up (and logged), never waited for. The cancelled
+context also stops the Telegram bot's long poll, the monitor and the counter's loop. A request
+that ends well is therefore not cut off by a deploy, and a notification or an email that was on its
+way still leaves. Work that sleeps until some deadline, like the deletion of a magic-link message
+in Telegram after the link's lifetime, is *not* tracked (it would hold the shutdown up for as
+long): it is lost with the process, as it always was. A crash or a `SIGKILL` skips all of this.
+systemd's default `TimeoutStopSec` (90 s) leaves room for it, and `docker-compose.yml` asks for
+`stop_grace_period: 30s`, since docker kills after 10 s unless told otherwise.
 
 ## Telegram
 

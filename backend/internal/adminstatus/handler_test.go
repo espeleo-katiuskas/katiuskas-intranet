@@ -275,3 +275,35 @@ func TestStatusReportsTheActivity(t *testing.T) {
 		}
 	}
 }
+
+// The activity figures are read after what is still in memory has been stored.
+type flushFunc func(ctx context.Context) error
+
+func (f flushFunc) Flush(ctx context.Context) error { return f(ctx) }
+
+func TestStatusStoresWhatIsInMemoryBeforeReadingTheActivity(t *testing.T) {
+	tx := testutil.NewTx(t)
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	mux := http.NewServeMux()
+	handler := adminstatus.NewHandler(tx, authenticator, adminstatus.Info{})
+	flushed := 0
+	handler.SetFlusher(flushFunc(func(ctx context.Context) error {
+		flushed++
+		_, err := tx.Exec(ctx, `INSERT INTO request_counts (minute, requests) VALUES (date_trunc('minute', now()), 42)`)
+		return err
+	}))
+	handler.RegisterRoutes(mux)
+
+	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+	var body struct {
+		Activity struct {
+			Requests map[string]int64 `json:"requests"`
+		} `json:"activity"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if flushed != 1 || body.Activity.Requests["last_hour"] != 42 {
+		t.Errorf("flushed %d times, requests of the last hour: %d (expected 1 and 42)", flushed, body.Activity.Requests["last_hour"])
+	}
+}

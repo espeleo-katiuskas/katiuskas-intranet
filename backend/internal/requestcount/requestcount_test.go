@@ -62,3 +62,31 @@ func TestRequestsAreCountedPerMinuteAndStored(t *testing.T) {
 		t.Errorf("a second flush changed the counts: %d in %d rows", requests, rows)
 	}
 }
+
+// Run stops when its context is cancelled and does not store anything then: the last flush is the
+// shutdown's to make, once the requests still going on are over.
+func TestRunStopsWithoutFlushing(t *testing.T) {
+	c := New(testutil.NewTx(t))
+	c.add(time.Now())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx)
+		close(done)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop when its context was cancelled")
+	}
+	if rows, _ := total(t, c); rows != 0 {
+		t.Errorf("Run stored %d rows when stopping", rows)
+	}
+	if err := c.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, requests := total(t, c); requests != 1 {
+		t.Errorf("the request counted was not kept for the final flush: %d stored", requests)
+	}
+}

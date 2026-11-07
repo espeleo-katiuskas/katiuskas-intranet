@@ -76,6 +76,9 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+    # The API shuts down in an orderly way on SIGTERM (it lets the requests being answered finish
+    # and stores what is only in memory, up to 25 s): docker's default of 10 s would kill it first.
+    stop_grace_period: 30s
     restart: unless-stopped
 
   web:

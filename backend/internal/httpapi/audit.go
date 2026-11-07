@@ -34,13 +34,13 @@ func NotifyAsync(notifier MutationNotifier, text string) {
 	if notifier == nil {
 		return
 	}
-	go func() {
+	Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := notifier.Send(ctx, text); err != nil {
 			slog.Error("notify telegram", "error", err)
 		}
-	}()
+	})
 }
 
 // DiffFields compares the named fields of before and after — two

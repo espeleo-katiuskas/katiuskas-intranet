@@ -91,9 +91,9 @@ type Handler struct {
 	pendingTelegramDMsMu sync.Mutex
 	pendingTelegramDMs   map[int64]pendingTelegramDM
 
-	// background tracks the sends that run in their own goroutine (the
-	// Telegram DM riding along a web request), so WaitForBackgroundSends
-	// can wait for them.
+	// background tracks the magic-link DMs that run in their own goroutine (the Telegram DM riding
+	// along a web request), so WaitForBackgroundSends can wait for them. The other sends of this
+	// package are tracked by httpapi.Go.
 	background sync.WaitGroup
 }
 
@@ -102,7 +102,7 @@ type Handler struct {
 // after a failure (forgetting an unreachable chat, see
 // notifyMagicLinkViaTelegram). Nothing in a request needs it; it exists so
 // a test can look at the outcome without racing the goroutine, and so a
-// shutdown could let them finish.
+// shutdown lets them finish (cmd/api).
 func (h *Handler) WaitForBackgroundSends() {
 	h.background.Wait()
 }
@@ -270,13 +270,13 @@ func logSafe(s string) string {
 // does for a successful sign-in, in the background so the request never
 // waits on Telegram.
 func (h *Handler) notifyAccessProblem(text string) {
-	go func() {
+	httpapi.Go(func() {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := h.notifier.Send(sendCtx, text); err != nil {
 			slog.Error("notify access problem to telegram", "error", err)
 		}
-	}()
+	})
 }
 
 // IssueMagicLinkForTelegramUser replies to a message from someone whose
@@ -606,7 +606,7 @@ func (h *Handler) deleteTelegramDMs(list []pendingTelegramDM) {
 			pending.cancel()
 		}
 	}
-	go func() {
+	httpapi.Go(func() {
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		for _, pending := range list {
@@ -614,7 +614,7 @@ func (h *Handler) deleteTelegramDMs(list []pendingTelegramDM) {
 				slog.Error("delete magic link telegram message", "error", err)
 			}
 		}
-	}()
+	})
 }
 
 // deletePendingTelegramDM immediately deletes the magic-link DM (see
@@ -785,13 +785,13 @@ func (h *Handler) notifyLogin(ctx context.Context, userID int64, ip string) {
 		login = fmt.Sprintf("user #%d", userID)
 	}
 	text := fmt.Sprintf("🔑 Login: %s (%s)", login, ip)
-	go func() {
+	httpapi.Go(func() {
 		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := h.notifier.Send(sendCtx, text); err != nil {
 			slog.Error("notify login to telegram", "error", err)
 		}
-	}()
+	})
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {

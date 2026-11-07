@@ -928,7 +928,7 @@ Nested fields:
   be read. `users` counts the different people with a session used in the period (a session counts
   in the period of its last use only; an administrator acting as somebody else does not count) and
   `requests` those the API answered under `/api/`, the health check apart, whatever the answer,
-  from the counts it keeps per minute (a few seconds may not be stored yet)
+  from the counts it keeps per minute (what is still in memory is stored before they are read)
 - `problems` is a list of sentences in Spanish saying what is wrong (database not answering, a
   missing directory, a disk at `DISK_ALERT_PERCENT` or more); empty when all is well
 

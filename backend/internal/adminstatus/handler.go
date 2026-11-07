@@ -53,6 +53,19 @@ type Handler struct {
 	pool          db.PGX
 	authenticator *auth.Authenticator
 	info          Info
+	flusher       Flusher
+}
+
+// Flusher stores what is still only in memory, so that the figures read are up to date: the request
+// counts, which are written to the database every few minutes (package requestcount).
+type Flusher interface {
+	Flush(ctx context.Context) error
+}
+
+// SetFlusher says what to store before the activity figures are read; without one they are what
+// the database has.
+func (h *Handler) SetFlusher(f Flusher) {
+	h.flusher = f
 }
 
 func NewHandler(pool db.PGX, authenticator *auth.Authenticator, info Info) *Handler {
@@ -121,6 +134,10 @@ type statusResponse struct {
 
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	resp := h.build(r.Context())
+	if h.flusher != nil {
+		// Best effort: with the database failing, the figures are simply what it has.
+		_ = h.flusher.Flush(r.Context())
+	}
 	resp.Activity = h.activity(r.Context())
 	httpapi.WriteJSON(w, http.StatusOK, resp)
 }

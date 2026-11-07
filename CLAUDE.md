@@ -131,7 +131,11 @@ package per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `act
 `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a read-only directory tree from
 disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads
 (the people and requests of its "Actividad" come from `tokens.last_used_at` and from
-`request_counts`, which the `requestcount` middleware in `cmd/api` fills).
+`request_counts`, which the `requestcount` middleware in `cmd/api` fills). **The API shuts down in
+an orderly way** on SIGTERM/SIGINT (`serve` in `cmd/api/main.go`): requests in flight finish, what
+runs in the background is waited for if it was started with `httpapi.Go` (use it, not a bare `go`,
+for a notification or email that must not be lost; never for work that sleeps until a deadline),
+and the request counts are stored.
 Packages that can't import each other use small local interfaces satisfied structurally
 (`UserLookup`, `DuesLookup`, `LicensesLookup`…).
 

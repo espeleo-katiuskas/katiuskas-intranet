@@ -1386,9 +1386,9 @@ item per budget.
 ### `request_counts`
 
 How many requests the API has answered, per minute, for the activity figures of `/admin`. Only the
-minutes with any requests have a row. The API counts in memory and adds to the table every few
-seconds (`internal/requestcount`), so what is stored is a few seconds behind and a restart loses
-those seconds. Nothing is ever deleted.
+minutes with any requests have a row. The API counts in memory and adds to the table every five
+minutes (`internal/requestcount`), when it shuts down in an orderly way and whenever `/admin` reads
+the figures, so a crash or a kill loses the last few minutes at most. Nothing is ever deleted.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
