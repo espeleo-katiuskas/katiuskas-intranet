@@ -43,7 +43,7 @@ function itemNameText(item, { includeType = true } = {}) {
       `${item.diameter_mm} mm`,
       ropeTypeLabels[item.rope_type] ?? item.rope_type,
       item.manufacture_year,
-      item.length_m ? `${item.length_m} m` : null,
+      item.length_m ? `${item.length_m}m` : null,
     ];
     return parts.filter(Boolean).join(' · ');
   }
