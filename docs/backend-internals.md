@@ -845,6 +845,24 @@ still in memory is also stored when the API shuts down (see **Orderly shutdown**
 only a crash or a kill loses the last few minutes. If the figures cannot be read, `activity` is left
 out and the rest of the status is answered as usual.
 
+**Calendar of activity** (`GET /admin/activity`, `activityCalendar` in `adminstatus/activity.go`):
+who used the API each day, for the calendar of `/admin`. It is kept in `user_activity` (a row per
+person and day), written by the same `requestcount.Counter` as the totals. The counter learns who
+made a request from `httpapi.Actor`: it puts an empty box in the request's context (`WithActorBox`)
+before passing it on, `auth.RequireAuth` (and the cookie variant) fills it (`SetRequestActor`, with
+the person and whether an administrator is acting as them) and, once the request is over, the
+counter counts it for that person on that day — so a request nobody signed in for counts for nobody,
+and an impersonation counts for nobody either, since it is not the person's own activity. The day is
+the club's, `Europe/Madrid` (`requestcount.Day`, with `time/tzdata` embedded so that it does not
+depend on the host): a person using the intranet at half past midnight there is on the new day.
+Flushing keeps what cannot be stored for the next time, except activity of a person who no longer
+exists (a foreign key violation, which is dropped), and deleting a person deletes their rows
+(`users.Repository.Delete`). Nothing earlier than this feature is known. The endpoint asks the
+counter to store what it still has in memory, as the status does, and answers with the days that
+have any activity in the last `days` days (365 by default, 730 at most), by login: the page looks
+the names up in the directory. It is admin only: it says who used the intranet and when, and it
+holds counts, never what they looked at.
+
 ## Orderly shutdown
 
 `cmd/api` runs the server with `http.Server` and a context cancelled by SIGTERM or SIGINT

@@ -1916,3 +1916,106 @@ h2[id^="section-"] {
   min-width: 0;
   width: 9rem;
 }
+
+/* "Actividad" (/admin): a calendar like the contributions of GitHub. A column per week (Monday first), a
+   row per weekday, a cell per day that is darker the more people used the API (level-0 to level-4). It
+   scrolls sideways on its own when the screen is narrow, without moving the page. */
+.activity {
+  --cell: 13px;
+  --gap: 3px;
+  max-width: 960px;
+}
+
+.activity-summary {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+}
+
+.heat {
+  display: flex;
+  gap: 8px;
+}
+
+.heat-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  gap: var(--gap);
+  /* Level with the grid: under the row of the months' names. */
+  margin-top: calc(18px + var(--gap));
+  font-size: 0.7rem;
+  line-height: var(--cell);
+  color: var(--ink-muted);
+}
+
+.heat-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.heat-months {
+  display: grid;
+  column-gap: var(--gap);
+  height: 18px;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.heat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, var(--cell));
+  gap: var(--gap);
+  margin-top: var(--gap);
+  width: max-content;
+}
+
+.heat-cell {
+  display: inline-block;
+  width: var(--cell);
+  height: var(--cell);
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  background: var(--surface-muted);
+}
+
+button.heat-cell {
+  cursor: pointer;
+}
+
+button.heat-cell:hover,
+button.heat-cell[aria-pressed='true'] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.heat-empty {
+  border-color: transparent;
+  background: transparent;
+}
+
+.heat-cell.level-1 { background: #f0d9bf; }
+.heat-cell.level-2 { background: #e0b17d; }
+.heat-cell.level-3 { background: #c98a47; }
+.heat-cell.level-4 { background: #b4732e; }
+
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.activity-detail h3 {
+  margin: 16px 0 6px;
+  font-size: 1rem;
+}
+
+.activity-detail ul {
+  margin: 0;
+  padding-left: 20px;
+}

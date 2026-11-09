@@ -43,6 +43,34 @@ func SetRequestUserID(ctx context.Context, userID int64) {
 	}
 }
 
+type actorKey struct{}
+
+// Actor is who made a request, once the authentication has found out: set by SetRequestActor for
+// whoever wrapped the request with WithActorBox (the request counter), which reads it when the request
+// is over.
+type Actor struct {
+	UserID int64
+	// Impersonated is true when an administrator is acting as UserID.
+	Impersonated bool
+	// Known is false for a request that was not authenticated.
+	Known bool
+}
+
+// WithActorBox puts an empty Actor in the context of a request, to be filled in by the authentication
+// further down the chain, and returns it. It works by reference, like requestLogFields.
+func WithActorBox(ctx context.Context) (context.Context, *Actor) {
+	actor := &Actor{}
+	return context.WithValue(ctx, actorKey{}, actor), actor
+}
+
+// SetRequestActor says who is making the request, for whoever asked with WithActorBox. A no-op
+// outside a request wrapped that way.
+func SetRequestActor(ctx context.Context, userID int64, impersonated bool) {
+	if actor, ok := ctx.Value(actorKey{}).(*Actor); ok {
+		*actor = Actor{UserID: userID, Impersonated: impersonated, Known: true}
+	}
+}
+
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

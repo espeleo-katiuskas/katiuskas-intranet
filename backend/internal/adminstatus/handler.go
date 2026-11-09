@@ -74,6 +74,7 @@ func NewHandler(pool db.PGX, authenticator *auth.Authenticator, info Info) *Hand
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/admin/status", h.authenticator.Protect(h.status, "admin"))
+	mux.Handle("GET /api/v1/admin/activity", h.authenticator.Protect(h.activityCalendar, "admin"))
 }
 
 type appStatus struct {

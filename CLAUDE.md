@@ -131,7 +131,9 @@ package per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `act
 `cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a read-only directory tree from
 disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads
 (the people and requests of its "Actividad" come from `tokens.last_used_at` and from
-`request_counts`, which the `requestcount` middleware in `cmd/api` fills). **The API shuts down in
+`request_counts`, which the `requestcount` middleware in `cmd/api` fills; the same middleware fills
+`user_activity`, a row per person and day in the club's time zone, which the calendar of `/admin`
+reads through `GET /admin/activity`). **The API shuts down in
 an orderly way** on SIGTERM/SIGINT (`serve` in `cmd/api/main.go`): requests in flight finish, what
 runs in the background is waited for if it was started with `httpapi.Go` (use it, not a bare `go`,
 for a notification or email that must not be lost; never for work that sleeps until a deadline),
@@ -273,5 +275,13 @@ reloads its data. One `<page>.html` + `js/<page>.js` per view.
   `formatCurrency`, dates `formatDate`.
 - Search boxes normalize accents and case (`normalizeForSearch` in `api.js`).
 - All user-visible text in Spanish; identifiers in English.
+- **After any significant change to the frontend, check that it looks right on a desktop and on a
+  phone.** Drive headless Chromium (see Commands) at about 1280 px wide and at about 390 px
+  (`Emulation.setDeviceMetricsOverride` with `mobile=True`), and look at the page: nothing runs past
+  the edge or makes the page scroll sideways (compare `documentElement.scrollWidth` with
+  `clientWidth`), buttons and values are visible and not squeezed, and a table's last columns are
+  not hidden (`stack-on-phone` turns a table into cards on a phone; `docs/frontend.md`, "Tables on a
+  phone"). Dialogs too. Chromium caches `web/` for an hour: disable its cache
+  (`Network.setCacheDisabled`) or the old script is what is tested.
 - Per-page details (distributions, accounting, members, license thumbnails, admin…) are in
   `docs/frontend.md`.

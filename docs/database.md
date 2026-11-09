@@ -23,7 +23,7 @@ Contents:
 - [Club information](#club-information): `club_info_items`
 - [Transaction files](#transaction-files): `transaction_files`
 - [Budgets](#budgets): `budgets`, `budget_items`, `budget_item_accounts`
-- [Request counts](#request-counts): `request_counts`
+- [Request counts](#request-counts): `request_counts`, `user_activity`
 - [Functions, triggers and extensions](#functions-triggers-and-extensions)
 - [Seeded data](#seeded-data)
 - [Migrations](#migrations)
@@ -1400,6 +1400,28 @@ Constraints:
 - primary key (minute)
 - `requests > 0`
 
+### `user_activity`
+
+Who used the API each day, for the calendar of activity of `/admin`: a row per person and day with
+the number of requests they made. The day is the club's (the calendar day in Europe/Madrid, not the
+server's or UTC's). It is filled together with `request_counts` (`internal/requestcount`, same
+flush): a request counts for the person who made it once it has been answered, so a request nobody
+signed in for counts for nobody, and neither does one of an administrator acting as somebody else
+(`tokens.impersonated_by`). It starts empty when it is created: nothing is known of earlier days.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `day` | date | no |  |
+| `user_id` | bigint | no |  |
+| `requests` | bigint | no |  |
+
+Constraints:
+
+- primary key (day, user_id)
+- `user_id` → `users(id)`: deleting a person deletes their activity (`users.Repository.Delete`, as
+  with their sessions), so the days they used disappear from the calendar
+- `requests > 0`
+
 ## Functions, triggers and extensions
 
 - **Extension `btree_gist`** (migration 00001): makes possible the `EXCLUDE USING gist` constraint
@@ -1518,3 +1540,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00055_material_accounting.sql`: `accounts.material_rental` and `accounts.material_sale` (one
   account each, partial unique indexes) and `material_movements.transaction_id`
 - `00056_request_counts.sql`: `request_counts`
+- `00057_user_activity.sql`: `user_activity`

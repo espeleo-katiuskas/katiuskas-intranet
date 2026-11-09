@@ -99,6 +99,16 @@ types (`updateMovementAccountField`). The account goes in the request as `accoun
 is marked for the rentals or the sales of material (in Contabilidad) the API answers
 `no_material_account`.
 
+**Calendar of activity on `/admin`.** The "Actividad" section draws the last year like the
+contributions of GitHub (`renderActivity` in `admin.js`, from `GET /admin/activity`): a column per
+week, Monday first, a row per weekday, and a cell per day, as a button, that is darker the more
+different people used the API that day (levels 0 to 4, in proportion to the busiest day shown;
+`.heat-*` in `style.css`). Choosing a day lists who used it, as links to their `/socio` page with
+their requests (the detail starts on the latest day with any activity; names come from the
+directory, so it is drawn again if that arrives after the calendar). It scrolls sideways by itself
+on a narrow screen, starting on the newest weeks. The days are the club's (Madrid) and are plain
+dates here: no time zone arithmetic. What was before the feature was put in place is not there.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (the five
 of `/admin`) is drawn instead, under 640px, as a card per row: `js/stackedTables.js`, started by

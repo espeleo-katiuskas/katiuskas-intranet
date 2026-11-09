@@ -60,6 +60,7 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		httpapi.SetRequestUserID(r.Context(), user.ID)
+		httpapi.SetRequestActor(r.Context(), user.ID, user.ImpersonatedBy != nil)
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -92,6 +93,7 @@ func (a *Authenticator) RequireAuthFromHeaderOrCookie(next http.Handler) http.Ha
 			return
 		}
 		httpapi.SetRequestUserID(r.Context(), user.ID)
+		httpapi.SetRequestActor(r.Context(), user.ID, user.ImpersonatedBy != nil)
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

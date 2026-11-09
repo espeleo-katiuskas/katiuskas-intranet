@@ -307,3 +307,79 @@ func TestStatusStoresWhatIsInMemoryBeforeReadingTheActivity(t *testing.T) {
 		t.Errorf("flushed %d times, requests of the last hour: %d (expected 1 and 42)", flushed, body.Activity.Requests["last_hour"])
 	}
 }
+
+func getActivity(mux *http.ServeMux, token, query string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/activity"+query, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// The calendar of activity: who used the API each day (by login, with their requests), only the days
+// with some, oldest first, inside the range asked for; admin only.
+func TestActivityCalendarListsWhoUsedTheAPIEachDay(t *testing.T) {
+	mux, resolver, tx := newServer(t, adminstatus.Info{})
+	ctx := context.Background()
+	ana, beto := testutil.InsertMember(t, tx), testutil.InsertMember(t, tx)
+	// Days counted back from today in the club's time zone, as the handler does.
+	for _, row := range []struct {
+		user    testutil.TestUser
+		daysAgo int
+		count   int
+	}{{ana, 0, 5}, {beto, 0, 2}, {ana, 3, 7}, {beto, 400, 9}} {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO user_activity (day, user_id, requests)
+			VALUES ((now() AT TIME ZONE 'Europe/Madrid')::date - $3::int, $1, $2)
+		`, row.user.ID, row.count, row.daysAgo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	token := testutil.TokenFor(resolver, 1, "admin")
+
+	for _, role := range []string{"board", "member"} {
+		if rec := getActivity(mux, testutil.TokenFor(resolver, 1, role), ""); rec.Code != http.StatusForbidden {
+			t.Errorf("expected %s to be forbidden, got %d", role, rec.Code)
+		}
+	}
+	rec := getActivity(mux, token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+		Days []struct {
+			Date  string `json:"date"`
+			Users []struct {
+				Login    string `json:"login"`
+				Requests int64  `json:"requests"`
+			} `json:"users"`
+		} `json:"days"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	// Two days with activity inside the default year; the one 400 days ago is out of it.
+	if len(body.Days) != 2 || body.Days[0].Date >= body.Days[1].Date || body.Days[1].Date != body.To {
+		t.Fatalf("unexpected days: %+v (to %s)", body.Days, body.To)
+	}
+	if len(body.Days[0].Users) != 1 || body.Days[0].Users[0].Login != ana.Login || body.Days[0].Users[0].Requests != 7 {
+		t.Errorf("unexpected first day: %+v", body.Days[0])
+	}
+	if len(body.Days[1].Users) != 2 || body.Days[1].Users[0].Requests+body.Days[1].Users[1].Requests != 7 {
+		t.Errorf("unexpected last day: %+v", body.Days[1])
+	}
+	// A wider range reaches it; a narrower one leaves the older day out; nonsense is refused.
+	if rec := getActivity(mux, token, "?days=730"); !strings.Contains(rec.Body.String(), `"requests":9`) {
+		t.Errorf("730 days should reach the one of 400 days ago: %s", rec.Body.String())
+	}
+	if rec := getActivity(mux, token, "?days=1"); strings.Count(rec.Body.String(), `"date"`) != 1 {
+		t.Errorf("one day should have only today: %s", rec.Body.String())
+	}
+	for _, bad := range []string{"?days=0", "?days=731", "?days=abc"} {
+		if rec := getActivity(mux, token, bad); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d", bad, rec.Code)
+		}
+	}
+}

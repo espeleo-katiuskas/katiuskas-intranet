@@ -132,6 +132,36 @@ func TestRequireAuthRecordsTheUserForRequestLogging(t *testing.T) {
 	}
 }
 
+// Both ways of authenticating tell whoever counts the requests who made one, and whether an
+// administrator was acting as them.
+func TestRequireAuthTellsTheRequestCounterWhoMadeTheRequest(t *testing.T) {
+	admin := int64(1)
+	resolver := stubResolver{
+		"own":          AuthenticatedUser{ID: 7, Roles: []string{"member"}},
+		"impersonated": AuthenticatedUser{ID: 8, Roles: []string{"member"}, ImpersonatedBy: &admin},
+	}
+	a := NewAuthenticator(resolver)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	for name, wrap := range map[string]func(http.Handler) http.Handler{
+		"RequireAuth":                   a.RequireAuth,
+		"RequireAuthFromHeaderOrCookie": a.RequireAuthFromHeaderOrCookie,
+	} {
+		for token, want := range map[string]httpapi.Actor{
+			"own":          {UserID: 7, Known: true},
+			"impersonated": {UserID: 8, Impersonated: true, Known: true},
+			"nobody":       {},
+		} {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			ctx, actor := httpapi.WithActorBox(req.Context())
+			wrap(next).ServeHTTP(httptest.NewRecorder(), req.WithContext(ctx))
+			if *actor != want {
+				t.Errorf("%s, token %q: expected %+v, got %+v", name, token, want, *actor)
+			}
+		}
+	}
+}
+
 func TestRequireAuthFromHeaderOrCookieAcceptsEitherTransport(t *testing.T) {
 	resolver := stubResolver{"valid-token": AuthenticatedUser{ID: 7, Roles: []string{"admin"}}}
 	a := NewAuthenticator(resolver)

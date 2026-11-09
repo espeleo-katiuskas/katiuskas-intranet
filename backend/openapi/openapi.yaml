@@ -690,6 +690,46 @@ paths:
               schema: { $ref: "#/components/schemas/AdminStatus" }
         "403": { description: Requires admin. }
 
+  /admin/activity:
+    get:
+      summary: Who used the API each day
+      description: >
+        Admin-only, read-only. The days with some activity in the last `days` days (today included),
+        oldest first, each with the people who used the API (by login) and how many requests each made;
+        for the calendar of activity of /admin. The days are the club's (Europe/Madrid), not UTC's. A
+        request counts for the person who made it once it has been answered, so one nobody signed in
+        for counts for nobody, and neither does one of an administrator acting as somebody else. Only
+        what has been recorded since the feature was put in place is there. What the API still has in
+        memory is stored before it is read, so it is up to date.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 730, default: 365 } }
+      responses:
+        "200":
+          description: The calendar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { type: string, format: date }
+                  to: { type: string, format: date }
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        users:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              login: { type: string }
+                              requests: { type: integer, format: int64 }
+        "400": { description: invalid_days — days is not a number from 1 to 730. }
+        "403": { description: Requires admin. }
+
   /tokens:
     get:
       summary: List everyone's session tokens

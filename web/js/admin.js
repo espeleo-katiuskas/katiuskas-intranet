@@ -2,6 +2,7 @@ import {
   apiFetch,
   currentUser,
   escapeHtml,
+  formatDate,
   formatDateTime,
   personPickerLabeler,
   resolvePickerId,
@@ -376,6 +377,151 @@ async function loadDirectory() {
     // Without names the logins show instead.
   }
 }
+
+// "Actividad": a calendar of the last year like the contributions of GitHub, one cell per day, darker
+// the more different people used the API that day (GET /admin/activity). Each cell is a button: choosing
+// a day lists who used it, with their requests. The weeks start on Monday and the last one is the
+// current week; the days are the club's (Madrid), and are only dates here: no time zone arithmetic.
+const activityContainer = document.getElementById('activity-container');
+let activityCalendar = null;
+let selectedActivityDay = null;
+
+const parseDay = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+const isoDay = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const mondayIndex = (date) => (date.getDay() + 6) % 7;
+const shortMonths = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+function personLink(login) {
+  const name = namesByLogin[login] ?? login;
+  return `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(name)}</a>`;
+}
+
+function renderActivityDetail() {
+  const detail = document.getElementById('activity-detail');
+  if (!detail || !selectedActivityDay) return;
+  const entry = activityCalendar.days.find((d) => d.date === selectedActivityDay);
+  const date = parseDay(selectedActivityDay);
+  const weekday = date.toLocaleDateString('es', { weekday: 'long' });
+  const title = `${weekday[0].toUpperCase()}${weekday.slice(1)} ${formatDate(date)}`;
+  if (!entry) {
+    detail.innerHTML = `<h3>${escapeHtml(title)}</h3><p>Nadie usó la intranet ese día.</p>`;
+    return;
+  }
+  const people = entry.users
+    .map(
+      (u) =>
+        `<li>${personLink(u.login)} — ${u.requests.toLocaleString('es')} ${u.requests === 1 ? 'petición' : 'peticiones'}</li>`,
+    )
+    .join('');
+  detail.innerHTML = `<h3>${escapeHtml(title)}: ${entry.users.length} ${entry.users.length === 1 ? 'persona' : 'personas'}</h3><ul>${people}</ul>`;
+}
+
+function renderActivity() {
+  if (!activityCalendar) return;
+  const { from, to, days } = activityCalendar;
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const most = Math.max(1, ...days.map((d) => d.users.length));
+  const level = (n) => (n === 0 ? 0 : Math.min(4, Math.ceil((n * 4) / most)));
+
+  // From the Monday of the week of the first day to the end of the week of the last one.
+  const first = parseDay(from);
+  const start = new Date(
+    first.getFullYear(),
+    first.getMonth(),
+    first.getDate() - mondayIndex(first),
+  );
+  const last = parseDay(to);
+  const weeks = Math.floor(Math.round((last - start) / 86400000) / 7) + 1;
+
+  const cells = [];
+  const months = [];
+  let lastMonth = -1;
+  for (let week = 0; week < weeks; week++) {
+    for (let weekday = 0; weekday < 7; weekday++) {
+      const date = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate() + week * 7 + weekday,
+      );
+      const iso = isoDay(date);
+      if (iso < from || iso > to) {
+        cells.push('<span class="heat-cell heat-empty"></span>');
+        continue;
+      }
+      const entry = byDate.get(iso);
+      const n = entry ? entry.users.length : 0;
+      const text = `${formatDate(date)}: ${n === 0 ? 'nadie' : `${n} ${n === 1 ? 'persona' : 'personas'}`}`;
+      cells.push(
+        `<button type="button" class="heat-cell level-${level(n)}" data-day="${iso}" title="${text}" aria-label="${text}" aria-pressed="${iso === selectedActivityDay}"></button>`,
+      );
+      // The name of a month goes above the first week that starts in it.
+      if (weekday === 0 && date.getMonth() !== lastMonth) {
+        months.push(
+          `<span style="grid-column: ${week + 1} / span 3">${shortMonths[date.getMonth()]}</span>`,
+        );
+        lastMonth = date.getMonth();
+      }
+    }
+  }
+
+  const people = new Set(days.flatMap((d) => d.users.map((u) => u.login)));
+  const summary = days.length
+    ? `${people.size} ${people.size === 1 ? 'persona distinta' : 'personas distintas'} en ${days.length} ${days.length === 1 ? 'día' : 'días'} con actividad.`
+    : 'Todavía no hay actividad registrada: se empezó a guardar al desplegar esta versión.';
+  activityContainer.innerHTML = `
+    <p class="activity-summary">${summary}</p>
+    <div class="heat">
+      <div class="heat-weekdays" aria-hidden="true"><span>Lun</span><span></span><span>Mié</span><span></span><span>Vie</span><span></span><span>Dom</span></div>
+      <div class="heat-scroll">
+        <div class="heat-months" style="grid-template-columns: repeat(${weeks}, var(--cell))" aria-hidden="true">${months.join('')}</div>
+        <div class="heat-grid" style="grid-template-columns: repeat(${weeks}, var(--cell))">${cells.join('')}</div>
+      </div>
+    </div>
+    <div class="heat-legend" aria-hidden="true">Menos <span class="heat-cell level-0"></span><span class="heat-cell level-1"></span><span class="heat-cell level-2"></span><span class="heat-cell level-3"></span><span class="heat-cell level-4"></span> Más</div>
+    <div id="activity-detail" class="activity-detail" aria-live="polite"></div>`;
+  // The newest weeks are the ones that matter: on a narrow screen the calendar starts scrolled to them.
+  const scroller = activityContainer.querySelector('.heat-scroll');
+  scroller.scrollLeft = scroller.scrollWidth;
+  renderActivityDetail();
+}
+
+async function loadActivity() {
+  try {
+    activityCalendar = await apiFetch('/admin/activity');
+    // Starts with the latest day that has any activity chosen, if there is one.
+    selectedActivityDay = activityCalendar.days.at(-1)?.date ?? null;
+    renderActivity();
+  } catch {
+    activityContainer.textContent = 'No se pudo cargar la actividad.';
+  }
+}
+
+activityContainer.addEventListener('click', (event) => {
+  const cell = event.target.closest('button[data-day]');
+  if (!cell) return;
+  selectedActivityDay = cell.dataset.day;
+  for (const other of activityContainer.querySelectorAll('button[data-day]')) {
+    other.setAttribute('aria-pressed', String(other === cell));
+  }
+  renderActivityDetail();
+});
 
 // "Estado del sistema": a read-only picture from GET /admin/status — what is
 // deployed, whether the database answers and how far its migrations are,
@@ -1179,8 +1325,11 @@ await Promise.all([
   loadRoles(),
   loadDirectory().then(() => {
     if (sessionsShown.length) renderSessions();
+    // The detail of a day names people: drawn again if the directory came after the calendar.
+    renderActivityDetail();
   }),
   loadStatus(),
+  loadActivity(),
   loadSessions(),
   loadHolidays(),
   loadClubInfo(),

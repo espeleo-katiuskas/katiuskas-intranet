@@ -572,6 +572,10 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM magic_link_tokens WHERE user_id = $1`, id); err != nil {
 		return err
 	}
+	// Their days of activity go with them, as their sessions do.
+	if _, err := tx.Exec(ctx, `DELETE FROM user_activity WHERE user_id = $1`, id); err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {

@@ -989,6 +989,29 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+// A person's days of activity go with them, as their sessions do, instead of keeping them from being
+// deleted.
+func TestDeleteTakesTheirActivityWithIt(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, users.CreateInput{FirstName: "A", LastName: "B", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO user_activity (day, user_id, requests) VALUES (current_date, $1, 3)`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	var left int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM user_activity WHERE user_id = $1`, created.ID).Scan(&left); err != nil || left != 0 {
+		t.Errorf("their activity is still there: %d (%v)", left, err)
+	}
+}
+
 func TestDeleteNotFound(t *testing.T) {
 	repo := users.NewRepository(testutil.NewTx(t))
 	if err := repo.Delete(context.Background(), 999999); !errors.Is(err, users.ErrNotFound) {

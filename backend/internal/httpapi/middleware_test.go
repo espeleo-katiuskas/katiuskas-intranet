@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -132,4 +133,17 @@ func TestRequestLoggerStillLogsAPanickingRequest(t *testing.T) {
 	if !strings.Contains(logOutput, `msg="GET /boom 500 `) {
 		t.Errorf("expected RequestLogger's own line, with the real path and the 500 status, to still be logged despite the panic, got %q", logOutput)
 	}
+}
+
+// The actor box is filled by reference and is a no-op outside a request that asked for one.
+func TestSetRequestActorFillsTheBoxAndIsANoOpWithout(t *testing.T) {
+	ctx, actor := WithActorBox(context.Background())
+	if actor.Known {
+		t.Fatal("a new box already knows somebody")
+	}
+	SetRequestActor(ctx, 5, true)
+	if *actor != (Actor{UserID: 5, Impersonated: true, Known: true}) {
+		t.Errorf("unexpected actor: %+v", *actor)
+	}
+	SetRequestActor(context.Background(), 1, false) // nothing to set: must not panic
 }

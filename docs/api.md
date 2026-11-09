@@ -130,6 +130,14 @@ if the person has linked Telegram, by Telegram too.
   (people and requests in the last hour, day and month), of the running process. Never includes
   secrets.
   - returns: 200 `AdminStatus`
+- **GET** `/admin/activity` — *Admin*. Who used the API each day: the days that have any activity,
+  oldest first, with the people (by login) and the requests each made. `?days=` is how many days
+  back to look, today included (365 by default, from 1 to 730). The days are the club's
+  (Europe/Madrid). The requests of an administrator acting as somebody else do not count for that
+  person; a request nobody signed in for counts for nobody. It only has what was recorded since this
+  was put in place.
+  - returns: 200 `AdminActivity`
+  - errors: 400 `invalid_days`
 
 ## Club information
 
@@ -948,6 +956,19 @@ Nested fields:
 | `os` | text |
 | `current` | boolean |
 | `impersonated_by_login` | text |
+
+### `AdminActivity`
+
+| Field | Type |
+|---|---|
+| `from` | date |
+| `to` | date |
+| `days` | [object] |
+
+Nested fields:
+
+- `days`: `[{date, users}]`, only days with activity, oldest first; `users` is `[{login, requests}]`
+  ordered by login
 
 ### `Role`
 
