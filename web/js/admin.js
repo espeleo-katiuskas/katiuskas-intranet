@@ -473,13 +473,19 @@ function renderActivity() {
       );
       // The name of a month goes above the first week that starts in it.
       if (weekday === 0 && date.getMonth() !== lastMonth) {
-        months.push(
-          `<span style="grid-column: ${week + 1} / span 3">${shortMonths[date.getMonth()]}</span>`,
-        );
+        months.push({ column: week + 1, name: shortMonths[date.getMonth()] });
         lastMonth = date.getMonth();
       }
     }
   }
+
+  // A name is about three columns wide: when the next month starts sooner than that (the first, partial
+  // month of the range), the earlier name goes, so two never overlap. Each one has a single column and
+  // always the first row — in a grid, an item that cannot go where it was asked is pushed to another row,
+  // out of sight, and so are all the ones after it.
+  const monthLabels = months
+    .filter((month, i) => i === months.length - 1 || months[i + 1].column - month.column >= 3)
+    .map((month) => `<span style="grid-column: ${month.column}; grid-row: 1">${month.name}</span>`);
 
   const people = new Set(days.flatMap((d) => d.users.map((u) => u.login)));
   const summary = days.length
@@ -490,7 +496,7 @@ function renderActivity() {
     <div class="heat">
       <div class="heat-weekdays" aria-hidden="true"><span>Lun</span><span></span><span>Mié</span><span></span><span>Vie</span><span></span><span>Dom</span></div>
       <div class="heat-scroll">
-        <div class="heat-months" style="grid-template-columns: repeat(${weeks}, var(--cell))" aria-hidden="true">${months.join('')}</div>
+        <div class="heat-months" style="grid-template-columns: repeat(${weeks}, var(--cell))" aria-hidden="true">${monthLabels.join('')}</div>
         <div class="heat-grid" style="grid-template-columns: repeat(${weeks}, var(--cell))">${cells.join('')}</div>
       </div>
     </div>
