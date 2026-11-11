@@ -49,12 +49,13 @@ what is specific to having those two on one machine.
 
 Nothing is pushed to the host: it pulls. See "Pull-based deployment" below for how it works and how
 to set it up. The only workflow in the repository, `.github/workflows/ci.yml`, checks the code on
-pushes to `main` and on pull requests — Go: `gofmt`, build, `go vet`, `staticcheck` and the tests
-with `-race`; a separate job for `govulncheck`; the frontend: `node --check` and `biome ci` over
-`web/js`; and it validates the OpenAPI and builds the Docker image — and it does not run on tag
-pushes and deploys nothing. They are the same checks that are run before a commit, so a commit that
-skipped one still fails here. The manual procedure in the deployment guide remains the reference for
-what an update involves.
+pushes to `main` and on pull requests — Go (the newest 1.27.x, the one the image and the host build
+with, set once as `GO_VERSION` in the workflow, and not the oldest one that `go.mod` allows):
+`gofmt`, build, `go vet`, `staticcheck` and the tests with `-race`; a separate job for
+`govulncheck`; the frontend: `node --check` and `biome ci` over `web/js`; and it validates the
+OpenAPI and builds the Docker image — and it does not run on tag pushes and deploys nothing. They
+are the same checks that are run before a commit, so a commit that skipped one still fails here. The
+manual procedure in the deployment guide remains the reference for what an update involves.
 
 ## Pull-based deployment
 

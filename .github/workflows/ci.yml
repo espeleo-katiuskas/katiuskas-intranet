@@ -13,6 +13,14 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The Go that checks the code, the one that builds it: backend/Dockerfile (golang:1.27-alpine) and the
+  # host. "1.27" with check-latest below is the newest 1.27.x, which is what govulncheck needs: it also
+  # checks the standard library of the Go it runs with, and an older patch has vulnerabilities that
+  # were fixed since. The `go` line of go.mod is only the oldest Go that can build the code, so it is
+  # not what is tested. Bump this and the Dockerfile together.
+  GO_VERSION: '1.27'
+
 # The actions are pinned to a commit, not to a tag: a tag can be moved to other code afterwards, a
 # commit cannot. The version is in the comment; Dependabot (.github/dependabot.yml) proposes the
 # newer commit, and keeps the comment up to date, when there is one.
@@ -45,7 +53,8 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache-dependency-path: go.sum
 
       - name: gofmt
@@ -64,7 +73,7 @@ jobs:
         run: go vet ./...
 
       # Pinned to a version, like the actions: a newer staticcheck may flag more, and that should
-      # arrive in a commit of its own, not on its own. Both need the Go of go.mod, as the code does.
+      # arrive in a commit of its own, not on its own.
       - name: staticcheck
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
@@ -78,8 +87,7 @@ jobs:
         run: go test ./... -race -cover
 
   # Apart from the backend job, so that a vulnerability that is published tomorrow in something the code
-  # already uses turns this one red and not the tests. The latest patch of the Go of go.mod is used
-  # (check-latest): the standard library of an older patch has vulnerabilities that were fixed since.
+  # already uses turns this one red and not the tests.
   vulncheck:
     name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
@@ -88,9 +96,9 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache-dependency-path: go.sum
 
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
