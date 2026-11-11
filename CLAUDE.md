@@ -103,8 +103,9 @@ production's files hard-linked). Production deploys without Docker (`docs/deploy
   deployment runs is queued, several merge into one rerun) and, as a safety net, by a timer every 15
   minutes; its output is in the unit's journal; **nothing in the request decides what is deployed**
   (the receiver only checks GitHub's signature). So merging into `main` is a live deploy, and
-  migrations run against a copy of real data. `ci.yml` only tests. Roll production back by tagging a
-  new, higher version.
+  migrations run against a copy of real data. `ci.yml` only checks the code (format, build, vet,
+  staticcheck, tests with `-race`, vulnerabilities, the frontend, the spec and the image). Roll
+  production back by tagging a new, higher version.
 - Production is backed up every night (`scripts/backup.sh`, a timer; database and files, with a
   retention and an optional hook to copy them off the host: `docs/environments.md`, "Backups").
 - Failures are told by Telegram: the API watches its own status (database, directories, disks:
@@ -219,8 +220,9 @@ remove; a transaction with files cannot be deleted. The type is decided from the
 and images are served inline.
 
 **Material** (`internal/material`, page `/material`): one word for the club's material, everywhere. A catalog
-entry is a *material item* (`type`: `rope`, `bag`, `general`; `category` for `general`), moved by *material
-movements*. API under `/material/…` (`/material/items`, `/material/movements`, `/material/categories`,
+entry is a *material item* with a *type* from the `material_types` catalog (its `kind` is `rope` for
+Cuerda, `bag` for Saca and `general` for every other type), moved by *material movements*. API under
+`/material/…` (`/material/items`, `/material/types`, `/material/movements`,
 `/users/{login}/material/movements`), tables and types `material_*` (`material_items`, `material_movements`,
 `material_item_quantities`, `material_item_type`…). A general type has *attributes* (text or enum,
 required or optional; values kept by id in `material_items.attributes`) and says whether the

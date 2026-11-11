@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   backend:
-    name: Backend (vet, build, test)
+    name: Backend (format, build, vet, staticcheck, test)
     runs-on: ubuntu-latest
 
     # Matches docker-compose.yml's postgres service (same image, same
@@ -48,11 +48,25 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: go vet
-        run: go vet ./...
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l backend)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not formatted (run go fmt):"
+            echo "$unformatted"
+            exit 1
+          fi
 
       - name: go build
         run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # Pinned to a version, like the actions: a newer staticcheck may flag more, and that should
+      # arrive in a commit of its own, not on its own. Both need the Go of go.mod, as the code does.
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
       - name: go test
         env:
@@ -61,7 +75,42 @@ jobs:
           # time any test touches it. Without this var set, DB-backed tests
           # just t.Skip instead of failing.
           TEST_DATABASE_URL: postgres://intranet:intranet@localhost:5432/intranet_test?sslmode=disable
-        run: go test ./... -cover
+        run: go test ./... -race -cover
+
+  # Apart from the backend job, so that a vulnerability that is published tomorrow in something the code
+  # already uses turns this one red and not the tests. The latest patch of the Go of go.mod is used
+  # (check-latest): the standard library of an older patch has vulnerabilities that were fixed since.
+  vulncheck:
+    name: Vulnerabilities (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+          check-latest: true
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  # The frontend has no build step, so these checks are all its safety net. Node is already on the
+  # runner; Biome is fetched at the version of biome.json's schema (bump both together).
+  frontend:
+    name: Frontend (syntax, lint, format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: node --check
+        run: |
+          for f in web/js/*.js; do
+            node --check "$f"
+          done
+
+      - name: biome ci
+        run: npx --yes @biomejs/biome@2.5.15 ci web/js
 
   openapi:
     name: Validate openapi.yaml

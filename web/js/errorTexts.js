@@ -109,6 +109,7 @@ const texts = {
   invalid_item_fields: 'Los datos no corresponden al tipo de material elegido.',
   model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
+  invalid_days: 'El número de días tiene que estar entre 1 y 730.',
   duplicate_material:
     'Ya hay otro material exactamente igual (mismo tipo, marca, modelo, código, descripción y atributos). Si tienes más unidades, súmalas a ese material.',
   item_description_required: 'La descripción es obligatoria para este tipo de material.',

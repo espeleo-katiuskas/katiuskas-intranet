@@ -499,9 +499,8 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // A loan is always tied to an activity, and it's common for one trip
 // to have plenty of material going out — this section lets admin/board/
 // material register (and return) those loans right here instead of
-// hunting the item down on the material page. Item type/rope/bag
-// labels are duplicated from js/material.js and js/member.js, the
-// same way those two already duplicate them from each other.
+// hunting the item down on the material page. The items are named as everywhere else
+// (js/materialCommon.js).
 
 let itemsById = {};
 let itemEntries = [];

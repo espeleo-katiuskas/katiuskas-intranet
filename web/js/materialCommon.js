@@ -63,4 +63,4 @@ function itemNameText(item, { includeType = true } = {}) {
   return !includeType && full.startsWith(prefix) ? full.slice(prefix.length) : full;
 }
 
-export { bagTypeLabels, itemLabel, itemPickerText, itemRef, ropeTypeLabels };
+export { itemLabel, itemPickerText };

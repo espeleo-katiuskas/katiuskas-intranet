@@ -47,11 +47,14 @@ what is specific to having those two on one machine.
   git push origin <version>
   ```
 
-Nothing is pushed to the host: it pulls. See "Pull-based deployment" below for how it works and
-how to set it up. The only workflow in the repository, `.github/workflows/ci.yml`, checks, builds
-and tests the code (and also validates the OpenAPI and builds the Docker image) on pushes to
-`main` and on pull requests; it does not run on tag pushes and deploys nothing. The manual
-procedure in the deployment guide remains the reference for what an update involves.
+Nothing is pushed to the host: it pulls. See "Pull-based deployment" below for how it works and how
+to set it up. The only workflow in the repository, `.github/workflows/ci.yml`, checks the code on
+pushes to `main` and on pull requests — Go: `gofmt`, build, `go vet`, `staticcheck` and the tests
+with `-race`; a separate job for `govulncheck`; the frontend: `node --check` and `biome ci` over
+`web/js`; and it validates the OpenAPI and builds the Docker image — and it does not run on tag
+pushes and deploys nothing. They are the same checks that are run before a commit, so a commit that
+skipped one still fails here. The manual procedure in the deployment guide remains the reference for
+what an update involves.
 
 ## Pull-based deployment
 
