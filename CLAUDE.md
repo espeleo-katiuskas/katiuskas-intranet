@@ -23,6 +23,7 @@ explanations live in `docs/`; read the one that matches the task before changing
 | `docs/frontend.md` | the conventions every page shares and each page in detail |
 | `docs/architecture.md` | overview and business rules |
 | `docs/environments.md`, `docs/deployment.md` | local / testing / production, and how to deploy |
+| `docs/roadmap.md` | what is planned and not done yet, with the questions to settle before building it |
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and
 `docs/api.md`; a migration → `docs/database.md`; a rule or invariant → its section in
@@ -219,21 +220,21 @@ directory). Everybody sees `file_count`; admin, board and money read; admin and 
 remove; a transaction with files cannot be deleted. The type is decided from the bytes and only PDFs
 and images are served inline.
 
-**Material** (`internal/material`, page `/material`): one word for the club's material, everywhere. A catalog
-entry is a *material item* with a *type* from the `material_types` catalog (its `kind` is `rope` for
-Cuerda, `bag` for Saca and `general` for every other type), moved by *material movements*. API under
-`/material/…` (`/material/items`, `/material/types`, `/material/movements`,
-`/users/{login}/material/movements`), tables and types `material_*` (`material_items`, `material_movements`,
-`material_item_quantities`, `material_item_type`…). A general type has *attributes* (text or enum,
-required or optional; values kept by id in `material_items.attributes`) and says whether the
-description is required; no two items may be exactly the same (`material_items_identity_key`), and
-the API builds the item's `display_name` from its type, brand, model, attribute values and
-description (`docs/backend-internals.md`, "Material types and attributes"). **A sale or a rental
-that costs something is recorded in accounting** in the same database transaction: the asset
-account paid into (`account_id`, in the request) against the income account marked
-`accounts.material_sale` / `material_rental`, and the movement keeps the `transaction_id`; deleting
-that transaction is refused, deleting the movement deletes it. Don't bring back `inventory`, `gear`
-or bare `item_`/`movement_` names for it.
+**Material** (`internal/material`, page `/material`): one word for the club's material, everywhere.
+A catalog entry is a *material item* with a *type* from the `material_types` catalog (its `kind` is
+`rope` for Cuerda, `bag` for Saca and `general` for every other type), moved by *material
+movements*. API under `/material/…` (`/material/items`, `/material/types`, `/material/movements`,
+`/users/{login}/material/movements`), tables and types `material_*` (`material_items`,
+`material_movements`, `material_item_quantities`, `material_item_type`…). A general type has
+*attributes* (text or enum, required or optional; values kept by id in `material_items.attributes`)
+and says whether the description is required; no two items may be exactly the same
+(`material_items_identity_key`), and the API builds the item's `display_name` from its type, brand,
+model, attribute values and description (`docs/backend-internals.md`, "Material types and
+attributes"). **A sale or a rental that costs something is recorded in accounting** in the same
+database transaction: the asset account paid into (`account_id`, in the request) against the income
+account marked `accounts.material_sale` / `material_rental`, and the movement keeps the
+`transaction_id`; deleting that transaction is refused, deleting the movement deletes it. Don't
+bring back `inventory`, `gear` or bare `item_`/`movement_` names for it.
 
 **Budgets.** One per calendar year, income and expenses made of line items ("partidas"), each over
 one or more leaf accounts of that type; both parts must add up to the same and every non-hidden

@@ -16,6 +16,8 @@ información sobre el club en [katiuskas.es](https://katiuskas.es/).
   restricciones.
 - [`docs/backend-internals.md`](docs/backend-internals.md) y [`docs/frontend.md`](docs/frontend.md)
   — el detalle de cómo funciona el backend, recurso a recurso, y el frontend, página a página.
+- [`docs/roadmap.md`](docs/roadmap.md) — lo que está previsto y todavía no se ha hecho, con lo que
+  hay que decidir antes de hacerlo.
 - [`scripts/`](scripts/) — herramientas de línea de comandos; ver
   [`scripts/README.md`](scripts/README.md).
 - [`docker-compose.yml`](docker-compose.yml) — PostgreSQL + API + frontend detrás de Caddy, para
