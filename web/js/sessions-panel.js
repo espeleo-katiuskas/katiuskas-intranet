@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml, formatDateTime, logout, showError, showFeedback } from './api.js';
-import { initSortableHeaders } from './sortableHeaders.js';
+import { initSortableHeaders } from './sortable-headers.js';
 
 // The sessions of a person: where they are signed in (GET /users/{login}/tokens?status=active, the ones
 // not expired or revoked), each of which can be closed (PATCH .../tokens/{id} with revoked: true). It is the person

@@ -24,7 +24,7 @@ import {
   describeDistribution,
   isUnchosen,
   loadPeople,
-} from './distributionCommon.js';
+} from './distribution-common.js';
 
 await initPage();
 const me = currentUser();

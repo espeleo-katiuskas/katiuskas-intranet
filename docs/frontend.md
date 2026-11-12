@@ -9,23 +9,24 @@ rules behind them, in [`backend-internals.md`](backend-internals.md) and
 just an unexamined default: every page already revalidates its own session and re-fetches its own
 data on load, so there's no cross-page state an SPA would actually save, and this stays free of a
 bundler or any client-side router), one `<page>.html` + `js/<page>.js` per view, Caddy's `try_files
-{path} {path}.html` making `/socios` resolve to `socios.html`. The sidebar and topbar, identical on
-every authenticated page, are rendered once from `js/layout.js`'s `initPage()` rather than
-copy-pasted into each `<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/
-`<header id="topbar">` pair for it to fill in. `initPage()` is also each page's own session
-bootstrap (in place of what used to be five near-identical lines re-typed at the top of every
-`<page>.js`): it validates the session, applies role-based visibility, and wires the sidebar toggle,
-topbar greeting, and logout button, returning the signed-in user same as `currentUser()` would. The
-menu collapses below 800px (an overlay behind the hamburger) and, on a wide screen, can be hidden
-with the "×" at the top of it: `api.js`'s `initSidebarToggle` puts `.sidebar-hidden` on `.shell` —
-which looks like the narrow layout, `style.css` keeps the two rules alike — and remembers it in
-`localStorage` (`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there
-the hamburger brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there
-has to match the media query). The content is at most 1400px wide (`.content`), the full width up to
-there so that tables use it; running text keeps 75 characters and the panels of filters and forms
-960px, whatever the width. Its own `requireAnyRole` option additionally redirects home if the
-signed-in user holds none of the listed roles — the whole-page gates of `member.js` (admin/board),
-of `accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin), tighter than the
+{path} {path}.html` making `/socios` resolve to `socios.html`. Every file name in `web/` is
+kebab-case, scripts included (`js/library-item.js`). The sidebar and topbar, identical on every
+authenticated page, are rendered once from `js/layout.js`'s `initPage()` rather than copy-pasted
+into each `<page>.html` — every one of them reduces to an empty `<aside id="sidebar">`/ `<header
+id="topbar">` pair for it to fill in. `initPage()` is also each page's own session bootstrap (in
+place of what used to be five near-identical lines re-typed at the top of every `<page>.js`): it
+validates the session, applies role-based visibility, and wires the sidebar toggle, topbar greeting,
+and logout button, returning the signed-in user same as `currentUser()` would. The menu collapses
+below 800px (an overlay behind the hamburger) and, on a wide screen, can be hidden with the "×" at
+the top of it: `api.js`'s `initSidebarToggle` puts `.sidebar-hidden` on `.shell` — which looks like
+the narrow layout, `style.css` keeps the two rules alike — and remembers it in `localStorage`
+(`katiuskas:sidebar-hidden`, applied as `api.js` loads so it doesn't flash); there the hamburger
+brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match the
+media query). The content is at most 1400px wide (`.content`), the full width up to there so that
+tables use it; running text keeps 75 characters and the panels of filters and forms 960px, whatever
+the width. Its own `requireAnyRole` option additionally redirects home if the signed-in user holds
+none of the listed roles — the whole-page gates of `member.js` (admin/board), of
+`accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin), tighter than the
 ordinary baseline check every API route already enforces. Which sidebar link reads as "active" is
 computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad` or
 `/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a per-page
@@ -75,19 +76,19 @@ rope (`parseSearch`, `matchesSearch` in `material.js`). The comparison is strict
 out a rope of exactly 30 m, and several such words add up (`>25m <40`); the rest of the words are
 looked for as text as usual (`>30 petzl`). The box's tooltip explains it.
 
-**Library (`/biblioteca`, `/ejemplar?id=…`).** `biblioteca.html`/`libraryList.js` is the catalogue:
-a table with a thumbnail of the cover, title (a link, with where it is kept), type, author, year and
-a badge "Disponible"/"Prestado" — which is all a member learns about a loan: never who has it —,
-with a search box that looks in everything an item says (accents and case ignored, every word typed
-has to appear, the type included), a select of types and a "Solo los disponibles" checkbox. Admin,
-board and `biblioteca` also get "Tipos" (a dialog that lists the types with how many items have
-each, to rename, delete — not while it has items — or add one; the page loads again after each
-change, and the filter and the selects of the forms follow) and "+ Nuevo ejemplar" (a dialog;
-creating it goes straight to the item's page, where the cover is added); admin, board, `biblioteca`
-and `material` get, below, "Ejemplares prestados" (`GET /library/loans`: item, member, since, and a
-"Devolver" button that records the return today). `ejemplar.html`/`libraryItem.js` is one item: the
-type next to the author and year under the title, the cover (a plain `<img>` pointing at
-`/library/items/{id}/cover`, which the session cookie lets through, so that no blob has to be
+**Library (`/biblioteca`, `/ejemplar?id=…`).** `biblioteca.html`/`library-items.js` is the
+catalogue: a table with a thumbnail of the cover, title (a link, with where it is kept), type,
+author, year and a badge "Disponible"/"Prestado" — which is all a member learns about a loan: never
+who has it —, with a search box that looks in everything an item says (accents and case ignored,
+every word typed has to appear, the type included), a select of types and a "Solo los disponibles"
+checkbox. Admin, board and `biblioteca` also get "Tipos" (a dialog that lists the types with how
+many items have each, to rename, delete — not while it has items — or add one; the page loads again
+after each change, and the filter and the selects of the forms follow) and "+ Nuevo ejemplar" (a
+dialog; creating it goes straight to the item's page, where the cover is added); admin, board,
+`biblioteca` and `material` get, below, "Ejemplares prestados" (`GET /library/loans`: item, member,
+since, and a "Devolver" button that records the return today). `ejemplar.html`/`library-item.js` is
+one item: the type next to the author and year under the title, the cover (a plain `<img>` pointing
+at `/library/items/{id}/cover`, which the session cookie lets through, so that no blob has to be
 fetched for each one; the browser revalidates it when the cover changes), the data, then
 "Comentarios" and "Fotos y documentos", which every member can add to (an image is shown and opens
 in a tab; anything else is a link that downloads; "Borrar" appears on what the person wrote, and on
@@ -99,19 +100,19 @@ board and `biblioteca` also have "Editar ejemplar" (a dialog, with the select of
 it opens), "Añadir/Cambiar portada" (a file input that sends the image at once, `PUT
 /library/items/{id}/cover`), "Quitar portada" and "Borrar ejemplar"; admin alone has "Borrar" on a
 loan. All of this is in `data-roles` blocks that the page removes from the DOM for the rest, so
-`libraryItem.js` and `libraryList.js` only touch those elements when the person has the role
+`library-item.js` and `library-items.js` only touch those elements when the person has the role
 (`canManage`, `canLoan`): a plain member's page must work with them gone. The names of the people
-come from the directory (`libraryCommon.js`), and the dates the API gives as `2026-10-01` are shown
+come from the directory (`library-common.js`), and the dates the API gives as `2026-10-01` are shown
 with `dateOnly`, which builds a local date instead of parsing the string as UTC. The two pages count
 as one entry of the menu, "Biblioteca" (`ACTIVE_ALIASES`).
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
-and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
-of `/material`: *Prestado*, the items whose loans have not all come back
+and material) to `/material-prestado` (`loaned-material.js`), which has what used to be at the
+bottom of `/material`: *Prestado*, the items whose loans have not all come back
 (`outstanding_loan_quantity`), with the units pending and, from each item's own movements, the
 activities they are out for (loans minus returns, per activity), and *Alquilado*, the open rentals
 (`GET /material/movements?status=active`) with a "Devolver" button. A loan is returned from the page
-of its activity, so this page only reports them. `materialCommon.js` has how an item is named,
+of its activity, so this page only reports them. `material-common.js` has how an item is named,
 shared with `/material`. In the menu it counts as part of Material (`ACTIVE_ALIASES`).
 
 **Movement types on `/material`.** "+ Movimiento" only offers what can be done with that item right
@@ -142,7 +143,7 @@ dates here: no time zone arithmetic. What was before the feature was put in plac
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin` and of the library) is drawn instead, under 640px, as a card per row:
-`js/stackedTables.js`, started by `initPage`, gives every cell `data-label` with the text of its
+`js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text of its
 column's header (again whenever the rows are redrawn, with a `MutationObserver`), and `style.css`
 shows each cell as its label above its value; the header keeps only the sortable columns, as a row
 "Ordenar por" of buttons, and the other headers go. A cell that spans the row (the "nothing here"
@@ -159,7 +160,7 @@ to look different gives itself a class, not a rule on `a`.
 **Remembering the email at sign-in.** To save typing the address (slow on a phone), `login.html`
 offers the last five addresses that signed in on this browser, in `localStorage`
 (`katiuskas:login-emails`, newest first, no repeats whatever the case): when the email field is
-focused, the same menu as the pickers (`pickerSearch.js`) lists them, and choosing one moves the
+focused, the same menu as the pickers (`picker-search.js`) lists them, and choosing one moves the
 focus to the phone. Only the email is saved, not the phone, and only after a sign-in that worked:
 the address typed when asking for the link waits in `katiuskas:login-pending-email` and is moved to
 the list when this browser completes the sign-in — by the code, by the link opened in this tab, or,
@@ -169,7 +170,7 @@ from other sites does not cover this menu; the phone has it too, so that it is a
 request that is never followed through is not remembered. It also works on the club's shared tablet
 (`local.` address): whoever can use it can see the addresses of the others, which is accepted.
 
-**Searching in a picker (`pickerSearch.js`).** The searchable pickers are an `<input list>` over a
+**Searching in a picker (`picker-search.js`).** The searchable pickers are an `<input list>` over a
 `<datalist>`, which the browser filters by itself without ignoring accents ("garcia" did not find
 "García"). `initPickerSearch`, called by `initPage`, takes every such input over the first time it
 gets the focus: it removes its `list` attribute and shows its own menu (`.picker-menu`, right after
@@ -189,16 +190,16 @@ unique (no two activities share a start date and title), and the ones of materia
 below.
 
 **How a piece of material reads.** Every listing of material (`/material`, `/material-prestado`, the
-loans of `/actividad` and the history of `/socio`) writes it with `itemLabel` (`materialCommon.js`),
-and the pickers of material (the loan picker of `/actividad`) with `itemPickerText`, which reads the
-same as a row of `/material`. There is no "#<id>": two items are never exactly the same (the API
-refuses it), so the type, the name and the code tell them apart. General material is named by the
-API (`display_name`: the type, brand and model, the values of its attributes and the description,
-joined with " · "); a rope or a bag by its brand and model and its own data. The label is the type,
-that name and, if the item has a code, "#<code>" (`itemRef`). The table of `/material` has its own
-"Tipo" column, so its "Características" column starts at the name (and ends with the code, since
-there is no column for it); an item that lacks something its type now requires is marked
-"Incompleto" there.
+loans of `/actividad` and the history of `/socio`) writes it with `itemLabel`
+(`material-common.js`), and the pickers of material (the loan picker of `/actividad`) with
+`itemPickerText`, which reads the same as a row of `/material`. There is no "#<id>": two items are
+never exactly the same (the API refuses it), so the type, the name and the code tell them apart.
+General material is named by the API (`display_name`: the type, brand and model, the values of its
+attributes and the description, joined with " · "); a rope or a bag by its brand and model and its
+own data. The label is the type, that name and, if the item has a code, "#<code>" (`itemRef`). The
+table of `/material` has its own "Tipo" column, so its "Características" column starts at the name
+(and ends with the code, since there is no column for it); an item that lacks something its type now
+requires is marked "Incompleto" there.
 
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):
@@ -376,7 +377,7 @@ somebody with at least one of `admin`, `board` or `member`: with none of them th
 in and the API refuses to impersonate them (409 `not_eligible`). It follows the person's roles
 (`renderRoles`), which can change on that page.
 
-"Ver como…" (`js/roleOverride.js`, wired by `initPage`): admins have a link in the topbar (removed
+"Ver como…" (`js/role-override.js`, wired by `initPage`): admins have a link in the topbar (removed
 for anybody else by `data-roles`, and for an impersonation) that opens a dialog with the roles from
 `GET /roles` as checkboxes, plus buttons for the usual combinations (Socio, Socio con material,
 Socio con biblioteca, Socio con money, Junta, Administrador), and sends them with `PUT
@@ -436,15 +437,15 @@ the route itself needs the bearer header specifically. Markdown
 documents render through a small dependency-free converter (`js/markdown.js`) that
 resolves each document-relative link against the document's own directory and rewrites it
 into an in-app `/archivo` navigation link; HTML documents render in a fully sandboxed
-`<iframe>` instead, with no such link rewriting. `archive.js` and `userFiles.js` (the
+`<iframe>` instead, with no such link rewriting. `archive.js` and `user-files.js` (the
 embedded per-person file browser on `/perfil`/`/socio`) share this same
-listing/preview/download logic almost verbatim — `js/fileBrowser.js` pulls out the
+listing/preview/download logic almost verbatim — `js/file-browser.js` pulls out the
 common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
 document-relative link resolver, `downloadBlob`) both import, rather than each carrying
 its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
 `formatSize`/`downloadBlob` from there too, the only two of these it also needed.
 
-`/perfil` also has a "Mis sesiones" section (`initSessionsPanel` in `js/sessionsPanel.js`, which
+`/perfil` also has a "Mis sesiones" section (`initSessionsPanel` in `js/sessions-panel.js`, which
 `/socio` shares, see below): the person's sessions not expired or revoked (`GET
 /users/{login}/tokens?status=active`), each with its browser and system, last use and address, when
 it was opened and when it expires, "Esta sesión" on the one in use and, if an administrator entered
@@ -463,7 +464,7 @@ mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small clickable t
 than a plain list of text links — instead of pointing at that person's `licencias/` subdirectory
 (see [Dropping files
 in](backend-internals.md#dropping-files-into-the-archive-and-the-per-person-directories)) through
-`userFiles.js`'s generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches
+`user-files.js`'s generic browser: `js/license-files.js`'s `initLicenseFiles(login, opts)` fetches
 that one directory's listing (`GET /users/{login}/files?path=licencias`), builds the `<select>` from
 whatever years actually have a license on file (ascending, most recent selected by default — nothing
 conjures up an empty year the way `loadActas` doesn't either), and renders each of that year's files
@@ -492,7 +493,7 @@ the same. It is meant to be 280px on its longest side — twice `.license-thumbn
 `licenseCard`'s `<img data-fallback-src>` tries that thumbnail first;
 `wireThumbnailFallbacks` catches a load failure (the common case until the script has been
 run) and falls back to the license's own file directly only if that file is itself an
-image (`fileKind`, `fileBrowser.js`) — nothing to generate a thumbnail for when the real
+image (`fileKind`, `file-browser.js`) — nothing to generate a thumbnail for when the real
 file already is a small, displayable image — and, failing that too (a PDF or anything else
 with no thumbnail dropped in for it yet), swaps in a plain 📄 placeholder of the same size
 rather than the browser's own broken-image icon, so the grid stays visually consistent
@@ -514,7 +515,7 @@ own, `style.css` as well since `dashboard.css` stays index.html-specific.
 
 `/repartos`, `/reparto?id=…` and `/reparto-gestion?id=…` (`distributions.js`, `distribution.js` and
 `distribution-manage.js` with its sections `distribution-orders.js`, `distribution-payments.js` and
-`distribution-numbers.js`, sharing `js/distributionCommon.js`) are the interface for
+`distribution-numbers.js`, sharing `js/distribution-common.js`) are the interface for
 **Distributions** above — where what the code and the API call a unit is a "pedido" to the people
 reading these pages, and an extra unit an "extra", since "unidad" meant nothing to them — behind one
 "Repartos" sidebar entry (`layout.js` maps the two detail pages to it in `ACTIVE_ALIASES`). The list
@@ -589,46 +590,46 @@ first part of the number when it has several (a series and its fractions), press
 unmark, with Shift to mark from the last one pressed to this one, a filter box, and never more
 marked than the order is missing — the rest are disabled — and the free numbers read again if the
 API refuses one because somebody took it meanwhile (all of it is `createNumberPicker` in
-`numberPicker.js`, which the sale over the counter uses too); for an article with free-text numbers,
-a field to type them) and the list of its numbered items, each with its paid / delivered state, to
-tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on — mark paid or
-take the payment off (admin/board), hand out to the person asked in a dialog (`deliver-dialog`,
-"Entregado a", prefilled with the member the order is for; only members are offered), undo a
-delivery, return, take the numbers off. These actions are a line "Con lo marcado" (`markedActions`)
-that is there only while something is ticked and has only the buttons that would do something to
-what is ticked (`applicable`: "Marcar pagados" if some ticked number is unpaid, "Quitar pago" if
-some is paid, "Entregar" if some is not handed out, "Deshacer entrega" if some is, "Devolver" if
-some is handed out and unpaid, "Quitar números" if some is neither); each acts only on the ticked
-numbers it applies to, and the line is drawn again on each tick. The line "Pedido:" has "Pagar todo
-(importe)" and, while something can be handed out (`deliverable`), "Entregar todo", which asks in
-the same dialog who collects it. Elsewhere a count field (`quantityOf`) does the same as the ticks.
-Paying and taking a payment off first ask, in `pay-dialog`, for the asset account (`withAccount`:
-the non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in `localStorage`;
-skipped when the order costs nothing) and send it as `account_id`. The create/edit dialogs of a
-distribution have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the default
-account, named in its first option). Changing or removing an order (`canEditOrder`) is offered at
-any time but in a draft, as the API allows. Everything goes through the single `perform(act, unit)`,
-confirming before handing over unpaid units, undoing, returning or taking numbers off. Wherever the
-frontend lists numbers they are sorted (`sortIdentifiers`: part by part, digits as numbers) and
-joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list such as the numbers an
-error message or an entry of the list of payments names). The Telegram messages about numbers say
-them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a Go copy of those two that
-must keep giving the same order and ranges; each message says what it changed — numbers added, taken
-off or newly assigned — not what was typed). What is unfolded, ticked and typed survives redrawing.
-Both pickers ("A nombre de", "Entregado a") offer only members, never everybody on file:
-`loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people` — `for=order`, the
-members on the cutoff date (today's when there is none); `for=pickup`, also today's members — and
-only the names shown for who did what come from `/users/directory`. The API enforces the same
-(`not_eligible`, `invalid_collector`), the pickers just don't offer what would be refused.
-`api.js`'s `apiFetch` puts the API's error `code` on the thrown `Error`, and sets its message to the
-Spanish text for that code from `js/errorTexts.js` (the one catalog of every code the API can answer
-with; a function for the few whose message carries something to show, such as the names of the
-accounts a budget is missing, or the two totals that do not match), falling back to the API's own
-text for a code it does not know. `apiFetchForm` and `apiFetchBlob` do the same, and a request that
-never reaches the server says so in Spanish instead of the browser's "Failed to fetch". A page that
-wants something more specific for a code still reads `err.code` (`distributionCommon.js`'s
-`apiErrorText`, `accountTree.js`'s `accountingErrorText`). A new error code in the API needs its
-entry in that catalog.
+`number-picker.js`, which the sale over the counter uses too); for an article with free-text
+numbers, a field to type them) and the list of its numbered items, each with its paid / delivered
+state, to tick (`ticked`; "todos / sin pagar / sin entregar…" tick by state, `pick`) and act on —
+mark paid or take the payment off (admin/board), hand out to the person asked in a dialog
+(`deliver-dialog`, "Entregado a", prefilled with the member the order is for; only members are
+offered), undo a delivery, return, take the numbers off. These actions are a line "Con lo marcado"
+(`markedActions`) that is there only while something is ticked and has only the buttons that would
+do something to what is ticked (`applicable`: "Marcar pagados" if some ticked number is unpaid,
+"Quitar pago" if some is paid, "Entregar" if some is not handed out, "Deshacer entrega" if some is,
+"Devolver" if some is handed out and unpaid, "Quitar números" if some is neither); each acts only on
+the ticked numbers it applies to, and the line is drawn again on each tick. The line "Pedido:" has
+"Pagar todo (importe)" and, while something can be handed out (`deliverable`), "Entregar todo",
+which asks in the same dialog who collects it. Elsewhere a count field (`quantityOf`) does the same
+as the ticks. Paying and taking a payment off first ask, in `pay-dialog`, for the asset account
+(`withAccount`: the non-hidden `asset` ones of `GET /accounts`, the last chosen remembered in
+`localStorage`; skipped when the order costs nothing) and send it as `account_id`. The create/edit
+dialogs of a distribution have a "Cuenta de los pagos" select (`loadAccountOptions`; empty is the
+default account, named in its first option). Changing or removing an order (`canEditOrder`) is
+offered at any time but in a draft, as the API allows. Everything goes through the single
+`perform(act, unit)`, confirming before handing over unpaid units, undoing, returning or taking
+numbers off. Wherever the frontend lists numbers they are sorted (`sortIdentifiers`: part by part,
+digits as numbers) and joined into ranges (`formatIdentifiers`; `compactNumbers` for a bare list
+such as the numbers an error message or an entry of the list of payments names). The Telegram
+messages about numbers say them the same way (`formatNumbers`/`compareNumbers` in `numbering.go`, a
+Go copy of those two that must keep giving the same order and ranges; each message says what it
+changed — numbers added, taken off or newly assigned — not what was typed). What is unfolded, ticked
+and typed survives redrawing. Both pickers ("A nombre de", "Entregado a") offer only members, never
+everybody on file: `loadPeople(id, purpose)` takes the entries from `GET /distributions/{id}/people`
+— `for=order`, the members on the cutoff date (today's when there is none); `for=pickup`, also
+today's members — and only the names shown for who did what come from `/users/directory`. The API
+enforces the same (`not_eligible`, `invalid_collector`), the pickers just don't offer what would be
+refused. `api.js`'s `apiFetch` puts the API's error `code` on the thrown `Error`, and sets its
+message to the Spanish text for that code from `js/error-texts.js` (the one catalog of every code
+the API can answer with; a function for the few whose message carries something to show, such as the
+names of the accounts a budget is missing, or the two totals that do not match), falling back to the
+API's own text for a code it does not know. `apiFetchForm` and `apiFetchBlob` do the same, and a
+request that never reaches the server says so in Spanish instead of the browser's "Failed to fetch".
+A page that wants something more specific for a code still reads `err.code`
+(`distribution-common.js`'s `apiErrorText`, `account-tree.js`'s `accountingErrorText`). A new error
+code in the API needs its entry in that catalog.
 
 `/contabilidad` (`accounting.js`) manages the chart of accounts from `GET`/`POST`/`PUT /accounts`
 and `POST /accounts/{id}/move` — a tree, indented by depth, of every account's name, direct balance,
@@ -645,7 +646,7 @@ stretched by `.field input`'s `width: 100%`), always sent explicitly — uncheck
 omitted, since `PUT` replaces every field — and each row shows a small
 "Cuotas"/"Licencias"/"Repartos"/"Alquiler de material"/"Venta de material"/"Oculta" badge next to
 the account's name for whichever are on, so which accounts a transaction can record those against is
-visible without opening each one. `js/accountTree.js` holds the
+visible without opening each one. `js/account-tree.js` holds the
 `childrenByParent`/`flattenAccountTree` pair both this page and
 `account.js` need: `GET /accounts` already comes back as a pre-order, depth-first walk (see the
 `accounts` bullet under [Accounting](backend-internals.md#accounting)), so filtering that flat list
@@ -653,7 +654,7 @@ down to a single `parent_id`, in the order it already arrives in, *is* that grou
 order — one pass groups every `parent_id` at once, no separate tree-building pass. Hidden accounts
 (`hidden`) are left out of the table, and of the parent pickers, unless a "Mostrar cuentas ocultas
 (N)" checkbox — shown only when there are any — is on (a view choice, never persisted); each is
-tagged "Oculta" and dimmed when shown; `shownAccounts` (`accountTree.js`) drops them while
+tagged "Oculta" and dimmed when shown; `shownAccounts` (`account-tree.js`) drops them while
 re-parenting their shown children onto the nearest shown ancestor, since filtering the flat list
 alone would lose those children from the tree walk. The ↑/↓ arrows follow the real sibling groups
 but count only shown siblings, and a move repeats once per hidden sibling it has to pass (the
@@ -674,13 +675,13 @@ row also lists them, as links to `/api/v1/transactions/{id}/files/{fileId}/file`
 makes a plain link work). The new-transaction dialog has a multiple file input, and the edit one
 lists the transaction's files, each with a "Quitar" that deletes it at once (after a confirmation),
 and the same input; the files chosen are uploaded one by one once the transaction is saved
-(`uploadTransactionFiles` in `js/transactionFiles.js`, which the pages share), and one that fails is
-reported with the rest of what could not be registered. Deleting a transaction that still has files
-says so (`transaction_has_files`). `/justificantes` (`transactionFilesPage.js`, for admin, board and
-money, reached with the "Justificantes" button in the header of `/contabilidad`, not from the
-sidebar, where it counts as part of Contabilidad for the highlighting) is the overview: every file
-from `GET /transaction-files` with its transaction's date, description, amount and accounts (each
-with its sign, linking to the account's ledger), a year filter and "Ver más".
+(`uploadTransactionFiles` in `js/transaction-files.js`, which the pages share), and one that fails
+is reported with the rest of what could not be registered. Deleting a transaction that still has
+files says so (`transaction_has_files`). `/justificantes` (`transaction-files-page.js`, for admin,
+board and money, reached with the "Justificantes" button in the header of `/contabilidad`, not from
+the sidebar, where it counts as part of Contabilidad for the highlighting) is the overview: every
+file from `GET /transaction-files` with its transaction's date, description, amount and accounts
+(each with its sign, linking to the account's ledger), a year filter and "Ver más".
 
 `/presupuestos` (`budgets.js`) is the yearly budget, in the sidebar for every baseline role. A year
 selector (the years that have a budget from `GET /budgets`, plus this year and the next; "Otro año"
@@ -816,7 +817,7 @@ as the tooltip; "—" if never used), creation and expiry, "Activa"/"Caducada"/"
 an impersonation's and on the admin's own "Esta sesión"), 50 at a time with "Ver más" and a checkbox
 for the expired and revoked ones, where an active one can be revoked (a different warning for one's
 own, which signs out) or have its expiry changed, through `/users/{login}/tokens/{id}`; its headers
-Persona, Último uso, Creada and Caduca sort it (`initSortableHeaders`, `js/sortableHeaders.js`: a
+Persona, Último uso, Creada and Caduca sort it (`initSortableHeaders`, `js/sortable-headers.js`: a
 click or Enter on the header picks the column or turns it round, ▲/▼ and `aria-sort` say which; the
 most recent first for the dates and A first for the person to begin with, last use to begin with the
 page) by asking the API (`sort`, `order`), so that the order holds across the pages "Ver más"

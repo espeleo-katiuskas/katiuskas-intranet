@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatCurrency, formatDate, showError } from './api.js';
 import { initPage } from './layout.js';
-import { transactionFileLink } from './transactionFiles.js';
+import { transactionFileLink } from './transaction-files.js';
 
 // The sidebar and the API both limit this page to admin, board and money; the API is the authority.
 await initPage({ requireAnyRole: ['admin', 'board', 'money'] });

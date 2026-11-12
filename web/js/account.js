@@ -20,13 +20,13 @@ import {
   flattenAccountTree,
   shownAccounts,
   accountLabel,
-} from './accountTree.js';
+} from './account-tree.js';
 import { initModal, openModal } from './modal.js';
 import {
   fileCountBadge,
   transactionFileItems,
   uploadTransactionFiles,
-} from './transactionFiles.js';
+} from './transaction-files.js';
 
 // Reached only from /contabilidad's own account tree — same admin/board/money gate as that page
 // (see accounting.js's own doc comment for why this is tighter than the API itself, which opens

@@ -1,5 +1,5 @@
 import { goAfterLogin, setToken } from './api.js';
-import { initPickerSearch } from './pickerSearch.js';
+import { initPickerSearch } from './picker-search.js';
 
 const API_BASE = '/api/v1';
 

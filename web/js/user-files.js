@@ -15,13 +15,13 @@ import {
   fileKind,
   resolveRelativePath,
   downloadBlob,
-} from './fileBrowser.js';
+} from './file-browser.js';
 
 // A per-person document browser, embedded (not a page of its own) in
 // both perfil.html (a socio's own files) and socio.html (admin/board
 // viewing someone else's) — see GET /users/{login}/files[/file]. Mostly
 // mirrors js/archive.js's own browsing/preview logic (see
-// js/fileBrowser.js for the pieces shared with it), but navigates by
+// js/file-browser.js for the pieces shared with it), but navigates by
 // updating this same page's DOM in place instead of real page loads:
 // there's no dedicated URL for "this folder" or "this file" the way
 // /archivo?path=/?view= has, since this widget only ever lives inside a

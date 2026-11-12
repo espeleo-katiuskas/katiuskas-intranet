@@ -8,7 +8,7 @@ import {
   statusBadge,
   visibilityLabels,
   syncArticleFields,
-} from './distributionCommon.js';
+} from './distribution-common.js';
 
 await initPage();
 

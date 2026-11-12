@@ -3,7 +3,7 @@
 // nothing needs restoring after a page navigation) and re-fetches the
 // signed-in identity from /auth/me on every page load, since an opaque
 // token has nothing a client can decode locally.
-import { errorText } from './errorTexts.js';
+import { errorText } from './error-texts.js';
 
 const API_BASE = '/api/v1';
 
@@ -176,7 +176,7 @@ function renderImpersonationBanner(impersonator) {
 
 // Shown on every page while an admin acts with other roles than their own, to see what somebody
 // with those roles sees: it says which, for how long, and has the two ways out. The dialog to choose
-// the roles lives in roleOverride.js, which listens for this event.
+// the roles lives in role-override.js, which listens for this event.
 function renderRoleOverrideBanner() {
   const banner = document.createElement('div');
   banner.className = 'impersonation-banner';
@@ -313,7 +313,7 @@ async function fetchOrExplain(url, options) {
 }
 
 // The Error for a failed response: its message in Spanish when the API's error code is known (see
-// errorTexts.js), else the API's own. The code rides along on the error, for a page that wants to say
+// error-texts.js), else the API's own. The code rides along on the error, for a page that wants to say
 // it in its own words instead.
 async function errorOf(response) {
   const body = await response.json().catch(() => null);

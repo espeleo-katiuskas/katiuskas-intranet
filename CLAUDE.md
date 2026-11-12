@@ -272,6 +272,8 @@ real `tokens` table.
 
 Plain multi-page site, no SPA and no build step, on purpose: every page revalidates its session and
 reloads its data. One `<page>.html` + `js/<page>.js` per view.
+Every file name in `web/` is kebab-case, scripts included (`js/library-item.js`, never
+`libraryItem.js`).
 
 - Every authenticated page calls `await initPage({ requireAnyRole })` (`js/layout.js`): it validates
   the session (`GET /auth/me`), renders sidebar and topbar, applies `data-roles="admin,board"`
@@ -283,7 +285,7 @@ reloads its data. One `<page>.html` + `js/<page>.js` per view.
 - Errors: `showError(message)` opens a modal over everything that has to be closed, and
   `showFeedback` is the sticky success banner. There is no `#error` element. What a user sees must
   be Spanish: the API's messages are English, so `apiFetch` swaps them for the Spanish text of the
-  error `code` in `js/errorTexts.js` — **a new error code needs its entry there**.
+  error `code` in `js/error-texts.js` — **a new error code needs its entry there**.
 - `js/api.js` keeps the token in `localStorage` (`token`), `apiFetch` puts the API's error `code` on
   the thrown `Error`, and the page's independent requests go out together, drawing waiting on a
   `ready` promise only where needed.

@@ -17,11 +17,11 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { itemLabel } from './materialCommon.js';
-import { initSessionsPanel } from './sessionsPanel.js';
-import { initUserFilesBrowser } from './userFiles.js';
-import { initLicenseFiles } from './licenseFiles.js';
-import { trackDirtyFields, markFieldsClean } from './formDirty.js';
+import { itemLabel } from './material-common.js';
+import { initSessionsPanel } from './sessions-panel.js';
+import { initUserFilesBrowser } from './user-files.js';
+import { initLicenseFiles } from './license-files.js';
+import { trackDirtyFields, markFieldsClean } from './form-dirty.js';
 import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });

@@ -19,9 +19,9 @@ import {
   currentUser,
   hasAnyRole,
 } from './api.js';
-import { initPickerSearch } from './pickerSearch.js';
-import { initStackedTables } from './stackedTables.js';
-import { initRoleOverride } from './roleOverride.js';
+import { initPickerSearch } from './picker-search.js';
+import { initStackedTables } from './stacked-tables.js';
+import { initRoleOverride } from './role-override.js';
 
 // One entry per sidebar link, in display order. roles restricts who
 // even sees the link at all (applyRoleVisibility, via data-roles) —

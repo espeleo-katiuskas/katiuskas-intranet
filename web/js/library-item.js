@@ -20,8 +20,8 @@ import {
   loadTypes,
   personLink,
   typeOptions,
-} from './libraryCommon.js';
-import { formatSize } from './fileBrowser.js';
+} from './library-common.js';
+import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 

@@ -18,7 +18,7 @@ import {
   fileKind,
   resolveRelativePath,
   downloadBlob,
-} from './fileBrowser.js';
+} from './file-browser.js';
 
 await initPage();
 

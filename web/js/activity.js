@@ -20,9 +20,9 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { itemLabel, itemPickerText } from './materialCommon.js';
+import { itemLabel, itemPickerText } from './material-common.js';
 import { renderMarkdown } from './markdown.js';
-import { formatSize, downloadBlob } from './fileBrowser.js';
+import { formatSize, downloadBlob } from './file-browser.js';
 
 const viewer = await initPage();
 const isAdmin = hasAnyRole(viewer, ['admin', 'board']);
@@ -500,7 +500,7 @@ document.getElementById('participants-list').addEventListener('click', async (ev
 // to have plenty of material going out — this section lets admin/board/
 // material register (and return) those loans right here instead of
 // hunting the item down on the material page. The items are named as everywhere else
-// (js/materialCommon.js).
+// (js/material-common.js).
 
 let itemsById = {};
 let itemEntries = [];

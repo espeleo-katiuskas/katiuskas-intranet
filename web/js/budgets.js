@@ -7,7 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initPage } from './layout.js';
-import { accountLabel, childrenByParent } from './accountTree.js';
+import { accountLabel, childrenByParent } from './account-tree.js';
 import { initModal, openModal } from './modal.js';
 
 // Everybody who can sign in reads the budgets; only admin and money change them (the API is the

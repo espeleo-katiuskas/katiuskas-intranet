@@ -13,7 +13,7 @@ import {
   loadTypes,
   personLink,
   typeOptions,
-} from './libraryCommon.js';
+} from './library-common.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 

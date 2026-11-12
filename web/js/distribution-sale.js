@@ -6,8 +6,8 @@ import {
   formatIdentifiers,
   loadPeople,
   resolvePickerId,
-} from './distributionCommon.js';
-import { createNumberPicker } from './numberPicker.js';
+} from './distribution-common.js';
+import { createNumberPicker } from './number-picker.js';
 
 // A sale over the counter, for admin and board: a member asks for something and pays on the spot, so
 // the order, its numbers, the payment and the hand-over are written down in a single dialog instead of

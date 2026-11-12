@@ -14,7 +14,7 @@ import {
   childrenByParent,
   flattenAccountTree,
   shownAccounts,
-} from './accountTree.js';
+} from './account-tree.js';
 import { initModal, openModal } from './modal.js';
 
 // This whole page is restricted to admin, board and money, tighter than the API itself
@@ -26,7 +26,7 @@ const viewer = await initPage({ requireAnyRole: ['admin', 'board', 'money'] });
 const canWrite = hasAnyRole(viewer, ['admin', 'money']);
 if (!canWrite) document.getElementById('toggle-new-account').remove();
 
-let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see accountTree.js
+let flattened = []; // [{ account, depth, isFirst, isLast }], one entry per account, in display order — see account-tree.js
 let allAccounts = []; // every account, hidden ones included, exactly as GET /accounts answered
 let showHidden = false; // whether the table (and the parent pickers) include hidden accounts — a view choice, never persisted
 let accountsById = {}; // rebuilt alongside flattened — so a row's own "Editar" can look its account up without a fresh fetch

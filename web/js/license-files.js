@@ -1,5 +1,5 @@
 import { API_BASE, apiFetch, escapeHtml, encodeFilePath } from './api.js';
-import { fileKind } from './fileBrowser.js';
+import { fileKind } from './file-browser.js';
 
 // Federative license copies live in each person's own "licencias"
 // subdirectory of their user files (see internal/userfiles), one file

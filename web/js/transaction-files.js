@@ -1,5 +1,5 @@
 import { apiFetchForm, escapeHtml, formatDateTime } from './api.js';
-import { formatSize } from './fileBrowser.js';
+import { formatSize } from './file-browser.js';
 
 // What the pages share about the documents (tickets, invoices) attached to a transaction.
 

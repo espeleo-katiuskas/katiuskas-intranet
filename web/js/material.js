@@ -13,7 +13,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { itemLabel, itemPickerText } from './materialCommon.js';
+import { itemLabel, itemPickerText } from './material-common.js';
 
 const user = await initPage();
 // Managing the material — adding equipment to the catalog, and its movements (loans, rentals,

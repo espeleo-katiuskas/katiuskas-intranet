@@ -20,7 +20,7 @@ import {
   loadAccountOptions,
   readDistributionForm,
   syncArticleFields,
-} from './distributionCommon.js';
+} from './distribution-common.js';
 import { initNumbers } from './distribution-numbers.js';
 import { initOrders } from './distribution-orders.js';
 import { initPayments } from './distribution-payments.js';

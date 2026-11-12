@@ -10,7 +10,7 @@ import {
 } from './api.js';
 import { initModal, openModal } from './modal.js';
 import { mountOrderForm } from './distribution-order-form.js';
-import { createNumberPicker } from './numberPicker.js';
+import { createNumberPicker } from './number-picker.js';
 import {
   apiErrorText,
   articleLeft,
@@ -24,7 +24,7 @@ import {
   loadPeople,
   resolvePickerId,
   unitCost,
-} from './distributionCommon.js';
+} from './distribution-common.js';
 
 // Everything about a distribution's orders in one place, for the people who put the order together
 // (admin, board) and hand it out (material): what has to be bought and, for each member, what they
@@ -413,7 +413,7 @@ export async function initOrders(ctx) {
 
   // ----- numbering: choosing the free numbers with the mouse -----
   // For an article whose numbers are described, the free ones are buttons to press (see
-  // numberPicker.js); the order can take no more than the numbers it is missing.
+  // number-picker.js); the order can take no more than the numbers it is missing.
   const numbersDialog = document.getElementById('numbers-dialog');
   const numbersForm = document.getElementById('numbers-form');
   initModal(numbersDialog, numbersForm);

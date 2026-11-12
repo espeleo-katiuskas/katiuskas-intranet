@@ -1,7 +1,7 @@
 // What the API's error codes say, in Spanish. The API's own messages are in English (they are for
 // whoever reads the logs or calls the API), so `apiFetch` replaces them with these when it knows the
 // code; for one it does not know, the API's message is shown as it is. A page that wants to say
-// something more specific for a code (distributionCommon.js's apiErrorText, accountTree.js's
+// something more specific for a code (distribution-common.js's apiErrorText, account-tree.js's
 // accountingErrorText) still can: it reads `err.code`.
 //
 // A text is a string, or a function of the API's message for the codes whose message carries

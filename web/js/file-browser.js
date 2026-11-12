@@ -1,6 +1,6 @@
 // Shared helpers for browsing/previewing a document tree over HTTP and
 // saving a fetched Blob back to disk — pulled out once instead of
-// three near-identical copies: js/archive.js and js/userFiles.js each
+// three near-identical copies: js/archive.js and js/user-files.js each
 // had their own copy of every one of these; js/activity.js (for its
 // memoria resources, a different feature entirely, but downloading a
 // fetched file and showing its size is the same problem either way)

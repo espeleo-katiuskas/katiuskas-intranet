@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml, isNotFound, showError, showNotFound } from './api.js';
-import { apiErrorText } from './distributionCommon.js';
+import { apiErrorText } from './distribution-common.js';
 
 // Every number that exists of the articles whose numbers are described, who has each and how many
 // are free: for the people who hand them out (admin, board, material). It is a section of

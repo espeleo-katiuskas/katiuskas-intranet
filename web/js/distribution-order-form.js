@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml, formatCurrency, showError, showFeedback } from './api.js';
-import { articleLeft, hasArticles, resolvePickerId } from './distributionCommon.js';
+import { articleLeft, hasArticles, resolvePickerId } from './distribution-common.js';
 
 // The select of each option of a distribution (to choose what is asked for), with the ids
 // `<prefix>-<n>`; `selected` has the values already chosen.

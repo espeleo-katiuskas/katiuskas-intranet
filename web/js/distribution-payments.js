@@ -6,7 +6,7 @@ import {
   showError,
   showNotFound,
 } from './api.js';
-import { compactNumbers, formatDateTime } from './distributionCommon.js';
+import { compactNumbers, formatDateTime } from './distribution-common.js';
 
 // Every payment marked in one distribution, newest first, with what it had collected after each
 // one. Admin and board: it says who paid. It is a section of /reparto-gestion; what is returned has

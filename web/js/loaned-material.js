@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, formatDate, showError, showFeedback } from './api.js';
 import { initPage } from './layout.js';
-import { itemLabel } from './materialCommon.js';
+import { itemLabel } from './material-common.js';
 
 // The material that is still the club's but is not in it right now: what is out on loan (the units of
 // each item that its loans have not got back, summed over every activity, and for which activities)

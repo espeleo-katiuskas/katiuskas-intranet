@@ -9,7 +9,7 @@
   --danger: #a1453d;
   --success: #4c7a52;
   /* A field an editor has changed but not yet saved (member.js/profile.js's
-     own "Datos" forms, via js/formDirty.js) — soft enough not to read as
+     own "Datos" forms, via js/form-dirty.js) — soft enough not to read as
      an error or a validation warning, distinct enough from --surface to
      spot at a glance which fields are actually pending a save. */
   --field-dirty-bg: #fbf1da;
@@ -991,7 +991,7 @@ button.link-button {
   font-size: 0.85rem;
 }
 
-/* Licencias federativas' own per-year list (js/licenseFiles.js): a
+/* Licencias federativas' own per-year list (js/license-files.js): a
    small grid of clickable thumbnails instead of a plain .link-list of
    text links, so a license is recognizable at a glance. Each
    thumbnail displays at 140px on its longest side — the file actually
@@ -1188,7 +1188,7 @@ input[readonly] { background: var(--surface-muted); }
   min-height: 64px;
 }
 
-/* Applied by js/formDirty.js while a field's value differs from what the
+/* Applied by js/form-dirty.js while a field's value differs from what the
    form was last populated with (a fresh load, a successful save, or
    "Cancelar") — cleared the moment it matches again, including a manual
    edit back to the original value. */
@@ -1789,7 +1789,7 @@ h2[id^="section-"] {
   margin-top: 6px;
 }
 
-/* The menu of a searchable picker (js/pickerSearch.js): right after its input, against the same positioned
+/* The menu of a searchable picker (js/picker-search.js): right after its input, against the same positioned
    ancestor, above whatever follows. */
 .picker-menu {
   position: absolute;
@@ -1835,7 +1835,7 @@ h2[id^="section-"] {
   text-align: center;
 }
 
-/* On a phone a table with class "stack-on-phone" (js/stackedTables.js) is a card per row: each cell is a
+/* On a phone a table with class "stack-on-phone" (js/stacked-tables.js) is a card per row: each cell is a
    line with the name of its column above the value, so nothing, buttons included, is left off to the right
    to scroll to. Its header keeps only the sortable columns, as buttons to sort by. */
 @media (max-width: 640px) {

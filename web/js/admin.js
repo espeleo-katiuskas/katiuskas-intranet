@@ -10,10 +10,10 @@ import {
   showFeedback,
   showError,
 } from './api.js';
-import { formatSize } from './fileBrowser.js';
+import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
-import { initSortableHeaders } from './sortableHeaders.js';
+import { initSortableHeaders } from './sortable-headers.js';
 
 // Everything here is for administrators only — the nav link is hidden from
 // anyone else and anyone else who lands here is sent home. More sections

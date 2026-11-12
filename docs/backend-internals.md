@@ -768,7 +768,7 @@ field. Names are unique ignoring case (409 `duplicate_library_type`) and a type 
 deleted (409 `library_type_in_use`): both are checked in the service before the statement, because a
 failed statement would abort the transaction the tests run in; the unique index and the foreign key
 stay as the backstop. The codes have `library` in them because `duplicate_type` and `type_in_use`
-already mean the same for the types of material, with another text in `errorTexts.js`.
+already mean the same for the types of material, with another text in `error-texts.js`.
 
 **Who can do what.** Everybody who can sign in (`Protect` with no role: member, board or admin)
 reads every item and adds comments and files; admin, board and the `biblioteca` role create, edit
@@ -1302,7 +1302,7 @@ always-present/replaced-wholesale shape): an account that's no longer used. An a
 a `type` (migration `00031_accounts_type.sql`, the `account_type` enum: `asset` — its balance is
 money the club really has —, `income`, `expense`; optional and left out of the JSON when absent like
 `code`, a blank one normalized to none by `normalizeType`, `PUT` replacing it, an unknown one 400
-`invalid_type`): it is shown on `/cuenta`'s header (`accountTypes` in `accountTree.js`), chosen in
+`invalid_type`): it is shown on `/cuenta`'s header (`accountTypes` in `account-tree.js`), chosen in
 the create/edit dialogs, and the account a distribution's payment is made in has to be an `asset`.
 An account with no type of its own has its parent's, and so on up (migration `00034`, SQL function
 `account_effective_type`): `type` in the JSON is the own one, the one `PUT` replaces, and

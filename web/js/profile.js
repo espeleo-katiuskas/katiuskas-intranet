@@ -1,9 +1,9 @@
 import { hasAnyRole, apiFetch, showFeedback, showError } from './api.js';
 import { initPage } from './layout.js';
-import { initSessionsPanel } from './sessionsPanel.js';
-import { initUserFilesBrowser } from './userFiles.js';
-import { initLicenseFiles } from './licenseFiles.js';
-import { trackDirtyFields, markFieldsClean } from './formDirty.js';
+import { initSessionsPanel } from './sessions-panel.js';
+import { initUserFilesBrowser } from './user-files.js';
+import { initLicenseFiles } from './license-files.js';
+import { trackDirtyFields, markFieldsClean } from './form-dirty.js';
 import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const user = await initPage();
