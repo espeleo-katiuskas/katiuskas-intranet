@@ -202,3 +202,26 @@ func TestHandlerListRejectsSessionCookie(t *testing.T) {
 		t.Errorf("expected 401 (GET /archive must not accept the session cookie), got %d", rec.Code)
 	}
 }
+
+// If the root of the archive is gone, the API says it is unavailable (503), not that the path does not
+// exist (404), so that the page can tell a problem of the server from a wrong address.
+func TestHandlerAMissingRootAnswers503(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "archive")
+	svc, err := archive.NewService(root)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	authenticator, resolver := testutil.NewTestAuthenticator()
+	mux := http.NewServeMux()
+	archive.NewHandler(svc, authenticator).RegisterRoutes(mux)
+	token := testutil.TokenFor(resolver, 1, "member")
+	if err := os.Remove(root); err != nil {
+		t.Fatalf("remove root: %v", err)
+	}
+	for _, path := range []string{"/api/v1/archive", "/api/v1/archive?path=Actas", "/api/v1/archive/file/Estatutos.pdf"} {
+		rec := doRequest(mux, path, token)
+		if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "archive_unavailable") {
+			t.Errorf("%s: expected 503 archive_unavailable, got %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+}

@@ -697,23 +697,47 @@ function isNotFound(err) {
   return err?.code === 'not_found' || err?.code === 'invalid_id';
 }
 
-function showNotFound() {
+// Replaces the content of the page with a message (and keeps showError from opening its dialog on top
+// of it). Only the first call counts.
+function replacePageContent(id, html) {
   if (notFoundShown) return;
   notFoundShown = true;
   document.getElementById('error-dialog')?.close();
   const main = document.querySelector('main.content');
   if (!main) return;
   for (const child of main.children) child.hidden = true;
-  const notFound = document.createElement('div');
-  notFound.id = 'not-found';
-  notFound.innerHTML = `
+  const message = document.createElement('div');
+  message.id = id;
+  message.innerHTML = html;
+  main.append(message);
+}
+
+function showNotFound() {
+  replacePageContent(
+    'not-found',
+    `
     <h1>Esta página no existe</h1>
     <p>
       La dirección no corresponde a nada que exista: puede que el enlace esté mal escrito o que lo
       que buscas se haya borrado. Usa el menú para ir a otra página, o <a href="/">vuelve al
       inicio</a>.
-    </p>`;
-  main.append(notFound);
+    </p>`,
+  );
+}
+
+// For a page whose data cannot be read because of a problem of the server (not of the address): it
+// must not look like a page that does not exist.
+function showUnavailable() {
+  replacePageContent(
+    'unavailable',
+    `
+    <h1>Ha fallado algo en el servidor</h1>
+    <p>
+      No se puede mostrar lo que buscas por un problema del servidor, no de la dirección: avisa a
+      quien administra la intranet. Mientras tanto, usa el menú para ir a otra página, o
+      <a href="/">vuelve al inicio</a>.
+    </p>`,
+  );
 }
 
 // showNotFound for a page whose own code must not go on (nothing it would draw exists): the
@@ -871,6 +895,7 @@ export {
   queryId,
   isNotFound,
   showNotFound,
+  showUnavailable,
   stopAsNotFound,
   formatDate,
   formatMonthYear,

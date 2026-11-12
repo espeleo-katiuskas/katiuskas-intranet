@@ -42,6 +42,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	listing, err := h.service.ListDirectory(r.URL.Query().Get("path"))
 	switch {
+	case errors.Is(err, ErrUnavailable):
+		slog.Error("archive root is missing", "error", err)
+		httpapi.WriteError(w, http.StatusServiceUnavailable, "archive_unavailable", err.Error())
 	case errors.Is(err, ErrNotFound):
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "directory not found")
 	case errors.Is(err, ErrInvalidPath):
@@ -64,6 +67,10 @@ func (h *Handler) file(w http.ResponseWriter, r *http.Request) {
 	relPath := r.PathValue("path")
 	f, err := h.service.OpenFile(relPath)
 	switch {
+	case errors.Is(err, ErrUnavailable):
+		slog.Error("archive root is missing", "error", err)
+		httpapi.WriteError(w, http.StatusServiceUnavailable, "archive_unavailable", err.Error())
+		return
 	case errors.Is(err, ErrNotFound):
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "file not found")
 		return

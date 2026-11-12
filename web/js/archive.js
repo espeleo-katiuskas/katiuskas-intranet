@@ -7,6 +7,7 @@ import {
   isNotFound,
   showError,
   showNotFound,
+  showUnavailable,
 } from './api.js';
 import { initPage } from './layout.js';
 import { renderMarkdown } from './markdown.js';
@@ -63,6 +64,11 @@ function isMissing(err) {
   return isNotFound(err) || ['invalid_path', 'not_a_directory', 'not_a_file'].includes(err?.code);
 }
 
+// The root of the archive is gone on the server: not a wrong address.
+function isUnavailable(err) {
+  return err?.code === 'archive_unavailable';
+}
+
 async function loadDirectory(dirPath) {
   directoryView.hidden = false;
   fileView.hidden = true;
@@ -74,6 +80,10 @@ async function loadDirectory(dirPath) {
       ? listing.entries.map((entry) => renderEntryRow(listing.path, entry)).join('')
       : '<tr><td colspan="3">Esta carpeta está vacía.</td></tr>';
   } catch (err) {
+    if (isUnavailable(err)) {
+      showUnavailable();
+      return;
+    }
     if (isMissing(err)) {
       showNotFound();
       return;
@@ -144,6 +154,10 @@ async function loadFile(path) {
         '<p class="hint">No hay vista previa disponible para este tipo de fichero. Descárgalo para verlo.</p>';
     }
   } catch (err) {
+    if (isUnavailable(err)) {
+      showUnavailable();
+      return;
+    }
     if (isMissing(err)) {
       showNotFound();
       return;

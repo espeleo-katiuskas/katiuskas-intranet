@@ -4169,6 +4169,7 @@ paths:
         "400":
           description: invalid_path (escapes root) or not_a_directory (path names a file).
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { description: "archive_unavailable — the root directory of the archive is gone." }
 
   /archive/file/{path}:
     get:
@@ -4203,6 +4204,7 @@ paths:
         "400":
           description: invalid_path (escapes root) or not_a_file (path names a directory).
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { description: "archive_unavailable — the root directory of the archive is gone." }
 
   /accounts:
     get:

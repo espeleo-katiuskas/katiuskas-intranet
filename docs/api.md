@@ -863,11 +863,12 @@ Directory trees on disk, read-only: none of this is in the database.
   the order of its optional `.order.json` when it has one, else alphabetically.
   - query: `path`
   - returns: 200 `ArchiveListing`
-  - errors: 400 `invalid_path`, `not_a_directory`
+  - errors: 400 `invalid_path`, `not_a_directory`; 503 `archive_unavailable` (the root directory of
+    the archive is gone: a problem of the server, not of the path)
 - **GET** `/archive/file/{path}` — *Any baseline role*. Content of a document. It also accepts the
   session cookie, for ordinary browser links.
   - query: `download`
-  - errors: 400 `invalid_path`, `not_a_file`
+  - errors: 400 `invalid_path`, `not_a_file`; 503 `archive_unavailable`
 - **GET** `/users/{login}/files` — *The person themselves, admin or board*. Lists a directory of a
   person's files.
   - query: `path`

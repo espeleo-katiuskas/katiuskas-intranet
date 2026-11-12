@@ -334,24 +334,25 @@ redirect and no modal. It happens when the address has no usable id (`queryId()`
 number, else null; `stopAsNotFound()` also keeps the rest of the page's script from running) and
 when the API says the thing is not there (`isNotFound(err)`: `not_found` or `invalid_id`; the
 archive also treats `invalid_path`, `not_a_directory` and `not_a_file` that way). After that
-`showError` stays silent, since the page's other requests fail for the same reason. Any other
-failure (a 500, no network) still opens the error modal. `login.html`'s own inline messages next to
-the button they answer are the exception. `perfil.html`'s own "Mis datos" and `member.js`'s
-own "Datos" are both left as a plain inline form instead, not a dialog: a person's own
-core data is prominent enough on both pages (the entire reason `/perfil` exists at all;
-the very first thing an admin or board looks at on `/socio`) that hiding it behind an
-"Editar" button added friction for no real gain in clarity — plain `<input>`s directly on
-the page double as the read-only view too, so there's no separate view-only rendering to
-keep in sync with whatever the form itself holds. Populated once by
-`loadProfile()`/`loadMember()` and never reset to blank the way a "create new X" dialog's
-own form is on close, both add a "Cancelar" button next to "Guardar cambios" that puts
-back exactly what was last loaded (a plain local re-populate, not a re-fetch) — the one
-bit of a modal's own behavior (`initModal`'s reset-on-close) an inline form doesn't get
-for free, since there's no `close` event here to hang it from. `member.js`'s own version
-disables every field instead (not just the identity ones `profile.js` restricts) for
-anyone who isn't a real admin — board can still see a person's full data this way, just
-not submit any change to it, the same read-only-but-visible treatment `profile.js` already
-gives a plain member's own name/DNI/birth date/gender.
+`showError` stays silent, since the page's other requests fail for the same reason. The one
+exception is the archive's `archive_unavailable` (its root directory is gone on the server):
+`showUnavailable()` puts "Ha fallado algo en el servidor" in the same place, so that a problem of
+the server does not look like a wrong address. Any other failure (a 500, no network) still opens the
+error modal. `login.html`'s own inline messages next to the button they answer are the exception.
+`perfil.html`'s own "Mis datos" and `member.js`'s own "Datos" are both left as a plain inline form
+instead, not a dialog: a person's own core data is prominent enough on both pages (the entire reason
+`/perfil` exists at all; the very first thing an admin or board looks at on `/socio`) that hiding it
+behind an "Editar" button added friction for no real gain in clarity — plain `<input>`s directly on
+the page double as the read-only view too, so there's no separate view-only rendering to keep in
+sync with whatever the form itself holds. Populated once by `loadProfile()`/`loadMember()` and never
+reset to blank the way a "create new X" dialog's own form is on close, both add a "Cancelar" button
+next to "Guardar cambios" that puts back exactly what was last loaded (a plain local re-populate,
+not a re-fetch) — the one bit of a modal's own behavior (`initModal`'s reset-on-close) an inline
+form doesn't get for free, since there's no `close` event here to hang it from. `member.js`'s own
+version disables every field instead (not just the identity ones `profile.js` restricts) for anyone
+who isn't a real admin — board can still see a person's full data this way, just not submit any
+change to it, the same read-only-but-visible treatment `profile.js` already gives a plain member's
+own name/DNI/birth date/gender.
 
 The impersonation banner (`renderImpersonationBanner`) shows "Tiempo restante: 42 min; después
 volverás a tu sesión" and counts it down (minutes, then seconds in the last one), from

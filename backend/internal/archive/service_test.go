@@ -66,6 +66,27 @@ func TestNewServiceRejectsARootThatIsAFile(t *testing.T) {
 	}
 }
 
+// A root that disappears after the start is a problem of the server, not a path that is not there.
+func TestAMissingRootIsUnavailableNotNotFound(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "archive")
+	svc, err := archive.NewService(root)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatalf("remove root: %v", err)
+	}
+	if _, err := svc.ListDirectory(""); !errors.Is(err, archive.ErrUnavailable) {
+		t.Errorf("expected ErrUnavailable listing the root, got %v", err)
+	}
+	if _, err := svc.ListDirectory("Actas"); !errors.Is(err, archive.ErrUnavailable) {
+		t.Errorf("expected ErrUnavailable listing a subdirectory, got %v", err)
+	}
+	if _, err := svc.OpenFile("Estatutos.pdf"); !errors.Is(err, archive.ErrUnavailable) {
+		t.Errorf("expected ErrUnavailable opening a file, got %v", err)
+	}
+}
+
 func TestListDirectoryListsRootByDefault(t *testing.T) {
 	svc := newTestService(t)
 

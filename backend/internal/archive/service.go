@@ -19,6 +19,10 @@ var (
 	// ErrNotFound means the given path doesn't exist under the archive
 	// root.
 	ErrNotFound = errors.New("not found")
+
+	// ErrUnavailable means the root of the archive itself is gone (the directory was removed or its
+	// disk unmounted after the API started): a problem of the server, not of the path asked for.
+	ErrUnavailable = errors.New("the archive is not available")
 	// ErrInvalidPath means the given path tries to escape the archive
 	// root (a "..", an absolute path, or a symlink pointing outside it)
 	// — never a legitimate request, so it's never distinguished from
@@ -100,6 +104,9 @@ func (s *Service) resolve(relPath string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(full)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if _, rootErr := os.Stat(s.root); rootErr != nil {
+				return "", ErrUnavailable
+			}
 			return "", ErrNotFound
 		}
 		return "", err
@@ -144,6 +151,10 @@ func (s *Service) ListDirectory(relPath string) (Listing, error) {
 
 	dirEntries, err := os.ReadDir(full)
 	if err != nil {
+		// The root that exists for stat but cannot be read (a directory deleted while it is still mounted).
+		if os.IsNotExist(err) && full == s.root {
+			return Listing{}, ErrUnavailable
+		}
 		return Listing{}, err
 	}
 

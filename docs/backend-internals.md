@@ -841,7 +841,10 @@ its order; dotfiles never listed, that one included, though it can be fetched by
 /archive/file/{path...}` streams a file's raw bytes (the path is the rest of the URL, slashes
 included — e.g. `/archive/file/Actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
 default or as an attachment with `?download=1`, with HTTP Range support via `http.ServeContent`.
-Both are open to any baseline role and read-only — nothing here lets a caller upload, rename, or
+If the root directory itself is gone (removed, or its disk unmounted, after the API started —
+startup creates it), `resolve` and `ListDirectory` answer `ErrUnavailable` and both routes 503
+`archive_unavailable` instead of 404: the page must not look like a wrong address. Both are open
+to any baseline role and read-only — nothing here lets a caller upload, rename, or
 delete anything.
 
 ## Per-person files

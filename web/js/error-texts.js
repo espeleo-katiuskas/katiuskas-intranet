@@ -110,6 +110,8 @@ const texts = {
   model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
   invalid_days: 'El número de días tiene que estar entre 1 y 730.',
+  archive_unavailable:
+    'El archivo no está disponible ahora mismo. Avisa a quien administra la intranet.',
   // Biblioteca
   invalid_item_year: 'El año del ejemplar tiene que estar entre 1000 y 2200.',
   type_required: 'Elige el tipo del ejemplar.',
