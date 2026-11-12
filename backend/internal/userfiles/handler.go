@@ -15,13 +15,13 @@ import (
 )
 
 func init() {
-	// Same rationale as internal/library's identical init(): Go's mime
+	// Same rationale as internal/archive's identical init(): Go's mime
 	// package falls back to a small built-in table when the host has no
 	// /etc/mime.types (true of the alpine-based API image), and that
 	// table doesn't include every extension a person's own documents
 	// realistically use. Registered here too (not just relied on via
-	// library's own init()) so this package behaves the same whether or
-	// not library happens to also be imported into the same binary.
+	// archive's own init()) so this package behaves the same whether or
+	// not archive happens to also be imported into the same binary.
 	for ext, typ := range map[string]string{
 		".md":   "text/markdown; charset=utf-8",
 		".txt":  "text/plain; charset=utf-8",
@@ -64,12 +64,12 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // handler, the same self-or-privileged pattern
 // memberships.Handler.listByUser and material.Handler.listMovementsByUser
 // use, since who may see a specific person's files isn't a fixed role
-// list the way, say, GET /library is. /file also accepts the session
+// list the way, say, GET /archive is. /file also accepts the session
 // cookie (ProtectAllowingCookie, see auth.RequireAuthFromHeaderOrCookie),
 // not just the bearer header, so it works as a plain URL a browser can
 // navigate to directly and still get the file's real name. Its own path
 // is a URL path segment, not a ?path= query parameter — same
-// {path...} wildcard shape as internal/library's own /file route.
+// {path...} wildcard shape as internal/archive's own /file route.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users/{login}/files", h.authenticator.Protect(h.list))
 	mux.Handle("GET /api/v1/users/{login}/files/file/{path...}", h.authenticator.ProtectAllowingCookie(h.file))

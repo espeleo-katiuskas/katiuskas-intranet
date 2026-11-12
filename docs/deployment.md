@@ -38,10 +38,11 @@ own at `127.0.0.1:64710`.
 ├── web/                   # static copy of the repository's web/
 ├── db/migrations/         # copy of the repository's db/migrations/ (only the .sql files)
 ├── data/
-│   ├── library/           # LIBRARY_ROOT
+│   ├── archive/           # ARCHIVE_ROOT
 │   ├── user-files/        # USER_FILES_ROOT
 │   ├── activity-resources/ # ACTIVITY_RESOURCES_ROOT
-│   └── transaction-files/  # TRANSACTION_FILES_ROOT
+│   ├── transaction-files/  # TRANSACTION_FILES_ROOT
+│   └── library-files/      # LIBRARY_FILES_ROOT
 └── api.env                # environment variables of the systemd service, not readable by others
 ```
 
@@ -50,7 +51,7 @@ Everything owned by a dedicated system user, with no login shell:
 ```sh
 sudo useradd --system --create-home --home-dir /opt/katiuskas-intranet \
   --shell /usr/sbin/nologin intranet
-sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/library,data/user-files,data/activity-resources,data/transaction-files}
+sudo mkdir -p /opt/katiuskas-intranet/{bin,web,db/migrations,data/archive,data/user-files,data/activity-resources,data/transaction-files,data/library-files}
 sudo chown -R intranet:intranet /opt/katiuskas-intranet
 ```
 
@@ -142,10 +143,11 @@ sudo tee /opt/katiuskas-intranet/api.env >/dev/null <<'EOF'
 HTTP_ADDR=127.0.0.1:64711
 DATABASE_URL=postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable
 PUBLIC_BASE_URL=https://intranet.tudominio.org
-LIBRARY_ROOT=/opt/katiuskas-intranet/data/library
+ARCHIVE_ROOT=/opt/katiuskas-intranet/data/archive
 USER_FILES_ROOT=/opt/katiuskas-intranet/data/user-files
 ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources
 TRANSACTION_FILES_ROOT=/opt/katiuskas-intranet/data/transaction-files
+LIBRARY_FILES_ROOT=/opt/katiuskas-intranet/data/library-files
 # Leave the four SMTP_* commented out to send no real email: the magic
 # sign-in links are then logged in `journalctl -u katiuskas-api`.
 #SMTP_HOST=smtp.tudominio.org
@@ -186,6 +188,13 @@ sudo chmod 600 /opt/katiuskas-intranet/api.env
 `docker-compose.yml`: here there is no isolated network separating the API from the rest of the
 machine, so it has to be restricted to localhost explicitly — only Caddy, on the same host,
 needs to talk to it.
+
+`ARCHIVE_ROOT` was called `LIBRARY_ROOT` until the club's library of books took the name "library":
+an `api.env` that still sets only `LIBRARY_ROOT` keeps working (the API and `scripts/backup.sh` read
+it when `ARCHIVE_ROOT` is not set), so nothing has to change on an installation that already exists;
+rename the variable when convenient, and the directory only if wanted. `LIBRARY_FILES_ROOT`, the
+covers and files of the library, may be left out: the API then uses `library-files` next to
+`ACTIVITY_RESOURCES_ROOT`.
 
 systemd unit, `/etc/systemd/system/katiuskas-api.service`:
 
@@ -374,9 +383,10 @@ a database dump and the directories of files:
 sudo -u postgres pg_dump intranet > backup-$(date +%Y%m%d).sql
 tar czf activity-resources-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data activity-resources
 tar czf transaction-files-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data transaction-files
+tar czf library-files-$(date +%Y%m%d).tar.gz -C /opt/katiuskas-intranet/data library-files
 ```
 
-`/opt/katiuskas-intranet/data/library` and `/opt/katiuskas-intranet/data/user-files` are ordinary
+`/opt/katiuskas-intranet/data/archive` and `/opt/katiuskas-intranet/data/user-files` are ordinary
 directories — copy them like any other file on the system.
 
 ### License thumbnails

@@ -91,15 +91,15 @@ if (isAdmin) {
 }
 
 // Documentos/Actas asambleas/Memorias de actividades all read straight
-// from a fixed /library folder (library/Documentos, library/Actas,
-// library/Memorias — see index.html) rather than from any club-specific
+// from a fixed /archive folder (archive/Documentos, archive/Actas,
+// archive/Memorias — see index.html) rather than from any club-specific
 // endpoint, so admins can add or remove a PDF just by dropping it in, no
 // deploy needed. The order is the API's own: alphabetical, unless the
 // folder has a .order.json naming which files go first
 // (Service.ListDirectory), so /archivo shows the same order and there is
 // nothing to fetch or sort here.
 async function listFiles(dirPath) {
-  const listing = await apiFetch(`/library?path=${encodeURIComponent(dirPath)}`);
+  const listing = await apiFetch(`/archive?path=${encodeURIComponent(dirPath)}`);
   return listing.entries.filter((entry) => entry.type === 'file');
 }
 
@@ -109,15 +109,15 @@ function stripExtension(name) {
 }
 
 // Every Documentos/Actas/Memorias entry is a plain link straight to
-// /library/file, opened in a new tab — no fetch/blob juggling needed:
+// /archive/file, opened in a new tab — no fetch/blob juggling needed:
 // initSession() (see api.js) also gets the API to set the session as an
-// HttpOnly cookie (auth.SetSessionCookie), which GET /library/file
+// HttpOnly cookie (auth.SetSessionCookie), which GET /archive/file
 // accepts as well as the bearer header specifically so a plain,
 // browser-navigated URL like this one works and the browser's own
 // "Save As" picks up the file's real name — a blob: URL created from a
 // fetch() response can't carry that name at all.
 function fileLink(dirPath, name, label) {
-  const href = `${API_BASE}/library/file/${encodeFilePath(`${dirPath}/${name}`)}`;
+  const href = `${API_BASE}/archive/file/${encodeFilePath(`${dirPath}/${name}`)}`;
   return `<a href="${href}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
 }
 

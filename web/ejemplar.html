@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ejemplar — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <p><a href="/biblioteca">&larr; Volver a la biblioteca</a></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+
+  <div class="library-header">
+    <div id="library-cover"></div>
+    <div class="library-header-text">
+      <h1 id="library-title">Ejemplar</h1>
+      <p class="subtitle" id="library-meta"></p>
+      <p><span id="library-status" class="badge"></span></p>
+      <div class="detail-list" id="library-details"></div>
+      <div class="panel-actions" data-roles="admin,board,biblioteca">
+        <button id="edit-item" type="button" class="btn btn-secondary btn-small">Editar ejemplar</button>
+        <button id="change-cover" type="button" class="btn btn-secondary btn-small">Cambiar portada</button>
+        <button id="remove-cover" type="button" class="btn btn-secondary btn-small" hidden>Quitar portada</button>
+        <button id="delete-item" type="button" class="btn btn-danger btn-small">Borrar ejemplar</button>
+        <input id="cover-input" type="file" accept="image/*" hidden>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="edit-item-dialog" class="panel modal" data-roles="admin,board,biblioteca">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Editar ejemplar</h3>
+    <form id="edit-item-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="eb-type">Tipo</label>
+          <select id="eb-type" name="type_id" required></select>
+        </div>
+        <div class="field">
+          <label for="eb-title">Título</label>
+          <input id="eb-title" name="title" type="text" required>
+        </div>
+        <div class="field">
+          <label for="eb-author">Autor <span class="optional">(opcional)</span></label>
+          <input id="eb-author" name="author" type="text">
+        </div>
+        <div class="field">
+          <label for="eb-publisher">Editorial <span class="optional">(opcional)</span></label>
+          <input id="eb-publisher" name="publisher" type="text">
+        </div>
+        <div class="field">
+          <label for="eb-year">Año <span class="optional">(opcional)</span></label>
+          <input id="eb-year" name="year" type="number" min="1000" max="2200" step="1">
+        </div>
+        <div class="field">
+          <label for="eb-isbn">ISBN <span class="optional">(opcional)</span></label>
+          <input id="eb-isbn" name="isbn" type="text">
+        </div>
+        <div class="field span-2">
+          <label for="eb-location">Dónde está en el local <span class="optional">(opcional)</span></label>
+          <input id="eb-location" name="location" type="text" placeholder="Estante, caja…">
+        </div>
+        <div class="field span-2">
+          <label for="eb-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="eb-description" name="description"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <section>
+    <h2>Comentarios</h2>
+    <div id="comments"></div>
+    <form id="comment-form" class="comment-form">
+      <div class="field">
+        <label for="comment-body">Añade un comentario</label>
+        <textarea id="comment-body" name="body" maxlength="2000" required placeholder="Qué te ha parecido, para qué sirve…"></textarea>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-secondary btn-small">Comentar</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Fotos y documentos</h2>
+    <p class="subtitle">Cualquier socio puede añadir fotos, documentos, topografías o escaneos de partes del ejemplar.</p>
+    <div id="resources"></div>
+    <form id="resource-form" class="comment-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="resource-file">Fichero (10 MiB como máximo)</label>
+          <input id="resource-file" name="file" type="file" required>
+        </div>
+        <div class="field">
+          <label for="resource-title">Título <span class="optional">(opcional)</span></label>
+          <input id="resource-title" name="title" type="text" maxlength="200" placeholder="Qué es">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
+      </div>
+    </form>
+  </section>
+
+  <section data-roles="admin,board,biblioteca,material">
+    <h2>Préstamos</h2>
+    <p class="subtitle">Solo lo ven la Junta, la biblioteca y quien gestiona el material.</p>
+    <p id="loan-status"></p>
+    <datalist id="loan-people-options"></datalist>
+    <form id="lend-form" class="comment-form" hidden>
+      <div class="field-grid">
+        <div class="field">
+          <label for="lend-person">Prestar a</label>
+          <input id="lend-person" type="text" list="loan-people-options" autocomplete="off" placeholder="Escribe un nombre…" required>
+        </div>
+        <div class="field">
+          <label for="lend-date">Fecha del préstamo</label>
+          <input id="lend-date" name="lent_at" type="date" required>
+        </div>
+        <div class="field span-2">
+          <label for="lend-notes">Notas <span class="optional">(opcional)</span></label>
+          <input id="lend-notes" name="notes" type="text">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-secondary btn-small">Apuntar préstamo</button>
+      </div>
+    </form>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Socio</th><th>Prestado</th><th>Devuelto</th><th>Apuntado por</th><th>Notas</th><th></th></tr>
+        </thead>
+        <tbody id="loans-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog id="return-dialog" class="panel modal" data-roles="admin,board,biblioteca,material">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Apuntar devolución</h3>
+    <form id="return-form">
+      <div class="field">
+        <label for="return-date">Fecha de la devolución</label>
+        <input id="return-date" name="returned_at" type="date" required>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Apuntar devolución</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/libraryItem.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("SMTP_PORT", "")
+	t.Setenv("ARCHIVE_ROOT", "")
 	t.Setenv("LIBRARY_ROOT", "")
 
 	cfg, err := Load()
@@ -33,8 +34,8 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.SMTPHost != "" {
 		t.Errorf("expected SMTPHost to have no default, got %q", cfg.SMTPHost)
 	}
-	if cfg.LibraryRoot != "/data/library" {
-		t.Errorf("expected default LibraryRoot /data/library, got %q", cfg.LibraryRoot)
+	if cfg.ArchiveRoot != "/data/archive" {
+		t.Errorf("expected default ArchiveRoot /data/archive, got %q", cfg.ArchiveRoot)
 	}
 }
 
@@ -44,7 +45,7 @@ func TestLoadHonorsOverrides(t *testing.T) {
 	t.Setenv("PUBLIC_BASE_URL", "https://intranet.example")
 	t.Setenv("SMTP_HOST", "smtp.example.com")
 	t.Setenv("SMTP_PORT", "2525")
-	t.Setenv("LIBRARY_ROOT", "/srv/documents")
+	t.Setenv("ARCHIVE_ROOT", "/srv/documents")
 
 	cfg, err := Load()
 	if err != nil {
@@ -62,8 +63,26 @@ func TestLoadHonorsOverrides(t *testing.T) {
 	if cfg.SMTPPort != "2525" {
 		t.Errorf("expected overridden SMTPPort, got %q", cfg.SMTPPort)
 	}
-	if cfg.LibraryRoot != "/srv/documents" {
-		t.Errorf("expected overridden LibraryRoot, got %q", cfg.LibraryRoot)
+	if cfg.ArchiveRoot != "/srv/documents" {
+		t.Errorf("expected overridden ArchiveRoot, got %q", cfg.ArchiveRoot)
+	}
+}
+
+// An api.env written when the archive of documents was still called the library keeps working.
+func TestLoadArchiveRootFallsBackToTheOldName(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("ARCHIVE_ROOT", "")
+	t.Setenv("LIBRARY_ROOT", "/srv/old")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.ArchiveRoot != "/srv/old" {
+		t.Errorf("expected LIBRARY_ROOT to be used, got %q", cfg.ArchiveRoot)
+	}
+	t.Setenv("ARCHIVE_ROOT", "/srv/new")
+	if cfg, _ = Load(); cfg.ArchiveRoot != "/srv/new" {
+		t.Errorf("expected ARCHIVE_ROOT to win, got %q", cfg.ArchiveRoot)
 	}
 }
 
@@ -83,5 +102,39 @@ func TestLoadDiskAlertPercent(t *testing.T) {
 		if _, err := Load(); err == nil {
 			t.Errorf("expected %q to be refused", bad)
 		}
+	}
+}
+
+// The directory of the items' files is LIBRARY_FILES_ROOT, and when that is not set one called library-files
+// beside the memorias': an installation whose environment file predates the library still starts.
+func TestLoadLibraryFilesRoot(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+
+	t.Setenv("ACTIVITY_RESOURCES_ROOT", "")
+	t.Setenv("LIBRARY_FILES_ROOT", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LibraryFilesRoot != "/data/library-files" {
+		t.Errorf("expected the default /data/library-files, got %q", cfg.LibraryFilesRoot)
+	}
+
+	t.Setenv("ACTIVITY_RESOURCES_ROOT", "/opt/katiuskas/data/activity-resources")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LibraryFilesRoot != "/opt/katiuskas/data/library-files" {
+		t.Errorf("expected it beside the memorias, got %q", cfg.LibraryFilesRoot)
+	}
+
+	t.Setenv("LIBRARY_FILES_ROOT", "/srv/ejemplares")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LibraryFilesRoot != "/srv/ejemplares" {
+		t.Errorf("expected the one that was set, got %q", cfg.LibraryFilesRoot)
 	}
 }

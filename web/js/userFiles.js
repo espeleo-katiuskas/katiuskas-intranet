@@ -20,7 +20,7 @@ import {
 // A per-person document browser, embedded (not a page of its own) in
 // both perfil.html (a socio's own files) and socio.html (admin/board
 // viewing someone else's) — see GET /users/{login}/files[/file]. Mostly
-// mirrors js/library.js's own browsing/preview logic (see
+// mirrors js/archive.js's own browsing/preview logic (see
 // js/fileBrowser.js for the pieces shared with it), but navigates by
 // updating this same page's DOM in place instead of real page loads:
 // there's no dedicated URL for "this folder" or "this file" the way
@@ -32,7 +32,7 @@ import {
 
 // A synthetic, non-navigating href this widget's own click handlers
 // intercept — see the module doc comment above for why this can't just
-// be a real URL the way library.js's linkHrefFor is.
+// be a real URL the way archive.js's linkHrefFor is.
 function ufHref(path, isDir) {
   return `#uf:${isDir ? 'dir' : 'file'}:${encodeURIComponent(path)}`;
 }
@@ -150,7 +150,7 @@ function initUserFilesBrowser(login, { hideWhenEmpty = false } = {}) {
         const url = URL.createObjectURL(blob);
         preview.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}" class="document-image">`;
       } else if (kind === 'html') {
-        // Fully sandboxed, same reasoning as library.js: no safe way to
+        // Fully sandboxed, same reasoning as archive.js: no safe way to
         // intercept navigation inside a sandboxed frame, so relative
         // links inside it aren't rewritten into in-widget navigation.
         const url = URL.createObjectURL(blob);

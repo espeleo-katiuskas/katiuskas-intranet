@@ -1,6 +1,6 @@
 // Shared helpers for browsing/previewing a document tree over HTTP and
 // saving a fetched Blob back to disk — pulled out once instead of
-// three near-identical copies: js/library.js and js/userFiles.js each
+// three near-identical copies: js/archive.js and js/userFiles.js each
 // had their own copy of every one of these; js/activity.js (for its
 // memoria resources, a different feature entirely, but downloading a
 // fetched file and showing its size is the same problem either way)
@@ -71,7 +71,7 @@ export function resolveRelativePath(baseDir, href) {
 
 // Triggers a browser "save as" for an already-fetched Blob — used
 // instead of a plain <a href> wherever the file was fetched via
-// apiFetchBlob rather than linked directly. Only library's and
+// apiFetchBlob rather than linked directly. Only archive's and
 // userfiles' own file-serving GET routes mirror the session token into
 // a cookie too, specifically so a document/file can be a plain,
 // browser-navigable link there — everywhere else, a bare link has

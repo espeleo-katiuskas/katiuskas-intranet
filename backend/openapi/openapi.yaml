@@ -1915,7 +1915,7 @@ paths:
         Streams a type=file resource's raw bytes — not_a_file for a
         type=text resource, which never has one. Same
         inline-by-default/?download=1/Content-Type behavior as
-        GET /library/file/{path} and GET /users/{login}/files/file/{path},
+        GET /archive/file/{path} and GET /users/{login}/files/file/{path},
         open to any baseline role (same as GET .../resources above).
       security: [{ bearerAuth: [] }]
       parameters:
@@ -2262,6 +2262,442 @@ paths:
       responses:
         "204": { description: Holiday deleted }
         "400": { description: invalid_id — id isn't numeric. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/types:
+    get:
+      summary: List the types of item
+      description: >
+        Any baseline role. Libro, Revista, Mapa, Topografía, Otro and whatever has been added, in the
+        order they were added, each with how many items have it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The types
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryType" }
+    post:
+      summary: Add a type of item
+      description: Admin, board or the biblioteca role. The name is unique ignoring case.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryTypeInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryType" }
+        "400": { description: "invalid_body, type_name_required or type_name_too_long (60 characters)." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "409": { description: "duplicate_library_type." }
+
+  /library/types/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Rename a type of item
+      description: Admin, board or the biblioteca role.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryTypeInput" }
+      responses:
+        "200":
+          description: The type as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryType" }
+        "400": { description: "invalid_id, invalid_body, type_name_required or type_name_too_long." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_library_type." }
+    delete:
+      summary: Delete a type of item
+      description: Admin, board or the biblioteca role. Only a type no item has.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "library_type_in_use — an item has it." }
+
+  /library/items:
+    get:
+      summary: List the items of the library
+      description: >
+        Any baseline role. Every item, by title, with its type, whether it is available (not out on loan), whether
+        it has a cover and how many comments and files it has — never who has it, which only the loans
+        say.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryItem" }
+    post:
+      summary: Add an item
+      description: Admin, board or the biblioteca role. Blank text counts as no value.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { description: "invalid_body, type_required, unknown_library_type, title_required or invalid_item_year (outside 1000 to 2200)." }
+        "403": { description: "Requires admin, board or biblioteca." }
+
+  /library/items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One item
+      description: Any baseline role.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Edit an item
+      description: >
+        Admin, board or biblioteca. Replaces every field: what is left out is cleared.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemInput" }
+      responses:
+        "200":
+          description: The item as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { description: "invalid_id, invalid_body, type_required, unknown_library_type, title_required or invalid_item_year." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete an item
+      description: >
+        Admin, board or biblioteca. Only an item that has never been lent: its history of loans stays.
+        Its comments and files go with it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: "Deleted" }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "item_has_loans — it has been lent." }
+
+  /library/items/{id}/comments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The comments on an item
+      description: Any baseline role. Oldest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryComment" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Comment on an item
+      description: Any baseline role. At most 2000 characters.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryComment" }
+        "400": { description: "invalid_id, invalid_body, comment_required or comment_too_long." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/items/{id}/comments/{commentId}:
+    delete:
+      summary: Remove a comment
+      description: Its author, admin, board or biblioteca.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: commentId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: "Removed" }
+        "400": { description: "invalid_id." }
+        "403": { description: "not_yours — somebody else wrote it and the caller does not manage the library." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/items/{id}/resources:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The files of an item that are not its cover
+      description: Any baseline role. Photos, documents, topographies, scans; oldest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryResource" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Attach a file to an item
+      description: >
+        Any baseline role. One file, at most 10 MiB, in the multipart field `file`, and an optional
+        caption in `title` (200 characters at most). Its type is decided from its bytes: a PDF or an
+        image can be shown in the browser, anything else is only downloaded.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryResource" }
+        "400": { description: "invalid_id, invalid_body, file_required (missing or empty) or file_title_too_long." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: "file_too_large." }
+
+  /library/items/{id}/resources/{resourceId}/file:
+    get:
+      summary: The bytes of a file of an item
+      description: >
+        Any baseline role; also accepts the session cookie, so that a browser can open it. A PDF or an
+        image is shown in the page; anything else is downloaded, and sandboxed. `?download=1` forces a
+        download.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceId, in: path, required: true, schema: { type: integer } }
+        - { name: download, in: query, required: false, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200": { description: "The file" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/items/{id}/resources/{resourceId}:
+    delete:
+      summary: Remove a file of an item
+      description: >
+        Whoever attached it, admin, board or biblioteca. The cover is not removed this way (it answers
+        404): see DELETE /library/items/{id}/cover.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: resourceId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: "Removed" }
+        "400": { description: "invalid_id." }
+        "403": { description: "not_yours." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /library/items/{id}/cover:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The cover of an item
+      description: >
+        Any baseline role; also accepts the session cookie, so that an `<img>` can point at it. The
+        address stays the same when the cover is replaced, so the answer has to be revalidated
+        (Cache-Control no-cache).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: "The image" }
+        "400": { description: "invalid_id." }
+        "404": { description: "not_found — no such item, or it has no cover." }
+    put:
+      summary: Set the cover of an item
+      description: >
+        Admin, board or biblioteca. One image (recognised by its bytes), at most 10 MiB, in the
+        multipart field `file`; it takes the place of the cover there was.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: The new cover
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryResource" }
+        "400": { description: "invalid_id, invalid_body, file_required or cover_not_image." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: "file_too_large." }
+    delete:
+      summary: Take the cover off an item
+      description: Admin, board or biblioteca.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: "Removed" }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin, board or biblioteca." }
+        "404": { description: "not_found — no such item, or it has no cover." }
+
+  /library/loans:
+    get:
+      summary: The loans of every item
+      description: >
+        Admin, board, biblioteca or material. Newest first: those still out by default, all of them
+        with status=all.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [open, all], default: open } }
+      responses:
+        "200":
+          description: The loans
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { description: "invalid_status." }
+        "403": { description: "Requires admin, board, biblioteca or material." }
+
+  /library/items/{id}/loans:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The history of loans of an item
+      description: Admin, board, biblioteca or material. Newest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The loans
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin, board, biblioteca or material." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Lend an item to a member
+      description: >
+        Admin, board, biblioteca or material. The item must be available and the person a member now.
+        The date of the loan is today by default and may be a past one, never a future one.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login]
+              properties:
+                login: { type: string }
+                lent_at: { type: string, format: date }
+                notes: { type: string }
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { description: "invalid_id, invalid_body, loan_login_required, invalid_date (not YYYY-MM-DD) or invalid_dates (in the future)." }
+        "403": { description: "Requires admin, board, biblioteca or material." }
+        "404": { description: "not_found — no such item, or nobody has that login." }
+        "409": { description: "item_not_available (it is out) or loan_recipient_not_member." }
+
+  /library/items/{id}/loans/{loanId}/return:
+    post:
+      summary: Record that a lent item is back
+      description: >
+        Admin, board, biblioteca or material. The body is optional: `returned_at` is today by default,
+        never before the loan began and never in the future.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: loanId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                returned_at: { type: string, format: date }
+      responses:
+        "200":
+          description: The loan, closed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { description: "invalid_id, invalid_body, invalid_date or invalid_dates." }
+        "403": { description: "Requires admin, board, biblioteca or material." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "loan_already_returned." }
+
+  /library/items/{id}/loans/{loanId}:
+    delete:
+      summary: Delete a loan recorded by mistake
+      description: Admin only.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: loanId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: "Deleted" }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /distributions:
@@ -3071,7 +3507,7 @@ paths:
         Browses this person's own personal documents (a scanned DNI, a
         signed waiver, medical paperwork...) — a plain directory tree on
         disk (config.UserFilesRoot), one subdirectory per login, not
-        anything stored in the database. Unlike GET /library, this is
+        anything stored in the database. Unlike GET /archive, this is
         *not* open to every baseline role: only the person themselves,
         or admin/board, may browse it (403 forbidden otherwise) — a
         login that doesn't belong to anyone at all is 404 instead. path
@@ -3106,7 +3542,7 @@ paths:
       summary: Read or download one of a person's own files
       description: >
         Streams a document's raw bytes with a best-effort Content-Type,
-        same as GET /library/file/{path} — supports HTTP Range requests,
+        same as GET /archive/file/{path} — supports HTTP Range requests,
         and the same path resolution, root confinement, and
         self-or-admin/board access check as GET /users/{login}/files.
       security: [{ bearerAuth: [] }, { cookieAuth: [] }]
@@ -3703,16 +4139,16 @@ paths:
         "404":
           description: not_found — no active rental with this id.
 
-  /library:
+  /archive:
     get:
-      summary: List a document library directory
+      summary: List a document archive directory
       description: >
-        Browses the club's document library (estatutos, reglamentos,
+        Browses the club's document archive (estatutos, reglamentos,
         normativas, memorias de actividades, actas...) — a plain
-        directory tree on disk (config.LibraryRoot), not anything stored
+        directory tree on disk (config.ArchiveRoot), not anything stored
         in the database. Open to any baseline role (admin/board/member),
         read-only: there's no way to upload, rename, or delete anything
-        through this API. path defaults to the library's root when
+        through this API. path defaults to the archive's root when
         omitted; every path is resolved and checked against root
         server-side, so one that tries to escape it (a "..", an absolute
         path, a symlink pointing outside) either lands back inside root
@@ -3729,12 +4165,12 @@ paths:
           description: Directory listing
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/LibraryListing" }
+              schema: { $ref: "#/components/schemas/ArchiveListing" }
         "400":
           description: invalid_path (escapes root) or not_a_directory (path names a file).
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /library/file/{path}:
+  /archive/file/{path}:
     get:
       summary: Read or download a document
       description: >
@@ -3744,7 +4180,7 @@ paths:
         don't otherwise agree on) so the frontend can either render it
         itself (Markdown) or hand it to the browser (PDF, image, HTML).
         Supports HTTP Range requests. Same path resolution and root
-        confinement as GET /library.
+        confinement as GET /archive.
       security: [{ bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - name: path
@@ -4194,7 +4630,7 @@ components:
         HttpOnly cookie instead — set by every endpoint that issues or
         replaces a session (magic-link consume, impersonate,
         impersonate/exit), cleared by POST /auth/logout. Accepted only
-        by GET /library/file/{path} and GET /users/{login}/files/file/{path}, which
+        by GET /archive/file/{path} and GET /users/{login}/files/file/{path}, which
         need to work as a plain, browser-navigable URL (opened directly
         in a new tab, or saved by the browser's own "Save As" under the
         file's real name) that a custom Authorization header can't ride
@@ -4266,7 +4702,7 @@ components:
           items:
             type: object
             properties:
-              name: { type: string, enum: [library, user_files, activity_resources] }
+              name: { type: string, enum: [archive, user_files, activity_resources] }
               path: { type: string }
               exists: { type: boolean }
         disks:
@@ -5410,7 +5846,90 @@ components:
           nullable: true
           description: The accounting transaction a sale or a rental recorded; absent for the other types and for one that costs nothing.
 
-    LibraryEntry:
+    LibraryTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 60 }
+
+    LibraryType:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        item_count: { type: integer, description: "How many items have this type." }
+
+    LibraryItemInput:
+      type: object
+      required: [type_id, title]
+      properties:
+        type_id: { type: integer, description: "A type of GET /library/types." }
+        title: { type: string }
+        author: { type: string, nullable: true }
+        publisher: { type: string, nullable: true }
+        year: { type: integer, minimum: 1000, maximum: 2200, nullable: true }
+        isbn: { type: string, nullable: true }
+        location: { type: string, nullable: true, description: "Where it is kept in the club's rooms (a shelf mark, a box)." }
+        description: { type: string, nullable: true }
+
+    LibraryItem:
+      type: object
+      description: >
+        One copy of an item. It says whether it is available but never who has it: that is in the loans,
+        which only admin, board, biblioteca and material read.
+      properties:
+        id: { type: integer }
+        type_id: { type: integer }
+        type: { type: string, description: "The name of the type." }
+        title: { type: string }
+        author: { type: string }
+        publisher: { type: string }
+        year: { type: integer }
+        isbn: { type: string }
+        location: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        available: { type: boolean, description: "False while the item is out on loan." }
+        has_cover: { type: boolean, description: "The cover is served at GET /library/items/{id}/cover." }
+        comment_count: { type: integer }
+        resource_count: { type: integer, description: "The files that are not the cover." }
+
+    LibraryComment:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer }
+        user_login: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+
+    LibraryResource:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer }
+        is_cover: { type: boolean }
+        title: { type: string, description: "The caption given when it was attached; absent if none." }
+        file_name: { type: string }
+        content_type: { type: string }
+        file_size: { type: integer }
+        uploaded_by: { type: string, description: "A login." }
+        created_at: { type: string, format: date-time }
+
+    LibraryLoan:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer }
+        item_title: { type: string }
+        user_login: { type: string }
+        lent_at: { type: string, format: date }
+        returned_at: { type: string, format: date, description: "Absent while the item is out." }
+        recorded_by_login: { type: string }
+        notes: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ArchiveEntry:
       type: object
       properties:
         name: { type: string }
@@ -5420,7 +5939,7 @@ components:
           description: Bytes. Omitted for a directory.
         modified_at: { type: string, format: date-time }
 
-    LibraryListing:
+    ArchiveListing:
       type: object
       properties:
         path:
@@ -5432,7 +5951,7 @@ components:
             sent.
         entries:
           type: array
-          items: { $ref: "#/components/schemas/LibraryEntry" }
+          items: { $ref: "#/components/schemas/ArchiveEntry" }
           description: >
             Subdirectories first, then files, each group alphabetical, except that the names
             listed in the directory's own optional .order.json (a JSON array of names) come

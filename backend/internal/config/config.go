@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -74,20 +75,20 @@ type Config struct {
 	// doesn't show up, the same as every other Telegram feature being
 	// unset.
 	TelegramBotUsername string
-	// LibraryRoot is the directory the internal/library package serves
+	// ArchiveRoot is the directory the internal/archive package serves
 	// club documents (estatutos, actas...) from — mounted read-only into
 	// the container, populated by whoever deploys the club's documents,
 	// never written to by the API itself.
-	LibraryRoot string
+	ArchiveRoot string
 	// UserFilesRoot is the directory internal/userfiles serves each
 	// person's own documents from, one subdirectory per login — same
-	// deployment story as LibraryRoot (mounted read-only, populated by
+	// deployment story as ArchiveRoot (mounted read-only, populated by
 	// whoever deploys the club's documents, never written to by the API
 	// itself), just scoped per person instead of one shared tree.
 	UserFilesRoot string
 	// ActivityResourcesRoot is the directory internal/activityresources
 	// saves a memoria's uploaded files to, one subdirectory per activity
-	// — unlike LibraryRoot/UserFilesRoot, this one *is* written to by
+	// — unlike ArchiveRoot/UserFilesRoot, this one *is* written to by
 	// the API itself (an actual upload endpoint, not a read-only,
 	// drop-in-by-hand tree), so it's backed by a named Docker volume
 	// rather than a host bind mount (see docker-compose.yml).
@@ -96,11 +97,30 @@ type Config struct {
 	// (tickets, invoices) attached to transactions to, one subdirectory per transaction. Like
 	// ActivityResourcesRoot it is written to by the API, so it is backed by a named volume.
 	TransactionFilesRoot string
-	// DiskAlertPercent is the share of a filesystem holding LibraryRoot,
-	// UserFilesRoot, ActivityResourcesRoot or TransactionFilesRoot that may be used before the
+	// LibraryFilesRoot is the directory internal/library saves the files of the items (covers, documents,
+	// scans) to, one subdirectory per item. Like ActivityResourcesRoot it is written to by the API, so
+	// it is backed by a named volume. Set with LIBRARY_FILES_ROOT; when it is not, it is a directory
+	// called library-files next to ActivityResourcesRoot.
+	LibraryFilesRoot string
+	// DiskAlertPercent is the share of a filesystem holding ArchiveRoot,
+	// UserFilesRoot, ActivityResourcesRoot, TransactionFilesRoot or LibraryFilesRoot that may be used before the
 	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
 	// that warning off. Set with DISK_ALERT_PERCENT, 90 by default.
 	DiskAlertPercent int
+}
+
+// archiveRoot is ARCHIVE_ROOT. The variable used to be called LIBRARY_ROOT (the archive of documents
+// was "the library" before the club's library of books took that name), so an api.env that still sets
+// only LIBRARY_ROOT keeps working: pointing at an empty default directory instead would show an
+// empty archive without any error.
+func archiveRoot() string {
+	if v := os.Getenv("ARCHIVE_ROOT"); v != "" {
+		return v
+	}
+	if v := os.Getenv("LIBRARY_ROOT"); v != "" {
+		return v
+	}
+	return "/data/archive"
 }
 
 func Load() (Config, error) {
@@ -124,10 +144,17 @@ func Load() (Config, error) {
 		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramLogChatID:     os.Getenv("TELEGRAM_LOG_CHAT_ID"),
 		TelegramBotUsername:   os.Getenv("TELEGRAM_BOT_USERNAME"),
-		LibraryRoot:           getEnv("LIBRARY_ROOT", "/data/library"),
+		ArchiveRoot:           archiveRoot(),
 		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
 		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
 		TransactionFilesRoot:  getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
+		LibraryFilesRoot:      os.Getenv("LIBRARY_FILES_ROOT"),
+	}
+	if cfg.LibraryFilesRoot == "" {
+		// Not set: next to the memorias, which every installation already has, so that an
+		// installation whose environment file predates the library starts all the same (where it can
+		// create a directory beside the others).
+		cfg.LibraryFilesRoot = filepath.Join(filepath.Dir(cfg.ActivityResourcesRoot), "library-files")
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")

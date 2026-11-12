@@ -1,7 +1,7 @@
 import { escapeHtml } from './api.js';
 
 // A small, dependency-free Markdown → HTML converter for the document
-// library's rendered documents (estatutos, actas...): headers,
+// archive's rendered documents (estatutos, actas...): headers,
 // paragraphs, bold/italic, links, lists, and blockquotes — not a full
 // CommonMark implementation, since club documents don't need tables or
 // code fences. Every span of literal text is escaped *before* any
@@ -10,7 +10,7 @@ import { escapeHtml } from './api.js';
 // produces are the fixed set written directly below.
 //
 // resolveLink(href) is called with each link's original target and
-// must return the anchor's final href — the document library page uses
+// must return the anchor's final href — the document archive page uses
 // it to turn a document-relative link ("./Actas/", "../Estatutos.pdf")
 // into an in-app navigation link instead of a raw filesystem path.
 

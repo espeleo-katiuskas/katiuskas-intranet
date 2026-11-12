@@ -776,10 +776,10 @@ function renderMemoriaBody(res) {
 
 // Fetches every image-type file resource's own bytes (same
 // GET .../resources/{id}/file every download already uses — there's no
-// cookie-based auth on this route the way library/userfiles' file
+// cookie-based auth on this route the way archive/userfiles' file
 // routes have, so a plain <img src="..."> pointing straight at the API
 // URL can't work; this is the same apiFetchBlob-then-object-URL dance
-// library.js's own image preview uses) and drops each one into its
+// archive.js's own image preview uses) and drops each one into its
 // resource's own placeholder. Run once after loadMemoria() re-renders
 // the list, in parallel rather than one at a time, since there's
 // normally at most a handful of photos in one activity's memoria.

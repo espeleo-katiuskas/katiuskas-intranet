@@ -244,7 +244,7 @@ func TestHandlerFileRequiresAuthentication(t *testing.T) {
 	}
 }
 
-// TestHandlerFileAcceptsSessionCookie mirrors library's own test: /file
+// TestHandlerFileAcceptsSessionCookie mirrors archive's own test: /file
 // also accepts the session cookie so a person's own document can be
 // opened as a plain, browser-navigable URL — and resolveAccess's
 // self-or-admin/board check still applies, since the cookie populates

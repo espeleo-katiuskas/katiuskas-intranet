@@ -108,10 +108,10 @@ person reaches in the current calendar year. It replaces the exact birth date, w
 exposed here: the bracket is enough for what needs to be seen at a glance without revealing
 anyone's birth date.
 
-**Roles and Junta Directiva.** `MemberListing` has no `roles` field: an ordinary member
-does not need to know which internal roles (`admin`, `money`, `material` or any label an
-admin has created) another person has. It is non-public information, like the DNI or the
-contact data, and this reduced view exists so as not to show it.
+**Roles and Junta Directiva.** `MemberListing` has no `roles` field: an ordinary member does not
+need to know which internal roles (`admin`, `money`, `material`, `biblioteca` or any label an admin
+has created) another person has. It is non-public information, like the DNI or the contact data, and
+this reduced view exists so as not to show it.
 
 - The only exception is the board position in the Junta, which is public within the club. It
   comes from `GET /board-members`, also open to member, and from there `web/js/members.js` takes
@@ -381,7 +381,8 @@ Catalog of roles (manageable: create, delete) and who holds which (many-to-many 
 The system ones (`admin`, `board`, `member`, `former_member`) are the only ones to which the code
 gives permissions or automatic behavior. Any other role an admin creates is an organizational
 label: it unlocks nothing by itself unless explicitly programmed (`material` and `money` are of
-this kind and do have an effect, see "`material_items` and `material_movements`" and "Accounting").
+this kind and do have an effect, see "`material_items` and `material_movements`", "Library"
+and "Accounting"; `biblioteca` is the one that looks after the library).
 The automatic ones (`member`, `former_member` and `board`) are neither assigned nor removed by
 anybody by hand: `POST`/`DELETE /users/{login}/roles` reject them with 409. Which roles exist and
 which of them are system or automatic ones is in [`database.md`](database.md).
@@ -763,7 +764,7 @@ file (title + the file, normally a photo or a PDF).
 
 - The metadata lives in PostgreSQL. The content of a file resource lives apart, on disk
   (`config.ActivityResourcesRoot`), indexed by the id of the row itself. It is a named Docker
-  volume, not a bind mount like `library`/`userfiles`, because here the files only arrive through
+  volume, not a bind mount like `archive`/`userfiles`, because here the files only arrive through
   `POST /activities/{id}/resources`, never put there by hand.
 - A file is created once and never modified: there is no way to replace its bytes (the resource is
   deleted and another is added), and `Storage.Save` creates it with `O_EXCL`, so it refuses to
@@ -823,6 +824,34 @@ taken for an id. The list of types itself is changed by admin alone
 (`POST`/`PATCH`/`DELETE /material/types`): names are unique (409 `duplicate_type`), Cuerda and Saca
 can be neither renamed nor deleted (409 `fixed_type`) and a type with items is not deleted (409
 `type_in_use`).
+### Library (the `library_*` tables)
+
+The club's library (books, magazines, maps, topographies…), apart from the document archive. A row
+of `library_items` is one copy; it is **available** when it has no loan that is still open, and
+anybody who can sign in sees that but never **who has it**.
+
+**Rules**
+
+- Every item has a type (Libro, Revista, Mapa, Topografía, Otro…) from a catalogue that whoever
+  manages the library edits; a type that has items is not deleted.
+- A loan has the date it went out and, once it is back, the date it came back. An item that is out
+  cannot be lent again (409 `item_not_available`), only a member now can borrow it (409
+  `loan_recipient_not_member`), and neither date can be in the future or a return before its loan
+  (400 `invalid_dates`); the day is the club's (Europe/Madrid).
+- An item that has ever been lent cannot be deleted: its history stays (409 `item_has_loans`). One
+  that has not is deleted with its comments and files.
+- Everybody who can sign in adds comments and files (photos, documents, topographies, scans) to an
+  item; whoever wrote a comment or attached a file removes it, and so do admin, board and the
+  `biblioteca` role.
+- An item has at most one cover, an image, that only admin, board and `biblioteca` set; a new one
+  takes the place of the old one.
+
+**Permissions**: creating and editing items and covers is for `admin`, `board` and the optional role
+`biblioteca`, which is seeded but is not a system one (like `material`: a club that does not want
+the distinction can delete it and keep using `board`); reading the loans and recording loans and
+returns is for those three and `material`; deleting a loan recorded by mistake is for admin alone.
+Whatever `biblioteca` can do, board can do too.
+
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,
@@ -1069,7 +1098,7 @@ the API but not write it, except for asking for units and editing their own).
   reading it does not change the distribution) and the page says so; once it is opened, the same
   figures are already real.
 
-### Document archive (`internal/library`)
+### Document archive (`internal/archive`)
 
 The club's document archive (statutes, regulations, rules, activity memorias, meeting
 minutes...): a directory tree on disk, not PostgreSQL. For that reason, unlike any other
@@ -1077,9 +1106,9 @@ resource, there is no `repository.go`/pgx: `Service` works directly against the 
 
 **Origin of the data**
 
-- Root in `config.LibraryRoot`, mounted in the container from `./library` on the host (see
+- Root in `config.ArchiveRoot`, mounted in the container from `./archive` on the host (see
   `docker-compose.yml`).
-- The documents are placed by whoever administers the server, directly in `./library`.
+- The documents are placed by whoever administers the server, directly in `./archive`.
 
 **Access**
 
@@ -1100,7 +1129,7 @@ Every path given by the caller is resolved and checked against the root before t
 
 ### Per-person files (`internal/userfiles`)
 
-Same model as `internal/library` (a tree on disk, `config.UserFilesRoot`, mounted from
+Same model as `internal/archive` (a tree on disk, `config.UserFilesRoot`, mounted from
 `./user-files` on the host, no PostgreSQL), but with one subdirectory per login instead of a
 single shared tree. It holds each person's own documents (a scanned DNI, a signed
 authorization...).
@@ -1252,16 +1281,17 @@ resource's `handler.go` is the only layer that knows HTTP exists.
 - `internal/telegram` and `internal/telegrambot`: client of the Telegram bot API and the bot
   that receives messages (see the "Telegram" subsection).
 - One package per domain resource: `users`, `roles`, `tokens`, `memberships`,
-  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`,
+  `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`, `library`
+  (the club's library, not to be mixed with `internal/archive`, the archive of documents),
   `accounting`, `clubinfo` (the home page's "datos de interés", editable from `/admin`) and
   `budgets` (the yearly budgets) and `transactionfiles` (documents attached to transactions).
   Each one is split into `model.go`, `repository.go` (pgx), `service.go` and `handler.go`.
 - `adminstatus` (`GET /admin/status`) is not a domain resource: it only reads, and has a single
   `handler.go` (see "Estado del sistema" in the `/admin` page).
 
-`internal/library` and `internal/userfiles` are the exception to that pattern: since there is
+`internal/archive` and `internal/userfiles` are the exception to that pattern: since there is
 nothing in PostgreSQL behind either of them, they have no `repository.go`; their `service.go`
-works directly against the file system (see "Document archive (`internal/library`)" and
+works directly against the file system (see "Document archive (`internal/archive`)" and
 "Per-person files (`internal/userfiles`)").
 
 `GET /api/v1/health` (what a reverse proxy or systemd reaches under `/api/*`) requires no
@@ -1294,7 +1324,7 @@ The same token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cooki
 in, starting or ending an impersonation). `POST /auth/logout` deletes it.
 
 - No ordinary route looks at it: all of them keep reading only the `Authorization` header.
-- It exists only for `auth.ProtectAllowingCookie`, which the file routes of `internal/library`
+- It exists only for `auth.ProtectAllowingCookie`, which the file routes of `internal/archive`
   and `internal/userfiles` use (and only those).
 - Thanks to it, a document can be a normal link that the browser opens in another tab or saves
   under its real name, without downloading it with `fetch` and turning it into a `Blob`.
@@ -1512,6 +1542,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses, "Mis sesiones" (the sessions not expired or revoked, each of which can be closed) and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |
 | `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent material and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
 | `/material` | Material catalog and its movements. | Any baseline role. | "Nuevo material" and the movements (loan, rental, sale), for admin, board and the `material` role. |
+| `/biblioteca`, `/ejemplar?id=…` (`biblioteca.html`/`libraryList.js`, `ejemplar.html`/`libraryItem.js`) | The library: the catalogue (search, "Solo los disponibles") and, for admin, board, `biblioteca` and `material`, the items that are out; and one item with its cover, comments, files and, for those four, its loans. | Any baseline role. | Anybody sees whether an item is available but not who has it, and comments and attaches files; "Nuevo ejemplar", editing, the cover and deleting are for admin, board and `biblioteca`; recording loans and returns, for those and `material`. |
 | `/material-prestado` (`material-prestado.html`/`loanedMaterial.js`) | The material that is still the club's but not in it right now: *Prestado* (every item with loans not yet returned, the units pending and the activities they are out for, each linking to its page) and *Alquilado* (the open rentals, with "Devolver"). | Admin, board and the `material` role; not in the sidebar, reached with the "Material prestado o alquilado" button of `/material`. | Material that is lost, abandoned or retired is not on it, as it is not the club's any more. |
 | `/archivo` | The club's document archive. | Any baseline role. | `js/fileBrowser.js` shares the listing and preview logic with `userFiles.js`; Markdown documents are rendered with `js/markdown.js`. |
 | `/repartos` | List of distributions (what the club hands out to members) with the month and year it was created ("Enero de 2026"), status ("Borrador", "Se puede pedir", "Activo", "Terminado"; "Activo" instead of "Se puede pedir" where "Puedes pedirlo" is) and price; "Puedes pedirlo" on the open ones that apply to whoever is looking. "+ Nuevo reparto" opens a dialog. | Any baseline role; drafts and "+ Nuevo reparto" only for admin and board. | Options are written one per line, "Talla: S, M, L". |

@@ -15,6 +15,8 @@ Contents:
   `license_types`, `board_members`
 - [Activities](#activities): `activities`, `activity_participants`, `activity_guests`,
   `activity_resources`, `holidays`
+- [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
+  `library_resources`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -50,8 +52,9 @@ Contents:
   checked by the Go service, and is stated in each table (section "Rules outside the database").
 - **Files outside PostgreSQL**: the document archive (`LIBRARY_ROOT`), each person's files
   (`USER_FILES_ROOT`), the files of an activity's memoria (`ACTIVITY_RESOURCES_ROOT`) and the
-  documents attached to transactions (`TRANSACTION_FILES_ROOT`) are on disk; in the database only
-  the metadata of the last two remains (`activity_resources`, `transaction_files`).
+  documents attached to transactions (`TRANSACTION_FILES_ROOT`) and the files of the items
+  (`LIBRARY_FILES_ROOT`) are on disk; in the database only the metadata of the last three remains
+  (`activity_resources`, `transaction_files`, `library_resources`).
 
 ## Map of relationships
 
@@ -67,6 +70,8 @@ activity_participants ──< activity_guests   (the person who invites them)
 material_items ──< material_movements        (material_item_quantities is a view of the two)
 license_types ──< licenses                material_types ──< material_items
 material_types ──< material_type_attributes ──< material_attribute_options
+library_types ──< library_items ──< library_loans, library_comments, library_resources
+                                    (loans, comments and files point at users too)
 
 distributions ──┬─< distribution_options
                 ├─< distribution_articles ──< distribution_unit_identifiers
@@ -884,6 +889,140 @@ available now) and `outstanding_loan_quantity` (what is lent and not returned), 
 | `available_quantity` | bigint |  |  |
 | `outstanding_loan_quantity` | bigint |  |  |
 
+## Library
+
+The club's library (books, magazines, maps, topographies…; not the document archive, which is a
+directory on disk): a catalogue of copies, their loans to members, comments and files. The bytes of
+the files are on disk (`LIBRARY_FILES_ROOT`, one file per row of `library_resources` under a
+directory per item, like the files of a memoria); in the database there is only the metadata.
+
+### `library_types`
+
+What kind of thing an item is (a book, a magazine, a map…): a catalogue whoever manages the library
+edits. The migration seeds Libro, Revista, Mapa, Topografía and Otro.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `name` | text | no |  |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `name` is not blank
+- unique `idx_library_types_name` on `lower(name)`: names are unique ignoring case
+
+Rules outside the database: a name has at most 60 characters (`MaxTypeNameLength`), and a type that
+has items is not deleted (409 `library_type_in_use`; the foreign key below would refuse it too).
+
+### `library_items`
+
+A row is one copy of an item: two copies of a title are two rows.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `type_id` | bigint | no |  |
+| `title` | text | no |  |
+| `author` | text | yes |  |
+| `publisher` | text | yes |  |
+| `year` | integer | yes |  |
+| `isbn` | text | yes |  |
+| `location` | text | yes |  |
+| `description` | text | yes |  |
+| `created_at` | timestamptz | no | now() |
+
+Notes on the columns:
+
+- `location`: Where it is kept in the club's rooms (a shelf mark, a box).
+
+Constraints:
+
+- primary key (id)
+- `type_id` → `library_types(id)`
+- `title` is not blank
+- `year` between 1000 and 2200
+- index `idx_library_items_type_id` on `(type_id)`
+
+Whether an item is available is not stored: it is when it has no loan that is still open.
+
+### `library_loans`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `item_id` | bigint | no |  |
+| `user_id` | bigint | no |  |
+| `lent_at` | date | no | CURRENT_DATE |
+| `returned_at` | date | yes |  |
+| `recorded_by` | bigint | no |  |
+| `notes` | text | yes |  |
+| `created_at` | timestamptz | no | now() |
+
+Notes on the columns:
+
+- `returned_at`: Empty while the item is out.
+
+Constraints:
+
+- primary key (id)
+- `item_id` → `library_items(id)`, `user_id` → `users(id)`, `recorded_by` → `users(id)`
+- `library_loan_returned_after_lent`: `returned_at IS NULL OR returned_at >= lent_at`
+- unique `idx_library_loans_one_open_per_item` on `(item_id)` where `returned_at IS NULL`: an item
+  that is out has one open loan and cannot be lent again
+
+Rules outside the database: the borrower has to be a member now (`library.Service.Lend`), and
+neither date can be in the future (the club's day, `internal/platform/clubtime`).
+
+### `library_comments`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `item_id` | bigint | no |  |
+| `user_id` | bigint | no |  |
+| `body` | text | no |  |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `item_id` → `library_items(id)`, `user_id` → `users(id)`
+- `body` is not blank and has at most 2000 characters
+
+### `library_resources`
+
+The files of an item: its cover and any other file (photos, documents, topographies, scans).
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `item_id` | bigint | no |  |
+| `is_cover` | boolean | no | false |
+| `title` | text | yes |  |
+| `file_name` | text | no |  |
+| `content_type` | text | no |  |
+| `file_size` | integer | no |  |
+| `uploaded_by` | bigint | no |  |
+| `created_at` | timestamptz | no | now() |
+
+Notes on the columns:
+
+- `title`: The caption given when it was attached; the name of the file is kept apart.
+- `content_type`: Decided from the bytes; only PDFs and images are shown in the page.
+
+Constraints:
+
+- primary key (id)
+- `item_id` → `library_items(id)`, `uploaded_by` → `users(id)`
+- `file_name` and `content_type` are not blank, `file_size > 0`
+- unique `idx_library_resources_one_cover_per_item` on `(item_id)` where `is_cover`: an item has at
+  most one cover; a new cover is a new row and a new file, never a rewrite
+
+Nothing cascades: deleting an item deletes its comments and files first, in Go, and refuses if it
+has ever been lent. A person who has loans, comments or files cannot be deleted.
+
 ## Distributions
 
 ### `distributions`
@@ -1446,7 +1585,7 @@ Constraints:
 Besides the schema, the migrations leave this data:
 
 - `roles`: `admin`, `board`, `member`, `former_member` (system roles, the last three automatic),
-  `material` and `money`.
+  `material`, `money` and `biblioteca` (who looks after the library).
 - `license_types`: 24 types (zones A, B and B1 × BASICA and PLUS × adulto, Infantil and Juvenil,
   plus ZERO, ASEDEB, FAE, FERM, FMM and "Otra").
 - `material_types`: Cuerda (rope) and Saca (bag), fixed, and Mosquetones, Spits, Placas, Maillones
@@ -1541,3 +1680,5 @@ at the end; that database has to be recreated when a new migration appears.
   account each, partial unique indexes) and `material_movements.transaction_id`
 - `00056_request_counts.sql`: `request_counts`
 - `00057_user_activity.sql`: `user_activity`
+- `00058_library.sql`: the role `biblioteca` and the tables `library_types`, `library_items`,
+  `library_loans`, `library_comments` and `library_resources`

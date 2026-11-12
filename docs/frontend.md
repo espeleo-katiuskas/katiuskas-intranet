@@ -75,6 +75,36 @@ rope (`parseSearch`, `matchesSearch` in `material.js`). The comparison is strict
 out a rope of exactly 30 m, and several such words add up (`>25m <40`); the rest of the words are
 looked for as text as usual (`>30 petzl`). The box's tooltip explains it.
 
+**Library (`/biblioteca`, `/ejemplar?id=…`).** `biblioteca.html`/`libraryList.js` is the catalogue:
+a table with a thumbnail of the cover, title (a link, with where it is kept), type, author, year and
+a badge "Disponible"/"Prestado" — which is all a member learns about a loan: never who has it —,
+with a search box that looks in everything an item says (accents and case ignored, every word typed
+has to appear, the type included), a select of types and a "Solo los disponibles" checkbox. Admin,
+board and `biblioteca` also get "Tipos" (a dialog that lists the types with how many items have
+each, to rename, delete — not while it has items — or add one; the page loads again after each
+change, and the filter and the selects of the forms follow) and "+ Nuevo ejemplar" (a dialog;
+creating it goes straight to the item's page, where the cover is added); admin, board, `biblioteca`
+and `material` get, below, "Ejemplares prestados" (`GET /library/loans`: item, member, since, and a
+"Devolver" button that records the return today). `ejemplar.html`/`libraryItem.js` is one item: the
+type next to the author and year under the title, the cover (a plain `<img>` pointing at
+`/library/items/{id}/cover`, which the session cookie lets through, so that no blob has to be
+fetched for each one; the browser revalidates it when the cover changes), the data, then
+"Comentarios" and "Fotos y documentos", which every member can add to (an image is shown and opens
+in a tab; anything else is a link that downloads; "Borrar" appears on what the person wrote, and on
+everything for admin, board and `biblioteca`), and, for the four roles that see loans, "Préstamos":
+who has the item and since when, a form to lend it (a picker of the members, a date that defaults to
+today and cannot be later, notes), the history, and "Devolver", which asks for the date of the
+return (today by default; the date input is limited between the day of the loan and today). Admin,
+board and `biblioteca` also have "Editar ejemplar" (a dialog, with the select of types filled when
+it opens), "Añadir/Cambiar portada" (a file input that sends the image at once, `PUT
+/library/items/{id}/cover`), "Quitar portada" and "Borrar ejemplar"; admin alone has "Borrar" on a
+loan. All of this is in `data-roles` blocks that the page removes from the DOM for the rest, so
+`libraryItem.js` and `libraryList.js` only touch those elements when the person has the role
+(`canManage`, `canLoan`): a plain member's page must work with them gone. The names of the people
+come from the directory (`libraryCommon.js`), and the dates the API gives as `2026-10-01` are shown
+with `dateOnly`, which builds a local date instead of parsing the string as UTC. The two pages count
+as one entry of the menu, "Biblioteca" (`ACTIVE_ALIASES`).
+
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loanedMaterial.js`), which has what used to be at the bottom
 of `/material`: *Prestado*, the items whose loans have not all come back
@@ -110,15 +140,15 @@ on a narrow screen, starting on the newest weeks. The days are the club's (Madri
 dates here: no time zone arithmetic. What was before the feature was put in place is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
-on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (the five
-of `/admin`) is drawn instead, under 640px, as a card per row: `js/stackedTables.js`, started by
-`initPage`, gives every cell `data-label` with the text of its column's header (again whenever the
-rows are redrawn, with a `MutationObserver`), and `style.css` shows each cell as its label above its
-value; the header keeps only the sortable columns, as a row "Ordenar por" of buttons, and the other
-headers go. A cell that spans the row (the "nothing here" message) and an empty one carry no label.
-The rows of "Estado del sistema" put the name above the value under that width, since its fixed
-column of 20rem left the value no room, and `.section-header` lets its button wrap below the title
-instead of squeezing it.
+on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
+`/admin` and of the library) is drawn instead, under 640px, as a card per row:
+`js/stackedTables.js`, started by `initPage`, gives every cell `data-label` with the text of its
+column's header (again whenever the rows are redrawn, with a `MutationObserver`), and `style.css`
+shows each cell as its label above its value; the header keeps only the sortable columns, as a row
+"Ordenar por" of buttons, and the other headers go. A cell that spans the row (the "nothing here"
+message) and an empty one carry no label. The rows of "Estado del sistema" put the name above the
+value under that width, since its fixed column of 20rem left the value no room, and
+`.section-header` lets its button wrap below the title instead of squeezing it.
 
 **Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only
 on hover, as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`,
@@ -302,7 +332,7 @@ the page's own content and puts "Esta página no existe" in its place, in the us
 redirect and no modal. It happens when the address has no usable id (`queryId()`: a positive whole
 number, else null; `stopAsNotFound()` also keeps the rest of the page's script from running) and
 when the API says the thing is not there (`isNotFound(err)`: `not_found` or `invalid_id`; the
-library also treats `invalid_path`, `not_a_directory` and `not_a_file` that way). After that
+archive also treats `invalid_path`, `not_a_directory` and `not_a_file` that way). After that
 `showError` stays silent, since the page's other requests fail for the same reason. Any other
 failure (a 500, no network) still opens the error modal. `login.html`'s own inline messages next to
 the button they answer are the exception. `perfil.html`'s own "Mis datos" and `member.js`'s
@@ -349,13 +379,13 @@ in and the API refuses to impersonate them (409 `not_eligible`). It follows the 
 "Ver como…" (`js/roleOverride.js`, wired by `initPage`): admins have a link in the topbar (removed
 for anybody else by `data-roles`, and for an impersonation) that opens a dialog with the roles from
 `GET /roles` as checkboxes, plus buttons for the usual combinations (Socio, Socio con material,
-Socio con money, Junta, Administrador), and sends them with `PUT /auth/role-override`; then the page
-reloads as somebody with those roles (the topbar link and the admin-only pages go away if `admin` is
-not among them). While it is in force every page shows a banner (`renderRoleOverrideBanner` in
-`api.js`, from `real_roles` in `GET /auth/me`) with the roles, the time left (counted down by the
-same `countDownTimeLeft` as an impersonation, reloading at zero) and "Cambiar roles" (the same
-dialog, through a `katiuskas:role-override` event) and "Volver a mis roles" (`DELETE
-/auth/role-override`, then reload).
+Socio con biblioteca, Socio con money, Junta, Administrador), and sends them with `PUT
+/auth/role-override`; then the page reloads as somebody with those roles (the topbar link and the
+admin-only pages go away if `admin` is not among them). While it is in force every page shows a
+banner (`renderRoleOverrideBanner` in `api.js`, from `real_roles` in `GET /auth/me`) with the roles,
+the time left (counted down by the same `countDownTimeLeft` as an impersonation, reloading at zero)
+and "Cambiar roles" (the same dialog, through a `katiuskas:role-override` event) and "Volver a mis
+roles" (`DELETE /auth/role-override`, then reload).
 
 `js/api.js` is the underlying shared client `layout.js` itself is built on: it keeps the session
 token in `localStorage`, and `initSession()` calls `GET /auth/me` on every page load to validate the
@@ -396,7 +426,7 @@ back non-empty, un-hides a note linking straight to the bot's chat — left hidd
 there's no dead link (or flash of one) when Telegram isn't configured at all, or the request itself
 fails.
 
-`library.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
+`archive.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
 own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
 document from the `/archivo` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
 and works with the resulting `Blob` client-side — an object URL for inline preview, a
@@ -406,7 +436,7 @@ the route itself needs the bearer header specifically. Markdown
 documents render through a small dependency-free converter (`js/markdown.js`) that
 resolves each document-relative link against the document's own directory and rewrites it
 into an in-app `/archivo` navigation link; HTML documents render in a fully sandboxed
-`<iframe>` instead, with no such link rewriting. `library.js` and `userFiles.js` (the
+`<iframe>` instead, with no such link rewriting. `archive.js` and `userFiles.js` (the
 embedded per-person file browser on `/perfil`/`/socio`) share this same
 listing/preview/download logic almost verbatim — `js/fileBrowser.js` pulls out the
 common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
@@ -432,7 +462,7 @@ admin can end anybody's), worded for a third person, and on their own page, the 
 mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small clickable thumbnails rather
 than a plain list of text links — instead of pointing at that person's `licencias/` subdirectory
 (see [Dropping files
-in](backend-internals.md#dropping-files-into-the-library-and-the-per-person-directories)) through
+in](backend-internals.md#dropping-files-into-the-archive-and-the-per-person-directories)) through
 `userFiles.js`'s generic browser: `js/licenseFiles.js`'s `initLicenseFiles(login, opts)` fetches
 that one directory's listing (`GET /users/{login}/files?path=licencias`), builds the `<select>` from
 whatever years actually have a license on file (ascending, most recent selected by default — nothing
@@ -453,7 +483,7 @@ The thumbnail itself is a companion file at
 PDF's) — a dotfile-prefixed subdirectory, invisible to the plain "licencias" listing this
 module reads (`userfiles.Service.ListDirectory` skips any entry, file or directory,
 starting with "."), the same "invisible companion file, fetched by exact path" trick
-(the library's own `.order.json` is a dotfile too, though the API reads that one itself).
+(the archive's own `.order.json` is a dotfile too, though the API reads that one itself).
 Nothing in the running app generates
 one; `scripts/generate-license-thumbnails.sh` does, on demand, for every license copy that
 lacks one (see **Commands**); one dropped in by hand next to the license's own file works
@@ -911,7 +941,7 @@ chromium --headless=new --disable-gpu --no-sandbox \
 Then script it — no Node/Playwright available either, so a plain Python script talking
 raw WebSocket frames to `ws://localhost:9333/devtools/page/<id>` (the id comes from
 `PUT http://localhost:9333/json/new?<url>`) works, needing nothing beyond the standard
-library (`socket`, `hashlib`, `struct`, `json`). To view a page that requires being
+archive (`socket`, `hashlib`, `struct`, `json`). To view a page that requires being
 signed in: mint a session token with `scripts/get-token.sh <login>` (dev only), navigate
 to the app's own origin first, run `Runtime.evaluate` with
 `localStorage.setItem('token', '<token>')` — the same key `js/api.js` itself reads on

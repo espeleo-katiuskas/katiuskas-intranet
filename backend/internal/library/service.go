@@ -1,247 +1,420 @@
 package library
 
 import (
-	"encoding/json"
+	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"io"
+	"io/fs"
 	"log/slog"
-	"mime"
 	"os"
-	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/clubtime"
 )
 
-var (
-	// ErrNotFound means the given path doesn't exist under the library
-	// root.
-	ErrNotFound = errors.New("not found")
-	// ErrInvalidPath means the given path tries to escape the library
-	// root (a "..", an absolute path, or a symlink pointing outside it)
-	// — never a legitimate request, so it's never distinguished from
-	// ErrNotFound in what a caller is told (see Handler), only in what
-	// gets logged.
-	ErrInvalidPath = errors.New("path escapes the document library")
-	// ErrIsDirectory means a file was expected but the path names a
-	// directory.
-	ErrIsDirectory = errors.New("path is a directory, not a file")
-	// ErrNotDirectory means a directory was expected but the path names
-	// a file.
-	ErrNotDirectory = errors.New("path is a file, not a directory")
-)
-
-func init() {
-	// Go's mime package falls back to a small built-in table when the
-	// host has no /etc/mime.types (true of the alpine-based API image),
-	// and that table doesn't include every extension a club's documents
-	// realistically use. Registered once, globally, like any mime
-	// package caller is expected to do.
-	for ext, typ := range map[string]string{
-		".md":   "text/markdown; charset=utf-8",
-		".txt":  "text/plain; charset=utf-8",
-		".doc":  "application/msword",
-		".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		".xls":  "application/vnd.ms-excel",
-		".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		".odt":  "application/vnd.oasis.opendocument.text",
-		".ods":  "application/vnd.oasis.opendocument.spreadsheet",
-		".csv":  "text/csv; charset=utf-8",
-	} {
-		_ = mime.AddExtensionType(ext, typ)
-	}
+// RoleLookup says whether a person holds a role, the automatic ones included — roles.Service
+// satisfies it structurally (see main.go's wiring).
+type RoleLookup interface {
+	HasAnyRole(ctx context.Context, userID int64, names ...string) (bool, error)
 }
 
 type Service struct {
-	// root is absolute and symlink-resolved once at startup, so every
-	// later comparison in resolve is between two already-clean absolute
-	// paths.
-	root string
+	repo    *Repository
+	storage *Storage
+	roles   RoleLookup
 }
 
-// NewService resolves root once at startup, creating it if it doesn't
-// exist yet — a fresh deployment shouldn't have to pre-create an empty
-// directory by hand before the API will even boot. A root that exists
-// but isn't a directory still fails fast here rather than on every
-// request.
-func NewService(root string) (*Service, error) {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(abs, 0o755); err != nil {
-		return nil, fmt.Errorf("create library root: %w", err)
-	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return nil, err
-	}
-	return &Service{root: resolved}, nil
+func NewService(repo *Repository, storage *Storage, roles RoleLookup) *Service {
+	return &Service{repo: repo, storage: storage, roles: roles}
 }
 
-// cleanRelPath normalizes a caller-given path into a slash-separated,
-// root-relative form with no leading slash and no ".." segments — "" for
-// the root itself. Anchoring at "/" before cleaning is what makes ".."
-// harmless: path.Clean can't walk it above that synthetic root, the same
-// trick net/http's own file server uses.
-func cleanRelPath(relPath string) string {
-	return strings.TrimPrefix(path.Clean("/"+relPath), "/")
-}
-
-// resolve maps a caller-given path (untrusted: a URL query parameter) to
-// an absolute filesystem path guaranteed to be inside root, following
-// symlinks and rejecting any that lead back outside it — a symlink
-// planted inside the tree is the one way cleanRelPath's own safety
-// doesn't already cover.
-func (s *Service) resolve(relPath string) (string, error) {
-	full := filepath.Join(s.root, cleanRelPath(relPath))
-	resolved, err := filepath.EvalSymlinks(full)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", ErrNotFound
-		}
-		return "", err
-	}
-	if resolved != s.root && !strings.HasPrefix(resolved, s.root+string(filepath.Separator)) {
-		return "", ErrInvalidPath
-	}
-	return resolved, nil
-}
-
-// orderFileName is the optional file in a directory that decides the order its entries are
-// listed in (see ListDirectory). It starts with a dot, so it never shows up in a listing, but
-// can still be fetched by its exact path.
-const orderFileName = ".order.json"
-
-// maxOrderFileSize bounds how much of an order file is read: it is a list of names.
-const maxOrderFileSize = 1 << 20
-
-// ListDirectory lists relPath's immediate contents, directories first then files — dotfiles
-// (.git, .DS_Store, an editor's swap file) are never listed, since nothing under the library
-// root should need one. Within each group the order is alphabetical (case-insensitive), except
-// for what the directory's own optional .order.json names: a plain JSON array of entry names,
-// which come first, in that order, followed by everything it does not name in alphabetical
-// order. Reordering is then just editing that one file inside the library, and every caller
-// (the home page's lists, /archivo) sees the same order. A name in it that does not exist is
-// skipped; a file that cannot be read or is not an array of strings is ignored (and logged).
-func (s *Service) ListDirectory(relPath string) (Listing, error) {
-	full, err := s.resolve(relPath)
-	if err != nil {
-		return Listing{}, err
-	}
-	info, err := os.Stat(full)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return Listing{}, ErrNotFound
-		}
-		return Listing{}, err
-	}
-	if !info.IsDir() {
-		return Listing{}, ErrNotDirectory
-	}
-
-	dirEntries, err := os.ReadDir(full)
-	if err != nil {
-		return Listing{}, err
-	}
-
-	entries := make([]Entry, 0, len(dirEntries))
-	for _, de := range dirEntries {
-		if strings.HasPrefix(de.Name(), ".") {
-			continue
-		}
-		fi, err := de.Info()
-		if err != nil {
-			continue
-		}
-		e := Entry{Name: de.Name(), ModifiedAt: fi.ModTime()}
-		if de.IsDir() {
-			e.Type = EntryDir
-		} else {
-			e.Type = EntryFile
-			e.Size = fi.Size()
-		}
-		entries = append(entries, e)
-	}
-	rank := s.readOrder(relPath)
-	sort.Slice(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if (a.Type == EntryDir) != (b.Type == EntryDir) {
-			return a.Type == EntryDir
-		}
-		ra, listedA := rank[a.Name]
-		rb, listedB := rank[b.Name]
-		if listedA != listedB {
-			return listedA
-		}
-		if listedA {
-			return ra < rb
-		}
-		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-	})
-
-	return Listing{Path: cleanRelPath(relPath), Entries: entries}, nil
-}
-
-// readOrder reads the directory's .order.json into the position of each name it lists (the first
-// time a name appears is the one that counts). Nil when there is none or it is not usable.
-func (s *Service) readOrder(relPath string) map[string]int {
-	full, err := s.resolve(path.Join(cleanRelPath(relPath), orderFileName))
-	if err != nil {
-		return nil // no such file, or a symlink out of the tree: no order
-	}
-	f, err := os.Open(full)
-	if err != nil {
+// blankToNil trims a text and gives nil for a blank one, so that "" is never stored as if it were a value.
+func blankToNil(p *string) *string {
+	if p == nil {
 		return nil
 	}
-	defer f.Close()
-	var names []string
-	if err := json.NewDecoder(io.LimitReader(f, maxOrderFileSize)).Decode(&names); err != nil {
-		slog.Warn("library: ignoring an unreadable "+orderFileName,
-			"directory", cleanRelPath(relPath), "error", err)
+	trimmed := strings.TrimSpace(*p)
+	if trimmed == "" {
 		return nil
 	}
-	rank := make(map[string]int, len(names))
-	for i, name := range names {
-		if _, seen := rank[name]; !seen {
-			rank[name] = i
-		}
-	}
-	return rank
+	return &trimmed
 }
 
-// File is an open document ready to be streamed to a response, along
-// with what the caller needs to set the right headers. Close must be
-// called once the caller is done with Content.
-type File struct {
-	Content    io.ReadSeekCloser
-	Name       string
-	Size       int64
-	ModifiedAt time.Time
+func clean(in Input) (Input, error) {
+	if in.TypeID <= 0 {
+		return Input{}, ErrTypeRequired
+	}
+	in.Title = strings.TrimSpace(in.Title)
+	if in.Title == "" {
+		return Input{}, ErrBlankTitle
+	}
+	in.Author, in.Publisher, in.ISBN = blankToNil(in.Author), blankToNil(in.Publisher), blankToNil(in.ISBN)
+	in.Location, in.Description = blankToNil(in.Location), blankToNil(in.Description)
+	if in.Year != nil && (*in.Year < 1000 || *in.Year > 2200) {
+		return Input{}, ErrInvalidYear
+	}
+	return in, nil
 }
 
-// OpenFile opens relPath for reading. The caller is responsible for
-// closing File.Content.
-func (s *Service) OpenFile(relPath string) (File, error) {
-	full, err := s.resolve(relPath)
+func (s *Service) List(ctx context.Context) ([]Item, error) { return s.repo.List(ctx) }
+
+func (s *Service) Get(ctx context.Context, id int64) (Item, error) { return s.repo.Get(ctx, id) }
+
+func (s *Service) Create(ctx context.Context, in Input) (Item, error) {
+	in, err := clean(in)
 	if err != nil {
-		return File{}, err
+		return Item{}, err
 	}
-	info, err := os.Stat(full)
+	if err := s.checkType(ctx, in.TypeID); err != nil {
+		return Item{}, err
+	}
+	return s.repo.Create(ctx, in)
+}
+
+func (s *Service) Update(ctx context.Context, id int64, in Input) (Item, error) {
+	in, err := clean(in)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return File{}, ErrNotFound
+		return Item{}, err
+	}
+	if err := s.checkType(ctx, in.TypeID); err != nil {
+		return Item{}, err
+	}
+	return s.repo.Update(ctx, id, in)
+}
+
+// checkType refuses a type that does not exist (the foreign key would too, but only by failing the
+// statement).
+func (s *Service) checkType(ctx context.Context, id int64) error {
+	if _, err := s.repo.GetType(ctx, id); errors.Is(err, ErrTypeNotFound) {
+		return ErrUnknownType
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ----- types -----
+
+func (s *Service) ListTypes(ctx context.Context) ([]Type, error) { return s.repo.ListTypes(ctx) }
+
+func (s *Service) GetType(ctx context.Context, id int64) (Type, error) {
+	return s.repo.GetType(ctx, id)
+}
+
+// cleanTypeName trims the name and checks it is neither blank nor too long.
+func cleanTypeName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrBlankTypeName
+	}
+	if utf8.RuneCountInString(name) > MaxTypeNameLength {
+		return "", ErrTypeNameTooLong
+	}
+	return name, nil
+}
+
+// freeTypeName says the name is not taken (ignoring case) by a type other than `except`.
+func (s *Service) freeTypeName(ctx context.Context, name string, except int64) error {
+	t, err := s.repo.TypeNamed(ctx, name)
+	if errors.Is(err, ErrTypeNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if t.ID != except {
+		return ErrDuplicateType
+	}
+	return nil
+}
+
+func (s *Service) CreateType(ctx context.Context, name string) (Type, error) {
+	name, err := cleanTypeName(name)
+	if err != nil {
+		return Type{}, err
+	}
+	if err := s.freeTypeName(ctx, name, 0); err != nil {
+		return Type{}, err
+	}
+	return s.repo.CreateType(ctx, name)
+}
+
+func (s *Service) RenameType(ctx context.Context, id int64, name string) (Type, error) {
+	name, err := cleanTypeName(name)
+	if err != nil {
+		return Type{}, err
+	}
+	if _, err := s.repo.GetType(ctx, id); err != nil {
+		return Type{}, err
+	}
+	if err := s.freeTypeName(ctx, name, id); err != nil {
+		return Type{}, err
+	}
+	return s.repo.RenameType(ctx, id, name)
+}
+
+// DeleteType removes a type no item has.
+func (s *Service) DeleteType(ctx context.Context, id int64) error {
+	t, err := s.repo.GetType(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t.ItemCount > 0 {
+		return ErrTypeInUse
+	}
+	return s.repo.DeleteType(ctx, id)
+}
+
+// Delete removes an item that has never been lent, its comments and its files.
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	files, err := s.repo.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, fileID := range files {
+		s.removeBytes(id, fileID)
+	}
+	return nil
+}
+
+// removeBytes deletes a file's bytes once its row is gone: the row was the only thing that made the
+// file exist for anybody, so failing to remove the bytes only leaves an unreferenced file behind and
+// must not undo what was asked.
+func (s *Service) removeBytes(itemID, resourceID int64) {
+	if err := s.storage.Delete(itemID, resourceID); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Error("remove an item file from disk", "error", err, "item_id", itemID, "resource_id", resourceID)
+	}
+}
+
+// ----- comments -----
+
+func (s *Service) ListComments(ctx context.Context, itemID int64) ([]Comment, error) {
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListComments(ctx, itemID)
+}
+
+func (s *Service) AddComment(ctx context.Context, itemID, userID int64, body string) (Comment, error) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return Comment{}, ErrBlankComment
+	}
+	if utf8.RuneCountInString(body) > MaxCommentLength {
+		return Comment{}, ErrCommentTooLong
+	}
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return Comment{}, err
+	}
+	return s.repo.AddComment(ctx, itemID, userID, body)
+}
+
+// DeleteComment removes a comment: its author may, and so may whoever manages the library
+// (privileged). It answers with the comment, for the notice.
+func (s *Service) DeleteComment(ctx context.Context, itemID, id, requesterID int64, privileged bool) (Comment, error) {
+	c, authorID, err := s.repo.GetComment(ctx, itemID, id)
+	if err != nil {
+		return Comment{}, err
+	}
+	if !privileged && authorID != requesterID {
+		return Comment{}, ErrNotYours
+	}
+	if err := s.repo.DeleteComment(ctx, itemID, id); err != nil {
+		return Comment{}, err
+	}
+	return c, nil
+}
+
+// ----- files -----
+
+func cleanName(name string) string {
+	name = filepath.Base(strings.ReplaceAll(strings.TrimSpace(name), `\`, "/"))
+	if name == "" || name == "." || name == "/" {
+		return "file"
+	}
+	return name
+}
+
+func (s *Service) ListResources(ctx context.Context, itemID int64) ([]Resource, error) {
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListResources(ctx, itemID)
+}
+
+// add stores a file: the row first, since the path of the bytes is keyed by its id, and the row is
+// removed again if the save fails, so that a file whose bytes are not there never stays listed.
+func (s *Service) add(ctx context.Context, itemID, uploadedBy int64, isCover bool, title *string, name string, content []byte) (Resource, error) {
+	f, replaced, err := s.repo.CreateResource(ctx, itemID, uploadedBy, isCover, title, name, detectType(name, content), len(content))
+	if err != nil {
+		return Resource{}, err
+	}
+	if err := s.storage.Save(itemID, f.ID, bytes.NewReader(content)); err != nil {
+		_ = s.repo.DeleteResource(ctx, itemID, f.ID)
+		return Resource{}, err
+	}
+	if replaced != 0 {
+		s.removeBytes(itemID, replaced)
+	}
+	return f, nil
+}
+
+// AddResource attaches a file (anything) to an item, with an optional caption.
+func (s *Service) AddResource(ctx context.Context, itemID, uploadedBy int64, title *string, name string, content []byte) (Resource, error) {
+	if len(content) == 0 {
+		return Resource{}, ErrEmptyFile
+	}
+	title = blankToNil(title)
+	if title != nil && utf8.RuneCountInString(*title) > MaxResourceTitleLength {
+		return Resource{}, ErrTitleTooLong
+	}
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return Resource{}, err
+	}
+	return s.add(ctx, itemID, uploadedBy, false, title, cleanName(name), content)
+}
+
+// SetCover gives the item its cover, in place of the one it had. It has to be an image, recognised by
+// its bytes.
+func (s *Service) SetCover(ctx context.Context, itemID, uploadedBy int64, name string, content []byte) (Resource, error) {
+	if len(content) == 0 {
+		return Resource{}, ErrEmptyFile
+	}
+	name = cleanName(name)
+	if !isImage(detectType(name, content)) {
+		return Resource{}, ErrNotAnImage
+	}
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return Resource{}, err
+	}
+	return s.add(ctx, itemID, uploadedBy, true, nil, name, content)
+}
+
+// RemoveCover takes the cover off an item.
+func (s *Service) RemoveCover(ctx context.Context, itemID int64) error {
+	cover, err := s.repo.GetCover(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.DeleteResource(ctx, itemID, cover.ID); err != nil {
+		return err
+	}
+	s.removeBytes(itemID, cover.ID)
+	return nil
+}
+
+// RemoveResource deletes a file: whoever attached it may, and so may whoever manages the library
+// (privileged). The cover is not removed this way (RemoveCover). It answers with the file, for the
+// notice.
+func (s *Service) RemoveResource(ctx context.Context, itemID, id, requesterID int64, privileged bool) (Resource, error) {
+	f, uploaderID, err := s.repo.GetResource(ctx, itemID, id)
+	if err != nil || f.IsCover {
+		if err == nil {
+			err = ErrResourceNotFound
 		}
-		return File{}, err
+		return Resource{}, err
 	}
-	if info.IsDir() {
-		return File{}, ErrIsDirectory
+	if !privileged && uploaderID != requesterID {
+		return Resource{}, ErrNotYours
 	}
-	f, err := os.Open(full)
+	if err := s.repo.DeleteResource(ctx, itemID, id); err != nil {
+		return Resource{}, err
+	}
+	s.removeBytes(itemID, id)
+	return f, nil
+}
+
+// OpenResource is a file's metadata and its open file, which the caller closes.
+func (s *Service) OpenResource(ctx context.Context, itemID, id int64) (Resource, *os.File, error) {
+	f, _, err := s.repo.GetResource(ctx, itemID, id)
 	if err != nil {
-		return File{}, err
+		return Resource{}, nil, err
 	}
-	return File{Content: f, Name: info.Name(), Size: info.Size(), ModifiedAt: info.ModTime()}, nil
+	file, err := s.storage.Open(itemID, id)
+	if err != nil {
+		return Resource{}, nil, err
+	}
+	return f, file, nil
+}
+
+// OpenCover is the cover of the item and its open file, which the caller closes.
+func (s *Service) OpenCover(ctx context.Context, itemID int64) (Resource, *os.File, error) {
+	f, err := s.repo.GetCover(ctx, itemID)
+	if err != nil {
+		return Resource{}, nil, err
+	}
+	file, err := s.storage.Open(itemID, f.ID)
+	if err != nil {
+		return Resource{}, nil, err
+	}
+	return f, file, nil
+}
+
+// ----- loans -----
+
+// day reads a date given by a caller, or today (the club's) when there is none.
+func day(raw *string) (string, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return clubtime.Today(), nil
+	}
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(*raw))
+	if err != nil {
+		return "", ErrInvalidDate
+	}
+	return parsed.Format("2006-01-02"), nil
+}
+
+func (s *Service) ListLoansOfItem(ctx context.Context, itemID int64) ([]Loan, error) {
+	if _, err := s.repo.Get(ctx, itemID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListLoansOfItem(ctx, itemID)
+}
+
+func (s *Service) ListLoans(ctx context.Context, openOnly bool) ([]Loan, error) {
+	return s.repo.ListLoans(ctx, openOnly)
+}
+
+// Lend records that an item goes out to a member, on the given day (today by default; never a day
+// that has not come yet). Only somebody who is a member now can have an item.
+func (s *Service) Lend(ctx context.Context, itemID, userID, recordedBy int64, lentAt *string, notes *string) (Loan, error) {
+	date, err := day(lentAt)
+	if err != nil {
+		return Loan{}, err
+	}
+	if date > clubtime.Today() {
+		return Loan{}, ErrInvalidDates
+	}
+	member, err := s.roles.HasAnyRole(ctx, userID, "member")
+	if err != nil {
+		return Loan{}, err
+	}
+	if !member {
+		return Loan{}, ErrRecipientNotMember
+	}
+	return s.repo.CreateLoan(ctx, itemID, userID, recordedBy, date, blankToNil(notes))
+}
+
+// Return records that an item is back, on the given day (today by default): not before the loan began
+// and never a day that has not come yet.
+func (s *Service) Return(ctx context.Context, itemID, loanID int64, returnedAt *string) (Loan, error) {
+	date, err := day(returnedAt)
+	if err != nil {
+		return Loan{}, err
+	}
+	if date > clubtime.Today() {
+		return Loan{}, ErrInvalidDates
+	}
+	return s.repo.ReturnLoan(ctx, itemID, loanID, date)
+}
+
+func (s *Service) GetLoan(ctx context.Context, itemID, loanID int64) (Loan, error) {
+	return s.repo.GetLoan(ctx, itemID, loanID)
+}
+
+func (s *Service) DeleteLoan(ctx context.Context, itemID, loanID int64) error {
+	return s.repo.DeleteLoan(ctx, itemID, loanID)
 }

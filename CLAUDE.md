@@ -19,7 +19,7 @@ explanations live in `docs/`; read the one that matches the task before changing
 |---|---|
 | `docs/api.md` | every endpoint: who can call it, parameters, errors, objects. `backend/openapi/openapi.yaml` is the contract |
 | `docs/database.md` | tables, columns, constraints, triggers, seeded data, migrations |
-| `docs/backend-internals.md` | the long form, resource by resource: users/auth/roles, activities, distributions, licenses, dues, leaves, library, Telegram, accounting, test helpers |
+| `docs/backend-internals.md` | the long form, resource by resource: users/auth/roles, activities, distributions, licenses, dues, leaves, library, archive, Telegram, accounting, test helpers |
 | `docs/frontend.md` | the conventions every page shares and each page in detail |
 | `docs/architecture.md` | overview and business rules |
 | `docs/environments.md`, `docs/deployment.md` | local / testing / production, and how to deploy |
@@ -81,7 +81,7 @@ chromium --headless=new --disable-gpu --no-sandbox --user-data-dir=/tmp/chromium
 Sign in there with `localStorage.setItem('token', '<token from get-token.sh>')` before navigating.
 
 Dropping files in (no rebuild or restart; both directories are gitignored): club documents into
-`./library/`, per-person files into `./user-files/<login>/`, a license copy into that person's
+`./archive/`, per-person files into `./user-files/<login>/`, a license copy into that person's
 `licencias/` as `yyyy-mm-dd-tipo_de_licencia.ext` (thumbnails with
 `scripts/generate-license-thumbnails.sh`; on the club's host a timer runs it every 15 minutes). See
 `docs/backend-internals.md`.
@@ -93,9 +93,10 @@ Local Docker stack (where changes are tried first), **testing** (`testing.katius
 club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stable`, units
 `katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool is
 in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
-sharing `LIBRARY_ROOT` and `USER_FILES_ROOT` (the directories the API writes to,
-`ACTIVITY_RESOURCES_ROOT` and `TRANSACTION_FILES_ROOT`, are separate in each, and testing gets
-production's files hard-linked). Production deploys without Docker (`docs/deployment.md`).
+sharing `ARCHIVE_ROOT` and `USER_FILES_ROOT` (the directories the API writes to,
+`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT` and `LIBRARY_FILES_ROOT`, are separate in each,
+and testing gets production's files hard-linked). Production deploys without Docker
+(`docs/deployment.md`).
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub
   what each environment should run — the tip of `main` for testing, the highest semver tag for
@@ -115,7 +116,7 @@ production's files hard-linked). Production deploys without Docker (`docs/deploy
 - Testing's database is a copy of production's, refreshed on every production deploy
   (`scripts/copy-prod-to-testing.sh`, from `deploy.sh`'s `AFTER_DEPLOY` hook): it holds real
   personal data and anything done there is overwritten.
-- Because the library and the per-person files are shared, don't grant admin/board in testing (it
+- Because the archive and the per-person files are shared, don't grant admin/board in testing (it
   would open every member's personal documents). Memoria and transaction files can be uploaded and
   deleted there: testing has its own directories, hard-linked from production's at each copy.
 - `web/` is served by Caddy with `Cache-Control: max-age=3600`, so a browser may keep an old script
@@ -128,20 +129,19 @@ Each point is the short version; the reasons and the edge cases are in `docs/bac
 **Layers.** `backend/internal/httpapi` (router, request logging, `WriteJSON`/`WriteError`) → one
 package per resource (`users`, `roles`, `memberships`, `licenses`, `board`, `activities`,
 `activityresources`, `distributions`, `material`, `tokens`, `accounting`, `budgets`,
-`transactionfiles`), each `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`; only
-`handler.go` knows HTTP. Each package registers its routes with `RegisterRoutes(mux)`, wired in
-`cmd/api/main.go`. `internal/library`, `internal/userfiles` serve a read-only directory tree from
-disk (no repository; every caller path goes through `Service.resolve`) and `adminstatus` only reads
-(the people and requests of its "Actividad" come from `tokens.last_used_at` and from
-`request_counts`, which the `requestcount` middleware in `cmd/api` fills; the same middleware fills
-`user_activity`, a row per person and day in the club's time zone, which the calendar of `/admin`
-reads through `GET /admin/activity`). **The API shuts down in
-an orderly way** on SIGTERM/SIGINT (`serve` in `cmd/api/main.go`): requests in flight finish, what
-runs in the background is waited for if it was started with `httpapi.Go` (use it, not a bare `go`,
-for a notification or email that must not be lost; never for work that sleeps until a deadline),
-and the request counts are stored.
-Packages that can't import each other use small local interfaces satisfied structurally
-(`UserLookup`, `DuesLookup`, `LicensesLookup`…).
+`transactionfiles`, `library`), each `model.go` / `repository.go` (pgx) / `service.go` /
+`handler.go`; only `handler.go` knows HTTP. Each package registers its routes with
+`RegisterRoutes(mux)`, wired in `cmd/api/main.go`. `internal/archive`, `internal/userfiles` serve a
+read-only directory tree from disk (no repository; every caller path goes through `Service.resolve`)
+and `adminstatus` only reads (the people and requests of its "Actividad" come from
+`tokens.last_used_at` and from `request_counts`, which the `requestcount` middleware in `cmd/api`
+fills; the same middleware fills `user_activity`, a row per person and day in the club's time zone,
+which the calendar of `/admin` reads through `GET /admin/activity`). **The API shuts down in an
+orderly way** on SIGTERM/SIGINT (`serve` in `cmd/api/main.go`): requests in flight finish, what runs
+in the background is waited for if it was started with `httpapi.Go` (use it, not a bare `go`, for a
+notification or email that must not be lost; never for work that sleeps until a deadline), and the
+request counts are stored. Packages that can't import each other use small local interfaces
+satisfied structurally (`UserLookup`, `DuesLookup`, `LicensesLookup`…).
 
 **`db.PGX`.** Repositories take the subset of `*pgxpool.Pool` they call, so tests give them a
 transaction (`testutil.NewTx`) that is rolled back. A `Begin` on top of a transaction is a
@@ -152,7 +152,7 @@ CONSTRAINTS … IMMEDIATE` and puts it back.
 pair), roles resolved live on every request (`internal/tokens`). `Authenticator.Protect` *always*
 also requires admin, board or member on top of the roles a route lists, so someone holding only
 `material` or `money` is refused everywhere. The token is mirrored in the `katiuskas_session` cookie
-only for `ProtectAllowingCookie`, used by the file-serving routes of library and userfiles (and
+only for `ProtectAllowingCookie`, used by the file-serving routes of archive and userfiles (and
 nowhere else). Magic-link token 128 bits (it travels in a URL), 6-digit code bounded by
 `code_attempts`; the request and code-consume routes share one `IPRateLimiter`; the request says
 when email+phone match nobody with access (404 `unknown_details`, a deliberate choice), the code
@@ -241,6 +241,19 @@ one or more leaf accounts of that type; both parts must add up to the same and e
 income/expense account must be in some item (checked in Go on `PUT /budgets/{year}`, which replaces
 the whole budget). Anybody signed in reads (with the real amounts and the percentage); writes are
 admin or `money`.
+
+**Library** (`internal/library`, pages `/biblioteca` and `/ejemplar?id=`; not `internal/archive`,
+which is the read-only tree of club documents, page `/archivo`). The club's books, magazines, maps,
+topographies…: one `library_items` row is one copy, whatever it is, and has a type (`library_types`:
+Libro, Revista, Mapa… edited by whoever manages the library). Anybody signed in (admin, board,
+member) reads every datum and whether the item is available, **never who has it**, and adds
+comments, files and photos; creating and editing items, and the cover, is admin, board or the
+`biblioteca` role; seeing loans and recording lends and returns is those plus `material` (so `board`
+always goes with it); deleting a loan is admin only. Only a current member can be lent an item; an
+item has at most one open loan (partial unique index); no due date, only `lent_at` and
+`returned_at`; an item that was ever lent cannot be deleted. Files and covers live in
+`LIBRARY_FILES_ROOT` (default `library-files` next to `ACTIVITY_RESOURCES_ROOT`), keyed by row id,
+created once and **never rewritten**, like the other file trees.
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.
 Notifications are fire-and-forget (own goroutine, bounded timeout, detached context), with two

@@ -377,7 +377,7 @@ async function apiFetchForm(path, formData, options = {}) {
 }
 
 // Like apiFetch, but for an endpoint that returns raw bytes (a document
-// library file) instead of JSON — there's no session cookie this app
+// archive file) instead of JSON — there's no session cookie this app
 // could rely on for a plain <a href>, so downloading or previewing a
 // file means fetching it with the Authorization header by hand and
 // working with the resulting Blob client-side.
@@ -394,7 +394,7 @@ async function apiFetchBlob(path) {
 }
 
 // Encodes a slash-separated file path for use as URL path segments —
-// GET /library/file/<path> and GET /users/{login}/files/file/<path>
+// GET /archive/file/<path> and GET /users/{login}/files/file/<path>
 // take the file's path as part of the URL itself (a {path...} wildcard
 // server-side), not a ?path= query parameter, so each segment needs
 // its own escaping (spaces, accents, "?"...) while the slashes between

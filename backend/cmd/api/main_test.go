@@ -29,13 +29,14 @@ func testConfig(t *testing.T) config.Config {
 		TelegramBotDMLinkTTL:  5 * time.Minute,
 		ImpersonationTokenTTL: time.Hour,
 		PublicBaseURL:         "http://localhost:64710",
-		// Real directories are required (library.NewService et al. stat
+		// Real directories are required (archive.NewService et al. stat
 		// them), but nothing here should ever touch a host path — a
 		// fresh t.TempDir() per root, cleaned up automatically.
-		LibraryRoot:           t.TempDir(),
+		ArchiveRoot:           t.TempDir(),
 		UserFilesRoot:         t.TempDir(),
 		ActivityResourcesRoot: t.TempDir(),
 		TransactionFilesRoot:  t.TempDir(),
+		LibraryFilesRoot:      t.TempDir(),
 	}
 }
 

@@ -1277,7 +1277,7 @@ func TestConsumeMagicLinkNotifiesTelegramOfTheLogin(t *testing.T) {
 
 // TestConsumeMagicLinkSetsSessionCookie checks the same session token
 // returned in the JSON body is also set as auth.SessionCookieName —
-// the transport GET /library/file and GET /users/{login}/files/file
+// the transport GET /archive/file and GET /users/{login}/files/file
 // accept in addition to the bearer header, so a document can be opened
 // as a plain, browser-navigable URL. See auth.SetSessionCookie.
 func TestConsumeMagicLinkSetsSessionCookie(t *testing.T) {
@@ -1568,7 +1568,7 @@ func TestLogoutRevokesTheToken(t *testing.T) {
 // TestLogoutClearsSessionCookie checks logout also expires
 // auth.SessionCookieName (MaxAge < 0), not just revoking the token in
 // the body — otherwise a signed-out browser could still open a
-// library/userfiles file link straight from history or a bookmark.
+// archive/userfiles file link straight from history or a bookmark.
 func TestLogoutClearsSessionCookie(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")

@@ -2021,3 +2021,121 @@ button.heat-cell[aria-pressed='true'] {
   margin: 0;
   padding-left: 20px;
 }
+
+/* The library (/biblioteca, /ejemplar). */
+.library-thumb {
+  display: block;
+  width: 36px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.library-cover-empty {
+  /* An item with no cover: an empty frame of the same size, so the rows keep their rhythm. */
+  background:
+    linear-gradient(var(--line), var(--line)) center / 1px 60% no-repeat,
+    var(--surface-muted);
+}
+
+.badge-ok {
+  background: #dcebdc;
+  color: #2e5d34;
+}
+
+.badge-out {
+  background: #f3dcd9;
+  color: #8a3a33;
+}
+
+.library-header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.library-header-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.library-cover-image {
+  display: block;
+  max-width: 160px;
+  max-height: 240px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  object-fit: contain;
+  background: var(--surface-muted);
+}
+
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.comment-body {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-form {
+  margin-top: 12px;
+}
+
+.resource-image {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin-top: 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+.library-thumb-cell {
+  width: 1%;
+}
+
+.filter-bar #library-search-field {
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+/* What an item says of itself: the name of each datum next to it, not at the other end of the page. */
+#library-details .detail-row {
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 16px;
+}
+
+#library-details .detail-row > :first-child {
+  flex: 0 0 8rem;
+}
+
+/* The form that adds a type of item, under the table of types. */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+.inline-form .field {
+  margin-bottom: 0;
+  flex: 1 1 14rem;
+}
+#types-table-body .field {
+  margin-bottom: 0;
+}

@@ -110,6 +110,27 @@ const texts = {
   model_without_brand: 'Un modelo solo se puede indicar si hay marca.',
   single_unit_item: 'Las cuerdas y las sacas son siempre una sola unidad.',
   invalid_days: 'El número de días tiene que estar entre 1 y 730.',
+  // Biblioteca
+  invalid_item_year: 'El año del ejemplar tiene que estar entre 1000 y 2200.',
+  type_required: 'Elige el tipo del ejemplar.',
+  unknown_library_type: 'Ese tipo de ejemplar no existe.',
+  type_name_required: 'Escribe el nombre del tipo.',
+  type_name_too_long: 'El nombre del tipo es demasiado largo (60 caracteres como máximo).',
+  duplicate_library_type: 'Ya hay un tipo con ese nombre.',
+  library_type_in_use: 'Este tipo tiene ejemplares y no se puede borrar.',
+  comment_required: 'Escribe el comentario.',
+  comment_too_long: 'El comentario es demasiado largo (2000 caracteres como máximo).',
+  cover_not_image: 'La portada tiene que ser una imagen.',
+  file_title_too_long: 'El título del fichero es demasiado largo (200 caracteres como máximo).',
+  invalid_dates:
+    'Las fechas del préstamo no son válidas: ni en el futuro, ni una devolución anterior al préstamo.',
+  not_yours: 'Solo quien lo añadió, o quien gestiona la biblioteca, puede quitarlo.',
+  item_has_loans:
+    'Este ejemplar se ha prestado alguna vez y no se puede borrar: se conserva su historial.',
+  item_not_available: 'El ejemplar no está disponible: está prestado.',
+  loan_already_returned: 'Este préstamo ya está devuelto.',
+  loan_recipient_not_member: 'Un ejemplar solo se puede prestar a un socio.',
+  loan_login_required: 'Elige a qué socio se presta el ejemplar.',
   duplicate_material:
     'Ya hay otro material exactamente igual (mismo tipo, marca, modelo, código, descripción y atributos). Si tienes más unidades, súmalas a ese material.',
   item_description_required: 'La descripción es obligatoria para este tipo de material.',

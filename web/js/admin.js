@@ -590,10 +590,11 @@ function renderStatus(status) {
   const db = status.database;
   const settings = status.settings;
   const storageLabels = {
-    library: 'Archivo',
+    archive: 'Archivo',
     user_files: 'Ficheros de las personas',
     activity_resources: 'Memorias de actividades',
     transaction_files: 'Ficheros de transacciones',
+    library_files: 'Ficheros de la biblioteca',
   };
 
   const problems = (status.problems ?? []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');

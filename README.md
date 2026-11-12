@@ -74,7 +74,7 @@ cd backend && go test ./...
 ```
 
 Cada paquete que toca PostgreSQL (todos menos `auth`, `config`, `mail`, `httpapi`,
-`telegram`, `library` y `userfiles` — estos dos últimos sirven ficheros del disco, no de
+`telegram`, `archive` y `userfiles` — estos dos últimos sirven ficheros del disco, no de
 la base de datos; los demás no persisten nada en absoluto) usa una base de datos de
 pruebas real — no hay mocks del acceso a datos, las restricciones de PostgreSQL (solapes,
 claves foráneas, uniqueness) son parte de lo que se prueba. `internal/testutil` aplica

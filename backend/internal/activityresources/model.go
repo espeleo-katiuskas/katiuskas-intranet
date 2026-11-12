@@ -6,7 +6,7 @@
 // Metadata lives in Postgres (this package's own repository.go); a
 // file resource's bytes live on disk instead (Storage, in storage.go),
 // keyed by this row's own id rather than any caller-given path, so —
-// unlike internal/library or internal/userfiles — there's no directory
+// unlike internal/archive or internal/userfiles — there's no directory
 // tree to browse and no path-escape risk to guard against.
 package activityresources
 

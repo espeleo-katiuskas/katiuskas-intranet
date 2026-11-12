@@ -69,7 +69,7 @@ async function loadDirectory(dirPath) {
   renderBreadcrumbs(dirPath);
   entriesList.innerHTML = '<tr><td colspan="3">Cargando…</td></tr>';
   try {
-    const listing = await apiFetch(`/library?path=${encodeURIComponent(dirPath)}`);
+    const listing = await apiFetch(`/archive?path=${encodeURIComponent(dirPath)}`);
     entriesList.innerHTML = listing.entries.length
       ? listing.entries.map((entry) => renderEntryRow(listing.path, entry)).join('')
       : '<tr><td colspan="3">Esta carpeta está vacía.</td></tr>';
@@ -99,7 +99,7 @@ async function loadFile(path) {
   };
   document.getElementById('file-download').onclick = async () => {
     try {
-      const blob = await apiFetchBlob(`/library/file/${encodeFilePath(path)}?download=1`);
+      const blob = await apiFetchBlob(`/archive/file/${encodeFilePath(path)}?download=1`);
       downloadBlob(blob, name);
     } catch (err) {
       showError(err.message);
@@ -108,7 +108,7 @@ async function loadFile(path) {
 
   const kind = fileKind(name);
   try {
-    const blob = await apiFetchBlob(`/library/file/${encodeFilePath(path)}`);
+    const blob = await apiFetchBlob(`/archive/file/${encodeFilePath(path)}`);
     document.getElementById('file-meta').textContent = formatSize(blob.size);
 
     if (kind === 'markdown' || kind === 'text') {
@@ -133,7 +133,7 @@ async function loadFile(path) {
     } else if (kind === 'html') {
       // Rendered in a fully sandboxed iframe (no scripts, no same-origin
       // access) since this is still arbitrary HTML — relative links
-      // inside it are not rewritten into library navigation the way
+      // inside it are not rewritten into archive navigation the way
       // Markdown's are, since there's no safe way to intercept
       // navigation inside a sandboxed frame without also granting it
       // more privileges than a document view needs.
@@ -156,7 +156,7 @@ async function loadFile(path) {
 const params = new URLSearchParams(window.location.search);
 const viewPath = params.get('view');
 // A "." or ".." in the path would be collapsed by the browser before the request even left: it is
-// not a path of the library, so it is as missing as any other that is not there.
+// not a path of the archive, so it is as missing as any other that is not there.
 const hasDotSegments = (path) => path.split('/').some((part) => part === '.' || part === '..');
 if (hasDotSegments(viewPath ?? params.get('path') ?? '')) {
   showNotFound();

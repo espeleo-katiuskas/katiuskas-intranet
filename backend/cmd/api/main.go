@@ -17,6 +17,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/adminstatus"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/archive"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
@@ -239,6 +240,12 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		return nil, nil, nil, nil, err
 	}
 	transactionFilesService := transactionfiles.NewService(transactionfiles.NewRepository(repoPool), transactionFilesStorage)
+	libraryFilesStorage, err := library.NewStorage(cfg.LibraryFilesRoot)
+	if err != nil {
+		slog.Error("set up library files storage", "error", err, "root", cfg.LibraryFilesRoot)
+		return nil, nil, nil, nil, err
+	}
+	libraryService := library.NewService(library.NewRepository(repoPool), libraryFilesStorage, rolesService)
 
 	licensesRepo := licenses.NewRepository(repoPool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
@@ -260,9 +267,9 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	materialRepo := material.NewRepository(repoPool)
 	materialService := material.NewService(materialRepo, rolesService)
 
-	libraryService, err := library.NewService(cfg.LibraryRoot)
+	archiveService, err := archive.NewService(cfg.ArchiveRoot)
 	if err != nil {
-		slog.Error("set up document library", "error", err, "root", cfg.LibraryRoot)
+		slog.Error("set up document archive", "error", err, "root", cfg.ArchiveRoot)
 		return nil, nil, nil, nil, err
 	}
 
@@ -320,10 +327,11 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		// also when main() hands buildRouter a telegramClient at all.
 		TelegramBotRunning:    telegramClient != nil,
 		TelegramBotUsername:   cfg.TelegramBotUsername,
-		LibraryRoot:           cfg.LibraryRoot,
+		ArchiveRoot:           cfg.ArchiveRoot,
 		UserFilesRoot:         cfg.UserFilesRoot,
 		ActivityResourcesRoot: cfg.ActivityResourcesRoot,
 		TransactionFilesRoot:  cfg.TransactionFilesRoot,
+		LibraryFilesRoot:      cfg.LibraryFilesRoot,
 		DiskAlertPercent:      cfg.DiskAlertPercent,
 	})
 
@@ -339,7 +347,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Material:          material.NewHandler(materialService, authenticator, usersService, telegramSender),
 		Distributions:     distributions.NewHandler(distributionsService, authenticator, usersService, telegramSender),
 		Board:             board.NewHandler(boardService, authenticator, usersService, telegramSender),
-		Library:           library.NewHandler(libraryService, authenticator),
+		Archive:           archive.NewHandler(archiveService, authenticator),
 		UserFiles:         userfiles.NewHandler(userFilesService, authenticator, usersService),
 		ActivityResources: activityresources.NewHandler(activityResourcesService, authenticator, activitiesService, usersService, telegramSender),
 		Accounting:        accounting.NewHandler(accountingService, authenticator, usersService, membershipsService, licensesService, telegramSender),
@@ -347,6 +355,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		ClubInfo:          clubinfo.NewHandler(clubInfoService, authenticator, usersService, telegramSender),
 		Budgets:           budgets.NewHandler(budgetsService, authenticator, usersService, telegramSender),
 		TransactionFiles:  transactionfiles.NewHandler(transactionFilesService, authenticator, usersService, telegramSender),
+		Library:           library.NewHandler(libraryService, authenticator, usersService, telegramSender),
 	})
 
 	return router, authHandler, usersService, adminStatus, nil

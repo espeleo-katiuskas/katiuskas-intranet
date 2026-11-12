@@ -17,6 +17,7 @@ Contents:
 - [Activities](#activities)
 - [Activity memoria](#activity-memoria)
 - [Material](#material)
+- [Library](#library)
 - [Distributions](#distributions)
 - [Document archive and per-person files](#document-archive-and-per-person-files)
 - [Accounting](#accounting)
@@ -26,12 +27,12 @@ Contents:
 ## Conventions
 
 - **Base**: all routes hang from `/api/v1`. Bodies and responses are JSON, except
-  files (`/library/file/…`, `/users/{login}/files/file/…`, the file of a memoria resource), which
+  files (`/archive/file/…`, `/users/{login}/files/file/…`, the file of a memoria resource), which
   are the raw bytes, and the creation of a memoria resource, which is `multipart/form-data`.
 - **Session**: there are no passwords. `POST /auth/magic-link` sends a link with a code; it is
   exchanged for an opaque token with `POST /auth/magic-link/consume` (or `…/consume-code`) and that
   token goes in every request: `Authorization: Bearer <token>`. The token expires 30 days after its
-  last use (every use renews it) and can be revoked. The file routes (`/library/file/…`,
+  last use (every use renews it) and can be revoked. The file routes (`/archive/file/…`,
   `/users/{login}/files/file/…`) also accept the `katiuskas_session` cookie, which the API sets on
   sign-in, so that a document can be an ordinary browser link.
 - **Baseline role**: almost every route with a session also requires being `admin`, `board` or
@@ -609,6 +610,118 @@ files (up to 25 MiB).
   Purchases, rentals and loans of a person.
   - returns: 200 `[Movement]`
 
+## Library
+
+The club's library: books, magazines, maps, topographies… (not the document archive below). A row is
+one copy of an item. Every member reads everything about an item, including whether it is available,
+but never who has it; admin, board and the `biblioteca` role create and change items and their
+covers; admin, board, `biblioteca` and `material` read and record the loans. Whatever `biblioteca`
+can do, board can do.
+
+- **GET** `/library/types` — *Any baseline role*. The types of item (Libro, Revista, Mapa,
+  Topografía, Otro and whatever has been added), in the order they were added, each with the number
+  of items that have it.
+  - returns: 200 `[LibraryType]`
+- **POST** `/library/types` — *Admin, board or biblioteca*. Adds a type.
+  - body: `name*` (at most 60 characters; unique ignoring case)
+  - returns: 201 `LibraryType`
+  - errors: 400 `invalid_body`, `type_name_required`, `type_name_too_long`; 409
+    `duplicate_library_type`
+- **PUT** `/library/types/{id}` — *Admin, board or biblioteca*. Renames a type.
+  - body: `name*`
+  - returns: 200 `LibraryType`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/library/types/{id}` — *Admin, board or biblioteca*. Deletes a type no item has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `library_type_in_use`
+- **GET** `/library/items` — *Any baseline role*. Every item, by title, each with its type,
+  `available`, `has_cover` and the number of its comments and files.
+  - returns: 200 `[LibraryItem]`
+- **POST** `/library/items` — *Admin, board or biblioteca*. Adds an item.
+  - body: `type_id*` (a type of `/library/types`), `title*`, `author`, `publisher`, `year` (1000 to
+    2200), `isbn`, `location` (where it is in the club's rooms), `description`; blank text counts as
+    no value
+  - returns: 201 `LibraryItem`
+  - errors: 400 `invalid_body`, `type_required`, `unknown_library_type`, `title_required`,
+    `invalid_item_year`
+- **GET** `/library/items/{id}` — *Any baseline role*. One item.
+  - returns: 200 `LibraryItem`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/library/items/{id}` — *Admin, board or biblioteca*. Replaces every field of the item
+  (what is left out is cleared).
+  - body: the same as creating
+  - returns: 200 `LibraryItem`
+  - errors: 400 `invalid_id`, `invalid_body`, `type_required`, `unknown_library_type`,
+    `title_required`, `invalid_item_year`; 404 `not_found`
+- **DELETE** `/library/items/{id}` — *Admin, board or biblioteca*. Deletes an item that has never
+  been lent, with its comments and files.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `item_has_loans`
+- **GET** `/library/items/{id}/comments` — *Any baseline role*. The comments, oldest first.
+  - returns: 200 `[LibraryComment]`
+- **POST** `/library/items/{id}/comments` — *Any baseline role*. Adds a comment (at most 2000
+  characters).
+  - body: `body*`
+  - returns: 201 `LibraryComment`
+  - errors: 400 `invalid_id`, `invalid_body`, `comment_required`, `comment_too_long`; 404
+    `not_found`
+- **DELETE** `/library/items/{id}/comments/{commentId}` — *Its author, admin, board or biblioteca*.
+  - returns: 204
+  - errors: 400 `invalid_id`; 403 `not_yours`; 404 `not_found`
+- **GET** `/library/items/{id}/resources` — *Any baseline role*. The files of the item that are not
+  its cover (photos, documents, topographies, scans), oldest first.
+  - returns: 200 `[LibraryResource]`
+- **POST** `/library/items/{id}/resources` — *Any baseline role*. Attaches a file,
+  `multipart/form-data` with `file` (10 MiB at most) and an optional `title`. The type is decided
+  from the bytes.
+  - returns: 201 `LibraryResource`
+  - errors: 400 `invalid_id`, `invalid_body`, `file_required` (none or empty),
+    `file_title_too_long`; 404 `not_found`; 413 `file_too_large`
+- **GET** `/library/items/{id}/resources/{resourceId}/file` — *Any baseline role* (the session
+  cookie is accepted too). The raw bytes: a PDF or an image is shown in the page, anything else is
+  downloaded (`?download=1` forces it), and none can run as part of the intranet.
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/library/items/{id}/resources/{resourceId}` — *Whoever attached it, admin, board or
+  biblioteca*. The cover is not removed this way.
+  - returns: 204
+  - errors: 400 `invalid_id`; 403 `not_yours`; 404 `not_found`
+- **GET** `/library/items/{id}/cover` — *Any baseline role* (the session cookie is accepted too, so
+  that an `<img>` can point at it). The cover, an image.
+  - errors: 400 `invalid_id`; 404 `not_found` (the item has no cover)
+- **PUT** `/library/items/{id}/cover` — *Admin, board or biblioteca*. Sets the cover, in place of
+  the one there was: `multipart/form-data` with `file`, which has to be an image.
+  - returns: 200 `LibraryResource`
+  - errors: 400 `invalid_id`, `invalid_body`, `file_required`, `cover_not_image`; 404 `not_found`;
+    413 `file_too_large`
+- **DELETE** `/library/items/{id}/cover` — *Admin, board or biblioteca*. Takes the cover off.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **GET** `/library/loans` — *Admin, board, biblioteca or material*. The loans of every item, newest
+  first: those still out by default, all of them with `?status=all`.
+  - returns: 200 `[LibraryLoan]`
+  - errors: 400 `invalid_status`
+- **GET** `/library/items/{id}/loans` — *Admin, board, biblioteca or material*. The history of one
+  item.
+  - returns: 200 `[LibraryLoan]`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **POST** `/library/items/{id}/loans` — *Admin, board, biblioteca or material*. Lends the item to a
+  member (somebody who is a member now).
+  - body: `login*`, `lent_at` (a date, today by default; never in the future), `notes`
+  - returns: 201 `LibraryLoan`
+  - errors: 400 `invalid_id`, `invalid_body`, `loan_login_required`, `invalid_date`,
+    `invalid_dates`; 404 `not_found`; 409 `item_not_available` (it is out),
+    `loan_recipient_not_member`
+- **POST** `/library/items/{id}/loans/{loanId}/return` — *Admin, board, biblioteca or material*.
+  Records that the item is back.
+  - body: optional; `returned_at` (a date, today by default; not before the loan began, never in the
+    future)
+  - returns: 200 `LibraryLoan`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_dates`; 404 `not_found`; 409
+    `loan_already_returned`
+- **DELETE** `/library/items/{id}/loans/{loanId}` — *Admin*. Deletes a loan recorded by mistake.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
+
 ## Distributions
 
 A distribution is something the club hands out to its members (shirts, lottery...). Statuses:
@@ -746,12 +859,12 @@ changes it.
 
 Directory trees on disk, read-only: none of this is in the database.
 
-- **GET** `/library` — *Any baseline role*. Lists a directory of the club's archive (`?path=`), in
+- **GET** `/archive` — *Any baseline role*. Lists a directory of the club's archive (`?path=`), in
   the order of its optional `.order.json` when it has one, else alphabetically.
   - query: `path`
-  - returns: 200 `LibraryListing`
+  - returns: 200 `ArchiveListing`
   - errors: 400 `invalid_path`, `not_a_directory`
-- **GET** `/library/file/{path}` — *Any baseline role*. Content of a document. It also accepts the
+- **GET** `/archive/file/{path}` — *Any baseline role*. Content of a document. It also accepts the
   session cookie, for ordinary browser links.
   - query: `download`
   - errors: 400 `invalid_path`, `not_a_file`
@@ -1485,7 +1598,78 @@ and `value` is always the text to show (the option's label, for an enum).
 | `notes` | text |
 | `transaction_id` | integer |
 
-### `LibraryEntry`
+### `LibraryType`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `item_count` | integer |
+
+### `LibraryItem`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `type_id` | integer |
+| `type` | text |
+| `title` | text |
+| `author` | text |
+| `publisher` | text |
+| `year` | integer |
+| `isbn` | text |
+| `location` | text |
+| `description` | text |
+| `created_at` | datetime |
+| `available` | boolean |
+| `has_cover` | boolean |
+| `comment_count` | integer |
+| `resource_count` | integer |
+
+An item says whether it is `available` but never who has it. `resource_count` does not count the
+cover.
+
+### `LibraryComment`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `item_id` | integer |
+| `user_login` | text |
+| `body` | text |
+| `created_at` | datetime |
+
+### `LibraryResource`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `item_id` | integer |
+| `is_cover` | boolean |
+| `title` | text |
+| `file_name` | text |
+| `content_type` | text |
+| `file_size` | integer |
+| `uploaded_by` | text |
+| `created_at` | datetime |
+
+### `LibraryLoan`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `item_id` | integer |
+| `item_title` | text |
+| `user_login` | text |
+| `lent_at` | date |
+| `returned_at` | date |
+| `recorded_by_login` | text |
+| `notes` | text |
+| `created_at` | datetime |
+
+`returned_at` is absent while the item is out.
+
+### `ArchiveEntry`
 
 | Field | Type |
 |---|---|
@@ -1494,12 +1678,12 @@ and `value` is always the text to show (the option's label, for an enum).
 | `size` | integer |
 | `modified_at` | datetime |
 
-### `LibraryListing`
+### `ArchiveListing`
 
 | Field | Type |
 |---|---|
 | `path` | text |
-| `entries` | [LibraryEntry] |
+| `entries` | [ArchiveEntry] |
 
 ### `UserFileEntry`
 

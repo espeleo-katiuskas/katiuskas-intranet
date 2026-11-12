@@ -19,7 +19,7 @@ type Routes struct {
 	Activities        ResourceHandler
 	Material          ResourceHandler
 	Board             ResourceHandler
-	Library           ResourceHandler
+	Archive           ResourceHandler
 	UserFiles         ResourceHandler
 	ActivityResources ResourceHandler
 	Accounting        ResourceHandler
@@ -28,6 +28,7 @@ type Routes struct {
 	ClubInfo          ResourceHandler
 	Budgets           ResourceHandler
 	TransactionFiles  ResourceHandler
+	Library           ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
@@ -44,7 +45,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Material.RegisterRoutes(mux)
 	routes.Distributions.RegisterRoutes(mux)
 	routes.Board.RegisterRoutes(mux)
-	routes.Library.RegisterRoutes(mux)
+	routes.Archive.RegisterRoutes(mux)
 	routes.UserFiles.RegisterRoutes(mux)
 	routes.ActivityResources.RegisterRoutes(mux)
 	routes.Accounting.RegisterRoutes(mux)
@@ -52,6 +53,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.ClubInfo.RegisterRoutes(mux)
 	routes.Budgets.RegisterRoutes(mux)
 	routes.TransactionFiles.RegisterRoutes(mux)
+	routes.Library.RegisterRoutes(mux)
 
 	// Recoverer has to be the *inner* layer, closer to mux, not the
 	// outer one: RequestLogger's own next.ServeHTTP call has no

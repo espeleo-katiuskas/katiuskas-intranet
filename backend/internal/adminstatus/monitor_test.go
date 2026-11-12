@@ -37,7 +37,7 @@ func newMonitor(t *testing.T, info Info) (*Monitor, *recorder, *time.Time) {
 
 func TestMonitorSaysNothingWhileEverythingIsFine(t *testing.T) {
 	dir := t.TempDir()
-	monitor, rec, _ := newMonitor(t, Info{LibraryRoot: dir, UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir})
+	monitor, rec, _ := newMonitor(t, Info{ArchiveRoot: dir, UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir})
 	monitor.Check(context.Background())
 	monitor.Check(context.Background())
 	if len(rec.sent) != 0 {
@@ -50,7 +50,7 @@ func TestMonitorReportsAProblemOnceAndWhenItIsGone(t *testing.T) {
 	missing := dir + "/missing"
 	monitor, rec, clock := newMonitor(t, Info{
 		PublicBaseURL: "https://intranet.example.test",
-		LibraryRoot:   dir, UserFilesRoot: missing, ActivityResourcesRoot: dir, TransactionFilesRoot: dir,
+		ArchiveRoot:   dir, UserFilesRoot: missing, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir,
 	})
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func TestMonitorReportsAProblemOnceAndWhenItIsGone(t *testing.T) {
 func TestMonitorRemindsOnceADayAndReportsNewProblems(t *testing.T) {
 	dir := t.TempDir()
 	monitor, rec, clock := newMonitor(t, Info{
-		LibraryRoot: dir + "/a", UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir,
+		ArchiveRoot: dir + "/a", UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir,
 	})
 	ctx := context.Background()
 	monitor.Check(ctx)
@@ -109,12 +109,12 @@ func TestProblemsOfDatabaseAndDisk(t *testing.T) {
 	s := statusResponse{
 		Database: databaseStatus{Error: "connection refused"},
 		Disks: []diskStatus{
-			{Paths: []string{"/data/library"}, FreeBytes: 3 << 30, UsedPercent: 91},
+			{Paths: []string{"/data/archive"}, FreeBytes: 3 << 30, UsedPercent: 91},
 			{Paths: []string{"/other"}, UsedPercent: 40},
 		},
 	}
 	got := problemsOf(s, 90)
-	if len(got) != 2 || got[0].Key != "database" || got[1].Key != "disk:/data/library" {
+	if len(got) != 2 || got[0].Key != "database" || got[1].Key != "disk:/data/archive" {
 		t.Fatalf("unexpected problems: %+v", got)
 	}
 	if !strings.Contains(got[0].Text, "connection refused") || !strings.Contains(got[1].Text, "91 %") ||
@@ -140,7 +140,7 @@ func TestDiskOfComputesWhatDfShows(t *testing.T) {
 func TestDisksOfGroupsDirectoriesOnTheSameFilesystem(t *testing.T) {
 	dir := t.TempDir()
 	disks := disksOf([]storageStatus{
-		{Name: "library", Path: dir, Exists: true},
+		{Name: "archive", Path: dir, Exists: true},
 		{Name: "user_files", Path: dir, Exists: true},
 		{Name: "missing", Path: dir + "/nope", Exists: false},
 	})

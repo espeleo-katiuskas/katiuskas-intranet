@@ -10,6 +10,7 @@ import { initModal, openModal } from './modal.js';
 const PRESETS = [
   { label: 'Socio', roles: ['member'] },
   { label: 'Socio con material', roles: ['member', 'material'] },
+  { label: 'Socio con biblioteca', roles: ['member', 'biblioteca'] },
   { label: 'Socio con money', roles: ['member', 'money'] },
   { label: 'Junta', roles: ['board'] },
   { label: 'Administrador', roles: ['admin'] },

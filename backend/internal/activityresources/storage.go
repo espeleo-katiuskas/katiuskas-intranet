@@ -10,7 +10,7 @@ import (
 
 // Storage holds a file resource's raw bytes on disk, one file per
 // resource id under a per-activity subdirectory — unlike
-// internal/library or internal/userfiles, nothing here is ever a
+// internal/archive or internal/userfiles, nothing here is ever a
 // caller-given path: activityID/resourceID always come from either a
 // validated URL path segment (parsed as an integer — never a string
 // that could contain "..") or a database row this package's own
@@ -21,7 +21,7 @@ type Storage struct {
 }
 
 // NewStorage resolves root once at startup, creating it if it doesn't
-// exist yet, the same as library.NewService/userfiles.NewService.
+// exist yet, the same as archive.NewService/userfiles.NewService.
 func NewStorage(root string) (*Storage, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {

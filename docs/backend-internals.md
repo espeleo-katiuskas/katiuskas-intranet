@@ -22,7 +22,8 @@ Contents:
 - [Licenses](#licenses)
 - [Membership dues](#membership-dues)
 - [Temporary leaves](#temporary-leaves)
-- [Document library](#document-library)
+- [Library](#library)
+- [Document archive](#document-archive)
 - [Per-person files](#per-person-files)
 - [Club information](#club-information)
 - [Admin status](#admin-status)
@@ -42,8 +43,8 @@ see below, and `requestcount` is a middleware, not a resource), each split into 
 `repository.go` (pgx) / `service.go` / `handler.go`. The
 domain layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
 owns and registers its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
-**`internal/library`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
-it serves a read-only document tree from disk (`config.LibraryRoot`), not Postgres, so it has no
+**`internal/archive`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
+it serves a read-only document tree from disk (`config.ArchiveRoot`), not Postgres, so it has no
 `repository.go` — `service.go` works directly against the filesystem, resolving and validating every
 caller-given path against root before touching disk (`Service.resolve`), since there's no database
 constraint to lean on for that instead.
@@ -103,11 +104,11 @@ token is also mirrored into an `HttpOnly`/`Secure`/`SameSite=Lax` cookie (`auth.
 name `katiuskas_session`, scoped to `/api/v1`) whenever one is issued or refreshed (sign-in,
 impersonation start/exit) — every ordinary route still only ever looks at the bearer header
 (`auth.Protect`/`RequireAuth`), so this cookie existing changes nothing about them. It exists purely
-for `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/library` and
+for `auth.ProtectAllowingCookie`/`RequireAuthFromHeaderOrCookie`, which `internal/archive` and
 `internal/userfiles` use on their own file-serving `GET` routes specifically (nowhere else) so a
 document/file can be a plain, browser-navigable `<a href>` link — opened directly in a new tab, or
 saved by the browser's own "Save As" with the real filename — instead of needing `apiFetchBlob`'s
-fetch-then-`Blob` dance the way `library.js` otherwise uses for everything else;
+fetch-then-`Blob` dance the way `archive.js` otherwise uses for everything else;
 `web/js/dashboard.js`'s own Documentos/Actas/Memorias links lean on exactly this to stay plain
 links. `ClearSessionCookie` removes it on logout, so a signed-out browser can't open a file link
 straight from history or a bookmark anymore. `internal/authapi` glues magic-link
@@ -319,10 +320,10 @@ consistent with a set of `CHECK` constraints (migration `00010_activity_resource
 the same "description only for text, file fields only for file" shape `material_movements`
 already uses for its own type-specific fields. Metadata lives in Postgres (`Repository`);
 a file resource's bytes live on disk instead (`Storage`, `config.ActivityResourcesRoot` —
-a *named Docker volume*, not a host bind mount like `library`/`userfiles`, since files
+a *named Docker volume*, not a host bind mount like `archive`/`userfiles`, since files
 arrive exclusively through `POST /activities/{id}/resources` rather than being dropped in
 by hand), keyed by the row's own id rather than any caller-given path, so unlike
-`library`/`userfiles` there's no directory tree to browse and no path-escape risk to guard
+`archive`/`userfiles` there's no directory tree to browse and no path-escape risk to guard
 against. A file is created once and never modified afterward — there's no way to replace
 its bytes (delete the resource and add another), `Storage.Save` creates it with `O_EXCL`
 so it refuses (`os.ErrExist`) to touch one that already exists, and `Delete` is a plain
@@ -346,7 +347,7 @@ unless they happened to list themselves when creating the activity (see
 specific resource (`PATCH`/`DELETE`) is narrower still — only that resource's own author,
 or admin/board, even for someone else who took part in the same activity. A file's bytes
 come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
-`library`/`userfiles` file routes takes only the bearer header (no cookie).
+`archive`/`userfiles` file routes takes only the bearer header (no cookie).
 
 ## Distributions
 
@@ -748,16 +749,97 @@ foreign key): the movement is deleted instead (`DELETE /material/movements/{id}`
 its transaction and entries in the same database transaction — unless the transaction has files
 attached (409 `transaction_has_files`). A rental's return changes nothing in accounting.
 
-## Document library
+## Library
 
-**Document library** (`internal/library`): serves club documents (estatutos, reglamentos, actas...)
-read-only from a plain directory tree bind-mounted from `./library` on the host — see [Dropping
-files in](#dropping-files-into-the-library-and-the-per-person-directories) — not the database. `GET
-/library?path=...` lists a directory (subdirectories first, then files, each group alphabetical
+`internal/library` is the club's library — books, magazines, maps, topographies…, each row one copy
+of whatever it is, called an *item* — not `internal/archive`, the read-only tree of club documents
+on disk, which is a different thing (it was called the library before this one). The data is in
+Postgres (migration `00058_library.sql`) and the bytes of the files on disk (`LIBRARY_FILES_ROOT`).
+
+**A row is one copy.** Two copies of a title are two `items` rows: there is no quantity or stock, as
+there is for material, since an item is lent to a person and comes back whole.
+
+**Types.** Every item has a type from the `library_types` catalogue (Libro, Revista, Mapa,
+Topografía and Otro are seeded; whoever manages the library adds, renames and deletes them:
+`GET/POST /library/types`, `PUT/DELETE /library/types/{id}`). `type_id` is required when creating or
+editing an item (400 `type_required`, or `unknown_library_type` for one that does not exist) and the
+item comes back with `type_id` and the `type` name, which the edit notice diffs like any other
+field. Names are unique ignoring case (409 `duplicate_library_type`) and a type with items cannot be
+deleted (409 `library_type_in_use`): both are checked in the service before the statement, because a
+failed statement would abort the transaction the tests run in; the unique index and the foreign key
+stay as the backstop. The codes have `library` in them because `duplicate_type` and `type_in_use`
+already mean the same for the types of material, with another text in `errorTexts.js`.
+
+**Who can do what.** Everybody who can sign in (`Protect` with no role: member, board or admin)
+reads every item and adds comments and files; admin, board and the `biblioteca` role create, edit
+and delete items and set their covers and remove what others added; admin, board, `biblioteca` and
+`material` read the loans and record loans and returns; deleting a loan is admin only. `biblioteca`
+is a plain role in the `roles` table (like `material` and `money`, seeded by the migration and not a
+system role), never above board: whatever it can do, board can do, so a route that names it names
+`board` and `admin` with it (`manageRoles`, `loanRoles` in `handler.go`). A comment or a file may
+also be removed by whoever wrote it, which `Service.DeleteComment`/`RemoveResource` check against
+the `privileged` flag the handler works out from the caller's roles (403 `not_yours`).
+
+**Availability, not borrower.** An `Item` carries `available` — true when it has no open loan,
+worked out in `itemSelect` — and never who has it: nothing a plain member can read names the
+borrower. The loans (`GET /library/loans`, `GET /library/items/{id}/loans`) are for the roles above,
+and a test checks that no route open to a member contains the borrower's login.
+
+**Loans.** `library_loans` has `lent_at` and `returned_at` (dates; the item is out while
+`returned_at` is null) and a partial unique index allows one open loan per item, which `CreateLoan`
+also takes the item's row lock for, so that two people recording at once cannot both win (the loser
+is 409 `item_not_available`). The borrower has to be a member now (`RoleLookup.HasAnyRole(member)`,
+409 `loan_recipient_not_member`), as for material. The dates default to today and may be earlier (a
+loan that was forgotten is written down later) but never later than today, and a return cannot be
+before its loan began (400 `invalid_dates`); "today" is the club's day, `internal/platform/clubtime`
+(`Europe/Madrid`), not the server's or the database's, so recording at half past midnight there
+works. An item that has ever been lent cannot be deleted (409 `item_has_loans`): its history stays.
+
+**Comments and files.** A comment has at most 2000 characters (counted in characters, not bytes). A
+file (at most 10 MiB, `MaxFileSize`) is a `library_resources` row plus its bytes under
+`LIBRARY_FILES_ROOT/<item id>/<row id>`: the row is created first, since the path is keyed by its
+id, and removed again if saving the bytes fails. The bytes are created once with `O_EXCL` and
+**never rewritten** — the prod→testing copy hard-links the files, so a rewrite in place would
+corrupt both trees. The type is decided from the bytes (`detectType`): only a PDF or an image is
+shown in the page (`inline`); anything else is an attachment with a sandboxing
+`Content-Security-Policy`, always with `X-Content-Type-Options: nosniff`, so a file can never run as
+part of the intranet. The file and cover routes also accept the session cookie
+(`ProtectAllowingCookie`), so that an `<img>` or a link opens them.
+
+**The cover** is a `library_resources` row with `is_cover` (a partial unique index allows one per
+item), set with `PUT /library/items/{id}/cover` (an image, recognised by its bytes: 400
+`cover_not_image`). Replacing it is a transaction that deletes the old row and inserts the new one,
+then saves the new bytes and removes the old ones: a new cover is a new file, never a rewrite. It is
+not counted in `resource_count` nor listed with the other files, and `DELETE
+/library/items/{id}/resources/{id}` answers 404 for it (it goes with `DELETE
+/library/items/{id}/cover`). Its address does not change, so `serveFile` sends `Cache-Control:
+private, no-cache` and the browser revalidates (`ServeContent` answers 304).
+
+**Deleting an item** (`Repository.Delete`, one transaction with the row locked) refuses one that has
+loans and otherwise deletes its comments and the rows of its files, then the item, and the service
+removes the bytes afterwards — failing to remove a file only leaves it unreferenced, it never undoes
+the delete. Nothing cascades in the database, so a person who has loans, comments or files cannot be
+deleted from the intranet (409 `has_references`).
+
+**Configuration.** `LIBRARY_FILES_ROOT` names the directory; unset, it is a directory called
+`library-files` next to `ACTIVITY_RESOURCES_ROOT` (`config.Load`), so that an installation whose
+`api.env` predates the library still starts. The status page lists it with the other storage
+directories (`library_files`), `scripts/backup.sh` backs it up and `scripts/copy-prod-to-testing.sh`
+hard-links it into testing, each applying the same default.
+
+The Telegram notices say that an item was added, edited (a diff of the changed fields), deleted,
+lent, returned, commented, or that a file or a cover was added or removed.
+
+## Document archive
+
+**Document archive** (`internal/archive`): serves club documents (estatutos, reglamentos, actas...)
+read-only from a plain directory tree bind-mounted from `./archive` on the host — see [Dropping
+files in](#dropping-files-into-the-archive-and-the-per-person-directories) — not the database. `GET
+/archive?path=...` lists a directory (subdirectories first, then files, each group alphabetical
 except for what the directory's own optional `.order.json` — a JSON array of names — puts first, in
 its order; dotfiles never listed, that one included, though it can be fetched by its path); `GET
-/library/file/{path...}` streams a file's raw bytes (the path is the rest of the URL, slashes
-included — e.g. `/library/file/Actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
+/archive/file/{path...}` streams a file's raw bytes (the path is the rest of the URL, slashes
+included — e.g. `/archive/file/Actas/2026-02-01.pdf` — not a `?path=` query parameter), inline by
 default or as an attachment with `?download=1`, with HTTP Range support via `http.ServeContent`.
 Both are open to any baseline role and read-only — nothing here lets a caller upload, rename, or
 delete anything.
@@ -765,15 +847,15 @@ delete anything.
 ## Per-person files
 
 **Per-person files** (`internal/userfiles`): the same read-only, filesystem-backed model
-as the document library, one subdirectory per login instead of one shared tree — a scanned
+as the document archive, one subdirectory per login instead of one shared tree — a scanned
 DNI, a signed waiver, medical paperwork. `GET /users/{login}/files[?path=...]` and
-`GET /users/{login}/files/file/{path...}` mirror `/library`'s own listing/streaming shape
+`GET /users/{login}/files/file/{path...}` mirror `/archive`'s own listing/streaming shape
 exactly (including the path-in-URL file route, `?download=1` and Range support), but are
 *not* open to every baseline role: only that person themselves, or admin/board, may see
 them (403 otherwise) — checked inline in the handler (`Handler.resolveAccess`), the same
 self-or-privileged pattern
 `memberships.Handler.listByUser`/`material.Handler.listMovementsByUser` use, since who
-may see a specific person's files isn't a fixed role list the way `/library`'s is. A login
+may see a specific person's files isn't a fixed role list the way `/archive`'s is. A login
 with no subdirectory of its own yet — most people, until someone drops a file in for them
 — gets an empty listing at their own root rather than a 404.
 
@@ -1440,15 +1522,15 @@ so handler tests in every *other* package can mint bearer tokens for arbitrary
 users/roles without hitting the real `tokens` table (only the `auth` and `tokens`
 packages' own tests exercise real session mechanics; `auth`'s internal tests use a local
 stub instead of `testutil`, since `testutil` imports `auth` and an internal test file
-can't import back). `internal/library` (and `internal/userfiles`, structured the same way)
+can't import back). `internal/archive` (and `internal/userfiles`, structured the same way)
 needs none of the Postgres fixtures — each package's own `service_test.go` builds a
 `Service` directly on a `t.TempDir()` tree, no Postgres involved at all; only their
 `handler_test.go`s reach for `FakeResolver`/`TokenFor` to mint bearer tokens for the
 role/self checks their routes enforce.
 
-## Dropping files into the library and the per-person directories
+## Dropping files into the archive and the per-person directories
 
-Club documents (estatutos, actas...) shown at `/archivo`: drop files into `./library/` next
+Club documents (estatutos, actas...) shown at `/archivo`: drop files into `./archive/` next
 to `docker-compose.yml` (bind-mounted into the API container, auto-created if missing) — no
 rebuild, no restart, nothing through the API itself. That directory is gitignored. The listing is
 alphabetical; to put some files first (the home page's Documentos, Actas and Memorias lists use
@@ -1457,12 +1539,12 @@ this), add a `.order.json` to that directory, a JSON array of names such as
 alphabetically. A name that is not there is skipped, and a file that is not a valid array is
 ignored (the API logs a warning). Editing it takes effect on the next request.
 The home page's three lists read three fixed directories, named exactly like this (the file system
-is case-sensitive): `./library/Documentos`, `./library/Actas` (files named `yyyy-mm-dd.pdf`, or
-`yyyy-mm-dd-suffix.pdf` when there are several that day) and `./library/Memorias`.
+is case-sensitive): `./archive/Documentos`, `./archive/Actas` (files named `yyyy-mm-dd.pdf`, or
+`yyyy-mm-dd-suffix.pdf` when there are several that day) and `./archive/Memorias`.
 
 Per-person documents (a scanned DNI, a signed waiver...) shown at `/users/{login}/files`: drop files
 into `./user-files/<login>/` next to `docker-compose.yml` (same bind-mount, auto-create, gitignored,
-no rebuild/restart story as `./library` above), one subdirectory per login. A copy of each
+no rebuild/restart story as `./archive` above), one subdirectory per login. A copy of each
 federative license goes in that same person's `licencias/` subdirectory, named
 `yyyy-mm-dd-tipo_de_licencia.ext` (image or PDF); an optional thumbnail for one goes in
 `licencias/.thumbnails/`, named after that same original filename plus `.jpg` (e.g.

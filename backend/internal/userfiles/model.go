@@ -2,13 +2,13 @@
 // documents (a scanned DNI, a signed waiver, medical paperwork...) from
 // a directory on disk (Service.root, set once at startup from
 // config.UserFilesRoot), one subdirectory per login. Structurally this
-// is internal/library's exact model — no database involved, Service
+// is internal/archive's exact model — no database involved, Service
 // works directly against the filesystem, resolving and validating
 // every caller-given path against root before touching it (see
 // Service.resolve) — except every path is additionally scoped under
 // the given login's own subtree, and a login with no subtree of its
 // own yet (most people, until someone drops a file in for them) is an
-// empty listing rather than a 404. Unlike library, this isn't open to
+// empty listing rather than a 404. Unlike archive, this isn't open to
 // every baseline role: a person's files are personal, so only that
 // person and admin/board may ever see them (see Handler).
 package userfiles

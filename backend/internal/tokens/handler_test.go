@@ -173,7 +173,7 @@ func TestHandlerImpersonateSucceedsAndTheTokenWorksAsTheTarget(t *testing.T) {
 
 // TestHandlerImpersonateSetsSessionCookie checks the impersonation
 // token is also carried as auth.SessionCookieName, matching the
-// response body — so a library/userfiles file opened straight from a
+// response body — so a archive/userfiles file opened straight from a
 // new tab while impersonating resolves as the impersonated person too,
 // the same as every other request the frontend makes with this token.
 func TestHandlerImpersonateSetsSessionCookie(t *testing.T) {

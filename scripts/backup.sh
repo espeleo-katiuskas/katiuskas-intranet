@@ -11,10 +11,11 @@
 #   BACKUP_DIR=<where to keep the backups> scripts/backup.sh <env-file>
 #
 # <env-file> is the environment's api.env (the systemd EnvironmentFile); DATABASE_URL,
-# LIBRARY_ROOT, USER_FILES_ROOT, ACTIVITY_RESOURCES_ROOT and TRANSACTION_FILES_ROOT are read from
-# it, parsed, never sourced. Each run makes a directory BACKUP_DIR/<yyyymmdd-hhmmss>/ with
+# ARCHIVE_ROOT, USER_FILES_ROOT, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT and LIBRARY_FILES_ROOT
+# are read from it, parsed, never sourced. Each run makes a directory BACKUP_DIR/<yyyymmdd-hhmmss>/ with
 #   database.dump   pg_dump --format=custom (it includes goose's version table)
-#   files/<name>/   library, user-files, activity-resources and transaction-files, as they were
+#   files/<name>/   archive, user-files, activity-resources, transaction-files and library-files, as
+#                   they were
 # The files are copied with rsync, hard-linking whatever has not changed since the previous
 # backup (--link-dest), so every backup is a complete tree that can be browsed or restored on its
 # own and yet a day without changes costs almost no disk. Deleting an old backup never affects
@@ -96,11 +97,22 @@ fi
 
 # The directories to copy: the name each has in the backup, and where it is.
 declare -A sources=(
-  [library]=$(env_value "$env_file" LIBRARY_ROOT)
+  [archive]=$(env_value "$env_file" ARCHIVE_ROOT)
   [user-files]=$(env_value "$env_file" USER_FILES_ROOT)
   [activity-resources]=$(env_value "$env_file" ACTIVITY_RESOURCES_ROOT)
   [transaction-files]=$(env_value "$env_file" TRANSACTION_FILES_ROOT)
+  [library-files]=$(env_value "$env_file" LIBRARY_FILES_ROOT)
 )
+# An api.env written before the archive of documents was renamed (it was the library) names it
+# LIBRARY_ROOT; the API still accepts that, so the backup does too.
+if [[ -z ${sources[archive]} ]]; then
+  sources[archive]=$(env_value "$env_file" LIBRARY_ROOT)
+fi
+# LIBRARY_FILES_ROOT may be unset (an api.env that predates the library): the API then uses a directory called
+# library-files beside the memorias' (config.Load does the same).
+if [[ -z ${sources[library-files]} && -n ${sources[activity-resources]} ]]; then
+  sources[library-files]=$(dirname "${sources[activity-resources]}")/library-files
+fi
 for name in "${!sources[@]}"; do
   [[ -n ${sources[$name]} ]] || die "no value for the $name directory in $env_file"
   [[ -d ${sources[$name]} ]] || die "the $name directory ${sources[$name]} does not exist"
@@ -124,7 +136,7 @@ final=$BACKUP_DIR/$stamp
 trap 'rm -rf "$partial"' EXIT
 mkdir "$partial"
 
-for name in library user-files activity-resources transaction-files; do
+for name in archive user-files activity-resources transaction-files library-files; do
   log "copying $name from ${sources[$name]}"
   link=()
   if [[ -n $previous && -d $previous/files/$name ]]; then

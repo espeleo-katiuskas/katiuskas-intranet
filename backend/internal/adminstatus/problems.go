@@ -75,7 +75,7 @@ type Problem struct {
 
 // storageLabels name the directories the way the interface does.
 var storageLabels = map[string]string{
-	"library":            "el archivo",
+	"archive":            "el archivo",
 	"user_files":         "los ficheros de las personas",
 	"activity_resources": "las memorias de actividades",
 	"transaction_files":  "los ficheros de las transacciones",

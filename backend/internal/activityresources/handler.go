@@ -350,7 +350,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 // file streams a file resource's raw content — not_a_file for a text
 // resource, which never has one. ?download=1 asks for it as an
 // attachment; anything else serves it inline, same as
-// library.Handler.file/userfiles.Handler.file.
+// archive.Handler.file/userfiles.Handler.file.
 func (h *Handler) file(w http.ResponseWriter, r *http.Request) {
 	activityID, ok := h.resolveActivityID(w, r)
 	if !ok {
@@ -432,7 +432,7 @@ func (h *Handler) reorder(w http.ResponseWriter, r *http.Request) {
 
 // sanitizeFilename keeps a filename out of the surrounding
 // Content-Disposition quotes it's placed in — same defensive move as
-// library.sanitizeFilename/userfiles.sanitizeFilename, cheap insurance
+// archive.sanitizeFilename/userfiles.sanitizeFilename, cheap insurance
 // against a stray quote in an uploaded file's original name.
 func sanitizeFilename(name string) string {
 	return strings.ReplaceAll(name, `"`, "'")

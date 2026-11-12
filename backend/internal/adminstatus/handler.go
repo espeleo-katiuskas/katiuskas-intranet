@@ -39,10 +39,11 @@ type Info struct {
 	TelegramBotRunning    bool
 	TelegramBotUsername   string
 
-	LibraryRoot           string
+	ArchiveRoot           string
 	UserFilesRoot         string
 	ActivityResourcesRoot string
 	TransactionFilesRoot  string
+	LibraryFilesRoot      string
 
 	// DiskAlertPercent is how full a filesystem holding one of the
 	// directories may be before it counts as a problem (see Problems).
@@ -157,10 +158,11 @@ func (h *Handler) build(ctx context.Context) statusResponse {
 
 func (h *Handler) collect(ctx context.Context) statusResponse {
 	storage := []storageStatus{
-		directory("library", h.info.LibraryRoot),
+		directory("archive", h.info.ArchiveRoot),
 		directory("user_files", h.info.UserFilesRoot),
 		directory("activity_resources", h.info.ActivityResourcesRoot),
 		directory("transaction_files", h.info.TransactionFilesRoot),
+		directory("library_files", h.info.LibraryFilesRoot),
 	}
 	return statusResponse{
 		App:      h.appStatus(),

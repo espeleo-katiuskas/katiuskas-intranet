@@ -62,9 +62,9 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 		TelegramLogConfigured: true,
 		TelegramBotRunning:    true,
 		TelegramBotUsername:   "KatiuskasBot",
-		LibraryRoot:           existing,
+		ArchiveRoot:           existing,
 		UserFilesRoot:         existing + "/missing",
-		ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
+		ActivityResourcesRoot: existing, TransactionFilesRoot: existing, LibraryFilesRoot: existing,
 	})
 	// The test database is migrated without goose; give it the table goose
 	// keeps, so the migration number can be read back.
@@ -123,7 +123,7 @@ func TestStatusReportsWhatTheProcessWasGiven(t *testing.T) {
 	for _, s := range got.Storage {
 		exists[s.Name] = s.Exists
 	}
-	if !exists["library"] || exists["user_files"] || !exists["activity_resources"] {
+	if !exists["archive"] || exists["user_files"] || !exists["activity_resources"] {
 		t.Errorf("expected only the missing directory to be reported as missing, got %v", exists)
 	}
 	for _, secret := range []string{"password", "postgres://", "smtp_host", "bot_token"} {
@@ -155,9 +155,9 @@ func TestStatusWithoutAGooseTable(t *testing.T) {
 func TestStatusListsProblemsAndDisks(t *testing.T) {
 	existing := t.TempDir()
 	mux, resolver, _ := newServer(t, adminstatus.Info{
-		LibraryRoot:           existing,
+		ArchiveRoot:           existing,
 		UserFilesRoot:         existing + "/missing",
-		ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
+		ActivityResourcesRoot: existing, TransactionFilesRoot: existing, LibraryFilesRoot: existing,
 		DiskAlertPercent: 1, // any real filesystem is at least that full
 	})
 	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
@@ -172,8 +172,8 @@ func TestStatusListsProblemsAndDisks(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil {
 		t.Fatalf("expected 200 and JSON, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(got.Disks) != 1 || len(got.Disks[0].Paths) != 3 || got.Disks[0].TotalBytes == 0 {
-		t.Errorf("expected one filesystem with the three directories that exist, got %+v", got.Disks)
+	if len(got.Disks) != 1 || len(got.Disks[0].Paths) != 4 || got.Disks[0].TotalBytes == 0 {
+		t.Errorf("expected one filesystem with the four directories that exist, got %+v", got.Disks)
 	}
 	if len(got.Problems) != 2 {
 		t.Errorf("expected the missing directory and the full disk as problems, got %q", got.Problems)
@@ -183,7 +183,7 @@ func TestStatusListsProblemsAndDisks(t *testing.T) {
 func TestStatusHasNoProblemsWhenAllIsWell(t *testing.T) {
 	existing := t.TempDir()
 	mux, resolver, _ := newServer(t, adminstatus.Info{
-		LibraryRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
+		ArchiveRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing, TransactionFilesRoot: existing, LibraryFilesRoot: existing,
 	})
 	rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
 	if !strings.Contains(rec.Body.String(), `"problems":[]`) {

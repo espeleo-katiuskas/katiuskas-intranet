@@ -68,7 +68,7 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 
 // RequireAuthFromHeaderOrCookie is RequireAuth, but falls back to
 // SessionCookieName when there's no Authorization header. Reserved for
-// the specific read-only file-serving routes (library, userfiles) that
+// the specific read-only file-serving routes (archive, userfiles) that
 // need to work as a plain, browser-navigable URL — opened directly in a
 // new tab, or saved by the browser's own "Save As" with its real
 // filename — neither of which can carry a custom header the way a
@@ -154,7 +154,7 @@ func (a *Authenticator) Protect(next http.HandlerFunc, roles ...string) http.Han
 
 // ProtectAllowingCookie is Protect, but also accepts SessionCookieName
 // as an alternative to the bearer header — see
-// RequireAuthFromHeaderOrCookie. Reserved for the library/userfiles
+// RequireAuthFromHeaderOrCookie. Reserved for the archive/userfiles
 // file-serving routes; every other route keeps using Protect.
 func (a *Authenticator) ProtectAllowingCookie(next http.HandlerFunc, roles ...string) http.Handler {
 	var handler http.Handler = next

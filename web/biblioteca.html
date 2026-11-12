@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biblioteca — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <div class="section-header">
+    <div>
+      <h1>Biblioteca</h1>
+      <p class="subtitle">La biblioteca del club: libros, revistas, mapas, topografías… Mira qué hay y si está disponible. En cada ejemplar puedes dejar comentarios y añadir fotos o documentos.</p>
+    </div>
+    <div class="table-actions">
+      <button id="manage-types" type="button" class="btn btn-secondary btn-small" data-roles="admin,board,biblioteca">Tipos</button>
+      <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board,biblioteca">+ Nuevo ejemplar</button>
+    </div>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+
+  <dialog id="new-item-dialog" class="panel modal" data-roles="admin,board,biblioteca">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Nuevo ejemplar</h3>
+    <form id="new-item-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="nb-type">Tipo</label>
+          <select id="nb-type" name="type_id" required></select>
+        </div>
+        <div class="field">
+          <label for="nb-title">Título</label>
+          <input id="nb-title" name="title" type="text" required>
+        </div>
+        <div class="field">
+          <label for="nb-author">Autor <span class="optional">(opcional)</span></label>
+          <input id="nb-author" name="author" type="text">
+        </div>
+        <div class="field">
+          <label for="nb-publisher">Editorial <span class="optional">(opcional)</span></label>
+          <input id="nb-publisher" name="publisher" type="text">
+        </div>
+        <div class="field">
+          <label for="nb-year">Año <span class="optional">(opcional)</span></label>
+          <input id="nb-year" name="year" type="number" min="1000" max="2200" step="1">
+        </div>
+        <div class="field">
+          <label for="nb-isbn">ISBN <span class="optional">(opcional)</span></label>
+          <input id="nb-isbn" name="isbn" type="text">
+        </div>
+        <div class="field span-2">
+          <label for="nb-location">Dónde está en el local <span class="optional">(opcional)</span></label>
+          <input id="nb-location" name="location" type="text" placeholder="Estante, caja…">
+        </div>
+        <div class="field span-2">
+          <label for="nb-description">Descripción <span class="optional">(opcional)</span></label>
+          <textarea id="nb-description" name="description"></textarea>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-primary">Crear ejemplar</button>
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="types-dialog" class="panel modal" data-roles="admin,board,biblioteca">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Tipos de ejemplar</h3>
+    <p class="subtitle">Libro, revista, mapa… Un tipo que ya tiene ejemplares no se puede borrar.</p>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Nombre</th><th>Ejemplares</th><th></th></tr>
+        </thead>
+        <tbody id="types-table-body"></tbody>
+      </table>
+    </div>
+    <form id="new-type-form" class="inline-form">
+      <div class="field">
+        <label for="new-type-name">Nuevo tipo</label>
+        <input id="new-type-name" name="name" type="text" maxlength="60" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-small">Añadir tipo</button>
+    </form>
+  </dialog>
+
+  <div class="filter-bar">
+    <div class="field" id="library-search-field">
+      <label for="library-search">Buscar en la biblioteca</label>
+      <input id="library-search" type="search" autocomplete="off" placeholder="Título, tipo, autor, editorial, ISBN…">
+    </div>
+    <div class="field">
+      <label for="type-filter">Tipo</label>
+      <select id="type-filter"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label class="checkbox-label" for="only-available"><input id="only-available" type="checkbox"> Solo los disponibles</label>
+    </div>
+  </div>
+  <p class="people-count" id="library-count" hidden></p>
+
+  <div class="table-wrap">
+    <table class="stack-on-phone">
+      <thead>
+        <tr><th></th><th>Título</th><th>Tipo</th><th>Autor</th><th>Año</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="items-table-body"></tbody>
+    </table>
+  </div>
+
+  <section data-roles="admin,board,biblioteca,material">
+    <div class="section-header">
+      <div>
+        <h2 id="section-loans">Ejemplares prestados</h2>
+        <p class="subtitle">Quién tiene ahora cada ejemplar y desde cuándo. Solo lo ven la Junta, la biblioteca y quien gestiona el material.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Ejemplar</th><th>Socio</th><th>Desde</th><th></th></tr>
+        </thead>
+        <tbody id="open-loans-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/libraryList.js"></script>
+</body>
+</html>

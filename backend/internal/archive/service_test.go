@@ -1,4 +1,4 @@
-package library_test
+package archive_test
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/library"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/archive"
 )
 
 // newTestService sets up a small tree under a fresh t.TempDir():
@@ -17,7 +17,7 @@ import (
 //	    2024-acta.md
 //	  .git/            (hidden — never listed)
 //	    config
-func newTestService(t *testing.T) *library.Service {
+func newTestService(t *testing.T) *archive.Service {
 	t.Helper()
 	root := t.TempDir()
 	write(t, filepath.Join(root, "Estatutos.pdf"), "pdf bytes")
@@ -30,7 +30,7 @@ func newTestService(t *testing.T) *library.Service {
 	}
 	write(t, filepath.Join(root, ".git", "config"), "hidden")
 
-	svc, err := library.NewService(root)
+	svc, err := archive.NewService(root)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
@@ -45,11 +45,11 @@ func write(t *testing.T, path, content string) {
 }
 
 func TestNewServiceCreatesTheRootIfMissing(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "nested", "library")
+	root := filepath.Join(t.TempDir(), "nested", "archive")
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("expected %s not to exist yet", root)
 	}
-	if _, err := library.NewService(root); err != nil {
+	if _, err := archive.NewService(root); err != nil {
 		t.Fatalf("new service: %v", err)
 	}
 	info, err := os.Stat(root)
@@ -61,7 +61,7 @@ func TestNewServiceCreatesTheRootIfMissing(t *testing.T) {
 func TestNewServiceRejectsARootThatIsAFile(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "not-a-dir")
 	write(t, root, "just a file")
-	if _, err := library.NewService(root); err == nil {
+	if _, err := archive.NewService(root); err == nil {
 		t.Error("expected an error when root is a file, not a directory")
 	}
 }
@@ -80,10 +80,10 @@ func TestListDirectoryListsRootByDefault(t *testing.T) {
 		t.Fatalf("expected 2 visible entries (dotfiles hidden), got %d: %+v", len(listing.Entries), listing.Entries)
 	}
 	// Directories first, then alphabetical.
-	if listing.Entries[0].Name != "Actas" || listing.Entries[0].Type != library.EntryDir {
+	if listing.Entries[0].Name != "Actas" || listing.Entries[0].Type != archive.EntryDir {
 		t.Errorf("expected Actas dir first, got %+v", listing.Entries[0])
 	}
-	if listing.Entries[1].Name != "Estatutos.pdf" || listing.Entries[1].Type != library.EntryFile {
+	if listing.Entries[1].Name != "Estatutos.pdf" || listing.Entries[1].Type != archive.EntryFile {
 		t.Errorf("expected Estatutos.pdf second, got %+v", listing.Entries[1])
 	}
 	if listing.Entries[1].Size == 0 {
@@ -147,7 +147,7 @@ func TestListDirectoryNeutralizesPathEscapesInsteadOfLeakingOutsideRoot(t *testi
 	for _, escape := range []string{"../../etc", "a/../../b"} {
 		t.Run(escape, func(t *testing.T) {
 			_, err := svc.ListDirectory(escape)
-			if !errors.Is(err, library.ErrNotFound) {
+			if !errors.Is(err, archive.ErrNotFound) {
 				t.Errorf("expected ErrNotFound (a neutralized escape resolving to a nonexistent in-root path), got %v", err)
 			}
 		})
@@ -156,14 +156,14 @@ func TestListDirectoryNeutralizesPathEscapesInsteadOfLeakingOutsideRoot(t *testi
 
 func TestListDirectoryNotFound(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.ListDirectory("nope"); !errors.Is(err, library.ErrNotFound) {
+	if _, err := svc.ListDirectory("nope"); !errors.Is(err, archive.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
 func TestListDirectoryRejectsAFilePath(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.ListDirectory("Estatutos.pdf"); !errors.Is(err, library.ErrNotDirectory) {
+	if _, err := svc.ListDirectory("Estatutos.pdf"); !errors.Is(err, archive.ErrNotDirectory) {
 		t.Errorf("expected ErrNotDirectory, got %v", err)
 	}
 }
@@ -190,14 +190,14 @@ func TestOpenFile(t *testing.T) {
 
 func TestOpenFileNotFound(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.OpenFile("nope.pdf"); !errors.Is(err, library.ErrNotFound) {
+	if _, err := svc.OpenFile("nope.pdf"); !errors.Is(err, archive.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
 func TestOpenFileRejectsADirectoryPath(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.OpenFile("Actas"); !errors.Is(err, library.ErrIsDirectory) {
+	if _, err := svc.OpenFile("Actas"); !errors.Is(err, archive.ErrIsDirectory) {
 		t.Errorf("expected ErrIsDirectory, got %v", err)
 	}
 }
@@ -213,17 +213,17 @@ func TestSymlinkEscapingRootIsRejected(t *testing.T) {
 		t.Skipf("symlinks not supported in this environment: %v", err)
 	}
 
-	svc, err := library.NewService(root)
+	svc, err := archive.NewService(root)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
-	if _, err := svc.OpenFile("link.txt"); !errors.Is(err, library.ErrInvalidPath) {
+	if _, err := svc.OpenFile("link.txt"); !errors.Is(err, archive.ErrInvalidPath) {
 		t.Errorf("expected ErrInvalidPath for a symlink escaping root, got %v", err)
 	}
 }
 
 // listNames lists a directory and returns just the names, in the order given.
-func listNames(t *testing.T, svc *library.Service, dir string) []string {
+func listNames(t *testing.T, svc *archive.Service, dir string) []string {
 	t.Helper()
 	listing, err := svc.ListDirectory(dir)
 	if err != nil {
@@ -236,7 +236,7 @@ func listNames(t *testing.T, svc *library.Service, dir string) []string {
 	return names
 }
 
-func serviceWithFiles(t *testing.T, order string, names ...string) (*library.Service, string) {
+func serviceWithFiles(t *testing.T, order string, names ...string) (*archive.Service, string) {
 	t.Helper()
 	root := t.TempDir()
 	for _, name := range names {
@@ -245,7 +245,7 @@ func serviceWithFiles(t *testing.T, order string, names ...string) (*library.Ser
 	if order != "" {
 		write(t, filepath.Join(root, ".order.json"), order)
 	}
-	svc, err := library.NewService(root)
+	svc, err := archive.NewService(root)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}

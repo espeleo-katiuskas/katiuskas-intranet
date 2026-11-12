@@ -15,11 +15,11 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata" // the club's time zone must be there whatever the host has installed
 
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/clubtime"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
@@ -33,20 +33,10 @@ const flushEvery = 5 * time.Minute
 // foreignKeyViolationCode is what Postgres raises for activity of a person who has been deleted.
 const foreignKeyViolationCode = "23503"
 
-// clubZone is the time zone whose midnight ends a day of activity: the club's, not the server's.
-var clubZone = mustLoadZone("Europe/Madrid")
-
-func mustLoadZone(name string) *time.Location {
-	zone, err := time.LoadLocation(name)
-	if err != nil {
-		panic(err)
-	}
-	return zone
-}
-
-// Day is the calendar day, "2026-11-07", that a moment falls on in the club's time zone.
+// Day is the calendar day, "2026-11-07", that a moment falls on in the club's time zone (the zone
+// whose midnight ends a day of activity: the club's, not the server's).
 func Day(at time.Time) string {
-	return at.In(clubZone).Format("2006-01-02")
+	return clubtime.Day(at)
 }
 
 // personDay is a person's activity on one day.

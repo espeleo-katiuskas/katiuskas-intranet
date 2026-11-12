@@ -223,7 +223,7 @@ func (h *Handler) impersonate(w http.ResponseWriter, r *http.Request) {
 			h.actorLogin(r.Context()), r.PathValue("login")))
 	}
 	// Also carried as a cookie (see auth.SetSessionCookie) so a file
-	// opened straight in a new tab from library/userfiles while
+	// opened straight in a new tab from archive/userfiles while
 	// impersonating resolves as the impersonated person too, exactly
 	// like every other request the frontend makes with this same token.
 	auth.SetSessionCookie(w, raw, h.publicBaseURL, h.impersonationTokenTTL)

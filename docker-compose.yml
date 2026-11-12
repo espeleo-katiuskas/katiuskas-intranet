@@ -36,18 +36,19 @@ services:
       # TELEGRAM_BOT_USERNAME is independent of those two — set it (to
       # whatever @BotFather gave the bot, without the "@") to have the
       # login page offer Telegram as a way to sign in at all.
-      LIBRARY_ROOT: "/data/library"
+      ARCHIVE_ROOT: "/data/archive"
       USER_FILES_ROOT: "/data/user-files"
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
       TRANSACTION_FILES_ROOT: "/data/transaction-files"
+      LIBRARY_FILES_ROOT: "/data/library-files"
     volumes:
       # Club documents (estatutos, actas...) for every socio to browse —
-      # drop files straight into ./library on the host, no rebuild or
+      # drop files straight into ./archive on the host, no rebuild or
       # restart needed. Created automatically on first run if missing.
-      - ./library:/data/library
+      - ./archive:/data/archive
       # Per-person documents (a scanned DNI, a signed waiver...) — drop
       # files into ./user-files/<login>/ on the host, one subdirectory
-      # per login, same no-rebuild-needed story as ./library above.
+      # per login, same no-rebuild-needed story as ./archive above.
       - ./user-files:/data/user-files
       # A memoria's uploaded files (photos, PDFs...) — unlike the two
       # above, these arrive exclusively through the API (POST
@@ -58,6 +59,9 @@ services:
       # The tickets and invoices attached to transactions: they also arrive only through the API
       # (POST /transactions/{id}/files), so a named volume as well.
       - transaction_files_data:/data/transaction-files
+      # The covers and other files of the library's items: again only through the API
+      # (POST /library/items/{id}/resources, PUT /library/items/{id}/cover), so a named volume.
+      - library_files_data:/data/library-files
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,3 +106,4 @@ volumes:
   postgres_data:
   activity_resources_data:
   transaction_files_data:
+  library_files_data:
