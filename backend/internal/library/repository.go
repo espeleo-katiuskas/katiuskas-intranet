@@ -26,8 +26,9 @@ func NewRepository(pool db.PGX) *Repository {
 // itemSelect is an item with what is worked out from the rest: whether it is available (it has no
 // loan that is still open), whether it has a cover and how many comments and files it has.
 const itemSelect = `
-	SELECT b.id, b.type_id, t.name, b.title, b.author, b.publisher, b.year, b.isbn, b.location, b.description, b.created_at,
-		NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = b.id AND l.returned_at IS NULL),
+	SELECT b.id, b.type_id, t.name, b.title, b.author, b.publisher, b.year, b.isbn, b.location, b.description,
+		b.acquired_on::text, b.ended_on::text, b.end_reason, b.created_at,
+		b.ended_on IS NULL AND NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = b.id AND l.returned_at IS NULL),
 		EXISTS (SELECT 1 FROM library_resources r WHERE r.item_id = b.id AND r.is_cover),
 		(SELECT count(*) FROM library_comments c WHERE c.item_id = b.id),
 		(SELECT count(*) FROM library_resources r WHERE r.item_id = b.id AND NOT r.is_cover)
@@ -35,7 +36,7 @@ const itemSelect = `
 
 func scanItem(row pgx.Row, b *Item) error {
 	return row.Scan(&b.ID, &b.TypeID, &b.Type, &b.Title, &b.Author, &b.Publisher, &b.Year, &b.ISBN, &b.Location, &b.Description,
-		&b.CreatedAt, &b.Available, &b.HasCover, &b.CommentCount, &b.ResourceCount)
+		&b.AcquiredOn, &b.EndedOn, &b.EndReason, &b.CreatedAt, &b.Available, &b.HasCover, &b.CommentCount, &b.ResourceCount)
 }
 
 // List is every item, by title.
@@ -68,9 +69,11 @@ func (r *Repository) Get(ctx context.Context, id int64) (Item, error) {
 func (r *Repository) Create(ctx context.Context, in Input) (Item, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO library_items (type_id, title, author, publisher, year, isbn, location, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
-	`, in.TypeID, in.Title, in.Author, in.Publisher, in.Year, in.ISBN, in.Location, in.Description).Scan(&id)
+		INSERT INTO library_items (type_id, title, author, publisher, year, isbn, location, description,
+			acquired_on, ended_on, end_reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11) RETURNING id
+	`, in.TypeID, in.Title, in.Author, in.Publisher, in.Year, in.ISBN, in.Location, in.Description,
+		in.AcquiredOn, in.EndedOn, in.EndReason).Scan(&id)
 	if isForeignKeyViolation(err) {
 		return Item{}, ErrUnknownType
 	}
@@ -80,21 +83,52 @@ func (r *Repository) Create(ctx context.Context, in Input) (Item, error) {
 	return r.Get(ctx, id)
 }
 
-// Update replaces every field of an item.
+// Update replaces every field of an item. In one transaction, with the row locked (so that nobody
+// lends it meanwhile), it checks the dates against the loans: the item cannot have been acquired after
+// its first loan or left before its last movement, and it cannot leave while it is out on loan.
 func (r *Repository) Update(ctx context.Context, id int64, in Input) (Item, error) {
-	tag, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Item{}, err
+	}
+	defer tx.Rollback(ctx)
+	var locked int64
+	err = tx.QueryRow(ctx, `SELECT id FROM library_items WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Item{}, ErrNotFound
+	}
+	if err != nil {
+		return Item{}, err
+	}
+	var out, afterFirstLoan, beforeLastMovement bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM library_loans WHERE item_id = $1 AND returned_at IS NULL),
+			COALESCE($2::date > (SELECT min(lent_at) FROM library_loans WHERE item_id = $1), false),
+			COALESCE($3::date < (SELECT max(GREATEST(lent_at, returned_at)) FROM library_loans WHERE item_id = $1), false)
+	`, id, in.AcquiredOn, in.EndedOn).Scan(&out, &afterFirstLoan, &beforeLastMovement)
+	if err != nil {
+		return Item{}, err
+	}
+	if afterFirstLoan || beforeLastMovement {
+		return Item{}, ErrInvalidItemDates
+	}
+	if out && in.EndedOn != nil {
+		return Item{}, ErrItemOnLoan
+	}
+	_, err = tx.Exec(ctx, `
 		UPDATE library_items SET type_id = $2, title = $3, author = $4, publisher = $5, year = $6, isbn = $7,
-			location = $8, description = $9
+			location = $8, description = $9, acquired_on = $10::date, ended_on = $11::date, end_reason = $12
 		WHERE id = $1
-	`, id, in.TypeID, in.Title, in.Author, in.Publisher, in.Year, in.ISBN, in.Location, in.Description)
+	`, id, in.TypeID, in.Title, in.Author, in.Publisher, in.Year, in.ISBN, in.Location, in.Description,
+		in.AcquiredOn, in.EndedOn, in.EndReason)
 	if isForeignKeyViolation(err) {
 		return Item{}, ErrUnknownType
 	}
 	if err != nil {
 		return Item{}, err
 	}
-	if tag.RowsAffected() == 0 {
-		return Item{}, ErrNotFound
+	if err := tx.Commit(ctx); err != nil {
+		return Item{}, err
 	}
 	return r.Get(ctx, id)
 }
@@ -376,13 +410,21 @@ func (r *Repository) CreateLoan(ctx context.Context, itemID, userID, recordedBy 
 		return Loan{}, err
 	}
 	defer tx.Rollback(ctx)
-	var locked int64
-	err = tx.QueryRow(ctx, `SELECT id FROM library_items WHERE id = $1 FOR UPDATE`, itemID).Scan(&locked)
+	var ended, beforeAcquired bool
+	err = tx.QueryRow(ctx, `
+		SELECT ended_on IS NOT NULL, $2::date < acquired_on FROM library_items WHERE id = $1 FOR UPDATE
+	`, itemID, lentAt).Scan(&ended, &beforeAcquired)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Loan{}, ErrNotFound
 	}
 	if err != nil {
 		return Loan{}, err
+	}
+	if ended {
+		return Loan{}, ErrItemEnded
+	}
+	if beforeAcquired {
+		return Loan{}, ErrInvalidDates
 	}
 	var id int64
 	err = tx.QueryRow(ctx, `

@@ -2362,7 +2362,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LibraryItem" }
-        "400": { description: "invalid_body, type_required, unknown_library_type, title_required or invalid_item_year (outside 1000 to 2200)." }
+        "400": { description: "invalid_body, type_required, unknown_library_type, title_required, invalid_item_year (outside 1000 to 2200), acquired_on_required, invalid_date, invalid_item_dates (in the future, or the end before the start), invalid_end_reason or end_incomplete (the end date and its reason go together)." }
         "403": { description: "Requires admin, board or biblioteca." }
 
   /library/items/{id}:
@@ -2396,9 +2396,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LibraryItem" }
-        "400": { description: "invalid_id, invalid_body, type_required, unknown_library_type, title_required or invalid_item_year." }
+        "400": { description: "invalid_id, invalid_body and everything creating can answer, plus invalid_item_dates when the dates disagree with its loans (acquired after its first loan, ended before its last lend or return)." }
         "403": { description: "Requires admin, board or biblioteca." }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "item_on_loan — it is out, so it cannot be given an end date." }
     delete:
       summary: Delete an item
       description: >
@@ -2652,10 +2653,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LibraryLoan" }
-        "400": { description: "invalid_id, invalid_body, loan_login_required, invalid_date (not YYYY-MM-DD) or invalid_dates (in the future)." }
+        "400": { description: "invalid_id, invalid_body, loan_login_required, invalid_date (not YYYY-MM-DD) or invalid_dates (in the future, or before the item was acquired)." }
         "403": { description: "Requires admin, board, biblioteca or material." }
         "404": { description: "not_found — no such item, or nobody has that login." }
-        "409": { description: "item_not_available (it is out) or loan_recipient_not_member." }
+        "409": { description: "item_not_available (it is out), item_ended (it has left the library) or loan_recipient_not_member." }
 
   /library/items/{id}/loans/{loanId}/return:
     post:
@@ -5863,9 +5864,12 @@ components:
 
     LibraryItemInput:
       type: object
-      required: [type_id, title]
+      required: [type_id, acquired_on, title]
       properties:
         type_id: { type: integer, description: "A type of GET /library/types." }
+        acquired_on: { type: string, format: date, description: "The day the club got it; never in the future." }
+        ended_on: { type: string, format: date, nullable: true, description: "The day it left the library for good; with end_reason, or neither. Never in the future or before acquired_on." }
+        end_reason: { type: string, enum: [lost, withdrawn, sold], nullable: true }
         title: { type: string }
         author: { type: string, nullable: true }
         publisher: { type: string, nullable: true }
@@ -5890,8 +5894,11 @@ components:
         isbn: { type: string }
         location: { type: string }
         description: { type: string }
+        acquired_on: { type: string, format: date }
+        ended_on: { type: string, format: date, description: "Present, with end_reason, when the item left the library for good." }
+        end_reason: { type: string, enum: [lost, withdrawn, sold] }
         created_at: { type: string, format: date-time }
-        available: { type: boolean, description: "False while the item is out on loan." }
+        available: { type: boolean, description: "False while the item is out on loan and once it has left the library." }
         has_cover: { type: boolean, description: "The cover is served at GET /library/items/{id}/cover." }
         comment_count: { type: integer }
         resource_count: { type: integer, description: "The files that are not the cover." }

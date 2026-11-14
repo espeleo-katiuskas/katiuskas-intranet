@@ -188,7 +188,7 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 // newItem creates an item as the librarian and returns it.
 func (e *env) newItem(title string) library.Item {
 	e.t.Helper()
-	rec := e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "title": title})
+	rec := e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": title})
 	status(e.t, rec, http.StatusCreated)
 	return decode[library.Item](e.t, rec)
 }
@@ -213,8 +213,8 @@ func TestPermissions(t *testing.T) {
 		body         any
 	}
 	manageOnly := []call{
-		{"POST", "/api/v1/library/items", map[string]any{"type_id": e.libro, "title": "Otro"}},
-		{"PUT", itemPath(item, ""), map[string]any{"type_id": e.libro, "title": "Cambiado"}},
+		{"POST", "/api/v1/library/items", map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "Otro"}},
+		{"PUT", itemPath(item, ""), map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "Cambiado"}},
 		{"PUT", itemPath(item, "/cover"), nil}, // refused before the body is read
 		{"POST", "/api/v1/library/types", map[string]any{"name": "Folleto"}},
 		{"PUT", fmt.Sprintf("/api/v1/library/types/%d", e.libro), map[string]any{"name": "Libro"}},
@@ -272,7 +272,7 @@ func TestPermissions(t *testing.T) {
 func TestItemCRUD(t *testing.T) {
 	e := newEnv(t)
 	rec := e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{
-		"type_id": e.libro, "title": "  La Cueva  ", "author": "Ana", "publisher": "  ", "year": 1999, "isbn": "978-1", "location": "Estante 2",
+		"type_id": e.libro, "acquired_on": "2020-01-01", "title": "  La Cueva  ", "author": "Ana", "publisher": "  ", "year": 1999, "isbn": "978-1", "location": "Estante 2",
 		"description": "Un ejemplar.",
 	})
 	status(t, rec, http.StatusCreated)
@@ -293,12 +293,12 @@ func TestItemCRUD(t *testing.T) {
 		t.Errorf("expected them by title, ignoring case, got %v", titles)
 	}
 
-	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "title": "   "}), 400, "title_required")
-	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "title": "X", "year": 3000}), 400, "invalid_item_year")
-	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "title": "X", "year": 999}), 400, "invalid_item_year")
+	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "   "}), 400, "title_required")
+	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "X", "year": 3000}), 400, "invalid_item_year")
+	errorCode(t, e.json("POST", "/api/v1/library/items", e.biblioteca.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "X", "year": 999}), 400, "invalid_item_year")
 
 	// An edit replaces everything: what is left out is cleared.
-	rec = e.json("PUT", itemPath(item, ""), e.board.token, map[string]any{"type_id": e.libro, "title": "La Cueva II", "author": "Beto"})
+	rec = e.json("PUT", itemPath(item, ""), e.board.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "La Cueva II", "author": "Beto"})
 	status(t, rec, http.StatusOK)
 	edited := decode[library.Item](t, rec)
 	if edited.Title != "La Cueva II" || *edited.Author != "Beto" || edited.Year != nil || edited.Location != nil {
@@ -309,7 +309,7 @@ func TestItemCRUD(t *testing.T) {
 	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha editado el ejemplar «La Cueva»") || !strings.Contains(msg, "Title:") {
 		t.Errorf("unexpected edit notice: %q", msg)
 	}
-	errorCode(t, e.json("PUT", "/api/v1/library/items/987654", e.board.token, map[string]any{"type_id": e.libro, "title": "X"}), 404, "not_found")
+	errorCode(t, e.json("PUT", "/api/v1/library/items/987654", e.board.token, map[string]any{"type_id": e.libro, "acquired_on": "2020-01-01", "title": "X"}), 404, "not_found")
 	errorCode(t, e.json("GET", "/api/v1/library/items/abc", e.member.token, nil), 400, "invalid_id")
 
 	status(t, e.json("DELETE", itemPath(item, ""), e.biblioteca.token, nil), http.StatusNoContent)
@@ -647,15 +647,15 @@ func TestTypes(t *testing.T) {
 		return e.json("POST", "/api/v1/library/items", e.biblioteca.token, body)
 	}
 	errorCode(t, create(map[string]any{"title": "Sin tipo"}), 400, "type_required")
-	errorCode(t, create(map[string]any{"title": "Raro", "type_id": 987654}), 400, "unknown_library_type")
-	rec = create(map[string]any{"title": "Guía", "type_id": folleto.ID})
+	errorCode(t, create(map[string]any{"title": "Raro", "type_id": 987654, "acquired_on": "2020-01-01"}), 400, "unknown_library_type")
+	rec = create(map[string]any{"title": "Guía", "type_id": folleto.ID, "acquired_on": "2020-01-01"})
 	status(t, rec, http.StatusCreated)
 	item := decode[library.Item](t, rec)
 	if item.TypeID != folleto.ID || item.Type != "FOLLETO" {
 		t.Errorf("the item should carry its type: %+v", item)
 	}
 	errorCode(t, e.json("PUT", itemPath(item, ""), e.board.token, map[string]any{"title": "Guía"}), 400, "type_required")
-	rec = e.json("PUT", itemPath(item, ""), e.board.token, map[string]any{"title": "Guía", "type_id": e.libro})
+	rec = e.json("PUT", itemPath(item, ""), e.board.token, map[string]any{"title": "Guía", "type_id": e.libro, "acquired_on": "2020-01-01"})
 	status(t, rec, http.StatusOK)
 	if got := decode[library.Item](t, rec); got.Type != "Libro" {
 		t.Errorf("expected the type to change: %+v", got)
@@ -670,4 +670,91 @@ func TestTypes(t *testing.T) {
 	errorCode(t, e.json("DELETE", fmt.Sprintf("/api/v1/library/types/%d", e.libro), e.board.token, nil), 409, "library_type_in_use")
 	status(t, e.json("DELETE", path, e.board.token, nil), http.StatusNoContent)
 	errorCode(t, e.json("DELETE", path, e.board.token, nil), 404, "not_found")
+}
+
+// The dates of an item: when it was acquired (required) and, together, when and why it left the
+// library for good (lost, withdrawn or sold). An item that has left is not available and cannot be
+// lent; one that is out cannot leave; the dates agree with the loans.
+func TestItemDates(t *testing.T) {
+	e := newEnv(t)
+	body := func(extra map[string]any) map[string]any {
+		m := map[string]any{"type_id": e.libro, "title": "Topo", "acquired_on": "2020-01-01"}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	create := func(m map[string]any) *httptest.ResponseRecorder {
+		return e.json("POST", "/api/v1/library/items", e.biblioteca.token, m)
+	}
+	tomorrow := time.Now().AddDate(0, 0, 2).Format("2006-01-02")
+
+	// What is refused.
+	errorCode(t, create(map[string]any{"type_id": e.libro, "title": "Topo"}), 400, "acquired_on_required")
+	errorCode(t, create(body(map[string]any{"acquired_on": "ayer"})), 400, "invalid_date")
+	errorCode(t, create(body(map[string]any{"acquired_on": tomorrow})), 400, "invalid_item_dates")
+	errorCode(t, create(body(map[string]any{"ended_on": "2021-01-01"})), 400, "end_incomplete")
+	errorCode(t, create(body(map[string]any{"end_reason": "sold"})), 400, "end_incomplete")
+	errorCode(t, create(body(map[string]any{"ended_on": "2021-01-01", "end_reason": "burnt"})), 400, "invalid_end_reason")
+	errorCode(t, create(body(map[string]any{"ended_on": "2019-12-31", "end_reason": "lost"})), 400, "invalid_item_dates")
+	errorCode(t, create(body(map[string]any{"ended_on": tomorrow, "end_reason": "lost"})), 400, "invalid_item_dates")
+
+	// An item that has left is created or edited into being unavailable, with its date and reason.
+	rec := create(body(nil))
+	status(t, rec, http.StatusCreated)
+	item := decode[library.Item](t, rec)
+	if item.AcquiredOn != "2020-01-01" || item.EndedOn != nil || item.EndReason != nil || !item.Available {
+		t.Errorf("unexpected item: %+v", item)
+	}
+	rec = e.json("PUT", itemPath(item, ""), e.board.token, body(map[string]any{"ended_on": " 2021-05-01 ", "end_reason": "sold"}))
+	status(t, rec, http.StatusOK)
+	item = decode[library.Item](t, rec)
+	if item.Available || item.EndedOn == nil || *item.EndedOn != "2021-05-01" || *item.EndReason != "sold" {
+		t.Errorf("an item that has left should say so and not be available: %+v", item)
+	}
+	e.notifier.wait(t) // the creation
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "EndReason") && !strings.Contains(msg, "sold") {
+		t.Errorf("the edit notice should say it has left: %q", msg)
+	}
+
+	// It cannot be lent while it is gone; taking the end date away brings it back.
+	borrower := e.person("member")
+	lend := func(extra map[string]any) *httptest.ResponseRecorder {
+		m := map[string]any{"login": borrower.user.Login}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return e.json("POST", itemPath(item, "/loans"), e.material.token, m)
+	}
+	errorCode(t, lend(nil), 409, "item_ended")
+	rec = e.json("PUT", itemPath(item, ""), e.board.token, body(nil))
+	status(t, rec, http.StatusOK)
+	if got := decode[library.Item](t, rec); !got.Available || got.EndedOn != nil || got.EndReason != nil {
+		t.Errorf("without the end date it should be available again: %+v", got)
+	}
+
+	// A loan cannot start before the item was acquired.
+	errorCode(t, lend(map[string]any{"lent_at": "2019-12-31"}), 400, "invalid_dates")
+
+	// While it is out it cannot leave; the dates agree with the loans.
+	rec = lend(map[string]any{"lent_at": "2021-01-10"})
+	status(t, rec, http.StatusCreated)
+	loan := decode[library.Loan](t, rec)
+	leave := body(map[string]any{"ended_on": "2021-06-01", "end_reason": "lost"})
+	errorCode(t, e.json("PUT", itemPath(item, ""), e.board.token, leave), 409, "item_on_loan")
+	errorCode(t, e.json("PUT", itemPath(item, ""), e.board.token, body(map[string]any{"acquired_on": "2021-02-01"})), 400, "invalid_item_dates")
+	status(t, e.json("POST", itemPath(item, fmt.Sprintf("/loans/%d/return", loan.ID)), e.material.token, map[string]any{"returned_at": "2021-01-20"}), http.StatusOK)
+	errorCode(t, e.json("PUT", itemPath(item, ""), e.board.token, body(map[string]any{"ended_on": "2021-01-15", "end_reason": "lost"})), 400, "invalid_item_dates")
+	rec = e.json("PUT", itemPath(item, ""), e.board.token, leave)
+	status(t, rec, http.StatusOK)
+	if got := decode[library.Item](t, rec); got.Available || *got.EndReason != "lost" {
+		t.Errorf("expected it to have left: %+v", got)
+	}
+	// Its loan history stays, and it is not in the list of what is out.
+	if loans := decode[[]library.Loan](t, e.json("GET", itemPath(item, "/loans"), e.material.token, nil)); len(loans) != 1 {
+		t.Errorf("the history of loans should stay: %+v", loans)
+	}
+	if open := decode[[]library.Loan](t, e.json("GET", "/api/v1/library/loans", e.material.token, nil)); len(open) != 0 {
+		t.Errorf("nothing should be out: %+v", open)
+	}
 }

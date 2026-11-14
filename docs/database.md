@@ -931,11 +931,17 @@ A row is one copy of an item: two copies of a title are two rows.
 | `isbn` | text | yes |  |
 | `location` | text | yes |  |
 | `description` | text | yes |  |
+| `acquired_on` | date | no | CURRENT_DATE |
+| `ended_on` | date | yes |  |
+| `end_reason` | text | yes |  |
 | `created_at` | timestamptz | no | now() |
 
 Notes on the columns:
 
 - `location`: Where it is kept in the club's rooms (a shelf mark, a box).
+- `acquired_on`: The day the club got it.
+- `ended_on`, `end_reason`: If it left the library for good, the day and why: `lost`, `withdrawn`
+  or `sold`.
 
 Constraints:
 
@@ -943,9 +949,13 @@ Constraints:
 - `type_id` → `library_types(id)`
 - `title` is not blank
 - `year` between 1000 and 2200
+- `end_reason` is `lost`, `withdrawn` or `sold`
+- `library_items_end_complete`: `ended_on` and `end_reason` are both set or both null
+- `library_items_end_after_start`: `ended_on` is not before `acquired_on`
 - index `idx_library_items_type_id` on `(type_id)`
 
-Whether an item is available is not stored: it is when it has no loan that is still open.
+Whether an item is available is not stored: it is when it has no `ended_on` and no loan that is
+still open.
 
 ### `library_loans`
 
@@ -1682,3 +1692,5 @@ at the end; that database has to be recreated when a new migration appears.
 - `00057_user_activity.sql`: `user_activity`
 - `00058_library.sql`: the role `biblioteca` and the tables `library_types`, `library_items`,
   `library_loans`, `library_comments` and `library_resources`
+- `00059_library_item_dates.sql`: `acquired_on`, `ended_on` and `end_reason` of `library_items`; the
+  items that already existed count as acquired on the day they were added (the club's day)

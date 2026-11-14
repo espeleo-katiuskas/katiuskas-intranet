@@ -22,6 +22,13 @@ const MaxFileSize = 10 << 20 // 10 MiB
 // MaxTypeNameLength is the longest name a type may have, in characters.
 const MaxTypeNameLength = 60
 
+// The reasons an item can leave the library for good.
+const (
+	EndLost      = "lost"
+	EndWithdrawn = "withdrawn"
+	EndSold      = "sold"
+)
+
 // MaxCommentLength is the most a comment may say, in characters.
 const MaxCommentLength = 2000
 
@@ -32,18 +39,26 @@ var (
 	ErrCoverNotFound    = errors.New("the item has no cover")
 	ErrLoanNotFound     = errors.New("loan not found")
 	ErrBlankTitle       = errors.New("the title is required")
-	ErrTypeRequired     = errors.New("the type is required")
-	ErrUnknownType      = errors.New("there is no such type")
-	ErrTypeNotFound     = errors.New("type not found")
-	ErrBlankTypeName    = errors.New("the name of the type is required")
-	ErrTypeNameTooLong  = errors.New("the name of the type is too long")
-	ErrDuplicateType    = errors.New("there is already a type with that name")
-	ErrTypeInUse        = errors.New("the type has items and cannot be deleted")
-	ErrInvalidYear      = errors.New("the year must be between 1000 and 2200")
-	ErrBlankComment     = errors.New("the comment is empty")
-	ErrCommentTooLong   = errors.New("the comment is too long")
-	ErrEmptyFile        = errors.New("the file is empty")
-	ErrNotAnImage       = errors.New("the cover has to be an image")
+	ErrAcquiredRequired = errors.New("the date the item was acquired is required")
+	ErrInvalidEndReason = errors.New("the reason an item left must be lost, withdrawn or sold")
+	ErrEndIncomplete    = errors.New("the date and the reason an item left go together")
+	ErrInvalidItemDates = errors.New("the dates of the item are not valid")
+	// ErrItemEnded means the item has left the library (lost, withdrawn or sold): it cannot be lent.
+	ErrItemEnded = errors.New("the item has left the library and cannot be lent")
+	// ErrItemOnLoan means an item that is out on loan cannot be given its end date.
+	ErrItemOnLoan      = errors.New("the item is out on loan: record its return first")
+	ErrTypeRequired    = errors.New("the type is required")
+	ErrUnknownType     = errors.New("there is no such type")
+	ErrTypeNotFound    = errors.New("type not found")
+	ErrBlankTypeName   = errors.New("the name of the type is required")
+	ErrTypeNameTooLong = errors.New("the name of the type is too long")
+	ErrDuplicateType   = errors.New("there is already a type with that name")
+	ErrTypeInUse       = errors.New("the type has items and cannot be deleted")
+	ErrInvalidYear     = errors.New("the year must be between 1000 and 2200")
+	ErrBlankComment    = errors.New("the comment is empty")
+	ErrCommentTooLong  = errors.New("the comment is too long")
+	ErrEmptyFile       = errors.New("the file is empty")
+	ErrNotAnImage      = errors.New("the cover has to be an image")
 	// ErrItemHasLoans means an item that has been lent cannot be deleted: its history of loans stays.
 	ErrItemHasLoans = errors.New("the item has been lent and cannot be deleted")
 	// ErrNotAvailable means the item is out: it has a loan that has not been returned.
@@ -69,18 +84,23 @@ const MaxResourceTitleLength = 200
 // Item is one copy of an item. It says whether it is available but never who has it: that is in the
 // loans, which only whoever manages them reads.
 type Item struct {
-	ID          int64     `json:"id"`
-	TypeID      int64     `json:"type_id"`
-	Type        string    `json:"type"`
-	Title       string    `json:"title"`
-	Author      *string   `json:"author,omitempty"`
-	Publisher   *string   `json:"publisher,omitempty"`
-	Year        *int      `json:"year,omitempty"`
-	ISBN        *string   `json:"isbn,omitempty"`
-	Location    *string   `json:"location,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	// Available is false while the item is out on loan.
+	ID          int64   `json:"id"`
+	TypeID      int64   `json:"type_id"`
+	Type        string  `json:"type"`
+	Title       string  `json:"title"`
+	Author      *string `json:"author,omitempty"`
+	Publisher   *string `json:"publisher,omitempty"`
+	Year        *int    `json:"year,omitempty"`
+	ISBN        *string `json:"isbn,omitempty"`
+	Location    *string `json:"location,omitempty"`
+	Description *string `json:"description,omitempty"`
+	// AcquiredOn is the day the club got it (YYYY-MM-DD). EndedOn and EndReason, together, say that it
+	// left the library for good, when and why (lost, withdrawn or sold).
+	AcquiredOn string    `json:"acquired_on"`
+	EndedOn    *string   `json:"ended_on,omitempty"`
+	EndReason  *string   `json:"end_reason,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	// Available is false while the item is out on loan and once it has left the library.
 	Available bool `json:"available"`
 	// HasCover says whether the item has a cover, which is served at GET /library/items/{id}/cover.
 	HasCover bool `json:"has_cover"`
@@ -100,6 +120,9 @@ type Input struct {
 	ISBN        *string
 	Location    *string
 	Description *string
+	AcquiredOn  string
+	EndedOn     *string
+	EndReason   *string
 }
 
 // Type is a kind of item (book, magazine, map…): a catalogue that whoever manages the library edits.

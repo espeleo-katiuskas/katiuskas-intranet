@@ -251,7 +251,9 @@ comments, files and photos; creating and editing items, and the cover, is admin,
 `biblioteca` role; seeing loans and recording lends and returns is those plus `material` (so `board`
 always goes with it); deleting a loan is admin only. Only a current member can be lent an item; an
 item has at most one open loan (partial unique index); no due date, only `lent_at` and
-`returned_at`; an item that was ever lent cannot be deleted. Files and covers live in
+`returned_at`; an item has `acquired_on` and, optionally, `ended_on` with `end_reason` (lost,
+withdrawn, sold): once it has left it is not available and cannot be lent, and while it is out it
+cannot leave; an item that was ever lent cannot be deleted. Files and covers live in
 `LIBRARY_FILES_ROOT` (default `library-files` next to `ACTIVITY_RESOURCES_ROOT`), keyed by row id,
 created once and **never rewritten**, like the other file trees.
 

@@ -2050,6 +2050,12 @@ button.heat-cell[aria-pressed='true'] {
   color: #8a3a33;
 }
 
+.badge-gone {
+  background: var(--surface-muted);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
 .library-header {
   display: flex;
   gap: 20px;

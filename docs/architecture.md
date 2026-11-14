@@ -827,8 +827,8 @@ can be neither renamed nor deleted (409 `fixed_type`) and a type with items is n
 ### Library (the `library_*` tables)
 
 The club's library (books, magazines, maps, topographies…), apart from the document archive. A row
-of `library_items` is one copy; it is **available** when it has no loan that is still open, and
-anybody who can sign in sees that but never **who has it**.
+of `library_items` is one copy; it is **available** when it has not left the library and has no loan
+that is still open, and anybody who can sign in sees that but never **who has it**.
 
 **Rules**
 
@@ -838,6 +838,10 @@ anybody who can sign in sees that but never **who has it**.
   cannot be lent again (409 `item_not_available`), only a member now can borrow it (409
   `loan_recipient_not_member`), and neither date can be in the future or a return before its loan
   (400 `invalid_dates`); the day is the club's (Europe/Madrid).
+- An item has the day it was acquired and, optionally, the day it left the library for good and
+  why (lost, withdrawn or sold). One that has left is not available and cannot be lent (409
+  `item_ended`); one that is out cannot leave (409 `item_on_loan`); the dates cannot be in the
+  future and have to agree with the loans (400 `invalid_item_dates`).
 - An item that has ever been lent cannot be deleted: its history stays (409 `item_has_loans`). One
   that has not is deleted with its comments and files.
 - Everybody who can sign in adds comments and files (photos, documents, topographies, scans) to an

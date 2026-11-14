@@ -106,6 +106,12 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrLoanNotFound, http.StatusNotFound, "not_found"},
 		{ErrTypeNotFound, http.StatusNotFound, "not_found"},
 		{ErrBlankTitle, http.StatusBadRequest, "title_required"},
+		{ErrAcquiredRequired, http.StatusBadRequest, "acquired_on_required"},
+		{ErrInvalidEndReason, http.StatusBadRequest, "invalid_end_reason"},
+		{ErrEndIncomplete, http.StatusBadRequest, "end_incomplete"},
+		{ErrInvalidItemDates, http.StatusBadRequest, "invalid_item_dates"},
+		{ErrItemEnded, http.StatusConflict, "item_ended"},
+		{ErrItemOnLoan, http.StatusConflict, "item_on_loan"},
 		{ErrTypeRequired, http.StatusBadRequest, "type_required"},
 		{ErrUnknownType, http.StatusBadRequest, "unknown_library_type"},
 		{ErrBlankTypeName, http.StatusBadRequest, "type_name_required"},
@@ -154,6 +160,9 @@ type itemBody struct {
 	ISBN        *string `json:"isbn"`
 	Location    *string `json:"location"`
 	Description *string `json:"description"`
+	AcquiredOn  string  `json:"acquired_on"`
+	EndedOn     *string `json:"ended_on"`
+	EndReason   *string `json:"end_reason"`
 }
 
 func (b itemBody) input() Input { return Input(b) }
@@ -267,7 +276,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // itemAuditFields are the Item fields an edit's notification diffs: those Input can change.
-var itemAuditFields = []string{"Type", "Title", "Author", "Publisher", "Year", "ISBN", "Location", "Description"}
+var itemAuditFields = []string{"Type", "Title", "Author", "Publisher", "Year", "ISBN", "Location", "Description",
+	"AcquiredOn", "EndedOn", "EndReason"}
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id")

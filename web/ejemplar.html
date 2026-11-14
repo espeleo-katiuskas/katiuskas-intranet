@@ -22,7 +22,7 @@
     <div class="library-header-text">
       <h1 id="library-title">Ejemplar</h1>
       <p class="subtitle" id="library-meta"></p>
-      <p><span id="library-status" class="badge"></span></p>
+      <p id="library-status"></p>
       <div class="detail-list" id="library-details"></div>
       <div class="panel-actions" data-roles="admin,board,biblioteca">
         <button id="edit-item" type="button" class="btn btn-secondary btn-small">Editar ejemplar</button>
@@ -62,6 +62,23 @@
         <div class="field">
           <label for="eb-isbn">ISBN <span class="optional">(opcional)</span></label>
           <input id="eb-isbn" name="isbn" type="text">
+        </div>
+        <div class="field">
+          <label for="eb-acquired">Adquirido el</label>
+          <input id="eb-acquired" name="acquired_on" type="date" required>
+        </div>
+        <div class="field">
+          <label for="eb-ended">Baja el <span class="optional">(opcional)</span></label>
+          <input id="eb-ended" name="ended_on" type="date">
+        </div>
+        <div class="field">
+          <label for="eb-end-reason">Motivo de la baja <span class="optional">(con la fecha)</span></label>
+          <select id="eb-end-reason" name="end_reason">
+            <option value="">—</option>
+            <option value="lost">Pérdida</option>
+            <option value="withdrawn">Retirada</option>
+            <option value="sold">Venta</option>
+          </select>
         </div>
         <div class="field span-2">
           <label for="eb-location">Dónde está en el local <span class="optional">(opcional)</span></label>

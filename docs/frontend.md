@@ -79,32 +79,37 @@ looked for as text as usual (`>30 petzl`). The box's tooltip explains it.
 **Library (`/biblioteca`, `/ejemplar?id=…`).** `biblioteca.html`/`library-items.js` is the
 catalogue: a table with a thumbnail of the cover, title (a link, with where it is kept), type,
 author, year and a badge "Disponible"/"Prestado" — which is all a member learns about a loan: never
-who has it —, with a search box that looks in everything an item says (accents and case ignored,
-every word typed has to appear, the type included), a select of types and a "Solo los disponibles"
-checkbox. Admin, board and `biblioteca` also get "Tipos" (a dialog that lists the types with how
-many items have each, to rename, delete — not while it has items — or add one; the page loads again
-after each change, and the filter and the selects of the forms follow) and "+ Nuevo ejemplar" (a
-dialog; creating it goes straight to the item's page, where the cover is added); admin, board,
-`biblioteca` and `material` get, below, "Ejemplares prestados" (`GET /library/loans`: item, member,
-since, and a "Devolver" button that records the return today). `ejemplar.html`/`library-item.js` is
-one item: the type next to the author and year under the title, the cover (a plain `<img>` pointing
-at `/library/items/{id}/cover`, which the session cookie lets through, so that no blob has to be
-fetched for each one; the browser revalidates it when the cover changes), the data, then
-"Comentarios" and "Fotos y documentos", which every member can add to (an image is shown and opens
-in a tab; anything else is a link that downloads; "Borrar" appears on what the person wrote, and on
-everything for admin, board and `biblioteca`), and, for the four roles that see loans, "Préstamos":
-who has the item and since when, a form to lend it (a picker of the members, a date that defaults to
-today and cannot be later, notes), the history, and "Devolver", which asks for the date of the
-return (today by default; the date input is limited between the day of the loan and today). Admin,
-board and `biblioteca` also have "Editar ejemplar" (a dialog, with the select of types filled when
-it opens), "Añadir/Cambiar portada" (a file input that sends the image at once, `PUT
-/library/items/{id}/cover`), "Quitar portada" and "Borrar ejemplar"; admin alone has "Borrar" on a
-loan. All of this is in `data-roles` blocks that the page removes from the DOM for the rest, so
-`library-item.js` and `library-items.js` only touch those elements when the person has the role
-(`canManage`, `canLoan`): a plain member's page must work with them gone. The names of the people
-come from the directory (`library-common.js`), and the dates the API gives as `2026-10-01` are shown
-with `dateOnly`, which builds a local date instead of parsing the string as UTC. The two pages count
-as one entry of the menu, "Biblioteca" (`ACTIVE_ALIASES`).
+who has it — or, for an item that has left the library, "Perdido"/"Retirado"/"Vendido" (grey,
+`statusBadge` in `library-common.js`), with a search box that looks in everything an item says
+(accents and case ignored, every word typed has to appear, the type included), a select of types and
+a "Solo los disponibles" checkbox. Admin, board and `biblioteca` also get "Tipos" (a dialog that
+lists the types with how many items have each, to rename, delete — not while it has items — or add
+one; the page loads again after each change, and the filter and the selects of the forms follow) and
+"+ Nuevo ejemplar" (a dialog, with the date it was acquired, today by default; creating it goes
+straight to the item's page, where the cover is added); admin, board, `biblioteca` and `material`
+get, below, "Ejemplares prestados" (`GET /library/loans`: item, member, since, and a "Devolver"
+button that records the return today). `ejemplar.html`/`library-item.js` is one item: the type next
+to the author and year under the title, the date it was acquired and, if it has left, "Baja" with
+the reason and the date, the cover (a plain `<img>` pointing at `/library/items/{id}/cover`, which
+the session cookie lets through, so that no blob has to be fetched for each one; the browser
+revalidates it when the cover changes), the data, then "Comentarios" and "Fotos y documentos", which
+every member can add to (an image is shown and opens in a tab; anything else is a link that
+downloads; "Borrar" appears on what the person wrote, and on everything for admin, board and
+`biblioteca`), and, for the four roles that see loans, "Préstamos": who has the item and since when
+(or that it has left the library, in which case there is no form to lend it), a form to lend it (a
+picker of the members, a date that defaults to today and cannot be later, notes), the history, and
+"Devolver", which asks for the date of the return (today by default; the date input is limited
+between the day of the loan and today). Admin, board and `biblioteca` also have "Editar ejemplar" (a
+dialog, with the select of types filled when it opens, and the dates: "Adquirido el" and, to give
+the item its end, "Baja el" with "Motivo de la baja"; clearing both brings it back), "Añadir/Cambiar
+portada" (a file input that sends the image at once, `PUT /library/items/{id}/cover`), "Quitar
+portada" and "Borrar ejemplar"; admin alone has "Borrar" on a loan. All of this is in `data-roles`
+blocks that the page removes from the DOM for the rest, so `library-item.js` and `library-items.js`
+only touch those elements when the person has the role (`canManage`, `canLoan`): a plain member's
+page must work with them gone. The names of the people come from the directory
+(`library-common.js`), and the dates the API gives as `2026-10-01` are shown with `dateOnly`, which
+builds a local date instead of parsing the string as UTC. The two pages count as one entry of the
+menu, "Biblioteca" (`ACTIVE_ALIASES`).
 
 **Material that is out.** `/material` has a "Material prestado o alquilado" button (for admin, board
 and material) to `/material-prestado` (`loaned-material.js`), which has what used to be at the

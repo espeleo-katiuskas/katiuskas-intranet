@@ -43,6 +43,51 @@ func blankToNil(p *string) *string {
 	return &trimmed
 }
 
+// itemDay reads a date of an item: YYYY-MM-DD, and never a day that has not come yet.
+func itemDay(raw string) (string, error) {
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(raw))
+	if err != nil {
+		return "", ErrInvalidDate
+	}
+	date := parsed.Format("2006-01-02")
+	if date > clubtime.Today() {
+		return "", ErrInvalidItemDates
+	}
+	return date, nil
+}
+
+// cleanDates checks when the item was acquired and, if it has left the library, when and why.
+func cleanDates(in Input) (Input, error) {
+	if strings.TrimSpace(in.AcquiredOn) == "" {
+		return Input{}, ErrAcquiredRequired
+	}
+	var err error
+	if in.AcquiredOn, err = itemDay(in.AcquiredOn); err != nil {
+		return Input{}, err
+	}
+	in.EndedOn, in.EndReason = blankToNil(in.EndedOn), blankToNil(in.EndReason)
+	if (in.EndedOn == nil) != (in.EndReason == nil) {
+		return Input{}, ErrEndIncomplete
+	}
+	if in.EndedOn == nil {
+		return in, nil
+	}
+	switch *in.EndReason {
+	case EndLost, EndWithdrawn, EndSold:
+	default:
+		return Input{}, ErrInvalidEndReason
+	}
+	ended, err := itemDay(*in.EndedOn)
+	if err != nil {
+		return Input{}, err
+	}
+	if ended < in.AcquiredOn {
+		return Input{}, ErrInvalidItemDates
+	}
+	in.EndedOn = &ended
+	return in, nil
+}
+
 func clean(in Input) (Input, error) {
 	if in.TypeID <= 0 {
 		return Input{}, ErrTypeRequired
@@ -56,7 +101,7 @@ func clean(in Input) (Input, error) {
 	if in.Year != nil && (*in.Year < 1000 || *in.Year > 2200) {
 		return Input{}, ErrInvalidYear
 	}
-	return in, nil
+	return cleanDates(in)
 }
 
 func (s *Service) List(ctx context.Context) ([]Item, error) { return s.repo.List(ctx) }

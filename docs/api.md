@@ -635,15 +635,19 @@ can do, board can do.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `library_type_in_use`
 - **GET** `/library/items` — *Any baseline role*. Every item, by title, each with its type,
-  `available`, `has_cover` and the number of its comments and files.
+  `acquired_on`, `ended_on` and `end_reason`, `available`, `has_cover` and the number of its
+  comments and files.
   - returns: 200 `[LibraryItem]`
 - **POST** `/library/items` — *Admin, board or biblioteca*. Adds an item.
   - body: `type_id*` (a type of `/library/types`), `title*`, `author`, `publisher`, `year` (1000 to
     2200), `isbn`, `location` (where it is in the club's rooms), `description`; blank text counts as
-    no value
+    no value; `acquired_on*` (the day the club got it), and `ended_on` with `end_reason` (`lost`,
+    `withdrawn` or `sold`) if it has left the library for good: both or none, and no date in the
+    future or `ended_on` before `acquired_on`
   - returns: 201 `LibraryItem`
   - errors: 400 `invalid_body`, `type_required`, `unknown_library_type`, `title_required`,
-    `invalid_item_year`
+    `invalid_item_year`, `acquired_on_required`, `invalid_date`, `invalid_item_dates`,
+    `invalid_end_reason`, `end_incomplete`
 - **GET** `/library/items/{id}` — *Any baseline role*. One item.
   - returns: 200 `LibraryItem`
   - errors: 400 `invalid_id`; 404 `not_found`
@@ -651,8 +655,9 @@ can do, board can do.
   (what is left out is cleared).
   - body: the same as creating
   - returns: 200 `LibraryItem`
-  - errors: 400 `invalid_id`, `invalid_body`, `type_required`, `unknown_library_type`,
-    `title_required`, `invalid_item_year`; 404 `not_found`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`; 409 `item_on_loan` (it cannot leave
+    while it is out). The dates also have to agree with its loans: `acquired_on` no later than its
+    first loan and `ended_on` no earlier than its last lend or return (400 `invalid_item_dates`)
 - **DELETE** `/library/items/{id}` — *Admin, board or biblioteca*. Deletes an item that has never
   been lent, with its comments and files.
   - returns: 204
@@ -706,11 +711,12 @@ can do, board can do.
   - errors: 400 `invalid_id`; 404 `not_found`
 - **POST** `/library/items/{id}/loans` — *Admin, board, biblioteca or material*. Lends the item to a
   member (somebody who is a member now).
-  - body: `login*`, `lent_at` (a date, today by default; never in the future), `notes`
+  - body: `login*`, `lent_at` (a date, today by default; never in the future, and not before the
+    item was acquired), `notes`
   - returns: 201 `LibraryLoan`
   - errors: 400 `invalid_id`, `invalid_body`, `loan_login_required`, `invalid_date`,
     `invalid_dates`; 404 `not_found`; 409 `item_not_available` (it is out),
-    `loan_recipient_not_member`
+    `item_ended` (it has left the library), `loan_recipient_not_member`
 - **POST** `/library/items/{id}/loans/{loanId}/return` — *Admin, board, biblioteca or material*.
   Records that the item is back.
   - body: optional; `returned_at` (a date, today by default; not before the loan began, never in the
@@ -1621,14 +1627,18 @@ and `value` is always the text to show (the option's label, for an enum).
 | `isbn` | text |
 | `location` | text |
 | `description` | text |
+| `acquired_on` | date |
+| `ended_on` | date |
+| `end_reason` | lost/withdrawn/sold |
 | `created_at` | datetime |
 | `available` | boolean |
 | `has_cover` | boolean |
 | `comment_count` | integer |
 | `resource_count` | integer |
 
-An item says whether it is `available` but never who has it. `resource_count` does not count the
-cover.
+An item says whether it is `available` (in the library and not out on loan) but never who has it.
+`ended_on` and `end_reason` are there together when it has left the library for good.
+`resource_count` does not count the cover.
 
 ### `LibraryComment`
 

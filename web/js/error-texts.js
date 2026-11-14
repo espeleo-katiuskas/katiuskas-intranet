@@ -120,6 +120,13 @@ const texts = {
   type_name_too_long: 'El nombre del tipo es demasiado largo (60 caracteres como máximo).',
   duplicate_library_type: 'Ya hay un tipo con ese nombre.',
   library_type_in_use: 'Este tipo tiene ejemplares y no se puede borrar.',
+  acquired_on_required: 'Indica cuándo se adquirió el ejemplar.',
+  invalid_end_reason: 'El motivo de la baja tiene que ser pérdida, retirada o venta.',
+  end_incomplete: 'La fecha y el motivo de la baja van juntos: pon los dos o ninguno.',
+  invalid_item_dates:
+    'Las fechas del ejemplar no son válidas: ni en el futuro, ni la baja antes de la adquisición, ni de acuerdo con sus préstamos.',
+  item_ended: 'El ejemplar ya no está en la biblioteca y no se puede prestar.',
+  item_on_loan: 'El ejemplar está prestado: apunta primero su devolución.',
   comment_required: 'Escribe el comentario.',
   comment_too_long: 'El comentario es demasiado largo (2000 caracteres como máximo).',
   cover_not_image: 'La portada tiene que ser una imagen.',

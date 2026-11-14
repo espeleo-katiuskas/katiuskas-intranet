@@ -17,8 +17,11 @@ import {
   coverImage,
   dateOnly,
   loadPeople,
+  END_REASONS,
   loadTypes,
   personLink,
+  statusBadge,
+  today,
   typeOptions,
 } from './library-common.js';
 import { formatSize } from './file-browser.js';
@@ -39,12 +42,6 @@ let resources = [];
 let loans = [];
 let people = { namesByLogin: {}, memberEntries: [], memberOptions: '' };
 
-// The day it is for the browser, "2026-11-12", for the date fields: a loan cannot start in the future.
-function today() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
 function nameOf(login) {
   return people.namesByLogin[login] ?? login;
 }
@@ -62,13 +59,16 @@ function renderItem() {
   ]
     .filter(Boolean)
     .join(' · ');
-  const status = document.getElementById('library-status');
-  status.textContent = item.available ? 'Disponible' : 'Prestado';
-  status.className = `badge ${item.available ? 'badge-ok' : 'badge-out'}`;
+  document.getElementById('library-status').innerHTML = statusBadge(item);
   document.getElementById('library-cover').innerHTML = item.has_cover
     ? `<a href="${API_BASE}/library/items/${item.id}/cover" target="_blank" rel="noopener">${coverImage(item, 'library-cover-image')}</a>`
     : '';
   const rows = [
+    ['Adquirido el', dateOnly(item.acquired_on)],
+    [
+      'Baja',
+      item.ended_on ? `${END_REASONS[item.end_reason]} el ${dateOnly(item.ended_on)}` : null,
+    ],
     ['ISBN', item.isbn],
     ['Dónde está', item.location],
     ['Descripción', item.description],
@@ -147,10 +147,14 @@ function renderResources() {
 function renderLoans() {
   if (!canLoan) return;
   const open = loans.find((l) => !l.returned_at);
-  document.getElementById('loan-status').innerHTML = open
-    ? `Prestado a ${personLink(people.namesByLogin, open.user_login)} desde el ${dateOnly(open.lent_at)}.`
-    : 'El ejemplar está en el local.';
-  document.getElementById('lend-form').hidden = Boolean(open);
+  let state = 'El ejemplar está en el local.';
+  if (open) {
+    state = `Prestado a ${personLink(people.namesByLogin, open.user_login)} desde el ${dateOnly(open.lent_at)}.`;
+  } else if (item.ended_on) {
+    state = `El ejemplar ya no está en la biblioteca (${END_REASONS[item.end_reason].toLowerCase()} el ${dateOnly(item.ended_on)}): no se puede prestar.`;
+  }
+  document.getElementById('loan-status').innerHTML = state;
+  document.getElementById('lend-form').hidden = Boolean(open) || Boolean(item.ended_on);
   document.getElementById('loans-table-body').innerHTML = loans.length
     ? loans
         .map(
@@ -284,6 +288,11 @@ if (canManage) {
       showError(err.message);
       return;
     }
+    form.elements.acquired_on.max = today();
+    form.elements.ended_on.max = today();
+    form.elements.acquired_on.value = item.acquired_on;
+    form.elements.ended_on.value = item.ended_on ?? '';
+    form.elements.end_reason.value = item.end_reason ?? '';
     form.elements.title.value = item.title;
     form.elements.author.value = item.author ?? '';
     form.elements.publisher.value = item.publisher ?? '';
@@ -302,6 +311,9 @@ if (canManage) {
           method: 'PUT',
           body: JSON.stringify({
             type_id: Number(form.elements.type_id.value),
+            acquired_on: form.elements.acquired_on.value,
+            ended_on: form.elements.ended_on.value || null,
+            end_reason: form.elements.end_reason.value || null,
             title: form.elements.title.value.trim(),
             author: text('author'),
             publisher: text('publisher'),

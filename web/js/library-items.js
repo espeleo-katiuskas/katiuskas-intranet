@@ -12,6 +12,8 @@ import {
   loadPeople,
   loadTypes,
   personLink,
+  statusBadge,
+  today,
   typeOptions,
 } from './library-common.js';
 import { initPage } from './layout.js';
@@ -62,11 +64,7 @@ function renderItem(item) {
       <td>${escapeHtml(item.type)}</td>
       <td>${item.author ? escapeHtml(item.author) : '—'}</td>
       <td class="nowrap">${item.year ?? '—'}</td>
-      <td>${
-        item.available
-          ? '<span class="badge badge-ok">Disponible</span>'
-          : '<span class="badge badge-out">Prestado</span>'
-      }</td>
+      <td>${statusBadge(item)}</td>
     </tr>`;
 }
 
@@ -174,6 +172,8 @@ if (canManage) {
   initModal(dialog, form);
   document.getElementById('toggle-new-item').addEventListener('click', () => {
     form.elements.type_id.innerHTML = typeOptions(types, null);
+    form.elements.acquired_on.max = today();
+    form.elements.acquired_on.value = today();
     openModal(dialog);
   });
   form.addEventListener('submit', async (event) => {
@@ -186,6 +186,7 @@ if (canManage) {
         method: 'POST',
         body: JSON.stringify({
           type_id: Number(form.elements.type_id.value),
+          acquired_on: form.elements.acquired_on.value,
           title: form.elements.title.value.trim(),
           author: text('author'),
           publisher: text('publisher'),

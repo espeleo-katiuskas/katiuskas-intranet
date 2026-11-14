@@ -780,10 +780,21 @@ system role), never above board: whatever it can do, board can do, so a route th
 also be removed by whoever wrote it, which `Service.DeleteComment`/`RemoveResource` check against
 the `privileged` flag the handler works out from the caller's roles (403 `not_yours`).
 
-**Availability, not borrower.** An `Item` carries `available` — true when it has no open loan,
-worked out in `itemSelect` — and never who has it: nothing a plain member can read names the
-borrower. The loans (`GET /library/loans`, `GET /library/items/{id}/loans`) are for the roles above,
-and a test checks that no route open to a member contains the borrower's login.
+**Dates of an item.** `acquired_on` is required and `ended_on` comes with `end_reason` (`lost`,
+`withdrawn`, `sold`) or not at all (400 `end_incomplete`; `invalid_end_reason`). `cleanDates` checks
+them before the statement (never in the future, the end not before the start: 400
+`invalid_item_dates`); `Repository.Update` then locks the item's row and checks them against the
+loans — `acquired_on` no later than the first loan, `ended_on` no earlier than the last lend or
+return, and no `ended_on` while a loan is open (409 `item_on_loan`) — and `CreateLoan` takes the
+same lock, so nobody can lend an item while it is being ended (409 `item_ended` afterwards). A loan
+cannot start before `acquired_on` (400 `invalid_dates`). Clearing `ended_on` and `end_reason`
+brings the item back. The edit notice diffs the three like any other field.
+
+**Availability, not borrower.** An `Item` carries `available` — true when it has not left the
+library and has no open loan, worked out in `itemSelect` — and never who has it: nothing a plain
+member can read names the borrower. The loans (`GET /library/loans`, `GET
+/library/items/{id}/loans`) are for the roles above, and a test checks that no route open to a
+member contains the borrower's login.
 
 **Loans.** `library_loans` has `lent_at` and `returned_at` (dates; the item is out while
 `returned_at` is null) and a partial unique index allows one open loan per item, which `CreateLoan`

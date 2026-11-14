@@ -16,6 +16,26 @@ function dateOnly(iso) {
   return formatDate(new Date(year, month - 1, day));
 }
 
+// The day it is for the browser, "2026-11-12", for the date fields: none of the dates of the library
+// can be in the future.
+function today() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// Why an item left the library for good, as the API names it, and how a page says it.
+const END_REASONS = { lost: 'Perdido', withdrawn: 'Retirado', sold: 'Vendido' };
+
+// The badge of an item: whether it is in the library (available or out on loan) or has left it.
+function statusBadge(item) {
+  if (item.end_reason) {
+    return `<span class="badge badge-gone">${END_REASONS[item.end_reason] ?? 'Baja'}</span>`;
+  }
+  return item.available
+    ? '<span class="badge badge-ok">Disponible</span>'
+    : '<span class="badge badge-out">Prestado</span>';
+}
+
 // Where the cover of an item is: an <img> can point straight at it (the session cookie is enough). The
 // address does not change when the cover does, so the browser is told to ask again (the API answers
 // 304 when nothing changed).
@@ -75,4 +95,15 @@ function personLink(namesByLogin, login) {
   return `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(namesByLogin[login] ?? login)}</a>`;
 }
 
-export { coverImage, coverUrl, dateOnly, loadPeople, loadTypes, personLink, typeOptions };
+export {
+  coverImage,
+  coverUrl,
+  dateOnly,
+  END_REASONS,
+  loadPeople,
+  loadTypes,
+  personLink,
+  statusBadge,
+  today,
+  typeOptions,
+};
