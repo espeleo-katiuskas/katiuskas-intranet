@@ -433,23 +433,23 @@ back non-empty, un-hides a note linking straight to the bot's chat — left hidd
 there's no dead link (or flash of one) when Telegram isn't configured at all, or the request itself
 fails.
 
-`archive.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s
-own simpler Documentos/Actas/Memorias links do instead) — downloading or previewing a
-document from the `/archivo` browsing UI fetches the file with `apiFetchBlob` (`api.js`)
-and works with the resulting `Blob` client-side — an object URL for inline preview, a
-synthetic `<a download>` click to save — since a `Blob` is what lets it render Markdown
-inline and drive the download from a click handler rather than a bare link, not because
-the route itself needs the bearer header specifically. Markdown
-documents render through a small dependency-free converter (`js/markdown.js`) that
-resolves each document-relative link against the document's own directory and rewrites it
-into an in-app `/archivo` navigation link; HTML documents render in a fully sandboxed
-`<iframe>` instead, with no such link rewriting. `archive.js` and `user-files.js` (the
-embedded per-person file browser on `/perfil`/`/socio`) share this same
-listing/preview/download logic almost verbatim — `js/file-browser.js` pulls out the
-common pieces (`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same
-document-relative link resolver, `downloadBlob`) both import, rather than each carrying
-its own near-identical copy; `activity.js`'s own memoria-resource downloads import just
-`formatSize`/`downloadBlob` from there too, the only two of these it also needed.
+`archive.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s own simpler
+Documentos/Actas/Memorias links do instead) — downloading or previewing a document from the
+`/archivo` browsing UI fetches the file with `apiFetchBlob` (`api.js`) and works with the resulting
+`Blob` client-side — an object URL for inline preview, a synthetic `<a download>` click to save —
+since a `Blob` is what lets it render Markdown inline and drive the download from a click handler
+rather than a bare link, not because the route itself needs the bearer header specifically. Markdown
+documents (and the texts of an activity's memoria) render through a small dependency-free converter
+(`js/markdown.js`) that resolves each document-relative link against the document's own directory
+and rewrites it into an in-app `/archivo` navigation link, and only makes an anchor of a target that
+`safeHref` (`js/rich-text.js`) accepts (http, https, mailto or a path); HTML documents render in a
+fully sandboxed `<iframe>` instead, with no such link rewriting. `archive.js` and `user-files.js`
+(the embedded per-person file browser on `/perfil`/`/socio`) share this same
+listing/preview/download logic almost verbatim — `js/file-browser.js` pulls out the common pieces
+(`joinPath`/`dirOf`/`nameOf`, `formatSize`, `fileKind`, the same document-relative link resolver,
+`downloadBlob`) both import, rather than each carrying its own near-identical copy; `activity.js`'s
+own memoria-resource downloads import just `formatSize`/`downloadBlob` from there too, the only two
+of these it also needed.
 
 `/perfil` also has a "Mis sesiones" section (`initSessionsPanel` in `js/sessions-panel.js`, which
 `/socio` shares, see below): the person's sessions not expired or revoked (`GET

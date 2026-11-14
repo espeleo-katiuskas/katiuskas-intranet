@@ -1,4 +1,5 @@
 import { escapeHtml } from './api.js';
+import { isExternal, safeHref } from './rich-text.js';
 
 // A small, dependency-free Markdown → HTML converter for the document
 // archive's rendered documents (estatutos, actas...): headers,
@@ -13,15 +14,31 @@ import { escapeHtml } from './api.js';
 // must return the anchor's final href — the document archive page uses
 // it to turn a document-relative link ("./Actas/", "../Estatutos.pdf")
 // into an in-app navigation link instead of a raw filesystem path.
+//
+// A link only becomes an anchor if its final target passes safeHref
+// (http, https, mailto, or a path): a "javascript:" or "data:" target is
+// shown as the text it was written as, never as a link.
+
+// renderInline works on text that is already escaped, and the target of
+// a link has to be looked at and written from what the person typed.
+function unescapeHtml(text) {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
 
 function renderInline(text, resolveLink) {
   let html = escapeHtml(text);
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
-    const finalHref = resolveLink ? resolveLink(href) : href;
-    const external = /^([a-z][a-z0-9+.-]*:)?\/\//i.test(href) && !finalHref.startsWith('/');
-    const target = external ? ' target="_blank" rel="noopener"' : '';
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, escapedHref) => {
+    const href = unescapeHtml(escapedHref);
+    const finalHref = safeHref(resolveLink ? resolveLink(href) : href, { allowRelative: true });
+    if (!finalHref) return match;
+    const target = isExternal(finalHref) ? ' target="_blank" rel="noopener noreferrer"' : '';
     return `<a href="${escapeHtml(finalHref)}"${target}>${label}</a>`;
   });
   return html;
