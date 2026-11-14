@@ -2269,6 +2269,14 @@ button.heat-cell[aria-pressed='true'] {
   overflow-y: auto;
 }
 
+/* A dialog scrolls, so a list that floats over it would be cut off by its edge: inside one the list
+   takes its own room and the dialog grows. */
+dialog.modal .area-results {
+  position: static;
+  box-shadow: none;
+  max-height: 12rem;
+}
+
 .area-results li {
   padding: 6px 8px;
   border-radius: 4px;
