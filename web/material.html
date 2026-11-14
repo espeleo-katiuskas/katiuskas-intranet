@@ -20,7 +20,8 @@
     </div>
     <div class="table-actions">
       <a href="/material-prestado" class="btn btn-secondary btn-small" data-roles="admin,board,material">Material prestado o alquilado</a>
-      <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small" data-roles="admin,board,material">+ Nuevo material</button>
+      <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small manage-only" data-roles="admin,board,material">+ Nuevo material</button>
+      <button id="toggle-manage" type="button" class="btn btn-secondary btn-small" aria-pressed="false" data-roles="admin,board,material">Gestionar material</button>
     </div>
   </div>
 
@@ -124,7 +125,7 @@
   </div>
 
   <div class="table-wrap">
-    <table>
+    <table class="stack-on-phone">
       <thead>
         <tr><th>Tipo</th><th>Características</th><th>Disponible</th><th>Estado</th><th></th></tr>
       </thead>

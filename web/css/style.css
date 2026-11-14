@@ -2202,3 +2202,8 @@ button.heat-cell[aria-pressed='true'] {
 #library-details .detail-row {
   align-items: flex-start;
 }
+
+/* What the page of material only shows while "Gestionar material" is on. */
+.content:not(.managing) .manage-only {
+  display: none;
+}

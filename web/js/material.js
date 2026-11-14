@@ -143,15 +143,15 @@ function renderItemRow(item) {
   return `
     <tr>
       <td>${escapeHtml(item.type_name)}</td>
-      <td>${itemLabel(item, { includeType: false })}${item.incomplete && canManageMovements ? ' <span class="badge" title="Le falta algo que su tipo exige: edítalo para completarlo">Incompleto</span>' : ''}</td>
+      <td>${itemLabel(item, { includeType: false })}${item.incomplete && canManageMovements ? ' <span class="badge" title="Le falta algo que su tipo exige: pulsa «Gestionar material» y edítalo para completarlo">Incompleto</span>' : ''}</td>
       <td>${item.available_quantity} / ${item.total_quantity}</td>
       <td><span class="badge">${itemStatusLabels[item.status] ?? item.status}</span></td>
       <td>
         <div class="table-actions">
           <button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button>
           ${canManageMovements && movementTypeOptionsFor(item).length ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
-          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-edit-item="${item.id}">Editar</button>` : ''}
-          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-duplicate-item="${item.id}">Duplicar</button>` : ''}
+          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small manage-only" data-edit-item="${item.id}">Editar</button>` : ''}
+          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small manage-only" data-duplicate-item="${item.id}">Duplicar</button>` : ''}
         </div>
       </td>
     </tr>
@@ -363,6 +363,19 @@ async function loadItems() {
   } catch {
     tableBody.innerHTML = '<tr><td colspan="5">No se pudo cargar el material.</td></tr>';
   }
+}
+
+// "Gestionar material" shows or hides what is only needed now and then — "+ Nuevo material" and
+// "Editar" and "Duplicar" on each row (the class manage-only) — so that the page is for looking at the
+// material and its movements. It always starts hidden. The state is a class of the content, not of
+// the rows, so it stays when the table is drawn again after a change.
+const manageToggle = document.getElementById('toggle-manage');
+if (manageToggle) {
+  manageToggle.addEventListener('click', () => {
+    const managing = document.querySelector('main.content').classList.toggle('managing');
+    manageToggle.setAttribute('aria-pressed', String(managing));
+    manageToggle.textContent = managing ? 'Terminar de gestionar' : 'Gestionar material';
+  });
 }
 
 // Set below, for whoever can manage the material: opens the dialog of "Nuevo material" to edit an item.

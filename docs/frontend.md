@@ -41,37 +41,46 @@ shows a plain panel linking to `/login`. Everything it loads is by absolute path
 at whatever address was asked for, however deep — which is also why `layout.js`'s topbar logo is
 `/images/…` and not relative.
 
-**Duplicating material.** Next to "Editar", each row of `/material` has "Duplicar" (the same roles:
-admin, board and material), for creating something similar to what already exists. It opens the
-same dialog as "Nuevo material" (`openDuplicateItemDialog` in `material.js`, which fills the form
-with `fillItemForm`, as an edit does) titled "Duplicar material", with a note saying which item it
-starts from, and everything in it can be changed before "Crear material", which is the ordinary
-`POST /material/items`: nothing about it is in the API. What is copied is the type, brand, model,
-colour, the data of a rope or a bag, the attributes, the description, the prices and "Se puede
-prestar". The **code is not copied**, because it is unique among all the material (and a rope or a
-bag must have one): it is left blank, and for a rope or a bag the cursor goes there. The quantity
-and the date of acquisition are not the item's data either and start as in any new item. Changing
-the type in the dialog drops the attributes of the previous one and keeps the rest. Closing the
-dialog without saving forgets the copy, so the next "+ Nuevo material" is empty.
+**Managing material.** `/material` is for looking at the material and its movements: each row only
+shows "Movimientos" and "+ Movimiento". What is needed now and then — "+ Nuevo material" in the
+header, and "Editar" and "Duplicar" on each row (the class `manage-only`) — appears when
+"Gestionar material" (admin, board and material, like the buttons it shows) is pressed, and its text
+becomes "Terminar de gestionar" (`aria-pressed` says which). The page always opens with them hidden;
+the state is the class `managing` of `main.content`, not of the rows, so it stays when the table is
+drawn again after a save, and a hidden button cannot be reached with the keyboard. The table is
+`stack-on-phone`, so on a phone each item is a card and its buttons are not off to the right.
 
-**Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
-dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditItemDialog`): the
-title and the button change, the type is fixed for a rope or a bag (the field is disabled) and, for
-general material, can be changed to another general type (Cuerda and Saca are not offered), the
-quantity and the date of acquisition are left out (the stock is what its movements say) and the form
-is filled with the item; it sends `PUT /material/items/{id}`, which replaces every field (the
-attributes included). The "Tipo" select lists every type from `GET /material/types` (in the order an
-admin has set); the fields shown depend on the *kind* of the chosen type (rope fields for Cuerda,
-bag fields for Saca, description and quantity for any other), each option carrying it in
-`data-kind`. Brand, model and code are in the form for every type, required only for ropes and bags;
-the model field stays disabled (and empty) while there is no brand. The attributes of the chosen
-type (`attributes` in `GET /material/types`) are drawn by `syncTypeFields` before the description,
-one field each: a text box, or a list of the attribute's options (`attribute_<id>` is the name of
-the field), with "(opcional)" on the optional ones and `required` on the others; they are drawn
-again whenever the type changes, so the values typed for another type's attributes are dropped. The
-same function says whether the description is required (`description_required` of the type;
-"(opcional)" is shown next to its label otherwise). Only the attributes with a value go in the
-request.
+**Duplicating material.** Next to "Editar", each row of `/material` has "Duplicar" (when managing,
+see above), for creating something similar to what already exists. It opens the same dialog as
+"Nuevo material" (`openDuplicateItemDialog` in `material.js`, which fills the form with
+`fillItemForm`, as an edit does) titled "Duplicar material", with a note saying which item it starts
+from, and everything in it can be changed before "Crear material", which is the ordinary `POST
+/material/items`: nothing about it is in the API. What is copied is the type, brand, model, colour,
+the data of a rope or a bag, the attributes, the description, the prices and "Se puede prestar". The
+**code is not copied**, because it is unique among all the material (and a rope or a bag must have
+one): it is left blank, and for a rope or a bag the cursor goes there. The quantity and the date of
+acquisition are not the item's data either and start as in any new item. Changing the type in the
+dialog drops the attributes of the previous one and keeps the rest. Closing the dialog without
+saving forgets the copy, so the next "+ Nuevo material" is empty.
+
+**Editing material.** On `/material` ("Editar" in each row when managing, for admin, board and
+material) the dialog of "Nuevo material" is reused to edit an item (`material.js`,
+`openEditItemDialog`): the title and the button change, the type is fixed for a rope or a bag (the
+field is disabled) and, for general material, can be changed to another general type (Cuerda and
+Saca are not offered), the quantity and the date of acquisition are left out (the stock is what its
+movements say) and the form is filled with the item; it sends `PUT /material/items/{id}`, which
+replaces every field (the attributes included). The "Tipo" select lists every type from `GET
+/material/types` (in the order an admin has set); the fields shown depend on the *kind* of the
+chosen type (rope fields for Cuerda, bag fields for Saca, description and quantity for any other),
+each option carrying it in `data-kind`. Brand, model and code are in the form for every type,
+required only for ropes and bags; the model field stays disabled (and empty) while there is no
+brand. The attributes of the chosen type (`attributes` in `GET /material/types`) are drawn by
+`syncTypeFields` before the description, one field each: a text box, or a list of the attribute's
+options (`attribute_<id>` is the name of the field), with "(opcional)" on the optional ones and
+`required` on the others; they are drawn again whenever the type changes, so the values typed for
+another type's attributes are dropped. The same function says whether the description is required
+(`description_required` of the type; "(opcional)" is shown next to its label otherwise). Only the
+attributes with a value go in the request.
 
 **Which material the table lists.** The table of `/material` hides the items with no unit left,
 those that show "0 / 0" (`isGone` in `material.js`: sold, lost, abandoned or retired). They are no
@@ -178,7 +187,7 @@ with `noopener noreferrer`. The API stores and returns plain text; nothing about
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
-`/admin` and of the library) is drawn instead, under 640px, as a card per row:
+`/admin`, of the library and of `/material`) is drawn instead, under 640px, as a card per row:
 `js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text of its
 column's header (again whenever the rows are redrawn, with a `MutationObserver`), and `style.css`
 shows each cell as its label above its value; the header keeps only the sortable columns, as a row
