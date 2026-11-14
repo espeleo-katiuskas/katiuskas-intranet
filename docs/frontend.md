@@ -72,7 +72,12 @@ movements say) and the form is filled with the item; it sends `PUT /material/ite
 replaces every field (the attributes included). The "Tipo" select lists every type from `GET
 /material/types` (in the order an admin has set); the fields shown depend on the *kind* of the
 chosen type (rope fields for Cuerda, bag fields for Saca, description and quantity for any other),
-each option carrying it in `data-kind`. Brand, model and code are in the form for every type,
+each option carrying it in `data-kind`. The fields come in this order: the type; then the type of
+rope, or of bag, or the quantity (for general material, on creation only); brand, model and code;
+for a rope the year of manufacture, the diameter and the length, for a bag the capacity; the colour
+(ropes and bags); for every type the date of acquisition (on creation only), the rental price, the
+sale price and "Se puede prestar"; the attributes of the type; and last the description (the
+"Observaciones" of a rope or a bag). Brand, model and code are in the form for every type,
 required only for ropes and bags; the model field stays disabled (and empty) while there is no
 brand. The attributes of the chosen type (`attributes` in `GET /material/types`) are drawn by
 `syncTypeFields` before the description, one field each: a text box, or a list of the attribute's
