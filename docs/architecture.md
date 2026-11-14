@@ -856,6 +856,45 @@ the distinction can delete it and keep using `board`); reading the loans and rec
 returns is for those three and `material`; deleting a loan recorded by mistake is for admin alone.
 Whatever `biblioteca` can do, board can do too.
 
+### Places (the `place_*` tables, `places` and the zones)
+
+The club's catalogue of places: caves and shafts, canyons, via ferratas, huts… Everybody who can
+sign in reads it, and **any member creates and changes places and their points**, as in a wiki: each
+place keeps who created it and who changed it last (the place or any of its points), and when.
+
+**Rules**
+
+- A place has a type from `place_types`. Its **kind** decides what it has: only a cave (Cueva, Sima)
+  has a depth, a horizontal length and a **geology** (what it is formed in: Caliza, Yeso, Hielo,
+  Lava… a catalogue an admin edits, optional, with more kinds than anybody lists at once), and only
+  a cave or a canyon has a technical sheet (what has to be installed to go through it). Cueva, Sima
+  and Cañón are fixed; an admin adds, renames and deletes the general types (vía ferrata, refugio…),
+  and one that has places is not deleted.
+- A place says **where it is** with a zone from the tree of `areas`: the most specific one it is
+  known to be in (a municipality, a province or just the country), so its province, community and
+  country are the zones it is in. The zones are the 195 states of the United Nations and, for Spain,
+  its communities, provinces and municipalities, all seeded (a territory that is not a state, like
+  Gibraltar, is added below the state that administers it); nothing in the code knows the levels,
+  which are the text `kind` of each zone, so any country fits. Any member adds a zone that is
+  missing below another; only admin renames, merges (a zone that was added twice) and deletes them.
+- A place always has **one main coordinate**, in the place itself, and any number of other points
+  (parking, start of the approach, waypoint, access, other), each with its own coordinates, name and
+  note. Coordinates are stored as WGS84 latitude and longitude, with an optional altitude in metres
+  above sea level; the form also accepts UTM and converts it.
+- The state says under which conditions a place can be visited: `open` (freely), `permit_required`
+  (a permit has to be asked for first), `tourist` (run as an attraction, to be paid for) or
+  `closed`. It is a label and a filter: it does not stop anything else. What is missing to go
+  through a cave or a canyon is the technical sheet's business, not the state's. Depth, length,
+  access and description are all optional.
+- Anybody changes a place or its points; only admin and board delete a place (with its points), as a
+  place is the work of several people.
+- What is not there yet (phase 1): the files (photos, texts, documents), the map of all the places,
+  the link with activities and the tracks. They are in `roadmap.md`.
+
+**Permissions**: reading, creating, changing and managing the points is for any baseline role;
+deleting a place for `admin` and `board`; the types of place and renaming, merging and deleting
+zones for `admin` (adding a zone is for any baseline role).
+
 ### Distributions (`distributions`, `distribution_options`, `distribution_units`)
 
 A distribution is something the club hands out to its members: shirts, buffs, a rope, mugs,
@@ -1544,6 +1583,7 @@ Classic multi-page site (not an SPA), with no build step: one `<page>.html` plus
 | `/socios` | List of people. | Sidebar: admin, board and member. | For a member it reduces columns and filters to `MemberListing` and its rows are not clickable; for admin and board, each row leads to `/socio?login=<login>`. |
 | `/socio?login=…` (`socio.html`/`member.js`) | A person's page (see below). | Only admin and board. | Only admin can save the data; board sees it disabled. Admin also sees and can close the person's sessions. |
 | `/perfil` | Own page: editable contact data, the same "Historial como socio" as `/socio` (without buttons), licenses, "Mis sesiones" (the sessions not expired or revoked, each of which can be closed) and files. | Any baseline role. | Includes the same viewer of own files as `/socio`. |
+| `/lugares`, `/lugar?id=…` (`lugares.html`/`places.js`, `lugar.html`/`place.js`) | The places: a table with search by name, other names, zone (municipality, province, community, country) and type, and filters by type, state and geology; and one place with its data, coordinates (in decimals and UTM, with a link to a map) and altitude, the geology of a cave, how to get there, description, technical sheet and the other points. | Any baseline role. | Any member adds a place, changes it and manages its points (dialogs shared in `place-dialog.js`; where it is, chosen with a search among the zones that can add a missing one; the field of coordinates reads decimals or UTM and shows what it understood); admin and board delete it; admin manages the types, the geologies and the zones. |
 | `/actividades`, `/actividad?id=…` | List and detail of an activity: participants, lent material and memoria. | Any baseline role. | The list includes a yearly calendar view that marks weekends and holidays (there is no separate calendar page). |
 | `/material` | Material catalog and its movements. | Any baseline role. | "Nuevo material" and the movements (loan, rental, sale), for admin, board and the `material` role. |
 | `/biblioteca`, `/ejemplar?id=…` (`biblioteca.html`/`library-items.js`, `ejemplar.html`/`library-item.js`) | The library: the catalogue (search, "Solo los disponibles") and, for admin, board, `biblioteca` and `material`, the items that are out; and one item with its cover, comments, files and, for those four, its loans. | Any baseline role. | Anybody sees whether an item is available but not who has it, and comments and attaches files; "Nuevo ejemplar", editing, the cover and deleting are for admin, board and `biblioteca`; recording loans and returns, for those and `material`. |

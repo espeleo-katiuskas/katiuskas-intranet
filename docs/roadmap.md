@@ -6,24 +6,24 @@ building it; nothing in it is decided. When one is started its design goes to th
 
 ## Catalogue of places (caves, shafts, canyons…)
 
-A catalogue of the places where the club goes, with plenty of information about each.
+The first phase is done and documented (`api.md`, `database.md`, `backend-internals.md`,
+`frontend.md`): the types, the places with their kind, state, main coordinate and texts, their other
+points, and the list and the page of each. What is left, in this order:
 
-- **Data of a place**: type, coordinates, state, description, topographies and photos.
-- **Activities**: a place can be associated with activities.
-- **Users**: every user can consult them and add information to each one.
-
-To settle:
-
-- What "adding information" means (comments, photos, topographies, corrections to the data), whether
-  it is published at once or reviewed by somebody (admin or board) and whether it keeps who added it
-  and when, as the participants of an activity do (`added_by`, `added_at`).
-- Who creates and edits the places themselves, and who may delete what others added.
-- The types of place (a catalogue an admin edits, like the types of material?) and the states
-  (active, closed, being equipped, gone…).
-- The coordinates: the system (WGS84 latitude and longitude, and/or UTM), whether there is a map,
-  and whether the location of some places should be hidden.
-- Who sees what: the location of some places is better not made public.
-- Photos and topographies: the same pattern for files as above, the types allowed and a maximum
-  size.
-- The link with `activities`: a table joining places and activities, shown on the page of each
-  activity and on that of each place (what has been done there).
+- **Files**: photos, texts and documents attached to a place (like the memoria of an activity: a
+  text or a file with a title, on disk keyed by the row id and never rewritten). To settle: the
+  types allowed, the maximum size, who removes what others added, and thumbnails for the photos.
+- **The map**: all the places on one map, grouped when the view is wide (Leaflet and its clustering,
+  copied into the repository, with a light listing of the places for it), and a small map on the
+  page of each place with all its points. To settle: the source of the tiles (a topographic and a
+  satellite layer; OpenStreetMap's standard tiles limit heavy use and the IGN is the Spanish
+  official source) and whether the grouping stays in the browser (fine for a few thousand places) or
+  moves to the server.
+- **Activities**: a table joining places and activities, shown on the page of each activity and on
+  that of each place (what has been done there).
+- **Tracks**: the way of an approach or of a canyon, as a GPX attached to the place and drawn on its
+  map.
+- **Later**: a technical sheet made of pitches (with their lengths, which would let the rope needed
+  be worked out and linked with the material), other fields of a canyon (drop, length, difficulty),
+  a catalogue code, and whether the location of some places should be hidden from some people (today
+  all who can sign in see everything).

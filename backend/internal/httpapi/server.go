@@ -29,6 +29,8 @@ type Routes struct {
 	Budgets           ResourceHandler
 	TransactionFiles  ResourceHandler
 	Library           ResourceHandler
+	Places            ResourceHandler
+	Areas             ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
@@ -54,6 +56,8 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Budgets.RegisterRoutes(mux)
 	routes.TransactionFiles.RegisterRoutes(mux)
 	routes.Library.RegisterRoutes(mux)
+	routes.Places.RegisterRoutes(mux)
+	routes.Areas.RegisterRoutes(mux)
 
 	// Recoverer has to be the *inner* layer, closer to mux, not the
 	// outer one: RequestLogger's own next.ServeHTTP call has no

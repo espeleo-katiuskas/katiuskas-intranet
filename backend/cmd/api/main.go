@@ -18,6 +18,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/adminstatus"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/archive"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
@@ -31,6 +32,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/requestcount"
@@ -252,6 +254,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		return nil, nil, nil, nil, err
 	}
 	libraryService := library.NewService(library.NewRepository(repoPool), libraryFilesStorage, rolesService)
+	placesService := places.NewService(places.NewRepository(repoPool))
+	areasService := areas.NewService(areas.NewRepository(repoPool))
 
 	licensesRepo := licenses.NewRepository(repoPool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
@@ -362,6 +366,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Budgets:           budgets.NewHandler(budgetsService, authenticator, usersService, telegramSender),
 		TransactionFiles:  transactionfiles.NewHandler(transactionFilesService, authenticator, usersService, telegramSender),
 		Library:           library.NewHandler(libraryService, authenticator, usersService, telegramSender),
+		Places:            places.NewHandler(placesService, authenticator, usersService, telegramSender),
+		Areas:             areas.NewHandler(areasService, authenticator, usersService, telegramSender),
 	})
 
 	return router, authHandler, usersService, adminStatus, nil

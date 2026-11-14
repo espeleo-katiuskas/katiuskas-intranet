@@ -17,6 +17,7 @@ Contents:
   `activity_resources`, `holidays`
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
+- [Places](#places): `areas`, `place_types`, `place_geologies`, `places`, `place_points`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -50,7 +51,7 @@ Contents:
   foreign keys, `EXCLUDE`, triggers) is in the database, and the tests really use it, without
   simulating it. What depends on several rows or on other tables and does not fit in a constraint is
   checked by the Go service, and is stated in each table (section "Rules outside the database").
-- **Files outside PostgreSQL**: the document archive (`LIBRARY_ROOT`), each person's files
+- **Files outside PostgreSQL**: the document archive (`ARCHIVE_ROOT`), each person's files
   (`USER_FILES_ROOT`), the files of an activity's memoria (`ACTIVITY_RESOURCES_ROOT`) and the
   documents attached to transactions (`TRANSACTION_FILES_ROOT`) and the files of the items
   (`LIBRARY_FILES_ROOT`) are on disk; in the database only the metadata of the last three remains
@@ -72,6 +73,9 @@ license_types ──< licenses                material_types ──< material_it
 material_types ──< material_type_attributes ──< material_attribute_options
 library_types ──< library_items ──< library_loans, library_comments, library_resources
                                     (loans, comments and files point at users too)
+areas ──< areas (a tree), places              place_types ──< places ──< place_points
+                                              place_geologies ──< places
+                          (places point at users too: who created and who changed)
 
 distributions ──┬─< distribution_options
                 ├─< distribution_articles ──< distribution_unit_identifiers
@@ -99,6 +103,10 @@ what it deletes, the code does it itself, explicitly, in the same transaction:
 - `DELETE /distributions/{id}`: its orders and the numbers they hold, its articles, its options and
   its log of payments (refused if an order is paid or collected). Deleting an order (or an order
   that ends up with nothing) keeps the rows of the log of payments, which stop pointing at it.
+- `DELETE /places/{id}`: its points.
+- `POST /areas/{id}/merge`: moves the zones below the first one and its places to the second, and
+  deletes the first. `DELETE /areas/{id}` deletes only a zone with nothing below it and no place in
+  it.
 - `DELETE /budgets/{year}` and `PUT /budgets/{year}`: the line items and the accounts they cover.
 - `DELETE /users/{login}`: only the person's sessions and sign-in links, which are ephemeral.
   Anything else that points at them (roles, membership periods, leaves, licenses, board positions,
@@ -1037,6 +1045,202 @@ Constraints:
 Nothing cascades: deleting an item deletes its comments and files first, in Go, and refuses if it
 has ever been lent. A person who has loans, comments or files cannot be deleted.
 
+## Places
+
+The club's catalogue of places: caves and shafts, canyons, via ferratas, huts… A place has a type,
+one main coordinate (in the place itself, so there is always one), a zone that says where it is and
+any number of other points. There are no files yet.
+
+### `areas`
+
+The zones of the world, as a tree of any depth: a country and, below it, whatever its administrative
+divisions are (in Spain an autonomous community, a province and a municipality; in Andorra a
+parish). Nothing in the code knows the levels: `kind` is the text that names each one, and a place
+points at the most specific zone it is in, so its country, province… are its ancestors. The roots
+are the states of the United Nations, all of them seeded (migration `00062`, with Spain down to its
+municipalities); anybody adds a zone below another (a territory that is not a state goes below the
+one that administers it), and an admin renames, merges and deletes them.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `parent_id` | bigint | yes |  |
+| `kind` | text | no |  |
+| `name` | text | no |  |
+| `norm_name` | text | no |  |
+| `code` | text | yes |  |
+| `created_at` | timestamptz | no | now() |
+
+Notes on the columns:
+
+- `parent_id`: The zone it is in; empty for a country.
+- `kind`: The level, in the club's words: "País", "Comunidad autónoma", "Provincia", "Municipio"…
+- `norm_name`: The name in lower case, without accents, and with every run of anything but letters
+  and digits as one space ("Donostia/San Sebastián" is `donostia san sebastian`). It is what the
+  search and the uniqueness of the names use, and `areas.Normalize` in Go writes it (a test checks
+  that the seed has the same).
+- `code`: An official code when there is one: ISO 3166-1 alpha-2 for a country, the INE's for a
+  Spanish community, province or municipality (five digits: those of its province, then its own
+  three).
+
+Constraints:
+
+- primary key (id)
+- `parent_id` → `areas(id)`, and not its own parent
+- `kind` and `name` are not blank, `norm_name` is not empty, and `code` is not blank when there is
+  one
+- unique `idx_areas_parent_name` on `(COALESCE(parent_id, 0), norm_name)`: below the same zone
+  (among the countries, if there is none) two names that differ only in case, accents or punctuation
+  are the same
+- index `idx_areas_parent_id` on `(parent_id)`, and `idx_areas_norm_name` on `norm_name` (for the
+  search)
+
+Rules outside the database: only a country is a root (the API never creates one), the name is at
+most 200 characters and the kind 60, a zone is only deleted when nothing is below it and no place is
+in it, two zones are merged only below the same one, and the first zone below another one needs its
+`kind` said (the rest take the one their siblings have).
+
+### `place_types`
+
+What kind of place something is. The `kind` decides what a place of the type has, as in
+`material_types`: a cave (Cueva, Sima) has a depth and a horizontal length, and a cave or a canyon
+has a technical sheet. The migration seeds Cueva and Sima (`cave`), Cañón (`canyon`) and Vía
+ferrata, Refugio and Otro (`general`); the first three are fixed, and an admin adds, renames and
+deletes the general ones.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `name` | text | no |  |
+| `kind` | text | no | 'general' |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `name` is not blank
+- `kind` is `cave`, `canyon` or `general`
+- unique `place_types_id_kind_key` on `(id, kind)`: what `places` points at, so that the kind of a
+  place is always the one of its type
+- unique `idx_place_types_name` on `lower(name)`: names are unique ignoring case
+
+Rules outside the database: only a general type is created, renamed or deleted (409
+`fixed_place_type` otherwise), and one that has places is not deleted (409 `place_type_in_use`).
+
+### `place_geologies`
+
+What a cave is formed in (limestone, gypsum, ice, lava…): a catalogue an admin edits, since there
+are more kinds than anybody lists at once. Only a cave has one, and it is optional. None is fixed
+and nothing in the code depends on any. The migration seeds Caliza, Yeso, Hielo and Lava (the usual
+ones, first) and then Dolomía, Mármol, Sal, Arenisca, Cuarcita, Conglomerado and Granito.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `name` | text | no |  |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `name` is not blank
+- unique `idx_place_geologies_name` on `lower(name)`: names are unique ignoring case
+
+Rules outside the database: one that has places is not deleted (409 `geology_in_use`).
+
+### `places`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `type_id` | bigint | no |  |
+| `kind` | text | no |  |
+| `name` | text | no |  |
+| `alt_names` | text | yes |  |
+| `state` | text | no | 'open' |
+| `area_id` | bigint | no |  |
+| `lat` | double precision | no |  |
+| `lon` | double precision | no |  |
+| `altitude_m` | integer | yes |  |
+| `access` | text | yes |  |
+| `description` | text | yes |  |
+| `depth_m` | integer | yes |  |
+| `horizontal_length_m` | integer | yes |  |
+| `geology_id` | bigint | yes |  |
+| `technical_sheet` | text | yes |  |
+| `created_by` | bigint | no |  |
+| `created_at` | timestamptz | no | now() |
+| `updated_by` | bigint | no |  |
+| `updated_at` | timestamptz | no | now() |
+
+Notes on the columns:
+
+- `kind`: The kind of the place's type, kept here so that the checks below can use it.
+- `alt_names`: Other names it is known by, as free text.
+- `state`: Under which conditions the place can be visited: `open` (freely), `permit_required` (a
+  permit has to be asked for first), `tourist` (it is run as an attraction and has to be paid for)
+  or `closed` (it cannot be visited).
+- `area_id`: Where it is: the most specific zone known, at least the country.
+- `lat`, `lon`: The main coordinate, WGS84, in degrees.
+- `altitude_m`: Its altitude in metres above sea level (negative below it), when it is known.
+- `access`, `description`, `technical_sheet`: Free text, shown with the little formatting of
+  `js/rich-text.js`. The technical sheet says what has to be installed to go through the place.
+- `depth_m`, `horizontal_length_m`: Of a cave, in metres.
+- `geology_id`: What a cave is formed in.
+- `updated_by`, `updated_at`: The last change of the place or of any of its points; the same as the
+  creation until there is one. They are set by the Go service.
+
+Constraints:
+
+- primary key (id)
+- `(type_id, kind)` → `place_types(id, kind)`
+- `area_id` → `areas(id)`, `geology_id` → `place_geologies(id)`
+- `created_by` → `users(id)`, `updated_by` → `users(id)`
+- `name` is not blank
+- `state` is `open`, `permit_required`, `tourist` or `closed`
+- `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000
+- `depth_m` and `horizontal_length_m` not negative
+- `measures_only_for_caves`: `kind = 'cave'` or both measures are empty
+- `geology_only_for_caves`: `kind = 'cave'` or there is no geology
+- `technical_sheet_only_for_caves_and_canyons`: `kind` is `cave` or `canyon`, or there is no sheet
+- index `idx_places_type_id` on `(type_id)`, `idx_places_area_id` on `(area_id)`,
+  `idx_places_geology_id` on `(geology_id)` and `idx_places_lat_lon` on `(lat, lon)`
+
+Rules outside the database: the zone is given and exists (`places.Service` checks it before the
+statement), the coordinates are given (a missing one is not zero), the altitude (400
+`invalid_altitude`) and the measures stay within limits that only catch a typo (-500 to 9000 m of
+altitude, 20000 m of depth and 2000000 m of horizontal length), and what a place has fits the kind
+of its type (400 `invalid_place_fields`; `places.Service` checks it before the statement, the
+constraints are the backstop). A place may change to any type whose kind fits its fields.
+
+### `place_points`
+
+The other points of a place: where to leave the car, where the approach starts, a waypoint, each of
+the accesses… Nothing cascades: `places.Repository.DeletePlace` deletes the points with the place,
+in one transaction.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `place_id` | bigint | no |  |
+| `kind` | text | no |  |
+| `name` | text | yes |  |
+| `lat` | double precision | no |  |
+| `lon` | double precision | no |  |
+| `altitude_m` | integer | yes |  |
+| `note` | text | yes |  |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `place_id` → `places(id)`
+- `kind` is `parking`, `approach`, `waypoint`, `access` or `other`
+- `name` is not blank when there is one
+- `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000 (metres
+  above sea level, when it is known)
+- index `idx_place_points_place_id` on `(place_id)`
+
 ## Distributions
 
 ### `distributions`
@@ -1602,6 +1806,13 @@ Besides the schema, the migrations leave this data:
   `material`, `money` and `biblioteca` (who looks after the library).
 - `license_types`: 24 types (zones A, B and B1 × BASICA and PLUS × adulto, Infantil and Juvenil,
   plus ZERO, ASEDEB, FAE, FERM, FMM and "Otra").
+- `areas`: the 195 states of the UN (193 members and 2 observers, by their ISO 3166-1 code) and, for
+  Spain, its 19 autonomous communities and cities, 52 provinces and 8,132 municipalities of the INE
+  (1 January 2025), in migration `00062`.
+- `place_geologies`: Caliza, Yeso, Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita,
+  Conglomerado and Granito.
+- `place_types`: Cueva and Sima (cave) and Cañón (canyon), fixed, and Vía ferrata, Refugio and Otro
+  (general).
 - `material_types`: Cuerda (rope) and Saca (bag), fixed, and Mosquetones, Spits, Placas, Maillones
   and Iluminación (general).
 - `holidays`: the holidays of 2026.
@@ -1699,3 +1910,7 @@ at the end; that database has to be recreated when a new migration appears.
 - `00059_library_item_dates.sql`: `acquired_on`, `ended_on` and `end_reason` of `library_items`; the
   items that already existed count as acquired on the day they were added (the club's day)
 - `00060_material_color.sql`: `material_items.color`, optional, only for a rope or a bag
+- `00061_places.sql`: the catalogue of places: `areas`, `place_types` (seeded), `places` and
+  `place_points`
+- `00062_areas_seed.sql`: the countries and the zones of Spain (generated by
+  `scripts/generate-areas-seed.py`)

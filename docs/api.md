@@ -18,6 +18,8 @@ Contents:
 - [Activity memoria](#activity-memoria)
 - [Material](#material)
 - [Library](#library)
+- [Places](#places)
+- [Zones](#zones)
 - [Distributions](#distributions)
 - [Document archive and per-person files](#document-archive-and-per-person-files)
 - [Accounting](#accounting)
@@ -730,6 +732,140 @@ can do, board can do.
 - **DELETE** `/library/items/{id}/loans/{loanId}` — *Admin*. Deletes a loan recorded by mistake.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
+
+## Places
+
+The club's catalogue of places: caves and shafts, canyons, via ferratas, huts… A place has a type,
+one main coordinate and any number of other points. Any member reads, creates and changes places and
+their points (the API says who created each place and who changed it last, and when); deleting a
+place is for admin and board, and the types of place and the geologies of the caves are managed by
+admin alone. Coordinates are WGS84 latitude and longitude, in degrees, and an altitude, when it is
+known, in metres above sea level.
+
+- **GET** `/places/types` — *Any baseline role*. The types of place, in the order they were added,
+  each with its `kind` (`cave` for Cueva and Sima, `canyon` for Cañón, `general` for the rest) and
+  the number of places that have it.
+  - returns: 200 `[PlaceType]`
+- **POST** `/places/types` — *Admin*. Adds a general type (Cueva, Sima and Cañón are fixed).
+  - body: `name*` (unique ignoring case)
+  - returns: 201 `PlaceType`
+  - errors: 400 `invalid_body`, `place_type_name_required`; 409 `duplicate_place_type`
+- **PUT** `/places/types/{id}` — *Admin*. Renames a general type.
+  - body: `name*`
+  - returns: 200 `PlaceType`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`; 409 `fixed_place_type`
+- **DELETE** `/places/types/{id}` — *Admin*. Deletes a general type no place has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `fixed_place_type`, `place_type_in_use`
+- **GET** `/places/geologies` — *Any baseline role*. What a cave can be formed in (Caliza, Yeso,
+  Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita, Conglomerado, Granito and whatever has been
+  added), in the order they were added, each with the number of places that have it.
+  - returns: 200 `[PlaceGeology]`
+- **POST** `/places/geologies` — *Admin*. Adds a geology.
+  - body: `name*` (unique ignoring case)
+  - returns: 201 `PlaceGeology`
+  - errors: 400 `invalid_body`, `geology_name_required`; 409 `duplicate_geology`
+- **PUT** `/places/geologies/{id}` — *Admin*. Renames a geology (none is fixed).
+  - body: `name*`
+  - returns: 200 `PlaceGeology`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/places/geologies/{id}` — *Admin*. Deletes a geology no place has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `geology_in_use`
+- **GET** `/places` — *Any baseline role*. Every place, by name (ignoring case), unpaginated, with
+  what a table and its filters need: no long texts and no other points (those are in
+  `GET /places/{id}`), and where it is (`where`, `area_ids`).
+  - returns: 200 `[PlaceListItem]`
+- **POST** `/places` — *Any baseline role*. Adds a place.
+  - body: `type_id*`, `name*`, `lat*` and `lon*` (the main coordinate: -90 to 90 and -180 to 180)
+    and `altitude_m` (its altitude in metres above sea level, -500 to 9000, optional), `alt_names`
+    (other names it is known by), `state` (`open` by default: it can be visited freely;
+    `permit_required`: a permit has to be asked for; `tourist`: it is run as an attraction and has
+    to be paid for; `closed`), `area_id*` (the most specific zone it is in, of `/areas`: at least
+    the country), `access` (how to get there), `description`, and what depends on the kind of the
+    type: `depth_m` and `horizontal_length_m` (metres) and `geology_id` (of `/places/geologies`:
+    what it is formed in) only for a cave, and `technical_sheet` (what has to be installed to go
+    through it) for a cave or a canyon. Blank text counts as no value.
+  - returns: 201 `Place`
+  - errors: 400 `invalid_body`, `place_name_required`, `place_type_required`, `unknown_place_type`,
+    `place_area_required`, `unknown_area`, `invalid_place_state`, `invalid_coordinates`,
+    `invalid_altitude`, `unknown_geology`,
+    `invalid_place_measure` (negative, or above 20000 m of depth or 2000000 m of length),
+    `invalid_place_fields` (a measure or a geology of a place that is not a cave, or a technical
+    sheet of one that is neither a cave nor a canyon)
+- **GET** `/places/{id}` — *Any baseline role*. One place with its points.
+  - returns: 200 `Place`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/places/{id}` — *Any baseline role*. Replaces every field of the place (what is left out
+  is cleared), its type included, which may be any: the fields have to fit the kind of the new one.
+  Its other points are not touched.
+  - body: the same as creating
+  - returns: 200 `Place`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **POST** `/places/{id}/points` — *Any baseline role*. Adds one of the other points of a place.
+  Adding, changing or removing one counts as a change of the place (`updated_by`, `updated_at`).
+  - body: `kind*` (`parking`, `approach`, `waypoint`, `access` or `other`), `lat*`, `lon*`,
+    `altitude_m` (-500 to 9000, optional), `name`, `note`
+  - returns: 201 `PlacePoint`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_point_kind`, `invalid_coordinates`,
+    `invalid_altitude`; 404 `not_found`
+- **PUT** `/places/{id}/points/{pointId}` — *Any baseline role*. Replaces every field of a point.
+  - body: the same as creating
+  - returns: 200 `PlacePoint`
+  - errors: as creating; 404 `not_found` (also for a point of another place)
+- **DELETE** `/places/{id}/points/{pointId}` — *Any baseline role*. Removes a point.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
+
+## Zones
+
+The tree of zones that says where a place is: the 195 states of the United Nations (its 193 members
+and its two observers, all seeded) and, below each, whatever its administrative divisions are. For
+Spain they are seeded too: the autonomous communities, the provinces and the municipalities of the
+INE. A territory that is not a state (Gibraltar, for one) is added by a member below the state that
+administers it. Nothing in the API knows the levels: each zone has a `kind`, a text that names its
+level ("Provincia"), and a place points at the most specific zone it is in. Any member reads the
+zones and adds one below another when it is missing; renaming, merging and deleting them is for
+admin alone.
+
+- **GET** `/areas` — *Any baseline role*. Three questions, by the query:
+  - nothing: the countries, by name;
+  - `?parent_id=`: the zones directly below one, by name (404 `not_found` if there is no such zone);
+  - `?search=` (with `&limit=`, 20 by default and 50 at most): the zones whose name contains the
+    text, ignoring case, accents and punctuation ("coruna" finds "A Coruña"), the exact ones first,
+    each with its `ancestors`. An empty text finds nothing.
+  - returns: 200 `[Area]`
+  - errors: 400 `invalid_id` (a `parent_id` that is not a number); 404 `not_found`
+- **GET** `/areas/{id}` — *Any baseline role*. One zone with its `ancestors`, the country first.
+  - returns: 200 `Area`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **POST** `/areas` — *Any baseline role*. Adds a zone below another.
+  - body: `parent_id*`, `name*` (at most 200 characters; unique below the same zone ignoring case,
+    accents and punctuation), `kind` (at most 60 characters). Without a `kind` it is the kind of the
+    zones already below that one; with none below it yet, it has to be given.
+  - returns: 201 `Area`
+  - errors: 400 `invalid_body`, `area_parent_required`, `unknown_area`, `area_name_required`,
+    `area_kind_required`, `area_text_too_long`; 409 `duplicate_area`
+- **PUT** `/areas/{id}` — *Admin*. Renames a zone and, if a `kind` is given, changes it (a country
+  can be renamed).
+  - body: `name*`, `kind`
+  - returns: 200 `Area`
+  - errors: 400 `invalid_id`, `invalid_body`, `area_name_required`, `area_text_too_long`; 404
+    `not_found`; 409 `duplicate_area`
+- **DELETE** `/areas/{id}` — *Admin*. Deletes a zone with no zones below it and no places in it.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `area_is_country`, `area_has_children`,
+    `area_in_use`
+- **POST** `/areas/{id}/merge` — *Admin*. Moves the zones below this one and the places in it to
+  another zone below the same one, and deletes this one.
+  - body: `into_id*`
+  - returns: 200 `{id}`: the zone it was merged into
+  - errors: 400 `invalid_id`, `invalid_body`, `area_merge_self`; 404 `not_found`; 409
+    `area_is_country`, `area_merge_parents` (they are not below the same zone), `duplicate_area` (a
+    zone below this one has the name of one below the other)
 
 ## Distributions
 
@@ -1686,6 +1822,111 @@ An item says whether it is `available` (in the library and not out on loan) but 
 | `created_at` | datetime |
 
 `returned_at` is absent while the item is out.
+
+### `Area`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `parent_id` | integer |
+| `kind` | text |
+| `name` | text |
+| `code` | text |
+| `child_count` | integer |
+| `place_count` | integer |
+| `ancestors` | `[AreaRef]` |
+
+`parent_id` is absent for a country. `code` is an official code when there is one: ISO 3166-1
+alpha-2 for a country, the INE's for a Spanish community, province or municipality. `child_count`
+and `place_count` are the zones and the places directly below and in the zone, not in all its
+descendants. `ancestors`, the country first and without the zone itself, are given by a search and
+by `GET /areas/{id}`, not by the list of the zones below one.
+
+### `AreaRef`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `kind` | text |
+| `name` | text |
+
+### `PlaceType`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `kind` | cave/canyon/general |
+| `place_count` | integer |
+
+### `PlaceGeology`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `place_count` | integer |
+
+### `PlaceListItem`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `type_id` | integer |
+| `type_name` | text |
+| `kind` | cave/canyon/general |
+| `name` | text |
+| `alt_names` | text |
+| `state` | open/permit_required/tourist/closed |
+| `area_id` | integer |
+| `area_ids` | `[integer]` |
+| `where` | text |
+| `lat` | number |
+| `lon` | number |
+| `altitude_m` | integer |
+| `depth_m` | integer |
+| `horizontal_length_m` | integer |
+| `geology_id` | integer |
+| `geology` | text |
+
+### `Place`
+
+Everything of a `PlaceListItem`, and:
+
+| Field | Type |
+|---|---|
+| `access` | text |
+| `description` | text |
+| `technical_sheet` | text |
+| `area_path` | `[AreaRef]` |
+| `created_by` | text (login) |
+| `created_at` | datetime |
+| `updated_by` | text (login) |
+| `updated_at` | datetime |
+| `points` | `[PlacePoint]` |
+
+`area_id` is the most specific zone it is in; `area_ids` are that zone and the ones it is in, the
+country first, so that a list can be filtered by any of them; `where` says them from the most
+specific one to the country ("Valdemanco, Madrid, Comunidad de Madrid, España"); `area_path` is the
+same as references, the country first and with each `kind`. `kind` says what the place may have:
+`depth_m`, `horizontal_length_m` and `geology_id` (with its name in `geology`) only when it is
+`cave`, `technical_sheet` when it is `cave` or `canyon`. `altitude_m`, optional, is that of the main
+coordinate (the other points have their own). `updated_by` and `updated_at` are the last change of
+the place or of any of its points (the same as the creation until there is one).
+
+### `PlacePoint`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `place_id` | integer |
+| `kind` | parking/approach/waypoint/access/other |
+| `name` | text |
+| `lat` | number |
+| `lon` | number |
+| `altitude_m` | integer |
+| `note` | text |
+| `created_at` | datetime |
 
 ### `ArchiveEntry`
 

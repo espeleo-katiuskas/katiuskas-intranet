@@ -2264,6 +2264,388 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /places/types:
+    get:
+      summary: List the types of place
+      description: >
+        Any baseline role. Cueva and Sima (kind cave), Cañón (kind canyon) and the general types an admin
+        has added, in the order they were added, each with how many places have it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The types
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceType" }
+    post:
+      summary: Add a type of place
+      description: >
+        Admin only. It is a general type: the types of caves and canyons are fixed. The name is unique
+        ignoring case.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceTypeInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceType" }
+        "400": { description: "invalid_body or place_type_name_required." }
+        "403": { description: "Requires admin." }
+        "409": { description: "duplicate_place_type." }
+
+  /places/types/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Rename a type of place
+      description: Admin only, and only a general type.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceTypeInput" }
+      responses:
+        "200":
+          description: The type as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceType" }
+        "400": { description: "invalid_id, invalid_body or place_type_name_required." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_place_type or fixed_place_type (Cueva, Sima and Cañón)." }
+    delete:
+      summary: Delete a type of place
+      description: Admin only. Only a general type no place has.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "fixed_place_type, or place_type_in_use — a place has it." }
+
+  /places/geologies:
+    get:
+      summary: List the geologies of the caves
+      description: >
+        Any baseline role. What a cave can be formed in (Caliza, Yeso, Hielo, Lava, Dolomía, Mármol, Sal,
+        Arenisca, Cuarcita, Conglomerado, Granito and whatever has been added), in the order they were
+        added, each with how many places have it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The geologies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceGeology" }
+    post:
+      summary: Add a geology
+      description: Admin only. The name is unique ignoring case.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceGeologyInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceGeology" }
+        "400": { description: "invalid_body or geology_name_required." }
+        "403": { description: "Requires admin." }
+        "409": { description: "duplicate_geology." }
+
+  /places/geologies/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Rename a geology
+      description: Admin only. None is fixed.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceGeologyInput" }
+      responses:
+        "200":
+          description: The geology as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceGeology" }
+        "400": { description: "invalid_id, invalid_body or geology_name_required." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_geology." }
+    delete:
+      summary: Delete a geology
+      description: Admin only. Only one no place has.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "geology_in_use — a place has it." }
+
+  /places:
+    get:
+      summary: List the places
+      description: >
+        Any baseline role. Every place, by name ignoring case, unpaginated, with what a table and its
+        filters need: no long texts and no other points (GET /places/{id} has them).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The places
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceListItem" }
+    post:
+      summary: Add a place
+      description: Any baseline role. Blank text counts as no value.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_body, place_name_required, place_type_required, unknown_place_type, place_area_required, unknown_area, invalid_place_state, invalid_coordinates, invalid_altitude, unknown_geology, invalid_place_measure or invalid_place_fields (a depth, a horizontal length or a geology on a place that is not a cave, a technical sheet on one that is neither a cave nor a canyon)." }
+
+  /places/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One place, with its points
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The place
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Edit a place
+      description: >
+        Any baseline role. Replaces every field (what is left out is cleared), the type included, which
+        may be any one whose kind fits the fields. The other points are not touched.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceInput" }
+      responses:
+        "200":
+          description: The place as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_id and everything creating can answer." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a place
+      description: Admin or board. With its points.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin or board." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /places/{id}/points:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Add a point to a place
+      description: Any baseline role. It counts as a change of the place.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlacePointInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlacePoint" }
+        "400": { description: "invalid_id, invalid_body, invalid_point_kind, invalid_coordinates or invalid_altitude." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /places/{id}/points/{pointId}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+      - { name: pointId, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Edit a point of a place
+      description: Any baseline role. Replaces every field.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlacePointInput" }
+      responses:
+        "200":
+          description: The point as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlacePoint" }
+        "400": { description: "invalid_id, invalid_body, invalid_point_kind, invalid_coordinates or invalid_altitude." }
+        "404": { description: "not_found — the place, or a point that is not of that place." }
+    delete:
+      summary: Remove a point of a place
+      description: Any baseline role.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Removed }
+        "400": { description: "invalid_id." }
+        "404": { description: "not_found — the place, or a point that is not of that place." }
+
+  /areas:
+    get:
+      summary: List zones, or search them
+      description: >
+        Any baseline role. With no query, the countries; with `parent_id`, the zones directly below that
+        one; with `search`, the zones whose name contains the text ignoring case, accents and
+        punctuation, the exact ones first, each with its ancestors (an empty text finds nothing).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: parent_id, in: query, required: false, schema: { type: integer } }
+        - { name: search, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 50 }, description: "Only for a search." }
+      responses:
+        "200":
+          description: The zones, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Area" }
+        "400": { description: "invalid_id — a parent_id that is not a number." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Add a zone below another
+      description: >
+        Any baseline role. The kind is that of the zones already below the parent unless it is given;
+        with none below it yet it has to be given. The name is unique below each zone ignoring case,
+        accents and punctuation.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AreaInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Area" }
+        "400": { description: "invalid_body, area_parent_required, unknown_area, area_name_required, area_kind_required or area_text_too_long." }
+        "409": { description: "duplicate_area." }
+
+  /areas/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One zone, with its ancestors
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The zone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Area" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Rename a zone and change its kind
+      description: Admin only. A country can be renamed. Without a kind, it stays.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AreaUpdate" }
+      responses:
+        "200":
+          description: The zone as changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Area" }
+        "400": { description: "invalid_id, invalid_body, area_name_required or area_text_too_long." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_area." }
+    delete:
+      summary: Delete a zone
+      description: Admin only. Only a zone with no zones below it and no places in it, and never a country.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "area_is_country, area_has_children or area_in_use." }
+
+  /areas/{id}/merge:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Merge a zone into another below the same one
+      description: >
+        Admin only. Moves the zones below this one and the places in it to the other, and deletes this
+        one, in one transaction.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [into_id]
+              properties:
+                into_id: { type: integer }
+      responses:
+        "200":
+          description: The id of the zone it was merged into
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+        "400": { description: "invalid_id, invalid_body or area_merge_self." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "area_is_country, area_merge_parents (they are not below the same zone) or duplicate_area (a zone below this one has the name of one below the other)." }
+
   /library/types:
     get:
       summary: List the types of item
@@ -5851,6 +6233,150 @@ components:
           type: integer
           nullable: true
           description: The accounting transaction a sale or a rental recorded; absent for the other types and for one that costs nothing.
+
+    AreaRef:
+      type: object
+      properties:
+        id: { type: integer }
+        kind: { type: string }
+        name: { type: string }
+
+    AreaInput:
+      type: object
+      required: [parent_id, name]
+      properties:
+        parent_id: { type: integer, description: "The zone it is added below." }
+        name: { type: string, maxLength: 200 }
+        kind: { type: string, maxLength: 60, description: "The text that names its level (Provincia, Distrito…); the kind of its siblings if left out." }
+
+    AreaUpdate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        kind: { type: string, maxLength: 60, description: "It stays if left out." }
+
+    Area:
+      type: object
+      properties:
+        id: { type: integer }
+        parent_id: { type: integer, description: "Absent for a country." }
+        kind: { type: string, description: "The text that names its level: País, Comunidad autónoma, Provincia, Municipio…" }
+        name: { type: string }
+        code: { type: string, description: "An official code when there is one: ISO 3166-1 alpha-2 for a country, the INE's for a Spanish community, province or municipality." }
+        child_count: { type: integer, description: "Zones directly below it." }
+        place_count: { type: integer, description: "Places directly in it." }
+        ancestors:
+          type: array
+          description: "The zones it is in, the country first, without itself. Given by a search and by GET /areas/{id}."
+          items: { $ref: "#/components/schemas/AreaRef" }
+
+    PlaceTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    PlaceType:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        kind: { type: string, enum: [cave, canyon, general], description: "Cueva and Sima are cave, Cañón is canyon, every type an admin adds is general." }
+        place_count: { type: integer, description: "How many places have this type." }
+
+    PlaceGeologyInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    PlaceGeology:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        place_count: { type: integer, description: "How many places have this geology." }
+
+    PlaceInput:
+      type: object
+      required: [type_id, name, area_id, lat, lon]
+      properties:
+        type_id: { type: integer, description: "A type of GET /places/types." }
+        name: { type: string }
+        alt_names: { type: string, nullable: true, description: "Other names it is known by." }
+        state: { type: string, enum: [open, permit_required, tourist, closed], default: open, description: "How it can be visited: freely, only with a permit, as a paid attraction, or not at all." }
+        area_id: { type: integer, description: "The most specific zone it is in (of GET /areas): at least the country." }
+        lat: { type: number, minimum: -90, maximum: 90, description: "WGS84 latitude of the main coordinate, in degrees." }
+        lon: { type: number, minimum: -180, maximum: 180, description: "WGS84 longitude of the main coordinate, in degrees." }
+        altitude_m: { type: integer, minimum: -500, maximum: 9000, nullable: true, description: "Altitude of the main coordinate, in metres above sea level." }
+        access: { type: string, nullable: true, description: "How to get there." }
+        description: { type: string, nullable: true }
+        depth_m: { type: integer, minimum: 0, maximum: 20000, nullable: true, description: "Only for a place whose type is a cave." }
+        horizontal_length_m: { type: integer, minimum: 0, maximum: 2000000, nullable: true, description: "Only for a place whose type is a cave." }
+        geology_id: { type: integer, nullable: true, description: "What a cave is formed in (of GET /places/geologies). Only for a place whose type is a cave." }
+        technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cave or a canyon." }
+
+    PlaceListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        type_id: { type: integer }
+        type_name: { type: string }
+        kind: { type: string, enum: [cave, canyon, general] }
+        name: { type: string }
+        alt_names: { type: string }
+        state: { type: string, enum: [open, permit_required, tourist, closed] }
+        area_id: { type: integer, description: "The most specific zone it is in." }
+        area_ids: { type: array, items: { type: integer }, description: "That zone and the ones it is in, the country first." }
+        where: { type: string, description: "The names of those zones from the most specific to the country: Valdemanco, Madrid, Comunidad de Madrid, España." }
+        lat: { type: number }
+        lon: { type: number }
+        altitude_m: { type: integer, description: "Altitude of the main coordinate, in metres above sea level." }
+        depth_m: { type: integer }
+        horizontal_length_m: { type: integer }
+        geology_id: { type: integer }
+        geology: { type: string, description: "The name of the geology of a cave." }
+
+    Place:
+      description: A place with everything about it.
+      allOf:
+        - { $ref: "#/components/schemas/PlaceListItem" }
+        - type: object
+          properties:
+            access: { type: string }
+            description: { type: string }
+            technical_sheet: { type: string }
+            area_path: { type: array, description: "The zone and the ones it is in, the country first.", items: { $ref: "#/components/schemas/AreaRef" } }
+            created_by: { type: string, description: "Login of who added it." }
+            created_at: { type: string, format: date-time }
+            updated_by: { type: string, description: "Login of who last changed the place or any of its points." }
+            updated_at: { type: string, format: date-time }
+            points: { type: array, items: { $ref: "#/components/schemas/PlacePoint" } }
+
+    PlacePointInput:
+      type: object
+      required: [kind, lat, lon]
+      properties:
+        kind: { type: string, enum: [parking, approach, waypoint, access, other] }
+        name: { type: string, nullable: true }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        altitude_m: { type: integer, minimum: -500, maximum: 9000, nullable: true, description: "In metres above sea level." }
+        note: { type: string, nullable: true }
+
+    PlacePoint:
+      type: object
+      properties:
+        id: { type: integer }
+        place_id: { type: integer }
+        kind: { type: string, enum: [parking, approach, waypoint, access, other] }
+        name: { type: string }
+        lat: { type: number }
+        lon: { type: number }
+        altitude_m: { type: integer }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
 
     LibraryTypeInput:
       type: object

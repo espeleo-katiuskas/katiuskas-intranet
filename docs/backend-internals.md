@@ -38,11 +38,11 @@ Contents:
 **Layers**: `backend/internal/httpapi` (router assembly, `ClientIP`, request logging, panic
 recovery, `WriteJSON`/`WriteError`) → one package per domain resource (`users`, `roles`,
 `memberships`, `licenses`, `board`, `activities`, `activityresources`, `distributions`, `material`,
-`tokens`, `accounting`, `clubinfo`, `budgets`, `transactionfiles`; `adminstatus` is the odd one out,
-see below, and `requestcount` is a middleware, not a resource), each split into `model.go` /
-`repository.go` (pgx) / `service.go` / `handler.go`. The
-domain layer never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package
-owns and registers its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
+`tokens`, `accounting`, `clubinfo`, `budgets`, `transactionfiles`, `library`, `places`, `areas`;
+`adminstatus` is the odd one out, see below, and `requestcount` is a middleware, not a resource),
+each split into `model.go` / `repository.go` (pgx) / `service.go` / `handler.go`. The domain layer
+never imports `net/http`; only `handler.go` knows HTTP exists. Each resource package owns and
+registers its own routes via `RegisterRoutes(mux)`, wired together in `cmd/api/main.go`.
 **`internal/archive`** (and **`internal/userfiles`**, see below) is the one exception to this shape:
 it serves a read-only document tree from disk (`config.ArchiveRoot`), not Postgres, so it has no
 `repository.go` — `service.go` works directly against the filesystem, resolving and validating every
@@ -843,6 +843,122 @@ hard-links it into testing, each applying the same default.
 
 The Telegram notices say that an item was added, edited (a diff of the changed fields), deleted,
 lent, returned, commented, or that a file or a cover was added or removed.
+
+## Places
+
+`internal/places`: the catalogue of places (`place_types`, `places`, `place_points`, and the zone
+each one is in; migration `00061_places.sql`), with the usual `model.go`, `repository.go`,
+`service.go` and `handler.go`. It has no files yet.
+
+**Who can do what.** Everybody who can sign in reads, and creates and changes places and their
+points: there is no review, and the API says who and when (`created_by`, `updated_by` and
+`updated_at` in `Place`, which the repository fills by joining `users`, so the handler needs no
+lookup for them). Only admin and board delete a place, and only admin manages the types. Every
+change is announced on Telegram (`httpapi.NotifyAsync`), a place edit with the `DiffFields` of what
+changed (`placeAuditFields`) as the other resources do.
+
+**Kinds.** A type has a `kind` (`cave`, `canyon` or `general`) that cannot change; Cueva and Sima
+are `cave`, Cañón is `canyon`, and a type an admin adds is always `general`, so those three are
+fixed (409 `fixed_place_type` on renaming or deleting them). `places.kind` repeats the kind of the
+type, tied to it by the foreign key `(type_id, kind)`, so that two `CHECK`s can say what each kind
+may have (`measures_only_for_caves`, `geology_only_for_caves`,
+`technical_sheet_only_for_caves_and_canyons`), the way
+`material_items` does. `Service.kindOf` reads the type before the statement and refuses a field that
+does not fit (400 `invalid_place_fields`), because a violated `CHECK` would abort the transaction
+the tests run in (the constraints stay as the backstop); an edit may change the type to any other,
+and `UpdatePlace` writes the new kind with it.
+
+**Coordinates.** Latitude and longitude are `double precision` columns of WGS84 degrees, with
+`CHECK` ranges and no PostGIS (a package the production host would have to install for a bounding
+box that a plain index on `(lat, lon)` answers). `Input.Lat` and `Input.Lon` are pointers so that a
+missing one is 400 `invalid_coordinates` and not 0, the Gulf of Guinea. UTM is only the frontend's
+business (`js/coordinates.js`): the API never sees it. The **altitude** (`altitude_m`, in metres
+above sea level) goes with the coordinate, in the place and in each of its points: an optional
+integer between -500 and 9000 (the Dead Sea and the Himalayas, only to catch a typo; 400
+`invalid_altitude`), with a `CHECK` as a backstop. It is a pointer in `Input` and `PointInput`
+because most places do not have one yet, and an edit that leaves it out clears it, like every other
+field.
+
+**Geology.** What a cave is formed in is a row of `place_geologies`, a catalogue an admin edits
+(`/places/geologies`), not a fixed list: nobody knows all the kinds there are, so none is fixed and
+nothing in the code depends on any. `geology_id` is optional and only for a cave, as the depth is
+(`geology_only_for_caves`; `kindOf` refuses it on another kind with 400 `invalid_place_fields`, and
+an unknown one with 400 `unknown_geology`, both before the statement). One in use is not deleted
+(409 `geology_in_use`). The listing and the place carry its id and its name, and the edit notice
+diffs the name (`Geology`).
+
+**The main coordinate.** It is in the `places` row (not in `place_points` with a flag), so that "a
+place always has one" holds by construction, with no trigger, and a map or a listing needs no join.
+The other points are `place_points`, each with its kind (`parking`, `approach`, `waypoint`,
+`access`, `other`); `AddPoint`, `UpdatePoint` and `DeletePoint` lock the place's row, so that two
+people changing it do not race, and touch its `updated_by` and `updated_at`. A point is only
+reachable through its own place (a point of another place is 404). `DeletePlace` deletes the points
+with the place, in one transaction, as nothing cascades.
+
+**Where it is.** A place has an `area_id`, the most specific zone known, at least the country (400
+`place_area_required`, and `unknown_area` for one that is not there, checked by `kindOf` before the
+statement). The listing and the place say it three ways, all worked out with a recursive query on
+the tree of zones (`listFrom`): `area_ids`, the zone and the ones it is in with the country first,
+so that a list can be filtered by any of them; `where`, their names from the most specific to the
+country, which the search of `/lugares` looks in, so that "Madrid" finds the places in the province,
+in a municipality of it and in the community; and, in the place only, `area_path`, the same with the
+`kind` of each. The edit notice diffs `Where`.
+
+**The listing.** `GET /places` is unpaginated, like `GET /users`, and gives `ListItem`, the fields
+of a table and its filters, without the long texts or the points: the frontend filters and searches
+it in the browser, which is fine for the hundreds or few thousands of places expected. A map of all
+of them would use a lighter listing still.
+
+## Zones
+
+`internal/areas`: the tree of zones that says where a place is (`areas`; migrations
+`00061_places.sql` and, for the data, `00062_areas_seed.sql`), with the usual `model.go`,
+`repository.go`, `service.go` and `handler.go`. It is its own package because a zone is a resource
+with its own routes (`/areas`) that other things may use later; `places` only points at it with a
+foreign key.
+
+**A tree with no levels.** A zone has a `parent_id` and a `kind`, the text that names its level
+("País", "Provincia", "Municipio"); nothing in the code or the API knows what the levels are, which
+differ from one country to another (Spain has a community, a province and a municipality; Andorra, a
+parish). A place points at the most specific zone it is in, and its country, province… are the
+ancestors, found with a recursive query (`WITH RECURSIVE`, at most a handful of steps). The roots
+are the states; the API never creates one.
+
+**The seed.** Migration `00062` has the 195 states of the United Nations (its 193 members and its
+two observers, the Holy See and Palestine; names in Spanish from CLDR) and, for Spain, the 19
+communities and cities, the 52 provinces and the 8,132 municipalities of the INE list of 1 January
+2025, each below the right one. It is generated by `scripts/generate-areas-seed.py`, which says
+where the data comes from; a newer edition of the INE list would come in as another migration. The
+names the INE writes with the article last ("Coruña, A") are written with it first, and the two
+languages of a name stay together ("La Vila Joiosa/Villajoyosa").
+
+**Names.** `Normalize` (`model.go`) gives a name in lower case, without accents (unicode
+normalization NFD without the marks, and the letters that do not split, like ß or ø, by hand) and
+with every run of anything but letters and digits as one space. It is stored as `norm_name`, and the
+search and the uniqueness use it: below the same zone, "Valdemanco", "valdemanco" and "Valdémanco"
+are one zone, which the unique index `idx_areas_parent_name` guarantees and `Service` checks first
+(as a violated constraint would abort the transaction the tests run in). The script that writes the
+seed has the same function in Python, and `TestSeed` checks that the two agree on all the 8,398
+zones.
+
+**The search** (`GET /areas?search=`) looks for the normalized text inside `norm_name` (so "coruna"
+finds "A Coruña"), puts the exact names first, then those that start with it, then the shortest, and
+gives each with its ancestors, which is what lets two zones with the same name be told apart
+("Madrid" is a province and a municipality). It matches only the name of the zone, not those of its
+ancestors.
+
+**Adding.** Any member adds a zone below another. The `kind` is the one most of its siblings have,
+unless it is given, and the first zone below another needs it said (400 `area_kind_required`).
+Nothing else is checked, so a typo is possible: that is what an admin fixes.
+
+**Changing.** Renaming (and changing the kind) is for admin alone, as is deleting a zone, which only
+works if nothing is below it and no place is in it, and never for a country (409 `area_is_country`,
+`area_has_children`, `area_in_use`). **Merging** (`POST /areas/{id}/merge`) is the way out when a
+zone was added twice: it locks both rows (always in the same order, so two merges do not wait for
+each other), requires both to be below the same zone, moves the zones below the first one and the
+places in it to the second, and deletes the first, in one transaction. If a zone below the first one
+has the name of one below the second, nothing is merged (409 `duplicate_area`). Every change is
+announced on Telegram.
 
 ## Document archive
 
