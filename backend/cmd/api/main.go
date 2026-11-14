@@ -48,12 +48,18 @@ import (
 // in the server's time zone), e.g. "🚀 API started (version v0.3.6, commit del
 // 17-10-2026 12:00)".
 func startupMessage(build adminstatus.Build) string {
+	return startupMessageIn(build, time.Local)
+}
+
+// startupMessageIn is startupMessage with the time zone the commit's time is shown in, which the tests
+// give instead of changing the global time.Local (that is read by every goroutine that asks the time).
+func startupMessageIn(build adminstatus.Build, zone *time.Location) string {
 	var details []string
 	if build.Version != "" {
 		details = append(details, "version "+build.Version)
 	}
 	if !build.CommitTime.IsZero() {
-		details = append(details, "commit del "+build.CommitTime.Local().Format("02-01-2006 15:04"))
+		details = append(details, "commit del "+build.CommitTime.In(zone).Format("02-01-2006 15:04"))
 	}
 	if len(details) == 0 {
 		return "🚀 API started"

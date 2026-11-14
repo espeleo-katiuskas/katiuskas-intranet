@@ -81,10 +81,9 @@ func TestBuildRouterAssemblesAndAnswers(t *testing.T) {
 }
 
 func TestStartupMessageSaysWhatIsKnownAboutTheBuild(t *testing.T) {
-	// The message is in the server's time zone: fix it, so the test gives the same anywhere.
-	local := time.Local
-	time.Local = time.FixedZone("test", 2*60*60)
-	defer func() { time.Local = local }()
+	// The message is in the server's time zone: the test gives one, so it gives the same anywhere (and
+	// does not change time.Local, which other goroutines read).
+	zone := time.FixedZone("test", 2*60*60)
 	commit := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC) // 12:00 there
 	cases := []struct {
 		name  string
@@ -97,7 +96,7 @@ func TestStartupMessageSaysWhatIsKnownAboutTheBuild(t *testing.T) {
 		{"nothing known", adminstatus.Build{}, "🚀 API started"},
 	}
 	for _, c := range cases {
-		if got := startupMessage(c.build); got != c.want {
+		if got := startupMessageIn(c.build, zone); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
 	}
