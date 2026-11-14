@@ -151,6 +151,7 @@ function renderItemRow(item) {
           <button type="button" class="btn btn-secondary btn-small" data-toggle-item-movements="${item.id}">Movimientos</button>
           ${canManageMovements && movementTypeOptionsFor(item).length ? `<button type="button" class="btn btn-secondary btn-small" data-add-movement="${item.id}">+ Movimiento</button>` : ''}
           ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-edit-item="${item.id}">Editar</button>` : ''}
+          ${canManageMovements ? `<button type="button" class="btn btn-secondary btn-small" data-duplicate-item="${item.id}">Duplicar</button>` : ''}
         </div>
       </td>
     </tr>
@@ -366,6 +367,8 @@ async function loadItems() {
 
 // Set below, for whoever can manage the material: opens the dialog of "Nuevo material" to edit an item.
 let openEditItemDialog = null;
+// The same dialog, to create a new item that starts as a copy of one that exists.
+let openDuplicateItemDialog = null;
 
 document.getElementById('items-table-body').addEventListener('click', async (event) => {
   const toggleButton = event.target.closest('button[data-toggle-item-movements]');
@@ -381,6 +384,12 @@ document.getElementById('items-table-body').addEventListener('click', async (eve
   const editItemButton = event.target.closest('button[data-edit-item]');
   if (editItemButton) {
     openEditItemDialog?.(Number(editItemButton.dataset.editItem));
+    return;
+  }
+
+  const duplicateItemButton = event.target.closest('button[data-duplicate-item]');
+  if (duplicateItemButton) {
+    openDuplicateItemDialog?.(Number(duplicateItemButton.dataset.duplicateItem));
     return;
   }
 
@@ -497,6 +506,8 @@ if (canManageMovements) {
   const descriptionField = document.getElementById('ni-description');
   // The dialog is shared: the id of the item it is editing, or null when it creates one.
   let editingItemId = null;
+  // Or the id of the item whose data it starts with, when it creates a copy of it.
+  let duplicatingItemId = null;
   // The catalog of types, with the attributes of each (what the form of a general item asks for).
   let materialTypes = [];
 
@@ -586,8 +597,11 @@ if (canManageMovements) {
       if (editingItemId !== null) el.hidden = true;
       else if (!el.dataset.kindField) el.hidden = false;
     });
-    document.getElementById('ni-title').textContent =
-      editingItemId !== null ? 'Editar material' : 'Nuevo material';
+    let title = 'Nuevo material';
+    if (editingItemId !== null) title = 'Editar material';
+    else if (duplicatingItemId !== null) title = 'Duplicar material';
+    document.getElementById('ni-title').textContent = title;
+    document.getElementById('ni-duplicate-note').hidden = duplicatingItemId === null;
     document.getElementById('ni-submit').textContent =
       editingItemId !== null ? 'Guardar' : 'Crear material';
     // Editing: a rope or a bag keeps its type, and general material may change it, but only to another
@@ -622,21 +636,19 @@ if (canManageMovements) {
   // the very first render below.
   newItemDialog.addEventListener('close', () => {
     editingItemId = null;
+    duplicatingItemId = null;
     updateKindFieldsVisibility();
   });
 
-  openEditItemDialog = (itemId) => {
-    const item = itemsById[itemId];
-    if (!item) return;
-    editingItemId = itemId;
-    typeSelect.value = item.type_id;
-    updateKindFieldsVisibility();
+  // Puts an item's data in the form, for the type already chosen: all of it but the code, and the
+  // quantity and date of acquisition, which are not the item's data.
+  function fillItemForm(item, { withCode }) {
     const set = (name, value) => {
       newItemForm.elements[name].value = value ?? '';
     };
     set('brand', item.brand);
     set('model', item.model);
-    set('code', item.code);
+    if (withCode) set('code', item.code);
     syncModelWithBrand();
     set('color', item.color);
     set('rope_type', item.rope_type);
@@ -652,7 +664,34 @@ if (canManageMovements) {
       set(`attribute_${value.attribute_id}`, value.option_id ?? value.value);
     }
     newItemForm.elements.loanable.checked = item.loanable;
+  }
+
+  openEditItemDialog = (itemId) => {
+    const item = itemsById[itemId];
+    if (!item) return;
+    editingItemId = itemId;
+    typeSelect.value = item.type_id;
+    updateKindFieldsVisibility();
+    fillItemForm(item, { withCode: true });
     openModal(newItemDialog);
+  };
+
+  // A new item that starts as a copy: everything is filled in and can be changed before saving. The
+  // code is not copied — it is unique among all the material (and a rope or a bag must have one) — so
+  // it is left blank, and for a rope or a bag the cursor goes there.
+  openDuplicateItemDialog = (itemId) => {
+    const item = itemsById[itemId];
+    if (!item) return;
+    duplicatingItemId = itemId;
+    typeSelect.value = item.type_id;
+    updateKindFieldsVisibility();
+    fillItemForm(item, { withCode: false });
+    const needsCode = item.kind === 'rope' || item.kind === 'bag';
+    document.getElementById('ni-duplicate-note').textContent =
+      `Empieza como copia de «${itemPickerText(item)}»: cambia lo que haga falta antes de crearlo.` +
+      (needsCode ? ' Escribe su código, que no puede repetirse.' : '');
+    openModal(newItemDialog);
+    if (needsCode) document.getElementById('ni-code').focus();
   };
 
   document.getElementById('toggle-new-item').addEventListener('click', () => {

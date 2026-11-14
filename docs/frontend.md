@@ -41,6 +41,19 @@ shows a plain panel linking to `/login`. Everything it loads is by absolute path
 at whatever address was asked for, however deep — which is also why `layout.js`'s topbar logo is
 `/images/…` and not relative.
 
+**Duplicating material.** Next to "Editar", each row of `/material` has "Duplicar" (the same roles:
+admin, board and material), for creating something similar to what already exists. It opens the
+same dialog as "Nuevo material" (`openDuplicateItemDialog` in `material.js`, which fills the form
+with `fillItemForm`, as an edit does) titled "Duplicar material", with a note saying which item it
+starts from, and everything in it can be changed before "Crear material", which is the ordinary
+`POST /material/items`: nothing about it is in the API. What is copied is the type, brand, model,
+colour, the data of a rope or a bag, the attributes, the description, the prices and "Se puede
+prestar". The **code is not copied**, because it is unique among all the material (and a rope or a
+bag must have one): it is left blank, and for a rope or a bag the cursor goes there. The quantity
+and the date of acquisition are not the item's data either and start as in any new item. Changing
+the type in the dialog drops the attributes of the previous one and keeps the rest. Closing the
+dialog without saving forgets the copy, so the next "+ Nuevo material" is empty.
+
 **Editing material.** On `/material` ("Editar" in each row, for admin, board and material) the
 dialog of "Nuevo material" is reused to edit an item (`material.js`, `openEditItemDialog`): the
 title and the button change, the type is fixed for a rope or a bag (the field is disabled) and, for
