@@ -724,9 +724,12 @@ option can never make items identical.
 every listing, movement and Telegram notification names an item the same way: the type, brand and
 model, the *values* of its attributes (not their names) in the order of the type's attributes
 (`position`, changed with `PUT /material/types/{id}/attributes/order`), and, for general material,
-the description at the end, joined with " · ": "Mosquetones · Petzl Attache · aluminio ·
-asimétrico · con seguro". The catalog is read once per request (`loadTypes`, three small queries),
-not once per item, so listing hundreds of items costs the same as listing one.
+the description at the end, joined with " · ": "Mosquetones · Petzl Attache · aluminio · asimétrico
+· con seguro". A rope or a bag has no attributes, but may have a `color` (optional, at most
+`MaxColorLength` = 40 characters, trimmed; a general item cannot: the `color_only_for_rope_and_bag`
+check, answered as `invalid_item_fields`), which goes last: "Cuerda · Beal Karma · azul". The
+catalog is read once per request (`loadTypes`, three small queries), not once per item, so listing
+hundreds of items costs the same as listing one.
 
 **Sales and rentals are recorded in accounting** (migration `00055_material_accounting.sql`), as the
 payment of a distribution is. `POST /material/movements` takes `account_id`, the asset account the

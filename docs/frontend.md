@@ -218,11 +218,13 @@ loans of `/actividad` and the history of `/socio`) writes it with `itemLabel`
 `itemPickerText`, which reads the same as a row of `/material`. There is no "#<id>": two items are
 never exactly the same (the API refuses it), so the type, the name and the code tell them apart.
 General material is named by the API (`display_name`: the type, brand and model, the values of its
-attributes and the description, joined with " · "); a rope or a bag by its brand and model and its
-own data. The label is the type, that name and, if the item has a code, "#<code>" (`itemRef`). The
-table of `/material` has its own "Tipo" column, so its "Características" column starts at the name
-(and ends with the code, since there is no column for it); an item that lacks something its type now
-requires is marked "Incompleto" there.
+attributes and the description, joined with " · "); a rope or a bag by its brand and model, its own
+data and its colour, if it has one (the last part, so "azul" finds it in the search of `/material`,
+which looks in what the table shows; the form of a rope or a bag has an optional "Color"). The label
+is the type, that name and, if the item has a code, "#<code>" (`itemRef`). The table of `/material`
+has its own "Tipo" column, so its "Características" column starts at the name (and ends with the
+code, since there is no column for it); an item that lacks something its type now requires is marked
+"Incompleto" there.
 
 **Who the pickers offer.** `GET /users/directory` says whether each person is a `member` now or a
 `former_member`, and the pickers offer only whom the thing is open to (the API refuses the rest):

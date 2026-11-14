@@ -1500,3 +1500,101 @@ func TestHandlerAnItemCodeCannotBeOnlyDigitsNorEmpty(t *testing.T) {
 		}
 	}
 }
+
+// The colour of a rope or a bag: optional, trimmed (a blank one is none), part of the item's name so
+// the lists show it and a search finds it, replaced like every other field on an edit, and refused on
+// general material.
+func TestHandlerColorOfARopeOrABag(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	boardToken := tokenFor(t, authn, 3, "board")
+	create := func(body map[string]any) *httptest.ResponseRecorder {
+		return doRequest(mux, http.MethodPost, "/api/v1/material/items", boardToken, body)
+	}
+	rope := func(code string, extra map[string]any) map[string]any {
+		b := map[string]any{
+			"type_id": testutil.MaterialTypeID(t, tx, "Cuerda"), "brand": "Beal", "model": "Karma", "code": code,
+			"rope_type": "caving", "diameter_mm": 9.0, "manufacture_year": 2020, "length_m": 50,
+		}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	decodeItem := func(rec *httptest.ResponseRecorder) material.Item {
+		t.Helper()
+		var it material.Item
+		if err := json.Unmarshal(rec.Body.Bytes(), &it); err != nil {
+			t.Fatal(err)
+		}
+		return it
+	}
+
+	// A rope with a colour, trimmed; its name ends with it.
+	rec := create(rope("C-C1", map[string]any{"color": "  azul y negro "}))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("rope with a colour: %d %s", rec.Code, rec.Body.String())
+	}
+	blue := decodeItem(rec)
+	if blue.Color == nil || *blue.Color != "azul y negro" || !strings.HasSuffix(blue.DisplayName, " · azul y negro") {
+		t.Errorf("unexpected rope: color %v, name %q", blue.Color, blue.DisplayName)
+	}
+	// Without one, or with a blank one, it has none and the name has nothing added.
+	for name, extra := range map[string]map[string]any{"none": {}, "blank": {"color": "   "}} {
+		rec := create(rope("C-"+name, extra))
+		if it := decodeItem(rec); rec.Code != http.StatusCreated || it.Color != nil || strings.Contains(it.DisplayName, "·  ") || strings.HasSuffix(it.DisplayName, " · ") {
+			t.Errorf("rope with %s colour: %d color %v name %q", name, rec.Code, it.Color, it.DisplayName)
+		}
+	}
+	// A bag may have one too.
+	bag := map[string]any{
+		"type_id": testutil.MaterialTypeID(t, tx, "Saca"), "brand": "Petzl", "model": "Kliff", "code": "S-C1", "bag_type": "quick",
+		"capacity_liters": 35.0, "color": "rojo",
+	}
+	if rec := create(bag); rec.Code != http.StatusCreated || decodeItem(rec).Color == nil {
+		t.Errorf("bag with a colour: %d %s", rec.Code, rec.Body.String())
+	}
+	// It is in the listing.
+	found := false
+	list := doRequest(mux, http.MethodGet, "/api/v1/material/items", boardToken, nil)
+	var items []material.Item
+	if err := json.Unmarshal(list.Body.Bytes(), &items); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.ID == blue.ID {
+			found = it.Color != nil && *it.Color == "azul y negro"
+		}
+	}
+	if !found {
+		t.Errorf("the colour should come in the listing: %+v", items)
+	}
+
+	// Not for general material, and not too long.
+	general := generalItemBody(t, tx, 1)
+	general["color"] = "azul"
+	if rec := create(general); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "invalid_item_fields" {
+		t.Errorf("general material with a colour: %d %s", rec.Code, rec.Body.String())
+	}
+	long := strings.Repeat("a", material.MaxColorLength+1)
+	if rec := create(rope("C-C2", map[string]any{"color": long})); rec.Code != http.StatusBadRequest || errorCode(t, rec) != "color_too_long" {
+		t.Errorf("a colour that is too long: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// An edit replaces it, and leaving it out clears it.
+	path := fmt.Sprintf("/api/v1/material/items/%d", blue.ID)
+	edit := func(extra map[string]any) material.Item {
+		b := rope("C-C1", extra)
+		delete(b, "type_id")
+		rec := doRequest(mux, http.MethodPut, path, boardToken, b)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("edit: %d %s", rec.Code, rec.Body.String())
+		}
+		return decodeItem(rec)
+	}
+	if it := edit(map[string]any{"color": "verde"}); it.Color == nil || *it.Color != "verde" {
+		t.Errorf("the edit should change the colour: %+v", it.Color)
+	}
+	if it := edit(nil); it.Color != nil || strings.Contains(it.DisplayName, "verde") {
+		t.Errorf("leaving the colour out should clear it: %v %q", it.Color, it.DisplayName)
+	}
+}

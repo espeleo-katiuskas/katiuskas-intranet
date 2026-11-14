@@ -475,8 +475,10 @@ files (up to 25 MiB).
 - **POST** `/material/items` — *Admin, board or material*. Adds an item of a type (Cuerda and Saca
   make a rope and a bag; any other type, general material).
   - body: `type_id*`, `brand`, `model`, `code`, `description`, `acquired_at`, `total_quantity`,
-    `loanable`, `rental_price_per_week`, `sale_price`, `rope_type`, `diameter_mm`,
-    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `attributes`. `brand`, `model`
+    `loanable`, `rental_price_per_week`, `sale_price`, `color`, `rope_type`, `diameter_mm`,
+    `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `attributes`. `color` is optional
+    (at most 40 characters, blank counts as none) and only for a rope or a bag, whose name it joins
+    in the lists. `brand`, `model`
     and `code` are required for a rope or bag and optional for general material; a `model` needs a
     `brand` (blank text counts as no value). The `description` of general material is required only
     if its type says so (`description_required`). `attributes` are the values for the type's
@@ -487,22 +489,23 @@ files (up to 25 MiB).
     item are an acquisition
   - returns: 201 `Item`
   - errors: 400 `invalid_body`, `unknown_type`, `invalid_date`, `single_unit_item`,
-    `invalid_item_fields`, `model_without_brand`, `invalid_item_code`,
+    `invalid_item_fields`, `model_without_brand`, `invalid_item_code`, `color_too_long`,
     `item_description_required`, `missing_attribute`, `invalid_attribute` (an attribute that is not
     the type's, given twice, an option of another attribute, a value of the wrong kind);
     409 `duplicate_item_code`, `duplicate_material`
 - **PUT** `/material/items/{id}` — *Admin, board or material*. Edits an item: replaces every
   editable field with the body's (the brand, model, code, description, attributes, `loanable`,
-  prices and the rope or bag fields of its kind). General material can change its type (`type_id`,
-  which may be left out to keep it), but only to another general one: a rope or a bag stays Cuerda
-  or Saca and nothing becomes one of them (`kind_change`). The quantities, which only movements
-  change, are not editable (a `total_quantity` in the body is ignored).
+  prices, the `color` and the rope or bag fields of its kind). General material can change its type
+  (`type_id`, which may be left out to keep it), but only to another general one: a rope or a bag
+  stays Cuerda or Saca and nothing becomes one of them (`kind_change`). The quantities, which only
+  movements change, are not editable (a `total_quantity` in the body is ignored).
   - body: the same as creating, without `acquired_at` and `total_quantity`, and with `type_id`
     optional
   - returns: 200 `Item`
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_type`, `kind_change`, `invalid_item_fields`,
-    `model_without_brand`, `invalid_item_code`, `item_description_required`, `missing_attribute`,
-    `invalid_attribute`; 404 `not_found`; 409 `duplicate_item_code`, `duplicate_material`
+    `model_without_brand`, `invalid_item_code`, `color_too_long`, `item_description_required`,
+    `missing_attribute`, `invalid_attribute`; 404 `not_found`; 409 `duplicate_item_code`,
+    `duplicate_material`
 - **DELETE** `/material/items/{id}` — *Admin*. Deletes an item that has no
   history: the acquisition it was created with goes with it, but any other movement (a loan, a
   rental, a sale, more stock, a loss...) makes it refuse.
@@ -1558,12 +1561,15 @@ and `value` is always the text to show (the option's label, for an enum).
 | `sellable` | boolean |
 | `rental_price_per_week` | number |
 | `sale_price` | number |
+| `color` | text |
 | `rope_type` | caving/canyoning |
 | `diameter_mm` | number |
 | `manufacture_year` | integer |
 | `length_m` | integer |
 | `bag_type` | caving/canyoning/quick/special |
 | `capacity_liters` | number |
+
+`color` is only there for a rope or a bag that has one, and is the last part of its `display_name`.
 
 ### `CreateItemInput`
 
@@ -1580,6 +1586,7 @@ and `value` is always the text to show (the option's label, for an enum).
 | `loanable` | boolean |
 | `rental_price_per_week` | number |
 | `sale_price` | number |
+| `color` | text |
 | `rope_type` | caving/canyoning |
 | `diameter_mm` | number |
 | `manufacture_year` | integer |

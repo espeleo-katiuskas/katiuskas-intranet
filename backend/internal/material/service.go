@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // RoleLookup says whether a person holds a role, the automatic ones included — roles.Service
@@ -146,6 +147,10 @@ func (s *Service) DeleteOption(ctx context.Context, id int64) error {
 
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, error) {
 	in.Brand, in.Model, in.Code, in.Description = blankToNil(in.Brand), blankToNil(in.Model), blankToNil(in.Code), blankToNil(in.Description)
+	in.Color = blankToNil(in.Color)
+	if in.Color != nil && utf8.RuneCountInString(*in.Color) > MaxColorLength {
+		return Item{}, ErrColorTooLong
+	}
 	if in.Model != nil && in.Brand == nil {
 		return Item{}, ErrModelWithoutBrand
 	}
@@ -157,6 +162,10 @@ func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (Item, err
 
 func (s *Service) UpdateItem(ctx context.Context, id int64, in UpdateItemInput) (Item, error) {
 	in.Brand, in.Model, in.Code, in.Description = blankToNil(in.Brand), blankToNil(in.Model), blankToNil(in.Code), blankToNil(in.Description)
+	in.Color = blankToNil(in.Color)
+	if in.Color != nil && utf8.RuneCountInString(*in.Color) > MaxColorLength {
+		return Item{}, ErrColorTooLong
+	}
 	if in.Model != nil && in.Brand == nil {
 		return Item{}, ErrModelWithoutBrand
 	}

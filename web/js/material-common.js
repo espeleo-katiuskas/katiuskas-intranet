@@ -44,6 +44,7 @@ function itemNameText(item, { includeType = true } = {}) {
       ropeTypeLabels[item.rope_type] ?? item.rope_type,
       item.manufacture_year,
       item.length_m ? `${item.length_m}m` : null,
+      item.color,
     ];
     return parts.filter(Boolean).join(' · ');
   }
@@ -53,6 +54,7 @@ function itemNameText(item, { includeType = true } = {}) {
       brandModel || null,
       `${item.capacity_liters} L`,
       bagTypeLabels[item.bag_type] ?? item.bag_type,
+      item.color,
     ];
     return parts.filter(Boolean).join(' · ');
   }

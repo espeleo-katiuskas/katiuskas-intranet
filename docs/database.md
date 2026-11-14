@@ -690,6 +690,7 @@ attributes its type defines. Stock is never stored: it comes from the movements
 | `loanable` | boolean | no | true |
 | `rental_price_per_week` | numeric(10,2) | yes |  |
 | `sale_price` | numeric(10,2) | yes |  |
+| `color` | text | yes |  |
 | `rope_type` | rope_type | yes |  |
 | `diameter_mm` | numeric(4,1) | yes |  |
 | `manufacture_year` | integer | yes |  |
@@ -703,6 +704,7 @@ Notes on the columns:
   id (as text): a string for a `text` attribute, the option's id (a number) for an `enum` one. Only
   attributes that have a value are there, never `null` or `""`; the API keeps it so. What an
   attribute or option is called is read from the catalog, so renaming one changes every item.
+- `color`: The colour of a rope or a bag in the club's words ("azul"); only for those two kinds.
 - `loanable`: Whether it can be lent to an activity.
 - `rental_price_per_week`: Rental rate per week.
 
@@ -715,6 +717,8 @@ Constraints:
 - `bag_requires_capacity`: `(kind <> 'bag') OR (capacity_liters IS NOT NULL)`
 - `bag_type_only_for_bag`: `(kind = 'bag') OR (bag_type IS NULL)`
 - `capacity_only_for_bag`: `(kind = 'bag') OR (capacity_liters IS NULL)`
+- `color_only_for_rope_and_bag`: `(kind IN ('rope', 'bag')) OR (color IS NULL)`
+- `material_items_color_not_empty`: `color` is not blank
 - `attributes_only_for_general`: `(kind = 'general') OR (attributes = '{}')`
 - `material_items_identity_key`: a unique index over `(type_id, brand, model, code,
   md5(description), md5(attributes::text))` with `NULLS NOT DISTINCT`: no two items are exactly the
@@ -1694,3 +1698,4 @@ at the end; that database has to be recreated when a new migration appears.
   `library_loans`, `library_comments` and `library_resources`
 - `00059_library_item_dates.sql`: `acquired_on`, `ended_on` and `end_reason` of `library_items`; the
   items that already existed count as acquired on the day they were added (the club's day)
+- `00060_material_color.sql`: `material_items.color`, optional, only for a rope or a bag

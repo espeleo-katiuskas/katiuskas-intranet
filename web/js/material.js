@@ -638,6 +638,7 @@ if (canManageMovements) {
     set('model', item.model);
     set('code', item.code);
     syncModelWithBrand();
+    set('color', item.color);
     set('rope_type', item.rope_type);
     set('diameter_mm', item.diameter_mm);
     set('manufacture_year', item.manufacture_year);
@@ -676,6 +677,7 @@ if (canManageMovements) {
     body.brand = optionalText('brand');
     body.model = optionalText('model');
     body.code = optionalText('code');
+    if (kind === 'rope' || kind === 'bag') body.color = optionalText('color');
     if (kind === 'rope') {
       body.rope_type = formData.get('rope_type');
       body.diameter_mm = Number(formData.get('diameter_mm'));

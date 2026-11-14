@@ -142,6 +142,7 @@ const texts = {
   loan_login_required: 'Elige a qué socio se presta el ejemplar.',
   duplicate_material:
     'Ya hay otro material exactamente igual (mismo tipo, marca, modelo, código, descripción y atributos). Si tienes más unidades, súmalas a ese material.',
+  color_too_long: 'El color es demasiado largo (40 caracteres como máximo).',
   item_description_required: 'La descripción es obligatoria para este tipo de material.',
   missing_attribute: 'Falta un atributo obligatorio del tipo de material.',
   invalid_attribute: 'Alguno de los atributos no corresponde al tipo de material elegido.',

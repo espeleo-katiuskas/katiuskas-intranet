@@ -250,6 +250,9 @@ func decorate(it *Item, t MaterialType) {
 		}
 		it.Incomplete = missing || (t.DescriptionRequired && it.Description == nil)
 	}
+	if it.Color != nil && it.Kind != ItemKindGeneral {
+		parts = append(parts, *it.Color)
+	}
 	it.DisplayName = strings.Join(parts, " · ")
 }
 

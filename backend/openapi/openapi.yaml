@@ -3610,6 +3610,7 @@ paths:
             a bag needs bag_type/capacity_liters, and none of a rope or bag's own
             fields may be set on the other two kinds), or
             model_without_brand (a model was given without a brand), or
+            color_too_long (more than 40 characters), or
             invalid_item_code (a code made only of digits; an empty one is the same as none), or
             item_description_required (a general item whose type requires a description has none),
             missing_attribute (a required attribute of the type has no value) or
@@ -3645,7 +3646,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
-        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, invalid_item_fields, model_without_brand, invalid_item_code (a code made only of digits), item_description_required, missing_attribute or invalid_attribute." }
+        "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, color_too_long, invalid_item_fields, model_without_brand, invalid_item_code (a code made only of digits), item_description_required, missing_attribute or invalid_attribute." }
         "403": { description: Requires admin, board or material. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code; or duplicate_material — another item is exactly the same. }
@@ -5756,6 +5757,7 @@ components:
         sellable: { type: boolean, description: "Computed: true iff sale_price is set." }
         rental_price_per_week: { type: number, nullable: true }
         sale_price: { type: number, nullable: true }
+        color: { type: string, description: "Rope and bag only, optional (at most 40 characters); the last part of display_name." }
         rope_type: { type: string, enum: [caving, canyoning], nullable: true, description: "rope only." }
         diameter_mm: { type: number, nullable: true, description: "rope only, in millimetres." }
         manufacture_year: { type: integer, nullable: true, description: "rope only." }
@@ -5793,6 +5795,7 @@ components:
         loanable: { type: boolean, default: true }
         rental_price_per_week: { type: number }
         sale_price: { type: number }
+        color: { type: string, nullable: true, description: "Optional, rope and bag only; at most 40 characters." }
         rope_type: { type: string, enum: [caving, canyoning], description: Required for rope. }
         diameter_mm: { type: number, description: "Required for rope, in millimetres." }
         manufacture_year: { type: integer, description: Required for rope. }

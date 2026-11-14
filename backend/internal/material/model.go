@@ -146,6 +146,9 @@ const (
 	MovementCancelled MovementStatus = "cancelled"
 )
 
+// MaxColorLength is the longest colour a rope or a bag may have, in characters.
+const MaxColorLength = 40
+
 type Item struct {
 	ID int64 `json:"id"`
 	// Kind is the shape of the item (from its type); TypeID and TypeName say which type it is.
@@ -201,6 +204,9 @@ type Item struct {
 	Sellable           bool     `json:"sellable"`
 	RentalPricePerWeek *float64 `json:"rental_price_per_week,omitempty"`
 	SalePrice          *float64 `json:"sale_price,omitempty"`
+	// Color is the colour of a rope or a bag, optional, in the club's own words ("azul"); a general
+	// item has none. It is part of what names the item in the lists, so it can be searched.
+	Color *string `json:"color,omitempty"`
 	// Rope-only.
 	RopeType        *RopeType `json:"rope_type,omitempty"`
 	DiameterMM      *float64  `json:"diameter_mm,omitempty"`
@@ -229,6 +235,7 @@ type CreateItemInput struct {
 	Loanable           bool
 	RentalPricePerWeek *float64
 	SalePrice          *float64
+	Color              *string
 	RopeType           *RopeType
 	DiameterMM         *float64
 	ManufactureYear    *int32
@@ -253,6 +260,7 @@ type UpdateItemInput struct {
 	Loanable           bool
 	RentalPricePerWeek *float64
 	SalePrice          *float64
+	Color              *string
 	RopeType           *RopeType
 	DiameterMM         *float64
 	ManufactureYear    *int32

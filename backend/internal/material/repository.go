@@ -82,6 +82,7 @@ var (
 	ErrModelWithoutBrand = errors.New("a model can only be given when there is a brand")
 	// ErrInvalidItemCode means a code made only of digits, which a listing could take for an id.
 	ErrInvalidItemCode = errors.New("a code cannot be made only of digits")
+	ErrColorTooLong    = errors.New("the colour is too long")
 	// ErrDuplicateItemCode means another item already has the code.
 	ErrDuplicateItemCode = errors.New("another item already has this code")
 )
@@ -125,7 +126,7 @@ func NewRepository(pool db.PGX) *Repository {
 const itemSelect = `
 	i.id, i.kind, i.type_id, mt.name, i.brand, i.model, i.code, i.description, i.attributes,
 	q.total_quantity, q.available_quantity, q.outstanding_loan_quantity, i.status, i.loanable,
-	i.rental_price_per_week, i.sale_price,
+	i.rental_price_per_week, i.sale_price, i.color,
 	i.rope_type, i.diameter_mm, i.manufacture_year, i.length_m, i.bag_type, i.capacity_liters
 	FROM material_items i
 	JOIN material_item_quantities q ON q.item_id = i.id
@@ -135,7 +136,7 @@ func scanItem(row interface{ Scan(dest ...any) error }, it *Item) error {
 	var rawAttributes []byte
 	if err := row.Scan(&it.ID, &it.Kind, &it.TypeID, &it.TypeName, &it.Brand, &it.Model, &it.Code, &it.Description, &rawAttributes,
 		&it.TotalQuantity, &it.AvailableQuantity, &it.OutstandingLoanQuantity, &it.Status, &it.Loanable,
-		&it.RentalPricePerWeek, &it.SalePrice,
+		&it.RentalPricePerWeek, &it.SalePrice, &it.Color,
 		&it.RopeType, &it.DiameterMM, &it.ManufactureYear, &it.LengthM, &it.BagType, &it.CapacityLiters,
 	); err != nil {
 		return err
@@ -203,12 +204,12 @@ func (r *Repository) CreateItem(ctx context.Context, in CreateItemInput) (Item, 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO material_items (kind, type_id, brand, model, code, description, attributes, loanable,
 			rental_price_per_week, sale_price, rope_type, diameter_mm, manufacture_year, length_m,
-			bag_type, capacity_liters)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			bag_type, capacity_liters, color)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		RETURNING id
 	`, kind, in.TypeID, in.Brand, in.Model, in.Code, in.Description, attributes, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters,
+		in.BagType, in.CapacityLiters, in.Color,
 	).Scan(&id)
 	if err != nil {
 		return Item{}, itemWriteError(err, kind)
@@ -268,11 +269,11 @@ func (r *Repository) UpdateItem(ctx context.Context, id int64, in UpdateItemInpu
 	_, err = tx.Exec(ctx, `
 		UPDATE material_items SET type_id=$15, brand=$2, model=$3, code=$4, description=$5, loanable=$6,
 			rental_price_per_week=$7, sale_price=$8, rope_type=$9, diameter_mm=$10,
-			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, attributes=$16
+			manufacture_year=$11, length_m=$12, bag_type=$13, capacity_liters=$14, attributes=$16, color=$17
 		WHERE id = $1
 	`, id, in.Brand, in.Model, in.Code, in.Description, in.Loanable,
 		in.RentalPricePerWeek, in.SalePrice, in.RopeType, in.DiameterMM, in.ManufactureYear, in.LengthM,
-		in.BagType, in.CapacityLiters, typeID, attributes)
+		in.BagType, in.CapacityLiters, typeID, attributes, in.Color)
 	if err != nil {
 		return Item{}, itemWriteError(err, kind)
 	}

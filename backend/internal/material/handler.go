@@ -205,6 +205,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		Loanable           *bool            `json:"loanable"`
 		RentalPricePerWeek *float64         `json:"rental_price_per_week"`
 		SalePrice          *float64         `json:"sale_price"`
+		Color              *string          `json:"color"`
 		RopeType           *RopeType        `json:"rope_type"`
 		DiameterMM         *float64         `json:"diameter_mm"`
 		ManufactureYear    *int32           `json:"manufacture_year"`
@@ -233,7 +234,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code,
 		Description: body.Description, Attributes: body.Attributes, AcquiredAt: acquiredAt, InitialQuantity: body.TotalQuantity,
 		Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
-		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
+		Color: body.Color, RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
 		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
 	if err != nil {
@@ -248,7 +249,7 @@ func (h *Handler) createItem(w http.ResponseWriter, r *http.Request) {
 // itemAuditFields are the Item fields an edit's notification diffs — those UpdateItemInput can change
 // (the type by its name, not by the numeric id).
 var itemAuditFields = []string{
-	"Brand", "Model", "Code", "Description", "Loanable", "RentalPricePerWeek", "SalePrice",
+	"Brand", "Model", "Code", "Description", "Loanable", "RentalPricePerWeek", "SalePrice", "Color",
 	"RopeType", "DiameterMM", "ManufactureYear", "LengthM", "BagType", "CapacityLiters", "TypeName",
 }
 
@@ -270,6 +271,7 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 		Loanable           *bool            `json:"loanable"`
 		RentalPricePerWeek *float64         `json:"rental_price_per_week"`
 		SalePrice          *float64         `json:"sale_price"`
+		Color              *string          `json:"color"`
 		RopeType           *RopeType        `json:"rope_type"`
 		DiameterMM         *float64         `json:"diameter_mm"`
 		ManufactureYear    *int32           `json:"manufacture_year"`
@@ -290,7 +292,7 @@ func (h *Handler) updateItem(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.UpdateItem(r.Context(), id, UpdateItemInput{
 		TypeID: body.TypeID, Brand: body.Brand, Model: body.Model, Code: body.Code, Description: body.Description,
 		Attributes: body.Attributes, Loanable: loanable, RentalPricePerWeek: body.RentalPricePerWeek, SalePrice: body.SalePrice,
-		RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
+		Color: body.Color, RopeType: body.RopeType, DiameterMM: body.DiameterMM, ManufactureYear: body.ManufactureYear,
 		LengthM: body.LengthM, BagType: body.BagType, CapacityLiters: body.CapacityLiters,
 	})
 	if err != nil {
@@ -365,6 +367,8 @@ func writeItemError(w http.ResponseWriter, err error, what string) {
 		httpapi.WriteError(w, http.StatusBadRequest, "model_without_brand", err.Error())
 	case errors.Is(err, ErrInvalidItemCode):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_item_code", err.Error())
+	case errors.Is(err, ErrColorTooLong):
+		httpapi.WriteError(w, http.StatusBadRequest, "color_too_long", err.Error())
 	case errors.Is(err, ErrDescriptionRequired):
 		httpapi.WriteError(w, http.StatusBadRequest, "item_description_required", err.Error())
 	case errors.Is(err, ErrMissingAttribute):
