@@ -13,7 +13,7 @@ The project runs in three environments:
 | Data | whatever is created locally | a copy of production's | the real data |
 | Telegram bot | optional | its own | its own |
 | `ARCHIVE_ROOT`, `USER_FILES_ROOT` | its own | shared with production | shared with testing |
-| `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` | its own | its own (production's files, hard-linked by the copy) | its own |
+| `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT`, `PLACE_FILES_ROOT` | its own | its own (production's files, hard-linked by the copy) | its own |
 
 On the club's host the two environments are installed in `/opt/katiuskas-intranet-testing` and
 `/opt/katiuskas-intranet-stable` (the production one is called "stable" there), run as the
@@ -288,9 +288,9 @@ reaches testing before production. It is run by the `AFTER_DEPLOY` hook of the p
 database, restores into it a full dump of production's (schema, data, sequence values and goose's
 version table) and applies with `goose` the migrations testing is ahead by. In addition, unless
 `--no-files` is given, it replaces the files in testing's `ACTIVITY_RESOURCES_ROOT`,
-`TRANSACTION_FILES_ROOT` and `LIBRARY_FILES_ROOT` with hard links to production's (see "Files the
-API writes: each environment has its own"). Production is only read. It is run as root or as a user
-who can stop and start testing's unit:
+`TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` and `PLACE_FILES_ROOT` with hard links to
+production's (see "Files the API writes: each environment has its own"). Production is only read. It
+is run as root or as a user who can stop and start testing's unit:
 
 ```sh
 TESTING_SERVICE=<testing unit> \
@@ -303,8 +303,8 @@ thing that uses `sudo`: the rest needs no privileges, but does need to be able t
 `api.env` files (the deployment guide leaves them with `chmod 600`, owned by `intranet`) and,
 for the files step, to be the owner of production's files (`intranet`) or root.
 
-It reads `DATABASE_URL`, `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT` and
-`LIBRARY_FILES_ROOT` from the two `api.env` files (without executing them) and needs `psql` and
+It reads `DATABASE_URL`, `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT`
+and `PLACE_FILES_ROOT` from the two `api.env` files (without executing them) and needs `psql` and
 `pg_dump` (package `postgresql-client`, with a `pg_dump` at least as new as production's server) and
 the `goose` binary, which by default it looks for in `bin/goose` next to testing's `api.env`, with
 the migrations in `db/migrations/` (as in the deployment guide; `GOOSE_BIN` and `MIGRATIONS_DIR`
@@ -358,11 +358,12 @@ directories in both environments. Both services must be able to read them.
 ## Files the API writes: each environment has its own
 
 `ACTIVITY_RESOURCES_ROOT` (the files attached to the activity memorias), `TRANSACTION_FILES_ROOT`
-(the tickets and invoices attached to transactions) and `LIBRARY_FILES_ROOT` (the covers and files
-of the library's items) are different: the API creates and deletes files in them, and testing's
-database is a copy of production's, so its rows have the same ids and therefore the same paths
-(`<activity id>/<resource id>`, `<transaction id>/<file id>` and `<item id>/<resource id>`). When
-`LIBRARY_FILES_ROOT` is not set in `api.env` the API uses a directory called `library-files` next to
+(the tickets and invoices attached to transactions), `LIBRARY_FILES_ROOT` (the covers and files of
+the library's items) and `PLACE_FILES_ROOT` (the files of the places) are different: the API creates
+and deletes files in them, and testing's database is a copy of production's, so its rows have the
+same ids and therefore the same paths (`<activity id>/<resource id>`, `<transaction id>/<file id>`
+and `<item id>/<resource id>`). When `LIBRARY_FILES_ROOT` (or `PLACE_FILES_ROOT`) is not set in
+`api.env` the API uses a directory called `library-files` (`place-files`) next to
 `ACTIVITY_RESOURCES_ROOT`, which keeps testing's and production's apart as long as those two are
 (the scripts that back up and copy the files apply the same default). In a shared directory:
 
@@ -436,7 +437,8 @@ have to repeat it changing:
 
 `ARCHIVE_ROOT` and `USER_FILES_ROOT` are the only paths pointed at the same place in both; the two
 directories the API writes to (`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`,
-`LIBRARY_FILES_ROOT`) are different in each: see the previous sections for what that implies.
+`LIBRARY_FILES_ROOT`, `PLACE_FILES_ROOT`) are different in each: see the previous sections for what
+that implies.
 
 ## Backups
 
@@ -444,7 +446,7 @@ The backup that matters is production's: testing's database is filled with that 
 production deployment, and the two shared directories (`ARCHIVE_ROOT`, `USER_FILES_ROOT`) only
 need to be backed up once. Production's backup holds the database and **every file the API creates
 or reads**: those two and the ones it writes (`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`,
-`LIBRARY_FILES_ROOT`).
+`LIBRARY_FILES_ROOT`, `PLACE_FILES_ROOT`).
 [`scripts/backup.sh`](../scripts/backup.sh) does it, every night, from a systemd timer
 ([`katiuskas-intranet-backup.timer`](../deploy/systemd/katiuskas-intranet-backup.timer)).
 
@@ -453,11 +455,12 @@ Each run makes a directory `BACKUP_DIR/<yyyymmdd-hhmmss>/` with:
 - `database.dump`: `pg_dump --format=custom` of production's database, goose's version table
   included, which is restored with `pg_restore`;
 - `files/archive`, `files/user-files`, `files/activity-resources`, `files/transaction-files` and
-  `files/library-files`: the five directories (the last three are the files the API itself writes),
-  copied with `rsync` and hard-linking whatever has not changed since the previous backup. Every
-  backup is therefore a complete tree, and yet a night without changes costs almost no disk (the
-  files are mostly photos and PDFs that are never modified); deleting an old backup does not affect
-  the others. (Backups made before the document archive got that name hold it as `files/library`.)
+  `files/library-files` and `files/place-files`: the six directories (the last four are the files
+  the API itself writes), copied with `rsync` and hard-linking whatever has not changed since the
+  previous backup. Every backup is therefore a complete tree, and yet a night without changes costs
+  almost no disk (the files are mostly photos and PDFs that are never modified); deleting an old
+  backup does not affect the others. (Backups made before the document archive got that name hold it
+  as `files/library`.)
 
 The files are copied before the dump, so that a row in the dump rarely points at a file the backup
 lacks. A backup is built in a `.partial` directory, renamed only when complete and when
@@ -502,7 +505,7 @@ the API stopped:
 ```sh
 B=/var/backups/katiuskas-intranet/<the backup's directory>
 pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" "$B/database.dump"
-for d in archive user-files activity-resources transaction-files library-files; do
+for d in archive user-files activity-resources transaction-files library-files place-files; do
   rsync -a --delete "$B/files/$d/" "<the environment's directory for $d>/"
 done
 ```
@@ -561,12 +564,12 @@ writes its errors and the sign-in notices to). Two mechanisms, for two kinds of 
   of `GET /admin/status`, see "Admin status" in `docs/backend-internals.md`): the database not
   answering, a storage directory that does not exist, and a disk almost full (`DISK_ALERT_PERCENT`
   in `api.env`: how full, in percent, a filesystem holding `ARCHIVE_ROOT`, `USER_FILES_ROOT`,
-  `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT` or `LIBRARY_FILES_ROOT` may be, 90 by default,
-  0 to turn it off). The API looks every 5 minutes and speaks when the set of problems changes ("⚠️
-  intranet.katiuskas.es: • Disco casi lleno (93 % usado, quedan 2.1 GB): /srv/…", then "✅ … ya no
-  hay ningún problema"), and again once a day while one remains. Each API (testing's and
-  production's) does it through its own bot, so there is nothing to install: it works as soon as
-  Telegram is configured.
+  `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` or `PLACE_FILES_ROOT`
+  may be, 90 by default, 0 to turn it off). The API looks every 5 minutes and speaks when the set of
+  problems changes ("⚠️ intranet.katiuskas.es: • Disco casi lleno (93 % usado, quedan 2.1 GB):
+  /srv/…", then "✅ … ya no hay ningún problema"), and again once a day while one remains. Each API
+  (testing's and production's) does it through its own bot, so there is nothing to install: it works
+  as soon as Telegram is configured.
 - **A deployment, a backup or a run of the thumbnails that fails**: those units name
   [`katiuskas-intranet-notify-failure@.service`](../deploy/systemd/katiuskas-intranet-notify-failure@.service)
   in `OnFailure=`, which runs [`scripts/notify-failure.sh`](../scripts/notify-failure.sh): it sends

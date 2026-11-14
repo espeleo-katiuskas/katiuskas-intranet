@@ -802,7 +802,7 @@ known, in metres above sea level.
   - body: the same as creating
   - returns: 200 `Place`
   - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
-- **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points.
+- **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points and its files.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
 - **POST** `/places/{id}/points` — *Any baseline role*. Adds one of the other points of a place.
@@ -819,6 +819,23 @@ known, in metres above sea level.
 - **DELETE** `/places/{id}/points/{pointId}` — *Any baseline role*. Removes a point.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
+- **GET** `/places/{id}/files` — *Any baseline role*. The files of a place (photos, topographies,
+  permits, documents), oldest first.
+  - returns: 200 `[PlaceFile]`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **POST** `/places/{id}/files` — *Any baseline role*. Attaches a file. Like a point, it counts as a
+  change of the place (`updated_by`, `updated_at`).
+  - body: multipart form, `file*` (10 MiB at most) and `title` (a caption, 200 characters at most)
+  - returns: 201 `PlaceFile`
+  - errors: 400 `invalid_id`, `invalid_body`, `file_required`, `file_title_too_long`;
+    404 `not_found`; 413 `file_too_large`
+- **GET** `/places/{id}/files/{fileId}/file` — *Any baseline role; the session cookie is accepted
+  too*. The bytes. A PDF or an image (decided from its bytes) is shown by the browser, anything else
+  is downloaded and sandboxed; `?download=1` forces a download.
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/places/{id}/files/{fileId}` — *Whoever attached it, admin or board*.
+  - returns: 204
+  - errors: 400 `invalid_id`; 403 `place_file_not_yours`; 404 `not_found`
 
 ## Zones
 
@@ -1904,6 +1921,7 @@ Everything of a `PlaceListItem`, and:
 | `updated_by` | text (login) |
 | `updated_at` | datetime |
 | `points` | `[PlacePoint]` |
+| `file_count` | number |
 
 `area_id` is the most specific zone it is in; `area_ids` are that zone and the ones it is in, the
 country first, so that a list can be filtered by any of them; `where` says them from the most
@@ -1912,7 +1930,20 @@ same as references, the country first and with each `kind`. `kind` says what the
 `depth_m`, `horizontal_length_m` and `geology_id` (with its name in `geology`) only when it is
 `cave`, `technical_sheet` when it is `cave` or `canyon`. `altitude_m`, optional, is that of the main
 coordinate (the other points have their own). `updated_by` and `updated_at` are the last change of
-the place or of any of its points (the same as the creation until there is one).
+the place, of any of its points or of its files (the same as the creation until there is one).
+
+### `PlaceFile`
+
+| Field | Type |
+|---|---|
+| `id` | number |
+| `place_id` | number |
+| `title` | text, absent if it has no caption |
+| `file_name` | text |
+| `content_type` | text |
+| `file_size` | number (bytes) |
+| `uploaded_by` | text (login) |
+| `created_at` | datetime |
 
 ### `PlacePoint`
 

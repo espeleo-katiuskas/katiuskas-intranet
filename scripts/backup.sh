@@ -11,10 +11,10 @@
 #   BACKUP_DIR=<where to keep the backups> scripts/backup.sh <env-file>
 #
 # <env-file> is the environment's api.env (the systemd EnvironmentFile); DATABASE_URL,
-# ARCHIVE_ROOT, USER_FILES_ROOT, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT and LIBRARY_FILES_ROOT
+# ARCHIVE_ROOT, USER_FILES_ROOT, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT, LIBRARY_FILES_ROOT and PLACE_FILES_ROOT
 # are read from it, parsed, never sourced. Each run makes a directory BACKUP_DIR/<yyyymmdd-hhmmss>/ with
 #   database.dump   pg_dump --format=custom (it includes goose's version table)
-#   files/<name>/   archive, user-files, activity-resources, transaction-files and library-files, as
+#   files/<name>/   archive, user-files, activity-resources, transaction-files, library-files and place-files, as
 #                   they were
 # The files are copied with rsync, hard-linking whatever has not changed since the previous
 # backup (--link-dest), so every backup is a complete tree that can be browsed or restored on its
@@ -102,6 +102,7 @@ declare -A sources=(
   [activity-resources]=$(env_value "$env_file" ACTIVITY_RESOURCES_ROOT)
   [transaction-files]=$(env_value "$env_file" TRANSACTION_FILES_ROOT)
   [library-files]=$(env_value "$env_file" LIBRARY_FILES_ROOT)
+  [place-files]=$(env_value "$env_file" PLACE_FILES_ROOT)
 )
 # An api.env written before the archive of documents was renamed (it was the library) names it
 # LIBRARY_ROOT; the API still accepts that, so the backup does too.
@@ -112,6 +113,10 @@ fi
 # library-files beside the memorias' (config.Load does the same).
 if [[ -z ${sources[library-files]} && -n ${sources[activity-resources]} ]]; then
   sources[library-files]=$(dirname "${sources[activity-resources]}")/library-files
+fi
+# The same for PLACE_FILES_ROOT (an api.env that predates the places): a directory called place-files.
+if [[ -z ${sources[place-files]} && -n ${sources[activity-resources]} ]]; then
+  sources[place-files]=$(dirname "${sources[activity-resources]}")/place-files
 fi
 for name in "${!sources[@]}"; do
   [[ -n ${sources[$name]} ]] || die "no value for the $name directory in $env_file"
@@ -136,7 +141,7 @@ final=$BACKUP_DIR/$stamp
 trap 'rm -rf "$partial"' EXIT
 mkdir "$partial"
 
-for name in archive user-files activity-resources transaction-files library-files; do
+for name in archive user-files activity-resources transaction-files library-files place-files; do
   log "copying $name from ${sources[$name]}"
   link=()
   if [[ -n $previous && -d $previous/files/$name ]]; then

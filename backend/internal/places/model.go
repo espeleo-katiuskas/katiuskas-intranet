@@ -146,6 +146,8 @@ type Place struct {
 	UpdatedBy string    `json:"updated_by"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Points    []Point   `json:"points"`
+	// FileCount is how many files are attached to it (GET /places/{id}/files lists them).
+	FileCount int `json:"file_count"`
 }
 
 // Input is what creating or editing a place takes: every field the person can change (an edit
@@ -189,4 +191,32 @@ type PointInput struct {
 	Lon       *float64
 	AltitudeM *int
 	Note      *string
+}
+
+// MaxFileSize is the largest file that can be attached to a place, in bytes.
+const MaxFileSize = 10 << 20 // 10 MiB
+
+// MaxFileTitleLength is the longest caption a file may have, in characters.
+const MaxFileTitleLength = 200
+
+var (
+	ErrFileNotFound = errors.New("file not found")
+	ErrEmptyFile    = errors.New("the file is empty")
+	// ErrTitleTooLong is a caption of a file longer than MaxFileTitleLength.
+	ErrTitleTooLong = errors.New("the title of the file is too long")
+	// ErrNotYours means somebody tried to remove a file that somebody else attached, being neither
+	// admin nor board.
+	ErrNotYours = errors.New("only who attached it, admin or board can remove it")
+)
+
+// File is the metadata of a file attached to a place (never its bytes, except through Open).
+type File struct {
+	ID          int64     `json:"id"`
+	PlaceID     int64     `json:"place_id"`
+	Title       *string   `json:"title,omitempty"`
+	FileName    string    `json:"file_name"`
+	ContentType string    `json:"content_type"`
+	FileSize    int64     `json:"file_size"`
+	UploadedBy  string    `json:"uploaded_by"` // a login
+	CreatedAt   time.Time `json:"created_at"`
 }

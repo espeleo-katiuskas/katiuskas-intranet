@@ -37,7 +37,7 @@ func newMonitor(t *testing.T, info Info) (*Monitor, *recorder, *time.Time) {
 
 func TestMonitorSaysNothingWhileEverythingIsFine(t *testing.T) {
 	dir := t.TempDir()
-	monitor, rec, _ := newMonitor(t, Info{ArchiveRoot: dir, UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir})
+	monitor, rec, _ := newMonitor(t, Info{ArchiveRoot: dir, UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir, PlaceFilesRoot: dir})
 	monitor.Check(context.Background())
 	monitor.Check(context.Background())
 	if len(rec.sent) != 0 {
@@ -50,7 +50,7 @@ func TestMonitorReportsAProblemOnceAndWhenItIsGone(t *testing.T) {
 	missing := dir + "/missing"
 	monitor, rec, clock := newMonitor(t, Info{
 		PublicBaseURL: "https://intranet.example.test",
-		ArchiveRoot:   dir, UserFilesRoot: missing, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir,
+		ArchiveRoot:   dir, UserFilesRoot: missing, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir, PlaceFilesRoot: dir,
 	})
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func TestMonitorReportsAProblemOnceAndWhenItIsGone(t *testing.T) {
 func TestMonitorRemindsOnceADayAndReportsNewProblems(t *testing.T) {
 	dir := t.TempDir()
 	monitor, rec, clock := newMonitor(t, Info{
-		ArchiveRoot: dir + "/a", UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir,
+		ArchiveRoot: dir + "/a", UserFilesRoot: dir, ActivityResourcesRoot: dir, TransactionFilesRoot: dir, LibraryFilesRoot: dir, PlaceFilesRoot: dir,
 	})
 	ctx := context.Background()
 	monitor.Check(ctx)

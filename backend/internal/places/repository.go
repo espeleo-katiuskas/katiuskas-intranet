@@ -102,7 +102,10 @@ func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	if p.AreaPath, err = r.areaPath(ctx, p.AreaID); err != nil {
 		return Place{}, err
 	}
-	p.Points, err = r.ListPoints(ctx, id)
+	if p.Points, err = r.ListPoints(ctx, id); err != nil {
+		return Place{}, err
+	}
+	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM place_files WHERE place_id = $1`, id).Scan(&p.FileCount)
 	return p, err
 }
 
@@ -176,23 +179,41 @@ func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, kind Kin
 	return r.GetPlace(ctx, id)
 }
 
-// DeletePlace removes a place with its points, in one transaction: nothing cascades in the database.
-func (r *Repository) DeletePlace(ctx context.Context, id int64) error {
+// DeletePlace removes a place with its points and its files, in one transaction: nothing cascades in
+// the database. It answers with the ids of the files, so that the caller can remove their bytes.
+func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 	if err := lockPlace(ctx, tx, id); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM place_points WHERE place_id = $1`, id); err != nil {
-		return err
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, `DELETE FROM place_files WHERE place_id = $1 RETURNING id`, id)
+	if err != nil {
+		return nil, err
+	}
+	var files []int64
+	for rows.Next() {
+		var fileID int64
+		if err := rows.Scan(&fileID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		files = append(files, fileID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM places WHERE id = $1`, id); err != nil {
-		return err
+		return nil, err
 	}
-	return tx.Commit(ctx)
+	return files, tx.Commit(ctx)
 }
 
 // lockPlace locks the row of a place for the rest of the transaction, or says it is not there.

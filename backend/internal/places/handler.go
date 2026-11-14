@@ -30,8 +30,10 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 }
 
 // RegisterRoutes: everybody who can sign in reads the places and creates and changes them and their
-// points (the API says who changed what and when); deleting a place is for admin and board; the types
-// of place and the geologies of the caves are managed by admin alone.
+// points and attach files (the API says who changed what and when); a file is removed by whoever
+// attached it, admin or board; deleting a place is for admin and board; the types of place and the
+// geologies of the caves are managed by admin alone. The bytes of a file also accept the session
+// cookie, so that an image can be shown by the page.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
 	mux.Handle("GET /api/v1/places/types", a.Protect(h.listTypes))
@@ -53,6 +55,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/places/{id}/points", a.Protect(h.addPoint))
 	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.updatePoint))
 	mux.Handle("DELETE /api/v1/places/{id}/points/{pointId}", a.Protect(h.deletePoint))
+
+	mux.Handle("GET /api/v1/places/{id}/files", a.Protect(h.listFiles))
+	mux.Handle("POST /api/v1/places/{id}/files", a.Protect(h.addFile))
+	mux.Handle("GET /api/v1/places/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file))
+	mux.Handle("DELETE /api/v1/places/{id}/files/{fileId}", a.Protect(h.deleteFile))
 }
 
 func (h *Handler) actorLogin(ctx context.Context) string {
@@ -78,6 +85,10 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 	for _, m := range []mapping{
 		{ErrNotFound, http.StatusNotFound, "not_found"},
 		{ErrPointNotFound, http.StatusNotFound, "not_found"},
+		{ErrFileNotFound, http.StatusNotFound, "not_found"},
+		{ErrEmptyFile, http.StatusBadRequest, "file_required"},
+		{ErrTitleTooLong, http.StatusBadRequest, "file_title_too_long"},
+		{ErrNotYours, http.StatusForbidden, "place_file_not_yours"},
 		{ErrTypeNotFound, http.StatusNotFound, "not_found"},
 		{ErrUnknownType, http.StatusBadRequest, "unknown_place_type"},
 		{ErrTypeRequired, http.StatusBadRequest, "place_type_required"},

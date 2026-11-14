@@ -41,6 +41,7 @@ services:
       ACTIVITY_RESOURCES_ROOT: "/data/activity-resources"
       TRANSACTION_FILES_ROOT: "/data/transaction-files"
       LIBRARY_FILES_ROOT: "/data/library-files"
+      PLACE_FILES_ROOT: "/data/place-files"
     volumes:
       # Club documents (estatutos, actas...) for every socio to browse —
       # drop files straight into ./archive on the host, no rebuild or
@@ -62,6 +63,9 @@ services:
       # The covers and other files of the library's items: again only through the API
       # (POST /library/items/{id}/resources, PUT /library/items/{id}/cover), so a named volume.
       - library_files_data:/data/library-files
+      # The photos and documents of the places: again only through the API
+      # (POST /places/{id}/files), so a named volume.
+      - place_files_data:/data/place-files
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,3 +111,4 @@ volumes:
   activity_resources_data:
   transaction_files_data:
   library_files_data:
+  place_files_data:

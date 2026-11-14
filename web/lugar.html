@@ -56,6 +56,27 @@
     </div>
   </section>
 
+  <section>
+    <h2>Fotos y documentos</h2>
+    <p class="subtitle">Cualquier socio puede añadir fotos, topografías, permisos o cualquier otro documento.</p>
+    <div id="place-files"></div>
+    <form id="file-form" class="comment-form">
+      <div class="field-grid">
+        <div class="field">
+          <label for="file-input">Fichero (10 MiB como máximo)</label>
+          <input id="file-input" name="file" type="file" required>
+        </div>
+        <div class="field">
+          <label for="file-title">Título <span class="optional">(opcional)</span></label>
+          <input id="file-title" name="title" type="text" maxlength="200" placeholder="Qué es">
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
+      </div>
+    </form>
+  </section>
+
   <p class="subtitle" id="place-authorship"></p>
     </main>
   </div>

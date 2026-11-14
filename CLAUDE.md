@@ -94,9 +94,9 @@ club's host (`/opt/katiuskas-intranet-testing` and `/opt/katiuskas-intranet-stab
 `katiuskas-intranet-testing.service` and `katiuskas-intranet-stable.service`; the deployment tool is
 in `/opt/katiuskas-intranet-deploy`), each with its own database, directory and Telegram bot,
 sharing `ARCHIVE_ROOT` and `USER_FILES_ROOT` (the directories the API writes to,
-`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT` and `LIBRARY_FILES_ROOT`, are separate in each,
-and testing gets production's files hard-linked). Production deploys without Docker
-(`docs/deployment.md`).
+`ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` and `PLACE_FILES_ROOT`,
+are separate in each, and testing gets production's files hard-linked). Production deploys without
+Docker (`docs/deployment.md`).
 
 - **The host pulls**: `scripts/deploy.sh` (run by one systemd unit, `deploy/systemd/`) asks GitHub
   what each environment should run — the tip of `main` for testing, the highest semver tag for
@@ -274,8 +274,10 @@ ancestors. Any member adds a zone that is missing; only admin renames, merges an
 Names are unique below a zone ignoring case, accents and punctuation (`norm_name`,
 `areas.Normalize`). Any member reads, creates and changes places and their points, and the API says
 who and when (`created_by`, `updated_by`, `updated_at`); only admin and board delete a place; only
-admin manages the types. The frontend reads UTM as well as decimals (`js/coordinates.js`) but the
-API only has latitude and longitude. No PostGIS. Not there yet: files, the map, the link with
+admin manages the types. Any member attaches photos and documents to a place (`place_files`, bytes
+in `PLACE_FILES_ROOT`, created once and **never rewritten**, like the library's); whoever attached
+one, admin and board remove it. The frontend reads UTM as well as decimals (`js/coordinates.js`) but
+the API only has latitude and longitude. No PostGIS. Not there yet: the map, the link with
 activities (`docs/roadmap.md`).
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.

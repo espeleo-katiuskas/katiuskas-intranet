@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,6 +72,7 @@ type env struct {
 	mux      *http.ServeMux
 	notifier *fakeNotifier
 	resolver testutil.FakeResolver
+	storage  *places.Storage
 	// who: two plain members, board and an admin.
 	member, other, board, admin person
 	// the ids of the seeded types, and of the geologies limestone and gypsum.
@@ -86,8 +90,12 @@ func newEnv(t *testing.T) *env {
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 	mux := http.NewServeMux()
-	places.NewHandler(places.NewService(places.NewRepository(tx)), authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver}
+	storage, err := places.NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	places.NewHandler(places.NewService(places.NewRepository(tx), storage), authenticator, usersService, notifier).RegisterRoutes(mux)
+	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage}
 	e.member = e.person("member")
 	e.other = e.person("member")
 	e.board = e.person("board")
@@ -754,4 +762,114 @@ func TestAltitude(t *testing.T) {
 		t.Errorf("leaving it out clears it too: %v", *got.AltitudeM)
 	}
 	errorCode(t, e.json("PUT", pointPath, e.member.token, point(map[string]any{"altitude_m": 9001})), 400, "invalid_altitude")
+}
+
+// upload attaches a file to a place as the person, with an optional caption.
+func (e *env) upload(p places.Place, token, name, title string, content []byte) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if title != "" {
+		_ = mw.WriteField("title", title)
+	}
+	if name != "" {
+		part, err := mw.CreateFormFile("file", name)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		_, _ = part.Write(content)
+	}
+	_ = mw.Close()
+	req := httptest.NewRequest("POST", placePath(p, "/files"), &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	e.mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// png is the smallest PNG there is, enough for the type to be recognised from the bytes.
+var png = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89")
+
+func TestFiles(t *testing.T) {
+	e := newEnv(t)
+	p := e.newPlace(e.cueva, "Cueva", nil)
+	e.notifier.wait(t)
+
+	// Anybody who can sign in attaches a file, with a caption.
+	rec := e.upload(p, e.other.token, "C:\\fotos\\boca.png", "  La boca  ", png)
+	status(t, rec, http.StatusCreated)
+	photo := decode[places.File](t, rec)
+	if photo.FileName != "boca.png" || photo.ContentType != "image/png" || *photo.Title != "La boca" ||
+		photo.FileSize != int64(len(png)) || photo.PlaceID != p.ID {
+		t.Errorf("unexpected file: %+v", photo)
+	}
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha adjuntado «boca.png» al lugar «Cueva»") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+	// A page is never shown by the browser: it is a download (checked below), whatever its name says.
+	rec = e.upload(p, e.member.token, "trampa.html", "", []byte("<script>alert(1)</script>"))
+	status(t, rec, http.StatusCreated)
+	page := decode[places.File](t, rec)
+	if page.Title != nil {
+		t.Errorf("a file attached without a caption has none: %+v", page)
+	}
+	e.notifier.wait(t)
+
+	errorCode(t, e.upload(p, e.member.token, "", "", nil), 400, "file_required")
+	errorCode(t, e.upload(p, e.member.token, "vacio.txt", "", nil), 400, "file_required")
+	errorCode(t, e.upload(p, e.member.token, "a.png", strings.Repeat("x", places.MaxFileTitleLength+1), png), 400, "file_title_too_long")
+	errorCode(t, e.upload(p, e.member.token, "grande.bin", "", make([]byte, places.MaxFileSize+1)), 413, "file_too_large")
+	missing := places.Place{}
+	missing.ID = 987654
+	errorCode(t, e.upload(missing, e.member.token, "a.png", "", png), 404, "not_found")
+
+	// The list and the count of the page.
+	list := decode[[]places.File](t, e.json("GET", placePath(p, "/files"), e.member.token, nil))
+	if len(list) != 2 || list[0].ID != photo.ID || list[1].ID != page.ID {
+		t.Errorf("unexpected list: %+v", list)
+	}
+	if got := decode[places.Place](t, e.json("GET", placePath(p, ""), e.member.token, nil)); got.FileCount != 2 {
+		t.Errorf("expected 2 files, got %d", got.FileCount)
+	}
+
+	// The bytes: an image is shown, anything else downloaded and sandboxed.
+	rec = e.json("GET", placePath(p, fmt.Sprintf("/files/%d/file", photo.ID)), e.member.token, nil)
+	status(t, rec, http.StatusOK)
+	if !bytes.Equal(rec.Body.Bytes(), png) || rec.Header().Get("Content-Type") != "image/png" ||
+		!strings.HasPrefix(rec.Header().Get("Content-Disposition"), "inline") {
+		t.Errorf("unexpected image answer: %v", rec.Header())
+	}
+	rec = e.json("GET", placePath(p, fmt.Sprintf("/files/%d/file", page.ID)), e.member.token, nil)
+	status(t, rec, http.StatusOK)
+	if !strings.HasPrefix(rec.Header().Get("Content-Disposition"), "attachment") ||
+		!strings.Contains(rec.Header().Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("a page must be downloaded and sandboxed: %v", rec.Header())
+	}
+	errorCode(t, e.json("GET", placePath(p, "/files/987654/file"), e.member.token, nil), 404, "not_found")
+	if rec := e.json("GET", placePath(p, fmt.Sprintf("/files/%d/file", photo.ID)), "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a file needs a session, got %d", rec.Code)
+	}
+
+	// Who removes: whoever attached it, admin and board; not another member.
+	errorCode(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", photo.ID)), e.member.token, nil), 403, "place_file_not_yours")
+	status(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", photo.ID)), e.other.token, nil), http.StatusNoContent)
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha quitado «boca.png» del lugar «Cueva»") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+	if _, err := e.storage.Open(p.ID, photo.ID); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the bytes must be gone, got %v", err)
+	}
+	status(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", page.ID)), e.board.token, nil), http.StatusNoContent)
+	e.notifier.wait(t)
+	errorCode(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", page.ID)), e.board.token, nil), 404, "not_found")
+
+	// Deleting a place takes its files with it, rows and bytes.
+	rec = e.upload(p, e.member.token, "foto.png", "", png)
+	status(t, rec, http.StatusCreated)
+	kept := decode[places.File](t, rec)
+	e.notifier.wait(t)
+	status(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), http.StatusNoContent)
+	if _, err := e.storage.Open(p.ID, kept.ID); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the bytes of a deleted place must be gone, got %v", err)
+	}
 }

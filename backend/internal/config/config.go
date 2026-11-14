@@ -102,8 +102,12 @@ type Config struct {
 	// it is backed by a named volume. Set with LIBRARY_FILES_ROOT; when it is not, it is a directory
 	// called library-files next to ActivityResourcesRoot.
 	LibraryFilesRoot string
+	// PlaceFilesRoot is the directory internal/places saves the files of the places (photos,
+	// topographies, documents) to, one subdirectory per place. Set with PLACE_FILES_ROOT; when it is
+	// not, it is a directory called place-files next to ActivityResourcesRoot.
+	PlaceFilesRoot string
 	// DiskAlertPercent is the share of a filesystem holding ArchiveRoot,
-	// UserFilesRoot, ActivityResourcesRoot, TransactionFilesRoot or LibraryFilesRoot that may be used before the
+	// UserFilesRoot, ActivityResourcesRoot, TransactionFilesRoot, LibraryFilesRoot or PlaceFilesRoot that may be used before the
 	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
 	// that warning off. Set with DISK_ALERT_PERCENT, 90 by default.
 	DiskAlertPercent int
@@ -149,6 +153,10 @@ func Load() (Config, error) {
 		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
 		TransactionFilesRoot:  getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
 		LibraryFilesRoot:      os.Getenv("LIBRARY_FILES_ROOT"),
+		PlaceFilesRoot:        os.Getenv("PLACE_FILES_ROOT"),
+	}
+	if cfg.PlaceFilesRoot == "" {
+		cfg.PlaceFilesRoot = filepath.Join(filepath.Dir(cfg.ActivityResourcesRoot), "place-files")
 	}
 	if cfg.LibraryFilesRoot == "" {
 		// Not set: next to the memorias, which every installation already has, so that an

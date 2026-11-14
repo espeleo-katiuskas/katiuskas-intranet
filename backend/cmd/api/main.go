@@ -254,7 +254,12 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		return nil, nil, nil, nil, err
 	}
 	libraryService := library.NewService(library.NewRepository(repoPool), libraryFilesStorage, rolesService)
-	placesService := places.NewService(places.NewRepository(repoPool))
+	placeFilesStorage, err := places.NewStorage(cfg.PlaceFilesRoot)
+	if err != nil {
+		slog.Error("set up place files storage", "error", err, "root", cfg.PlaceFilesRoot)
+		return nil, nil, nil, nil, err
+	}
+	placesService := places.NewService(places.NewRepository(repoPool), placeFilesStorage)
 	areasService := areas.NewService(areas.NewRepository(repoPool))
 
 	licensesRepo := licenses.NewRepository(repoPool)
@@ -342,6 +347,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		ActivityResourcesRoot: cfg.ActivityResourcesRoot,
 		TransactionFilesRoot:  cfg.TransactionFilesRoot,
 		LibraryFilesRoot:      cfg.LibraryFilesRoot,
+		PlaceFilesRoot:        cfg.PlaceFilesRoot,
 		DiskAlertPercent:      cfg.DiskAlertPercent,
 	})
 

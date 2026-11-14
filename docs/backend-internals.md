@@ -848,7 +848,8 @@ lent, returned, commented, or that a file or a cover was added or removed.
 
 `internal/places`: the catalogue of places (`place_types`, `places`, `place_points`, and the zone
 each one is in; migration `00061_places.sql`), with the usual `model.go`, `repository.go`,
-`service.go` and `handler.go`. It has no files yet.
+`service.go` and `handler.go`, plus `files.go`, `handler_files.go`, `storage.go` and `filetype.go`
+for the files (migration `00063_place_files.sql`).
 
 **Who can do what.** Everybody who can sign in reads, and creates and changes places and their
 points: there is no review, and the API says who and when (`created_by`, `updated_by` and
@@ -894,6 +895,22 @@ The other points are `place_points`, each with its kind (`parking`, `approach`, 
 people changing it do not race, and touch its `updated_by` and `updated_at`. A point is only
 reachable through its own place (a point of another place is 404). `DeletePlace` deletes the points
 with the place, in one transaction, as nothing cascades.
+
+**Files.** Photos, topographies, permits and any other document are attached to a place with a
+caption (`POST /places/{id}/files`, 10 MiB, anything): metadata in `place_files`, bytes in
+`PLACE_FILES_ROOT/<place id>/<row id>`, created once with `O_EXCL` and never rewritten, exactly like
+the files of the library (the row is created first because the path is keyed by its id, and removed
+again if saving fails). Any member attaches one; whoever attached it, admin and board remove it (403
+`place_file_not_yours`); there is no cover and no thumbnail, the page shows an image at a fixed
+width. The type is decided from the bytes (`detectType`): only a PDF or an image is served `inline`,
+anything else as an `attachment` with a sandboxing `Content-Security-Policy`, and the bytes route
+accepts the session cookie (`ProtectAllowingCookie`) so that an `<img>` can point at it. Attaching
+or removing one touches the place (`updated_by`, `updated_at`), like a point; `Place.file_count`
+says how many there are. `DeletePlace` deletes the rows in its transaction and the service removes
+the bytes afterwards (a failure only leaves an unreferenced file, and is logged). **Configuration:**
+`PLACE_FILES_ROOT`, a directory called `place-files` next to `ACTIVITY_RESOURCES_ROOT` when unset;
+the status page lists it (`place_files`), `scripts/backup.sh` backs it up and
+`scripts/copy-prod-to-testing.sh` hard-links it into testing.
 
 **Where it is.** A place has an `area_id`, the most specific zone known, at least the country (400
 `place_area_required`, and `unknown_area` for one that is not there, checked by `kindOf` before the

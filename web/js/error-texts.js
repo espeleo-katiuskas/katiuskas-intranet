@@ -167,6 +167,7 @@ const texts = {
   invalid_dates:
     'Las fechas del préstamo no son válidas: ni en el futuro, ni una devolución anterior al préstamo.',
   not_yours: 'Solo quien lo añadió, o quien gestiona la biblioteca, puede quitarlo.',
+  place_file_not_yours: 'Solo quien lo añadió o la Junta puede quitar este fichero.',
   item_has_loans:
     'Este ejemplar se ha prestado alguna vez y no se puede borrar: se conserva su historial.',
   item_not_available: 'El ejemplar no está disponible: está prestado.',

@@ -17,7 +17,8 @@ Contents:
   `activity_resources`, `holidays`
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
-- [Places](#places): `areas`, `place_types`, `place_geologies`, `places`, `place_points`
+- [Places](#places): `areas`, `place_types`, `place_geologies`, `places`, `place_points`,
+  `place_files`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -53,9 +54,10 @@ Contents:
   checked by the Go service, and is stated in each table (section "Rules outside the database").
 - **Files outside PostgreSQL**: the document archive (`ARCHIVE_ROOT`), each person's files
   (`USER_FILES_ROOT`), the files of an activity's memoria (`ACTIVITY_RESOURCES_ROOT`) and the
-  documents attached to transactions (`TRANSACTION_FILES_ROOT`) and the files of the items
-  (`LIBRARY_FILES_ROOT`) are on disk; in the database only the metadata of the last three remains
-  (`activity_resources`, `transaction_files`, `library_resources`).
+  documents attached to transactions (`TRANSACTION_FILES_ROOT`), the files of the items
+  (`LIBRARY_FILES_ROOT`) and those of the places (`PLACE_FILES_ROOT`) are on disk; in the database
+  only the metadata of the last four remains (`activity_resources`, `transaction_files`,
+  `library_resources`, `place_files`).
 
 ## Map of relationships
 
@@ -73,7 +75,7 @@ license_types ──< licenses                material_types ──< material_it
 material_types ──< material_type_attributes ──< material_attribute_options
 library_types ──< library_items ──< library_loans, library_comments, library_resources
                                     (loans, comments and files point at users too)
-areas ──< areas (a tree), places              place_types ──< places ──< place_points
+areas ──< areas (a tree), places              place_types ──< places ──< place_points, place_files
                                               place_geologies ──< places
                           (places point at users too: who created and who changed)
 
@@ -1240,6 +1242,25 @@ Constraints:
 - `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000 (metres
   above sea level, when it is known)
 - index `idx_place_points_place_id` on `(place_id)`
+
+### `place_files`
+
+The metadata of the photos and documents attached to a place (migration `00063_place_files.sql`);
+the bytes are on disk, in `PLACE_FILES_ROOT/<place id>/<row id>`, and never rewritten.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint | identity |
+| `place_id` | bigint | → `places(id)`, `ON DELETE RESTRICT` (the service deletes the rows first) |
+| `title` | text | the caption, optional |
+| `file_name` | text | not blank; the name of the uploaded file |
+| `content_type` | text | not blank; decided from the bytes |
+| `file_size` | integer | greater than 0 |
+| `uploaded_by` | bigint | → `users(id)` |
+| `created_at` | timestamptz | default `now()` |
+
+- indexes `idx_place_files_place_id` on `(place_id)` and `idx_place_files_uploaded_by` on
+  `(uploaded_by)`
 
 ## Distributions
 

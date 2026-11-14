@@ -2468,7 +2468,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       summary: Delete a place
-      description: Admin or board. With its points.
+      description: Admin or board. With its points and its files.
       security: [{ bearerAuth: [] }]
       responses:
         "204": { description: Deleted }
@@ -2526,6 +2526,82 @@ paths:
         "204": { description: Removed }
         "400": { description: "invalid_id." }
         "404": { description: "not_found — the place, or a point that is not of that place." }
+
+  /places/{id}/files:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The files of a place
+      description: Any baseline role. Photos, topographies, permits, documents; oldest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceFile" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Attach a file to a place
+      description: >
+        Any baseline role. One file, at most 10 MiB, in the multipart field `file`, and an optional
+        caption in `title` (200 characters at most). Its type is decided from its bytes: a PDF or an
+        image can be shown in the browser, anything else is only downloaded. It counts as a change of
+        the place.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceFile" }
+        "400": { description: "invalid_id, invalid_body, file_required (missing or empty) or file_title_too_long." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: "file_too_large." }
+
+  /places/{id}/files/{fileId}/file:
+    get:
+      summary: The bytes of a file of a place
+      description: >
+        Any baseline role; also accepts the session cookie, so that a browser can open it. A PDF or an
+        image is shown in the page; anything else is downloaded, and sandboxed. `?download=1` forces a
+        download.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: fileId, in: path, required: true, schema: { type: integer } }
+        - { name: download, in: query, required: false, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200": { description: "The file" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /places/{id}/files/{fileId}:
+    delete:
+      summary: Remove a file of a place
+      description: Whoever attached it, admin or board. It counts as a change of the place.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: fileId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: "Removed" }
+        "400": { description: "invalid_id." }
+        "403": { description: "place_file_not_yours." }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /areas:
     get:
@@ -6353,6 +6429,7 @@ components:
             updated_by: { type: string, description: "Login of who last changed the place or any of its points." }
             updated_at: { type: string, format: date-time }
             points: { type: array, items: { $ref: "#/components/schemas/PlacePoint" } }
+            file_count: { type: integer, description: "How many files are attached (GET /places/{id}/files)." }
 
     PlacePointInput:
       type: object
@@ -6376,6 +6453,18 @@ components:
         lon: { type: number }
         altitude_m: { type: integer }
         note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    PlaceFile:
+      type: object
+      properties:
+        id: { type: integer }
+        place_id: { type: integer }
+        title: { type: string, description: "The caption given when it was attached; absent if none." }
+        file_name: { type: string }
+        content_type: { type: string }
+        file_size: { type: integer }
+        uploaded_by: { type: string, description: "A login." }
         created_at: { type: string, format: date-time }
 
     LibraryTypeInput:

@@ -2,7 +2,7 @@
 #
 # Replaces the testing database with a copy of production's data, then
 # migrates it up to the schema testing's own code expects, and replaces
-# testing's activity resource, transaction and library files with hard links to production's.
+# testing's activity resource, transaction, library and place files with hard links to production's.
 #
 # Why a full drop-and-restore rather than copying rows: testing runs `main`,
 # which can carry migrations production hasn't received yet, so the two
@@ -14,9 +14,9 @@
 # Production is only read (pg_dump takes a consistent snapshot without
 # blocking writers). Everything in the testing database is lost.
 #
-# ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT and LIBRARY_FILES_ROOT hold the files the database's
-# activity_resources, transaction_files and library_resources rows point at, so they have to follow the
-# database.
+# ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT, LIBRARY_FILES_ROOT and PLACE_FILES_ROOT hold the
+# files the database's activity_resources, transaction_files, library_resources and place_files rows
+# point at, so they have to follow the database.
 # Their files are hard-linked, not copied: the API never modifies a stored file (Storage.Save refuses to
 # overwrite one and deleting is a plain unlink), so testing shares production's
 # files without using more disk, and a write or delete in one tree can't change
@@ -24,7 +24,7 @@
 # testing's id sequence from starting behind a file already in its tree (if it
 # ever lands on one, Save refuses to overwrite it and that one upload fails).
 # This needs testing to have its own ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT and
-# LIBRARY_FILES_ROOT, different from production's, on the same filesystem, and a user allowed to link production's
+# LIBRARY_FILES_ROOT and PLACE_FILES_ROOT, different from production's, on the same filesystem, and a user allowed to link production's
 # files (root, or their owner: see fs.protected_hardlinks). Pass --no-files to
 # leave the files alone and only copy the database.
 #
@@ -33,7 +33,8 @@
 #     scripts/copy-prod-to-testing.sh [--yes] [--no-files] <prod-env-file> <testing-env-file>
 #
 # The two env files are the systemd EnvironmentFile (api.env) of each
-# environment. Only DATABASE_URL, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT, LIBRARY_FILES_ROOT
+# environment. Only DATABASE_URL, ACTIVITY_RESOURCES_ROOT, TRANSACTION_FILES_ROOT, LIBRARY_FILES_ROOT,
+# PLACE_FILES_ROOT
 # (and PUBLIC_BASE_URL, to label the prompt) are read from them; they are parsed, never sourced.
 # --yes skips the confirmation prompt, for running from automation.
 #
@@ -164,7 +165,7 @@ latest_migration=$(ls "$MIGRATIONS_DIR" | sed -n 's/^0*\([0-9][0-9]*\)_.*\.sql$/
 
 # The directories the API writes to, which follow the database: for each, the variable that
 # names it in api.env and config.go's default for when it is unset.
-file_vars=(ACTIVITY_RESOURCES_ROOT TRANSACTION_FILES_ROOT LIBRARY_FILES_ROOT)
+file_vars=(ACTIVITY_RESOURCES_ROOT TRANSACTION_FILES_ROOT LIBRARY_FILES_ROOT PLACE_FILES_ROOT)
 declare -A file_defaults=(
   [ACTIVITY_RESOURCES_ROOT]=/data/activity-resources
   [TRANSACTION_FILES_ROOT]=/data/transaction-files
@@ -172,12 +173,15 @@ declare -A file_defaults=(
 declare -A prod_files testing_files
 
 # The directory a variable names in an env file, or what config.go makes of it when unset. The library files
-# default to a directory called library-files beside the memorias' (an api.env that predates the library).
+# default to a directory called library-files beside the memorias' (an api.env that predates the library),
+# and the files of the places to one called place-files.
 files_dir() {
   local env_file=$1 var=$2 value
   value=$(env_value "$env_file" "$var")
   if [[ -z $value && $var == LIBRARY_FILES_ROOT ]]; then
     value=$(dirname "$(files_dir "$env_file" ACTIVITY_RESOURCES_ROOT)")/library-files
+  elif [[ -z $value && $var == PLACE_FILES_ROOT ]]; then
+    value=$(dirname "$(files_dir "$env_file" ACTIVITY_RESOURCES_ROOT)")/place-files
   elif [[ -z $value ]]; then
     value=${file_defaults[$var]}
   fi
@@ -237,7 +241,7 @@ if ((copy_files)); then
     files_line+="  $var: ${testing_files[$var]} emptied, then hard-linked from ${prod_files[$var]}"$'\n'
   done
   files_line=${files_line%$'\n'}
-  lost="the testing database and its activity, transaction and library files"
+  lost="the testing database and its activity, transaction, library and place files"
 else
   files_line="  files:               left alone (--no-files)"
   lost="the testing database"

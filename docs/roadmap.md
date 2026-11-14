@@ -8,11 +8,8 @@ building it; nothing in it is decided. When one is started its design goes to th
 
 The first phase is done and documented (`api.md`, `database.md`, `backend-internals.md`,
 `frontend.md`): the types, the places with their kind, state, main coordinate and texts, their other
-points, and the list and the page of each. What is left, in this order:
+points, their photos and documents, and the list and the page of each. What is left, in this order:
 
-- **Files**: photos, texts and documents attached to a place (like the memoria of an activity: a
-  text or a file with a title, on disk keyed by the row id and never rewritten). To settle: the
-  types allowed, the maximum size, who removes what others added, and thumbnails for the photos.
 - **The map**: all the places on one map, grouped when the view is wide (Leaflet and its clustering,
   copied into the repository, with a light listing of the places for it), and a small map on the
   page of each place with all its points. To settle: the source of the tiles (a topographic and a

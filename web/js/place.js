@@ -1,5 +1,8 @@
 import {
+  API_BASE,
   apiFetch,
+  apiFetchForm,
+  hasAnyRole,
   escapeHtml,
   formatDateTime,
   isNotFound,
@@ -9,6 +12,7 @@ import {
   showNotFound,
   stopAsNotFound,
 } from './api.js';
+import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
@@ -21,7 +25,7 @@ import {
 } from './places-common.js';
 import { renderRichText } from './rich-text.js';
 
-await initPage();
+const user = await initPage();
 const placeId = queryId();
 if (placeId === null) await stopAsNotFound();
 
@@ -29,6 +33,9 @@ let place = null;
 let types = [];
 let geologies = [];
 let names = {};
+let files = [];
+// Admin and board remove any file; anybody else only their own.
+const canManageFiles = hasAnyRole(user, ['admin', 'board']);
 
 // The names of the people (from the directory, open to every signed-in user).
 async function loadNames() {
@@ -42,6 +49,36 @@ async function loadNames() {
 
 function personLink(login) {
   return `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(names[login] ?? login)}</a>`;
+}
+
+function fileUrl(file, download = false) {
+  return `${API_BASE}/places/${placeId}/files/${file.id}/file${download ? '?download=1' : ''}`;
+}
+
+function renderFiles() {
+  document.getElementById('place-files').innerHTML = files.length
+    ? files
+        .map((f) => {
+          const label = f.title || f.file_name;
+          const preview = f.content_type.startsWith('image/')
+            ? `<a href="${fileUrl(f)}" target="_blank" rel="noopener"><img src="${fileUrl(f)}" alt="${escapeHtml(label)}" class="resource-image" loading="lazy"></a>`
+            : '';
+          const removable = f.uploaded_by === user.login || canManageFiles;
+          return `
+        <div class="comment">
+          <div class="comment-head">
+            <span><a href="${fileUrl(f)}" target="_blank" rel="noopener"><strong>${escapeHtml(label)}</strong></a>
+              <span class="subtitle">${escapeHtml(f.file_name)} · ${formatSize(f.file_size)} · ${personLink(f.uploaded_by)}, ${formatDateTime(f.created_at)}</span></span>
+            <span class="nowrap">
+              <a class="btn btn-secondary btn-small" href="${fileUrl(f, true)}">Descargar</a>
+              ${removable ? `<button type="button" class="btn btn-secondary btn-small" data-delete-file="${f.id}">Borrar</button>` : ''}
+            </span>
+          </div>
+          ${preview}
+        </div>`;
+        })
+        .join('')
+    : '<p>Todavía no hay fotos ni documentos.</p>';
 }
 
 function render() {
@@ -109,17 +146,20 @@ function render() {
       ? ` Último cambio de ${personLink(place.updated_by)} el ${formatDateTime(place.updated_at)}.`
       : '';
   document.getElementById('place-authorship').innerHTML = created + changed;
+  renderFiles();
 }
 
 async function load() {
   try {
-    const [loaded, loadedTypes, loadedGeologies, loadedNames] = await Promise.all([
+    const [loaded, loadedFiles, loadedTypes, loadedGeologies, loadedNames] = await Promise.all([
       apiFetch(`/places/${placeId}`),
+      apiFetch(`/places/${placeId}/files`),
       loadTypes(),
       loadGeologies(),
       loadNames(),
     ]);
     place = loaded;
+    files = loadedFiles;
     types = loadedTypes;
     geologies = loadedGeologies;
     names = loadedNames;
@@ -181,9 +221,38 @@ document.getElementById('points-table-body').addEventListener('click', async (ev
   }
 });
 
+document.getElementById('file-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await apiFetchForm(`/places/${placeId}/files`, new FormData(form));
+    form.reset();
+    showFeedback('Fichero añadido.');
+    await load();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+document.getElementById('place-files').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-delete-file]');
+  if (!button || !confirm('¿Quitar este fichero?')) return;
+  try {
+    await apiFetch(`/places/${placeId}/files/${button.dataset.deleteFile}`, { method: 'DELETE' });
+    showFeedback('Fichero quitado.');
+    await load();
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
 // Only admin and board have the button (data-roles removes it for the rest).
 document.getElementById('delete-place')?.addEventListener('click', async () => {
-  if (!confirm(`¿Borrar «${place.name}», con sus puntos?`)) return;
+  if (!confirm(`¿Borrar «${place.name}», con sus puntos y sus ficheros?`)) return;
   try {
     await apiFetch(`/places/${placeId}`, { method: 'DELETE' });
     window.location.href = '/lugares';

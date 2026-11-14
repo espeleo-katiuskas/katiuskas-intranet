@@ -44,6 +44,7 @@ type Info struct {
 	ActivityResourcesRoot string
 	TransactionFilesRoot  string
 	LibraryFilesRoot      string
+	PlaceFilesRoot        string
 
 	// DiskAlertPercent is how full a filesystem holding one of the
 	// directories may be before it counts as a problem (see Problems).
@@ -163,6 +164,7 @@ func (h *Handler) collect(ctx context.Context) statusResponse {
 		directory("activity_resources", h.info.ActivityResourcesRoot),
 		directory("transaction_files", h.info.TransactionFilesRoot),
 		directory("library_files", h.info.LibraryFilesRoot),
+		directory("place_files", h.info.PlaceFilesRoot),
 	}
 	return statusResponse{
 		App:      h.appStatus(),

@@ -595,6 +595,7 @@ function renderStatus(status) {
     activity_resources: 'Memorias de actividades',
     transaction_files: 'Ficheros de transacciones',
     library_files: 'Ficheros de la biblioteca',
+    place_files: 'Ficheros de los lugares',
   };
 
   const problems = (status.problems ?? []).map((text) => `<li>${escapeHtml(text)}</li>`).join('');

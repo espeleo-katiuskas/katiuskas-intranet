@@ -8,11 +8,12 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo    *Repository
+	storage *Storage
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, storage *Storage) *Service {
+	return &Service{repo: repo, storage: storage}
 }
 
 // blankToNil trims a text and gives nil for a blank one, so that "" is never stored as if it were a value.
@@ -139,8 +140,16 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	return s.repo.UpdatePlace(ctx, id, userID, kind, in)
 }
 
+// DeletePlace removes a place with its points and its files.
 func (s *Service) DeletePlace(ctx context.Context, id int64) error {
-	return s.repo.DeletePlace(ctx, id)
+	files, err := s.repo.DeletePlace(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, fileID := range files {
+		s.removeBytes(id, fileID)
+	}
+	return nil
 }
 
 // ----- points -----

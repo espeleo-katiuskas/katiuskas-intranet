@@ -138,3 +138,26 @@ func TestLoadLibraryFilesRoot(t *testing.T) {
 		t.Errorf("expected the one that was set, got %q", cfg.LibraryFilesRoot)
 	}
 }
+
+// The directory of the files of the places is PLACE_FILES_ROOT, and when that is not set one called
+// place-files beside the memorias'.
+func TestLoadPlaceFilesRoot(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("ACTIVITY_RESOURCES_ROOT", "/opt/katiuskas/data/activity-resources")
+	t.Setenv("PLACE_FILES_ROOT", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PlaceFilesRoot != "/opt/katiuskas/data/place-files" {
+		t.Errorf("expected it beside the memorias, got %q", cfg.PlaceFilesRoot)
+	}
+	t.Setenv("PLACE_FILES_ROOT", "/srv/lugares")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PlaceFilesRoot != "/srv/lugares" {
+		t.Errorf("expected the one that was set, got %q", cfg.PlaceFilesRoot)
+	}
+}
