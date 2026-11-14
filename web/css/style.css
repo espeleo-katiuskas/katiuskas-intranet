@@ -2207,3 +2207,89 @@ button.heat-cell[aria-pressed='true'] {
 .content:not(.managing) .manage-only {
   display: none;
 }
+
+/* A place: the badge of a state that is being worked on, and what a field of coordinates understood. */
+.badge-warn {
+  background: #f6e7c1;
+  color: #7a5a12;
+}
+
+.coordinates-preview {
+  margin: 4px 0 0;
+}
+
+.coordinates-preview.coordinates-invalid {
+  color: var(--danger, #8a3a33);
+}
+
+.filter-bar #places-search-field {
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+/* The data of a place: each datum next to its name, not at the other end of the page. */
+#place-details .detail-row {
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+#place-details .detail-row > :first-child {
+  flex: 0 0 11rem;
+}
+
+#place-authorship {
+  margin-top: 24px;
+}
+
+.badge-info {
+  background: #d9e6f4;
+  color: #2a4f7a;
+}
+
+/* The field to choose a zone: the list of what is found, under the text. */
+.area-combo {
+  position: relative;
+}
+
+.area-results {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 4px;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(28, 33, 30, 0.2);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.area-results li {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.area-results li[aria-selected='true'],
+.area-results li:hover {
+  background: var(--surface-muted);
+}
+
+.area-results li.area-none {
+  cursor: default;
+  color: var(--ink-muted);
+}
+
+.area-chosen {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+}
+
+.area-add {
+  margin: -8px 0 0;
+}

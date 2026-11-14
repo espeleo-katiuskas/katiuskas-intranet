@@ -190,15 +190,75 @@ a space or a control character (browsers drop tabs and line breaks inside an add
 `java<tab>script:` would be a `javascript:` one). A link that leaves the intranet opens in a new tab
 with `noopener noreferrer`. The API stores and returns plain text; nothing about this is in it.
 
+**Places (`/lugares`, `/lugar?id=…`).** `lugares.html`/`places.js` is the list: a table (a card per
+place on a phone) of name — a link, with its other names under it —, type, state as a badge
+(Abierta, Hace falta permiso, Turística (de pago) or Cerrada: how the place can be visited, each
+with a line that explains it, `STATE_HELP` in `places-common.js`, under the field of the form and
+next to the badge on the page), where it is (`where`: the zone, the province, the community and the
+country, so "Madrid" finds the places of the province too) and the measures of a cave, with a search
+that looks in the name, the other names, the type, the state and where it is (accents and case
+ignored, every word has to appear, the geology of a cave included) and three selects, by type, by
+state and by geology; the type of a row has the geology of a cave under it. Any member gets "+ Nuevo
+lugar", which opens the dialog of `place-dialog.js` and goes to the page of the place once it is
+saved; admin gets "Tipos y geologías", a dialog with two tables to add, rename and delete the
+general types (Cueva, Sima and Cañón show "Fijo" and cannot be touched) and the geologies of the
+caves (none is fixed; one that has caves cannot be deleted), both with the same code
+(`bindCatalogue` in `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the
+data (other names, one row per zone from the country down — "País España", "Comunidad autónoma
+Comunidad de Madrid", "Provincia Madrid", "Municipio Valdemanco": the name of the level is the
+`kind` of the zone —, the main coordinate with a link to OpenStreetMap and its UTM next to it, its
+altitude above sea level, the geology of a cave, the depth and the horizontal length), then "Cómo
+llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
+`renderRichText` —, and "Otros puntos", a table of the other points with "Editar" and "Quitar" on
+each, and who added the place and who changed it last. Any member has "Editar lugar" and "Añadir
+punto"; admin and board also "Borrar lugar" (`data-roles`).
+
+The two dialogs, of a place and of a point, are built the first time they are needed by
+`place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
+form for creating and editing. The fields that depend on the kind of the chosen type (the measures
+and the geology of a cave, the technical sheet of a cave or a canyon) are in the form only for
+those, as in the form of material, and what a kind does not have is sent as null, which is what the
+API accepts. The field of **coordinates** is one text box that reads decimal degrees ("40.4168,
+-3.7038", also with decimal commas or the letters N, S, E, W) or UTM ("30T 440290 4474257"; without
+a zone the 30 is assumed, and the page says so), and shows under it what it understood — the
+decimals and the UTM — or that it does not understand it, in which case the form cannot be sent.
+`js/coordinates.js` does it, with no dependencies: Krüger's series to the sixth order, exact to far
+less than a millimetre inside a zone (ETRS89, the datum of the Spanish UTM, is taken as WGS84, which
+differs by centimetres); the API only ever sees latitude and longitude. The altitude, in metres
+above sea level, is a field of its own (optional, between -500 and 9000) next to the coordinates, in
+the dialog of a place and in that of a point, and shows after the coordinates of a point and as its
+own row in the place. The shared labels and helpers (states, kinds of point, the coordinates as a
+link) are in `places-common.js`.
+
+**Where it is** is chosen with `area-picker.js`: one text box where a person types part of a name (a
+municipality, a province, a country) and chooses among what `GET /areas?search=` finds, each shown
+with the zones it is in ("Valdemanco — Madrid, Comunidad de Madrid, España"), so that two with the
+same name are told apart. The search ignores case and accents ("coruna" finds "A Coruña") and is
+made 200 ms after the last key; the list opens under the box (`.area-combo`), is used with the mouse
+or with the arrows, Enter and Escape (Escape closes the list, not the dialog), and what is chosen is
+shown under the box as a chain with its kind ("Municipio · España › Comunidad de Madrid › Madrid ›
+Valdemanco"). Typing again undoes the choice, and the box is invalid until a zone is chosen, which
+the form needs. A new place starts in the last zone used, kept in the browser (`localStorage`, only
+a convenience). If the zone is not in the list, "¿No está? Añade una zona" opens `area-dialog.js`:
+the zone it goes in ("Dentro de", chosen with the same field, the one already chosen in the place's
+form if there is), its name and its kind, which is left blank to take that of the zones already
+below (the dialog says which) and is required for the first one below another; once added it is the
+chosen zone. Anybody can; to rename, merge, delete or add inside a zone, admin has "Zonas" on
+`/lugares` (`areas-manager.js`): it finds a zone with the same field and shows its chain, its kind
+and how many zones and places are in it, with its name and kind to change, the siblings it can be
+merged into (after a confirmation, which says that everything in it goes to the other one), "Añadir
+una zona dentro" and "Borrar zona", which is disabled for a country or a zone with something in it
+(and says why).
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
-`/admin`, of the library and of `/material`) is drawn instead, under 640px, as a card per row:
-`js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text of its
-column's header (again whenever the rows are redrawn, with a `MutationObserver`), and `style.css`
-shows each cell as its label above its value; the header keeps only the sortable columns, as a row
-"Ordenar por" of buttons, and the other headers go. A cell that spans the row (the "nothing here"
-message) and an empty one carry no label. The rows of "Estado del sistema" put the name above the
-value under that width, since its fixed column of 20rem left the value no room, and
+`/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card
+per row: `js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text
+of its column's header (again whenever the rows are redrawn, with a `MutationObserver`), and
+`style.css` shows each cell as its label above its value; the header keeps only the sortable
+columns, as a row "Ordenar por" of buttons, and the other headers go. A cell that spans the row (the
+"nothing here" message) and an empty one carry no label. The rows of "Estado del sistema" put the
+name above the value under that width, since its fixed column of 20rem left the value no room, and
 `.section-header` lets its button wrap below the title instead of squeezing it.
 
 **Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only

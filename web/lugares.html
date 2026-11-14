@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lugares — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <div class="section-header">
+    <div>
+      <h1>Lugares</h1>
+      <p class="subtitle">Cuevas, simas, cañones, vías ferratas, refugios… Mira dónde están, cómo se llega y en qué estado se encuentran. Cualquier socio puede añadir un lugar o completar uno que ya está.</p>
+    </div>
+    <div class="table-actions">
+      <button id="manage-areas" type="button" class="btn btn-secondary btn-small" data-roles="admin">Zonas</button>
+      <button id="manage-types" type="button" class="btn btn-secondary btn-small" data-roles="admin">Tipos y geologías</button>
+      <button id="toggle-new-place" type="button" class="btn btn-secondary btn-small">+ Nuevo lugar</button>
+    </div>
+  </div>
+
+  <p id="feedback" class="success-message" hidden></p>
+
+  <dialog id="types-dialog" class="panel modal" data-roles="admin">
+    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+    <h3>Tipos de lugar</h3>
+    <p class="subtitle">Cueva, Sima y Cañón son fijos: de ellos dependen los datos de cada lugar. Un tipo que ya tiene lugares no se puede borrar.</p>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Nombre</th><th>Lugares</th><th></th></tr>
+        </thead>
+        <tbody id="types-table-body"></tbody>
+      </table>
+    </div>
+    <form id="new-type-form" class="inline-form">
+      <div class="field">
+        <label for="new-type-name">Nuevo tipo</label>
+        <input id="new-type-name" name="name" type="text" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-small">Añadir tipo</button>
+    </form>
+
+    <h3>Geologías de las cuevas</h3>
+    <p class="subtitle">El material en el que se formó una cueva. Ninguna es fija, y una que ya tiene cuevas no se puede borrar.</p>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Nombre</th><th>Lugares</th><th></th></tr>
+        </thead>
+        <tbody id="geologies-table-body"></tbody>
+      </table>
+    </div>
+    <form id="new-geology-form" class="inline-form">
+      <div class="field">
+        <label for="new-geology-name">Nueva geología</label>
+        <input id="new-geology-name" name="name" type="text" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-small">Añadir geología</button>
+    </form>
+  </dialog>
+
+  <div class="filter-bar">
+    <div class="field" id="places-search-field">
+      <label for="places-search">Buscar lugares</label>
+      <input id="places-search" type="search" autocomplete="off" placeholder="Nombre, municipio, provincia, tipo…">
+    </div>
+    <div class="field">
+      <label for="type-filter">Tipo</label>
+      <select id="type-filter"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label for="state-filter">Estado</label>
+      <select id="state-filter"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label for="geology-filter">Geología</label>
+      <select id="geology-filter"><option value="">Todas</option></select>
+    </div>
+  </div>
+  <p class="people-count" id="places-count" hidden></p>
+
+  <div class="table-wrap">
+    <table class="stack-on-phone">
+      <thead>
+        <tr><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Dónde</th><th>Medidas</th></tr>
+      </thead>
+      <tbody id="places-table-body"></tbody>
+    </table>
+  </div>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/places.js"></script>
+</body>
+</html>

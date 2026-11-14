@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lugar — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+  <p><a href="/lugares">&larr; Volver a los lugares</a></p>
+
+  <p id="feedback" class="success-message" hidden></p>
+
+  <h1 id="place-name">Lugar</h1>
+  <p class="subtitle" id="place-meta"></p>
+  <p id="place-state"></p>
+  <div class="detail-list" id="place-details"></div>
+  <div class="panel-actions">
+    <button id="edit-place" type="button" class="btn btn-secondary btn-small">Editar lugar</button>
+    <button id="add-point" type="button" class="btn btn-secondary btn-small">Añadir punto</button>
+    <button id="delete-place" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar lugar</button>
+  </div>
+
+  <section>
+    <h2>Cómo llegar</h2>
+    <div id="place-access" class="rich-text"></div>
+  </section>
+
+  <section>
+    <h2>Descripción</h2>
+    <div id="place-description" class="rich-text"></div>
+  </section>
+
+  <section id="sheet-section" hidden>
+    <h2>Ficha técnica</h2>
+    <p class="subtitle">Qué instalación falta para poder recorrerla.</p>
+    <div id="place-sheet" class="rich-text"></div>
+  </section>
+
+  <section>
+    <h2>Otros puntos</h2>
+    <p class="subtitle">Dónde dejar el coche, dónde empieza la aproximación, puntos del camino, cada una de las bocas…</p>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Qué es</th><th>Nombre</th><th>Coordenadas</th><th>Nota</th><th></th></tr>
+        </thead>
+        <tbody id="points-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="subtitle" id="place-authorship"></p>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/place.js"></script>
+</body>
+</html>

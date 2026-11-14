@@ -45,6 +45,11 @@ const NAV_ITEMS = [
     icon: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>',
   },
   {
+    href: '/lugares',
+    label: 'Lugares',
+    icon: '<path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 0 0-13 0c0 5.4 6.5 11 6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  },
+  {
     href: '/material',
     label: 'Material',
     icon: '<path d="M6 2 L6 17 Q6 19 8 19 L17.5 19 Q19 19 19 17.5 L19 16.5 Q19 14.7 17.2 14.3 L12.5 13.3 L12 13.13 L12 2 Z"/>',
@@ -99,6 +104,7 @@ const NAV_ITEMS = [
 // when adding a page).
 const ACTIVE_ALIASES = {
   '/actividad': '/actividades',
+  '/lugar': '/lugares',
   '/socio': '/socios',
   '/cuenta': '/contabilidad',
   '/material-prestado': '/material',
