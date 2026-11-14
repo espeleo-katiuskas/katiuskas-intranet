@@ -18,7 +18,7 @@
   <p class="subtitle" id="activity-meta"></p>
   <p class="subtitle" id="activity-leader"></p>
   <p class="joined-note" id="joined-note" hidden>✓ Estás apuntado a esta actividad.</p>
-  <p id="activity-description"></p>
+  <div id="activity-description" class="rich-text"></div>
 
   <p id="feedback" class="success-message" hidden></p>
 
@@ -78,6 +78,7 @@
         <div class="field span-2">
           <label for="ea-description">Descripción</label>
           <textarea id="ea-description" name="description"></textarea>
+          <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
         </div>
       </div>
       <div class="panel-actions">

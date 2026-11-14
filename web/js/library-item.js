@@ -24,6 +24,7 @@ import {
   today,
   typeOptions,
 } from './library-common.js';
+import { renderRichText } from './rich-text.js';
 import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
@@ -76,7 +77,11 @@ function renderItem() {
   document.getElementById('library-details').innerHTML = rows
     .map(
       ([label, value]) =>
-        `<div class="detail-row"><span class="subtitle">${label}</span><span>${escapeHtml(value)}</span></div>`,
+        `<div class="detail-row"><span class="subtitle">${label}</span>${
+          label === 'Descripción'
+            ? `<div class="rich-text">${renderRichText(value)}</div>`
+            : `<span>${escapeHtml(value)}</span>`
+        }</div>`,
     )
     .join('');
   // The buttons only exist for those who manage the library (data-roles removes them for the rest).
@@ -102,7 +107,7 @@ function renderComments() {
             <span>${personLink(people.namesByLogin, c.user_login)} <span class="subtitle">${formatDateTime(c.created_at)}</span></span>
             ${mine || canManage ? `<button type="button" class="btn btn-secondary btn-small" data-delete-comment="${c.id}">Borrar</button>` : ''}
           </div>
-          <p class="comment-body">${escapeHtml(c.body)}</p>
+          <div class="comment-body rich-text">${renderRichText(c.body)}</div>
         </div>`;
         })
         .join('')

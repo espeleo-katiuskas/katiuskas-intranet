@@ -145,6 +145,24 @@ directory, so it is drawn again if that arrives after the calendar). It scrolls 
 on a narrow screen, starting on the newest weeks. The days are the club's (Madrid) and are plain
 dates here: no time zone arithmetic. What was before the feature was put in place is not there.
 
+**Free text with a little formatting.** The description of an activity (`/actividad`), of a
+distribution (`/reparto` and `/reparto-gestion`) and of a library item (`/ejemplar`), and the
+comments of the library, are written as plain text and shown through `renderRichText`
+(`js/rich-text.js`) into an element with the class `.rich-text`. It is not Markdown, and only this
+exists: `#`, `##` and `###` headings (drawn as `h3`, `h4` and `h5`, since the page's own title is
+the `h1`), `**bold**` and `*italic*` (not nested in each other, but they can hold a link), links as
+`[text](address)` and any bare `http(s)` address (without the full stop or the comma that ends the
+sentence), `- ` or `* ` lists and a `---` rule. Everything else — quotes, code, images, a
+`#hashtag`, `5 * 3 * 2` — stays as typed. The lines of a stretch of text keep their breaks (the
+`.multiline` class, `white-space: pre-wrap`, long words broken) and a blank line starts a new one,
+so several paragraphs read as such. The textareas say so in a `p.hint` under them. Safety: every
+span of text is escaped before a tag is written around it and only these tags are produced; a link
+is only made if `safeHref` accepts it — `http`, `https`, `mailto` or a path of the intranet starting
+with a single `/` — so `javascript:`, `data:` and the like stay as text, and so does an address with
+a space or a control character (browsers drop tabs and line breaks inside an address, so
+`java<tab>script:` would be a `javascript:` one). A link that leaves the intranet opens in a new tab
+with `noopener noreferrer`. The API stores and returns plain text; nothing about this is in it.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin` and of the library) is drawn instead, under 640px, as a card per row:

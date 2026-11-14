@@ -16,7 +16,7 @@
   <p><a id="back-link" href="/repartos">&larr; Volver al reparto</a></p>
   <h1 id="distribution-title">Gestionar reparto</h1>
   <p class="subtitle" id="distribution-meta"></p>
-  <p id="distribution-description"></p>
+  <div id="distribution-description" class="rich-text"></div>
 
   <p id="feedback" class="success-message" hidden></p>
 
@@ -53,6 +53,7 @@
         <div class="field span-2">
           <label for="ed-description">Descripción <span class="optional">(opcional)</span></label>
           <textarea id="ed-description" name="description"></textarea>
+          <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
         </div>
         <div class="field">
           <label for="ed-audience">Para quién</label>

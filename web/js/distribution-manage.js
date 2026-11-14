@@ -9,6 +9,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { renderRichText } from './rich-text.js';
 import {
   STATUS_ORDER,
   nothingToAsk,
@@ -84,7 +85,9 @@ function renderHeader() {
   document.getElementById('distribution-title').textContent = distribution.name;
   document.title = `${distribution.name} — Gestionar — Club de Espeleología Katiuskas`;
   document.getElementById('distribution-meta').innerHTML = describeDistribution(distribution);
-  document.getElementById('distribution-description').textContent = distribution.description ?? '';
+  document.getElementById('distribution-description').innerHTML = renderRichText(
+    distribution.description,
+  );
   // Buttons restricted by data-roles are removed from the page for everybody else, hence the
   // optional chaining on the ones that might not be there.
   const { previous, next } = neighbours();

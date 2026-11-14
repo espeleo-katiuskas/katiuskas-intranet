@@ -2093,8 +2093,60 @@ button.heat-cell[aria-pressed='true'] {
 
 .comment-body {
   margin: 4px 0 0;
+}
+
+/* A free text of several lines or paragraphs (a description, a comment): the line breaks the person
+   typed stay. */
+.multiline {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* What renderRichText (js/rich-text.js) makes: stretches of text, headings, a list, a rule. */
+.rich-text {
+  overflow-wrap: anywhere;
+}
+
+.rich-text p,
+.rich-text ul {
+  margin: 0 0 0.75em;
+}
+
+.rich-text ul {
+  padding-left: 1.4em;
+}
+
+.rich-text h3,
+.rich-text h4,
+.rich-text h5 {
+  margin: 1em 0 0.4em;
+  line-height: 1.3;
+}
+
+.rich-text h3 {
+  font-size: 1.15rem;
+}
+
+.rich-text h4 {
+  font-size: 1.05rem;
+}
+
+.rich-text h5 {
+  font-size: 1rem;
+}
+
+.rich-text hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1em 0;
+}
+
+.rich-text > :first-child {
+  margin-top: 0;
+}
+
+.rich-text > :last-child {
+  margin-bottom: 0;
 }
 
 .comment-form {
@@ -2144,4 +2196,9 @@ button.heat-cell[aria-pressed='true'] {
 }
 #types-table-body .field {
   margin-bottom: 0;
+}
+
+/* A description of several paragraphs: the label stays at the top of it. */
+#library-details .detail-row {
+  align-items: flex-start;
 }

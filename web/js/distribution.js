@@ -13,6 +13,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
+import { renderRichText } from './rich-text.js';
 import { mountOrderForm, optionSelects, readChoices } from './distribution-order-form.js';
 import {
   nothingToAsk,
@@ -56,7 +57,9 @@ function renderHeader() {
   document.getElementById('distribution-title').textContent = distribution.name;
   document.title = `${distribution.name} — Club de Espeleología Katiuskas`;
   document.getElementById('distribution-meta').innerHTML = describeDistribution(distribution);
-  document.getElementById('distribution-description').textContent = distribution.description ?? '';
+  document.getElementById('distribution-description').innerHTML = renderRichText(
+    distribution.description,
+  );
   // Only who manages distributions has the button (data-roles removes it for everybody else).
   const manageLink = document.getElementById('manage-link');
   if (manageLink) manageLink.href = `/reparto-gestion?id=${id}`;

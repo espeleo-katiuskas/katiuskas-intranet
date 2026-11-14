@@ -22,6 +22,7 @@ import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { itemLabel, itemPickerText } from './material-common.js';
 import { renderMarkdown } from './markdown.js';
+import { renderRichText } from './rich-text.js';
 import { formatSize, downloadBlob } from './file-browser.js';
 
 const viewer = await initPage();
@@ -107,7 +108,9 @@ async function loadActivity(ready = Promise.resolve()) {
     document.getElementById('activity-meta').textContent =
       `${dateRangeLabel(activity)} · ${typeLabels[activity.type] ?? activity.type} · ` +
       `${activityStateLabels[activityState(activity)]} · ${visibilityLabels[activity.visibility] ?? activity.visibility}`;
-    document.getElementById('activity-description').textContent = activity.description ?? '';
+    document.getElementById('activity-description').innerHTML = renderRichText(
+      activity.description,
+    );
 
     activityTitle = activity.title;
     activityCancelled = activity.cancelled;
