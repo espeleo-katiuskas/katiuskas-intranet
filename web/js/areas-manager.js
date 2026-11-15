@@ -41,7 +41,7 @@ function build() {
       </form>
       <form id="am-merge" class="inline-form">
         <div class="field">
-          <label for="am-merge-into">Fusionar en otra zona de la misma</label>
+          <label for="am-merge-into">Fusionar con otra zona del mismo nivel y de la misma zona superior</label>
           <select id="am-merge-into" required></select>
         </div>
         <button type="submit" class="btn btn-secondary btn-small">Fusionar</button>
@@ -97,7 +97,8 @@ function build() {
         .filter((s) => s.id !== mine)
         .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
         .join('');
-      mergeForm.querySelector('button').disabled = mergeInto.options.length === 0;
+      // With no sibling there is nothing to merge into: the form would only be an empty list.
+      mergeForm.hidden = mergeInto.options.length === 0;
     }
   }
 
