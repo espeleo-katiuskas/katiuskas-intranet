@@ -155,8 +155,9 @@ function addExpandButton(L, map, element) {
     const label = expanded ? 'Salir de la pantalla completa' : 'Pantalla completa';
     button.title = label;
     button.setAttribute('aria-label', label);
-    // The container changed its size: Leaflet has to know, and keeps the centre where it was.
-    map.invalidateSize({ pan: false });
+    // The container changed its size: Leaflet has to know, and by default it keeps the centre of the map
+    // where it was (not the corner), so the same place stays in the middle.
+    map.invalidateSize({ animate: false });
     if (expanded) document.addEventListener('keydown', onKey);
     else document.removeEventListener('keydown', onKey);
   }
@@ -173,8 +174,10 @@ function addExpandButton(L, map, element) {
       button.href = '#';
       button.setAttribute('role', 'button');
       L.DomEvent.disableClickPropagation(container);
+      // The click is the button's alone: it must not reach the map, which would take it for a click on
+      // the place under the pointer (and offer to create a place there).
       L.DomEvent.on(button, 'click', (event) => {
-        L.DomEvent.preventDefault(event);
+        L.DomEvent.stop(event);
         set(!expanded);
       });
       button.innerHTML = EXPAND_ICON;

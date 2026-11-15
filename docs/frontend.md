@@ -329,11 +329,14 @@ popup that is open) without opening another: Leaflet closes the popup and still 
 the close is remembered for the turn it happens in. Every map has, under the zoom buttons, a button
 that makes it take the whole window of the browser (`addExpandButton` in `createMap`, so all of them
 have it): the container gets the class `map-expanded` (fixed, over the sidebar and the top bar, with
-the page under it not scrolling) and Leaflet is told its new size (`invalidateSize`, keeping the
-centre); the same button, or Escape, gives the map back its place. It is deliberately not the
-Fullscreen API: the monitor is not taken over, only the window, so the address bar and the tabs
-stay. If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working. Nothing
-here is drawn from the server's side, and an offline map is not there.
+the page under it not scrolling) and Leaflet is told its new size (`invalidateSize`, whose default
+keeps the centre of the map in the middle, not the corner; `pan: false` would keep the corner); the
+same button, or Escape, gives the map back its place. The click on the button is stopped
+(`L.DomEvent.stop`), as `disableClickPropagation` alone does not keep a `click` from reaching the
+map, which would take it for a click on the place under the pointer and offer to create one. It is
+deliberately not the Fullscreen API: the monitor is not taken over, only the window, so the address
+bar and the tabs stay. If the tiles or Leaflet cannot be loaded the page says so and the rest keeps
+working. Nothing here is drawn from the server's side, and an offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
