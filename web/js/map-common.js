@@ -127,11 +127,63 @@ async function createMap(element) {
     })
     .addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
+  addExpandButton(L, map, element);
   map.on('baselayerchange', (event) => {
     const found = LAYERS.find((layer) => layer.name === event.name);
     if (found) rememberLayer(found.id);
   });
   return { L, map };
+}
+
+const EXPAND_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+const SHRINK_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+
+// A button under the zoom ones that makes the map take the whole window of the browser (and another
+// click, or Escape, gives it back its place on the page). It does not use the Fullscreen API: the
+// monitor is not taken over, only the window, and the page keeps its own address bar and tabs.
+function addExpandButton(L, map, element) {
+  let expanded = false;
+  let button = null;
+
+  function set(value) {
+    expanded = value;
+    element.classList.toggle('map-expanded', expanded);
+    document.documentElement.classList.toggle('map-is-expanded', expanded);
+    button.innerHTML = expanded ? SHRINK_ICON : EXPAND_ICON;
+    const label = expanded ? 'Salir de la pantalla completa' : 'Pantalla completa';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    // The container changed its size: Leaflet has to know, and keeps the centre where it was.
+    map.invalidateSize({ pan: false });
+    if (expanded) document.addEventListener('keydown', onKey);
+    else document.removeEventListener('keydown', onKey);
+  }
+
+  function onKey(event) {
+    if (event.key === 'Escape') set(false);
+  }
+
+  const Expand = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      button = L.DomUtil.create('a', 'map-expand-button', container);
+      button.href = '#';
+      button.setAttribute('role', 'button');
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(button, 'click', (event) => {
+        L.DomEvent.preventDefault(event);
+        set(!expanded);
+      });
+      button.innerHTML = EXPAND_ICON;
+      button.title = 'Pantalla completa';
+      button.setAttribute('aria-label', 'Pantalla completa');
+      return container;
+    },
+  });
+  new Expand().addTo(map);
 }
 
 // The marker of a place: a dot of the colour of its state.

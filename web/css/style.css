@@ -2326,6 +2326,29 @@ dialog.modal .area-results {
   min-height: 0;
 }
 
+/* A map that takes the whole window of the browser (not the screen: no Fullscreen API), over the sidebar
+   and the top bar, which are below this z-index; the page under it does not scroll meanwhile. */
+.places-map.map-expanded {
+  position: fixed !important; /* Leaflet gives its container an inline "position: relative" */
+  inset: 0;
+  z-index: 2000;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+html.map-is-expanded {
+  overflow: hidden;
+}
+
+.leaflet-bar a.map-expand-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .map-legend {
   font-size: 0.875rem;
   display: flex;

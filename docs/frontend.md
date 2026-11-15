@@ -326,9 +326,14 @@ or tooltip, as markers do not pass their clicks on to the map (`bubblingMouseEve
 `offerOnMapClick` in `map-common.js` does it for both, each page giving it the label and what to
 open. The popup has its close button, and a click elsewhere on the map only closes it (or any other
 popup that is open) without opening another: Leaflet closes the popup and still sends that click, so
-the close is remembered for the turn it happens in. If the tiles or Leaflet cannot be loaded the
-page says so and the rest keeps working. Nothing here is drawn from the server's side, and an
-offline map is not there.
+the close is remembered for the turn it happens in. Every map has, under the zoom buttons, a button
+that makes it take the whole window of the browser (`addExpandButton` in `createMap`, so all of them
+have it): the container gets the class `map-expanded` (fixed, over the sidebar and the top bar, with
+the page under it not scrolling) and Leaflet is told its new size (`invalidateSize`, keeping the
+centre); the same button, or Escape, gives the map back its place. It is deliberately not the
+Fullscreen API: the monitor is not taken over, only the window, so the address bar and the tabs
+stay. If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working. Nothing
+here is drawn from the server's side, and an offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
