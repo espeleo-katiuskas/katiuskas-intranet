@@ -156,29 +156,43 @@ function placePopup(place) {
 
 // A click on a map where there is no place offers to create one there: a small popup with the
 // coordinates and a button that opens the form of a new place with them written in (and the zone they
-// are in asked for). `types` and `geologies` are what the form needs, as `openPlaceDialog` takes them; once saved, the page of the new place is shown.
-function offerNewPlace(L, map, latlng, { types, geologies }) {
-  const box = document.createElement('div');
-  const where = document.createElement('p');
-  where.className = 'subtitle';
-  where.textContent = formatDecimal(latlng.lat, latlng.lng);
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'btn btn-secondary btn-small';
-  button.textContent = 'Crear un lugar aquí';
-  button.addEventListener('click', () => {
-    map.closePopup();
-    openPlaceDialog({
-      types,
-      geologies,
-      coordinates: { lat: latlng.lat, lon: latlng.lng },
-      onSaved: (place) => {
-        window.location.href = `/lugar?id=${place.id}`;
-      },
-    });
+// are in asked for); it has its close button, and a click elsewhere only closes it. `lists` gives the
+// types and the geologies the form needs, as `openPlaceDialog` takes them, when they are needed; once
+// the place is saved, its page is shown.
+function offerNewPlaces(L, map, lists) {
+  // Leaflet closes an open popup on a click outside it, and then still sends the click: that one only
+  // closed the popup, so it must not open another. The close and the click come in the same turn.
+  let justClosed = false;
+  map.on('popupclose', () => {
+    justClosed = true;
+    setTimeout(() => {
+      justClosed = false;
+    }, 0);
   });
-  box.append(where, button);
-  L.popup({ closeButton: false }).setLatLng(latlng).setContent(box).openOn(map);
+  map.on('click', (event) => {
+    if (justClosed) return;
+    const { lat, lng } = event.latlng;
+    const box = document.createElement('div');
+    const where = document.createElement('p');
+    where.className = 'subtitle';
+    where.textContent = formatDecimal(lat, lng);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary btn-small';
+    button.textContent = 'Crear un lugar aquí';
+    button.addEventListener('click', () => {
+      map.closePopup();
+      openPlaceDialog({
+        ...lists(),
+        coordinates: { lat, lon: lng },
+        onSaved: (place) => {
+          window.location.href = `/lugar?id=${place.id}`;
+        },
+      });
+    });
+    box.append(where, button);
+    L.popup().setLatLng(event.latlng).setContent(box).openOn(map);
+  });
 }
 
 // The key of the colours, as markup.
@@ -191,4 +205,4 @@ function mapLegend() {
     .join('');
 }
 
-export { createMap, loadLeaflet, mapLegend, offerNewPlace, placeMarker, placePopup, STATE_COLORS };
+export { createMap, loadLeaflet, mapLegend, offerNewPlaces, placeMarker, placePopup, STATE_COLORS };

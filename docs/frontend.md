@@ -280,9 +280,12 @@ tooltip, and a link to the big map centred on the place. A click on the big map,
 one of a place, where there is no place opens a small popup with the coordinates and "Crear un lugar
 aquí", which opens the form of a new place with them written in and the zone they are in already
 asked for (`GET /areas/locate`, as when they are typed); a click on a place opens its own popup, as
-markers do not pass their clicks on to the map (`bubblingMouseEvents: false`); `offerNewPlace` in
-`map-common.js` does it for both. If the tiles or Leaflet cannot be loaded the page says so and the
-rest keeps working. Nothing here is drawn from the server's side, and an offline map is not there.
+markers do not pass their clicks on to the map (`bubblingMouseEvents: false`); `offerNewPlaces` in
+`map-common.js` does it for both. The popup has its close button, and a click elsewhere on the map
+only closes it (or any other popup that is open) without opening another: Leaflet closes the popup
+and still sends that click, so the close is remembered for the turn it happens in. If the tiles or
+Leaflet cannot be loaded the page says so and the rest keeps working. Nothing here is drawn from the
+server's side, and an offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

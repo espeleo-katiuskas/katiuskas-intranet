@@ -23,7 +23,7 @@ import {
   STATE_HELP,
   stateBadge,
 } from './places-common.js';
-import { createMap, offerNewPlace, placeMarker, placePopup } from './map-common.js';
+import { createMap, offerNewPlaces, placeMarker, placePopup } from './map-common.js';
 import { renderRichText } from './rich-text.js';
 
 const user = await initPage();
@@ -92,9 +92,7 @@ async function renderMap() {
     if (!placeMap) {
       placeMap = await createMap(document.getElementById('place-map'));
       // Where nothing is, a click offers to create another place there (once, not at each drawing).
-      placeMap.map.on('click', (event) =>
-        offerNewPlace(placeMap.L, placeMap.map, event.latlng, { types, geologies }),
-      );
+      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, geologies }));
     }
   } catch {
     document.getElementById('place-map').outerHTML =
