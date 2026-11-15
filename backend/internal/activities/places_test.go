@@ -158,3 +158,37 @@ func TestHandlerDeleteActivityUnlinksItsPlaces(t *testing.T) {
 		t.Errorf("expected no links left, got %d, %v", links, err)
 	}
 }
+
+// A place cannot be taken off an activity while an entry of its memoria is about it; the ones that
+// stay are never touched.
+func TestHandlerPlaceOfTheMemoriaStaysOnTheActivity(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	leader := testutil.InsertMember(t, tx)
+	token := tokenFor(t, authn, leader.ID, "member")
+	boca := insertPlace(t, tx, leader.ID, "Sima Boca")
+	otra := insertPlace(t, tx, leader.ID, "Sima Otra")
+	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
+		"title": "Con memoria", "type": "caving", "start_date": "2026-05-02", "end_date": "2026-05-02", "place_ids": []int64{boca, otra},
+	})
+	activity := decodeJSON[activities.Activity](t, rec.Body.Bytes())
+	if _, err := tx.Exec(context.Background(), `
+		INSERT INTO activity_resources (activity_id, type, author_id, title, description, place_id, position)
+		VALUES ($1, 'text', $2, 'Crónica', 'x', $3, 1)
+	`, activity.ID, leader.ID, boca); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/activities/%d/places", activity.ID)
+
+	// Keeping the place of the memoria, and dropping the other one, is fine.
+	if rec := doRequest(mux, http.MethodPut, path, token, map[string]any{"place_ids": []int64{boca}}); rec.Code != http.StatusOK {
+		t.Fatalf("dropping the other place: %d: %s", rec.Code, rec.Body.String())
+	}
+	// Dropping the one the memoria is about is refused, and nothing changes.
+	rec = doRequest(mux, http.MethodPut, path, token, map[string]any{"place_ids": []int64{otra}})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "place_in_memoria" {
+		t.Fatalf("expected 409 place_in_memoria, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := decodeJSON[[]activities.PlaceRef](t, doRequest(mux, http.MethodGet, path, token, nil).Body.Bytes()); len(got) != 1 || got[0].ID != boca {
+		t.Errorf("a refused change must leave the places as they were, got %+v", got)
+	}
+}

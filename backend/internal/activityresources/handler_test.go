@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activityresources"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -104,6 +106,14 @@ type testPeople struct {
 
 func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, int64, testPeople) {
 	t.Helper()
+	mux, resolver, activityID, people, _ := newTestServerTx(t)
+	return mux, resolver, activityID, people
+}
+
+// newTestServerTx is newTestServer that also gives the transaction, for a test that has to put rows in
+// the database itself (the places an activity goes to).
+func newTestServerTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, int64, testPeople, pgx.Tx) {
+	t.Helper()
 	tx := testutil.NewTx(t)
 	repo := activityresources.NewRepository(tx)
 	storage, err := activityresources.NewStorage(t.TempDir())
@@ -131,7 +141,7 @@ func newTestServer(t *testing.T) (*http.ServeMux, testutil.FakeResolver, int64, 
 
 	mux := http.NewServeMux()
 	activityresources.NewHandler(service, authenticator, stubAct, stubU, nil).RegisterRoutes(mux)
-	return mux, resolver, activityID, people
+	return mux, resolver, activityID, people, tx
 }
 
 // newTestServerWithNotifier is newTestServer, but also wires a

@@ -135,6 +135,9 @@ const texts = {
   invalid_coordinates:
     'Las coordenadas no son válidas: latitud entre -90 y 90, longitud entre -180 y 180.',
   unknown_place: 'Ese lugar no existe.',
+  place_not_in_activity: 'Ese lugar no es uno de los lugares de la actividad.',
+  place_in_memoria:
+    'Hay elementos de la memoria sobre ese lugar: cámbialos o quítalos antes de quitar el lugar.',
   too_many_places: 'Una actividad no puede ir a tantos lugares.',
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',

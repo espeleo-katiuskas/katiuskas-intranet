@@ -363,6 +363,18 @@ or admin/board, even for someone else who took part in the same activity. A file
 come from `GET /activities/{id}/resources/{resourceID}/file`, which unlike
 `archive`/`userfiles` file routes takes only the bearer header (no cookie).
 
+**The place of an entry.** An entry may be about one place (`place_id`, optional, in the multipart
+form of the `POST` and in the body of the `PATCH`, where `null` takes it off and leaving it out
+keeps it); the answer says its name too (`place_name`, joined from `places`). It has to be one of
+the places the activity goes to (`activities`' `activity_places`), which the composite foreign key
+`(activity_id, place_id)` checks, so the repository only turns its violation into 400
+`place_not_in_activity` and there is no second check in Go to fall out of step with it. The same key
+is why a place cannot be taken off an activity while an entry is about it
+(`activities.Repository.SetPlaces` unlinks only what is no longer wanted, so one that stays is never
+touched, and answers 409 `place_in_memoria` for one that cannot go): the entry has to be changed
+first. `Create` and `Update` run in a transaction (a savepoint, inside the tests'), so that a
+refused one is undone by itself.
+
 ## Distributions
 
 **Distributions** (`internal/distributions`, migration `00021_distributions.sql`): things the club

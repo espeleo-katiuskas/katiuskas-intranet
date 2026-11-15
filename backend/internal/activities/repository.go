@@ -29,6 +29,9 @@ var (
 	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
 	// ErrUnknownPlace means one of the given place ids is not a place of the catalogue.
 	ErrUnknownPlace = errors.New("one of the given places does not exist")
+	// ErrPlaceInMemoria means a place cannot be taken off an activity while an entry of its memoria is
+	// about it.
+	ErrPlaceInMemoria = errors.New("an entry of the memoria is about that place: change or remove it first")
 	// ErrTooManyPlaces means more than MaxPlaces places were given.
 	ErrTooManyPlaces = errors.New("an activity cannot be linked to that many places")
 	// ErrHolidayNotFound means the given holiday id doesn't exist.
@@ -608,7 +611,14 @@ func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs [
 	if before, err = txRepo.ListPlaces(ctx, activityID); err != nil {
 		return nil, nil, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM activity_places WHERE activity_id = $1`, activityID); err != nil {
+	// Only what is no longer wanted is unlinked: a place that stays is never touched, and one that an
+	// entry of the memoria is about cannot go (the foreign key says so).
+	if _, err := tx.Exec(ctx, `DELETE FROM activity_places WHERE activity_id = $1 AND NOT (place_id = ANY($2))`,
+		activityID, placeIDs); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+			return nil, nil, ErrPlaceInMemoria
+		}
 		return nil, nil, err
 	}
 	if err := linkPlaces(ctx, tx, activityID, placeIDs); err != nil {

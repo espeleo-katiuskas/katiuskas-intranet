@@ -24,9 +24,12 @@ var (
 	// ErrReorderMismatch means the given ids aren't exactly this
 	// activity's current set of resources — see Repository.Reorder.
 	ErrReorderMismatch = errors.New("given ids don't match this activity's current resources")
+	// ErrPlaceNotInActivity means the place an entry is about is not one of those the activity goes to.
+	ErrPlaceNotInActivity = errors.New("the place is not one of the places of the activity")
 )
 
 const checkViolationCode = "23514"
+const foreignKeyViolationCode = "23503"
 
 // resourceSelect is appended to every query that returns one or more
 // Resource rows other than Create's INSERT ... RETURNING (which can't
@@ -35,13 +38,15 @@ const checkViolationCode = "23514"
 // author's login is joined in rather than resolved one at a time.
 const resourceSelect = `
 	ar.id, ar.activity_id, ar.type, ar.author_id, au.login, ar.title, ar.description,
-	ar.file_name, ar.file_size, ar.content_type, ar.position, ar.created_at
+	ar.file_name, ar.file_size, ar.content_type, ar.place_id, pl.name, ar.position, ar.created_at
 	FROM activity_resources ar
-	JOIN users au ON au.id = ar.author_id`
+	JOIN users au ON au.id = ar.author_id
+	LEFT JOIN places pl ON pl.id = ar.place_id`
 
 func scanResource(row interface{ Scan(dest ...any) error }, res *Resource) error {
 	return row.Scan(&res.ID, &res.ActivityID, &res.Type, &res.AuthorID, &res.AuthorLogin, &res.Title,
-		&res.Description, &res.FileName, &res.FileSize, &res.ContentType, &res.Position, &res.CreatedAt)
+		&res.Description, &res.FileName, &res.FileSize, &res.ContentType, &res.PlaceID, &res.PlaceName,
+		&res.Position, &res.CreatedAt)
 }
 
 type Repository struct {
@@ -57,20 +62,38 @@ func NewRepository(pool db.PGX) *Repository {
 // MAX(position) subquery and the INSERT run as one statement, so there's
 // no separate round trip that a concurrent create could race against.
 func (r *Repository) Create(ctx context.Context, in CreateInput) (Resource, error) {
+	// A transaction (a savepoint, inside one) so that a refused insert is undone by itself.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Resource{}, err
+	}
+	defer tx.Rollback(ctx)
 	var res Resource
-	err := r.pool.QueryRow(ctx, `
-		INSERT INTO activity_resources (activity_id, type, author_id, title, description, file_name, file_size, content_type, position)
-		SELECT $1, $2, $3, $4, $5, $6, $7, $8, COALESCE(MAX(position), 0) + 1
+	err = tx.QueryRow(ctx, `
+		INSERT INTO activity_resources (activity_id, type, author_id, title, description, file_name, file_size, content_type, place_id, position)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(MAX(position), 0) + 1
 		FROM activity_resources WHERE activity_id = $1
-		RETURNING id, activity_id, type, author_id, title, description, file_name, file_size, content_type, position, created_at
-	`, in.ActivityID, in.Type, in.AuthorID, in.Title, in.Description, in.FileName, in.FileSize, in.ContentType,
+		RETURNING id, activity_id, type, author_id, title, description, file_name, file_size, content_type, place_id, position, created_at
+	`, in.ActivityID, in.Type, in.AuthorID, in.Title, in.Description, in.FileName, in.FileSize, in.ContentType, in.PlaceID,
 	).Scan(&res.ID, &res.ActivityID, &res.Type, &res.AuthorID, &res.Title, &res.Description,
-		&res.FileName, &res.FileSize, &res.ContentType, &res.Position, &res.CreatedAt)
+		&res.FileName, &res.FileSize, &res.ContentType, &res.PlaceID, &res.Position, &res.CreatedAt)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == checkViolationCode {
 		return Resource{}, ErrInvalidFields
 	}
-	return res, err
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+		return Resource{}, ErrPlaceNotInActivity
+	}
+	if err != nil {
+		return Resource{}, err
+	}
+	// The name of the place is not in what the insert gives back.
+	if res.PlaceID != nil {
+		if err := tx.QueryRow(ctx, `SELECT name FROM places WHERE id = $1`, *res.PlaceID).Scan(&res.PlaceName); err != nil {
+			return Resource{}, err
+		}
+	}
+	return res, tx.Commit(ctx)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (Resource, error) {
@@ -125,17 +148,32 @@ func (r *Repository) Update(ctx context.Context, id int64, in UpdateInput) (Reso
 	if in.Description != nil {
 		res.Description = in.Description
 	}
-	_, err = r.pool.Exec(ctx, `
-		UPDATE activity_resources SET title = $1, description = $2 WHERE id = $3
-	`, res.Title, res.Description, id)
+	if in.SetPlace {
+		res.PlaceID = in.PlaceID
+	}
+	// A transaction (a savepoint, inside one) so that a refused update is undone by itself.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Resource{}, err
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
+		UPDATE activity_resources SET title = $1, description = $2, place_id = $3 WHERE id = $4
+	`, res.Title, res.Description, res.PlaceID, id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == checkViolationCode {
 		return Resource{}, ErrInvalidFields
 	}
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+		return Resource{}, ErrPlaceNotInActivity
+	}
 	if err != nil {
 		return Resource{}, err
 	}
-	return res, nil
+	if err := tx.Commit(ctx); err != nil {
+		return Resource{}, err
+	}
+	return r.GetByID(ctx, id)
 }
 
 func (r *Repository) Delete(ctx context.Context, id int64) error {

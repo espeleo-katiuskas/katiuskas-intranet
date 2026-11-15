@@ -374,7 +374,11 @@ sends the whole set with `PUT /activities/{id}/places` (`savePlaces`) and draws 
 when it fails, so that the page never shows what was not saved. The form to create an activity has
 no places: they are added on its page. `/lugar` has "Actividades", a table with the date, the
 activity (a link, with its state as a badge), its type and who organizes it, the latest first (`GET
-/places/{id}/activities`).
+/places/{id}/activities`). The dialogs to add to the memoria and to edit an entry have "Lugar
+(opcional)", a select with none and the places of the activity (`fillPlaceSelect`; when it has none
+it says they are added in "Lugares"), and each entry names the place it is about, as a link, after
+its author and date. Taking a place off the activity while an entry is about it is refused, and the
+message says so.
 
 In the participants list the "Quitar" button sits right after the name it is about
 (`.participant-row`), not at the far end of the row, and only on the rows the viewer may remove

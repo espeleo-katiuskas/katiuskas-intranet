@@ -89,7 +89,7 @@ func (h *Handler) activityTitle(ctx context.Context, activityID int64) string {
 // field set exactly, so a field this endpoint can't touch at all
 // (Position, the file metadata, ...) never shows up as a spurious
 // "change".
-var auditableFields = []string{"Title", "Description"}
+var auditableFields = []string{"Title", "Description", "PlaceName"}
 
 // Every route requires only baseline auth — read access is open to any
 // baseline role (admin/board/member), same as the rest of an activity's
@@ -232,6 +232,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The place the entry is about is optional, and has to be one of the places of the activity.
+	var placeID *int64
+	if raw := strings.TrimSpace(r.FormValue("place_id")); raw != "" {
+		id, perr := strconv.ParseInt(raw, 10, 64)
+		if perr != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "place_id must be numeric")
+			return
+		}
+		placeID = &id
+	}
+
 	current, _ := auth.UserFromContext(r.Context())
 	var (
 		res Resource
@@ -244,7 +255,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			httpapi.WriteError(w, http.StatusBadRequest, "description_required", "a text resource requires a description")
 			return
 		}
-		res, err = h.service.CreateText(r.Context(), activityID, current.ID, title, description)
+		res, err = h.service.CreateText(r.Context(), activityID, current.ID, title, description, placeID)
 	case ResourceFile:
 		file, header, ferr := r.FormFile("file")
 		if ferr != nil {
@@ -261,9 +272,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
-		res, err = h.service.CreateFile(r.Context(), activityID, current.ID, title, header.Filename, contentType, header.Size, file)
+		res, err = h.service.CreateFile(r.Context(), activityID, current.ID, title, header.Filename, contentType, header.Size, placeID, file)
 	default:
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_type", "type must be text or file")
+		return
+	}
+	if errors.Is(err, ErrPlaceNotInActivity) {
+		httpapi.WriteError(w, http.StatusBadRequest, "place_not_in_activity", err.Error())
 		return
 	}
 	if err != nil {
@@ -295,12 +310,26 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title       *string `json:"title"`
 		Description *string `json:"description"`
+		// Absent leaves the place as it is, null takes it off, a number sets it.
+		PlaceID json.RawMessage `json:"place_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	updated, err := h.service.Update(r.Context(), res.ID, UpdateInput{Title: body.Title, Description: body.Description})
+	in := UpdateInput{Title: body.Title, Description: body.Description}
+	if len(body.PlaceID) > 0 {
+		in.SetPlace = true
+		if err := json.Unmarshal(body.PlaceID, &in.PlaceID); err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "place_id must be a number or null")
+			return
+		}
+	}
+	updated, err := h.service.Update(r.Context(), res.ID, in)
+	if errors.Is(err, ErrPlaceNotInActivity) {
+		httpapi.WriteError(w, http.StatusBadRequest, "place_not_in_activity", err.Error())
+		return
+	}
 	if errors.Is(err, ErrDescriptionNotAllowed) {
 		httpapi.WriteError(w, http.StatusBadRequest, "description_not_allowed", err.Error())
 		return

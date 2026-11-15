@@ -750,6 +750,9 @@ func (h *Handler) setPlaces(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrTooManyPlaces):
 		httpapi.WriteError(w, http.StatusBadRequest, "too_many_places", err.Error())
 		return
+	case errors.Is(err, ErrPlaceInMemoria):
+		httpapi.WriteError(w, http.StatusConflict, "place_in_memoria", err.Error())
+		return
 	case err != nil:
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not set the places of the activity")
 		return

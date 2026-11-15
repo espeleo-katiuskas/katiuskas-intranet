@@ -35,9 +35,10 @@ func (s *Service) Get(ctx context.Context, id int64) (Resource, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *Service) CreateText(ctx context.Context, activityID, authorID int64, title, description string) (Resource, error) {
+func (s *Service) CreateText(ctx context.Context, activityID, authorID int64, title, description string, placeID *int64) (Resource, error) {
 	return s.repo.Create(ctx, CreateInput{
 		ActivityID: activityID, Type: ResourceText, AuthorID: authorID, Title: title, Description: &description,
+		PlaceID: placeID,
 	})
 }
 
@@ -48,10 +49,10 @@ func (s *Service) CreateText(ctx context.Context, activityID, authorID int64, ti
 // tables. A resource whose row exists but whose file never made it to
 // disk would otherwise 404 confusingly on every later attempt to open
 // it, instead of the create itself having failed up front.
-func (s *Service) CreateFile(ctx context.Context, activityID, authorID int64, title, fileName, contentType string, fileSize int64, content io.Reader) (Resource, error) {
+func (s *Service) CreateFile(ctx context.Context, activityID, authorID int64, title, fileName, contentType string, fileSize int64, placeID *int64, content io.Reader) (Resource, error) {
 	res, err := s.repo.Create(ctx, CreateInput{
 		ActivityID: activityID, Type: ResourceFile, AuthorID: authorID, Title: title,
-		FileName: &fileName, FileSize: &fileSize, ContentType: &contentType,
+		FileName: &fileName, FileSize: &fileSize, ContentType: &contentType, PlaceID: placeID,
 	})
 	if err != nil {
 		return Resource{}, err

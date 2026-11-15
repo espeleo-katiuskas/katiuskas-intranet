@@ -652,12 +652,15 @@ never modified.
 | `file_name` | text | yes |  |
 | `file_size` | bigint | yes |  |
 | `content_type` | text | yes |  |
+| `place_id` | bigint | yes |  |
 | `position` | integer | no |  |
 | `created_at` | timestamptz | no | now() |
 
 Notes on the columns:
 
 - `author_id`: Who wrote it; only they (or admin/board) can correct or delete it.
+- `place_id`: The place the entry is about, if it is about one (migration
+  `00065_activity_resource_place.sql`).
 - `position`: Order within its activity, dense from 1 to N.
 
 Constraints:
@@ -665,6 +668,9 @@ Constraints:
 - primary key (id)
 - `activity_id` → `activities(id)`: an activity with it cannot be deleted
 - `author_id` → `users(id)`
+- `(activity_id, place_id)` → `activity_places(activity_id, place_id)`: the place has to be one of
+  the places of the activity (a `NULL` place is not checked), and it cannot be taken off the
+  activity while an entry is about it (409 `place_in_memoria`)
 - `description_only_for_text`: `(type = 'text') OR (description IS NULL)`
 - `description_required_for_text`: `(type <> 'text') OR (description IS NOT NULL)`
 - `file_fields_only_for_file`: `(type = 'file') OR ((file_name IS NULL) AND (file_size IS NULL) AND
@@ -675,6 +681,7 @@ Constraints:
 Indexes:
 
 - `idx_activity_resources_activity_id` sobre `(activity_id)`
+- `idx_activity_resources_place` on `(activity_id, place_id)`
 
 ### `holidays`
 

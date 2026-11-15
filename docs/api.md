@@ -416,7 +416,7 @@ Directiva).
   - body: `place_ids*` (30 at most)
   - returns: 200 `[ActivityPlace]`, as they are now
   - errors: 400 `invalid_id`, `invalid_body`, `unknown_place`, `too_many_places`; 403 `forbidden`;
-    404 `not_found`
+    404 `not_found`; 409 `place_in_memoria` (an entry of the memoria is about a place that would go)
 - **GET** `/places/{id}/activities` — *Any baseline role*. The activities that went, or are to go,
   to a place: what has been done there, the latest first. Every activity is shown (a private one
   only limits who signs people up).
@@ -461,10 +461,11 @@ files (up to 25 MiB).
   - errors: 400 `invalid_id`
 - **POST** `/activities/{id}/resources` — *Admin, board, organizer or participant*. Adds a resource.
   Always `multipart/form-data`, the text one too.
-  - body: `type*`, `title*`, `description`, `file`
+  - body: `type*`, `title*`, `description`, `file`, `place_id` (the place the entry is about, one of
+    the places of the activity)
   - returns: 201 `ActivityResource`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_type`, `title_required`,
-    `description_required`, `file_required`; 413 `file_too_large`
+    `description_required`, `file_required`, `place_not_in_activity`; 413 `file_too_large`
 - **PUT** `/activities/{id}/resources/order` — *Admin, board, organizer or participant*. Replaces
   the whole order with the complete list of ids.
   - body: `resource_ids*`
@@ -473,11 +474,11 @@ files (up to 25 MiB).
 - **GET** `/activities/{id}/resources/{resourceID}` — *Any baseline role*. One resource.
   - returns: 200 `ActivityResource`
   - errors: 400 `invalid_id`; 404 `not_found`
-- **PATCH** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Changes title
-  or description.
-  - body: `title`, `description`
+- **PATCH** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Changes title,
+  description or the place it is about (`null` takes it off; left out, it stays).
+  - body: `title`, `description`, `place_id`
   - returns: 200 `ActivityResource`
-  - errors: 400 `invalid_id`
+  - errors: 400 `invalid_id`, `invalid_body`, `place_not_in_activity`
 - **DELETE** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Deletes the
   resource and its file.
   - returns: 204
@@ -1670,6 +1671,8 @@ Nested fields:
 | `file_name` | text |
 | `file_size` | integer |
 | `content_type` | text |
+| `place_id` | integer, absent if the entry is about no place |
+| `place_name` | text, with `place_id` |
 | `position` | integer |
 | `created_at` | datetime |
 

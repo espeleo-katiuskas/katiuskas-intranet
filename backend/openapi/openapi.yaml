@@ -1722,6 +1722,7 @@ paths:
         "400": { description: "invalid_id, invalid_body, unknown_place or too_many_places." }
         "403": { description: "Only the organizer, admin or board." }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "place_in_memoria — an entry of the memoria is about a place that would be taken off." }
 
   /places/{id}/activities:
     parameters:
@@ -1854,6 +1855,7 @@ paths:
                 title: { type: string }
                 description: { type: string, description: Required (non-blank) for type=text; ignored for type=file. }
                 file: { type: string, format: binary, description: Required for type=file; ignored for type=text. }
+                place_id: { type: integer, description: "Optional. The place the entry is about; one of the places of the activity (PUT /activities/{id}/places), else place_not_in_activity." }
       responses:
         "201":
           description: Resource created
@@ -1864,8 +1866,8 @@ paths:
           description: >
             invalid_id, invalid_body (malformed multipart form),
             invalid_type, title_required, description_required (type=text
-            with no description), or file_required (type=file with no
-            file part).
+            with no description), file_required (type=file with no
+            file part), or place_not_in_activity.
         "403": { description: Neither admin/board, the organizer, nor a participant. }
         "404": { description: Activity not found. }
         "413": { description: file_too_large — over the 25 MiB limit. }
@@ -1946,6 +1948,7 @@ paths:
               properties:
                 title: { type: string }
                 description: { type: string }
+                place_id: { type: integer, nullable: true, description: "The place the entry is about, one of the places of the activity; null takes it off; left out, it stays." }
       responses:
         "200":
           description: Updated resource
@@ -6176,6 +6179,8 @@ components:
         file_name: { type: string, nullable: true, description: type=file only — the original uploaded filename. }
         file_size: { type: integer, nullable: true, description: type=file only, in bytes. }
         content_type: { type: string, nullable: true, description: type=file only. }
+        place_id: { type: integer, description: "The place the entry is about, when it is about one." }
+        place_name: { type: string, description: "Its name, with place_id." }
         position:
           type: integer
           description: >

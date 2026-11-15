@@ -32,7 +32,7 @@ func TestServiceCreateFileSavesBothRowAndBytes(t *testing.T) {
 	service, _, activityID, authorID := newTestServiceForActivity(t)
 	ctx := context.Background()
 
-	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 5, bytes.NewReader([]byte("hello")))
+	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 5, nil, bytes.NewReader([]byte("hello")))
 	if err != nil {
 		t.Fatalf("create file: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestServiceCreateFileSavesBothRowAndBytes(t *testing.T) {
 func TestServiceOpenFileRejectsTextResource(t *testing.T) {
 	service, _, activityID, authorID := newTestServiceForActivity(t)
 	ctx := context.Background()
-	res, err := service.CreateText(ctx, activityID, authorID, "Crónica", "texto")
+	res, err := service.CreateText(ctx, activityID, authorID, "Crónica", "texto", nil)
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestServiceOpenFileRejectsTextResource(t *testing.T) {
 func TestServiceUpdateRejectsDescriptionOnFileResource(t *testing.T) {
 	service, _, activityID, authorID := newTestServiceForActivity(t)
 	ctx := context.Background()
-	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 1, bytes.NewReader([]byte("x")))
+	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 1, nil, bytes.NewReader([]byte("x")))
 	if err != nil {
 		t.Fatalf("create file: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestServiceUpdateRejectsDescriptionOnFileResource(t *testing.T) {
 func TestServiceDeleteRemovesBothRowAndFile(t *testing.T) {
 	service, storage, activityID, authorID := newTestServiceForActivity(t)
 	ctx := context.Background()
-	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 1, bytes.NewReader([]byte("x")))
+	res, err := service.CreateFile(ctx, activityID, authorID, "Foto", "foto.jpg", "image/jpeg", 1, nil, bytes.NewReader([]byte("x")))
 	if err != nil {
 		t.Fatalf("create file: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestServiceDeleteRemovesBothRowAndFile(t *testing.T) {
 func TestServiceDeleteTextResourceLeavesNothingOnDisk(t *testing.T) {
 	service, storage, activityID, authorID := newTestServiceForActivity(t)
 	ctx := context.Background()
-	res, err := service.CreateText(ctx, activityID, authorID, "Crónica", "texto")
+	res, err := service.CreateText(ctx, activityID, authorID, "Crónica", "texto", nil)
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}

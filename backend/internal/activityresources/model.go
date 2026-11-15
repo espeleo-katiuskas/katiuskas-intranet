@@ -38,6 +38,10 @@ type Resource struct {
 	FileName    *string      `json:"file_name,omitempty"`
 	FileSize    *int64       `json:"file_size,omitempty"`
 	ContentType *string      `json:"content_type,omitempty"`
+	// PlaceID and PlaceName say which place the entry is about, when it is about one: always one of the
+	// places the activity went to (activities' places).
+	PlaceID   *int64  `json:"place_id,omitempty"`
+	PlaceName *string `json:"place_name,omitempty"`
 	// Position is this resource's place in the memoria page, always a
 	// dense 1..N per activity — see Repository.Reorder.
 	Position int32 `json:"position"`
@@ -60,6 +64,8 @@ type CreateInput struct {
 	FileName    *string
 	FileSize    *int64
 	ContentType *string
+	// PlaceID is the place the entry is about, if it is about one.
+	PlaceID *int64
 }
 
 // UpdateInput edits a resource's title (either type) and description
@@ -69,4 +75,7 @@ type CreateInput struct {
 type UpdateInput struct {
 	Title       *string
 	Description *string
+	// SetPlace says PlaceID is being changed: to its value, or, if that is nil, to no place.
+	SetPlace bool
+	PlaceID  *int64
 }

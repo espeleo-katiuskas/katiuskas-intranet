@@ -893,6 +893,23 @@ async function loadMemoriaImagePreviews() {
   );
 }
 
+// The select of the place an entry of the memoria is about: none, or one of the places of the
+// activity (which the API requires too); with the one it has now chosen when it is being edited.
+function fillPlaceSelect(select, hint, chosen) {
+  select.innerHTML =
+    '<option value="">— Ninguno —</option>' +
+    activityPlaces
+      .map(
+        (p) =>
+          `<option value="${p.id}">${escapeHtml(p.name)} (${escapeHtml(p.type_name)})</option>`,
+      )
+      .join('');
+  select.value = chosen == null ? '' : String(chosen);
+  hint.textContent = activityPlaces.length
+    ? 'Uno de los lugares a los que va la actividad.'
+    : 'La actividad todavía no tiene lugares: se añaden más arriba, en «Lugares».';
+}
+
 function renderMemoriaRow(res, index) {
   const canEdit = canEditMemoriaResource(res);
   const canReorder = canContributeToMemoria();
@@ -900,7 +917,11 @@ function renderMemoriaRow(res, index) {
     <div class="detail-row memoria-resource" data-memoria-row="${res.id}">
       <div class="memoria-resource-body">
         <strong>${escapeHtml(res.title)}</strong>
-        <span class="subtitle">${escapeHtml(personLabel(res.author_login))} · ${formatDate(res.created_at)}</span>
+        <span class="subtitle">${escapeHtml(personLabel(res.author_login))} · ${formatDate(res.created_at)}${
+          res.place_id
+            ? ` · <a href="/lugar?id=${res.place_id}">${escapeHtml(res.place_name ?? 'Lugar')}</a>`
+            : ''
+        }</span>
         ${renderMemoriaBody(res)}
       </div>
       <span class="memoria-actions">
@@ -961,6 +982,11 @@ function openEditMemoriaDialog(id) {
   document.getElementById('em-title').value = res.title;
   document.getElementById('em-description-field').hidden = res.type !== 'text';
   document.getElementById('em-description').value = res.description ?? '';
+  fillPlaceSelect(
+    document.getElementById('em-place'),
+    document.getElementById('em-place-hint'),
+    res.place_id,
+  );
   openModal(document.getElementById('edit-memoria-dialog'));
 }
 
@@ -1033,7 +1059,10 @@ initModal(editMemoriaDialog, editMemoriaForm);
 
 editMemoriaForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const body = { title: document.getElementById('em-title').value.trim() };
+  const body = {
+    title: document.getElementById('em-title').value.trim(),
+    place_id: Number(document.getElementById('em-place').value) || null,
+  };
   if (!document.getElementById('em-description-field').hidden) {
     body.description = document.getElementById('em-description').value.trim();
   }
@@ -1072,9 +1101,14 @@ updateMemoriaFormVisibility();
 if (memoriaAddDialog) {
   initModal(memoriaAddDialog, memoriaAddForm);
   memoriaAddDialog.addEventListener('close', updateMemoriaFormVisibility);
-  document
-    .getElementById('toggle-memoria-add')
-    .addEventListener('click', () => openModal(memoriaAddDialog));
+  document.getElementById('toggle-memoria-add').addEventListener('click', () => {
+    fillPlaceSelect(
+      document.getElementById('memoria-place'),
+      document.getElementById('memoria-place-hint'),
+      null,
+    );
+    openModal(memoriaAddDialog);
+  });
 }
 
 memoriaAddForm?.addEventListener('submit', async (event) => {
@@ -1088,6 +1122,8 @@ memoriaAddForm?.addEventListener('submit', async (event) => {
   const formData = new FormData();
   formData.set('type', memoriaTypeSelect.value);
   formData.set('title', title);
+  const memoriaPlace = document.getElementById('memoria-place').value;
+  if (memoriaPlace) formData.set('place_id', memoriaPlace);
   if (memoriaTypeSelect.value === 'text') {
     const description = document.getElementById('memoria-description').value.trim();
     if (!description) {
