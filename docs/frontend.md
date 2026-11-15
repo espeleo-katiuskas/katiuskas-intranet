@@ -277,17 +277,17 @@ done through the API (`POST /areas/{id}/merge`).
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,
 and no build step is needed; `loadLeaflet` adds their scripts and styles the first time a map is
 shown, so a page without a map does not pay for them. There are three base layers, chosen with the
-control of the map and remembered in the browser (`localStorage`, `places-map-layer`): "Topográfico
-(IGN)" (the default, the IGN's `mapa-raster` WMTS, which has no tiles beyond zoom 17 and is enlarged
-after that), "Satélite (PNOA)" and "OpenStreetMap", each with its credit; the IGN's are the official
-source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask for light use,
-which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the colours of the
-badges) with its name as a tooltip and a popup with its name as a link, its type, its state and
-where it is; nearby places are grouped (`L.markerClusterGroup`) in the browser, which is fine for
-the thousands of places a club may have: the map uses the same `GET /places` as the table, and every
-filter and the search redraw it and fit it to what is left. The small map of `/lugar` has the main
-coordinate in its state's colour and the other points in grey, with their kind and name as a
-tooltip, and a link to the big map centred on the place. A click on the big map, and on the small
+control of the map and remembered in the browser (`localStorage`, `katiuskas:places-map-layer`):
+"Topográfico (IGN)" (the default, the IGN's `mapa-raster` WMTS, which has no tiles beyond zoom 17
+and is enlarged after that), "Satélite (PNOA)" and "OpenStreetMap", each with its credit; the IGN's
+are the official source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask
+for light use, which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the
+colours of the badges) with its name as a tooltip and a popup with its name as a link, its type, its
+state and where it is; nearby places are grouped (`L.markerClusterGroup`) in the browser, which is
+fine for the thousands of places a club may have: the map uses the same `GET /places` as the table,
+and every filter and the search redraw it and fit it to what is left. The small map of `/lugar` has
+the main coordinate in its state's colour and the other points in grey, with their kind and name as
+a tooltip, and a link to the big map centred on the place. A click on the big map, and on the small
 one of a place, where there is no place opens a small popup with the coordinates and "Crear un lugar
 aquí", which opens the form of a new place with them written in and the zone they are in already
 asked for (`GET /areas/locate`, as when they are typed); a click on a place opens its own popup, as

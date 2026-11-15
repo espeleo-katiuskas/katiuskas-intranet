@@ -78,7 +78,7 @@ const LAYERS = [
   },
 ];
 
-const LAYER_KEY = 'places-map-layer';
+const LAYER_KEY = 'katiuskas:places-map-layer';
 
 function rememberedLayer() {
   try {
