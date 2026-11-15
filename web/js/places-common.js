@@ -47,6 +47,11 @@ function loadTypes() {
   return apiFetch('/places/types');
 }
 
+// The systems of cavities, with their cavities: the form of a cavity offers them.
+function loadSystems() {
+  return apiFetch('/systems');
+}
+
 // What a cavity is (cueva, sima, torca, mina, abrigo…), with how many places have each.
 function loadSubtypes() {
   return apiFetch('/places/subtypes');
@@ -93,6 +98,7 @@ export {
   coordinatesHtml,
   loadGeologies,
   loadSubtypes,
+  loadSystems,
   loadTypes,
   measuresHtml,
   placeTypeLabel,

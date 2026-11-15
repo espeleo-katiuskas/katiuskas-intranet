@@ -1,9 +1,7 @@
 import {
   activityState,
   activityStateLabels,
-  API_BASE,
   apiFetch,
-  apiFetchForm,
   hasAnyRole,
   escapeHtml,
   formatDate,
@@ -16,14 +14,16 @@ import {
   stopAsNotFound,
   typeLabels,
 } from './api.js';
-import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
+import { bindFiles, fileRowsHtml } from './place-files.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
   coordinatesHtml,
   loadGeologies,
   loadSubtypes,
+  loadSystems,
   loadTypes,
+  placeTypeLabel,
   POINT_KIND_LABELS,
   STATE_HELP,
   stateBadge,
@@ -38,9 +38,12 @@ if (placeId === null) await stopAsNotFound();
 let place = null;
 let types = [];
 let subtypes = [];
+let systems = [];
 let geologies = [];
 let names = {};
 let files = [];
+let system = null; // The system the cavity is in, with its cavities, or null.
+let systemFiles = [];
 let activities = [];
 // Admin and board remove any file; anybody else only their own.
 const canManageFiles = hasAnyRole(user, ['admin', 'board']);
@@ -84,34 +87,38 @@ function renderActivities() {
     : '<tr><td colspan="4">Todavía no se ha hecho ninguna actividad aquí.</td></tr>';
 }
 
-function fileUrl(file, download = false) {
-  return `${API_BASE}/places/${placeId}/files/${file.id}/file${download ? '?download=1' : ''}`;
+// The system this cavity is in: a line that links to it, its description, links to the other cavities and
+// its photos and documents (to be changed on the page of the system).
+function renderSystem() {
+  const section = document.getElementById('system-section');
+  section.hidden = !system;
+  if (!system) return;
+  document.getElementById('system-intro').innerHTML =
+    `Esta cavidad forma parte del sistema <a href="/sistema?id=${system.id}"><strong>${escapeHtml(system.name)}</strong></a>.`;
+  document.getElementById('system-description').innerHTML = system.description
+    ? renderRichText(system.description)
+    : '';
+  const others = system.places.filter((p) => p.id !== place.id);
+  document.getElementById('system-places').innerHTML = others.length
+    ? others
+        .map(
+          (p) =>
+            `<li><a href="/lugar?id=${p.id}">${escapeHtml(p.name)}</a> <span class="subtitle">${escapeHtml(placeTypeLabel(p))}${p.where ? ` · ${escapeHtml(p.where)}` : ''}</span></li>`,
+        )
+        .join('')
+    : '<li class="subtitle">Todavía es la única cavidad del sistema.</li>';
+  document.getElementById('system-files').innerHTML = fileRowsHtml(systemFiles, {
+    base: `/systems/${system.id}`,
+    personLink,
+  });
 }
 
 function renderFiles() {
-  document.getElementById('place-files').innerHTML = files.length
-    ? files
-        .map((f) => {
-          const label = f.title || f.file_name;
-          const preview = f.content_type.startsWith('image/')
-            ? `<a href="${fileUrl(f)}" target="_blank" rel="noopener"><img src="${fileUrl(f)}" alt="${escapeHtml(label)}" class="resource-image" loading="lazy"></a>`
-            : '';
-          const removable = f.uploaded_by === user.login || canManageFiles;
-          return `
-        <div class="comment">
-          <div class="comment-head">
-            <span><a href="${fileUrl(f)}" target="_blank" rel="noopener"><strong>${escapeHtml(label)}</strong></a>
-              <span class="subtitle">${escapeHtml(f.file_name)} · ${formatSize(f.file_size)} · ${personLink(f.uploaded_by)}, ${formatDateTime(f.created_at)}</span></span>
-            <span class="nowrap">
-              <a class="btn btn-secondary btn-small" href="${fileUrl(f, true)}">Descargar</a>
-              ${removable ? `<button type="button" class="btn btn-secondary btn-small" data-delete-file="${f.id}">Borrar</button>` : ''}
-            </span>
-          </div>
-          ${preview}
-        </div>`;
-        })
-        .join('')
-    : '<p>Todavía no hay fotos ni documentos.</p>';
+  document.getElementById('place-files').innerHTML = fileRowsHtml(files, {
+    base: `/places/${placeId}`,
+    canRemove: (f) => f.uploaded_by === user.login || canManageFiles,
+    personLink,
+  });
 }
 
 // The small map: the main coordinate, in the colour of the state, and the other points in grey, each
@@ -124,7 +131,7 @@ async function renderMap() {
     if (!placeMap) {
       placeMap = await createMap(document.getElementById('place-map'));
       // Where nothing is, a click offers to create another place there (once, not at each drawing).
-      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, subtypes, geologies }));
+      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, subtypes, systems, geologies }));
     }
   } catch {
     document.getElementById('place-map').outerHTML =
@@ -223,6 +230,7 @@ function render() {
       : '';
   document.getElementById('place-authorship').innerHTML = created + changed;
   renderFiles();
+  renderSystem();
   renderActivities();
   renderMap();
 }
@@ -235,6 +243,7 @@ async function load() {
       loadedActivities,
       loadedTypes,
       loadedSubtypes,
+      loadedSystems,
       loadedGeologies,
       loadedNames,
     ] = await Promise.all([
@@ -243,14 +252,23 @@ async function load() {
       apiFetch(`/places/${placeId}/activities`),
       loadTypes(),
       loadSubtypes(),
+      loadSystems(),
       loadGeologies(),
       loadNames(),
     ]);
     place = loaded;
+    // The system it is in, with its files: its description and documents are shown here too.
+    [system, systemFiles] = loaded.system_id
+      ? await Promise.all([
+          apiFetch(`/systems/${loaded.system_id}`),
+          apiFetch(`/systems/${loaded.system_id}/files`),
+        ])
+      : [null, []];
     files = loadedFiles;
     activities = loadedActivities;
     types = loadedTypes;
     subtypes = loadedSubtypes;
+    systems = loadedSystems;
     geologies = loadedGeologies;
     names = loadedNames;
     render();
@@ -267,6 +285,7 @@ document.getElementById('edit-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
     subtypes,
+    systems,
     geologies,
     place,
     onSaved: async () => {
@@ -312,33 +331,11 @@ document.getElementById('points-table-body').addEventListener('click', async (ev
   }
 });
 
-document.getElementById('file-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const submit = form.querySelector('button[type="submit"]');
-  submit.disabled = true;
-  try {
-    await apiFetchForm(`/places/${placeId}/files`, new FormData(form));
-    form.reset();
-    showFeedback('Fichero añadido.');
-    await load();
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    submit.disabled = false;
-  }
-});
-
-document.getElementById('place-files').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-delete-file]');
-  if (!button || !confirm('¿Quitar este fichero?')) return;
-  try {
-    await apiFetch(`/places/${placeId}/files/${button.dataset.deleteFile}`, { method: 'DELETE' });
-    showFeedback('Fichero quitado.');
-    await load();
-  } catch (err) {
-    showError(err.message);
-  }
+bindFiles({
+  list: document.getElementById('place-files'),
+  form: document.getElementById('file-form'),
+  base: `/places/${placeId}`,
+  reload: load,
 });
 
 // Only admin and board have the button (data-roles removes it for the rest).

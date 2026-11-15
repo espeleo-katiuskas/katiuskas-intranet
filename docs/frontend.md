@@ -273,6 +273,29 @@ disabled for a country or a zone with something in it (and says why). There is n
 zones here, on purpose: it moves everything in one to the other and cannot be undone, so it is only
 done through the API (`POST /areas/{id}/merge`).
 
+**Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
+(see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
+name (a link) and the cavities of each (links, with their subtype), a search by the name of a system
+or of a cavity, and "+ Nuevo sistema" for any member, a dialog with the name and the description
+that goes to the page of the new system. It is reached from "Sistemas" on `/lugares`, and both pages
+light up "Lugares" in the sidebar (`ACTIVE_ALIASES`). `sistema.html`/`system.js` is one system: its
+name and description (`renderRichText`), "Editar sistema" (any member) and "Borrar sistema" (admin
+and board, with a confirmation that says the cavities stay), a map with all its cavities, then
+"Cavidades": a card for each with everything the API gives of it — its subtype and state, other
+names, where it is, coordinates, altitude, geology, depth and horizontal length, and its "Cómo
+llegar", "Descripción" and "Ficha técnica" — with "Quitar" to take it out of the system, and a row
+to add one (an input with a `datalist` of every cavity of the catalogue, "Nombre — Tipo (dónde)",
+which says "en «otro sistema»" for one that is in another, and asks before moving it, as a cavity is
+in one only). Every change sends the whole set with `PUT /systems/{id}/places` and the page is drawn
+again, also when it fails. Under them, "Fotos y documentos del sistema". On the page of a cavity
+that is in a system there is a section "Sistema", before the map: a line that links to the system,
+its description, links to its other cavities (with their subtype and where they are) and its photos
+and documents, read only (they are changed on the page of the system). The form of a cavity has
+"Sistema (opcional)", a select with "— Ninguno —" and the systems, only for the types of the cave
+kind. The photos and documents of a place and of a system are drawn and sent by the same module,
+`place-files.js` (`fileRowsHtml`, `bindFiles`, with the address `/places/3` or `/systems/4` as
+`base`).
+
 **The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,
 and no build step is needed; `loadLeaflet` adds their scripts and styles the first time a map is

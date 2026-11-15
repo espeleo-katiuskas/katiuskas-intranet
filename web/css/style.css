@@ -2375,7 +2375,8 @@ dialog.modal .area-results {
 }
 
 /* The names of places are long: the field to add one takes the row, with the button after it. */
-#place-search {
+#place-search,
+#cavity-search {
   flex: 1 1 18rem;
   max-width: 32rem;
 }

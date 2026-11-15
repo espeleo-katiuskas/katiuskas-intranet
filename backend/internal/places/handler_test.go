@@ -793,6 +793,11 @@ func TestAltitude(t *testing.T) {
 
 // upload attaches a file to a place as the person, with an optional caption.
 func (e *env) upload(p places.Place, token, name, title string, content []byte) *httptest.ResponseRecorder {
+	return e.uploadTo(placePath(p, "/files"), token, name, title, content)
+}
+
+// uploadTo attaches a file at the path of the files of a place or a system.
+func (e *env) uploadTo(path, token, name, title string, content []byte) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	if title != "" {
@@ -806,7 +811,7 @@ func (e *env) upload(p places.Place, token, name, title string, content []byte) 
 		_, _ = part.Write(content)
 	}
 	_ = mw.Close()
-	req := httptest.NewRequest("POST", placePath(p, "/files"), &buf)
+	req := httptest.NewRequest("POST", path, &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -827,7 +832,7 @@ func TestFiles(t *testing.T) {
 	status(t, rec, http.StatusCreated)
 	photo := decode[places.File](t, rec)
 	if photo.FileName != "boca.png" || photo.ContentType != "image/png" || *photo.Title != "La boca" ||
-		photo.FileSize != int64(len(png)) || photo.PlaceID != p.ID {
+		photo.FileSize != int64(len(png)) || photo.PlaceID == nil || *photo.PlaceID != p.ID || photo.SystemID != nil {
 		t.Errorf("unexpected file: %+v", photo)
 	}
 	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha adjuntado «boca.png» al lugar «Cueva»") {

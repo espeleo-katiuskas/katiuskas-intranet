@@ -83,6 +83,15 @@ var (
 	ErrBlankSubtypeName = errors.New("the name of the subtype is required")
 	ErrDuplicateSubtype = errors.New("there is already a subtype with that name")
 	ErrSubtypeInUse     = errors.New("the subtype has places and cannot be deleted")
+	ErrSystemNotFound   = errors.New("system not found")
+	ErrBlankSystemName  = errors.New("the name of the system is required")
+	ErrSystemNameLength = errors.New("the name of the system is too long")
+	ErrDuplicateSystem  = errors.New("there is already a system with that name")
+	ErrUnknownSystem    = errors.New("there is no such system")
+	// ErrNotACavity means something that is not a cavity was given a system: only cavities are in one.
+	ErrNotACavity = errors.New("only a cavity can be in a system")
+	// ErrUnknownPlace is one of the places given to a system that is not there.
+	ErrUnknownPlace = errors.New("one of the given places does not exist")
 	// ErrInvalidAltNames is a list of other names with too many, or one too long.
 	ErrInvalidAltNames  = errors.New("the other names are at most 20, of at most 200 characters each")
 	ErrUnknownGeology   = errors.New("there is no such geology")
@@ -140,6 +149,9 @@ type ListItem struct {
 	// SubtypeID and Subtype (its name) say what a cavity is: cueva, sima…
 	SubtypeID *int64  `json:"subtype_id,omitempty"`
 	Subtype   *string `json:"subtype,omitempty"`
+	// SystemID and System (its name) say which system of cavities it is in, if it is in one.
+	SystemID *int64  `json:"system_id,omitempty"`
+	System   *string `json:"system,omitempty"`
 	// AreaID is the most specific zone it is in; AreaIDs are that zone and the ones it is in, the
 	// country first, so that a list can be filtered by any of them; Where says them, from the most
 	// specific one to the country: "Valdemanco, Madrid, Comunidad de Madrid, España".
@@ -190,6 +202,7 @@ type Input struct {
 	AltNames          []string
 	State             string
 	SubtypeID         *int64
+	SystemID          *int64
 	AreaID            int64
 	Lat               *float64
 	Lon               *float64
@@ -244,12 +257,56 @@ var (
 
 // File is the metadata of a file attached to a place (never its bytes, except through Open).
 type File struct {
-	ID          int64     `json:"id"`
-	PlaceID     int64     `json:"place_id"`
+	ID int64 `json:"id"`
+	// PlaceID or SystemID: whose file it is (exactly one is there).
+	PlaceID     *int64    `json:"place_id,omitempty"`
+	SystemID    *int64    `json:"system_id,omitempty"`
 	Title       *string   `json:"title,omitempty"`
 	FileName    string    `json:"file_name"`
 	ContentType string    `json:"content_type"`
 	FileSize    int64     `json:"file_size"`
 	UploadedBy  string    `json:"uploaded_by"` // a login
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// MaxSystemNameLength is the longest name a system may have, in characters.
+const MaxSystemNameLength = 200
+
+// SystemPlaceRef is a cavity of a system, as the list of systems says it.
+type SystemPlaceRef struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Subtype string `json:"subtype,omitempty"`
+}
+
+// SystemListItem is a system as the listing gives it: its name and its cavities.
+type SystemListItem struct {
+	ID     int64            `json:"id"`
+	Name   string           `json:"name"`
+	Places []SystemPlaceRef `json:"places"`
+}
+
+// SystemPlace is a cavity of a system with everything the page of the system shows of it: what the
+// listing of places has and the long texts.
+type SystemPlace struct {
+	ListItem
+	Access         *string `json:"access,omitempty"`
+	Description    *string `json:"description,omitempty"`
+	TechnicalSheet *string `json:"technical_sheet,omitempty"`
+}
+
+// System is a group of cavities connected underground, with a description and files of its own.
+type System struct {
+	ID          int64   `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	// CreatedBy and UpdatedBy are logins (the last person who changed the system, its cavities or its files).
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedBy string    `json:"updated_by"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// FileCount is how many files are attached to it (GET /systems/{id}/files lists them).
+	FileCount int `json:"file_count"`
+	// Places are its cavities, by name, with everything about each.
+	Places []SystemPlace `json:"places"`
 }

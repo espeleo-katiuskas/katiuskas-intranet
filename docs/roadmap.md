@@ -9,19 +9,11 @@ building it; nothing in it is decided. When one is started its design goes to th
 The first phase is done and documented (`api.md`, `database.md`, `backend-internals.md`,
 `frontend.md`): the types, the places with their kind, state, main coordinate and texts, their other
 points, their photos and documents, the map (on `/lugares` and on each place), the activities that
-went to each place, and the list and the page of each. What is left, in this order:
+went to each place, the systems of cavities, and the list and the page of each. What is left, in
+this order:
 
 - **Tracks**: the way of an approach or of a canyon, as a GPX attached to the place and drawn on its
   map.
-- **Systems**: a group of caves and shafts that are connected underground, which is one cave as far
-  as the underground goes although each entrance is a place of its own (and has its own coordinate,
-  photos and state). A system has a name and its own texts, and its places are listed on its page
-  and on the page of each one; on the map its entrances are shown together, and the depth and the
-  development of the whole may be worked out or given. To settle: whether a place may be in more
-  than one system (a connection found later may join two), whether only caves can be in one (a
-  canyon cannot, but a shaft is a cave), whether the connection is a fact of the system or a link
-  between two places (to say which entrance joins which, and whether it is a proven connection or
-  only a suspected one), and who creates, changes and dissolves them (any member, like a place).
 - **OpenStreetMap layer**: the cave entrances of OpenStreetMap (`natural=cave_entrance`, about 9,400
   in Spain, almost all with a name and a coordinate, few with an altitude, a description or a web
   page) shown on the map as grey dots, apart from the catalogue, so that it keeps being the club's

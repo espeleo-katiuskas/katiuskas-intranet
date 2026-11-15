@@ -14,6 +14,7 @@ import { openPlaceDialog } from './place-dialog.js';
 import {
   loadGeologies,
   loadSubtypes,
+  loadSystems,
   loadTypes,
   measuresHtml,
   placeTypeLabel,
@@ -33,6 +34,7 @@ const countLine = document.getElementById('places-count');
 let allPlaces = [];
 let types = [];
 let subtypes = [];
+let systems = [];
 let geologies = [];
 
 stateFilter.innerHTML += Object.entries(STATE_LABELS)
@@ -87,7 +89,7 @@ async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
     const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
     map.addLayer(cluster);
-    offerNewPlaces(L, map, () => ({ types, subtypes, geologies }));
+    offerNewPlaces(L, map, () => ({ types, subtypes, systems, geologies }));
     mapState = { L, map, cluster, markers: new Map() };
     return mapState;
   });
@@ -232,15 +234,13 @@ function renderCatalogues() {
 
 async function load() {
   try {
-    const [places, loadedTypes, loadedSubtypes, loadedGeologies] = await Promise.all([
-      apiFetch('/places'),
-      loadTypes(),
-      loadSubtypes(),
-      loadGeologies(),
-    ]);
+    const [places, loadedTypes, loadedSubtypes, loadedSystems, loadedGeologies] = await Promise.all(
+      [apiFetch('/places'), loadTypes(), loadSubtypes(), loadSystems(), loadGeologies()],
+    );
     allPlaces = places;
     types = loadedTypes;
     subtypes = loadedSubtypes;
+    systems = loadedSystems;
     geologies = loadedGeologies;
     setOptions(typeFilter, 'Todos', types);
     setOptions(subtypeFilter, 'Todos', subtypes);
@@ -266,6 +266,7 @@ document.getElementById('toggle-new-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
     subtypes,
+    systems,
     geologies,
     onSaved: (place) => {
       window.location.href = `/lugar?id=${place.id}`;

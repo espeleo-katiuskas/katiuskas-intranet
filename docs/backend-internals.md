@@ -961,6 +961,34 @@ the bytes afterwards (a failure only leaves an unreferenced file, and is logged)
 the status page lists it (`place_files`), `scripts/backup.sh` backs it up and
 `scripts/copy-prod-to-testing.sh` hard-links it into testing.
 
+**Systems.** A system of cavities connected underground (`place_systems`, migration `00067`) has a
+name (unique ignoring case, 200 characters at most), a description and files of its own, and its
+cavities are the places whose `system_id` points at it. The code is in `internal/places`
+(`systems.go`, `handler_systems.go`) because a system is part of the catalogue and shares its files.
+**A cavity is in at most one system and only a cavity can be in one** (`system_only_for_caves`;
+`typeOf` refuses a `system_id` for any other kind, `invalid_place_fields`, and an unknown one,
+`unknown_system`): a connection found later is a matter of moving the cavities, and a place that was
+in two would have two descriptions to read. Any member creates and changes a system, sets its
+cavities and attaches files; deleting one is for admin and board and leaves the cavities in no
+system (`DeleteSystem`, in one transaction, which deletes the files too and the service then their
+bytes). **The cavities are set from either side**: with `system_id` in the form of a place, or all
+at once with `PUT /systems/{id}/places` (`SetSystemPlaces`: it locks the system, checks that every
+id is there and is a cavity before touching anything, unlinks what is no longer wanted, links the
+rest, which takes a cavity out of the system it was in, and answers with the cavities before and
+after, so that Telegram is only told when they differ). `GET /systems/{id}` gives the cavities with
+everything about each (`SystemPlace`: the listing's data and the three long texts) for the page of
+the system, and the list gives only their names. `updated_by` and `updated_at` of a system are its
+last change, of its cavities or of its files.
+
+**Files of a place and of a system.** They are the same code with another owner (`fileOwner` in
+`files.go`: the column, `place_id` or `system_id`, and the id), the same table `place_files`
+(exactly one of the two columns, `file_of_a_place_or_a_system`) and the same directory
+`PLACE_FILES_ROOT/<owner id>/<row id>`. A row id is unique among the files of both, so two never
+share a path even if a place and a system have the same number; the handlers take the owner from the
+route (`/places/{id}/files` and `/systems/{id}/files`), which is the only difference, besides the
+name in the Telegram notice ("al lugar", "al sistema"). A file is a `File` with `place_id` or
+`system_id`.
+
 **Where it is.** A place has an `area_id`, the most specific zone known, at least the country (400
 `place_area_required`, and `unknown_area` for one that is not there, checked by `kindOf` before the
 statement). The listing and the place say it three ways, all worked out with a recursive query on

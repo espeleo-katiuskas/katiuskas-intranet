@@ -1,6 +1,7 @@
 package places
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -80,77 +81,101 @@ func serveFile(w http.ResponseWriter, r *http.Request, f File, file *os.File) {
 	http.ServeContent(w, r, f.FileName, modTime, file)
 }
 
-func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
-	placeID, ok := pathID(w, r, "id")
-	if !ok {
-		return
+// ownerOf says which place or system a request of the files is about: the id of its path, made an owner
+// by `owner` (placeOwner or systemOwner).
+type ownerMaker func(int64) fileOwner
+
+// ownerLabel says what the owner is called in a notice: "el lugar «Cueva»" or "el sistema «Cueva»".
+func (h *Handler) ownerName(ctx context.Context, o fileOwner) (kind, name string, ok bool) {
+	if o.isSystem() {
+		sys, err := h.service.GetSystem(ctx, o.id)
+		return "sistema", sys.Name, err == nil
 	}
-	list, err := h.service.ListFiles(r.Context(), placeID)
-	if err != nil {
-		writeError(w, err, "could not list the files")
-		return
-	}
-	httpapi.WriteJSON(w, http.StatusOK, list)
+	p, err := h.service.GetPlace(ctx, o.id)
+	return "lugar", p.Name, err == nil
 }
 
-func (h *Handler) addFile(w http.ResponseWriter, r *http.Request) {
-	placeID, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	name, content, title, ok := readUpload(w, r)
-	if !ok {
-		return
-	}
-	f, err := h.service.AddFile(r.Context(), placeID, actorID(r.Context()), title, name, content)
-	if err != nil {
-		writeError(w, err, "could not attach the file")
-		return
-	}
-	if p, err := h.service.GetPlace(r.Context(), placeID); err == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📎 %s ha adjuntado «%s» al lugar «%s».", f.UploadedBy, f.FileName, p.Name))
-	}
-	httpapi.WriteJSON(w, http.StatusCreated, f)
-}
-
-func (h *Handler) file(w http.ResponseWriter, r *http.Request) {
-	placeID, ok := pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	id, ok := pathID(w, r, "fileId")
-	if !ok {
-		return
-	}
-	f, file, err := h.service.OpenFile(r.Context(), placeID, id)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			err = ErrFileNotFound
+func (h *Handler) listFiles(owner ownerMaker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r, "id")
+		if !ok {
+			return
 		}
-		writeError(w, err, "could not open the file")
-		return
+		list, err := h.service.ListFiles(r.Context(), owner(id))
+		if err != nil {
+			writeError(w, err, "could not list the files")
+			return
+		}
+		httpapi.WriteJSON(w, http.StatusOK, list)
 	}
-	defer file.Close()
-	serveFile(w, r, f, file)
 }
 
-func (h *Handler) deleteFile(w http.ResponseWriter, r *http.Request) {
-	placeID, ok := pathID(w, r, "id")
-	if !ok {
-		return
+func (h *Handler) addFile(owner ownerMaker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r, "id")
+		if !ok {
+			return
+		}
+		name, content, title, ok := readUpload(w, r)
+		if !ok {
+			return
+		}
+		o := owner(id)
+		f, err := h.service.AddFile(r.Context(), o, actorID(r.Context()), title, name, content)
+		if err != nil {
+			writeError(w, err, "could not attach the file")
+			return
+		}
+		if kind, ownerName, ok := h.ownerName(r.Context(), o); ok {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📎 %s ha adjuntado «%s» al %s «%s».", f.UploadedBy, f.FileName, kind, ownerName))
+		}
+		httpapi.WriteJSON(w, http.StatusCreated, f)
 	}
-	id, ok := pathID(w, r, "fileId")
-	if !ok {
-		return
+}
+
+func (h *Handler) file(owner ownerMaker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r, "id")
+		if !ok {
+			return
+		}
+		fileID, ok := pathID(w, r, "fileId")
+		if !ok {
+			return
+		}
+		f, file, err := h.service.OpenFile(r.Context(), owner(id), fileID)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				err = ErrFileNotFound
+			}
+			writeError(w, err, "could not open the file")
+			return
+		}
+		defer file.Close()
+		serveFile(w, r, f, file)
 	}
-	current, _ := auth.UserFromContext(r.Context())
-	f, err := h.service.RemoveFile(r.Context(), placeID, id, current.ID, current.HasAnyRole("admin", "board"))
-	if err != nil {
-		writeError(w, err, "could not delete the file")
-		return
+}
+
+func (h *Handler) deleteFile(owner ownerMaker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r, "id")
+		if !ok {
+			return
+		}
+		fileID, ok := pathID(w, r, "fileId")
+		if !ok {
+			return
+		}
+		o := owner(id)
+		current, _ := auth.UserFromContext(r.Context())
+		f, err := h.service.RemoveFile(r.Context(), o, fileID, current.ID, current.HasAnyRole("admin", "board"))
+		if err != nil {
+			writeError(w, err, "could not delete the file")
+			return
+		}
+		if kind, ownerName, ok := h.ownerName(r.Context(), o); ok {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado «%s» del %s «%s».", h.actorLogin(r.Context()), f.FileName, kind, ownerName))
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
-	if p, err := h.service.GetPlace(r.Context(), placeID); err == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado «%s» del lugar «%s».", h.actorLogin(r.Context()), f.FileName, p.Name))
-	}
-	w.WriteHeader(http.StatusNoContent)
 }

@@ -105,6 +105,8 @@ const NAV_ITEMS = [
 const ACTIVE_ALIASES = {
   '/actividad': '/actividades',
   '/lugar': '/lugares',
+  '/sistemas': '/lugares',
+  '/sistema': '/lugares',
   '/socio': '/socios',
   '/cuenta': '/contabilidad',
   '/material-prestado': '/material',

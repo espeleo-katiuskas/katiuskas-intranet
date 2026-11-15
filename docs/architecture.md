@@ -879,6 +879,14 @@ place keeps who created it and who changed it last (the place or any of its poin
   Gibraltar, is added below the state that administers it); nothing in the code knows the levels,
   which are the text `kind` of each zone, so any country fits. Any member adds a zone that is
   missing below another; only admin renames, merges (a zone that was added twice) and deletes them.
+- A **system** is a group of cavities that are connected underground, which is one cave as far as
+  the underground goes although each entrance is a place of its own: it has a name, a description
+  and photos and documents of its own, and its cavities. A cavity is in at most one system, and only
+  a cavity can be in one (a connection found later is a matter of moving the cavities). The page of
+  a cavity in a system shows the description and the documents of the system and links to its other
+  cavities, and the page of the system has everything about all of them and a map. Any member
+  creates and changes systems and sets their cavities; only admin and board delete one, which leaves
+  its cavities in no system.
 - A place always has **one main coordinate**, in the place itself, and any number of other points
   (parking, start of the approach, waypoint, access, other), each with its own coordinates, name and
   note. Coordinates are stored as WGS84 latitude and longitude, with an optional altitude in metres

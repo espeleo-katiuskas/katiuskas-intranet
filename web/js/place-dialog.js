@@ -88,6 +88,11 @@ function ensurePlaceDialog() {
           <select id="pd-subtype" name="subtype_id"></select>
           <p class="hint">Qué es la cavidad: cueva, sima, torca, mina, abrigo…</p>
         </div>
+        <div class="field" data-kind-field="cave">
+          <label for="pd-system">Sistema <span class="optional">(opcional)</span></label>
+          <select id="pd-system" name="system_id"></select>
+          <p class="hint">Si esta cavidad se comunica bajo tierra con otras. Los sistemas se crean en «Sistemas».</p>
+        </div>
         <div class="field" id="pd-state-field">
           <label for="pd-state">Estado</label>
           <select id="pd-state" name="state">
@@ -269,13 +274,14 @@ const whole = (form, name) =>
   form.elements[name].value === '' ? null : Number(form.elements[name].value);
 
 // Opens the dialog to create a place, or to change `place`. `types` are those of GET /places/types,
-// `subtypes` those of GET /places/subtypes and `geologies` those of GET /places/geologies. `onSaved` is
-// called with the place the API answers with, once it is saved. A new place may start at `coordinates`
+// `subtypes` those of GET /places/subtypes, `systems` those of GET /systems and `geologies` those of
+// GET /places/geologies. `onSaved` is called with the place the API answers with, once it is saved. A new place may start at `coordinates`
 // ({ lat, lon }, from a click on a map): they are written in the form and the zone they are in is asked
 // for at once.
 function openPlaceDialog({
   types,
   subtypes,
+  systems = [],
   geologies,
   place = null,
   coordinates = null,
@@ -305,6 +311,9 @@ function openPlaceDialog({
   form.elements.subtype_id.innerHTML = subtypes
     .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
     .join('');
+  form.elements.system_id.innerHTML =
+    '<option value="">— Ninguno —</option>' +
+    systems.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   form.elements.geology_id.innerHTML =
     '<option value="">—</option>' +
     geologies.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
@@ -315,6 +324,7 @@ function openPlaceDialog({
     set('type_id', place.type_id);
     set('geology_id', place.geology_id);
     set('subtype_id', place.subtype_id);
+    set('system_id', place.system_id);
     set('state', place.state || 'open');
     set('name', place.name);
     namesList.setNames(place.alt_names);
@@ -351,6 +361,7 @@ function openPlaceDialog({
           // Only a type that has a state gives its places one.
           state: hasStateOf() ? form.elements.state.value : '',
           subtype_id: kind === 'cave' ? Number(form.elements.subtype_id.value) : null,
+          system_id: kind === 'cave' ? whole(form, 'system_id') : null,
           area_id: areaPicker.area.id,
           lat: found.lat,
           lon: found.lon,

@@ -18,7 +18,7 @@ Contents:
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
 - [Places](#places): `areas`, `place_types`, `place_subtypes`, `place_geologies`, `places`,
-  `place_points`, `place_files`
+  `place_points`, `place_systems`, `place_files`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -78,6 +78,7 @@ library_types ──< library_items ──< library_loans, library_comments, lib
                                     (loans, comments and files point at users too)
 areas ──< areas (a tree), places              place_types ──< places ──< place_points, place_files
                                               place_subtypes, place_geologies ──< places
+                                              place_systems ──< places (its cavities), place_files
                           (places point at users too: who created and who changed)
 
 distributions ──┬─< distribution_options
@@ -1211,6 +1212,7 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 | `alt_names` | text[] | no | '{}' |
 | `state` | text | yes |  |
 | `subtype_id` | bigint | yes |  |
+| `system_id` | bigint | yes |  |
 | `area_id` | bigint | no |  |
 | `lat` | double precision | no |  |
 | `lon` | double precision | no |  |
@@ -1236,6 +1238,7 @@ Notes on the columns:
   permit has to be asked for first), `tourist` (it is run as an attraction and has to be paid for)
   or `closed` (it cannot be visited). Empty for a place whose type has no state.
 - `subtype_id`: What a cavity is (cueva, sima…): empty for any other place.
+- `system_id`: The system of cavities it is in, if it is in one (a cavity is in at most one).
 - `area_id`: Where it is: the most specific zone known, at least the country.
 - `lat`, `lon`: The main coordinate, WGS84, in degrees.
 - `altitude_m`: Its altitude in metres above sea level (negative below it), when it is known.
@@ -1251,12 +1254,13 @@ Constraints:
 - primary key (id)
 - `(type_id, kind, has_state)` → `place_types(id, kind, has_state)`
 - `area_id` → `areas(id)`, `geology_id` → `place_geologies(id)`, `subtype_id` →
-  `place_subtypes(id)`
+  `place_subtypes(id)`, `system_id` → `place_systems(id)`
 - `created_by` → `users(id)`, `updated_by` → `users(id)`
 - `name` is not blank
 - `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
 - `state_for_types_with_state`: `has_state` is true exactly when there is a state
 - `subtype_for_caves`: `kind = 'cave'` exactly when there is a subtype
+- `system_only_for_caves`: `kind = 'cave'` or there is no system
 - `alt_names_not_too_many`: at most 50 names (Go allows 20)
 - `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000
 - `depth_m` and `horizontal_length_m` not negative
@@ -1264,8 +1268,8 @@ Constraints:
 - `geology_only_for_caves`: `kind = 'cave'` or there is no geology
 - `technical_sheet_only_for_caves_and_canyons`: `kind` is `cave` or `canyon`, or there is no sheet
 - index `idx_places_type_id` on `(type_id)`, `idx_places_area_id` on `(area_id)`,
-  `idx_places_geology_id` on `(geology_id)`, `idx_places_subtype_id` on `(subtype_id)` and
-  `idx_places_lat_lon` on `(lat, lon)`
+  `idx_places_geology_id` on `(geology_id)`, `idx_places_subtype_id` on `(subtype_id)`,
+  `idx_places_system_id` on `(system_id)` and `idx_places_lat_lon` on `(lat, lon)`
 
 Rules outside the database: the zone is given and exists (`places.Service` checks it before the
 statement), the coordinates are given (a missing one is not zero), the altitude (400
@@ -1302,15 +1306,45 @@ Constraints:
   above sea level, when it is known)
 - index `idx_place_points_place_id` on `(place_id)`
 
+### `place_systems`
+
+A system of cavities connected underground (migration `00067_place_systems.sql`): a name, a
+description and, through `places.system_id`, its cavities. Its files are in `place_files`.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `name` | text | no |  |
+| `description` | text | yes |  |
+| `created_by` | bigint | no |  |
+| `created_at` | timestamptz | no | now() |
+| `updated_by` | bigint | no |  |
+| `updated_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `name` is not blank
+- `created_by`, `updated_by` → `users(id)`
+- unique `idx_place_systems_name` on `lower(name)`: names are unique ignoring case
+
+Rules outside the database: the name is at most 200 characters; `updated_by` and `updated_at` are
+the last change of the system, of its cavities (`PUT /systems/{id}/places`) or of its files, set by
+the Go service. A system is deleted by `places.Repository.DeleteSystem`, which leaves its cavities
+in no system, deletes its files and then it.
+
 ### `place_files`
 
-The metadata of the photos and documents attached to a place (migration `00063_place_files.sql`);
-the bytes are on disk, in `PLACE_FILES_ROOT/<place id>/<row id>`, and never rewritten.
+The metadata of the photos and documents attached to a place or to a system (migrations
+`00063_place_files.sql` and `00067`); the bytes are on disk, in `PLACE_FILES_ROOT/<place or system
+id>/<row id>`, and never rewritten. A row id is unique among the files of both, so two files never
+share a path although a place and a system may share a directory number.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | bigint | identity |
-| `place_id` | bigint | → `places(id)`, `ON DELETE RESTRICT` (the service deletes the rows first) |
+| `place_id` | bigint | → `places(id)`, `ON DELETE RESTRICT` (the service deletes the rows first); empty for a file of a system |
+| `system_id` | bigint | → `place_systems(id)`, `ON DELETE RESTRICT`; empty for a file of a place |
 | `title` | text | the caption, optional |
 | `file_name` | text | not blank; the name of the uploaded file |
 | `content_type` | text | not blank; decided from the bytes |
@@ -1318,8 +1352,9 @@ the bytes are on disk, in `PLACE_FILES_ROOT/<place id>/<row id>`, and never rewr
 | `uploaded_by` | bigint | → `users(id)` |
 | `created_at` | timestamptz | default `now()` |
 
-- indexes `idx_place_files_place_id` on `(place_id)` and `idx_place_files_uploaded_by` on
-  `(uploaded_by)`
+- `file_of_a_place_or_a_system`: exactly one of `place_id` and `system_id` is there
+- indexes `idx_place_files_place_id` on `(place_id)`, `idx_place_files_system_id` on `(system_id)`
+  and `idx_place_files_uploaded_by` on `(uploaded_by)`
 
 ## Distributions
 

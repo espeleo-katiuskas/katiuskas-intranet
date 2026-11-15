@@ -61,10 +61,21 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.updatePoint))
 	mux.Handle("DELETE /api/v1/places/{id}/points/{pointId}", a.Protect(h.deletePoint))
 
-	mux.Handle("GET /api/v1/places/{id}/files", a.Protect(h.listFiles))
-	mux.Handle("POST /api/v1/places/{id}/files", a.Protect(h.addFile))
-	mux.Handle("GET /api/v1/places/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file))
-	mux.Handle("DELETE /api/v1/places/{id}/files/{fileId}", a.Protect(h.deleteFile))
+	mux.Handle("GET /api/v1/places/{id}/files", a.Protect(h.listFiles(placeOwner)))
+	mux.Handle("POST /api/v1/places/{id}/files", a.Protect(h.addFile(placeOwner)))
+	mux.Handle("GET /api/v1/places/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file(placeOwner)))
+	mux.Handle("DELETE /api/v1/places/{id}/files/{fileId}", a.Protect(h.deleteFile(placeOwner)))
+
+	mux.Handle("GET /api/v1/systems", a.Protect(h.listSystems))
+	mux.Handle("POST /api/v1/systems", a.Protect(h.createSystem))
+	mux.Handle("GET /api/v1/systems/{id}", a.Protect(h.getSystem))
+	mux.Handle("PUT /api/v1/systems/{id}", a.Protect(h.updateSystem))
+	mux.Handle("DELETE /api/v1/systems/{id}", a.Protect(h.deleteSystem, "admin", "board"))
+	mux.Handle("PUT /api/v1/systems/{id}/places", a.Protect(h.setSystemPlaces))
+	mux.Handle("GET /api/v1/systems/{id}/files", a.Protect(h.listFiles(systemOwner)))
+	mux.Handle("POST /api/v1/systems/{id}/files", a.Protect(h.addFile(systemOwner)))
+	mux.Handle("GET /api/v1/systems/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file(systemOwner)))
+	mux.Handle("DELETE /api/v1/systems/{id}/files/{fileId}", a.Protect(h.deleteFile(systemOwner)))
 }
 
 func (h *Handler) actorLogin(ctx context.Context) string {
@@ -112,6 +123,13 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrDuplicateSubtype, http.StatusConflict, "duplicate_subtype"},
 		{ErrSubtypeInUse, http.StatusConflict, "subtype_in_use"},
 		{ErrInvalidAltNames, http.StatusBadRequest, "invalid_alt_names"},
+		{ErrSystemNotFound, http.StatusNotFound, "not_found"},
+		{ErrBlankSystemName, http.StatusBadRequest, "system_name_required"},
+		{ErrSystemNameLength, http.StatusBadRequest, "system_name_too_long"},
+		{ErrDuplicateSystem, http.StatusConflict, "duplicate_system"},
+		{ErrUnknownSystem, http.StatusBadRequest, "unknown_system"},
+		{ErrNotACavity, http.StatusBadRequest, "not_a_cavity"},
+		{ErrUnknownPlace, http.StatusBadRequest, "unknown_place"},
 		{ErrInvalidState, http.StatusBadRequest, "invalid_place_state"},
 		{ErrInvalidCoords, http.StatusBadRequest, "invalid_coordinates"},
 		{ErrInvalidAltitude, http.StatusBadRequest, "invalid_altitude"},
@@ -352,6 +370,7 @@ type placeBody struct {
 	AltNames          []string `json:"alt_names"`
 	State             string   `json:"state"`
 	SubtypeID         *int64   `json:"subtype_id"`
+	SystemID          *int64   `json:"system_id"`
 	AreaID            int64    `json:"area_id"`
 	Lat               *float64 `json:"lat"`
 	Lon               *float64 `json:"lon"`
@@ -369,7 +388,7 @@ func (b placeBody) input() Input { return Input(b) }
 // placeAuditFields are the Place fields an edit's notification diffs: those Input can change (the type
 // by its name).
 var placeAuditFields = []string{
-	"TypeName", "Subtype", "Name", "AltNames", "State", "Where", "Lat", "Lon", "AltitudeM", "Access",
+	"TypeName", "Subtype", "System", "Name", "AltNames", "State", "Where", "Lat", "Lon", "AltitudeM", "Access",
 	"Description", "DepthM", "HorizontalLengthM", "Geology", "TechnicalSheet",
 }
 

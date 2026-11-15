@@ -146,6 +146,11 @@ const texts = {
   invalid_place_measure: 'La profundidad o el desarrollo del lugar no son válidos.',
   invalid_place_fields:
     'El subtipo, la profundidad, el desarrollo y la geología son solo de las cavidades; la ficha técnica, de las cavidades y los cañones; y el estado, de los tipos que lo tienen.',
+  system_name_required: 'Escribe el nombre del sistema.',
+  system_name_too_long: 'El nombre del sistema es demasiado largo (200 caracteres como máximo).',
+  duplicate_system: 'Ya hay un sistema con ese nombre.',
+  unknown_system: 'Ese sistema no existe.',
+  not_a_cavity: 'Solo una cavidad puede estar en un sistema.',
   place_subtype_required: 'Elige qué es la cavidad: cueva, sima, torca, mina, abrigo…',
   unknown_subtype: 'Ese subtipo no existe.',
   subtype_name_required: 'Escribe el nombre del subtipo.',

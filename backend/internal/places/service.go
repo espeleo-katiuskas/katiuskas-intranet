@@ -104,7 +104,7 @@ func clean(in Input) (Input, error) {
 }
 
 // typeOf is the type a place is given, checking that what the place has fits it: only a cavity has a
-// subtype (and it must), a depth, a horizontal length and a geology, only a cavity or a canyon a technical
+// subtype (and it must), a system, a depth, a horizontal length and a geology, only a cavity or a canyon a technical
 // sheet, and only a type that has a state gives its places one (open, when none is said). It also checks
 // that the zone exists (before the statement, as a foreign key that fails would abort the transaction
 // the tests run in). It answers with the input as it is to be saved.
@@ -121,7 +121,8 @@ func (s *Service) typeOf(ctx context.Context, in Input) (Type, Input, error) {
 	if err != nil {
 		return Type{}, in, err
 	}
-	if (t.Kind != KindCave && (in.SubtypeID != nil || in.DepthM != nil || in.HorizontalLengthM != nil || in.GeologyID != nil)) ||
+	if (t.Kind != KindCave && (in.SubtypeID != nil || in.SystemID != nil || in.DepthM != nil ||
+		in.HorizontalLengthM != nil || in.GeologyID != nil)) ||
 		(t.Kind == KindGeneral && in.TechnicalSheet != nil) ||
 		(!t.HasState && in.State != "") {
 		return Type{}, in, ErrFieldsForKind
@@ -137,6 +138,13 @@ func (s *Service) typeOf(ctx context.Context, in Input) (Type, Input, error) {
 			return Type{}, in, ErrUnknownSubtype
 		} else if err != nil {
 			return Type{}, in, err
+		}
+	}
+	if in.SystemID != nil {
+		if exists, err := s.repo.SystemExists(ctx, *in.SystemID); err != nil {
+			return Type{}, in, err
+		} else if !exists {
+			return Type{}, in, ErrUnknownSystem
 		}
 	}
 	if in.GeologyID != nil {

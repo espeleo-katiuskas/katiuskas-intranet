@@ -36,7 +36,7 @@ func isForeignKeyViolation(err error) bool {
 // ----- places -----
 
 const listColumns = `
-	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name,
+	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name, p.system_id, sy.name,
 	p.area_id, w.ids, w.where_text,
 	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
 
@@ -47,6 +47,7 @@ const listFrom = `
 	JOIN place_types t ON t.id = p.type_id
 	LEFT JOIN place_geologies g ON g.id = p.geology_id
 	LEFT JOIN place_subtypes st ON st.id = p.subtype_id
+	LEFT JOIN place_systems sy ON sy.id = p.system_id
 	JOIN LATERAL (
 		WITH RECURSIVE up AS (
 			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM areas a WHERE a.id = p.area_id
@@ -59,7 +60,7 @@ const listFrom = `
 func (it *ListItem) scanTargets() []any {
 	return []any{
 		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
-		&it.Subtype, &it.AreaID, &it.AreaIDs, &it.Where, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
+		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
 		&it.Geology,
 	}
 }
@@ -151,14 +152,15 @@ func (r *Repository) AreaExists(ctx context.Context, id int64) (bool, error) {
 func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in Input) (Place, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, area_id, lat, lon,
-			altitude_m, access, description, depth_m, horizontal_length_m, geology_id, technical_sheet,
-			created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
+		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
+			lat, lon, altitude_m, access, description, depth_m, horizontal_length_m, geology_id,
+			technical_sheet, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+			$19, $19)
 		RETURNING id
-	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.AreaID, *in.Lat, *in.Lon,
-		in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID,
-		in.TechnicalSheet, userID).Scan(&id)
+	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID, in.AreaID,
+		*in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM,
+		in.GeologyID, in.TechnicalSheet, userID).Scan(&id)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}
@@ -172,13 +174,13 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in I
 func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, t Type, in Input) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
-			state = NULLIF($7, ''), subtype_id = $8, area_id = $9, lat = $10, lon = $11, altitude_m = $12,
-			access = $13, description = $14, depth_m = $15, horizontal_length_m = $16, geology_id = $17,
-			technical_sheet = $18, updated_by = $19, updated_at = now()
+			state = NULLIF($7, ''), subtype_id = $8, system_id = $9, area_id = $10, lat = $11, lon = $12,
+			altitude_m = $13, access = $14, description = $15, depth_m = $16, horizontal_length_m = $17,
+			geology_id = $18, technical_sheet = $19, updated_by = $20, updated_at = now()
 		WHERE id = $1
-	`, id, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.AreaID, *in.Lat,
-		*in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID,
-		in.TechnicalSheet, userID)
+	`, id, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID,
+		in.AreaID, *in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM,
+		in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}

@@ -820,7 +820,8 @@ known, in metres above sea level.
     `state` only for a type that has one (`has_state`: Cavidad, Cañón and Vía ferrata do), `open`
     by default (it can be visited freely; `permit_required`: a permit has to be asked for;
     `tourist`: it is run as an attraction and has to be paid for; `closed`); `subtype_id*` (of
-    `/places/subtypes`: cueva, sima…), `depth_m` and `horizontal_length_m` (metres) and
+    `/places/subtypes`: cueva, sima…), `system_id` (of `/systems`: the system it is in, optional),
+    `depth_m` and `horizontal_length_m` (metres) and
     `geology_id` (of `/places/geologies`: what it is formed in) only for a cavity, and
     `technical_sheet` (what has to be installed to go through it) for a cavity or a canyon. Blank
     text counts as no value.
@@ -877,6 +878,49 @@ known, in metres above sea level.
 - **DELETE** `/places/{id}/files/{fileId}` — *Whoever attached it, admin or board*.
   - returns: 204
   - errors: 400 `invalid_id`; 403 `place_file_not_yours`; 404 `not_found`
+
+## Systems
+
+A system is a group of cavities that are connected underground: a name, a description and files of
+its own, and the cavities that form it (each is a place of its own, in at most one system, and only
+a cavity can be in one). Any member reads, creates and changes systems and sets their cavities and
+files; deleting one is for admin and board.
+
+- **GET** `/systems` — *Any baseline role*. Every system by name (ignoring case), each with its
+  cavities by name.
+  - returns: 200 `[SystemListItem]`
+- **POST** `/systems` — *Any baseline role*. Creates a system.
+  - body: `name*` (at most 200 characters, unique ignoring case), `description`
+  - returns: 201 `System`
+  - errors: 400 `invalid_body`, `system_name_required`, `system_name_too_long`; 409
+    `duplicate_system`
+- **GET** `/systems/{id}` — *Any baseline role*. One system with its cavities, each with everything
+  about it (what `GET /places` has of a place and its `access`, `description` and
+  `technical_sheet`).
+  - returns: 200 `System`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/systems/{id}` — *Any baseline role*. Replaces the name and the description.
+  - body: the same as creating
+  - returns: 200 `System`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/systems/{id}` — *Admin or board*. Deletes a system with its files; its cavities stay,
+  in no system.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/systems/{id}/places` — *Any baseline role*. Makes the cavities of the system exactly the
+  given ones: the others are left in no system, and one that was in another system moves to this.
+  A repeated id counts once, and a refused change changes nothing.
+  - body: `place_ids*`
+  - returns: 200 `[SystemPlaceRef]`, the cavities as they are now
+  - errors: 400 `invalid_id`, `invalid_body`, `unknown_place`, `not_a_cavity`; 404 `not_found`
+- **GET** `/systems/{id}/files`, **POST** `/systems/{id}/files`, **GET**
+  `/systems/{id}/files/{fileId}/file` and **DELETE** `/systems/{id}/files/{fileId}` — *As the files
+  of a place*: the photos and documents of the system, with the same body, limits, errors and
+  permissions (whoever attached a file, admin and board remove it). They are `PlaceFile`s with a
+  `system_id`.
+
+A cavity says which system it is in with `system_id` when it is created or edited (`POST` and
+`PUT /places`), and `GET /places` and `GET /places/{id}` give `system_id` and `system`.
 
 ## Zones
 
@@ -1961,6 +2005,8 @@ by `GET /areas/{id}`, not by the list of the zones below one.
 | `state` | open/permit_required/tourist/closed, absent if the type has none |
 | `subtype_id` | integer, only a cavity |
 | `subtype` | text, with `subtype_id` |
+| `system_id` | integer, only a cavity in a system |
+| `system` | text, with `system_id` |
 | `area_id` | integer |
 | `area_ids` | `[integer]` |
 | `where` | text |
@@ -2006,12 +2052,41 @@ the place, of any of its points or of its files (the same as the creation until 
 | `name` | text |
 | `type_name` | text |
 
+### `SystemListItem`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `places` | `[SystemPlaceRef]` |
+
+### `SystemPlaceRef`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `subtype` | text |
+
+### `System`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `description` | text |
+| `created_by`, `updated_by` | text (login); the last change of the system, its cavities or its files |
+| `created_at`, `updated_at` | datetime |
+| `file_count` | integer |
+| `places` | `[PlaceListItem]` with `access`, `description` and `technical_sheet` |
+
 ### `PlaceFile`
 
 | Field | Type |
 |---|---|
 | `id` | number |
-| `place_id` | number |
+| `place_id` | number, for a file of a place |
+| `system_id` | number, for a file of a system |
 | `title` | text, absent if it has no caption |
 | `file_name` | text |
 | `content_type` | text |

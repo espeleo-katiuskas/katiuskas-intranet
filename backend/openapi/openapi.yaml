@@ -2737,6 +2737,189 @@ paths:
         "403": { description: "place_file_not_yours." }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /systems:
+    get:
+      summary: List the systems of cavities
+      description: Any baseline role. By name, each with its cavities by name.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The systems
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SystemListItem" }
+    post:
+      summary: Create a system
+      description: >
+        Any baseline role. A system is a group of cavities that are connected underground, with a name
+        (unique ignoring case), a description and files of its own. Its cavities are set with
+        PUT /systems/{id}/places.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SystemInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/System" }
+        "400": { description: "invalid_body, system_name_required or system_name_too_long." }
+        "409": { description: "duplicate_system." }
+
+  /systems/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One system with its cavities
+      description: Any baseline role. Each cavity with everything about it, long texts included.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The system
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/System" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Edit a system
+      description: Any baseline role. Replaces the name and the description (what is left out is cleared).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SystemInput" }
+      responses:
+        "200":
+          description: The system as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/System" }
+        "400": { description: "invalid_id, invalid_body, system_name_required or system_name_too_long." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_system." }
+    delete:
+      summary: Delete a system
+      description: Admin or board. With its files; its cavities stay, in no system.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin or board." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /systems/{id}/places:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Set the cavities of a system
+      description: >
+        Any baseline role. Makes the cavities exactly the given ones: the others are left in no system,
+        and one that was in another system moves (a cavity is in at most one). A repeated id counts once.
+        It counts as a change of the system.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [place_ids]
+              properties:
+                place_ids: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          description: The cavities as they are now
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SystemPlaceRef" }
+        "400": { description: "invalid_id, invalid_body, unknown_place or not_a_cavity (a place that is not of the cave kind)." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /systems/{id}/files:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The files of a system
+      description: Any baseline role. Photos, topographies, permits, documents; oldest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceFile" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Attach a file to a system
+      description: >
+        Any baseline role. One file, at most 10 MiB, in the multipart field `file`, and an optional
+        caption in `title` (200 characters at most). Its type is decided from its bytes: a PDF or an
+        image can be shown in the browser, anything else is only downloaded. It counts as a change of
+        the system.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceFile" }
+        "400": { description: "invalid_id, invalid_body, file_required (missing or empty) or file_title_too_long." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: "file_too_large." }
+
+  /systems/{id}/files/{fileId}/file:
+    get:
+      summary: The bytes of a file of a system
+      description: >
+        Any baseline role; also accepts the session cookie, so that a browser can open it. A PDF or an
+        image is shown in the page; anything else is downloaded, and sandboxed. `?download=1` forces a
+        download.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: fileId, in: path, required: true, schema: { type: integer } }
+        - { name: download, in: query, required: false, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200": { description: "The file" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /systems/{id}/files/{fileId}:
+    delete:
+      summary: Remove a file of a system
+      description: Whoever attached it, admin or board. It counts as a change of the system.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: fileId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: "Removed" }
+        "400": { description: "invalid_id." }
+        "403": { description: "place_file_not_yours." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /areas:
     get:
       summary: List zones, or search them
@@ -6570,6 +6753,7 @@ components:
         alt_names: { type: array, items: { type: string, maxLength: 200 }, maxItems: 20, description: "Other names it is known by: trimmed, without blanks or repeats (ignoring case)." }
         state: { type: string, enum: [open, permit_required, tourist, closed], default: open, description: "How it can be visited: freely, only with a permit, as a paid attraction, or not at all. Only for a type that has a state (has_state); refused for any other." }
         subtype_id: { type: integer, nullable: true, description: "What a cavity is (of GET /places/subtypes). Required for a place whose type is a cave (Cavidad), refused for any other." }
+        system_id: { type: integer, nullable: true, description: "The system a cavity is in (of GET /systems). Only for a cavity." }
         area_id: { type: integer, description: "The most specific zone it is in (of GET /areas): at least the country." }
         lat: { type: number, minimum: -90, maximum: 90, description: "WGS84 latitude of the main coordinate, in degrees." }
         lon: { type: number, minimum: -180, maximum: 180, description: "WGS84 longitude of the main coordinate, in degrees." }
@@ -6593,6 +6777,8 @@ components:
         state: { type: string, enum: [open, permit_required, tourist, closed], description: "Absent if the type of the place has none." }
         subtype_id: { type: integer, description: "Only a cavity." }
         subtype: { type: string, description: "The name of the subtype of a cavity." }
+        system_id: { type: integer, description: "The system a cavity is in, if it is in one." }
+        system: { type: string, description: "The name of that system." }
         area_id: { type: integer, description: "The most specific zone it is in." }
         area_ids: { type: array, items: { type: integer }, description: "That zone and the ones it is in, the country first." }
         where: { type: string, description: "The names of those zones from the most specific to the country: Valdemanco, Madrid, Comunidad de Madrid, España." }
@@ -6652,11 +6838,57 @@ components:
         name: { type: string }
         type_name: { type: string }
 
-    PlaceFile:
+    SystemInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        description: { type: string, nullable: true }
+
+    SystemPlaceRef:
       type: object
       properties:
         id: { type: integer }
+        name: { type: string }
+        subtype: { type: string, description: "The subtype of the cavity (Cueva, Sima…)." }
+
+    SystemListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        places: { type: array, items: { $ref: "#/components/schemas/SystemPlaceRef" } }
+
+    System:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        created_by: { type: string, description: "A login." }
+        created_at: { type: string, format: date-time }
+        updated_by: { type: string, description: "Login of who last changed the system, its cavities or its files." }
+        updated_at: { type: string, format: date-time }
+        file_count: { type: integer }
+        places:
+          type: array
+          description: "Its cavities by name: each is a PlaceListItem with the long texts of a Place."
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/PlaceListItem" }
+              - type: object
+                properties:
+                  access: { type: string }
+                  description: { type: string }
+                  technical_sheet: { type: string }
+
+    PlaceFile:
+      type: object
+      description: A file of a place or of a system; exactly one of place_id and system_id is there.
+      properties:
+        id: { type: integer }
         place_id: { type: integer }
+        system_id: { type: integer }
         title: { type: string, description: "The caption given when it was attached; absent if none." }
         file_name: { type: string }
         content_type: { type: string }
