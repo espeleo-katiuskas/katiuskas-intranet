@@ -124,6 +124,7 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 			p.AltNames = []string{}
 		}
 		p.Files = []File{}
+		p.Points = []Point{}
 		s.Places = append(s.Places, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -153,7 +154,25 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 				s.Places[i].Files = append(s.Places[i].Files, f)
 			}
 		}
-		return s, fileRows.Err()
+		if err := fileRows.Err(); err != nil {
+			return System{}, err
+		}
+		fileRows.Close()
+		// And their other points, for the map of the system.
+		pointRows, err := r.pool.Query(ctx, `SELECT `+pointColumns+` FROM place_points WHERE place_id = ANY($1) ORDER BY id`, ids)
+		if err != nil {
+			return System{}, err
+		}
+		defer pointRows.Close()
+		for pointRows.Next() {
+			var pt Point
+			if err := scanPoint(pointRows, &pt); err != nil {
+				return System{}, err
+			}
+			i := index[pt.PlaceID]
+			s.Places[i].Points = append(s.Places[i].Points, pt)
+		}
+		return s, pointRows.Err()
 	}
 	return s, nil
 }

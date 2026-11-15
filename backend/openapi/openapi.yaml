@@ -6882,6 +6882,7 @@ components:
                   description: { type: string }
                   technical_sheet: { type: string }
                   files: { type: array, description: "The files of the cavity itself, not the system's.", items: { $ref: "#/components/schemas/PlaceFile" } }
+                  points: { type: array, description: "Its other points, for the map of the system.", items: { $ref: "#/components/schemas/PlacePoint" } }
 
     PlaceFile:
       type: object

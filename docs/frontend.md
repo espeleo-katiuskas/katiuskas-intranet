@@ -281,20 +281,21 @@ or of a cavity, and "+ Nuevo sistema" for any member, a dialog with the name and
 that goes to the page of the new system. It is reached from "Sistemas" on `/lugares`, and both pages
 light up "Lugares" in the sidebar (`ACTIVE_ALIASES`). `sistema.html`/`system.js` is one system: its
 name and description (`renderRichText`), "Editar sistema" (any member) and "Borrar sistema" (admin
-and board, with a confirmation that says the cavities stay), a map with all its cavities, with "Ver
-en el mapa de todos los lugares" under it (as under the map of a place), which opens the big map
-starting on them, then "Cavidades": a card for each with everything the API gives of it — its
-subtype and state, other names, where it is, coordinates, altitude, geology, depth and horizontal
-length, and its "Cómo llegar", "Descripción" and "Ficha técnica", and its own "Fotos y documentos"
-(not the system's, which are under them) — with "Quitar" to take it out of the system, and a row to
-add one (an input with a `datalist` of every cavity of the catalogue, "Nombre — Tipo (dónde)", which
-says "en «otro sistema»" for one that is in another, and asks before moving it, as a cavity is in
-one only). Every change sends the whole set with `PUT /systems/{id}/places` and the page is drawn
-again, also when it fails. Under them, "Fotos y documentos del sistema". On the page of a cavity
-that is in a system there is a section "Sistema", just before the map: a line that links to the
-system, its description and links to its other cavities ("Otras cavidades del sistema", with their
-subtype and where they are). The system's photos and documents are not there but in the "Fotos y
-documentos" of the cavity, after its own: with a system the section has the subtitles "De esta
+and board, with a confirmation that says the cavities stay), a map with all its cavities and, in
+grey, the other points of each (parking, approach… with their kind, name and cavity as a tooltip,
+`pointMarker`), with "Ver en el mapa de todos los lugares" under it (as under the map of a place),
+which opens the big map starting on them, then "Cavidades": a card for each with everything the API
+gives of it — its subtype and state, other names, where it is, coordinates, altitude, geology, depth
+and horizontal length, and its "Cómo llegar", "Descripción" and "Ficha técnica", and its own "Fotos
+y documentos" (not the system's, which are under them) — with "Quitar" to take it out of the system,
+and a row to add one (an input with a `datalist` of every cavity of the catalogue, "Nombre — Tipo
+(dónde)", which says "en «otro sistema»" for one that is in another, and asks before moving it, as a
+cavity is in one only). Every change sends the whole set with `PUT /systems/{id}/places` and the
+page is drawn again, also when it fails. Under them, "Fotos y documentos del sistema". On the page
+of a cavity that is in a system there is a section "Sistema", just before the map: a line that links
+to the system, its description and links to its other cavities ("Otras cavidades del sistema", with
+their subtype and where they are). The system's photos and documents are not there but in the "Fotos
+y documentos" of the cavity, after its own: with a system the section has the subtitles "De esta
 cavidad" (its files, the only ones that can be changed there) and "Del sistema «…»" (read only, they
 are changed on the page of the system), and the form to add a file says that it adds one to the
 cavity. The form of a cavity has "Sistema (opcional)", a select with "— Ninguno —" and the systems,

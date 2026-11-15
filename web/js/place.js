@@ -28,7 +28,7 @@ import {
   STATE_HELP,
   stateBadge,
 } from './places-common.js';
-import { createMap, offerOnMapClick, placeMarker, placePopup } from './map-common.js';
+import { createMap, offerOnMapClick, placeMarker, placePopup, pointMarker } from './map-common.js';
 import { renderRichText } from './rich-text.js';
 
 const user = await initPage();
@@ -165,20 +165,7 @@ async function renderMap() {
   const group = L.featureGroup().addTo(map);
   placeMap.group = group;
   placeMarker(L, place).bindPopup(placePopup(place)).addTo(group);
-  for (const point of place.points) {
-    L.circleMarker([point.lat, point.lon], {
-      bubblingMouseEvents: false,
-      radius: 6,
-      weight: 2,
-      color: '#ffffff',
-      fillColor: '#6b6f68',
-      fillOpacity: 0.95,
-    })
-      .bindTooltip(
-        [POINT_KIND_LABELS[point.kind] ?? point.kind, point.name].filter(Boolean).join(': '),
-      )
-      .addTo(group);
-  }
+  for (const point of place.points) pointMarker(L, point).addTo(group);
   map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 16 });
 }
 

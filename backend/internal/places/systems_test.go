@@ -149,6 +149,15 @@ func TestSystemCavities(t *testing.T) {
 		*withFiles.Places[0].Files[0].Title != "La boca" || len(withFiles.Places[1].Files) != 0 {
 		t.Errorf("the system should carry the files of each cavity, apart from its own: %+v", withFiles.Places)
 	}
+	// And its other points, for the map of the system.
+	rec = e.json("POST", placePath(boca, "/points"), e.member.token, map[string]any{"kind": "parking", "name": "Pista", "lat": 40.84, "lon": -3.63})
+	status(t, rec, http.StatusCreated)
+	e.notifier.wait(t)
+	withPoints := decode[places.System](t, e.json("GET", systemPath(s, ""), e.member.token, nil))
+	if pts := withPoints.Places[0].Points; len(pts) != 1 || *pts[0].Name != "Pista" || pts[0].Kind != places.PointParking ||
+		withPoints.Places[1].Points == nil || len(withPoints.Places[1].Points) != 0 {
+		t.Errorf("the system should carry the other points of each cavity: %+v", withPoints.Places)
+	}
 	// The place says which system it is in, in the listing too.
 	if got := decode[places.Place](t, e.json("GET", placePath(boca, ""), e.member.token, nil)); got.SystemID == nil || *got.SystemID != s.ID || *got.System != "Sistema A" {
 		t.Errorf("the place should say its system: %+v", got)

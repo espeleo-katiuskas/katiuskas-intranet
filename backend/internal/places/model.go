@@ -295,6 +295,8 @@ type SystemPlace struct {
 	TechnicalSheet *string `json:"technical_sheet,omitempty"`
 	// Files are the photos and documents of the cavity itself (not those of the system), oldest first.
 	Files []File `json:"files"`
+	// Points are its other points (parking, approach…), for the map of the system.
+	Points []Point `json:"points"`
 }
 
 // System is a group of cavities connected underground, with a description and files of its own.

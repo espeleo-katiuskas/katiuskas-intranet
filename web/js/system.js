@@ -13,7 +13,7 @@ import {
   stopAsNotFound,
 } from './api.js';
 import { initPage } from './layout.js';
-import { createMap, placeMarker, placePopup } from './map-common.js';
+import { createMap, placeMarker, placePopup, pointMarker } from './map-common.js';
 import { initModal, openModal } from './modal.js';
 import { bindFiles, fileRowsHtml } from './place-files.js';
 import { coordinatesHtml, placeTypeLabel, STATE_HELP, stateBadge } from './places-common.js';
@@ -112,6 +112,8 @@ async function renderMap() {
   map.group = L.featureGroup().addTo(map.map);
   for (const p of system.places) {
     placeMarker(L, p).bindPopup(placePopup(p)).bindTooltip(p.name).addTo(map.group);
+    // The other points of each cavity, in grey, saying whose they are.
+    for (const point of p.points) pointMarker(L, point, p.name).addTo(map.group);
   }
   map.map.fitBounds(map.group.getBounds(), { padding: [30, 30], maxZoom: 16 });
 }

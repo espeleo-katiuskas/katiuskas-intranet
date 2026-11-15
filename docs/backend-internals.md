@@ -976,10 +976,10 @@ at once with `PUT /systems/{id}/places` (`SetSystemPlaces`: it locks the system,
 id is there and is a cavity before touching anything, unlinks what is no longer wanted, links the
 rest, which takes a cavity out of the system it was in, and answers with the cavities before and
 after, so that Telegram is only told when they differ). `GET /systems/{id}` gives the cavities with
-everything about each (`SystemPlace`: the listing's data, the three long texts and its own files,
-read for all the cavities in one query) for the page of the system, and the list gives only their
-names. `updated_by` and `updated_at` of a system are its last change, of its cavities or of its
-files.
+everything about each (`SystemPlace`: the listing's data, the three long texts, its own files and
+its other points, read for all the cavities in one query each) for the page of the system, and the
+list gives only their names. `updated_by` and `updated_at` of a system are its last change, of its
+cavities or of its files.
 
 **Files of a place and of a system.** They are the same code with another owner (`fileOwner` in
 `files.go`: the column, `place_id` or `system_id`, and the id), the same table `place_files`

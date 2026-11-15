@@ -1,6 +1,6 @@
 import { escapeHtml } from './api.js';
 import { formatDecimal } from './coordinates.js';
-import { placeTypeLabel, STATE_LABELS } from './places-common.js';
+import { placeTypeLabel, POINT_KIND_LABELS, STATE_LABELS } from './places-common.js';
 
 // What the maps of the places share: Leaflet (and its clustering) loaded the first time a map is shown,
 // the three layers of tiles, the markers and the legend. Leaflet is copied into web/vendor, so the page
@@ -147,6 +147,22 @@ function placeMarker(L, place) {
   });
 }
 
+// The marker of one of the other points of a place (parking, approach…): a smaller grey dot, with its
+// kind and name as a tooltip, plus `of` (the name of the place) when the map has points of several.
+function pointMarker(L, point, of = null) {
+  const label = [POINT_KIND_LABELS[point.kind] ?? point.kind, point.name]
+    .filter(Boolean)
+    .join(': ');
+  return L.circleMarker([point.lat, point.lon], {
+    bubblingMouseEvents: false,
+    radius: 6,
+    weight: 2,
+    color: '#ffffff',
+    fillColor: '#6b6f68',
+    fillOpacity: 0.95,
+  }).bindTooltip(of ? `${label} (${of})` : label);
+}
+
 // What the popup of a place says: its name as a link, what it is and where, and its state.
 function placePopup(place) {
   return `<strong><a href="/lugar?id=${place.id}">${escapeHtml(place.name)}</a></strong><br>
@@ -203,6 +219,7 @@ export {
   mapLegend,
   offerOnMapClick,
   placeMarker,
+  pointMarker,
   placePopup,
   STATE_COLORS,
 };
