@@ -28,7 +28,6 @@ const tableBody = document.getElementById('places-table-body');
 const searchInput = document.getElementById('places-search');
 const typeFilter = document.getElementById('type-filter');
 const stateFilter = document.getElementById('state-filter');
-const geologyFilter = document.getElementById('geology-filter');
 const subtypeFilter = document.getElementById('subtype-filter');
 const countLine = document.getElementById('places-count');
 let allPlaces = [];
@@ -156,6 +155,19 @@ document.getElementById('map-legend').innerHTML = mapLegend();
 document.getElementById('view-list').addEventListener('click', () => showView(false));
 document.getElementById('view-map').addEventListener('click', () => showView(true));
 
+// The subtype only makes sense for the cavities, and the state only for the types that have one (or
+// for all of them): the filter that does not apply is hidden, and forgotten, so that it never filters
+// without being seen.
+function syncFilters() {
+  const type = types.find((t) => t.id === Number(typeFilter.value));
+  const showSubtype = type?.kind === 'cave';
+  const showState = !type || type.has_state;
+  document.getElementById('subtype-filter-field').hidden = !showSubtype;
+  document.getElementById('state-filter-field').hidden = !showState;
+  if (!showSubtype) subtypeFilter.value = '';
+  if (!showState) stateFilter.value = '';
+}
+
 function renderPlaces() {
   const words = normalizeForSearch(searchInput.value).split(/\s+/).filter(Boolean);
   const shown = allPlaces.filter(
@@ -163,7 +175,6 @@ function renderPlaces() {
       (!typeFilter.value || place.type_id === Number(typeFilter.value)) &&
       (!stateFilter.value || place.state === stateFilter.value) &&
       (!subtypeFilter.value || place.subtype_id === Number(subtypeFilter.value)) &&
-      (!geologyFilter.value || place.geology_id === Number(geologyFilter.value)) &&
       words.every((word) => searchText(place).includes(word)),
   );
   tableBody.innerHTML = shown.length
@@ -233,7 +244,7 @@ async function load() {
     geologies = loadedGeologies;
     setOptions(typeFilter, 'Todos', types);
     setOptions(subtypeFilter, 'Todos', subtypes);
-    setOptions(geologyFilter, 'Todas', geologies);
+    syncFilters();
     if (isAdmin) renderCatalogues();
     renderPlaces();
   } catch (err) {
@@ -243,10 +254,12 @@ async function load() {
 }
 
 searchInput.addEventListener('input', renderPlaces);
-typeFilter.addEventListener('change', renderPlaces);
+typeFilter.addEventListener('change', () => {
+  syncFilters();
+  renderPlaces();
+});
 stateFilter.addEventListener('change', renderPlaces);
 subtypeFilter.addEventListener('change', renderPlaces);
-geologyFilter.addEventListener('change', renderPlaces);
 
 // Any member can add a place; it goes straight to its page, where the rest is filled in.
 document.getElementById('toggle-new-place').addEventListener('click', () => {

@@ -198,8 +198,10 @@ Cerrada: how the place can be visited, each with a line that explains it, `STATE
 type has no state shows none), where it is (`where`: the zone, the province, the community and the
 country, so "Madrid" finds the places of the province too) and the measures of a cave, with a search
 that looks in the name, the other names, the type, the state and where it is (accents and case
-ignored, every word has to appear, the geology of a cave included) and four selects, by type, by
-subtype, by state and by geology; the type of a row has the geology of a cave under it. "Lista" and
+ignored, every word has to appear, the geology of a cave included) and three selects, by type, by
+subtype and by state, of which the subtype is there only when the type chosen is Cavidad and the
+state only when it is "Todos" or a type that has one (a filter that is hidden is also cleared, so
+that it never filters unseen); the type of a row has the geology of a cave under it. "Lista" and
 "Mapa" switch the table for a map of the same places, with the same filters (see "The map of the
 places" below); `/lugares?vista=mapa` opens it, and `&lugar=<id>` also opens the popup of that
 place. Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the
