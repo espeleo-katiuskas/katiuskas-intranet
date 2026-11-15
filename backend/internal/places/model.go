@@ -79,6 +79,8 @@ var (
 	ErrBlankTypeName    = errors.New("the name of the type is required")
 	ErrDuplicateType    = errors.New("there is already a type with that name")
 	ErrTypeInUse        = errors.New("the type has places and cannot be deleted")
+	// ErrHasActivities means a place that activities went to cannot be deleted: their history stays.
+	ErrHasActivities = errors.New("the place has activities and cannot be deleted")
 	// ErrFixedType means Cueva, Sima and Cañón cannot be renamed or deleted: the kinds hang from them.
 	ErrFixedType = errors.New("the types of caves and canyons are fixed")
 )

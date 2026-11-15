@@ -56,7 +56,58 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	if err := s.checkMembers(ctx, in.ParticipantUserIDs); err != nil {
 		return Activity{}, err
 	}
+	placeIDs, err := cleanPlaceIDs(in.PlaceIDs)
+	if err != nil {
+		return Activity{}, err
+	}
+	in.PlaceIDs = placeIDs
 	return s.repo.Create(ctx, in)
+}
+
+// cleanPlaceIDs drops repeated ids and refuses too many.
+func cleanPlaceIDs(ids []int64) ([]int64, error) {
+	seen := make(map[int64]bool, len(ids))
+	clean := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			clean = append(clean, id)
+		}
+	}
+	if len(clean) > MaxPlaces {
+		return nil, ErrTooManyPlaces
+	}
+	return clean, nil
+}
+
+// ListPlaces are the places an activity goes to.
+func (s *Service) ListPlaces(ctx context.Context, activityID int64) ([]PlaceRef, error) {
+	if _, err := s.repo.GetByID(ctx, activityID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListPlaces(ctx, activityID)
+}
+
+// SetPlaces makes the places of an activity exactly the given ones (none unlinks them all). It answers
+// with the places before and after.
+func (s *Service) SetPlaces(ctx context.Context, activityID int64, placeIDs []int64) (before, after []PlaceRef, err error) {
+	if placeIDs, err = cleanPlaceIDs(placeIDs); err != nil {
+		return nil, nil, err
+	}
+	return s.repo.SetPlaces(ctx, activityID, placeIDs)
+}
+
+// ListByPlace are the activities that went to a place, the latest first; a place that is not there is
+// ErrUnknownPlace.
+func (s *Service) ListByPlace(ctx context.Context, placeID int64) ([]Activity, error) {
+	exists, err := s.repo.PlaceExists(ctx, placeID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrUnknownPlace
+	}
+	return s.repo.ListByPlace(ctx, placeID)
 }
 
 // clampOffset defaults a negative offset (a malformed or hand-edited

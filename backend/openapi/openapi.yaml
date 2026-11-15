@@ -1679,6 +1679,69 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: has_guests — that person still has guests in the activity; remove them first. }
 
+  /activities/{id}/places:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The places an activity goes to
+      description: Any baseline role. By name.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The places
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ActivityPlace" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Set the places an activity goes to
+      description: >
+        The organizer, admin or board. Makes the places exactly the given ones (an empty list clears
+        them); a repeated id counts once. At most 30.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [place_ids]
+              properties:
+                place_ids: { type: array, maxItems: 30, items: { type: integer } }
+      responses:
+        "200":
+          description: The places as they are now
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ActivityPlace" }
+        "400": { description: "invalid_id, invalid_body, unknown_place or too_many_places." }
+        "403": { description: "Only the organizer, admin or board." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /places/{id}/activities:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The activities of a place
+      description: >
+        Any baseline role. The activities that went, or are to go, to the place, the latest first.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Activity" }
+        "400": { description: "invalid_id." }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /activities/{id}/guests:
     get:
       summary: List an activity's guests
@@ -2468,7 +2531,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       summary: Delete a place
-      description: Admin or board. With its points and its files.
+      description: Admin or board. With its points and its files. 409 place_has_activities when an activity went to it.
       security: [{ bearerAuth: [] }]
       responses:
         "204": { description: Deleted }
@@ -6490,6 +6553,13 @@ components:
         altitude_m: { type: integer }
         note: { type: string }
         created_at: { type: string, format: date-time }
+
+    ActivityPlace:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type_name: { type: string }
 
     PlaceFile:
       type: object

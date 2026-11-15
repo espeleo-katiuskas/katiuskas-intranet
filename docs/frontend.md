@@ -365,6 +365,17 @@ the "Apuntarme" button; in a private one only the organizer, admin and board (an
 whoever is already signed up: it appears as soon as they are, as the button turns into "Darme de
 baja"). "Apuntarme" is only offered to members (`canAddOthers`, `canJoinSelf` in `activity.js`).
 
+**Places on `/actividad` and activities on `/lugar`.** Between the header and "Participantes",
+`/actividad` has "Lugares": the places of the catalogue the activity goes to, each a link to its
+page with its type, and, for whoever can edit the activity (`canManage`), "Quitar" on each and a row
+to add one (`#place-search`, an input with a `datalist` of the whole catalogue, each as "Nombre —
+Tipo (dónde)", loaded once from `GET /places` and without the ones already there). Every change
+sends the whole set with `PUT /activities/{id}/places` (`savePlaces`) and draws the list again, also
+when it fails, so that the page never shows what was not saved. The form to create an activity has
+no places: they are added on its page. `/lugar` has "Actividades", a table with the date, the
+activity (a link, with its state as a badge), its type and who organizes it, the latest first (`GET
+/places/{id}/activities`).
+
 In the participants list the "Quitar" button sits right after the name it is about
 (`.participant-row`), not at the far end of the row, and only on the rows the viewer may remove
 (`canRemoveParticipant`, as the API decides: admin/board, the organizer of a private activity, and

@@ -110,6 +110,7 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrDuplicateType, http.StatusConflict, "duplicate_place_type"},
 		{ErrTypeInUse, http.StatusConflict, "place_type_in_use"},
 		{ErrFixedType, http.StatusConflict, "fixed_place_type"},
+		{ErrHasActivities, http.StatusConflict, "place_has_activities"},
 	} {
 		if errors.Is(err, m.err) {
 			httpapi.WriteError(w, m.status, m.code, err.Error())

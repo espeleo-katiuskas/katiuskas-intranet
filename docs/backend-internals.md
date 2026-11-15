@@ -310,6 +310,20 @@ organizer (who can add anyone, so can remove anyone; on a public one they get no
 whoever signed that person up (`Service.AddedBy`, whatever the visibility): somebody can always undo
 what they did.
 
+**Places of an activity.** An activity goes to places of the catalogue (`activity_places`, migration
+`00064`): given at creation (`place_ids`, linked in the creation's transaction, so an unknown one
+refuses the whole activity: 400 `unknown_place`) and replaced afterwards by `PUT
+/activities/{id}/places`, whose body is the whole set (`Repository.SetPlaces` locks the activity,
+deletes the links and inserts the new ones, and answers with the places before and after, so that
+Telegram is only told when they differ). Who may is who may edit the activity (`canManage`: the
+organizer, admin and board). It is a join table of this package, which reads `places` and
+`place_types` itself rather than importing `places`; `GET /places/{id}/activities` is registered
+here too, as `/users/{login}/activities` is, and lists the activities of a place, the latest first,
+all of them (every activity is readable by anybody who signs in). Deleting an activity deletes its
+links, and a place with links is not deleted (`places.Repository.DeletePlace`, 409
+`place_has_activities`): what was done there stays. At most `MaxPlaces` (30) per activity, repeated
+ids counting once.
+
 ## Activity resources (memoria)
 
 **Activity resources / memoria** (`internal/activityresources`): after a trip, whoever

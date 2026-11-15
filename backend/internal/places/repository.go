@@ -190,6 +190,13 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 	if err := lockPlace(ctx, tx, id); err != nil {
 		return nil, err
 	}
+	var activities int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM activity_places WHERE place_id = $1`, id).Scan(&activities); err != nil {
+		return nil, err
+	}
+	if activities > 0 {
+		return nil, ErrHasActivities
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM place_points WHERE place_id = $1`, id); err != nil {
 		return nil, err
 	}

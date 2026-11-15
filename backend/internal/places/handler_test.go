@@ -873,3 +873,23 @@ func TestFiles(t *testing.T) {
 		t.Errorf("the bytes of a deleted place must be gone, got %v", err)
 	}
 }
+
+// A place that activities went to is not deleted: their history stays.
+func TestPlaceWithActivitiesIsNotDeleted(t *testing.T) {
+	e := newEnv(t)
+	p := e.newPlace(e.cueva, "Cueva con historia", nil)
+	e.notifier.wait(t)
+	activity := testutil.InsertActivity(t, e.tx)
+	if _, err := e.tx.Exec(context.Background(), `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	errorCode(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), 409, "place_has_activities")
+	if rec := e.json("GET", placePath(p, ""), e.member.token, nil); rec.Code != http.StatusOK {
+		t.Errorf("the place must still be there, got %d", rec.Code)
+	}
+	// Once the activity no longer goes there, it can be.
+	if _, err := e.tx.Exec(context.Background(), `DELETE FROM activity_places WHERE activity_id = $1`, activity); err != nil {
+		t.Fatal(err)
+	}
+	status(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), http.StatusNoContent)
+}

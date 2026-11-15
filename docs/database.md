@@ -14,7 +14,7 @@ Contents:
 - [Members](#members): `memberships`, `membership_leaves`, `membership_dues`, `licenses`,
   `license_types`, `board_members`
 - [Activities](#activities): `activities`, `activity_participants`, `activity_guests`,
-  `activity_resources`, `holidays`
+  `activity_places`, `activity_resources`, `holidays`
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
 - [Places](#places): `areas`, `place_types`, `place_geologies`, `places`, `place_points`,
@@ -68,7 +68,8 @@ users ──┬─< memberships, membership_leaves, membership_dues, licenses, b
         ├─< activities (leader) , activity_participants >── activities, activity_guests
         └─< material_movements (recipient and who records it)
 
-activities ──< activity_resources, activity_participants, activity_guests, material_movements
+activities ──< activity_resources, activity_participants, activity_guests, material_movements,
+           activity_places >── places
 activity_participants ──< activity_guests   (the person who invites them)
 material_items ──< material_movements        (material_item_quantities is a view of the two)
 license_types ──< licenses                material_types ──< material_items
@@ -616,6 +617,22 @@ Constraints:
 - `activity_guests_name_not_blank`: `btrim(name) <> ''`
 - unique `(activity_id, invited_by, lower(name))`: the same person does not invite the same name
   twice to one activity
+
+### `activity_places`
+
+The places of the catalogue an activity goes to (migration `00064_activity_places.sql`): a plain
+join table, as an activity may go to several and a place has had many.
+
+| Column | Type | Null |
+|---|---|---|
+| `activity_id` | bigint | no |
+| `place_id` | bigint | no |
+
+- primary key `(activity_id, place_id)`
+- `activity_id` → `activities(id)` and `place_id` → `places(id)`, both `ON DELETE RESTRICT`: the
+  service deletes an activity's links with it, and refuses to delete a place that has any (409
+  `place_has_activities`)
+- index `idx_activity_places_place_id` on `(place_id)`
 
 ### `activity_resources`
 

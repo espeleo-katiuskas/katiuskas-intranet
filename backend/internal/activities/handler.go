@@ -71,6 +71,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/activities/{id}", h.authenticator.Protect(h.update))
 	mux.Handle("DELETE /api/v1/activities/{id}", h.authenticator.Protect(h.deleteActivity))
 
+	mux.Handle("GET /api/v1/activities/{id}/places", h.authenticator.Protect(h.listPlaces))
+	mux.Handle("PUT /api/v1/activities/{id}/places", h.authenticator.Protect(h.setPlaces))
+	mux.Handle("GET /api/v1/places/{id}/activities", h.authenticator.Protect(h.listByPlace))
+
 	mux.Handle("GET /api/v1/activities/{id}/guests", h.authenticator.Protect(h.listGuests))
 	mux.Handle("POST /api/v1/activities/{id}/guests", h.authenticator.Protect(h.addGuest))
 	mux.Handle("DELETE /api/v1/activities/{id}/guests/{guestID}", h.authenticator.Protect(h.deleteGuest))
@@ -136,6 +140,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ParticipantLogins []string   `json:"participant_logins"`
 		LeaderLogin       *string    `json:"leader_login"`
 		MaxParticipants   *int       `json:"max_participants"`
+		PlaceIDs          []int64    `json:"place_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
@@ -186,7 +191,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Title: body.Title, Type: body.Type, StartDate: startDate, EndDate: endDate,
 		Description: body.Description, LeaderID: leaderID, Visibility: body.Visibility,
 		ParticipantUserIDs: participantIDs, CreatedBy: current.ID, MaxParticipants: body.MaxParticipants,
+		PlaceIDs: body.PlaceIDs,
 	})
+	if errors.Is(err, ErrUnknownPlace) {
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_place", err.Error())
+		return
+	}
+	if errors.Is(err, ErrTooManyPlaces) {
+		httpapi.WriteError(w, http.StatusBadRequest, "too_many_places", err.Error())
+		return
+	}
 	if errors.Is(err, ErrInvalidMaxParticipants) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_max_participants", err.Error())
 		return
@@ -677,4 +691,98 @@ func (h *Handler) deleteHoliday(w http.ResponseWriter, r *http.Request) {
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el festivo «%s» (%s).",
 		h.actorLogin(r.Context()), deleted.Name, deleted.Date.Format("2006-01-02")))
 	httpapi.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// ----- places -----
+
+func placeNames(list []PlaceRef) string {
+	names := make([]string, len(list))
+	for i, p := range list {
+		names[i] = "«" + p.Name + "»"
+	}
+	return strings.Join(names, ", ")
+}
+
+func (h *Handler) listPlaces(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	list, err := h.service.ListPlaces(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the places of the activity")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// setPlaces replaces the places an activity goes to; only who may edit the activity.
+func (h *Handler) setPlaces(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	if !h.canManage(r, id) {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "only the organizer, board, or admin can edit this activity")
+		return
+	}
+	var body struct {
+		PlaceIDs []int64 `json:"place_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	before, after, err := h.service.SetPlaces(r.Context(), id, body.PlaceIDs)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "activity not found")
+		return
+	case errors.Is(err, ErrUnknownPlace):
+		httpapi.WriteError(w, http.StatusBadRequest, "unknown_place", err.Error())
+		return
+	case errors.Is(err, ErrTooManyPlaces):
+		httpapi.WriteError(w, http.StatusBadRequest, "too_many_places", err.Error())
+		return
+	case err != nil:
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not set the places of the activity")
+		return
+	}
+	if placeNames(before) != placeNames(after) {
+		if a, err := h.service.Get(r.Context(), id); err == nil {
+			text := "ninguno"
+			if len(after) > 0 {
+				text = placeNames(after)
+			}
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🧭 %s ha cambiado los lugares de la actividad «%s»: %s.",
+				h.actorLogin(r.Context()), a.Title, text))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, after)
+}
+
+// listByPlace are the activities of a place: what has been done there. Every activity is visible to
+// anybody who signs in (private only limits who signs people up), so no filtering.
+func (h *Handler) listByPlace(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_id", "id must be numeric")
+		return
+	}
+	list, err := h.service.ListByPlace(r.Context(), id)
+	if errors.Is(err, ErrUnknownPlace) {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "place not found")
+		return
+	}
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the activities of the place")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }

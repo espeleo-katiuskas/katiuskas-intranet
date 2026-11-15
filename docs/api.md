@@ -363,10 +363,11 @@ Directiva).
 - **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if
   wanted). The organizer is whoever creates it, unless admin or board name someone else.
   - body: `title*`, `type`, `start_date*`, `end_date*`, `description`, `visibility`,
-    `participant_logins`, `leader_login`, `max_participants`
+    `participant_logins`, `leader_login`, `max_participants`, `place_ids`
   - returns: 201 `Activity`
   - errors: 400 `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
-    `invalid_visibility`, `invalid_max_participants`, `unknown_participant`; 403 `forbidden`; 404
+    `invalid_visibility`, `invalid_max_participants`, `unknown_participant`, `unknown_place`,
+    `too_many_places`; 403 `forbidden`; 404
     `not_found`; 409 `not_a_member` (a participant who is not a member now), `activity_full` (more
     initial participants than `max_participants`), `duplicate_activity` (that title already starts
     that day)
@@ -405,6 +406,22 @@ Directiva).
   signed that person up. Refused while that person still has guests in the activity.
   - returns: 204
   - errors: 400 `invalid_id`; 409 `has_guests`
+- **GET** `/activities/{id}/places` — *Any baseline role*. The places of the catalogue the activity
+  goes to, by name.
+  - returns: 200 `[ActivityPlace]`
+  - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/activities/{id}/places` — *The organizer, admin or board*. Makes the places of the
+  activity exactly the ones given (an empty list clears them); a repeated id counts once. Telegram
+  is told when the places change.
+  - body: `place_ids*` (30 at most)
+  - returns: 200 `[ActivityPlace]`, as they are now
+  - errors: 400 `invalid_id`, `invalid_body`, `unknown_place`, `too_many_places`; 403 `forbidden`;
+    404 `not_found`
+- **GET** `/places/{id}/activities` — *Any baseline role*. The activities that went, or are to go,
+  to a place: what has been done there, the latest first. Every activity is shown (a private one
+  only limits who signs people up).
+  - returns: 200 `[Activity]`
+  - errors: 400 `invalid_id`; 404 `not_found`
 - **GET** `/activities/{id}/guests` — *Any baseline role*. Guests: people from outside the club who
   go to the activity, each with who of the club invites them.
   - returns: 200 `[Guest]`
@@ -802,7 +819,8 @@ known, in metres above sea level.
   - body: the same as creating
   - returns: 200 `Place`
   - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
-- **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points and its files.
+- **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points and its files,
+  unless an activity went to it.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
 - **POST** `/places/{id}/points` — *Any baseline role*. Adds one of the other points of a place.
@@ -818,7 +836,7 @@ known, in metres above sea level.
   - errors: as creating; 404 `not_found` (also for a point of another place)
 - **DELETE** `/places/{id}/points/{pointId}` — *Any baseline role*. Removes a point.
   - returns: 204
-  - errors: 400 `invalid_id`; 404 `not_found`
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `place_has_activities`
 - **GET** `/places/{id}/files` — *Any baseline role*. The files of a place (photos, topographies,
   permits, documents), oldest first.
   - returns: 200 `[PlaceFile]`
@@ -1943,6 +1961,14 @@ same as references, the country first and with each `kind`. `kind` says what the
 `cave`, `technical_sheet` when it is `cave` or `canyon`. `altitude_m`, optional, is that of the main
 coordinate (the other points have their own). `updated_by` and `updated_at` are the last change of
 the place, of any of its points or of its files (the same as the creation until there is one).
+
+### `ActivityPlace`
+
+| Field | Type |
+|---|---|
+| `id` | number |
+| `name` | text |
+| `type_name` | text |
 
 ### `PlaceFile`
 

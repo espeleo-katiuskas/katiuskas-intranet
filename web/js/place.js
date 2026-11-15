@@ -1,9 +1,12 @@
 import {
+  activityState,
+  activityStateLabels,
   API_BASE,
   apiFetch,
   apiFetchForm,
   hasAnyRole,
   escapeHtml,
+  formatDate,
   formatDateTime,
   isNotFound,
   queryId,
@@ -11,6 +14,7 @@ import {
   showFeedback,
   showNotFound,
   stopAsNotFound,
+  typeLabels,
 } from './api.js';
 import { formatSize } from './file-browser.js';
 import { initPage } from './layout.js';
@@ -35,6 +39,7 @@ let types = [];
 let geologies = [];
 let names = {};
 let files = [];
+let activities = [];
 // Admin and board remove any file; anybody else only their own.
 const canManageFiles = hasAnyRole(user, ['admin', 'board']);
 
@@ -50,6 +55,31 @@ async function loadNames() {
 
 function personLink(login) {
   return `<a href="/socio?login=${encodeURIComponent(login)}">${escapeHtml(names[login] ?? login)}</a>`;
+}
+
+function dateRange(activity) {
+  return activity.start_date === activity.end_date
+    ? formatDate(activity.start_date)
+    : `${formatDate(activity.start_date)} – ${formatDate(activity.end_date)}`;
+}
+
+// What has been done here, and is to be: the activities that go to the place, the latest first.
+function renderActivities() {
+  document.getElementById('place-activities-body').innerHTML = activities.length
+    ? activities
+        .map((a) => {
+          const state = activityState(a);
+          return `
+      <tr>
+        <td class="nowrap">${dateRange(a)}</td>
+        <td><a href="/actividad?id=${a.id}"><strong>${escapeHtml(a.title)}</strong></a>
+          <span class="badge status-${state}">${escapeHtml(activityStateLabels[state] ?? state)}</span></td>
+        <td>${escapeHtml(typeLabels[a.type] ?? a.type)}</td>
+        <td>${personLink(a.leader_login)}</td>
+      </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="4">Todavía no se ha hecho ninguna actividad aquí.</td></tr>';
 }
 
 function fileUrl(file, download = false) {
@@ -187,20 +217,24 @@ function render() {
       : '';
   document.getElementById('place-authorship').innerHTML = created + changed;
   renderFiles();
+  renderActivities();
   renderMap();
 }
 
 async function load() {
   try {
-    const [loaded, loadedFiles, loadedTypes, loadedGeologies, loadedNames] = await Promise.all([
-      apiFetch(`/places/${placeId}`),
-      apiFetch(`/places/${placeId}/files`),
-      loadTypes(),
-      loadGeologies(),
-      loadNames(),
-    ]);
+    const [loaded, loadedFiles, loadedActivities, loadedTypes, loadedGeologies, loadedNames] =
+      await Promise.all([
+        apiFetch(`/places/${placeId}`),
+        apiFetch(`/places/${placeId}/files`),
+        apiFetch(`/places/${placeId}/activities`),
+        loadTypes(),
+        loadGeologies(),
+        loadNames(),
+      ]);
     place = loaded;
     files = loadedFiles;
+    activities = loadedActivities;
     types = loadedTypes;
     geologies = loadedGeologies;
     names = loadedNames;

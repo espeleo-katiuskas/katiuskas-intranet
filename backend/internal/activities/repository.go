@@ -27,6 +27,10 @@ var (
 	// doesn't exist. Create rejects the whole activity rather than
 	// creating it with a partial participant list.
 	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
+	// ErrUnknownPlace means one of the given place ids is not a place of the catalogue.
+	ErrUnknownPlace = errors.New("one of the given places does not exist")
+	// ErrTooManyPlaces means more than MaxPlaces places were given.
+	ErrTooManyPlaces = errors.New("an activity cannot be linked to that many places")
 	// ErrHolidayNotFound means the given holiday id doesn't exist.
 	ErrHolidayNotFound = errors.New("holiday not found")
 	// ErrDuplicateActivity means there is already an activity with that title starting that day.
@@ -133,6 +137,9 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Activity, erro
 	}
 
 	if err := checkRoom(ctx, tx, a.ID, a.MaxParticipants); err != nil {
+		return Activity{}, err
+	}
+	if err := linkPlaces(ctx, tx, a.ID, in.PlaceIDs); err != nil {
 		return Activity{}, err
 	}
 	return a, tx.Commit(ctx)
@@ -374,6 +381,10 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	if attached > 0 {
 		return ErrActivityInUse
 	}
+	// The places it went to are not a reason to keep it: the links go with it.
+	if _, err := tx.Exec(ctx, `DELETE FROM activity_places WHERE activity_id = $1`, id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM activities WHERE id = $1`, id); err != nil {
 		return err
 	}
@@ -534,4 +545,105 @@ func (r *Repository) DeleteHoliday(ctx context.Context, id int64) (Holiday, erro
 		return h, ErrHolidayNotFound
 	}
 	return h, err
+}
+
+// ----- places -----
+
+// linkPlaces inserts the links of an activity to places, each once; a place that is not there is
+// ErrUnknownPlace.
+func linkPlaces(ctx context.Context, tx pgx.Tx, activityID int64, placeIDs []int64) error {
+	for _, placeID := range placeIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)
+			ON CONFLICT (activity_id, place_id) DO NOTHING
+		`, activityID, placeID); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+				return ErrUnknownPlace
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ListPlaces are the places an activity goes to, by name.
+func (r *Repository) ListPlaces(ctx context.Context, activityID int64) ([]PlaceRef, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.name, t.name
+		FROM activity_places ap
+		JOIN places p ON p.id = ap.place_id
+		JOIN place_types t ON t.id = p.type_id
+		WHERE ap.activity_id = $1
+		ORDER BY p.name, p.id
+	`, activityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []PlaceRef{}
+	for rows.Next() {
+		var p PlaceRef
+		if err := rows.Scan(&p.ID, &p.Name, &p.TypeName); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
+// SetPlaces makes the places of an activity exactly the given ones, in one transaction: those that are
+// no longer there are unlinked and the new ones linked. It answers with the places as they were before
+// and as they are now, to tell what changed.
+func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs []int64) (before, after []PlaceRef, err error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := lockActivity(ctx, tx, activityID); err != nil {
+		return nil, nil, err
+	}
+	txRepo := &Repository{pool: tx}
+	if before, err = txRepo.ListPlaces(ctx, activityID); err != nil {
+		return nil, nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM activity_places WHERE activity_id = $1`, activityID); err != nil {
+		return nil, nil, err
+	}
+	if err := linkPlaces(ctx, tx, activityID, placeIDs); err != nil {
+		return nil, nil, err
+	}
+	if after, err = txRepo.ListPlaces(ctx, activityID); err != nil {
+		return nil, nil, err
+	}
+	return before, after, tx.Commit(ctx)
+}
+
+// ListByPlace are the activities that went, or are to go, to a place, the latest first.
+func (r *Repository) ListByPlace(ctx context.Context, placeID int64) ([]Activity, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+activitySelect+`
+		WHERE a.id IN (SELECT activity_id FROM activity_places WHERE place_id = $1)
+		ORDER BY a.start_date DESC, a.id DESC
+	`, placeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []Activity{}
+	for rows.Next() {
+		var a Activity
+		if err := scanActivity(rows, &a); err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
+	return list, rows.Err()
+}
+
+// PlaceExists says whether a place of the catalogue has that id.
+func (r *Repository) PlaceExists(ctx context.Context, placeID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM places WHERE id = $1)`, placeID).Scan(&exists)
+	return exists, err
 }

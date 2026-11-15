@@ -86,6 +86,7 @@ function applyManagementVisibility() {
   document.getElementById('cancel-activity').hidden = !canManage || activityCancelled;
   document.getElementById('reactivate-activity').hidden = !canManage || !activityCancelled;
   document.getElementById('add-participant-row').hidden = !canAddOthers();
+  document.getElementById('add-place-row').hidden = !canManage;
   // Guests: whoever is signed up adds their own with just a name; the organizer, admin and board also
   // say which of the people signed up invites them (as the backend requires).
   document.getElementById('add-guest-row').hidden = !(canManage || isParticipant);
@@ -333,6 +334,93 @@ async function loadParticipants(ready = Promise.resolve()) {
     container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
   }
 }
+
+// The places the activity goes to (GET and PUT /activities/{id}/places): linked to the catalogue, each
+// one to its page. Whoever may edit the activity changes them, always the whole set.
+let activityPlaces = [];
+let placeEntries = []; // The catalogue as the picker offers it: { id, label }.
+
+function placeLabel(place) {
+  return `${place.name} — ${place.type_name}${place.where ? ` (${place.where})` : ''}`;
+}
+
+function renderPlaceRow(place) {
+  return `
+    <div class="detail-row participant-row">
+      <span><a href="/lugar?id=${place.id}">${escapeHtml(place.name)}</a>
+        <span class="badge">${escapeHtml(place.type_name)}</span></span>
+      ${canManage ? `<button type="button" class="btn btn-danger btn-small" data-remove-place="${place.id}">Quitar</button>` : ''}
+    </div>
+  `;
+}
+
+function renderPlaceOptions() {
+  const here = new Set(activityPlaces.map((p) => p.id));
+  document.getElementById('place-options').innerHTML = renderPickerOptions(
+    placeEntries.filter((entry) => !here.has(entry.id)),
+  );
+}
+
+async function loadPlaces(ready = Promise.resolve()) {
+  const container = document.getElementById('places-list');
+  try {
+    activityPlaces = await apiFetch(`/activities/${activityId}/places`);
+    // Whether each one can be removed depends on who may edit the activity.
+    await ready;
+    container.innerHTML = activityPlaces.length
+      ? activityPlaces.map(renderPlaceRow).join('')
+      : '<p>Todavía no se ha dicho a qué lugares va.</p>';
+    if (canManage && !placeEntries.length) {
+      // The whole catalogue is light (no long texts), and only who can change the places needs it.
+      const all = await apiFetch('/places');
+      placeEntries = all.map((place) => ({ id: place.id, label: placeLabel(place) }));
+    }
+    renderPlaceOptions();
+  } catch (err) {
+    container.innerHTML = `<p>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// The places as they are to be, sent whole.
+async function savePlaces(ids, feedback) {
+  try {
+    await apiFetch(`/activities/${activityId}/places`, {
+      method: 'PUT',
+      body: JSON.stringify({ place_ids: ids }),
+    });
+    if (feedback) showFeedback(feedback);
+    await loadPlaces();
+  } catch (err) {
+    showError(err.message);
+    await loadPlaces();
+  }
+}
+
+document.getElementById('add-place').addEventListener('click', async () => {
+  const input = document.getElementById('place-search');
+  const here = new Set(activityPlaces.map((p) => p.id));
+  const id = resolvePickerId(
+    placeEntries.filter((entry) => !here.has(entry.id)),
+    input.value,
+  );
+  if (!id) {
+    showError('Escribe el nombre de un lugar de la lista.');
+    return;
+  }
+  input.value = '';
+  await savePlaces([...here, id], 'Lugar añadido.');
+});
+
+document.getElementById('places-list').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-remove-place]');
+  if (!button) return;
+  button.disabled = true;
+  const removed = Number(button.dataset.removePlace);
+  await savePlaces(
+    activityPlaces.map((p) => p.id).filter((id) => id !== removed),
+    'Lugar quitado.',
+  );
+});
 
 // People from outside the club (GET/POST /activities/{id}/guests, DELETE …/{guestID}), each invited by
 // one of those signed up. Whoever invited a guest, the organizer, admin and board can remove them.
@@ -1035,11 +1123,13 @@ const activityLoaded = loadActivity(directoryLoaded);
 const participantsLoaded = loadParticipants(Promise.all([directoryLoaded, activityLoaded]));
 const itemsLoaded = loadItems();
 const guestsLoaded = loadGuests(Promise.all([directoryLoaded, activityLoaded]));
+const placesLoaded = loadPlaces(activityLoaded);
 await Promise.all([
   directoryLoaded,
   activityLoaded,
   participantsLoaded,
   guestsLoaded,
+  placesLoaded,
   itemsLoaded,
   loadActivityLoans(itemsLoaded),
   loadMemoria(Promise.all([directoryLoaded, participantsLoaded])),

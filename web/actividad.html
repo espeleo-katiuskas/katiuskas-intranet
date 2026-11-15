@@ -89,6 +89,17 @@
   </dialog>
 
   <div class="section-header">
+    <h2>Lugares</h2>
+  </div>
+  <p class="hint">Las cuevas, cañones y otros lugares del catálogo a los que va la actividad.</p>
+  <div class="detail-list" id="places-list"></div>
+  <div class="role-add-row" id="add-place-row" hidden>
+    <input type="text" id="place-search" list="place-options" autocomplete="off" placeholder="Escribe el nombre de un lugar…" aria-label="Lugar">
+    <datalist id="place-options"></datalist>
+    <button type="button" id="add-place" class="btn btn-secondary btn-small">+ Lugar</button>
+  </div>
+
+  <div class="section-header">
     <h2>Participantes</h2>
   </div>
   <div class="detail-list" id="participants-list"></div>

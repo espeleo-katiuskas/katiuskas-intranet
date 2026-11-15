@@ -66,6 +66,17 @@ type Activity struct {
 	MaxParticipants *int `json:"max_participants,omitempty"`
 }
 
+// PlaceRef is a place an activity goes to, as the activity says it: enough to name it and link to it.
+type PlaceRef struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	TypeName string `json:"type_name"`
+}
+
+// MaxPlaces is the most places an activity can be linked to: far more than any outing, only to keep a
+// mistake from linking hundreds.
+const MaxPlaces = 30
+
 type CreateInput struct {
 	Title       string
 	Type        Type
@@ -76,6 +87,8 @@ type CreateInput struct {
 	Visibility  Visibility
 	// MaxParticipants limits those who can go, if given (at least 1).
 	MaxParticipants *int
+	// PlaceIDs are the places the activity goes to, linked in the same operation.
+	PlaceIDs []int64
 	// ParticipantUserIDs are signed up in the same operation as the
 	// activity itself, since whoever creates it already knows who's going.
 	ParticipantUserIDs []int64
