@@ -197,7 +197,7 @@ Cerrada: how the place can be visited, each with a line that explains it, `STATE
 `places-common.js`, under the field of the form and next to the badge on the page; a place whose
 type has no state shows none), where it is (`where`: the zone, the province, the community and the
 country, so "Madrid" finds the places of the province too) and the measures of a cave in short ("8m
-↓ · 1500m ↔": depth and horizontal length, each with its meaning as a tooltip; `measuresHtml`), with
+↓ · 1500m ⇄": depth and horizontal length, each with its meaning as a tooltip; `measuresHtml`), with
 a search that looks in the name, the other names, the type, the state and where it is (accents and
 case ignored, every word has to appear, the geology of a cave included) and three selects, by type,
 by subtype and by state, of which the subtype is there only when the type chosen is Cavidad and the
