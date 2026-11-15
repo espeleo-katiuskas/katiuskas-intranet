@@ -2301,3 +2301,7 @@ dialog.modal .area-results {
 .area-add {
   margin: -8px 0 0;
 }
+
+#areas-dialog .field-grid {
+  margin-top: 12px;
+}

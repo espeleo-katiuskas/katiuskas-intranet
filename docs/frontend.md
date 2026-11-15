@@ -245,12 +245,15 @@ a convenience). If the zone is not in the list, "¿No está? Añade una zona" op
 the zone it goes in ("Dentro de", chosen with the same field, the one already chosen in the place's
 form if there is), its name and its kind, which is left blank to take that of the zones already
 below (the dialog says which) and is required for the first one below another; once added it is the
-chosen zone. Anybody can; to rename, merge, delete or add inside a zone, admin has "Zonas" on
-`/lugares` (`areas-manager.js`): it finds a zone with the same field and shows its chain, its kind
-and how many zones and places are in it, with its name and kind to change, the siblings it can be
-merged into (after a confirmation, which says that everything in it goes to the other one), "Añadir
-una zona dentro" and "Borrar zona", which is disabled for a country or a zone with something in it
-(and says why).
+chosen zone. Anybody can; to add a country, rename, move, merge, delete or add inside a zone, admin
+has "Zonas" on `/lugares` (`areas-manager.js`): "Añadir un país" opens the same dialog with "Dentro
+de" optional (`allowRoot`; text there that is not a choice is refused, never taken for "none"). It
+finds a zone with the same field and shows its chain, its kind and how many zones and places are in
+it, with its name and kind to change, "Mover dentro de" (the zone it is in now, to be changed for
+another, or emptied to make it a country; after a confirmation that says that all it has goes with
+it), the siblings it can be merged into (after a confirmation, which says that everything in it goes
+to the other one), "Añadir una zona dentro" and "Borrar zona", which is disabled for a country or a
+zone with something in it (and says why).
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

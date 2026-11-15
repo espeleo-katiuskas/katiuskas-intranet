@@ -964,12 +964,20 @@ gives each with its ancestors, which is what lets two zones with the same name b
 ("Madrid" is a province and a municipality). It matches only the name of the zone, not those of its
 ancestors.
 
-**Adding.** Any member adds a zone below another. The `kind` is the one most of its siblings have,
-unless it is given, and the first zone below another needs it said (400 `area_kind_required`).
-Nothing else is checked, so a typo is possible: that is what an admin fixes.
+**Adding.** Any member adds a zone below another; an admin also adds a country (`POST /areas` with
+no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is "País" unless given).
+The `kind` is the one most of its siblings have, unless it is given, and the first zone below
+another needs it said (400 `area_kind_required`). Nothing else is checked, so a typo is possible:
+that is what an admin fixes.
 
-**Changing.** Renaming (and changing the kind) is for admin alone, as is deleting a zone, which only
-works if nothing is below it and no place is in it, and never for a country (409 `area_is_country`,
+**Changing.** Renaming (and changing the kind) is for admin alone, and so is **moving** a zone: `PUT
+/areas/{id}` with `parent_id` (a number, or `null` to make it a country; left out, it stays) puts
+it, with everything below it, under another zone. The repository does it in one transaction with the
+rename: it locks the row and walks up from the new parent to refuse the zone itself or one of its
+descendants (409 `area_move_cycle`), `Service.Update` checks the name against the siblings of the
+new parent first and the unique index is the backstop (409 `duplicate_area`). The places keep
+pointing at their zone, so their path changes with it. Deleting a zone, which only works if nothing
+is below it and no place is in it, and never for a country (409 `area_is_country`,
 `area_has_children`, `area_in_use`). **Merging** (`POST /areas/{id}/merge`) is the way out when a
 zone was added twice: it locks both rows (always in the same order, so two merges do not wait for
 each other), requires both to be below the same zone, moves the zones below the first one and the

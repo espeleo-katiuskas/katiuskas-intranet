@@ -28,8 +28,8 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
 }
 
-// RegisterRoutes: everybody who can sign in reads the zones and adds one below another; renaming,
-// merging and deleting them is for admin alone.
+// RegisterRoutes: everybody who can sign in reads the zones and adds one below another; adding a
+// country (a zone below none), renaming, moving, merging and deleting them is for admin alone.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
 	mux.Handle("GET /api/v1/areas", a.Protect(h.list))
@@ -58,7 +58,8 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 	for _, m := range []mapping{
 		{ErrNotFound, http.StatusNotFound, "not_found"},
 		{ErrUnknownParent, http.StatusBadRequest, "unknown_area"},
-		{ErrParentRequired, http.StatusBadRequest, "area_parent_required"},
+		{ErrRootAdminOnly, http.StatusForbidden, "area_root_admin_only"},
+		{ErrMoveCycle, http.StatusConflict, "area_move_cycle"},
 		{ErrBlankName, http.StatusBadRequest, "area_name_required"},
 		{ErrKindRequired, http.StatusBadRequest, "area_kind_required"},
 		{ErrTooLong, http.StatusBadRequest, "area_text_too_long"},
@@ -127,6 +128,13 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 // parentName is the name of the zone a zone is directly in, for a notice.
+func sameParent(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 func parentName(a Area) string {
 	if len(a.Ancestors) == 0 {
 		return ""
@@ -136,7 +144,7 @@ func parentName(a Area) string {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ParentID int64  `json:"parent_id"`
+		ParentID *int64 `json:"parent_id"`
 		Name     string `json:"name"`
 		Kind     string `json:"kind"`
 	}
@@ -144,13 +152,26 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
+	// No parent (or 0) makes a country, which only an admin may.
+	if body.ParentID != nil && *body.ParentID == 0 {
+		body.ParentID = nil
+	}
+	if current, _ := auth.UserFromContext(r.Context()); body.ParentID == nil && !current.HasAnyRole("admin") {
+		writeError(w, ErrRootAdminOnly, "could not add the zone")
+		return
+	}
 	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind)
 	if err != nil {
 		writeError(w, err, "could not add the zone")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha añadido la zona «%s» (%s) en «%s».",
-		h.actorLogin(r.Context()), a.Name, a.Kind, parentName(a)))
+	if parent := parentName(a); parent == "" {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha añadido la zona «%s» (%s), que no está dentro de ninguna otra.",
+			h.actorLogin(r.Context()), a.Name, a.Kind))
+	} else {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha añadido la zona «%s» (%s) en «%s».",
+			h.actorLogin(r.Context()), a.Name, a.Kind, parent))
+	}
 	httpapi.WriteJSON(w, http.StatusCreated, a)
 }
 
@@ -159,16 +180,28 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// parent_id is only looked at when it is in the body: null makes the zone a country.
 	var body struct {
-		Name string `json:"name"`
-		Kind string `json:"kind"`
+		Name     string          `json:"name"`
+		Kind     string          `json:"kind"`
+		ParentID json.RawMessage `json:"parent_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
+	var move Move
+	if len(body.ParentID) > 0 {
+		move.Set = true
+		var parent *int64
+		if err := json.Unmarshal(body.ParentID, &parent); err != nil {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "parent_id must be a number or null")
+			return
+		}
+		move.ID = parent
+	}
 	before, beforeErr := h.service.Get(r.Context(), id)
-	a, err := h.service.Update(r.Context(), id, body.Name, body.Kind)
+	a, err := h.service.Update(r.Context(), id, body.Name, body.Kind, move)
 	if err != nil {
 		writeError(w, err, "could not change the zone")
 		return
@@ -176,6 +209,20 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if beforeErr == nil && (before.Name != a.Name || before.Kind != a.Kind) {
 		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado la zona «%s» (%s) por «%s» (%s).",
 			h.actorLogin(r.Context()), before.Name, before.Kind, a.Name, a.Kind))
+	}
+	if beforeErr == nil && !sameParent(before.ParentID, a.ParentID) {
+		before, now := parentName(before), parentName(a)
+		switch {
+		case before == "":
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha movido la zona «%s» (%s), que no estaba dentro de ninguna otra, a «%s».",
+				h.actorLogin(r.Context()), a.Name, a.Kind, now))
+		case now == "":
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha sacado la zona «%s» (%s) de «%s»: ya no está dentro de ninguna otra.",
+				h.actorLogin(r.Context()), a.Name, a.Kind, before))
+		default:
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗺️ %s ha movido la zona «%s» (%s) de «%s» a «%s».",
+				h.actorLogin(r.Context()), a.Name, a.Kind, before, now))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, a)
 }

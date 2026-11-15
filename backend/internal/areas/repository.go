@@ -160,7 +160,7 @@ func (r *Repository) NameTaken(ctx context.Context, parentID *int64, normalized 
 	return taken, err
 }
 
-func (r *Repository) Create(ctx context.Context, parentID int64, kind, name, normalized string) (Area, error) {
+func (r *Repository) Create(ctx context.Context, parentID *int64, kind, name, normalized string) (Area, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO areas (parent_id, kind, name, norm_name) VALUES ($1, $2, $3, $4) RETURNING id
@@ -177,17 +177,55 @@ func (r *Repository) Create(ctx context.Context, parentID int64, kind, name, nor
 	return r.Get(ctx, id)
 }
 
-// Update renames a zone and changes its kind.
-func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalized string) (Area, error) {
-	tag, err := r.pool.Exec(ctx, `UPDATE areas SET kind = $2, name = $3, norm_name = $4 WHERE id = $1`, id, kind, name, normalized)
-	if pgCode(err) == uniqueViolationCode {
-		return Area{}, ErrDuplicate
+// Update renames a zone and changes its kind and, with move.Set, its parent, in one transaction. A zone
+// cannot go below itself or below a zone that is below it: the chain of ancestors of the new parent,
+// read under the lock of the row, says so.
+func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalized string, move Move) (Area, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Area{}, err
+	}
+	defer tx.Rollback(ctx)
+	var parent *int64
+	err = tx.QueryRow(ctx, `SELECT parent_id FROM areas WHERE id = $1 FOR UPDATE`, id).Scan(&parent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Area{}, ErrNotFound
 	}
 	if err != nil {
 		return Area{}, err
 	}
-	if tag.RowsAffected() == 0 {
-		return Area{}, ErrNotFound
+	if move.Set {
+		parent = move.ID
+		if parent != nil {
+			var below bool
+			if err := tx.QueryRow(ctx, `
+				WITH RECURSIVE up AS (
+					SELECT id, parent_id FROM areas WHERE id = $1
+					UNION ALL
+					SELECT a.id, a.parent_id FROM areas a JOIN up ON a.id = up.parent_id
+				)
+				SELECT EXISTS (SELECT 1 FROM up WHERE id = $2)
+			`, *parent, id).Scan(&below); err != nil {
+				return Area{}, err
+			}
+			if below {
+				return Area{}, ErrMoveCycle
+			}
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE areas SET parent_id = $2, kind = $3, name = $4, norm_name = $5 WHERE id = $1`,
+		id, parent, kind, name, normalized)
+	switch pgCode(err) {
+	case uniqueViolationCode:
+		return Area{}, ErrDuplicate
+	case foreignKeyViolationCode:
+		return Area{}, ErrUnknownParent
+	}
+	if err != nil {
+		return Area{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Area{}, err
 	}
 	return r.Get(ctx, id)
 }

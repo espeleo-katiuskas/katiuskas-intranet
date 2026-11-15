@@ -433,7 +433,8 @@ func TestAdd(t *testing.T) {
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": "---"}), 400, "area_name_required")
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": strings.Repeat("a", areas.MaxNameLength+1)}), 400, "area_text_too_long")
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": "X", "kind": strings.Repeat("a", areas.MaxKindLength+1)}), 400, "area_text_too_long")
-	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"name": "Sin padre"}), 400, "area_parent_required")
+	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"name": "Sin padre"}), 403, "area_root_admin_only")
+	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": 0, "name": "Sin padre"}), 403, "area_root_admin_only")
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": 987654321, "name": "Huérfana"}), 400, "unknown_area")
 }
 
@@ -526,4 +527,92 @@ func TestMerge(t *testing.T) {
 	if still := decode[areas.Area](t, e.json("GET", areaPath(a), e.member.token, nil)); still.ChildCount != 1 {
 		t.Errorf("a refused merge changes nothing: %+v", still)
 	}
+}
+
+// Only an admin adds a country, a zone that is in no other one; its kind is "País" unless it is said.
+func TestAddCountry(t *testing.T) {
+	e := newEnv(t)
+	rec := e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"name": "Atlántida"})
+	status(t, rec, http.StatusCreated)
+	got := decode[areas.Area](t, rec)
+	if got.ParentID != nil || got.Kind != "País" || len(got.Ancestors) != 0 {
+		t.Errorf("unexpected country: %+v", got)
+	}
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido la zona «Atlántida» (País), que no está dentro de ninguna otra") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+	status(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"name": "Mu", "kind": "Continente perdido"}), http.StatusCreated)
+	e.notifier.wait(t)
+	errorCode(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"name": "atlantida"}), 409, "duplicate_area")
+	errorCode(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"name": " "}), 400, "area_name_required")
+	// And it is a place for the zones below.
+	e.add(got.ID, "Capital", "Ciudad")
+}
+
+// An admin moves a zone below another, or makes it a country; never into itself or below itself, and
+// not under the name of another zone there.
+func TestMove(t *testing.T) {
+	e := newEnv(t)
+	a := e.add(e.madrid, "Municipio Movido", "")
+	child := e.add(a.ID, "Barrio", "Barrio")
+	e.notifier.wait(t)
+	e.notifier.wait(t)
+	path := areaPath(a)
+
+	// Below another zone, with its zones coming along.
+	rec := e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "parent_id": e.portugal})
+	status(t, rec, http.StatusOK)
+	got := decode[areas.Area](t, rec)
+	if got.ParentID == nil || *got.ParentID != e.portugal || len(got.Ancestors) != 1 || got.ChildCount != 1 {
+		t.Errorf("unexpected zone: %+v", got)
+	}
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha movido la zona «Municipio Movido» (Municipio) de «Madrid» a «Portugal»") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+	moved := decode[areas.Area](t, e.json("GET", areaPath(child), e.member.token, nil))
+	if len(moved.Ancestors) != 2 || moved.Ancestors[0].ID != e.portugal {
+		t.Errorf("a zone below it should have moved too: %+v", moved)
+	}
+
+	// Without parent_id it stays where it is; only the kind changes.
+	got = decode[areas.Area](t, e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "kind": "Otro"}))
+	if *got.ParentID != e.portugal || got.Kind != "Otro" {
+		t.Errorf("it should not have moved: %+v", got)
+	}
+	e.notifier.wait(t)
+
+	// Into itself, or below a zone that is below it.
+	errorCode(t, e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "parent_id": a.ID}), 409, "area_move_cycle")
+	errorCode(t, e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "parent_id": child.ID}), 409, "area_move_cycle")
+	errorCode(t, e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "parent_id": 987654321}), 400, "unknown_area")
+	errorCode(t, e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "parent_id": "uno"}), 400, "invalid_body")
+
+	// Under the name of another zone there; nothing changes, the rename included.
+	e.add(e.madrid, "Municipio Ocupado", "")
+	e.notifier.wait(t)
+	occupied := e.add(e.portugal, "Municipio Ocupado", "")
+	e.notifier.wait(t)
+	errorCode(t, e.json("PUT", areaPath(occupied), e.admin.token, map[string]any{"name": "Municipio Ocupado", "parent_id": e.madrid}), 409, "duplicate_area")
+	if still := decode[areas.Area](t, e.json("GET", areaPath(occupied), e.member.token, nil)); *still.ParentID != e.portugal {
+		t.Errorf("a refused move must change nothing: %+v", still)
+	}
+
+	// A country can be put below another zone, and a zone made a country with null.
+	status(t, e.json("PUT", fmt.Sprintf("/api/v1/areas/%d", e.portugal), e.admin.token, map[string]any{"name": "Portugal", "parent_id": e.spain}), http.StatusOK)
+	e.notifier.wait(t)
+	rec = e.json("PUT", path, e.admin.token, map[string]any{"name": a.Name, "kind": "País", "parent_id": nil})
+	status(t, rec, http.StatusOK)
+	got = decode[areas.Area](t, rec)
+	if got.ParentID != nil || len(got.Ancestors) != 0 {
+		t.Errorf("it should be a country now: %+v", got)
+	}
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "(Otro) por «Municipio Movido» (País)") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha sacado la zona «Municipio Movido» (País) de «Portugal»: ya no está dentro de ninguna otra") {
+		t.Errorf("unexpected notice: %q", msg)
+	}
+
+	// Members cannot.
+	errorCode(t, e.json("PUT", path, e.member.token, map[string]any{"name": a.Name, "parent_id": e.spain}), 403, "forbidden")
 }

@@ -21,8 +21,11 @@ function build() {
   dialog.innerHTML = `
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Zonas</h3>
-    <p class="subtitle">Busca una zona para cambiarle el nombre, fusionarla con otra, borrarla o añadir otra dentro.</p>
+    <p class="subtitle">Busca una zona para cambiarle el nombre, moverla, fusionarla con otra, borrarla o añadir otra dentro.</p>
     <p class="success-message" id="am-feedback" hidden></p>
+    <div class="panel-actions">
+      <button type="button" class="btn btn-secondary btn-small" id="am-add-country">Añadir un país</button>
+    </div>
     <div class="field-grid">
       ${areaPickerField({ id: 'am-search', label: 'Zona', required: false })}
     </div>
@@ -38,6 +41,16 @@ function build() {
           <input id="am-kind" name="kind" type="text" maxlength="60" required>
         </div>
         <button type="submit" class="btn btn-primary btn-small">Guardar</button>
+      </form>
+      <form id="am-move" class="inline-form">
+        ${areaPickerField({
+          id: 'am-move-parent',
+          label: 'Mover dentro de (en blanco: que no esté dentro de ninguna zona)',
+          required: false,
+          className: '',
+          placeholder: 'Escribe la zona en la que debe estar',
+        })}
+        <button type="submit" class="btn btn-secondary btn-small">Mover</button>
       </form>
       <form id="am-merge" class="inline-form">
         <div class="field">
@@ -57,6 +70,7 @@ function build() {
   const panel = document.getElementById('am-panel');
   const feedback = document.getElementById('am-feedback');
   const renameForm = document.getElementById('am-rename');
+  const moveForm = document.getElementById('am-move');
   const mergeForm = document.getElementById('am-merge');
   const mergeInto = document.getElementById('am-merge-into');
   const deleteButton = document.getElementById('am-delete');
@@ -89,6 +103,11 @@ function build() {
           ? 'Tiene lugares'
           : '';
     mergeForm.hidden = isCountry;
+    // Where it is now; changing it and sending the form moves the zone (with all that is below it).
+    const here = zone.id;
+    const parent = zone.parent_id ? await apiFetch(`/areas/${zone.parent_id}`) : null;
+    if (zone?.id !== here) return; // Another zone was chosen meanwhile.
+    moveParent.setArea(parent);
     if (!isCountry) {
       const mine = zone.id;
       const siblings = await apiFetch(`/areas?parent_id=${zone.parent_id}`);
@@ -111,6 +130,7 @@ function build() {
     }
   }
 
+  const moveParent = bindAreaPicker(moveForm.querySelector('[data-area-picker]'), {});
   const picker = bindAreaPicker(dialog.querySelector('[data-area-picker]'), {
     onChange: (area) => {
       say('');
@@ -135,6 +155,36 @@ function build() {
       picker.setArea(saved);
       zone = saved;
       say('Zona guardada.');
+      await render();
+    } catch (err) {
+      showError(err.message);
+    }
+  });
+
+  moveForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const target = moveParent.area;
+    if ((target?.id ?? null) === (zone.parent_id ?? null)) {
+      say('La zona ya está ahí.');
+      return;
+    }
+    const where = target
+      ? `dentro de «${target.name}» (${areaChain(target)})`
+      : 'fuera de todas las demás: pasará a ser una zona de primer nivel, como un país';
+    if (!confirm(`Se mueve «${zone.name}», con todo lo que tiene dentro, ${where}. ¿Mover?`))
+      return;
+    try {
+      const saved = await apiFetch(`/areas/${zone.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: zone.name,
+          kind: zone.kind,
+          parent_id: target ? target.id : null,
+        }),
+      });
+      picker.setArea(saved);
+      zone = saved;
+      say('Zona movida.');
       await render();
     } catch (err) {
       showError(err.message);
@@ -173,6 +223,17 @@ function build() {
     } catch (err) {
       showError(err.message);
     }
+  });
+
+  // Only the admin has this dialog, and only an admin may add a country.
+  document.getElementById('am-add-country').addEventListener('click', () => {
+    openAreaDialog({
+      allowRoot: true,
+      onSaved: async (saved) => {
+        picker.setArea(saved);
+        say('País añadido.');
+      },
+    });
   });
 
   document.getElementById('am-add').addEventListener('click', () => {

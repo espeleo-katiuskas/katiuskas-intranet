@@ -28,13 +28,13 @@ function areaChain(area) {
 }
 
 // The markup of the field. Put it in a form and give the element to bindAreaPicker.
-function areaPickerField({ id, label, required = true, className = 'span-2' }) {
+function areaPickerField({ id, label, required = true, className = 'span-2', placeholder }) {
   return `
     <div class="field area-picker ${className}" data-area-picker>
       <label for="${id}">${label}</label>
       <div class="area-combo">
         <input id="${id}" type="text" role="combobox" aria-expanded="false" aria-controls="${id}-results"
-          autocomplete="off" placeholder="Escribe un municipio, una provincia, un país…"${required ? ' required' : ''}>
+          autocomplete="off" placeholder="${placeholder ?? 'Escribe un municipio, una provincia, un país…'}"${required ? ' required' : ''}>
         <ul class="area-results" id="${id}-results" role="listbox" hidden></ul>
       </div>
       <p class="hint area-chosen" id="${id}-chosen"></p>
@@ -48,7 +48,7 @@ function bindAreaPicker(root, { onChange } = {}) {
   const input = root.querySelector('input');
   const list = root.querySelector('.area-results');
   const chosenLine = root.querySelector('.area-chosen');
-  const required = input.required;
+  let required = input.required;
   let current = null;
   let results = [];
   let active = -1;
@@ -56,7 +56,9 @@ function bindAreaPicker(root, { onChange } = {}) {
   let request = 0;
 
   function validity() {
-    input.setCustomValidity(required && !current ? 'Elige una zona de la lista.' : '');
+    // Text that is not a choice is never taken for "no zone", even when the field is optional.
+    const unchosen = required || input.value.trim() !== '';
+    input.setCustomValidity(unchosen && !current ? 'Elige una zona de la lista.' : '');
   }
 
   function close() {
@@ -162,6 +164,12 @@ function bindAreaPicker(root, { onChange } = {}) {
     },
     focus() {
       input.focus();
+    },
+    // Whether a zone has to be chosen (an optional field may stay empty).
+    setRequired(value) {
+      required = value;
+      input.required = value;
+      validity();
     },
   };
 }

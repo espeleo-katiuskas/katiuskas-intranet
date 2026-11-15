@@ -1,7 +1,8 @@
 // Package areas is the tree of zones of the world — states and, below each, whatever its
 // administrative divisions are — that says where a place is. Nothing here knows the levels: a zone has
 // a `kind`, the text that names its level ("Provincia"), and the roots are the states of the United
-// Nations, which are seeded. Anybody adds a zone below another; an admin renames, merges and deletes them.
+// Nations, which are seeded. Anybody adds a zone below another; an admin adds a country, and renames,
+// moves, merges and deletes zones.
 package areas
 
 import (
@@ -21,19 +22,22 @@ const (
 var (
 	ErrNotFound = errors.New("zone not found")
 	// ErrUnknownParent is a zone to be added below one that does not exist.
-	ErrUnknownParent  = errors.New("there is no such zone to add it to")
-	ErrParentRequired = errors.New("the zone it is added to is required")
-	ErrBlankName      = errors.New("the name of the zone is required")
-	ErrKindRequired   = errors.New("the kind of the zone is required: there is no other zone below this one to take it from")
-	ErrTooLong        = errors.New("the name or the kind of the zone is too long")
-	ErrDuplicate      = errors.New("there is already a zone with that name there")
-	ErrHasChildren    = errors.New("the zone has zones below it and cannot be deleted")
-	ErrInUse          = errors.New("the zone has places and cannot be deleted")
+	ErrUnknownParent = errors.New("there is no such zone to add it to")
+	// ErrRootAdminOnly is a zone with no zone above it (a country) asked for by somebody who is not admin.
+	ErrRootAdminOnly = errors.New("only an admin can add a zone that is not in another one (a country)")
+	ErrBlankName     = errors.New("the name of the zone is required")
+	ErrKindRequired  = errors.New("the kind of the zone is required: there is no other zone below this one to take it from")
+	ErrTooLong       = errors.New("the name or the kind of the zone is too long")
+	ErrDuplicate     = errors.New("there is already a zone with that name there")
+	ErrHasChildren   = errors.New("the zone has zones below it and cannot be deleted")
+	ErrInUse         = errors.New("the zone has places and cannot be deleted")
 	// ErrCountry means a country, which is a root of the tree, cannot be deleted or merged.
 	ErrCountry = errors.New("a country cannot be deleted or merged")
 	// ErrMergeParents means two zones are merged only if they are below the same one.
 	ErrMergeParents = errors.New("only two zones below the same one can be merged")
 	ErrMergeSelf    = errors.New("a zone cannot be merged into itself")
+	// ErrMoveCycle means a zone cannot be moved into itself or into one of the zones below it.
+	ErrMoveCycle = errors.New("a zone cannot be moved into itself or into a zone below it")
 )
 
 // Ref is a zone as a link of a chain: its ancestors, or the path of a place.
@@ -41,6 +45,16 @@ type Ref struct {
 	ID   int64  `json:"id"`
 	Kind string `json:"kind"`
 	Name string `json:"name"`
+}
+
+// CountryKind is the kind a zone that is in no other one has when none is given.
+const CountryKind = "País"
+
+// Move says where a zone goes when it is edited: Set is false when it stays where it is, and ID is nil
+// when it becomes a country (in no other zone).
+type Move struct {
+	Set bool
+	ID  *int64
 }
 
 // Area is a zone, with how many zones are directly below it and how many places are directly in it.

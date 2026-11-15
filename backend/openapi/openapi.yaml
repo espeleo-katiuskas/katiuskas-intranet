@@ -2626,11 +2626,13 @@ paths:
         "400": { description: "invalid_id — a parent_id that is not a number." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
-      summary: Add a zone below another
+      summary: Add a zone below another, or a country
       description: >
-        Any baseline role. The kind is that of the zones already below the parent unless it is given;
-        with none below it yet it has to be given. The name is unique below each zone ignoring case,
-        accents and punctuation.
+        Any baseline role to add a zone below another; without `parent_id` (or with 0) it adds a
+        country, a zone that is in no other one, which only an admin may. The kind is that of the zones
+        already below the parent unless it is given; with none below it yet it has to be given; a
+        country is a "País" unless it is said otherwise. The name is unique below each zone (among the
+        countries, for a country) ignoring case, accents and punctuation.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2643,7 +2645,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Area" }
-        "400": { description: "invalid_body, area_parent_required, unknown_area, area_name_required, area_kind_required or area_text_too_long." }
+        "400": { description: "invalid_body, unknown_area, area_name_required, area_kind_required or area_text_too_long." }
+        "403": { description: "area_root_admin_only — a country, by somebody who is not admin." }
         "409": { description: "duplicate_area." }
 
   /areas/{id}:
@@ -2661,8 +2664,11 @@ paths:
         "400": { description: "invalid_id." }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
-      summary: Rename a zone and change its kind
-      description: Admin only. A country can be renamed. Without a kind, it stays.
+      summary: Rename a zone, change its kind and move it
+      description: >
+        Admin only. A country can be renamed. Without a kind, it stays. `parent_id` moves the zone, with
+        all that is below it, below another zone, or makes it a country if it is null; if it is left out
+        the zone stays where it is. Nothing changes if any part is refused.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2675,9 +2681,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Area" }
-        "400": { description: "invalid_id, invalid_body, area_name_required or area_text_too_long." }
+        "400": { description: "invalid_id, invalid_body, area_name_required, area_text_too_long or unknown_area (the new parent)." }
         "403": { description: "Requires admin." }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_area (the name is taken where it goes) or area_move_cycle (into itself or into a zone below it)." }
         "409": { description: "duplicate_area." }
     delete:
       summary: Delete a zone
@@ -6319,9 +6326,9 @@ components:
 
     AreaInput:
       type: object
-      required: [parent_id, name]
+      required: [name]
       properties:
-        parent_id: { type: integer, description: "The zone it is added below." }
+        parent_id: { type: integer, nullable: true, description: "The zone it is added below; absent, null or 0 for a country (admin only)." }
         name: { type: string, maxLength: 200 }
         kind: { type: string, maxLength: 60, description: "The text that names its level (Provincia, Distrito…); the kind of its siblings if left out." }
 
@@ -6331,6 +6338,7 @@ components:
       properties:
         name: { type: string, maxLength: 200 }
         kind: { type: string, maxLength: 60, description: "It stays if left out." }
+        parent_id: { type: integer, nullable: true, description: "The zone it moves below; null makes it a country; left out, it stays where it is." }
 
     Area:
       type: object

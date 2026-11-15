@@ -115,7 +115,9 @@ const texts = {
   // Lugares
   place_area_required: 'Elige dónde está el lugar.',
   unknown_area: 'Esa zona no existe.',
-  area_parent_required: 'Elige dentro de qué zona se añade.',
+  area_root_admin_only:
+    'Solo un administrador puede añadir un país, una zona que no está dentro de otra.',
+  area_move_cycle: 'Una zona no se puede mover dentro de sí misma ni de una zona que tiene dentro.',
   area_name_required: 'Escribe el nombre de la zona.',
   area_kind_required:
     'Di qué tipo de zona es (Provincia, Distrito, Parroquia…): todavía no hay ninguna dentro de esa.',

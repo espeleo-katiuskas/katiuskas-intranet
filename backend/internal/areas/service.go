@@ -63,30 +63,34 @@ func cleanText(name, kind string) (string, string, string, error) {
 	return name, kind, normalized, nil
 }
 
-// Create adds a zone below another. Its kind is the one the zones below that one already have, unless
-// it is given; with none below it yet, it has to be given.
-func (s *Service) Create(ctx context.Context, parentID int64, name, kind string) (Area, error) {
-	if parentID <= 0 {
-		return Area{}, ErrParentRequired
-	}
+// Create adds a zone below another, or a country when parentID is nil. Its kind is the one the zones
+// below that one already have, unless it is given; with none below it yet, it has to be given; a country
+// is a "País" unless it is said otherwise.
+func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string) (Area, error) {
 	name, kind, normalized, err := cleanText(name, kind)
 	if err != nil {
 		return Area{}, err
 	}
-	if _, err := s.repo.Get(ctx, parentID); errors.Is(err, ErrNotFound) {
-		return Area{}, ErrUnknownParent
-	} else if err != nil {
-		return Area{}, err
-	}
-	if kind == "" {
-		if kind, err = s.repo.KindBelow(ctx, parentID); err != nil {
+	if parentID != nil {
+		if _, err := s.repo.Get(ctx, *parentID); errors.Is(err, ErrNotFound) {
+			return Area{}, ErrUnknownParent
+		} else if err != nil {
 			return Area{}, err
 		}
-		if kind == "" {
-			return Area{}, ErrKindRequired
+	}
+	if kind == "" {
+		if parentID == nil {
+			kind = CountryKind
+		} else {
+			if kind, err = s.repo.KindBelow(ctx, *parentID); err != nil {
+				return Area{}, err
+			}
+			if kind == "" {
+				return Area{}, ErrKindRequired
+			}
 		}
 	}
-	taken, err := s.repo.NameTaken(ctx, &parentID, normalized, 0)
+	taken, err := s.repo.NameTaken(ctx, parentID, normalized, 0)
 	if err != nil {
 		return Area{}, err
 	}
@@ -96,8 +100,9 @@ func (s *Service) Create(ctx context.Context, parentID int64, name, kind string)
 	return s.repo.Create(ctx, parentID, kind, name, normalized)
 }
 
-// Update renames a zone and, if a kind is given, changes it.
-func (s *Service) Update(ctx context.Context, id int64, name, kind string) (Area, error) {
+// Update renames a zone and, if a kind is given, changes it; with move.Set it also puts it below another
+// zone (or makes it a country). Nothing changes if any part is refused.
+func (s *Service) Update(ctx context.Context, id int64, name, kind string, move Move) (Area, error) {
 	current, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return Area{}, err
@@ -109,14 +114,28 @@ func (s *Service) Update(ctx context.Context, id int64, name, kind string) (Area
 	if kind == "" {
 		kind = current.Kind
 	}
-	taken, err := s.repo.NameTaken(ctx, current.ParentID, normalized, id)
+	target := current.ParentID
+	if move.Set {
+		target = move.ID
+		if target != nil {
+			if *target == id {
+				return Area{}, ErrMoveCycle
+			}
+			if _, err := s.repo.Get(ctx, *target); errors.Is(err, ErrNotFound) {
+				return Area{}, ErrUnknownParent
+			} else if err != nil {
+				return Area{}, err
+			}
+		}
+	}
+	taken, err := s.repo.NameTaken(ctx, target, normalized, id)
 	if err != nil {
 		return Area{}, err
 	}
 	if taken {
 		return Area{}, ErrDuplicate
 	}
-	return s.repo.Update(ctx, id, kind, name, normalized)
+	return s.repo.Update(ctx, id, kind, name, normalized, move)
 }
 
 // Delete removes a zone that has no zones below it and no places. A country is never deleted.
