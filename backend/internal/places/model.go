@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// Kind is the shape of a place, from its type: Cueva and Sima are caves and Cañón is a canyon, and
-// every other type an admin adds is general.
+// Kind is the shape of a place, from its type: Cavidad is a cave and Cañón is a canyon, and every other
+// type an admin adds is general.
 type Kind string
 
 const (
@@ -55,21 +55,36 @@ const (
 	MaxHorizontalLengthM = 2000000
 )
 
+// The most other names a place may have, and the longest of them, in characters.
+const (
+	MaxAltNames      = 20
+	MaxAltNameLength = 200
+)
+
 var (
 	ErrNotFound      = errors.New("place not found")
 	ErrPointNotFound = errors.New("point not found")
 	ErrTypeNotFound  = errors.New("type of place not found")
 	// ErrUnknownType is a place given a type that does not exist.
-	ErrUnknownType      = errors.New("there is no such type of place")
-	ErrTypeRequired     = errors.New("the type of the place is required")
-	ErrBlankName        = errors.New("the name of the place is required")
-	ErrAreaRequired     = errors.New("the zone of the place is required")
-	ErrUnknownArea      = errors.New("there is no such zone")
-	ErrInvalidState     = errors.New("the state must be open, permit_required, tourist or closed")
-	ErrInvalidCoords    = errors.New("the coordinates are not valid: latitude -90 to 90 and longitude -180 to 180")
-	ErrInvalidAltitude  = errors.New("the altitude is not valid: -500 to 9000 metres above sea level")
-	ErrInvalidMeasure   = errors.New("a measure of the place is not valid")
-	ErrFieldsForKind    = errors.New("the depth, the horizontal length and the geology are only for caves, and the technical sheet for caves and canyons")
+	ErrUnknownType     = errors.New("there is no such type of place")
+	ErrTypeRequired    = errors.New("the type of the place is required")
+	ErrBlankName       = errors.New("the name of the place is required")
+	ErrAreaRequired    = errors.New("the zone of the place is required")
+	ErrUnknownArea     = errors.New("there is no such zone")
+	ErrInvalidState    = errors.New("the state must be open, permit_required, tourist or closed")
+	ErrInvalidCoords   = errors.New("the coordinates are not valid: latitude -90 to 90 and longitude -180 to 180")
+	ErrInvalidAltitude = errors.New("the altitude is not valid: -500 to 9000 metres above sea level")
+	ErrInvalidMeasure  = errors.New("a measure of the place is not valid")
+	ErrFieldsForKind   = errors.New("the subtype, the depth, the horizontal length and the geology are only for cavities, the technical sheet for cavities and canyons, and the state for the types that have one")
+	// ErrSubtypeRequired is a cavity given no subtype (cueva, sima, torca...).
+	ErrSubtypeRequired  = errors.New("the subtype of a cavity is required")
+	ErrUnknownSubtype   = errors.New("there is no such subtype")
+	ErrSubtypeNotFound  = errors.New("subtype not found")
+	ErrBlankSubtypeName = errors.New("the name of the subtype is required")
+	ErrDuplicateSubtype = errors.New("there is already a subtype with that name")
+	ErrSubtypeInUse     = errors.New("the subtype has places and cannot be deleted")
+	// ErrInvalidAltNames is a list of other names with too many, or one too long.
+	ErrInvalidAltNames  = errors.New("the other names are at most 20, of at most 200 characters each")
 	ErrUnknownGeology   = errors.New("there is no such geology")
 	ErrGeologyNotFound  = errors.New("geology not found")
 	ErrBlankGeologyName = errors.New("the name of the geology is required")
@@ -87,9 +102,19 @@ var (
 
 // Type is a type of place, with how many places have it.
 type Type struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Kind Kind   `json:"kind"`
+	// HasState says whether the places of the type have a state (open, permit_required...): Cavidad, Cañón
+	// and Vía ferrata do, and what an admin adds may or may not.
+	HasState   bool `json:"has_state"`
+	PlaceCount int  `json:"place_count"`
+}
+
+// Subtype is what a cavity is (cueva, sima, torca, mina, abrigo…), with how many places have it.
+type Subtype struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
-	Kind       Kind   `json:"kind"`
 	PlaceCount int    `json:"place_count"`
 }
 
@@ -103,13 +128,18 @@ type Geology struct {
 // ListItem is a place as the listing gives it: what the table and the filters need, without the long
 // texts and the other points.
 type ListItem struct {
-	ID       int64   `json:"id"`
-	TypeID   int64   `json:"type_id"`
-	TypeName string  `json:"type_name"`
-	Kind     Kind    `json:"kind"`
-	Name     string  `json:"name"`
-	AltNames *string `json:"alt_names,omitempty"`
-	State    State   `json:"state"`
+	ID       int64  `json:"id"`
+	TypeID   int64  `json:"type_id"`
+	TypeName string `json:"type_name"`
+	Kind     Kind   `json:"kind"`
+	Name     string `json:"name"`
+	// AltNames are the other names it is known by, always a list (empty if there are none).
+	AltNames []string `json:"alt_names"`
+	// State is how it can be visited; absent for a place whose type has none.
+	State State `json:"state,omitempty"`
+	// SubtypeID and Subtype (its name) say what a cavity is: cueva, sima…
+	SubtypeID *int64  `json:"subtype_id,omitempty"`
+	Subtype   *string `json:"subtype,omitempty"`
 	// AreaID is the most specific zone it is in; AreaIDs are that zone and the ones it is in, the
 	// country first, so that a list can be filtered by any of them; Where says them, from the most
 	// specific one to the country: "Valdemanco, Madrid, Comunidad de Madrid, España".
@@ -157,8 +187,9 @@ type Place struct {
 type Input struct {
 	TypeID            int64
 	Name              string
-	AltNames          *string
+	AltNames          []string
 	State             string
+	SubtypeID         *int64
 	AreaID            int64
 	Lat               *float64
 	Lon               *float64

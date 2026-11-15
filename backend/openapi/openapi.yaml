@@ -2334,8 +2334,9 @@ paths:
     get:
       summary: List the types of place
       description: >
-        Any baseline role. Cueva and Sima (kind cave), Cañón (kind canyon) and the general types an admin
-        has added, in the order they were added, each with how many places have it.
+        Any baseline role. Cavidad (kind cave), Cañón (kind canyon) and the general types an admin has
+        added, each with whether its places have a state and how many places have it; the cavities first,
+        then the canyons and then the general ones, each in the order they were added.
       security: [{ bearerAuth: [] }]
       responses:
         "200":
@@ -2348,8 +2349,8 @@ paths:
     post:
       summary: Add a type of place
       description: >
-        Admin only. It is a general type: the types of caves and canyons are fixed. The name is unique
-        ignoring case.
+        Admin only. It is a general type: Cavidad and Cañón are fixed. The name is unique ignoring case.
+        Whether its places have a state (`has_state`, false if left out) is said now and does not change.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -2398,6 +2399,73 @@ paths:
         "403": { description: "Requires admin." }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: "fixed_place_type, or place_type_in_use — a place has it." }
+
+  /places/subtypes:
+    get:
+      summary: List the subtypes of the cavities
+      description: >
+        Any baseline role. What a cavity is (Cueva, Sima, Torca, Mina, Abrigo and whatever has been added), in
+        the order they were added, each with how many places have it.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The subtypes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlaceSubtype" }
+    post:
+      summary: Add a subtype
+      description: Admin only. The name is unique ignoring case.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceSubtypeInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceSubtype" }
+        "400": { description: "invalid_body or subtype_name_required." }
+        "403": { description: "Requires admin." }
+        "409": { description: "duplicate_subtype." }
+
+  /places/subtypes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Rename a subtype
+      description: Admin only. None is fixed.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceSubtypeInput" }
+      responses:
+        "200":
+          description: The subtype as renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaceSubtype" }
+        "400": { description: "invalid_id, invalid_body or subtype_name_required." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "duplicate_subtype." }
+    delete:
+      summary: Delete a subtype
+      description: Admin only. Only one no place has.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Deleted }
+        "400": { description: "invalid_id." }
+        "403": { description: "Requires admin." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "subtype_in_use — a place has it." }
 
   /places/geologies:
     get:
@@ -6456,14 +6524,29 @@ components:
       required: [name]
       properties:
         name: { type: string }
+        has_state: { type: boolean, description: "Only when adding a type: whether its places have a state. Ignored when renaming." }
 
     PlaceType:
       type: object
       properties:
         id: { type: integer }
         name: { type: string }
-        kind: { type: string, enum: [cave, canyon, general], description: "Cueva and Sima are cave, Cañón is canyon, every type an admin adds is general." }
+        kind: { type: string, enum: [cave, canyon, general], description: "Cavidad is cave, Cañón is canyon, every type an admin adds is general." }
+        has_state: { type: boolean, description: "Whether the places of the type have a state (Cavidad, Cañón and Vía ferrata do)." }
         place_count: { type: integer, description: "How many places have this type." }
+
+    PlaceSubtypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    PlaceSubtype:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        place_count: { type: integer, description: "How many places have this subtype." }
 
     PlaceGeologyInput:
       type: object
@@ -6484,18 +6567,19 @@ components:
       properties:
         type_id: { type: integer, description: "A type of GET /places/types." }
         name: { type: string }
-        alt_names: { type: string, nullable: true, description: "Other names it is known by." }
-        state: { type: string, enum: [open, permit_required, tourist, closed], default: open, description: "How it can be visited: freely, only with a permit, as a paid attraction, or not at all." }
+        alt_names: { type: array, items: { type: string, maxLength: 200 }, maxItems: 20, description: "Other names it is known by: trimmed, without blanks or repeats (ignoring case)." }
+        state: { type: string, enum: [open, permit_required, tourist, closed], default: open, description: "How it can be visited: freely, only with a permit, as a paid attraction, or not at all. Only for a type that has a state (has_state); refused for any other." }
+        subtype_id: { type: integer, nullable: true, description: "What a cavity is (of GET /places/subtypes). Required for a place whose type is a cave (Cavidad), refused for any other." }
         area_id: { type: integer, description: "The most specific zone it is in (of GET /areas): at least the country." }
         lat: { type: number, minimum: -90, maximum: 90, description: "WGS84 latitude of the main coordinate, in degrees." }
         lon: { type: number, minimum: -180, maximum: 180, description: "WGS84 longitude of the main coordinate, in degrees." }
         altitude_m: { type: integer, minimum: -500, maximum: 9000, nullable: true, description: "Altitude of the main coordinate, in metres above sea level." }
         access: { type: string, nullable: true, description: "How to get there." }
         description: { type: string, nullable: true }
-        depth_m: { type: integer, minimum: 0, maximum: 20000, nullable: true, description: "Only for a place whose type is a cave." }
-        horizontal_length_m: { type: integer, minimum: 0, maximum: 2000000, nullable: true, description: "Only for a place whose type is a cave." }
-        geology_id: { type: integer, nullable: true, description: "What a cave is formed in (of GET /places/geologies). Only for a place whose type is a cave." }
-        technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cave or a canyon." }
+        depth_m: { type: integer, minimum: 0, maximum: 20000, nullable: true, description: "Only for a cavity (a place whose type is of the cave kind)." }
+        horizontal_length_m: { type: integer, minimum: 0, maximum: 2000000, nullable: true, description: "Only for a cavity (a place whose type is of the cave kind)." }
+        geology_id: { type: integer, nullable: true, description: "What a cave is formed in (of GET /places/geologies). Only for a cavity." }
+        technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cavity or a canyon." }
 
     PlaceListItem:
       type: object
@@ -6505,8 +6589,10 @@ components:
         type_name: { type: string }
         kind: { type: string, enum: [cave, canyon, general] }
         name: { type: string }
-        alt_names: { type: string }
-        state: { type: string, enum: [open, permit_required, tourist, closed] }
+        alt_names: { type: array, items: { type: string }, description: "The other names, empty if there are none." }
+        state: { type: string, enum: [open, permit_required, tourist, closed], description: "Absent if the type of the place has none." }
+        subtype_id: { type: integer, description: "Only a cavity." }
+        subtype: { type: string, description: "The name of the subtype of a cavity." }
         area_id: { type: integer, description: "The most specific zone it is in." }
         area_ids: { type: array, items: { type: integer }, description: "That zone and the ones it is in, the country first." }
         where: { type: string, description: "The names of those zones from the most specific to the country: Valdemanco, Madrid, Comunidad de Madrid, España." }

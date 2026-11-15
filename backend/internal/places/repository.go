@@ -36,7 +36,8 @@ func isForeignKeyViolation(err error) bool {
 // ----- places -----
 
 const listColumns = `
-	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, p.state, p.area_id, w.ids, w.where_text,
+	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name,
+	p.area_id, w.ids, w.where_text,
 	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
 
 // listFrom is a place with its type and, through the tree of zones, the ids and the names of the zone it
@@ -45,6 +46,7 @@ const listFrom = `
 	FROM places p
 	JOIN place_types t ON t.id = p.type_id
 	LEFT JOIN place_geologies g ON g.id = p.geology_id
+	LEFT JOIN place_subtypes st ON st.id = p.subtype_id
 	JOIN LATERAL (
 		WITH RECURSIVE up AS (
 			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM areas a WHERE a.id = p.area_id
@@ -56,8 +58,8 @@ const listFrom = `
 
 func (it *ListItem) scanTargets() []any {
 	return []any{
-		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.AreaID,
-		&it.AreaIDs, &it.Where, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
+		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
+		&it.Subtype, &it.AreaID, &it.AreaIDs, &it.Where, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
 		&it.Geology,
 	}
 }
@@ -76,6 +78,9 @@ func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 		var it ListItem
 		if err := rows.Scan(it.scanTargets()...); err != nil {
 			return nil, err
+		}
+		if it.AltNames == nil {
+			it.AltNames = []string{}
 		}
 		list = append(list, it)
 	}
@@ -98,6 +103,9 @@ func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	}
 	if err != nil {
 		return Place{}, err
+	}
+	if p.AltNames == nil {
+		p.AltNames = []string{}
 	}
 	if p.AreaPath, err = r.areaPath(ctx, p.AreaID); err != nil {
 		return Place{}, err
@@ -140,15 +148,17 @@ func (r *Repository) AreaExists(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
-func (r *Repository) CreatePlace(ctx context.Context, userID int64, kind Kind, in Input) (Place, error) {
+func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in Input) (Place, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO places (type_id, kind, name, alt_names, state, area_id, lat, lon, altitude_m, access,
-			description, depth_m, horizontal_length_m, geology_id, technical_sheet, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, area_id, lat, lon,
+			altitude_m, access, description, depth_m, horizontal_length_m, geology_id, technical_sheet,
+			created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
 		RETURNING id
-	`, in.TypeID, kind, in.Name, in.AltNames, in.State, in.AreaID, *in.Lat, *in.Lon, in.AltitudeM, in.Access,
-		in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID).Scan(&id)
+	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.AreaID, *in.Lat, *in.Lon,
+		in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID,
+		in.TechnicalSheet, userID).Scan(&id)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}
@@ -159,14 +169,16 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, kind Kind, i
 }
 
 // UpdatePlace replaces every field of a place (and who changed it, and when).
-func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, kind Kind, in Input) (Place, error) {
+func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, t Type, in Input) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE places SET type_id = $2, kind = $3, name = $4, alt_names = $5, state = $6, area_id = $7,
-			lat = $8, lon = $9, altitude_m = $10, access = $11, description = $12, depth_m = $13,
-			horizontal_length_m = $14, geology_id = $15, technical_sheet = $16, updated_by = $17, updated_at = now()
+		UPDATE places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
+			state = NULLIF($7, ''), subtype_id = $8, area_id = $9, lat = $10, lon = $11, altitude_m = $12,
+			access = $13, description = $14, depth_m = $15, horizontal_length_m = $16, geology_id = $17,
+			technical_sheet = $18, updated_by = $19, updated_at = now()
 		WHERE id = $1
-	`, id, in.TypeID, kind, in.Name, in.AltNames, in.State, in.AreaID, *in.Lat, *in.Lon, in.AltitudeM, in.Access,
-		in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID)
+	`, id, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.AreaID, *in.Lat,
+		*in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM, in.GeologyID,
+		in.TechnicalSheet, userID)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}
@@ -347,12 +359,13 @@ func (r *Repository) DeletePoint(ctx context.Context, placeID, id, userID int64)
 // ----- types -----
 
 const typeSelect = `
-	SELECT t.id, t.name, t.kind, (SELECT count(*) FROM places p WHERE p.type_id = t.id)
+	SELECT t.id, t.name, t.kind, t.has_state, (SELECT count(*) FROM places p WHERE p.type_id = t.id)
 	FROM place_types t`
 
-// ListTypes is every type with how many places have it, in the order they were added.
+// ListTypes is every type with how many places have it: the cavities, the canyons and then the general
+// ones, each in the order they were added.
 func (r *Repository) ListTypes(ctx context.Context) ([]Type, error) {
-	rows, err := r.pool.Query(ctx, typeSelect+` ORDER BY t.id`)
+	rows, err := r.pool.Query(ctx, typeSelect+` ORDER BY CASE t.kind WHEN 'cave' THEN 0 WHEN 'canyon' THEN 1 ELSE 2 END, t.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +373,7 @@ func (r *Repository) ListTypes(ctx context.Context) ([]Type, error) {
 	list := []Type{}
 	for rows.Next() {
 		var t Type
-		if err := rows.Scan(&t.ID, &t.Name, &t.Kind, &t.PlaceCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Kind, &t.HasState, &t.PlaceCount); err != nil {
 			return nil, err
 		}
 		list = append(list, t)
@@ -370,7 +383,7 @@ func (r *Repository) ListTypes(ctx context.Context) ([]Type, error) {
 
 func (r *Repository) GetType(ctx context.Context, id int64) (Type, error) {
 	var t Type
-	err := r.pool.QueryRow(ctx, typeSelect+` WHERE t.id = $1`, id).Scan(&t.ID, &t.Name, &t.Kind, &t.PlaceCount)
+	err := r.pool.QueryRow(ctx, typeSelect+` WHERE t.id = $1`, id).Scan(&t.ID, &t.Name, &t.Kind, &t.HasState, &t.PlaceCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Type{}, ErrTypeNotFound
 	}
@@ -380,17 +393,19 @@ func (r *Repository) GetType(ctx context.Context, id int64) (Type, error) {
 // TypeNamed is the type with that name, ignoring case, or ErrTypeNotFound.
 func (r *Repository) TypeNamed(ctx context.Context, name string) (Type, error) {
 	var t Type
-	err := r.pool.QueryRow(ctx, typeSelect+` WHERE lower(t.name) = lower($1)`, name).Scan(&t.ID, &t.Name, &t.Kind, &t.PlaceCount)
+	err := r.pool.QueryRow(ctx, typeSelect+` WHERE lower(t.name) = lower($1)`, name).Scan(&t.ID, &t.Name, &t.Kind, &t.HasState, &t.PlaceCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Type{}, ErrTypeNotFound
 	}
 	return t, err
 }
 
-// CreateType adds a general type: the types of the other kinds are fixed.
-func (r *Repository) CreateType(ctx context.Context, name string) (Type, error) {
+// CreateType adds a general type: the types of the other kinds are fixed. Whether its places have a
+// state is said now and does not change.
+func (r *Repository) CreateType(ctx context.Context, name string, hasState bool) (Type, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `INSERT INTO place_types (name, kind) VALUES ($1, 'general') RETURNING id`, name).Scan(&id)
+	err := r.pool.QueryRow(ctx, `INSERT INTO place_types (name, kind, has_state) VALUES ($1, 'general', $2) RETURNING id`,
+		name, hasState).Scan(&id)
 	if isUniqueViolation(err) {
 		return Type{}, ErrDuplicateType
 	}
@@ -509,6 +524,90 @@ func (r *Repository) DeleteGeology(ctx context.Context, id int64) error {
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrGeologyNotFound
+	}
+	return nil
+}
+
+// ----- subtypes -----
+
+const subtypeSelect = `
+	SELECT g.id, g.name, (SELECT count(*) FROM places p WHERE p.subtype_id = g.id)
+	FROM place_subtypes g`
+
+// ListSubtypes is every subtype with how many places have it, in the order they were added.
+func (r *Repository) ListSubtypes(ctx context.Context) ([]Subtype, error) {
+	rows, err := r.pool.Query(ctx, subtypeSelect+` ORDER BY g.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []Subtype{}
+	for rows.Next() {
+		var g Subtype
+		if err := rows.Scan(&g.ID, &g.Name, &g.PlaceCount); err != nil {
+			return nil, err
+		}
+		list = append(list, g)
+	}
+	return list, rows.Err()
+}
+
+func (r *Repository) GetSubtype(ctx context.Context, id int64) (Subtype, error) {
+	var g Subtype
+	err := r.pool.QueryRow(ctx, subtypeSelect+` WHERE g.id = $1`, id).Scan(&g.ID, &g.Name, &g.PlaceCount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Subtype{}, ErrSubtypeNotFound
+	}
+	return g, err
+}
+
+// SubtypeNamed is the subtype with that name, ignoring case, or ErrSubtypeNotFound.
+func (r *Repository) SubtypeNamed(ctx context.Context, name string) (Subtype, error) {
+	var g Subtype
+	err := r.pool.QueryRow(ctx, subtypeSelect+` WHERE lower(g.name) = lower($1)`, name).Scan(&g.ID, &g.Name, &g.PlaceCount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Subtype{}, ErrSubtypeNotFound
+	}
+	return g, err
+}
+
+func (r *Repository) CreateSubtype(ctx context.Context, name string) (Subtype, error) {
+	var id int64
+	err := r.pool.QueryRow(ctx, `INSERT INTO place_subtypes (name) VALUES ($1) RETURNING id`, name).Scan(&id)
+	if isUniqueViolation(err) {
+		return Subtype{}, ErrDuplicateSubtype
+	}
+	if err != nil {
+		return Subtype{}, err
+	}
+	return r.GetSubtype(ctx, id)
+}
+
+func (r *Repository) RenameSubtype(ctx context.Context, id int64, name string) (Subtype, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE place_subtypes SET name = $2 WHERE id = $1`, id, name)
+	if isUniqueViolation(err) {
+		return Subtype{}, ErrDuplicateSubtype
+	}
+	if err != nil {
+		return Subtype{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return Subtype{}, ErrSubtypeNotFound
+	}
+	return r.GetSubtype(ctx, id)
+}
+
+// DeleteSubtype removes a subtype no place has: the foreign key refuses otherwise.
+func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM place_subtypes WHERE id = $1`, id)
+	if isForeignKeyViolation(err) {
+		return ErrSubtypeInUse
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrSubtypeNotFound
 	}
 	return nil
 }

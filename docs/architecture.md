@@ -864,12 +864,14 @@ place keeps who created it and who changed it last (the place or any of its poin
 
 **Rules**
 
-- A place has a type from `place_types`. Its **kind** decides what it has: only a cave (Cueva, Sima)
-  has a depth, a horizontal length and a **geology** (what it is formed in: Caliza, Yeso, Hielo,
-  Lava… a catalogue an admin edits, optional, with more kinds than anybody lists at once), and only
-  a cave or a canyon has a technical sheet (what has to be installed to go through it). Cueva, Sima
-  and Cañón are fixed; an admin adds, renames and deletes the general types (vía ferrata, refugio…),
-  and one that has places is not deleted.
+- A place has a type from `place_types`. Its **kind** decides what it has: only a cavity (the type
+  Cavidad) has a **subtype** (cueva, sima, torca, mina, abrigo… a catalogue an admin edits, and
+  required), a depth, a horizontal length and a **geology** (what it is formed in: Caliza, Yeso,
+  Hielo, Lava… another catalogue an admin edits, optional, with more kinds than anybody lists at
+  once), and only a cavity or a canyon has a technical sheet (what has to be installed to go through
+  it). Cavidad and Cañón are fixed; an admin adds, renames and deletes the general types (vía
+  ferrata, refugio…), and one that has places is not deleted. A place can have any number of **other
+  names**, a list.
 - A place says **where it is** with a zone from the tree of `areas`: the most specific one it is
   known to be in (a municipality, a province or just the country), so its province, community and
   country are the zones it is in. The zones are the 195 states of the United Nations and, for Spain,
@@ -883,9 +885,11 @@ place keeps who created it and who changed it last (the place or any of its poin
   above sea level; the form also accepts UTM and converts it.
 - The state says under which conditions a place can be visited: `open` (freely), `permit_required`
   (a permit has to be asked for first), `tourist` (run as an attraction, to be paid for) or
-  `closed`. It is a label and a filter: it does not stop anything else. What is missing to go
-  through a cave or a canyon is the technical sheet's business, not the state's. Depth, length,
-  access and description are all optional.
+  `closed`. Only the types that have a state give one to their places (Cavidad, Cañón and Vía
+  ferrata do; Refugio and Otro do not, and an admin chooses when adding another type). It is a label
+  and a filter: it does not stop anything else. What is missing to go through a cavity or a canyon
+  is the technical sheet's business, not the state's. Depth, length, access and description are all
+  optional.
 - Anybody changes a place or its points; only admin and board delete a place (with its points), as a
   place is the work of several people.
 - What is not there yet (phase 1): the files (photos, texts, documents), the map of all the places,

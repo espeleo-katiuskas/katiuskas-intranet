@@ -322,7 +322,8 @@ here too, as `/users/{login}/activities` is, and lists the activities of a place
 all of them (every activity is readable by anybody who signs in). Deleting an activity deletes its
 links, and a place with links is not deleted (`places.Repository.DeletePlace`, 409
 `place_has_activities`): what was done there stays. At most `MaxPlaces` (30) per activity, repeated
-ids counting once.
+ids counting once. The `type_name` of a place there is its subtype when it has one ("Sima") and its
+type otherwise.
 
 ## Activity resources (memoria)
 
@@ -884,16 +885,38 @@ lookup for them). Only admin and board delete a place, and only admin manages th
 change is announced on Telegram (`httpapi.NotifyAsync`), a place edit with the `DiffFields` of what
 changed (`placeAuditFields`) as the other resources do.
 
-**Kinds.** A type has a `kind` (`cave`, `canyon` or `general`) that cannot change; Cueva and Sima
-are `cave`, Cañón is `canyon`, and a type an admin adds is always `general`, so those three are
-fixed (409 `fixed_place_type` on renaming or deleting them). `places.kind` repeats the kind of the
-type, tied to it by the foreign key `(type_id, kind)`, so that two `CHECK`s can say what each kind
+**Kinds.** A type has a `kind` (`cave`, `canyon` or `general`) that cannot change; Cavidad is
+`cave`, Cañón is `canyon`, and a type an admin adds is always `general`, so those two are fixed (409
+`fixed_place_type` on renaming or deleting them). `places.kind` repeats the kind of the type, tied
+to it by the foreign key `(type_id, kind, has_state)`, so that the `CHECK`s can say what each kind
 may have (`measures_only_for_caves`, `geology_only_for_caves`,
-`technical_sheet_only_for_caves_and_canyons`), the way
-`material_items` does. `Service.kindOf` reads the type before the statement and refuses a field that
-does not fit (400 `invalid_place_fields`), because a violated `CHECK` would abort the transaction
-the tests run in (the constraints stay as the backstop); an edit may change the type to any other,
-and `UpdatePlace` writes the new kind with it.
+`technical_sheet_only_for_caves_and_canyons`, and `subtype_for_caves`, which also makes the subtype
+required), the way `material_items` does. `Service.typeOf` reads the type before the statement and
+refuses a field that does not fit (400 `invalid_place_fields`) or a cavity with no subtype (400
+`place_subtype_required`), because a violated `CHECK` would abort the transaction the tests run in
+(the constraints stay as the backstop); an edit may change the type to any other, and `UpdatePlace`
+writes the new kind and `has_state` with it.
+
+**Subtypes.** What a cavity is (cueva, sima, torca, mina, abrigo…) is a row of `place_subtypes`, a
+catalogue an admin edits (`/places/subtypes`, a copy of the geologies in shape): there is no end to
+the names, so none is fixed and nothing in the code depends on any. It is required for a cavity and
+refused for any other place, and one that has places is not deleted (409 `subtype_in_use`). The
+listing and the place carry its id and its name, which is how the pages call a cavity ("Sima", not
+"Cavidad"); migration `00066` turned the old types Cueva and Sima into Cavidad with that subtype.
+
+**State.** The state (`open`, `permit_required`, `tourist`, `closed`) only means something for some
+places, so `place_types.has_state` says it, fixed when the type is created like the kind is (`POST
+/places/types` takes `has_state`; Cavidad, Cañón and Vía ferrata have it). `places.has_state`
+repeats it, and `state_for_types_with_state` ties it to there being a state. `typeOf` gives `open`
+when the type has one and none is said, and refuses one for a type that has none (400
+`invalid_place_fields`); the API leaves `state` out of the JSON for those places (`COALESCE(state,
+'')` and `omitempty`), and the pages show no badge, no filter match and a grey dot on the map.
+
+**Other names.** `alt_names` is an array of text, not a table: a name has nothing else to say, and
+the search only needs to read them. `Service.cleanAltNames` trims them, drops the blank ones and the
+repeats (ignoring case, keeping the first) and refuses more than `MaxAltNames` (20) or one over
+`MaxAltNameLength` (200) with 400 `invalid_alt_names`; the repository always gives a list, never
+null, and the edit notice diffs it (`AltNames`).
 
 **Coordinates.** Latitude and longitude are `double precision` columns of WGS84 degrees, with
 `CHECK` ranges and no PostGIS (a package the production host would have to install for a bounding

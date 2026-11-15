@@ -35,7 +35,9 @@ const POINT_KIND_LABELS = {
   other: 'Otro',
 };
 
+// The badge of a state, or nothing for a place whose type has none.
 function stateBadge(state) {
+  if (!state) return '';
   return `<span class="badge ${STATE_BADGES[state] ?? ''}">${escapeHtml(STATE_LABELS[state] ?? state)}</span>`;
 }
 
@@ -43,6 +45,17 @@ function stateBadge(state) {
 // type has (cave, canyon or general).
 function loadTypes() {
   return apiFetch('/places/types');
+}
+
+// What a cavity is (cueva, sima, torca, mina, abrigo…), with how many places have each.
+function loadSubtypes() {
+  return apiFetch('/places/subtypes');
+}
+
+// What kind of place it is, as people say it: a cavity by its subtype ("Sima"), any other place by
+// its type.
+function placeTypeLabel(place) {
+  return place.subtype ?? place.type_name;
 }
 
 // What a cave can be formed in (limestone, gypsum, ice, lava…), with how many places have each.
@@ -74,8 +87,10 @@ function measuresText(place) {
 export {
   coordinatesHtml,
   loadGeologies,
+  loadSubtypes,
   loadTypes,
   measuresText,
+  placeTypeLabel,
   POINT_KIND_LABELS,
   STATE_HELP,
   STATE_LABELS,

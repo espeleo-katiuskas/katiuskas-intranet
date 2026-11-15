@@ -2379,3 +2379,13 @@ dialog.modal .area-results {
   flex: 1 1 18rem;
   max-width: 32rem;
 }
+
+/* The other names of a place, as chips with the field to add one under them. */
+.names-chips {
+  margin-bottom: 4px;
+}
+
+.names-list .role-add-row input {
+  flex: 1 1 14rem;
+  max-width: 28rem;
+}

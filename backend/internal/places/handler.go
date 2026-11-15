@@ -46,6 +46,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/places/geologies/{id}", a.Protect(h.renameGeology, "admin"))
 	mux.Handle("DELETE /api/v1/places/geologies/{id}", a.Protect(h.deleteGeology, "admin"))
 
+	mux.Handle("GET /api/v1/places/subtypes", a.Protect(h.listSubtypes))
+	mux.Handle("POST /api/v1/places/subtypes", a.Protect(h.createSubtype, "admin"))
+	mux.Handle("PUT /api/v1/places/subtypes/{id}", a.Protect(h.renameSubtype, "admin"))
+	mux.Handle("DELETE /api/v1/places/subtypes/{id}", a.Protect(h.deleteSubtype, "admin"))
+
 	mux.Handle("GET /api/v1/places", a.Protect(h.list))
 	mux.Handle("POST /api/v1/places", a.Protect(h.create))
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.get))
@@ -100,6 +105,13 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrBlankGeologyName, http.StatusBadRequest, "geology_name_required"},
 		{ErrDuplicateGeology, http.StatusConflict, "duplicate_geology"},
 		{ErrGeologyInUse, http.StatusConflict, "geology_in_use"},
+		{ErrSubtypeNotFound, http.StatusNotFound, "not_found"},
+		{ErrUnknownSubtype, http.StatusBadRequest, "unknown_subtype"},
+		{ErrSubtypeRequired, http.StatusBadRequest, "place_subtype_required"},
+		{ErrBlankSubtypeName, http.StatusBadRequest, "subtype_name_required"},
+		{ErrDuplicateSubtype, http.StatusConflict, "duplicate_subtype"},
+		{ErrSubtypeInUse, http.StatusConflict, "subtype_in_use"},
+		{ErrInvalidAltNames, http.StatusBadRequest, "invalid_alt_names"},
 		{ErrInvalidState, http.StatusBadRequest, "invalid_place_state"},
 		{ErrInvalidCoords, http.StatusBadRequest, "invalid_coordinates"},
 		{ErrInvalidAltitude, http.StatusBadRequest, "invalid_altitude"},
@@ -134,6 +146,8 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 
 type typeBody struct {
 	Name string `json:"name"`
+	// HasState is for a new type only: whether its places have a state. It does not change afterwards.
+	HasState bool `json:"has_state"`
 }
 
 func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +165,7 @@ func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	t, err := h.service.CreateType(r.Context(), body.Name)
+	t, err := h.service.CreateType(r.Context(), body.Name, body.HasState)
 	if err != nil {
 		writeError(w, err, "could not create the type")
 		return
@@ -264,14 +278,80 @@ func (h *Handler) deleteGeology(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ----- subtypes -----
+
+func (h *Handler) listSubtypes(w http.ResponseWriter, r *http.Request) {
+	list, err := h.service.ListSubtypes(r.Context())
+	if err != nil {
+		writeError(w, err, "could not list the subtypes")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) createSubtype(w http.ResponseWriter, r *http.Request) {
+	var body typeBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	g, err := h.service.CreateSubtype(r.Context(), body.Name)
+	if err != nil {
+		writeError(w, err, "could not create the subtype")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🧭 %s ha añadido el subtipo de cavidad «%s».", h.actorLogin(r.Context()), g.Name))
+	httpapi.WriteJSON(w, http.StatusCreated, g)
+}
+
+func (h *Handler) renameSubtype(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body typeBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	before, beforeErr := h.service.GetSubtype(r.Context(), id)
+	g, err := h.service.RenameSubtype(r.Context(), id, body.Name)
+	if err != nil {
+		writeError(w, err, "could not rename the subtype")
+		return
+	}
+	if beforeErr == nil && before.Name != g.Name {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado el subtipo de cavidad «%s» por «%s».",
+			h.actorLogin(r.Context()), before.Name, g.Name))
+	}
+	httpapi.WriteJSON(w, http.StatusOK, g)
+}
+
+func (h *Handler) deleteSubtype(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	g, getErr := h.service.GetSubtype(r.Context(), id)
+	if err := h.service.DeleteSubtype(r.Context(), id); err != nil {
+		writeError(w, err, "could not delete the subtype")
+		return
+	}
+	if getErr == nil {
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el subtipo de cavidad «%s».", h.actorLogin(r.Context()), g.Name))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ----- places -----
 
 // placeBody is what creating or editing a place takes.
 type placeBody struct {
 	TypeID            int64    `json:"type_id"`
 	Name              string   `json:"name"`
-	AltNames          *string  `json:"alt_names"`
+	AltNames          []string `json:"alt_names"`
 	State             string   `json:"state"`
+	SubtypeID         *int64   `json:"subtype_id"`
 	AreaID            int64    `json:"area_id"`
 	Lat               *float64 `json:"lat"`
 	Lon               *float64 `json:"lon"`
@@ -289,7 +369,7 @@ func (b placeBody) input() Input { return Input(b) }
 // placeAuditFields are the Place fields an edit's notification diffs: those Input can change (the type
 // by its name).
 var placeAuditFields = []string{
-	"TypeName", "Name", "AltNames", "State", "Where", "Lat", "Lon", "AltitudeM", "Access",
+	"TypeName", "Subtype", "Name", "AltNames", "State", "Where", "Lat", "Lon", "AltitudeM", "Access",
 	"Description", "DepthM", "HorizontalLengthM", "Geology", "TechnicalSheet",
 }
 

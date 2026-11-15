@@ -3,6 +3,7 @@ import { openAreaDialog } from './area-dialog.js';
 import { areaChain, areaPickerField, bindAreaPicker } from './area-picker.js';
 import { formatDecimal, formatUtm, parseCoordinates } from './coordinates.js';
 import { initModal, openModal } from './modal.js';
+import { bindNamesList, namesListField } from './names-list.js';
 import { POINT_KIND_LABELS, STATE_HELP, STATE_LABELS } from './places-common.js';
 
 // The two dialogs to write a place and one of its points, shared by /lugares (a new place) and /lugar
@@ -82,7 +83,12 @@ function ensurePlaceDialog() {
           <label for="pd-type">Tipo</label>
           <select id="pd-type" name="type_id" required></select>
         </div>
-        <div class="field">
+        <div class="field" data-kind-field="cave">
+          <label for="pd-subtype">Subtipo</label>
+          <select id="pd-subtype" name="subtype_id"></select>
+          <p class="hint">Qué es la cavidad: cueva, sima, torca, mina, abrigo…</p>
+        </div>
+        <div class="field" id="pd-state-field">
           <label for="pd-state">Estado</label>
           <select id="pd-state" name="state">
             ${Object.entries(STATE_LABELS)
@@ -95,10 +101,7 @@ function ensurePlaceDialog() {
           <label for="pd-name">Nombre</label>
           <input id="pd-name" name="name" type="text" required>
         </div>
-        <div class="field span-2">
-          <label for="pd-alt-names">Otros nombres <span class="optional">(opcional)</span></label>
-          <input id="pd-alt-names" name="alt_names" type="text">
-        </div>
+        ${namesListField({ id: 'pd-alt-names', label: 'Otros nombres', hint: 'Con los que también se la conoce.' })}
         ${coordinatesField('pd-coordinates', 'Coordenadas principales')}
         <div class="field" data-kind-field="cave">
           <label for="pd-depth">Profundidad (m) <span class="optional">(opcional)</span></label>
@@ -149,12 +152,20 @@ function ensurePlaceDialog() {
   );
   const typeSelect = form.elements.type_id;
   const kindOf = () => typeSelect.selectedOptions[0]?.dataset.kind ?? 'general';
-  // What depends on the kind of the chosen type (the measures of a cave, the technical sheet of a cave
-  // or a canyon) is only in the form for those.
+  const hasStateOf = () => typeSelect.selectedOptions[0]?.dataset.hasState === 'true';
+  // What depends on the kind of the chosen type (the subtype and the measures of a cavity, the technical
+  // sheet of a cavity or a canyon) is only in the form for those, and the state only for the types that
+  // have one. The subtype is required when it is there.
   const syncKind = () => {
     form.querySelectorAll('[data-kind-field]').forEach((el) => {
       el.hidden = !el.dataset.kindField.split(',').includes(kindOf());
     });
+    form.elements.subtype_id.required = kindOf() === 'cave';
+    // A cavity starts as a Cueva (the first subtype) unless it already is something else.
+    if (kindOf() === 'cave' && !form.elements.subtype_id.value) {
+      form.elements.subtype_id.selectedIndex = 0;
+    }
+    document.getElementById('pd-state-field').hidden = !hasStateOf();
   };
   typeSelect.addEventListener('change', syncKind);
   // What the chosen state means, under it.
@@ -163,6 +174,7 @@ function ensurePlaceDialog() {
       STATE_HELP[form.elements.state.value] ?? '';
   };
   form.elements.state.addEventListener('change', syncState);
+  const namesList = bindNamesList(dialog.querySelector('[data-names-list]'));
   const updateCoordinates = bindCoordinates(
     form.elements.coordinates,
     document.getElementById('pd-coordinates-preview'),
@@ -221,6 +233,7 @@ function ensurePlaceDialog() {
   });
   dialog.addEventListener('close', () => {
     // initModal resets the form on close: bring the rest back in line with it.
+    namesList.setNames([]);
     clearTimeout(lookupTimer);
     lookup += 1;
     clearProposal();
@@ -233,6 +246,8 @@ function ensurePlaceDialog() {
   placeDialog = {
     dialog,
     form,
+    namesList,
+    hasStateOf,
     kindOf,
     syncKind,
     syncState,
@@ -253,17 +268,42 @@ const text = (form, name) => form.elements[name].value.trim() || null;
 const whole = (form, name) =>
   form.elements[name].value === '' ? null : Number(form.elements[name].value);
 
-// Opens the dialog to create a place, or to change `place`. `types` are those of GET /places/types and
-// `geologies` those of GET /places/geologies. `onSaved` is called with the place the API answers with, once
-// it is saved. A new place may start at `coordinates` ({ lat, lon }, from a click on a map): they are
-// written in the form and the zone they are in is asked for at once.
-function openPlaceDialog({ types, geologies, place = null, coordinates = null, onSaved }) {
-  const { dialog, form, kindOf, syncKind, syncState, updateCoordinates, areaPicker, proposeArea } =
-    ensurePlaceDialog();
+// Opens the dialog to create a place, or to change `place`. `types` are those of GET /places/types,
+// `subtypes` those of GET /places/subtypes and `geologies` those of GET /places/geologies. `onSaved` is
+// called with the place the API answers with, once it is saved. A new place may start at `coordinates`
+// ({ lat, lon }, from a click on a map): they are written in the form and the zone they are in is asked
+// for at once.
+function openPlaceDialog({
+  types,
+  subtypes,
+  geologies,
+  place = null,
+  coordinates = null,
+  onSaved,
+}) {
+  const {
+    dialog,
+    form,
+    namesList,
+    hasStateOf,
+    kindOf,
+    syncKind,
+    syncState,
+    updateCoordinates,
+    areaPicker,
+    proposeArea,
+  } = ensurePlaceDialog();
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
   document.getElementById('pd-submit').textContent = place ? 'Guardar' : 'Crear lugar';
   form.elements.type_id.innerHTML = types
-    .map((t) => `<option value="${t.id}" data-kind="${t.kind}">${escapeHtml(t.name)}</option>`)
+    .map(
+      (t) =>
+        `<option value="${t.id}" data-kind="${t.kind}" data-has-state="${t.has_state}">${escapeHtml(t.name)}</option>`,
+    )
+    .join('');
+  // The subtypes of a cavity: the first (Cueva) is the one a new place starts with.
+  form.elements.subtype_id.innerHTML = subtypes
+    .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
     .join('');
   form.elements.geology_id.innerHTML =
     '<option value="">—</option>' +
@@ -274,9 +314,10 @@ function openPlaceDialog({ types, geologies, place = null, coordinates = null, o
     };
     set('type_id', place.type_id);
     set('geology_id', place.geology_id);
-    set('state', place.state);
+    set('subtype_id', place.subtype_id);
+    set('state', place.state || 'open');
     set('name', place.name);
-    set('alt_names', place.alt_names);
+    namesList.setNames(place.alt_names);
     set('coordinates', formatDecimal(place.lat, place.lon));
     set('altitude_m', place.altitude_m);
     set('depth_m', place.depth_m);
@@ -306,8 +347,10 @@ function openPlaceDialog({ types, geologies, place = null, coordinates = null, o
         body: JSON.stringify({
           type_id: Number(form.elements.type_id.value),
           name: form.elements.name.value.trim(),
-          alt_names: text(form, 'alt_names'),
-          state: form.elements.state.value,
+          alt_names: namesList.names,
+          // Only a type that has a state gives its places one.
+          state: hasStateOf() ? form.elements.state.value : '',
+          subtype_id: kind === 'cave' ? Number(form.elements.subtype_id.value) : null,
           area_id: areaPicker.area.id,
           lat: found.lat,
           lon: found.lon,

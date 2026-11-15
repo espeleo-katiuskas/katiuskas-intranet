@@ -191,48 +191,55 @@ a space or a control character (browsers drop tabs and line breaks inside an add
 with `noopener noreferrer`. The API stores and returns plain text; nothing about this is in it.
 
 **Places (`/lugares`, `/lugar?id=…`).** `lugares.html`/`places.js` is the list: a table (a card per
-place on a phone) of name — a link, with its other names under it —, type, state as a badge
-(Abierta, Hace falta permiso, Turística (de pago) or Cerrada: how the place can be visited, each
-with a line that explains it, `STATE_HELP` in `places-common.js`, under the field of the form and
-next to the badge on the page), where it is (`where`: the zone, the province, the community and the
+place on a phone) of name — a link, with its other names under it —, type (a cavity by its subtype,
+"Sima"; `placeTypeLabel`), state as a badge (Abierta, Hace falta permiso, Turística (de pago) or
+Cerrada: how the place can be visited, each with a line that explains it, `STATE_HELP` in
+`places-common.js`, under the field of the form and next to the badge on the page; a place whose
+type has no state shows none), where it is (`where`: the zone, the province, the community and the
 country, so "Madrid" finds the places of the province too) and the measures of a cave, with a search
 that looks in the name, the other names, the type, the state and where it is (accents and case
-ignored, every word has to appear, the geology of a cave included) and three selects, by type, by
-state and by geology; the type of a row has the geology of a cave under it. "Lista" and "Mapa"
-switch the table for a map of the same places, with the same filters (see "The map of the places"
-below); `/lugares?vista=mapa` opens it, and `&lugar=<id>` also opens the popup of that place. Any
-member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the page of the
-place once it is saved; admin gets "Tipos y geologías", a dialog with two tables to add, rename and
-delete the general types (Cueva, Sima and Cañón show "Fijo" and cannot be touched) and the geologies
-of the caves (none is fixed; one that has caves cannot be deleted), both with the same code
-(`bindCatalogue` in `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the
-data (other names, one row per zone from the country down — "País España", "Comunidad autónoma
-Comunidad de Madrid", "Provincia Madrid", "Municipio Valdemanco": the name of the level is the
-`kind` of the zone —, the main coordinate with a link to OpenStreetMap and its UTM next to it, its
-altitude above sea level, the geology of a cave, the depth and the horizontal length), then "Cómo
-llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
-`renderRichText` —, and "Otros puntos", a table of the other points with "Editar" and "Quitar" on
-each, "Fotos y documentos" (the files of the place, each with a title, its name, size and who
-attached it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image is shown
-under it; a form attaches a new one), and who added the place and who changed it last. Any member
-has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar" (`data-roles`).
+ignored, every word has to appear, the geology of a cave included) and four selects, by type, by
+subtype, by state and by geology; the type of a row has the geology of a cave under it. "Lista" and
+"Mapa" switch the table for a map of the same places, with the same filters (see "The map of the
+places" below); `/lugares?vista=mapa` opens it, and `&lugar=<id>` also opens the popup of that
+place. Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the
+page of the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to
+add, rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each
+says "Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
+afterwards), the subtypes of the cavities and the geologies of the caves (none of these two is
+fixed; one that has places cannot be deleted), all with the same code (`bindCatalogue` in
+`places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the data (other names,
+one row per zone from the country down — "País España", "Comunidad autónoma Comunidad de Madrid",
+"Provincia Madrid", "Municipio Valdemanco": the name of the level is the `kind` of the zone —, the
+main coordinate with a link to OpenStreetMap and its UTM next to it, its altitude above sea level,
+the geology of a cave, the depth and the horizontal length), then "Cómo llegar", "Descripción" and,
+for a cave or a canyon, "Ficha técnica" — all three through `renderRichText` —, and "Otros puntos",
+a table of the other points with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of
+the place, each with a title, its name, size and who attached it, "Descargar" and, for who attached
+it, admin and board, "Borrar"; an image is shown under it; a form attaches a new one), and who added
+the place and who changed it last. Any member has "Editar lugar" and "Añadir punto"; admin and board
+also "Borrar lugar" (`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
-form for creating and editing. The fields that depend on the kind of the chosen type (the measures
-and the geology of a cave, the technical sheet of a cave or a canyon) are in the form only for
-those, as in the form of material, and what a kind does not have is sent as null, which is what the
-API accepts. The field of **coordinates** is one text box that reads decimal degrees ("40.4168,
--3.7038", also with decimal commas or the letters N, S, E, W) or UTM ("30T 440290 4474257"; without
-a zone the 30 is assumed, and the page says so), and shows under it what it understood — the
-decimals and the UTM — or that it does not understand it, in which case the form cannot be sent.
-`js/coordinates.js` does it, with no dependencies: Krüger's series to the sixth order, exact to far
-less than a millimetre inside a zone (ETRS89, the datum of the Spanish UTM, is taken as WGS84, which
-differs by centimetres); the API only ever sees latitude and longitude. The altitude, in metres
-above sea level, is a field of its own (optional, between -500 and 9000) next to the coordinates, in
-the dialog of a place and in that of a point, and shows after the coordinates of a point and as its
-own row in the place. The shared labels and helpers (states, kinds of point, the coordinates as a
-link) are in `places-common.js`.
+form for creating and editing. The fields that depend on the chosen type are in the form only for
+the types that have them, as in the form of material: for a cavity the subtype (required, "Cueva" to
+begin with), the measures and the geology, for a cavity or a canyon the technical sheet, and the
+state only for a type that has one (`data-has-state` on the options of the type); what a type does
+not have is sent as null, or empty for the state, which is what the API accepts. The **other names**
+are a list (`names-list.js`: each name is added with Intro or the button and is a chip that can be
+taken off, repeats and blanks are not added, and what is typed and not yet added counts as one more
+when the form is sent). The field of **coordinates** is one text box that reads decimal degrees
+("40.4168, -3.7038", also with decimal commas or the letters N, S, E, W) or UTM ("30T 440290
+4474257"; without a zone the 30 is assumed, and the page says so), and shows under it what it
+understood — the decimals and the UTM — or that it does not understand it, in which case the form
+cannot be sent. `js/coordinates.js` does it, with no dependencies: Krüger's series to the sixth
+order, exact to far less than a millimetre inside a zone (ETRS89, the datum of the Spanish UTM, is
+taken as WGS84, which differs by centimetres); the API only ever sees latitude and longitude. The
+altitude, in metres above sea level, is a field of its own (optional, between -500 and 9000) next to
+the coordinates, in the dialog of a place and in that of a point, and shows after the coordinates of
+a point and as its own row in the place. The shared labels and helpers (states, kinds of point, the
+coordinates as a link) are in `places-common.js`.
 
 **Where it is** is chosen with `area-picker.js`: one text box where a person types part of a name (a
 municipality, a province, a country) and chooses among what `GET /areas?search=` finds, each shown

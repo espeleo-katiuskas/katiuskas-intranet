@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 type Service struct {
@@ -42,8 +43,31 @@ func validAltitude(altitude *int) bool {
 	return altitude == nil || (*altitude >= MinAltitudeM && *altitude <= MaxAltitudeM)
 }
 
-// clean checks and trims what a place is given, without the type (see kindOf). A blank state is
-// "open".
+// cleanAltNames trims the other names, drops the blank ones and the repeated ones (ignoring case), and
+// refuses too many or too long ones. It always gives a list, never nil.
+func cleanAltNames(names []string) ([]string, error) {
+	clean := []string{}
+	seen := map[string]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		key := strings.ToLower(name)
+		if name == "" || seen[key] {
+			continue
+		}
+		if utf8.RuneCountInString(name) > MaxAltNameLength {
+			return nil, ErrInvalidAltNames
+		}
+		seen[key] = true
+		clean = append(clean, name)
+	}
+	if len(clean) > MaxAltNames {
+		return nil, ErrInvalidAltNames
+	}
+	return clean, nil
+}
+
+// clean checks and trims what a place is given, without the type (see typeOf). A blank state stays
+// blank here: whether it has one, and which, depends on the type.
 func clean(in Input) (Input, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
@@ -56,11 +80,8 @@ func clean(in Input) (Input, error) {
 		return Input{}, ErrAreaRequired
 	}
 	in.State = strings.TrimSpace(in.State)
-	if in.State == "" {
-		in.State = string(StateOpen)
-	}
 	switch State(in.State) {
-	case StateOpen, StatePermitRequired, StateTourist, StateClosed:
+	case "", StateOpen, StatePermitRequired, StateTourist, StateClosed:
 	default:
 		return Input{}, ErrInvalidState
 	}
@@ -74,40 +95,58 @@ func clean(in Input) (Input, error) {
 		(in.HorizontalLengthM != nil && (*in.HorizontalLengthM < 0 || *in.HorizontalLengthM > MaxHorizontalLengthM)) {
 		return Input{}, ErrInvalidMeasure
 	}
-	in.AltNames = blankToNil(in.AltNames)
+	var err error
+	if in.AltNames, err = cleanAltNames(in.AltNames); err != nil {
+		return Input{}, err
+	}
 	in.Access, in.Description, in.TechnicalSheet = blankToNil(in.Access), blankToNil(in.Description), blankToNil(in.TechnicalSheet)
 	return in, nil
 }
 
-// kindOf is the kind of the type a place is given, checking that what the place has fits it: only a
-// cave has a depth, a horizontal length and a geology, and only a cave or a canyon a technical sheet. It also
-// checks that the zone exists (before the statement, as a foreign key that fails would abort the
-// transaction the tests run in).
-func (s *Service) kindOf(ctx context.Context, in Input) (Kind, error) {
+// typeOf is the type a place is given, checking that what the place has fits it: only a cavity has a
+// subtype (and it must), a depth, a horizontal length and a geology, only a cavity or a canyon a technical
+// sheet, and only a type that has a state gives its places one (open, when none is said). It also checks
+// that the zone exists (before the statement, as a foreign key that fails would abort the transaction
+// the tests run in). It answers with the input as it is to be saved.
+func (s *Service) typeOf(ctx context.Context, in Input) (Type, Input, error) {
 	if exists, err := s.repo.AreaExists(ctx, in.AreaID); err != nil {
-		return "", err
+		return Type{}, in, err
 	} else if !exists {
-		return "", ErrUnknownArea
+		return Type{}, in, ErrUnknownArea
 	}
 	t, err := s.repo.GetType(ctx, in.TypeID)
 	if errors.Is(err, ErrTypeNotFound) {
-		return "", ErrUnknownType
+		return Type{}, in, ErrUnknownType
 	}
 	if err != nil {
-		return "", err
+		return Type{}, in, err
 	}
-	if (t.Kind != KindCave && (in.DepthM != nil || in.HorizontalLengthM != nil || in.GeologyID != nil)) ||
-		(t.Kind == KindGeneral && in.TechnicalSheet != nil) {
-		return "", ErrFieldsForKind
+	if (t.Kind != KindCave && (in.SubtypeID != nil || in.DepthM != nil || in.HorizontalLengthM != nil || in.GeologyID != nil)) ||
+		(t.Kind == KindGeneral && in.TechnicalSheet != nil) ||
+		(!t.HasState && in.State != "") {
+		return Type{}, in, ErrFieldsForKind
+	}
+	if t.HasState && in.State == "" {
+		in.State = string(StateOpen)
+	}
+	if t.Kind == KindCave {
+		if in.SubtypeID == nil {
+			return Type{}, in, ErrSubtypeRequired
+		}
+		if _, err := s.repo.GetSubtype(ctx, *in.SubtypeID); errors.Is(err, ErrSubtypeNotFound) {
+			return Type{}, in, ErrUnknownSubtype
+		} else if err != nil {
+			return Type{}, in, err
+		}
 	}
 	if in.GeologyID != nil {
 		if _, err := s.repo.GetGeology(ctx, *in.GeologyID); errors.Is(err, ErrGeologyNotFound) {
-			return "", ErrUnknownGeology
+			return Type{}, in, ErrUnknownGeology
 		} else if err != nil {
-			return "", err
+			return Type{}, in, err
 		}
 	}
-	return t.Kind, nil
+	return t, in, nil
 }
 
 func (s *Service) ListPlaces(ctx context.Context) ([]ListItem, error) { return s.repo.ListPlaces(ctx) }
@@ -121,11 +160,11 @@ func (s *Service) CreatePlace(ctx context.Context, userID int64, in Input) (Plac
 	if err != nil {
 		return Place{}, err
 	}
-	kind, err := s.kindOf(ctx, in)
+	t, in, err := s.typeOf(ctx, in)
 	if err != nil {
 		return Place{}, err
 	}
-	return s.repo.CreatePlace(ctx, userID, kind, in)
+	return s.repo.CreatePlace(ctx, userID, t, in)
 }
 
 func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (Place, error) {
@@ -133,11 +172,11 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	if err != nil {
 		return Place{}, err
 	}
-	kind, err := s.kindOf(ctx, in)
+	t, in, err := s.typeOf(ctx, in)
 	if err != nil {
 		return Place{}, err
 	}
-	return s.repo.UpdatePlace(ctx, id, userID, kind, in)
+	return s.repo.UpdatePlace(ctx, id, userID, t, in)
 }
 
 // DeletePlace removes a place with its points and its files.
@@ -227,7 +266,7 @@ func (s *Service) freeTypeName(ctx context.Context, name string, except int64) e
 	return nil
 }
 
-func (s *Service) CreateType(ctx context.Context, name string) (Type, error) {
+func (s *Service) CreateType(ctx context.Context, name string, hasState bool) (Type, error) {
 	name, err := cleanTypeName(name)
 	if err != nil {
 		return Type{}, err
@@ -235,7 +274,7 @@ func (s *Service) CreateType(ctx context.Context, name string) (Type, error) {
 	if err := s.freeTypeName(ctx, name, 0); err != nil {
 		return Type{}, err
 	}
-	return s.repo.CreateType(ctx, name)
+	return s.repo.CreateType(ctx, name, hasState)
 }
 
 // RenameType renames a general type: the types of caves and canyons are fixed.
@@ -341,4 +380,75 @@ func (s *Service) DeleteGeology(ctx context.Context, id int64) error {
 		return ErrGeologyInUse
 	}
 	return s.repo.DeleteGeology(ctx, id)
+}
+
+// ----- subtypes -----
+
+func (s *Service) ListSubtypes(ctx context.Context) ([]Subtype, error) {
+	return s.repo.ListSubtypes(ctx)
+}
+
+func (s *Service) GetSubtype(ctx context.Context, id int64) (Subtype, error) {
+	return s.repo.GetSubtype(ctx, id)
+}
+
+func cleanSubtypeName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrBlankSubtypeName
+	}
+	return name, nil
+}
+
+// freeSubtypeName says that no subtype other than `except` has the name (ignoring case): checked before
+// the statement, which would otherwise fail and abort the transaction the tests run in.
+func (s *Service) freeSubtypeName(ctx context.Context, name string, except int64) error {
+	g, err := s.repo.SubtypeNamed(ctx, name)
+	if errors.Is(err, ErrSubtypeNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if g.ID != except {
+		return ErrDuplicateSubtype
+	}
+	return nil
+}
+
+func (s *Service) CreateSubtype(ctx context.Context, name string) (Subtype, error) {
+	name, err := cleanSubtypeName(name)
+	if err != nil {
+		return Subtype{}, err
+	}
+	if err := s.freeSubtypeName(ctx, name, 0); err != nil {
+		return Subtype{}, err
+	}
+	return s.repo.CreateSubtype(ctx, name)
+}
+
+func (s *Service) RenameSubtype(ctx context.Context, id int64, name string) (Subtype, error) {
+	name, err := cleanSubtypeName(name)
+	if err != nil {
+		return Subtype{}, err
+	}
+	if _, err := s.repo.GetSubtype(ctx, id); err != nil {
+		return Subtype{}, err
+	}
+	if err := s.freeSubtypeName(ctx, name, id); err != nil {
+		return Subtype{}, err
+	}
+	return s.repo.RenameSubtype(ctx, id, name)
+}
+
+// DeleteSubtype removes a subtype no place has.
+func (s *Service) DeleteSubtype(ctx context.Context, id int64) error {
+	g, err := s.repo.GetSubtype(ctx, id)
+	if err != nil {
+		return err
+	}
+	if g.PlaceCount > 0 {
+		return ErrSubtypeInUse
+	}
+	return s.repo.DeleteSubtype(ctx, id)
 }

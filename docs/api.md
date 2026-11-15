@@ -760,12 +760,14 @@ place is for admin and board, and the types of place and the geologies of the ca
 admin alone. Coordinates are WGS84 latitude and longitude, in degrees, and an altitude, when it is
 known, in metres above sea level.
 
-- **GET** `/places/types` — *Any baseline role*. The types of place, in the order they were added,
-  each with its `kind` (`cave` for Cueva and Sima, `canyon` for Cañón, `general` for the rest) and
-  the number of places that have it.
+- **GET** `/places/types` — *Any baseline role*. The types of place (the cavities, the canyons and
+  then the general ones, each in the order they were added), each with its `kind` (`cave` for
+  Cavidad, `canyon` for Cañón, `general` for the rest), whether its places have a state
+  (`has_state`) and the number of places that have it.
   - returns: 200 `[PlaceType]`
-- **POST** `/places/types` — *Admin*. Adds a general type (Cueva, Sima and Cañón are fixed).
-  - body: `name*` (unique ignoring case)
+- **POST** `/places/types` — *Admin*. Adds a general type (Cavidad and Cañón are fixed).
+  - body: `name*` (unique ignoring case), `has_state` (false if left out: whether its places have a
+    state; it cannot be changed afterwards)
   - returns: 201 `PlaceType`
   - errors: 400 `invalid_body`, `place_type_name_required`; 409 `duplicate_place_type`
 - **PUT** `/places/types/{id}` — *Admin*. Renames a general type.
@@ -775,6 +777,21 @@ known, in metres above sea level.
 - **DELETE** `/places/types/{id}` — *Admin*. Deletes a general type no place has.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `fixed_place_type`, `place_type_in_use`
+- **GET** `/places/subtypes` — *Any baseline role*. What a cavity is (Cueva, Sima, Torca, Mina,
+  Abrigo and whatever has been added), in the order they were added, each with the number of places
+  that have it.
+  - returns: 200 `[PlaceSubtype]`
+- **POST** `/places/subtypes` — *Admin*. Adds a subtype.
+  - body: `name*` (unique ignoring case)
+  - returns: 201 `PlaceSubtype`
+  - errors: 400 `invalid_body`, `subtype_name_required`; 409 `duplicate_subtype`
+- **PUT** `/places/subtypes/{id}` — *Admin*. Renames a subtype (none is fixed).
+  - body: `name*`
+  - returns: 200 `PlaceSubtype`
+  - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **DELETE** `/places/subtypes/{id}` — *Admin*. Deletes a subtype no place has.
+  - returns: 204
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `subtype_in_use`
 - **GET** `/places/geologies` — *Any baseline role*. What a cave can be formed in (Caliza, Yeso,
   Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita, Conglomerado, Granito and whatever has been
   added), in the order they were added, each with the number of places that have it.
@@ -797,20 +814,25 @@ known, in metres above sea level.
 - **POST** `/places` — *Any baseline role*. Adds a place.
   - body: `type_id*`, `name*`, `lat*` and `lon*` (the main coordinate: -90 to 90 and -180 to 180)
     and `altitude_m` (its altitude in metres above sea level, -500 to 9000, optional), `alt_names`
-    (other names it is known by), `state` (`open` by default: it can be visited freely;
-    `permit_required`: a permit has to be asked for; `tourist`: it is run as an attraction and has
-    to be paid for; `closed`), `area_id*` (the most specific zone it is in, of `/areas`: at least
-    the country), `access` (how to get there), `description`, and what depends on the kind of the
-    type: `depth_m` and `horizontal_length_m` (metres) and `geology_id` (of `/places/geologies`:
-    what it is formed in) only for a cave, and `technical_sheet` (what has to be installed to go
-    through it) for a cave or a canyon. Blank text counts as no value.
+    (a list of the other names it is known by: trimmed, without blanks or repeats ignoring case, 20
+    at most of 200 characters each), `area_id*` (the most specific zone it is in, of `/areas`: at
+    least the country), `access` (how to get there), `description`, and what depends on the type:
+    `state` only for a type that has one (`has_state`: Cavidad, Cañón and Vía ferrata do), `open`
+    by default (it can be visited freely; `permit_required`: a permit has to be asked for;
+    `tourist`: it is run as an attraction and has to be paid for; `closed`); `subtype_id*` (of
+    `/places/subtypes`: cueva, sima…), `depth_m` and `horizontal_length_m` (metres) and
+    `geology_id` (of `/places/geologies`: what it is formed in) only for a cavity, and
+    `technical_sheet` (what has to be installed to go through it) for a cavity or a canyon. Blank
+    text counts as no value.
   - returns: 201 `Place`
   - errors: 400 `invalid_body`, `place_name_required`, `place_type_required`, `unknown_place_type`,
     `place_area_required`, `unknown_area`, `invalid_place_state`, `invalid_coordinates`,
-    `invalid_altitude`, `unknown_geology`,
+    `invalid_altitude`, `unknown_geology`, `place_subtype_required` (a cavity with no subtype),
+    `unknown_subtype`, `invalid_alt_names`,
     `invalid_place_measure` (negative, or above 20000 m of depth or 2000000 m of length),
-    `invalid_place_fields` (a measure or a geology of a place that is not a cave, or a technical
-    sheet of one that is neither a cave nor a canyon)
+    `invalid_place_fields` (a subtype, a measure or a geology of a place that is not a cavity, a
+    technical sheet of one that is neither a cavity nor a canyon, or a state of a type that has
+    none)
 - **GET** `/places/{id}` — *Any baseline role*. One place with its points.
   - returns: 200 `Place`
   - errors: 400 `invalid_id`; 404 `not_found`
@@ -1907,6 +1929,15 @@ by `GET /areas/{id}`, not by the list of the zones below one.
 | `id` | integer |
 | `name` | text |
 | `kind` | cave/canyon/general |
+| `has_state` | boolean |
+| `place_count` | integer |
+
+### `PlaceSubtype`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
 | `place_count` | integer |
 
 ### `PlaceGeology`
@@ -1926,8 +1957,10 @@ by `GET /areas/{id}`, not by the list of the zones below one.
 | `type_name` | text |
 | `kind` | cave/canyon/general |
 | `name` | text |
-| `alt_names` | text |
-| `state` | open/permit_required/tourist/closed |
+| `alt_names` | `[text]`, empty if there are none |
+| `state` | open/permit_required/tourist/closed, absent if the type has none |
+| `subtype_id` | integer, only a cavity |
+| `subtype` | text, with `subtype_id` |
 | `area_id` | integer |
 | `area_ids` | `[integer]` |
 | `where` | text |

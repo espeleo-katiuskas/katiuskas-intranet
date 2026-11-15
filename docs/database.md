@@ -17,8 +17,8 @@ Contents:
   `activity_places`, `activity_resources`, `holidays`
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
-- [Places](#places): `areas`, `place_types`, `place_geologies`, `places`, `place_points`,
-  `place_files`
+- [Places](#places): `areas`, `place_types`, `place_subtypes`, `place_geologies`, `places`,
+  `place_points`, `place_files`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -77,7 +77,7 @@ material_types ──< material_type_attributes ──< material_attribute_optio
 library_types ──< library_items ──< library_loans, library_comments, library_resources
                                     (loans, comments and files point at users too)
 areas ──< areas (a tree), places              place_types ──< places ──< place_points, place_files
-                                              place_geologies ──< places
+                                              place_subtypes, place_geologies ──< places
                           (places point at users too: who created and who changed)
 
 distributions ──┬─< distribution_options
@@ -1129,16 +1129,19 @@ in it, two zones are merged only below the same one, and the first zone below an
 ### `place_types`
 
 What kind of place something is. The `kind` decides what a place of the type has, as in
-`material_types`: a cave (Cueva, Sima) has a depth and a horizontal length, and a cave or a canyon
-has a technical sheet. The migration seeds Cueva and Sima (`cave`), Cañón (`canyon`) and Vía
-ferrata, Refugio and Otro (`general`); the first three are fixed, and an admin adds, renames and
-deletes the general ones.
+`material_types`: a cavity has a subtype, a depth and a horizontal length, and a cavity or a canyon
+has a technical sheet. `has_state` says whether the places of the type have a state (open, permit
+required…). The migrations seed Cavidad (`cave`), Cañón (`canyon`) and Vía ferrata, Refugio and Otro
+(`general`); the first two are fixed, and an admin adds, renames and deletes the general ones. A
+place has its state only if its type has one: Cavidad, Cañón and Vía ferrata do, and so may the ones
+an admin adds.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
 | `id` | bigint | no | identity |
 | `name` | text | no |  |
 | `kind` | text | no | 'general' |
+| `has_state` | boolean | no | false |
 | `created_at` | timestamptz | no | now() |
 
 Constraints:
@@ -1146,12 +1149,34 @@ Constraints:
 - primary key (id)
 - `name` is not blank
 - `kind` is `cave`, `canyon` or `general`
-- unique `place_types_id_kind_key` on `(id, kind)`: what `places` points at, so that the kind of a
-  place is always the one of its type
+- unique `place_types_id_kind_has_state_key` on `(id, kind, has_state)`: what `places` points at, so
+  that the kind and the `has_state` of a place are always the ones of its type (neither changes
+  after the type is created)
 - unique `idx_place_types_name` on `lower(name)`: names are unique ignoring case
 
 Rules outside the database: only a general type is created, renamed or deleted (409
 `fixed_place_type` otherwise), and one that has places is not deleted (409 `place_type_in_use`).
+
+### `place_subtypes`
+
+What a cavity is (cueva, sima, torca, mina, abrigo…): a catalogue an admin edits, since there is
+no end to the names. Only a place of the cave kind has one, and it has to. None is fixed and
+nothing in the code depends on any. Migration `00066_place_cavities.sql` seeds Cueva, Sima, Torca,
+Mina and Abrigo.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `name` | text | no |  |
+| `created_at` | timestamptz | no | now() |
+
+Constraints:
+
+- primary key (id)
+- `name` is not blank
+- unique `idx_place_subtypes_name` on `lower(name)`: names are unique ignoring case
+
+Rules outside the database: one that has places is not deleted (409 `subtype_in_use`).
 
 ### `place_geologies`
 
@@ -1181,9 +1206,11 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 | `id` | bigint | no | identity |
 | `type_id` | bigint | no |  |
 | `kind` | text | no |  |
+| `has_state` | boolean | no |  |
 | `name` | text | no |  |
-| `alt_names` | text | yes |  |
-| `state` | text | no | 'open' |
+| `alt_names` | text[] | no | '{}' |
+| `state` | text | yes |  |
+| `subtype_id` | bigint | yes |  |
 | `area_id` | bigint | no |  |
 | `lat` | double precision | no |  |
 | `lon` | double precision | no |  |
@@ -1202,10 +1229,13 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 Notes on the columns:
 
 - `kind`: The kind of the place's type, kept here so that the checks below can use it.
-- `alt_names`: Other names it is known by, as free text.
+- `has_state`: Whether the place's type has a state, kept here like `kind`.
+- `alt_names`: The other names it is known by, a list (an array, not a table: a name has nothing
+  else to say). Go keeps them trimmed, without blanks and without repeats ignoring case.
 - `state`: Under which conditions the place can be visited: `open` (freely), `permit_required` (a
   permit has to be asked for first), `tourist` (it is run as an attraction and has to be paid for)
-  or `closed` (it cannot be visited).
+  or `closed` (it cannot be visited). Empty for a place whose type has no state.
+- `subtype_id`: What a cavity is (cueva, sima…): empty for any other place.
 - `area_id`: Where it is: the most specific zone known, at least the country.
 - `lat`, `lon`: The main coordinate, WGS84, in degrees.
 - `altitude_m`: Its altitude in metres above sea level (negative below it), when it is known.
@@ -1219,18 +1249,23 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `(type_id, kind)` → `place_types(id, kind)`
-- `area_id` → `areas(id)`, `geology_id` → `place_geologies(id)`
+- `(type_id, kind, has_state)` → `place_types(id, kind, has_state)`
+- `area_id` → `areas(id)`, `geology_id` → `place_geologies(id)`, `subtype_id` →
+  `place_subtypes(id)`
 - `created_by` → `users(id)`, `updated_by` → `users(id)`
 - `name` is not blank
-- `state` is `open`, `permit_required`, `tourist` or `closed`
+- `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
+- `state_for_types_with_state`: `has_state` is true exactly when there is a state
+- `subtype_for_caves`: `kind = 'cave'` exactly when there is a subtype
+- `alt_names_not_too_many`: at most 50 names (Go allows 20)
 - `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000
 - `depth_m` and `horizontal_length_m` not negative
 - `measures_only_for_caves`: `kind = 'cave'` or both measures are empty
 - `geology_only_for_caves`: `kind = 'cave'` or there is no geology
 - `technical_sheet_only_for_caves_and_canyons`: `kind` is `cave` or `canyon`, or there is no sheet
 - index `idx_places_type_id` on `(type_id)`, `idx_places_area_id` on `(area_id)`,
-  `idx_places_geology_id` on `(geology_id)` and `idx_places_lat_lon` on `(lat, lon)`
+  `idx_places_geology_id` on `(geology_id)`, `idx_places_subtype_id` on `(subtype_id)` and
+  `idx_places_lat_lon` on `(lat, lon)`
 
 Rules outside the database: the zone is given and exists (`places.Service` checks it before the
 statement), the coordinates are given (a missing one is not zero), the altitude (400
@@ -1856,8 +1891,9 @@ Besides the schema, the migrations leave this data:
   (1 January 2025), in migration `00062`.
 - `place_geologies`: Caliza, Yeso, Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita,
   Conglomerado and Granito.
-- `place_types`: Cueva and Sima (cave) and Cañón (canyon), fixed, and Vía ferrata, Refugio and Otro
-  (general).
+- `place_types`: Cavidad (cave) and Cañón (canyon), fixed, and Vía ferrata, Refugio and Otro
+  (general); all have a state but Refugio and Otro.
+- `place_subtypes`: Cueva, Sima, Torca, Mina and Abrigo.
 - `material_types`: Cuerda (rope) and Saca (bag), fixed, and Mosquetones, Spits, Placas, Maillones
   and Iluminación (general).
 - `holidays`: the holidays of 2026.

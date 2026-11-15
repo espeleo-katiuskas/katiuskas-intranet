@@ -573,10 +573,11 @@ func linkPlaces(ctx context.Context, tx pgx.Tx, activityID int64, placeIDs []int
 // ListPlaces are the places an activity goes to, by name.
 func (r *Repository) ListPlaces(ctx context.Context, activityID int64) ([]PlaceRef, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.name, t.name
+		SELECT p.id, p.name, COALESCE(s.name, t.name)
 		FROM activity_places ap
 		JOIN places p ON p.id = ap.place_id
 		JOIN place_types t ON t.id = p.type_id
+		LEFT JOIN place_subtypes s ON s.id = p.subtype_id
 		WHERE ap.activity_id = $1
 		ORDER BY p.name, p.id
 	`, activityID)

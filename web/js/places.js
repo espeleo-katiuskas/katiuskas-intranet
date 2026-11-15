@@ -13,8 +13,10 @@ import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
 import {
   loadGeologies,
+  loadSubtypes,
   loadTypes,
   measuresText,
+  placeTypeLabel,
   STATE_LABELS,
   stateBadge,
 } from './places-common.js';
@@ -27,9 +29,11 @@ const searchInput = document.getElementById('places-search');
 const typeFilter = document.getElementById('type-filter');
 const stateFilter = document.getElementById('state-filter');
 const geologyFilter = document.getElementById('geology-filter');
+const subtypeFilter = document.getElementById('subtype-filter');
 const countLine = document.getElementById('places-count');
 let allPlaces = [];
 let types = [];
+let subtypes = [];
 let geologies = [];
 
 stateFilter.innerHTML += Object.entries(STATE_LABELS)
@@ -42,8 +46,9 @@ function searchText(place) {
   return normalizeForSearch(
     [
       place.name,
-      place.alt_names,
+      ...place.alt_names,
       place.type_name,
+      place.subtype,
       place.geology,
       STATE_LABELS[place.state],
       place.where,
@@ -57,9 +62,11 @@ function renderPlace(place) {
   return `
     <tr>
       <td><a href="/lugar?id=${place.id}"><strong>${escapeHtml(place.name)}</strong></a>${
-        place.alt_names ? `<br><span class="subtitle">${escapeHtml(place.alt_names)}</span>` : ''
+        place.alt_names.length
+          ? `<br><span class="subtitle">${escapeHtml(place.alt_names.join(' · '))}</span>`
+          : ''
       }</td>
-      <td>${escapeHtml(place.type_name)}${
+      <td>${escapeHtml(placeTypeLabel(place))}${
         place.geology ? `<br><span class="subtitle">${escapeHtml(place.geology)}</span>` : ''
       }</td>
       <td>${stateBadge(place.state)}</td>
@@ -81,7 +88,7 @@ async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
     const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
     map.addLayer(cluster);
-    offerNewPlaces(L, map, () => ({ types, geologies }));
+    offerNewPlaces(L, map, () => ({ types, subtypes, geologies }));
     mapState = { L, map, cluster, markers: new Map() };
     return mapState;
   });
@@ -155,6 +162,7 @@ function renderPlaces() {
     (place) =>
       (!typeFilter.value || place.type_id === Number(typeFilter.value)) &&
       (!stateFilter.value || place.state === stateFilter.value) &&
+      (!subtypeFilter.value || place.subtype_id === Number(subtypeFilter.value)) &&
       (!geologyFilter.value || place.geology_id === Number(geologyFilter.value)) &&
       words.every((word) => searchText(place).includes(word)),
   );
@@ -177,13 +185,15 @@ function setOptions(select, all, list) {
 
 // The rows of the table of a catalogue (the types, the geologies): its name to change, how many places
 // have it, and the buttons. `fixed` says which items cannot be touched.
-function catalogueRows(items, { fixed = () => false, noun }) {
+function catalogueRows(items, { fixed = () => false, note = () => '', noun }) {
   return items
     .map(
       (item) => `
       <tr>
         <td><div class="field"><input type="text" value="${escapeHtml(item.name)}" data-name="${item.id}" aria-label="Nombre ${noun}"${fixed(item) ? ' disabled' : ''}></div></td>
-        <td class="nowrap">${item.place_count}</td>
+        <td class="nowrap">${item.place_count}${
+          note(item) ? `<br><span class="subtitle">${escapeHtml(note(item))}</span>` : ''
+        }</td>
         <td class="nowrap">${
           fixed(item)
             ? '<span class="subtitle">Fijo</span>'
@@ -198,7 +208,11 @@ function catalogueRows(items, { fixed = () => false, noun }) {
 function renderCatalogues() {
   document.getElementById('types-table-body').innerHTML = catalogueRows(types, {
     fixed: (t) => t.kind !== 'general',
+    note: (t) => (t.has_state ? 'Con estado' : 'Sin estado'),
     noun: 'del tipo',
+  });
+  document.getElementById('subtypes-table-body').innerHTML = catalogueRows(subtypes, {
+    noun: 'del subtipo',
   });
   document.getElementById('geologies-table-body').innerHTML = catalogueRows(geologies, {
     noun: 'de la geología',
@@ -207,15 +221,18 @@ function renderCatalogues() {
 
 async function load() {
   try {
-    const [places, loadedTypes, loadedGeologies] = await Promise.all([
+    const [places, loadedTypes, loadedSubtypes, loadedGeologies] = await Promise.all([
       apiFetch('/places'),
       loadTypes(),
+      loadSubtypes(),
       loadGeologies(),
     ]);
     allPlaces = places;
     types = loadedTypes;
+    subtypes = loadedSubtypes;
     geologies = loadedGeologies;
     setOptions(typeFilter, 'Todos', types);
+    setOptions(subtypeFilter, 'Todos', subtypes);
     setOptions(geologyFilter, 'Todas', geologies);
     if (isAdmin) renderCatalogues();
     renderPlaces();
@@ -228,12 +245,14 @@ async function load() {
 searchInput.addEventListener('input', renderPlaces);
 typeFilter.addEventListener('change', renderPlaces);
 stateFilter.addEventListener('change', renderPlaces);
+subtypeFilter.addEventListener('change', renderPlaces);
 geologyFilter.addEventListener('change', renderPlaces);
 
 // Any member can add a place; it goes straight to its page, where the rest is filled in.
 document.getElementById('toggle-new-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
+    subtypes,
     geologies,
     onSaved: (place) => {
       window.location.href = `/lugar?id=${place.id}`;
@@ -275,7 +294,11 @@ function bindCatalogue({ tbody, form, path, words }) {
     change(async () => {
       await apiFetch(path, {
         method: 'POST',
-        body: JSON.stringify({ name: form.elements.name.value }),
+        body: JSON.stringify({
+          name: form.elements.name.value,
+          // Only the form of a new type has it: whether its places have a state.
+          ...(form.elements.has_state ? { has_state: form.elements.has_state.checked } : {}),
+        }),
       });
       form.reset();
     }, words.added);
@@ -286,9 +309,13 @@ if (isAdmin) {
   initAreasManager(document.getElementById('manage-areas'));
   const dialog = document.getElementById('types-dialog');
   const typeForm = document.getElementById('new-type-form');
+  const subtypeForm = document.getElementById('new-subtype-form');
   const geologyForm = document.getElementById('new-geology-form');
   initModal(dialog, typeForm);
-  dialog.addEventListener('close', () => geologyForm.reset());
+  dialog.addEventListener('close', () => {
+    subtypeForm.reset();
+    geologyForm.reset();
+  });
   document.getElementById('manage-types').addEventListener('click', () => openModal(dialog));
   bindCatalogue({
     tbody: document.getElementById('types-table-body'),
@@ -299,6 +326,17 @@ if (isAdmin) {
       added: 'Tipo añadido.',
       deleted: 'Tipo borrado.',
       confirmDelete: '¿Borrar este tipo?',
+    },
+  });
+  bindCatalogue({
+    tbody: document.getElementById('subtypes-table-body'),
+    form: subtypeForm,
+    path: '/places/subtypes',
+    words: {
+      saved: 'Subtipo guardado.',
+      added: 'Subtipo añadido.',
+      deleted: 'Subtipo borrado.',
+      confirmDelete: '¿Borrar este subtipo?',
     },
   });
   bindCatalogue({

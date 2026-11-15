@@ -341,7 +341,7 @@ let activityPlaces = [];
 let placeEntries = []; // The catalogue as the picker offers it: { id, label }.
 
 function placeLabel(place) {
-  return `${place.name} — ${place.type_name}${place.where ? ` (${place.where})` : ''}`;
+  return `${place.name} — ${place.subtype ?? place.type_name}${place.where ? ` (${place.where})` : ''}`;
 }
 
 function renderPlaceRow(place) {

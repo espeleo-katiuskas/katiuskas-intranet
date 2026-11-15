@@ -57,6 +57,10 @@ func (f *fakeNotifier) wait(t *testing.T) string {
 	return ""
 }
 
+// cavidadID and cuevaID are the ids of the type Cavidad and of its subtype Cueva, which body gives to a
+// place of that type unless the test says another: a cavity must have a subtype.
+var cavidadID, cuevaID int64
+
 // valdemanco is the id of the seeded municipality of Valdemanco (Madrid, Comunidad de Madrid, España),
 // which the places of the tests are in: the seed is read-only, so it is the same for every test.
 var valdemanco int64
@@ -75,9 +79,11 @@ type env struct {
 	storage  *places.Storage
 	// who: two plain members, board and an admin.
 	member, other, board, admin person
-	// the ids of the seeded types, and of the geologies limestone and gypsum.
-	cueva, sima, canyon, ferrata int64
-	caliza, yeso                 int64
+	// the ids of the seeded types (a via ferrata has a state, a hut has none), of the subtypes cueva and
+	// sima, and of the geologies limestone and gypsum.
+	cavidad, canyon, ferrata, refugio int64
+	subCueva, subSima                 int64
+	caliza, yeso                      int64
 }
 
 func newEnv(t *testing.T) *env {
@@ -107,7 +113,16 @@ func newEnv(t *testing.T) *env {
 		}
 		return v
 	}
-	e.cueva, e.sima, e.canyon, e.ferrata = id("Cueva"), id("Sima"), id("Cañón"), id("Vía ferrata")
+	e.cavidad, e.canyon, e.ferrata, e.refugio = id("Cavidad"), id("Cañón"), id("Vía ferrata"), id("Refugio")
+	subtype := func(name string) int64 {
+		var v int64
+		if err := tx.QueryRow(context.Background(), `SELECT id FROM place_subtypes WHERE name = $1`, name).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	e.subCueva, e.subSima = subtype("Cueva"), subtype("Sima")
+	cavidadID, cuevaID = e.cavidad, e.subCueva
 	if err := tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +189,9 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 // body is a valid body to create a place of the type, which a test changes.
 func body(typeID int64, name string, extra map[string]any) map[string]any {
 	b := map[string]any{"type_id": typeID, "name": name, "area_id": valdemanco, "lat": 40.5, "lon": -3.7}
+	if typeID == cavidadID {
+		b["subtype_id"] = cuevaID
+	}
 	for k, v := range extra {
 		b[k] = v
 	}
@@ -197,7 +215,7 @@ func placePath(p places.Place, rest string) string {
 // not on top of a baseline one is refused everywhere.
 func TestPermissions(t *testing.T) {
 	e := newEnv(t)
-	place := e.newPlace(e.cueva, "Cueva del Agua", nil)
+	place := e.newPlace(e.cavidad, "Cueva del Agua", nil)
 	lonely := testutil.TokenFor(e.resolver, e.member.user.ID, "material") // without member, board or admin
 
 	type call struct {
@@ -209,8 +227,8 @@ func TestPermissions(t *testing.T) {
 		{"GET", "/api/v1/places/geologies", nil},
 	}
 	writers := []call{
-		{"POST", "/api/v1/places", body(e.cueva, "Otra", nil)},
-		{"PUT", placePath(place, ""), body(e.cueva, "Cambiada", nil)},
+		{"POST", "/api/v1/places", body(e.cavidad, "Otra", nil)},
+		{"PUT", placePath(place, ""), body(e.cavidad, "Cambiada", nil)},
 		{"POST", placePath(place, "/points"), map[string]any{"kind": "parking", "lat": 40.0, "lon": -3.0}},
 	}
 	deleters := []call{{"DELETE", "/api/v1/places/987654", nil}}
@@ -256,24 +274,25 @@ func TestPermissions(t *testing.T) {
 // long texts, and is deleted by admin or board, with its points.
 func TestPlaceCRUD(t *testing.T) {
 	e := newEnv(t)
-	rec := e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "  Sima de la Peña  ", map[string]any{
-		"alt_names": "La Peña", "access": "Por la pista.",
+	rec := e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "  Sima de la Peña  ", map[string]any{
+		"alt_names": []string{"La Peña", "  la peña ", "", "Sima de Peña"}, "access": "Por la pista.",
 		"description": "Una sima.", "depth_m": 120, "horizontal_length_m": 300, "technical_sheet": "Faltan 3 anclajes.",
 		"state": "permit_required",
 	}))
 	status(t, rec, http.StatusCreated)
 	p := decode[places.Place](t, rec)
-	if p.Name != "Sima de la Peña" || p.Kind != places.KindCave || p.TypeName != "Cueva" || p.State != places.StatePermitRequired ||
+	if p.Name != "Sima de la Peña" || p.Kind != places.KindCave || p.TypeName != "Cavidad" || *p.Subtype != "Cueva" ||
+		p.State != places.StatePermitRequired || strings.Join(p.AltNames, "|") != "La Peña|Sima de Peña" ||
 		*p.DepthM != 120 || *p.HorizontalLengthM != 300 || p.Lat != 40.5 || p.Lon != -3.7 ||
 		p.CreatedBy != e.member.user.Login || p.UpdatedBy != e.member.user.Login || len(p.Points) != 0 {
 		t.Errorf("unexpected place: %+v", p)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el lugar «Sima de la Peña» (Cueva)") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el lugar «Sima de la Peña» (Cavidad)") {
 		t.Errorf("unexpected notice: %q", msg)
 	}
-	// The default state is open and blank texts are none.
-	q := e.newPlace(e.canyon, "Barranco", map[string]any{"alt_names": "   "})
-	if q.State != places.StateOpen || q.AltNames != nil || q.Kind != places.KindCanyon {
+	// The default state is open, blank names are none and the list of them is always there.
+	q := e.newPlace(e.canyon, "Barranco", map[string]any{"alt_names": []string{"   "}})
+	if q.State != places.StateOpen || q.AltNames == nil || len(q.AltNames) != 0 || q.Kind != places.KindCanyon || q.Subtype != nil {
 		t.Errorf("unexpected defaults: %+v", q)
 	}
 	e.newPlace(e.ferrata, "abajo", nil)
@@ -297,11 +316,11 @@ func TestPlaceCRUD(t *testing.T) {
 	}
 
 	// Somebody else edits it: an edit replaces everything and says who.
-	rec = e.json("PUT", placePath(p, ""), e.other.token, body(e.sima, "Sima de la Peña II", map[string]any{"depth_m": 130}))
+	rec = e.json("PUT", placePath(p, ""), e.other.token, body(e.cavidad, "Sima de la Peña II", map[string]any{"depth_m": 130, "subtype_id": e.subSima}))
 	status(t, rec, http.StatusOK)
 	edited := decode[places.Place](t, rec)
-	if edited.Name != "Sima de la Peña II" || edited.TypeName != "Sima" || *edited.DepthM != 130 || edited.HorizontalLengthM != nil ||
-		edited.Access != nil || edited.AltNames != nil || edited.State != places.StateOpen {
+	if edited.Name != "Sima de la Peña II" || *edited.Subtype != "Sima" || *edited.DepthM != 130 || edited.HorizontalLengthM != nil ||
+		edited.Access != nil || len(edited.AltNames) != 0 || edited.State != places.StateOpen {
 		t.Errorf("an edit should replace every field: %+v", edited)
 	}
 	if edited.CreatedBy != e.member.user.Login || edited.UpdatedBy != e.other.user.Login || edited.UpdatedAt.Before(edited.CreatedAt) {
@@ -310,7 +329,7 @@ func TestPlaceCRUD(t *testing.T) {
 	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha editado el lugar «Sima de la Peña»") || !strings.Contains(msg, "Name:") {
 		t.Errorf("unexpected edit notice: %q", msg)
 	}
-	errorCode(t, e.json("PUT", "/api/v1/places/987654", e.member.token, body(e.cueva, "X", nil)), 404, "not_found")
+	errorCode(t, e.json("PUT", "/api/v1/places/987654", e.member.token, body(e.cavidad, "X", nil)), 404, "not_found")
 	errorCode(t, e.json("GET", "/api/v1/places/abc", e.member.token, nil), 400, "invalid_id")
 	errorCode(t, e.json("GET", "/api/v1/places/987654", e.member.token, nil), 404, "not_found")
 
@@ -339,9 +358,9 @@ func TestKindRules(t *testing.T) {
 	sheet := map[string]any{"technical_sheet": "Falta la cuerda del P20."}
 	measures := map[string]any{"depth_m": 50, "horizontal_length_m": 10}
 
-	status(t, create(e.cueva, measures), http.StatusCreated)
-	status(t, create(e.sima, measures), http.StatusCreated)
-	status(t, create(e.cueva, sheet), http.StatusCreated)
+	status(t, create(e.cavidad, measures), http.StatusCreated)
+	status(t, create(e.cavidad, map[string]any{"depth_m": 50, "subtype_id": e.subSima}), http.StatusCreated)
+	status(t, create(e.cavidad, sheet), http.StatusCreated)
 	status(t, create(e.canyon, sheet), http.StatusCreated)
 	errorCode(t, create(e.canyon, map[string]any{"depth_m": 10}), 400, "invalid_place_fields")
 	errorCode(t, create(e.canyon, map[string]any{"horizontal_length_m": 10}), 400, "invalid_place_fields")
@@ -350,7 +369,7 @@ func TestKindRules(t *testing.T) {
 	status(t, create(e.ferrata, map[string]any{"technical_sheet": "  "}), http.StatusCreated) // a blank one is none
 
 	// A cave can become a canyon only without a depth; the kind follows.
-	cave := e.newPlace(e.cueva, "Hondura", measures)
+	cave := e.newPlace(e.cavidad, "Hondura", measures)
 	errorCode(t, e.json("PUT", placePath(cave, ""), e.member.token, body(e.canyon, "Hondura", measures)), 400, "invalid_place_fields")
 	rec := e.json("PUT", placePath(cave, ""), e.member.token, body(e.canyon, "Hondura", nil))
 	status(t, rec, http.StatusOK)
@@ -364,7 +383,7 @@ func TestKindRules(t *testing.T) {
 func TestValidation(t *testing.T) {
 	e := newEnv(t)
 	create := func(extra map[string]any) *httptest.ResponseRecorder {
-		return e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "Sitio", extra))
+		return e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "Sitio", extra))
 	}
 	errorCode(t, create(map[string]any{"name": "   "}), 400, "place_name_required")
 	errorCode(t, create(map[string]any{"type_id": 0}), 400, "place_type_required")
@@ -393,7 +412,7 @@ func TestValidation(t *testing.T) {
 	}
 	// A missing coordinate is not zero.
 	for _, missing := range []string{"lat", "lon"} {
-		b := body(e.cueva, "Sitio", nil)
+		b := body(e.cavidad, "Sitio", nil)
 		delete(b, missing)
 		errorCode(t, e.json("POST", "/api/v1/places", e.member.token, b), 400, "invalid_coordinates")
 	}
@@ -408,9 +427,9 @@ func TestValidation(t *testing.T) {
 // are checked, and a change of a point counts as a change of the place.
 func TestPoints(t *testing.T) {
 	e := newEnv(t)
-	p := e.newPlace(e.cueva, "Cueva", nil)
+	p := e.newPlace(e.cavidad, "Cueva", nil)
 	e.notifier.wait(t)
-	other := e.newPlace(e.cueva, "Otra", nil)
+	other := e.newPlace(e.cavidad, "Otra", nil)
 	e.notifier.wait(t)
 
 	add := func(extra map[string]any) *httptest.ResponseRecorder {
@@ -475,8 +494,16 @@ func TestPoints(t *testing.T) {
 func TestTypes(t *testing.T) {
 	e := newEnv(t)
 	types := decode[[]places.Type](t, e.json("GET", "/api/v1/places/types", e.member.token, nil))
-	if len(types) < 6 || types[0].Name != "Cueva" || types[0].Kind != places.KindCave || types[2].Kind != places.KindCanyon || types[3].Kind != places.KindGeneral {
-		t.Fatalf("expected the seeded types: %+v", types)
+	if len(types) < 5 || types[0].Name != "Cavidad" || types[0].Kind != places.KindCave || !types[0].HasState ||
+		types[1].Kind != places.KindCanyon || !types[1].HasState || types[2].Kind != places.KindGeneral {
+		t.Fatalf("expected the seeded types, the cavities first: %+v", types)
+	}
+	withState := map[string]bool{}
+	for _, ty := range types {
+		withState[ty.Name] = ty.HasState
+	}
+	if !withState["Vía ferrata"] || withState["Refugio"] || withState["Otro"] {
+		t.Errorf("a via ferrata has a state, a hut and the rest do not: %v", withState)
 	}
 
 	rec := e.json("POST", "/api/v1/places/types", e.admin.token, map[string]any{"name": "  Fuente  "})
@@ -489,7 +516,7 @@ func TestTypes(t *testing.T) {
 		t.Errorf("unexpected notice: %q", msg)
 	}
 	errorCode(t, e.json("POST", "/api/v1/places/types", e.admin.token, map[string]any{"name": "fuente"}), 409, "duplicate_place_type")
-	errorCode(t, e.json("POST", "/api/v1/places/types", e.admin.token, map[string]any{"name": "cueva"}), 409, "duplicate_place_type")
+	errorCode(t, e.json("POST", "/api/v1/places/types", e.admin.token, map[string]any{"name": "cavidad"}), 409, "duplicate_place_type")
 	errorCode(t, e.json("POST", "/api/v1/places/types", e.admin.token, map[string]any{"name": "  "}), 400, "place_type_name_required")
 
 	path := fmt.Sprintf("/api/v1/places/types/%d", fuente.ID)
@@ -498,7 +525,7 @@ func TestTypes(t *testing.T) {
 	errorCode(t, e.json("PUT", "/api/v1/places/types/987654", e.admin.token, map[string]any{"name": "X"}), 404, "not_found")
 
 	// The types of caves and canyons are fixed.
-	for _, id := range []int64{e.cueva, e.sima, e.canyon} {
+	for _, id := range []int64{e.cavidad, e.canyon} {
 		fixed := fmt.Sprintf("/api/v1/places/types/%d", id)
 		errorCode(t, e.json("PUT", fixed, e.admin.token, map[string]any{"name": "Otra cosa"}), 409, "fixed_place_type")
 		errorCode(t, e.json("DELETE", fixed, e.admin.token, nil), 409, "fixed_place_type")
@@ -520,7 +547,7 @@ func TestTypes(t *testing.T) {
 // A person who created places cannot be deleted without more: the places keep who made them.
 func TestAPersonWithPlacesCannotBeDeletedBlindly(t *testing.T) {
 	e := newEnv(t)
-	e.newPlace(e.cueva, "Rastro", nil)
+	e.newPlace(e.cavidad, "Rastro", nil)
 	if err := users.NewRepository(e.tx).Delete(context.Background(), e.member.user.ID); err == nil {
 		t.Error("expected a person with a place not to be deleted without more")
 	}
@@ -530,7 +557,7 @@ func TestAPersonWithPlacesCannotBeDeletedBlindly(t *testing.T) {
 // listing and the place give them, and an edit may move it.
 func TestAreaOfAPlace(t *testing.T) {
 	e := newEnv(t)
-	p := e.newPlace(e.cueva, "Sima de la Peña", nil)
+	p := e.newPlace(e.cavidad, "Sima de la Peña", nil)
 	e.notifier.wait(t)
 	if p.AreaID != valdemanco || p.Where != "Valdemanco, Madrid, Comunidad de Madrid, España" || len(p.AreaIDs) != 4 || p.AreaIDs[3] != valdemanco {
 		t.Errorf("unexpected zone: %d %q %v", p.AreaID, p.Where, p.AreaIDs)
@@ -552,7 +579,7 @@ func TestAreaOfAPlace(t *testing.T) {
 	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE parent_id IS NULL AND code = 'ES'`).Scan(&spain); err != nil {
 		t.Fatal(err)
 	}
-	rec := e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Sima de la Peña", map[string]any{"area_id": spain}))
+	rec := e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Sima de la Peña", map[string]any{"area_id": spain}))
 	status(t, rec, http.StatusOK)
 	moved := decode[places.Place](t, rec)
 	if moved.Where != "España" || len(moved.AreaIDs) != 1 || len(moved.AreaPath) != 1 {
@@ -563,11 +590,11 @@ func TestAreaOfAPlace(t *testing.T) {
 	}
 
 	// The zone is required and has to exist.
-	missing := body(e.cueva, "Otra", nil)
+	missing := body(e.cavidad, "Otra", nil)
 	delete(missing, "area_id")
 	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, missing), 400, "place_area_required")
-	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "Otra", map[string]any{"area_id": 987654321})), 400, "unknown_area")
-	errorCode(t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Otra", map[string]any{"area_id": 987654321})), 400, "unknown_area")
+	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "Otra", map[string]any{"area_id": 987654321})), 400, "unknown_area")
+	errorCode(t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Otra", map[string]any{"area_id": 987654321})), 400, "unknown_area")
 }
 
 // What a cave is formed in: a geology of the catalogue, only for a cave, optional, shown in the listing
@@ -576,12 +603,12 @@ func TestGeologyOfAPlace(t *testing.T) {
 	e := newEnv(t)
 	withGeology := func(id int64) map[string]any { return map[string]any{"geology_id": id} }
 
-	p := e.newPlace(e.cueva, "Cueva de caliza", withGeology(e.caliza))
+	p := e.newPlace(e.cavidad, "Cueva de caliza", withGeology(e.caliza))
 	e.notifier.wait(t)
 	if p.GeologyID == nil || *p.GeologyID != e.caliza || p.Geology == nil || *p.Geology != "Caliza" {
 		t.Errorf("a cave with a geology: %+v %+v", p.GeologyID, p.Geology)
 	}
-	none := e.newPlace(e.sima, "Sima sin estudiar", nil)
+	none := e.newPlace(e.cavidad, "Sima sin estudiar", map[string]any{"subtype_id": e.subSima})
 	e.notifier.wait(t)
 	if none.GeologyID != nil || none.Geology != nil {
 		t.Errorf("it is optional: %+v", none.Geology)
@@ -603,13 +630,13 @@ func TestGeologyOfAPlace(t *testing.T) {
 			t.Errorf("a geology on %s: %d %s", name, rec.Code, rec.Body.String())
 		}
 	}
-	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "Rara", withGeology(987654))), 400, "unknown_geology")
-	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "Rara", withGeology(0))), 400, "unknown_geology")
+	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "Rara", withGeology(987654))), 400, "unknown_geology")
+	errorCode(t, e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "Rara", withGeology(0))), 400, "unknown_geology")
 	// A cave that becomes a canyon cannot keep it.
 	errorCode(t, e.json("PUT", placePath(p, ""), e.member.token, body(e.canyon, "Ahora cañón", withGeology(e.caliza))), 400, "invalid_place_fields")
 
 	// An edit replaces it: another one, and leaving it out clears it; the notice says it.
-	rec := e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Cueva de caliza", withGeology(e.yeso)))
+	rec := e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Cueva de caliza", withGeology(e.yeso)))
 	status(t, rec, http.StatusOK)
 	if got := decode[places.Place](t, rec); got.Geology == nil || *got.Geology != "Yeso" {
 		t.Errorf("the geology should change: %+v", got.Geology)
@@ -617,7 +644,7 @@ func TestGeologyOfAPlace(t *testing.T) {
 	if msg := e.notifier.wait(t); !strings.Contains(msg, "Geology: Caliza → Yeso") {
 		t.Errorf("the notice should say the geology changed: %q", msg)
 	}
-	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Cueva de caliza", nil))
+	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Cueva de caliza", nil))
 	status(t, rec, http.StatusOK)
 	if got := decode[places.Place](t, rec); got.GeologyID != nil || got.Geology != nil {
 		t.Errorf("leaving it out should clear it: %+v", got.Geology)
@@ -661,7 +688,7 @@ func TestGeologies(t *testing.T) {
 
 	// None is fixed: a seeded one is renamed like the others. One in use is not deleted.
 	status(t, e.json("PUT", fmt.Sprintf("/api/v1/places/geologies/%d", e.yeso), e.admin.token, map[string]any{"name": "Yeso (evaporita)"}), http.StatusOK)
-	e.newPlace(e.cueva, "En basalto", map[string]any{"geology_id": basalto.ID})
+	e.newPlace(e.cavidad, "En basalto", map[string]any{"geology_id": basalto.ID})
 	for _, g := range decode[[]places.Geology](t, e.json("GET", "/api/v1/places/geologies", e.member.token, nil)) {
 		if g.ID == basalto.ID && g.PlaceCount != 1 {
 			t.Errorf("expected 1 place, got %d", g.PlaceCount)
@@ -680,7 +707,7 @@ func TestGeologies(t *testing.T) {
 func TestAltitude(t *testing.T) {
 	e := newEnv(t)
 	create := func(extra map[string]any) *httptest.ResponseRecorder {
-		return e.json("POST", "/api/v1/places", e.member.token, body(e.cueva, "Cueva alta", extra))
+		return e.json("POST", "/api/v1/places", e.member.token, body(e.cavidad, "Cueva alta", extra))
 	}
 	rec := create(map[string]any{"altitude_m": 1234})
 	status(t, rec, http.StatusCreated)
@@ -698,7 +725,7 @@ func TestAltitude(t *testing.T) {
 	if listed == nil || *listed != 1234 {
 		t.Errorf("the listing should have it too: %v", listed)
 	}
-	if none := e.newPlace(e.sima, "Sima sin altitud", nil); none.AltitudeM != nil {
+	if none := e.newPlace(e.cavidad, "Sima sin altitud", map[string]any{"subtype_id": e.subSima}); none.AltitudeM != nil {
 		t.Errorf("it is optional: %v", *none.AltitudeM)
 	}
 	e.notifier.wait(t)
@@ -714,7 +741,7 @@ func TestAltitude(t *testing.T) {
 	}
 
 	// An edit replaces it, and leaving it out clears it; the notice says it changed.
-	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Cueva alta", map[string]any{"altitude_m": 1250}))
+	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Cueva alta", map[string]any{"altitude_m": 1250}))
 	status(t, rec, http.StatusOK)
 	if got := decode[places.Place](t, rec); *got.AltitudeM != 1250 {
 		t.Errorf("the altitude should change: %v", *got.AltitudeM)
@@ -725,12 +752,12 @@ func TestAltitude(t *testing.T) {
 	if msg := e.notifier.wait(t); !strings.Contains(msg, "AltitudeM: 1234 → 1250") {
 		t.Errorf("the notice should say the altitude changed: %q", msg)
 	}
-	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Cueva alta", nil))
+	rec = e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Cueva alta", nil))
 	status(t, rec, http.StatusOK)
 	if got := decode[places.Place](t, rec); got.AltitudeM != nil {
 		t.Errorf("leaving it out should clear it: %v", *got.AltitudeM)
 	}
-	errorCode(t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cueva, "Cueva alta", map[string]any{"altitude_m": 9001})), 400, "invalid_altitude")
+	errorCode(t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Cueva alta", map[string]any{"altitude_m": 9001})), 400, "invalid_altitude")
 
 	// The same in the other points.
 	point := func(extra map[string]any) map[string]any {
@@ -792,7 +819,7 @@ var png = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x0
 
 func TestFiles(t *testing.T) {
 	e := newEnv(t)
-	p := e.newPlace(e.cueva, "Cueva", nil)
+	p := e.newPlace(e.cavidad, "Cueva", nil)
 	e.notifier.wait(t)
 
 	// Anybody who can sign in attaches a file, with a caption.
@@ -877,7 +904,7 @@ func TestFiles(t *testing.T) {
 // A place that activities went to is not deleted: their history stays.
 func TestPlaceWithActivitiesIsNotDeleted(t *testing.T) {
 	e := newEnv(t)
-	p := e.newPlace(e.cueva, "Cueva con historia", nil)
+	p := e.newPlace(e.cavidad, "Cueva con historia", nil)
 	e.notifier.wait(t)
 	activity := testutil.InsertActivity(t, e.tx)
 	if _, err := e.tx.Exec(context.Background(), `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, p.ID); err != nil {

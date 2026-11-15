@@ -22,6 +22,7 @@ import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
   coordinatesHtml,
   loadGeologies,
+  loadSubtypes,
   loadTypes,
   POINT_KIND_LABELS,
   STATE_HELP,
@@ -36,6 +37,7 @@ if (placeId === null) await stopAsNotFound();
 
 let place = null;
 let types = [];
+let subtypes = [];
 let geologies = [];
 let names = {};
 let files = [];
@@ -122,7 +124,7 @@ async function renderMap() {
     if (!placeMap) {
       placeMap = await createMap(document.getElementById('place-map'));
       // Where nothing is, a click offers to create another place there (once, not at each drawing).
-      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, geologies }));
+      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, subtypes, geologies }));
     }
   } catch {
     document.getElementById('place-map').outerHTML =
@@ -154,14 +156,18 @@ async function renderMap() {
 function render() {
   document.title = `${place.name} — Club de Espeleología Katiuskas`;
   document.getElementById('place-name').textContent = place.name;
-  document.getElementById('place-meta').textContent = [place.type_name, place.where]
+  document.getElementById('place-meta').textContent = [place.type_name, place.subtype, place.where]
     .filter(Boolean)
     .join(' · ');
-  document.getElementById('place-state').innerHTML =
-    `${stateBadge(place.state)} <span class="subtitle">${escapeHtml(STATE_HELP[place.state] ?? '')}</span>`;
+  // A place whose type has no state does not say one.
+  const stateLine = document.getElementById('place-state');
+  stateLine.hidden = !place.state;
+  stateLine.innerHTML = place.state
+    ? `${stateBadge(place.state)} <span class="subtitle">${escapeHtml(STATE_HELP[place.state] ?? '')}</span>`
+    : '';
 
   const rows = [
-    ['Otros nombres', place.alt_names ? escapeHtml(place.alt_names) : null],
+    ['Otros nombres', place.alt_names.length ? escapeHtml(place.alt_names.join(' · ')) : null],
     // Where it is: each zone, from the country down, under the name of its level.
     ...place.area_path.map((zone) => [escapeHtml(zone.kind), escapeHtml(zone.name)]),
     ['Coordenadas', coordinatesHtml(place.lat, place.lon)],
@@ -223,19 +229,28 @@ function render() {
 
 async function load() {
   try {
-    const [loaded, loadedFiles, loadedActivities, loadedTypes, loadedGeologies, loadedNames] =
-      await Promise.all([
-        apiFetch(`/places/${placeId}`),
-        apiFetch(`/places/${placeId}/files`),
-        apiFetch(`/places/${placeId}/activities`),
-        loadTypes(),
-        loadGeologies(),
-        loadNames(),
-      ]);
+    const [
+      loaded,
+      loadedFiles,
+      loadedActivities,
+      loadedTypes,
+      loadedSubtypes,
+      loadedGeologies,
+      loadedNames,
+    ] = await Promise.all([
+      apiFetch(`/places/${placeId}`),
+      apiFetch(`/places/${placeId}/files`),
+      apiFetch(`/places/${placeId}/activities`),
+      loadTypes(),
+      loadSubtypes(),
+      loadGeologies(),
+      loadNames(),
+    ]);
     place = loaded;
     files = loadedFiles;
     activities = loadedActivities;
     types = loadedTypes;
+    subtypes = loadedSubtypes;
     geologies = loadedGeologies;
     names = loadedNames;
     render();
@@ -251,6 +266,7 @@ async function load() {
 document.getElementById('edit-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
+    subtypes,
     geologies,
     place,
     onSaved: async () => {

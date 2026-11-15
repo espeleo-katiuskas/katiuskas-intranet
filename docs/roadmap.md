@@ -35,10 +35,11 @@ went to each place, and the list and the page of each. What is left, in this ord
   slow and failed answers: a long timeout, the cache, and a note saying that the layer could not be
   loaded now, without hindering the rest of the map. The zone of a place added this way would be
   proposed with `GET /areas/locate`, which already exists (the form of a place uses it when the
-  coordinates are written), and the member confirms or changes it. To settle: what tells a shaft
-  from a cave (only the name does), the state a place added this way starts with, and the credit:
-  the data is ODbL, so the layer says where it comes from and the id of OpenStreetMap is kept, and
-  the catalogue must not be published as a database without looking at what that asks for.
+  coordinates are written), and the member confirms or changes it. To settle: which subtype a cavity
+  is (OpenStreetMap does not say, only the name hints at it, so the member would choose it), the
+  state a place added this way starts with, and the credit: the data is ODbL, so the layer says
+  where it comes from and the id of OpenStreetMap is kept, and the catalogue must not be published
+  as a database without looking at what that asks for.
 - **Later**: a technical sheet made of pitches (with their lengths, which would let the rope needed
   be worked out and linked with the material), other fields of a canyon (drop, length, difficulty),
   a catalogue code, and whether the location of some places should be hidden from some people (today

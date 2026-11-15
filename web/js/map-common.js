@@ -1,7 +1,7 @@
 import { escapeHtml } from './api.js';
 import { formatDecimal } from './coordinates.js';
 import { openPlaceDialog } from './place-dialog.js';
-import { STATE_LABELS } from './places-common.js';
+import { placeTypeLabel, STATE_LABELS } from './places-common.js';
 
 // What the maps of the places share: Leaflet (and its clustering) loaded the first time a map is shown,
 // the three layers of tiles, the markers and the legend. Leaflet is copied into web/vendor, so the page
@@ -96,7 +96,8 @@ function rememberLayer(id) {
   }
 }
 
-// The colour of the marker of each state, as the badges of the lists.
+// The colour of the marker of each state, as the badges of the lists; the places that have none are grey.
+const NO_STATE_COLOR = '#8a8f87';
 const STATE_COLORS = {
   open: '#3f8a56',
   permit_required: '#d19a1f',
@@ -142,7 +143,7 @@ function placeMarker(L, place) {
     radius: 8,
     weight: 2,
     color: '#ffffff',
-    fillColor: STATE_COLORS[place.state] ?? '#666666',
+    fillColor: STATE_COLORS[place.state] ?? NO_STATE_COLOR,
     fillOpacity: 0.95,
   });
 }
@@ -150,7 +151,7 @@ function placeMarker(L, place) {
 // What the popup of a place says: its name as a link, what it is and where, and its state.
 function placePopup(place) {
   return `<strong><a href="/lugar?id=${place.id}">${escapeHtml(place.name)}</a></strong><br>
-    ${escapeHtml(place.type_name)} · ${escapeHtml(STATE_LABELS[place.state] ?? place.state)}<br>
+    ${escapeHtml([placeTypeLabel(place), STATE_LABELS[place.state]].filter(Boolean).join(' · '))}<br>
     <span class="subtitle">${escapeHtml(place.where ?? '')}</span>`;
 }
 
@@ -197,10 +198,10 @@ function offerNewPlaces(L, map, lists) {
 
 // The key of the colours, as markup.
 function mapLegend() {
-  return Object.entries(STATE_LABELS)
+  return [...Object.entries(STATE_LABELS), ['', 'Sin estado']]
     .map(
       ([state, label]) =>
-        `<span class="map-legend-item"><span class="map-legend-dot" style="background:${STATE_COLORS[state]}"></span>${escapeHtml(label)}</span>`,
+        `<span class="map-legend-item"><span class="map-legend-dot" style="background:${STATE_COLORS[state] ?? NO_STATE_COLOR}"></span>${escapeHtml(label)}</span>`,
     )
     .join('');
 }

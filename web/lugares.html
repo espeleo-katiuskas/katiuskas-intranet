@@ -16,7 +16,7 @@
   <div class="section-header">
     <div>
       <h1>Lugares</h1>
-      <p class="subtitle">Cuevas, simas, cañones, vías ferratas, refugios… Mira dónde están, cómo se llega y en qué estado se encuentran. Cualquier socio puede añadir un lugar o completar uno que ya está.</p>
+      <p class="subtitle">Cavidades (cuevas, simas, torcas, minas…), cañones, vías ferratas, refugios… Mira dónde están, cómo se llega y en qué estado se encuentran. Cualquier socio puede añadir un lugar o completar uno que ya está.</p>
     </div>
     <div class="table-actions">
       <button id="manage-areas" type="button" class="btn btn-secondary btn-small" data-roles="admin">Zonas</button>
@@ -30,7 +30,7 @@
   <dialog id="types-dialog" class="panel modal" data-roles="admin">
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Tipos de lugar</h3>
-    <p class="subtitle">Cueva, Sima y Cañón son fijos: de ellos dependen los datos de cada lugar. Un tipo que ya tiene lugares no se puede borrar.</p>
+    <p class="subtitle">Cavidad y Cañón son fijos: de ellos dependen los datos de cada lugar. Un tipo que ya tiene lugares no se puede borrar.</p>
     <div class="table-wrap">
       <table class="stack-on-phone">
         <thead>
@@ -44,7 +44,30 @@
         <label for="new-type-name">Nuevo tipo</label>
         <input id="new-type-name" name="name" type="text" required>
       </div>
+      <div class="field">
+        <label class="checkbox-label" title="Si lo marcas, cada lugar de este tipo dirá si está abierto, necesita permiso, es turístico o está cerrado. No se puede cambiar después.">
+          <input name="has_state" type="checkbox"> Con estado
+        </label>
+      </div>
       <button type="submit" class="btn btn-primary btn-small">Añadir tipo</button>
+    </form>
+
+    <h3>Subtipos de las cavidades</h3>
+    <p class="subtitle">Qué es cada cavidad: cueva, sima, torca, mina, abrigo… Uno que ya tiene lugares no se puede borrar.</p>
+    <div class="table-wrap">
+      <table class="stack-on-phone">
+        <thead>
+          <tr><th>Nombre</th><th>Lugares</th><th></th></tr>
+        </thead>
+        <tbody id="subtypes-table-body"></tbody>
+      </table>
+    </div>
+    <form id="new-subtype-form" class="inline-form">
+      <div class="field">
+        <label for="new-subtype-name">Nuevo subtipo</label>
+        <input id="new-subtype-name" name="name" type="text" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-small">Añadir subtipo</button>
     </form>
 
     <h3>Geologías de las cuevas</h3>
@@ -74,6 +97,10 @@
     <div class="field">
       <label for="type-filter">Tipo</label>
       <select id="type-filter"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label for="subtype-filter">Subtipo</label>
+      <select id="subtype-filter"><option value="">Todos</option></select>
     </div>
     <div class="field">
       <label for="state-filter">Estado</label>

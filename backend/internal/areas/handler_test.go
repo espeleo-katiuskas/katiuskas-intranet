@@ -180,12 +180,17 @@ func (e *env) add(parent int64, name, kind string) areas.Area {
 // placeIn puts a place in a zone, straight in the database (the places have their own tests).
 func (e *env) placeIn(area int64) {
 	e.t.Helper()
-	_, err := e.tx.Exec(context.Background(), `
-		INSERT INTO places (type_id, kind, name, area_id, lat, lon, created_by, updated_by)
-		SELECT t.id, t.kind, 'Un lugar', $1, 40, -3, $2, $2 FROM place_types t WHERE t.name = 'Cueva'
+	tag, err := e.tx.Exec(context.Background(), `
+		INSERT INTO places (type_id, kind, has_state, state, subtype_id, name, area_id, lat, lon, created_by, updated_by)
+		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM place_subtypes WHERE name = 'Cueva'), 'Un lugar',
+			$1, 40, -3, $2, $2
+		FROM place_types t WHERE t.name = 'Cavidad'
 	`, area, e.member.user.ID)
 	if err != nil {
 		e.t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		e.t.Fatalf("expected one place to be inserted, got %d", tag.RowsAffected()) // not silently none
 	}
 }
 
