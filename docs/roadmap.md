@@ -8,14 +8,9 @@ building it; nothing in it is decided. When one is started its design goes to th
 
 The first phase is done and documented (`api.md`, `database.md`, `backend-internals.md`,
 `frontend.md`): the types, the places with their kind, state, main coordinate and texts, their other
-points, their photos and documents, and the list and the page of each. What is left, in this order:
+points, their photos and documents, the map (on `/lugares` and on each place), and the list and
+the page of each. What is left, in this order:
 
-- **The map**: all the places on one map, grouped when the view is wide (Leaflet and its clustering,
-  copied into the repository, with a light listing of the places for it), and a small map on the
-  page of each place with all its points. To settle: the source of the tiles (a topographic and a
-  satellite layer; OpenStreetMap's standard tiles limit heavy use and the IGN is the Spanish
-  official source) and whether the grouping stays in the browser (fine for a few thousand places) or
-  moves to the server.
 - **Activities**: a table joining places and activities, shown on the page of each activity and on
   that of each place (what has been done there).
 - **Tracks**: the way of an approach or of a canyon, as a GPX attached to the place and drawn on its

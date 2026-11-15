@@ -277,8 +277,10 @@ the API says who and when (`created_by`, `updated_by`, `updated_at`); only admin
 place; only admin manages the types. Any member attaches photos and documents to a place
 (`place_files`, bytes in `PLACE_FILES_ROOT`, created once and **never rewritten**, like the
 library's); whoever attached one, admin and board remove it. The frontend reads UTM as well as
-decimals (`js/coordinates.js`) but the API only has latitude and longitude. No PostGIS. Not there
-yet: the map, the link with activities (`docs/roadmap.md`).
+decimals (`js/coordinates.js`) but the API only has latitude and longitude. No PostGIS. The list has
+a map of the same places and each place a small one (`js/map-common.js`: Leaflet and its clustering
+are copied into `web/vendor/`, tiles from the IGN or OpenStreetMap). Not there yet: the link with
+activities (`docs/roadmap.md`).
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.
 Notifications are fire-and-forget (own goroutine, bounded timeout, detached context), with two

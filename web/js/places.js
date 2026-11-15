@@ -7,6 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initAreasManager } from './areas-manager.js';
+import { createMap, mapLegend, placeMarker, placePopup } from './map-common.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
@@ -67,6 +68,86 @@ function renderPlace(place) {
     </tr>`;
 }
 
+// ----- the map: the same places the table shows, with the same filters -----
+
+const params = new URLSearchParams(window.location.search);
+let mapView = params.get('vista') === 'mapa';
+const focusId = Number(params.get('lugar')) || null; // A place to show first, from its own page.
+let mapState = null; // { L, map, cluster, markers }, once the map has been made.
+let mapStarting = null;
+let focused = false;
+
+async function startMap() {
+  mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
+    const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
+    map.addLayer(cluster);
+    mapState = { L, map, cluster, markers: new Map() };
+    return mapState;
+  });
+  return mapStarting;
+}
+
+async function renderMap(shown) {
+  const note = document.getElementById('map-note');
+  let state;
+  try {
+    state = await startMap();
+  } catch (err) {
+    mapStarting = null;
+    note.textContent = err.message;
+    return;
+  }
+  const { L, map, cluster, markers } = state;
+  cluster.clearLayers();
+  markers.clear();
+  for (const place of shown) {
+    const marker = placeMarker(L, place).bindPopup(placePopup(place));
+    marker.bindTooltip(place.name);
+    markers.set(place.id, marker);
+  }
+  cluster.addLayers([...markers.values()]);
+  note.textContent = allPlaces.length
+    ? `${shown.length} de ${allPlaces.length} lugares en el mapa.`
+    : 'Todavía no hay ningún lugar.';
+  const target = !focused && focusId ? markers.get(focusId) : null;
+  focused = true;
+  if (target) {
+    // Close enough for it not to be inside a group; the group draws its markers once the view moved.
+    map.once('moveend', () => target.openPopup());
+    map.setView(target.getLatLng(), 16, { animate: false });
+  } else if (shown.length) {
+    map.fitBounds(L.latLngBounds(shown.map((p) => [p.lat, p.lon])), {
+      padding: [30, 30],
+      maxZoom: 15,
+    });
+  }
+}
+
+function applyView(map) {
+  mapView = map;
+  document.getElementById('map-view').hidden = !map;
+  document.getElementById('list-view').hidden = map;
+  document.getElementById('view-list').setAttribute('aria-pressed', String(!map));
+  document.getElementById('view-map').setAttribute('aria-pressed', String(map));
+}
+
+function showView(map) {
+  applyView(map);
+  const url = new URL(window.location.href);
+  if (map) url.searchParams.set('vista', 'mapa');
+  else url.searchParams.delete('vista');
+  url.searchParams.delete('lugar');
+  window.history.replaceState(null, '', url);
+  if (map) {
+    renderPlaces();
+    mapState?.map.invalidateSize(); // It was hidden, so it did not know its size.
+  }
+}
+
+document.getElementById('map-legend').innerHTML = mapLegend();
+document.getElementById('view-list').addEventListener('click', () => showView(false));
+document.getElementById('view-map').addEventListener('click', () => showView(true));
+
 function renderPlaces() {
   const words = normalizeForSearch(searchInput.value).split(/\s+/).filter(Boolean);
   const shown = allPlaces.filter(
@@ -81,6 +162,7 @@ function renderPlaces() {
     : `<tr><td colspan="5">${allPlaces.length ? 'Ningún lugar coincide con la búsqueda.' : 'Todavía no hay ningún lugar.'}</td></tr>`;
   countLine.hidden = allPlaces.length === 0;
   countLine.textContent = `${shown.length} de ${allPlaces.length} lugares`;
+  if (mapView) renderMap(shown);
 }
 
 // The options of a filter, keeping what was chosen if it is still there.
@@ -231,4 +313,5 @@ if (isAdmin) {
   });
 }
 
+applyView(mapView);
 await load();

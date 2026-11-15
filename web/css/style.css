@@ -2305,3 +2305,65 @@ dialog.modal .area-results {
 #areas-dialog .field-grid {
   margin-top: 12px;
 }
+
+/* The maps of the places. */
+.places-map {
+  height: min(70vh, 640px);
+  min-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  z-index: 0;
+}
+
+.places-map.small {
+  height: 320px;
+  min-height: 0;
+}
+
+.map-legend {
+  font-size: 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+}
+
+.map-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.leaflet-popup-content .subtitle {
+  margin: 0;
+}
+
+.view-switch {
+  display: inline-flex;
+  gap: 0;
+}
+
+.view-switch .btn {
+  border-radius: 0;
+}
+
+.view-switch .btn:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.view-switch .btn:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.view-switch .btn[aria-pressed='true'] {
+  background: var(--surface-muted);
+  font-weight: 600;
+}

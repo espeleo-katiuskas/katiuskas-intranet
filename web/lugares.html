@@ -84,9 +84,21 @@
       <select id="geology-filter"><option value="">Todas</option></select>
     </div>
   </div>
-  <p class="people-count" id="places-count" hidden></p>
+  <div class="section-header">
+    <p class="people-count" id="places-count" hidden></p>
+    <div class="view-switch" role="group" aria-label="Cómo ver los lugares">
+      <button type="button" class="btn btn-secondary btn-small" id="view-list" aria-pressed="true">Lista</button>
+      <button type="button" class="btn btn-secondary btn-small" id="view-map" aria-pressed="false">Mapa</button>
+    </div>
+  </div>
 
-  <div class="table-wrap">
+  <div id="map-view" hidden>
+    <div id="places-map" class="places-map"></div>
+    <div class="map-legend" id="map-legend"></div>
+    <p class="subtitle" id="map-note"></p>
+  </div>
+
+  <div class="table-wrap" id="list-view">
     <table class="stack-on-phone">
       <thead>
         <tr><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Dónde</th><th>Medidas</th></tr>

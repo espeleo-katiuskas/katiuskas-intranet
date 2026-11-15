@@ -198,11 +198,13 @@ next to the badge on the page), where it is (`where`: the zone, the province, th
 country, so "Madrid" finds the places of the province too) and the measures of a cave, with a search
 that looks in the name, the other names, the type, the state and where it is (accents and case
 ignored, every word has to appear, the geology of a cave included) and three selects, by type, by
-state and by geology; the type of a row has the geology of a cave under it. Any member gets "+ Nuevo
-lugar", which opens the dialog of `place-dialog.js` and goes to the page of the place once it is
-saved; admin gets "Tipos y geologías", a dialog with two tables to add, rename and delete the
-general types (Cueva, Sima and Cañón show "Fijo" and cannot be touched) and the geologies of the
-caves (none is fixed; one that has caves cannot be deleted), both with the same code
+state and by geology; the type of a row has the geology of a cave under it. "Lista" and "Mapa"
+switch the table for a map of the same places, with the same filters (see "The map of the places"
+below); `/lugares?vista=mapa` opens it, and `&lugar=<id>` also opens the popup of that place. Any
+member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the page of the
+place once it is saved; admin gets "Tipos y geologías", a dialog with two tables to add, rename and
+delete the general types (Cueva, Sima and Cañón show "Fijo" and cannot be touched) and the geologies
+of the caves (none is fixed; one that has caves cannot be deleted), both with the same code
 (`bindCatalogue` in `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the
 data (other names, one row per zone from the country down — "País España", "Comunidad autónoma
 Comunidad de Madrid", "Provincia Madrid", "Municipio Valdemanco": the name of the level is the
@@ -254,6 +256,24 @@ another, or emptied to make it a country; after a confirmation that says that al
 it), the siblings it can be merged into (after a confirmation, which says that everything in it goes
 to the other one), "Añadir una zona dentro" and "Borrar zona", which is disabled for a country or a
 zone with something in it (and says why).
+
+**The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
+copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,
+and no build step is needed; `loadLeaflet` adds their scripts and styles the first time a map is
+shown, so a page without a map does not pay for them. There are three base layers, chosen with the
+control of the map and remembered in the browser (`localStorage`, `places-map-layer`): "Topográfico
+(IGN)" (the default, the IGN's `mapa-raster` WMTS, which has no tiles beyond zoom 17 and is enlarged
+after that), "Satélite (PNOA)" and "OpenStreetMap", each with its credit; the IGN's are the official
+source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask for light use,
+which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the colours of the
+badges) with its name as a tooltip and a popup with its name as a link, its type, its state and
+where it is; nearby places are grouped (`L.markerClusterGroup`) in the browser, which is fine for
+the thousands of places a club may have: the map uses the same `GET /places` as the table, and every
+filter and the search redraw it and fit it to what is left. The small map of `/lugar` has the main
+coordinate in its state's colour and the other points in grey, with their kind and name as a
+tooltip, and a link to the big map centred on the place. If the tiles or Leaflet cannot be loaded
+the page says so and the rest keeps working. Nothing here is drawn from the server's side, and an
+offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

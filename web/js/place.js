@@ -23,6 +23,7 @@ import {
   STATE_HELP,
   stateBadge,
 } from './places-common.js';
+import { createMap, placeMarker, placePopup } from './map-common.js';
 import { renderRichText } from './rich-text.js';
 
 const user = await initPage();
@@ -79,6 +80,40 @@ function renderFiles() {
         })
         .join('')
     : '<p>Todavía no hay fotos ni documentos.</p>';
+}
+
+// The small map: the main coordinate, in the colour of the state, and the other points in grey, each
+// with its kind and name when pointed at. It is made once and drawn again after every change.
+let placeMap = null;
+
+async function renderMap() {
+  document.getElementById('place-map-link').href = `/lugares?vista=mapa&lugar=${place.id}`;
+  try {
+    placeMap ??= await createMap(document.getElementById('place-map'));
+  } catch {
+    document.getElementById('place-map').outerHTML =
+      '<p class="subtitle">No se pudo cargar el mapa.</p>';
+    return;
+  }
+  const { L, map } = placeMap;
+  placeMap.group?.remove();
+  const group = L.featureGroup().addTo(map);
+  placeMap.group = group;
+  placeMarker(L, place).bindPopup(placePopup(place)).addTo(group);
+  for (const point of place.points) {
+    L.circleMarker([point.lat, point.lon], {
+      radius: 6,
+      weight: 2,
+      color: '#ffffff',
+      fillColor: '#6b6f68',
+      fillOpacity: 0.95,
+    })
+      .bindTooltip(
+        [POINT_KIND_LABELS[point.kind] ?? point.kind, point.name].filter(Boolean).join(': '),
+      )
+      .addTo(group);
+  }
+  map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 16 });
 }
 
 function render() {
@@ -147,6 +182,7 @@ function render() {
       : '';
   document.getElementById('place-authorship').innerHTML = created + changed;
   renderFiles();
+  renderMap();
 }
 
 async function load() {
