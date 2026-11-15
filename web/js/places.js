@@ -15,7 +15,7 @@ import {
   loadGeologies,
   loadSubtypes,
   loadTypes,
-  measuresText,
+  measuresHtml,
   placeTypeLabel,
   STATE_LABELS,
   stateBadge,
@@ -70,7 +70,7 @@ function renderPlace(place) {
       }</td>
       <td>${stateBadge(place.state)}</td>
       <td>${escapeHtml(place.where)}</td>
-      <td>${escapeHtml(measuresText(place)) || '—'}</td>
+      <td>${measuresHtml(place) || '—'}</td>
     </tr>`;
 }
 

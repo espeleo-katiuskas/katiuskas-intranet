@@ -74,11 +74,16 @@ function coordinatesHtml(lat, lon, altitude = null) {
   );
 }
 
-// "120 m de profundidad · 300 m de desarrollo", for a cave that has either.
-function measuresText(place) {
+// The measures of a cave that has either, short: "120m ↓ · 300m ↔" (depth and horizontal length), each
+// with what it is as its tooltip, and each on one line. Empty if there are none.
+function measuresHtml(place) {
   return [
-    place.depth_m != null ? `${place.depth_m} m de profundidad` : null,
-    place.horizontal_length_m != null ? `${place.horizontal_length_m} m de desarrollo` : null,
+    place.depth_m != null
+      ? `<span class="nowrap" title="${place.depth_m} m de profundidad">${place.depth_m}m ↓</span>`
+      : null,
+    place.horizontal_length_m != null
+      ? `<span class="nowrap" title="${place.horizontal_length_m} m de desarrollo horizontal">${place.horizontal_length_m}m ↔</span>`
+      : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -89,7 +94,7 @@ export {
   loadGeologies,
   loadSubtypes,
   loadTypes,
-  measuresText,
+  measuresHtml,
   placeTypeLabel,
   POINT_KIND_LABELS,
   STATE_HELP,
