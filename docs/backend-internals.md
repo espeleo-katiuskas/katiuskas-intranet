@@ -965,18 +965,21 @@ gives each with its ancestors, which is what lets two zones with the same name b
 ancestors.
 
 **Locating a point.** `GET /areas/locate?lat=&lon=` proposes the zone a coordinate is in, for the
-form of a place. `Service.Locate` asks a `Boundaries` source (`Overpass`, in `locate.go`; none when
-`OVERPASS_URL` is `off`, and then the answer is always `null`) for the ISO code of the country and
-the INE code of the municipality that contain the point (an `is_in` query for the administrative
-areas of levels 2 and 8; a municipality's `ref:ine` has eleven digits and the first five are the
-code), and looks the zone up by code: the municipality first (`kind = 'Municipio'`, since a
-community and a province can share a code), then the country (a zone below none). It is a help, so
-it never says more than it knows (no zone is `{"area": null}`, not an error) and a failure is 502
-`locate_unavailable`, which the form ignores. The public instances are often at capacity and ask for
-light use, so `OVERPASS_URL` takes several, separated by commas, tried in order (6 s each); answers
-are kept 24 hours by the point rounded to about ten metres (2,000 at most), no more than three
-requests run at once, and the request says only a generic name as its client. Nothing about the
-person goes out, only the coordinate.
+form of a place. `Service.Locate` asks a `Boundaries` source (`Nominatim`, in `locate.go`; none when
+`NOMINATIM_URL` is `off`, and then the answer is always `null`) for the ISO code of the country and
+the INE code of the municipality that contain the point: a reverse search at the level of a
+municipality (`zoom=10`, `extratags=1`), whose answer for a Spanish municipality carries `ref:ine`,
+eleven digits of which the first five are the code. It looks the zone up by code: the municipality
+first (`kind = 'Municipio'`, since a community and a province can share a code), then the country (a
+zone below none). It is a help, so it never says more than it knows (no zone, or the sea, is
+`{"area": null}`, not an error) and a failure is 502 `locate_unavailable`, which the form ignores.
+**Why Nominatim and not Overpass:** an `is_in` query on Overpass says the same, but the public
+instances are very often at capacity and took half a minute, or did not answer, where Nominatim
+takes a fraction of a second. Its usage policy asks for at most one request a second and a client
+that says who it is, so the requests are spaced out by a second (`Spacing` changes it, for an
+instance of one's own), the answers are kept 24 hours by the point rounded to about ten metres
+(2,000 at most), and the request says only a generic name as its client. Nothing about the person
+goes out, only the coordinate.
 
 **Adding.** Any member adds a zone below another; an admin also adds a country (`POST /areas` with
 no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is "País" unless given).

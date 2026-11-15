@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,16 +30,19 @@ type Boundaries interface {
 // ErrLocateUnavailable means the source of boundaries could not be asked or did not answer.
 var ErrLocateUnavailable = errors.New("the zone of a point could not be looked up now")
 
-// Overpass asks Overpass API instances (OpenStreetMap's data) for the boundaries that contain a point,
-// the next one when an instance is busy or does not answer: the public ones are often at capacity. The
-// answers are kept for a day, by the point rounded to about ten metres, and no more than a few
-// requests are in flight at once, as the public instances ask for light use.
-type Overpass struct {
-	urls   []string
+// Nominatim asks a Nominatim instance (OpenStreetMap's geocoder) for the administrative division at a
+// point, at the level of a municipality (`zoom=10`), with its extra tags: in Spain that division carries
+// `ref:ine`. It answers in a fraction of a second, which Overpass, the other public service that could
+// say it, does not when it is busy (half a minute, or not at all). Its usage policy asks for at most one
+// request per second and a client that says who it is, so the requests are spaced out, the answers are
+// kept for a day by the point rounded to about ten metres, and the name of the client is generic.
+type Nominatim struct {
+	url    string
 	client *http.Client
-	slots  chan struct{}
 
-	mu    sync.Mutex
+	mu    sync.Mutex    // Guards next and cache.
+	next  time.Time     // When the next request may go out.
+	gap   time.Duration // How long after a request the next may go out.
 	cache map[string]cached
 }
 
@@ -48,58 +52,82 @@ type cached struct {
 }
 
 const (
-	overpassTimeout   = 6 * time.Second // For each instance.
-	overpassCacheTTL  = 24 * time.Hour
-	overpassCacheSize = 2000
-	overpassInFlight  = 3
+	nominatimTimeout   = 8 * time.Second
+	nominatimInterval  = time.Second // What the usage policy of the public instance asks for.
+	nominatimCacheTTL  = 24 * time.Hour
+	nominatimCacheSize = 2000
 )
 
-// NewOverpass uses the instances at the endpoints (".../api/interpreter"), in order.
-func NewOverpass(endpoints ...string) *Overpass {
-	return &Overpass{
-		urls:   endpoints,
-		client: &http.Client{Timeout: overpassTimeout},
-		slots:  make(chan struct{}, overpassInFlight),
-		cache:  map[string]cached{},
+// NewNominatim uses the instance whose reverse endpoint is at url (".../reverse").
+func NewNominatim(url string) *Nominatim {
+	return &Nominatim{
+		url: url, client: &http.Client{Timeout: nominatimTimeout}, cache: map[string]cached{},
+		gap: nominatimInterval,
 	}
+}
+
+// Spacing changes how long the requests are kept apart (for an instance of one's own, or a test).
+func (n *Nominatim) Spacing(gap time.Duration) *Nominatim {
+	n.gap = gap
+	return n
 }
 
 func cacheKey(lat, lon float64) string {
 	return fmt.Sprintf("%.4f,%.4f", lat, lon)
 }
 
-func (o *Overpass) cached(key string) (Containing, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	hit, ok := o.cache[key]
+func (n *Nominatim) cached(key string) (Containing, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	hit, ok := n.cache[key]
 	if !ok || time.Now().After(hit.expires) {
-		delete(o.cache, key)
+		delete(n.cache, key)
 		return Containing{}, false
 	}
 	return hit.value, true
 }
 
-func (o *Overpass) remember(key string, value Containing) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if len(o.cache) >= overpassCacheSize {
+func (n *Nominatim) remember(key string, value Containing) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if len(n.cache) >= nominatimCacheSize {
 		now := time.Now()
-		for k, v := range o.cache {
+		for k, v := range n.cache {
 			if now.After(v.expires) {
-				delete(o.cache, k)
+				delete(n.cache, k)
 			}
 		}
-		if len(o.cache) >= overpassCacheSize {
-			o.cache = map[string]cached{} // Full of live entries: start again rather than grow.
+		if len(n.cache) >= nominatimCacheSize {
+			n.cache = map[string]cached{} // Full of live entries: start again rather than grow.
 		}
 	}
-	o.cache[key] = cached{value: value, expires: time.Now().Add(overpassCacheTTL)}
+	n.cache[key] = cached{value: value, expires: time.Now().Add(nominatimCacheTTL)}
 }
 
-type overpassAnswer struct {
-	Elements []struct {
-		Tags map[string]string `json:"tags"`
-	} `json:"elements"`
+// wait takes the next turn to send a request, at least nominatimInterval after the one before.
+func (n *Nominatim) wait(ctx context.Context) error {
+	n.mu.Lock()
+	turn := n.next
+	if now := time.Now(); turn.Before(now) {
+		turn = now
+	}
+	n.next = turn.Add(n.gap)
+	n.mu.Unlock()
+	select {
+	case <-time.After(time.Until(turn)):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type nominatimAnswer struct {
+	// Error is what Nominatim says when there is nothing there (the sea): it is still a 200.
+	Error   string `json:"error"`
+	Address struct {
+		CountryCode string `json:"country_code"`
+	} `json:"address"`
+	ExtraTags map[string]string `json:"extratags"`
 }
 
 // municipalityCode is the INE code of the municipality a `ref:ine` names: its first five digits.
@@ -115,62 +143,46 @@ func municipalityCode(ref string) string {
 	return ref[:5]
 }
 
-func (o *Overpass) Containing(ctx context.Context, lat, lon float64) (Containing, error) {
+func (n *Nominatim) Containing(ctx context.Context, lat, lon float64) (Containing, error) {
 	key := cacheKey(lat, lon)
-	if hit, ok := o.cached(key); ok {
+	if hit, ok := n.cached(key); ok {
 		return hit, nil
 	}
-	select {
-	case o.slots <- struct{}{}:
-		defer func() { <-o.slots }()
-	case <-ctx.Done():
-		return Containing{}, ErrLocateUnavailable
+	if err := n.wait(ctx); err != nil {
+		return Containing{}, fmt.Errorf("%w: %v", ErrLocateUnavailable, err)
 	}
-	query := fmt.Sprintf(`[out:json][timeout:5];is_in(%.6f,%.6f)->.a;area.a[boundary=administrative][admin_level~"^(2|8)$"];out tags;`, lat, lon)
-	var answer overpassAnswer
-	var lastErr error
-	for _, endpoint := range o.urls {
-		if lastErr = o.ask(ctx, endpoint, query, &answer); lastErr == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			break
-		}
+	query := url.Values{
+		"format": {"jsonv2"}, "lat": {strconv.FormatFloat(lat, 'f', 6, 64)},
+		"lon": {strconv.FormatFloat(lon, 'f', 6, 64)}, "zoom": {"10"},
+		"extratags": {"1"}, "addressdetails": {"1"},
 	}
-	if lastErr != nil {
-		return Containing{}, fmt.Errorf("%w: %v", ErrLocateUnavailable, lastErr)
-	}
-	var found Containing
-	for _, e := range answer.Elements {
-		if code := strings.ToUpper(e.Tags["ISO3166-1"]); len(code) == 2 && found.CountryCode == "" {
-			found.CountryCode = code
-		}
-		if code := municipalityCode(e.Tags["ref:ine"]); code != "" && found.MunicipalityCode == "" {
-			found.MunicipalityCode = code
-		}
-	}
-	o.remember(key, found)
-	return found, nil
-}
-
-// ask puts the query to one instance and reads its answer.
-func (o *Overpass) ask(ctx context.Context, endpoint, query string, answer *overpassAnswer) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(url.Values{"data": {query}}.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, n.url+"?"+query.Encode(), nil)
 	if err != nil {
-		return err
+		return Containing{}, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// A generic name: the instance asks who is calling, and nothing more than that is needed.
 	req.Header.Set("User-Agent", "intranet-zone-lookup/1.0")
-	resp, err := o.client.Do(req)
+	resp, err := n.client.Do(req)
 	if err != nil {
-		return err
+		return Containing{}, fmt.Errorf("%w: %v", ErrLocateUnavailable, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
+		return Containing{}, fmt.Errorf("%w: status %d", ErrLocateUnavailable, resp.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(answer)
+	var answer nominatimAnswer
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&answer); err != nil {
+		return Containing{}, fmt.Errorf("%w: %v", ErrLocateUnavailable, err)
+	}
+	var found Containing
+	if answer.Error == "" {
+		if code := strings.ToUpper(answer.Address.CountryCode); len(code) == 2 {
+			found.CountryCode = code
+		}
+		found.MunicipalityCode = municipalityCode(answer.ExtraTags["ref:ine"])
+	}
+	n.remember(key, found)
+	return found, nil
 }
 
 // validPoint says whether a latitude and a longitude are numbers that fit WGS84.

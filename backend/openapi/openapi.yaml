@@ -2653,8 +2653,8 @@ paths:
     get:
       summary: Propose the zone a point is in
       description: >
-        Any baseline role. Asks an Overpass API instance (OpenStreetMap's data, configured with
-        `OVERPASS_URL`) which municipality and country contain the point, and answers with the zone of
+        Any baseline role. Asks a Nominatim instance (OpenStreetMap's geocoder, configured with
+        `NOMINATIM_URL`) which municipality and country contain the point, and answers with the zone of
         the seed that has that INE code (a Spanish municipality) or else that country's ISO code, with
         its ancestors; `area` is null when none is known or when the lookup is turned off. Answers are
         kept for a day, by the point rounded to about ten metres. It is a help to propose a zone, never
@@ -2675,7 +2675,7 @@ paths:
                     nullable: true
                     allOf: [{ $ref: "#/components/schemas/Area" }]
         "400": { description: "invalid_coordinates — missing, not numbers, or out of range." }
-        "502": { description: "locate_unavailable — no Overpass instance answered." }
+        "502": { description: "locate_unavailable — the Nominatim instance did not answer." }
 
   /areas/{id}:
     parameters:

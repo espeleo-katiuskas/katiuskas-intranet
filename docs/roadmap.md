@@ -32,12 +32,15 @@ the page of each. What is left, in this order:
   OpenStreetMap element kept in the new place (a column in `places`) so that the same entrance is
   not offered again, nor added twice. They would be asked for the area on view only, by the API (an
   Overpass query with a cache, not from the browser: the public instances ask for light use and an
-  identifiable client) and never stored. The zone of a place added this way would be proposed with
-  `GET /areas/locate`, which already exists (the form of a place uses it when the coordinates are
-  written), and the member confirms or changes it. To settle: what tells a shaft from a cave (only
-  the name does), the state a place added this way starts with, and the credit: the data is ODbL, so
-  the layer says where it comes from and the id of OpenStreetMap is kept, and the catalogue must not
-  be published as a database without looking at what that asks for.
+  identifiable client) and never stored. The public Overpass instances are often at capacity (a
+  simple query took half a minute, and others did not answer at all), so the layer has to cope with
+  slow and failed answers: a long timeout, the cache, and a note saying that the layer could not be
+  loaded now, without hindering the rest of the map. The zone of a place added this way would be
+  proposed with `GET /areas/locate`, which already exists (the form of a place uses it when the
+  coordinates are written), and the member confirms or changes it. To settle: what tells a shaft
+  from a cave (only the name does), the state a place added this way starts with, and the credit:
+  the data is ODbL, so the layer says where it comes from and the id of OpenStreetMap is kept, and
+  the catalogue must not be published as a database without looking at what that asks for.
 - **Later**: a technical sheet made of pitches (with their lengths, which would let the rope needed
   be worked out and linked with the material), other fields of a canyon (drop, length, difficulty),
   a catalogue code, and whether the location of some places should be hidden from some people (today

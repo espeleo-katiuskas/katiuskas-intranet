@@ -7,80 +7,89 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 )
 
-// The Overpass client reads the country and the INE code of the municipality out of what the instance
+// The Nominatim client reads the country and the INE code of the municipality out of what the instance
 // answers, keeps the answer for the same point, and calls a failure by its name.
-func TestOverpass(t *testing.T) {
+func TestNominatim(t *testing.T) {
 	var requests atomic.Int32
 	var body string
 	status := http.StatusOK
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		if r.Method != http.MethodPost || r.Header.Get("User-Agent") == "" {
-			t.Errorf("a POST that says who calls: %s %q", r.Method, r.Header.Get("User-Agent"))
-		}
-		_ = r.ParseForm()
-		if q := r.PostForm.Get("data"); q == "" {
-			t.Errorf("no query sent")
+		query := r.URL.Query()
+		if r.Method != http.MethodGet || r.Header.Get("User-Agent") == "" || query.Get("zoom") != "10" ||
+			query.Get("extratags") != "1" || query.Get("lat") == "" || query.Get("lon") == "" {
+			t.Errorf("a GET that says who calls, for a municipality, with its tags: %s %q %v",
+				r.Method, r.Header.Get("User-Agent"), query)
 		}
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
-	o := areas.NewOverpass(server.URL)
+	n := areas.NewNominatim(server.URL).Spacing(0)
 	ctx := context.Background()
 
-	body = `{"elements":[
-		{"tags":{"admin_level":"8","name":"La Cabrera","ref:ine":"28030000000"}},
-		{"tags":{"admin_level":"2","ISO3166-1":"es"}}]}`
-	got, err := o.Containing(ctx, 40.85, -3.62)
+	body = `{"name":"La Cabrera","address":{"country_code":"es"},"extratags":{"ref:ine":"28030000000"}}`
+	got, err := n.Containing(ctx, 40.85, -3.62)
 	if err != nil || got.MunicipalityCode != "28030" || got.CountryCode != "ES" {
 		t.Fatalf("unexpected answer: %+v, %v", got, err)
 	}
 	// The same point (to about ten metres) is not asked again.
-	if _, err := o.Containing(ctx, 40.85001, -3.62001); err != nil || requests.Load() != 1 {
+	if _, err := n.Containing(ctx, 40.85001, -3.62001); err != nil || requests.Load() != 1 {
 		t.Errorf("expected the answer to be kept, %d requests, %v", requests.Load(), err)
 	}
 
-	// A ref that is not an INE code is not taken for one; no boundaries is an empty answer.
-	body = `{"elements":[{"tags":{"admin_level":"8","ref:ine":"abc"}}]}`
-	if got, err := o.Containing(ctx, 1, 1); err != nil || got != (areas.Containing{}) {
+	// Outside Spain there is no INE code, only the country; a ref that is not a code is not taken for one.
+	body = `{"address":{"country_code":"pt"},"extratags":{"ref:ine":"abc"}}`
+	if got, err := n.Containing(ctx, 38.7, -9.1); err != nil || got != (areas.Containing{CountryCode: "PT"}) {
+		t.Errorf("expected only the country, got %+v, %v", got, err)
+	}
+	// Nothing there (the sea) is a 200 with an error: an empty answer, not a failure.
+	body = `{"error":"Unable to geocode"}`
+	if got, err := n.Containing(ctx, 0, -30); err != nil || got != (areas.Containing{}) {
 		t.Errorf("expected nothing, got %+v, %v", got, err)
 	}
 
 	// Anything but 200, or what is not JSON, is the source being unavailable; and it is not kept.
 	status = http.StatusTooManyRequests
-	if _, err := o.Containing(ctx, 2, 2); !errors.Is(err, areas.ErrLocateUnavailable) {
+	if _, err := n.Containing(ctx, 2, 2); !errors.Is(err, areas.ErrLocateUnavailable) {
 		t.Errorf("expected unavailable, got %v", err)
 	}
 	status, body = http.StatusOK, "<html>busy</html>"
-	if _, err := o.Containing(ctx, 2, 2); !errors.Is(err, areas.ErrLocateUnavailable) {
+	if _, err := n.Containing(ctx, 2, 2); !errors.Is(err, areas.ErrLocateUnavailable) {
 		t.Errorf("expected unavailable, got %v", err)
 	}
 	server.Close()
-	if _, err := o.Containing(ctx, 3, 3); !errors.Is(err, areas.ErrLocateUnavailable) {
+	if _, err := n.Containing(ctx, 3, 3); !errors.Is(err, areas.ErrLocateUnavailable) {
 		t.Errorf("expected unavailable with the server gone, got %v", err)
 	}
 }
 
-// An instance that is busy is skipped for the next one.
-func TestOverpassFallsBack(t *testing.T) {
-	busy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
+// Requests are spaced out by the second that the usage policy of the public instance asks for, and a
+// request that is waiting gives up with its context.
+func TestNominatimSpacesRequests(t *testing.T) {
+	var times []time.Time
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		times = append(times, time.Now())
+		_, _ = w.Write([]byte(`{"address":{"country_code":"es"}}`))
 	}))
-	defer busy.Close()
-	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"elements":[{"tags":{"ISO3166-1":"FR"}}]}`))
-	}))
-	defer good.Close()
-	got, err := areas.NewOverpass(busy.URL, good.URL).Containing(context.Background(), 48, 2)
-	if err != nil || got.CountryCode != "FR" {
-		t.Fatalf("expected the second instance to answer, got %+v, %v", got, err)
+	defer server.Close()
+	n := areas.NewNominatim(server.URL)
+	for i := 0; i < 2; i++ {
+		if _, err := n.Containing(context.Background(), float64(10+i), 0); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := areas.NewOverpass(busy.URL, busy.URL).Containing(context.Background(), 48, 2); !errors.Is(err, areas.ErrLocateUnavailable) {
-		t.Errorf("expected unavailable when all are busy, got %v", err)
+	if gap := times[1].Sub(times[0]); gap < 900*time.Millisecond {
+		t.Errorf("expected about a second between requests, got %v", gap)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := n.Containing(ctx, 20, 0); !errors.Is(err, areas.ErrLocateUnavailable) {
+		t.Errorf("expected a waiting request to give up with its context, got %v", err)
 	}
 }
