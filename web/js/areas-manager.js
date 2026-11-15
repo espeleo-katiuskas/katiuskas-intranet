@@ -21,13 +21,13 @@ function build() {
   dialog.innerHTML = `
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Zonas</h3>
-    <p class="subtitle">Busca una zona para cambiarle el nombre, moverla, fusionarla con otra, borrarla o añadir otra dentro.</p>
+    <p class="subtitle">Añade una zona nueva (un país, una provincia, un municipio…) o busca una que ya exista para cambiarle el nombre, moverla, fusionarla con otra, borrarla o añadir otra dentro.</p>
     <p class="success-message" id="am-feedback" hidden></p>
     <div class="panel-actions">
-      <button type="button" class="btn btn-secondary btn-small" id="am-add-country">Añadir un país</button>
+      <button type="button" class="btn btn-secondary btn-small" id="am-add-area">Añadir una zona</button>
     </div>
     <div class="field-grid">
-      ${areaPickerField({ id: 'am-search', label: 'Zona', required: false })}
+      ${areaPickerField({ id: 'am-search', label: 'Elige una zona para modificarla', required: false })}
     </div>
     <div id="am-panel" hidden>
       <p class="subtitle" id="am-info"></p>
@@ -225,13 +225,14 @@ function build() {
     }
   });
 
-  // Only the admin has this dialog, and only an admin may add a country.
-  document.getElementById('am-add-country').addEventListener('click', () => {
+  // Only the admin has this dialog; it adds a zone anywhere, or a country if "Dentro de" is left empty,
+  // which only an admin may.
+  document.getElementById('am-add-area').addEventListener('click', () => {
     openAreaDialog({
       allowRoot: true,
       onSaved: async (saved) => {
         picker.setArea(saved);
-        say('País añadido.');
+        say('Zona añadida.');
       },
     });
   });
