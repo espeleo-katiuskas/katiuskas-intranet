@@ -23,7 +23,7 @@ import {
   STATE_HELP,
   stateBadge,
 } from './places-common.js';
-import { createMap, placeMarker, placePopup } from './map-common.js';
+import { createMap, offerNewPlace, placeMarker, placePopup } from './map-common.js';
 import { renderRichText } from './rich-text.js';
 
 const user = await initPage();
@@ -89,7 +89,13 @@ let placeMap = null;
 async function renderMap() {
   document.getElementById('place-map-link').href = `/lugares?vista=mapa&lugar=${place.id}`;
   try {
-    placeMap ??= await createMap(document.getElementById('place-map'));
+    if (!placeMap) {
+      placeMap = await createMap(document.getElementById('place-map'));
+      // Where nothing is, a click offers to create another place there (once, not at each drawing).
+      placeMap.map.on('click', (event) =>
+        offerNewPlace(placeMap.L, placeMap.map, event.latlng, { types, geologies }),
+      );
+    }
   } catch {
     document.getElementById('place-map').outerHTML =
       '<p class="subtitle">No se pudo cargar el mapa.</p>';
@@ -102,6 +108,7 @@ async function renderMap() {
   placeMarker(L, place).bindPopup(placePopup(place)).addTo(group);
   for (const point of place.points) {
     L.circleMarker([point.lat, point.lon], {
+      bubblingMouseEvents: false,
       radius: 6,
       weight: 2,
       color: '#ffffff',

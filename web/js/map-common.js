@@ -1,4 +1,6 @@
 import { escapeHtml } from './api.js';
+import { formatDecimal } from './coordinates.js';
+import { openPlaceDialog } from './place-dialog.js';
 import { STATE_LABELS } from './places-common.js';
 
 // What the maps of the places share: Leaflet (and its clustering) loaded the first time a map is shown,
@@ -135,6 +137,8 @@ async function createMap(element) {
 // The marker of a place: a dot of the colour of its state.
 function placeMarker(L, place) {
   return L.circleMarker([place.lat, place.lon], {
+    // A click on a place is for the place, not for the map under it (which offers to create one).
+    bubblingMouseEvents: false,
     radius: 8,
     weight: 2,
     color: '#ffffff',
@@ -150,6 +154,33 @@ function placePopup(place) {
     <span class="subtitle">${escapeHtml(place.where ?? '')}</span>`;
 }
 
+// A click on a map where there is no place offers to create one there: a small popup with the
+// coordinates and a button that opens the form of a new place with them written in (and the zone they
+// are in asked for). `types` and `geologies` are what the form needs, as `openPlaceDialog` takes them; once saved, the page of the new place is shown.
+function offerNewPlace(L, map, latlng, { types, geologies }) {
+  const box = document.createElement('div');
+  const where = document.createElement('p');
+  where.className = 'subtitle';
+  where.textContent = formatDecimal(latlng.lat, latlng.lng);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-secondary btn-small';
+  button.textContent = 'Crear un lugar aquí';
+  button.addEventListener('click', () => {
+    map.closePopup();
+    openPlaceDialog({
+      types,
+      geologies,
+      coordinates: { lat: latlng.lat, lon: latlng.lng },
+      onSaved: (place) => {
+        window.location.href = `/lugar?id=${place.id}`;
+      },
+    });
+  });
+  box.append(where, button);
+  L.popup({ closeButton: false }).setLatLng(latlng).setContent(box).openOn(map);
+}
+
 // The key of the colours, as markup.
 function mapLegend() {
   return Object.entries(STATE_LABELS)
@@ -160,4 +191,4 @@ function mapLegend() {
     .join('');
 }
 
-export { createMap, loadLeaflet, mapLegend, placeMarker, placePopup, STATE_COLORS };
+export { createMap, loadLeaflet, mapLegend, offerNewPlace, placeMarker, placePopup, STATE_COLORS };

@@ -230,7 +230,16 @@ function ensurePlaceDialog() {
     syncState();
   });
   syncState();
-  placeDialog = { dialog, form, kindOf, syncKind, syncState, updateCoordinates, areaPicker };
+  placeDialog = {
+    dialog,
+    form,
+    kindOf,
+    syncKind,
+    syncState,
+    updateCoordinates,
+    areaPicker,
+    proposeArea,
+  };
   return placeDialog;
 }
 
@@ -245,9 +254,11 @@ const whole = (form, name) =>
   form.elements[name].value === '' ? null : Number(form.elements[name].value);
 
 // Opens the dialog to create a place, or to change `place`. `types` are those of GET /places/types and
-// `geologies` those of GET /places/geologies. `onSaved` is called with the place the API answers with, once it is saved.
-function openPlaceDialog({ types, geologies, place = null, onSaved }) {
-  const { dialog, form, kindOf, syncKind, syncState, updateCoordinates, areaPicker } =
+// `geologies` those of GET /places/geologies. `onSaved` is called with the place the API answers with, once
+// it is saved. A new place may start at `coordinates` ({ lat, lon }, from a click on a map): they are
+// written in the form and the zone they are in is asked for at once.
+function openPlaceDialog({ types, geologies, place = null, coordinates = null, onSaved }) {
+  const { dialog, form, kindOf, syncKind, syncState, updateCoordinates, areaPicker, proposeArea } =
     ensurePlaceDialog();
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
   document.getElementById('pd-submit').textContent = place ? 'Guardar' : 'Crear lugar';
@@ -276,7 +287,10 @@ function openPlaceDialog({ types, geologies, place = null, onSaved }) {
   }
   // Where it is: the zone of the place; a new one starts with none, to be chosen.
   areaPicker.setArea(place ? areaOfPlace(place) : null);
+  if (!place && coordinates)
+    form.elements.coordinates.value = formatDecimal(coordinates.lat, coordinates.lon);
   updateCoordinates();
+  if (!place && coordinates) proposeArea();
   syncKind();
   syncState();
   form.onsubmit = async (event) => {

@@ -7,7 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initAreasManager } from './areas-manager.js';
-import { createMap, mapLegend, placeMarker, placePopup } from './map-common.js';
+import { createMap, mapLegend, offerNewPlace, placeMarker, placePopup } from './map-common.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
@@ -81,6 +81,7 @@ async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
     const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
     map.addLayer(cluster);
+    map.on('click', (event) => offerNewPlace(L, map, event.latlng, { types, geologies }));
     mapState = { L, map, cluster, markers: new Map() };
     return mapState;
   });
