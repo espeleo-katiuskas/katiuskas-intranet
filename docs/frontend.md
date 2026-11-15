@@ -288,11 +288,12 @@ to add one (an input with a `datalist` of every cavity of the catalogue, "Nombre
 which says "en «otro sistema»" for one that is in another, and asks before moving it, as a cavity is
 in one only). Every change sends the whole set with `PUT /systems/{id}/places` and the page is drawn
 again, also when it fails. Under them, "Fotos y documentos del sistema". On the page of a cavity
-that is in a system there is a section "Sistema", before the map: a line that links to the system,
-its description, links to its other cavities (with their subtype and where they are) and its photos
-and documents, read only (they are changed on the page of the system). The form of a cavity has
-"Sistema (opcional)", a select with "— Ninguno —" and the systems, only for the types of the cave
-kind. The photos and documents of a place and of a system are drawn and sent by the same module,
+that is in a system there is a section "Sistema", at the very end, after its own "Fotos y
+documentos" (and before who added the place): a line that links to the system, its description,
+links to its other cavities (with their subtype and where they are) and its photos and documents,
+read only (they are changed on the page of the system). The form of a cavity has "Sistema
+(opcional)", a select with "— Ninguno —" and the systems, only for the types of the cave kind. The
+photos and documents of a place and of a system are drawn and sent by the same module,
 `place-files.js` (`fileRowsHtml`, `bindFiles`, with the address `/places/3` or `/systems/4` as
 `base`).
 
