@@ -204,24 +204,25 @@ by subtype and by state, of which the subtype is there only when the type chosen
 state only when it is "Todos" or a type that has one (a filter that is hidden is also cleared, so
 that it never filters unseen); the type of a row has the geology of a cave under it. "Lista" and
 "Mapa" switch the table for a map of the same places, with the same filters (see "The map of the
-places" below); `/lugares?vista=mapa` opens it, and `&lugar=<id>` also opens the popup of that
-place. Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the
-page of the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to
-add, rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each
-says "Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
-afterwards), the subtypes of the cavities and the geologies of the caves (none of these two is
-fixed; one that has places cannot be deleted), all with the same code (`bindCatalogue` in
-`places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the data (other names,
-one row per zone from the country down — "País España", "Comunidad autónoma Comunidad de Madrid",
-"Provincia Madrid", "Municipio Valdemanco": the name of the level is the `kind` of the zone —, the
-main coordinate with a link to OpenStreetMap and its UTM next to it, its altitude above sea level,
-the geology of a cave, the depth and the horizontal length), then "Cómo llegar", "Descripción" and,
-for a cave or a canyon, "Ficha técnica" — all three through `renderRichText` —, and "Otros puntos",
-a table of the other points with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of
-the place, each with a title, its name, size and who attached it, "Descargar" and, for who attached
-it, admin and board, "Borrar"; an image is shown under it; a form attaches a new one), and who added
-the place and who changed it last. Any member has "Editar lugar" and "Añadir punto"; admin and board
-also "Borrar lugar" (`data-roles`).
+places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>` also opens the popup of that place and
+`&sistema=<id>` starts the view on the cavities of that system. Any member gets "+ Nuevo lugar",
+which opens the dialog of `place-dialog.js` and goes to the page of the place once it is saved;
+admin gets "Tipos y geologías", a dialog with three tables to add, rename and delete the general
+types (Cavidad and Cañón show "Fijo" and cannot be touched; each says "Con estado" or "Sin estado",
+and a new one has the box "Con estado", which cannot be changed afterwards), the subtypes of the
+cavities and the geologies of the caves (none of these two is fixed; one that has places cannot be
+deleted), all with the same code (`bindCatalogue` in `places.js`), and "Zonas" (see below).
+`lugar.html`/`place.js` is one place: the data (other names, one row per zone from the country down
+— "País España", "Comunidad autónoma Comunidad de Madrid", "Provincia Madrid", "Municipio
+Valdemanco": the name of the level is the `kind` of the zone —, the main coordinate with a link to
+OpenStreetMap and its UTM next to it, its altitude above sea level, the geology of a cave, the depth
+and the horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha
+técnica" — all three through `renderRichText` —, and "Otros puntos", a table of the other points
+with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of the place, each with a title,
+its name, size and who attached it, "Descargar" and, for who attached it, admin and board, "Borrar";
+an image is shown under it; a form attaches a new one), and who added the place and who changed it
+last. Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar"
+(`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
@@ -280,22 +281,23 @@ or of a cavity, and "+ Nuevo sistema" for any member, a dialog with the name and
 that goes to the page of the new system. It is reached from "Sistemas" on `/lugares`, and both pages
 light up "Lugares" in the sidebar (`ACTIVE_ALIASES`). `sistema.html`/`system.js` is one system: its
 name and description (`renderRichText`), "Editar sistema" (any member) and "Borrar sistema" (admin
-and board, with a confirmation that says the cavities stay), a map with all its cavities, then
-"Cavidades": a card for each with everything the API gives of it — its subtype and state, other
-names, where it is, coordinates, altitude, geology, depth and horizontal length, and its "Cómo
-llegar", "Descripción" and "Ficha técnica" — with "Quitar" to take it out of the system, and a row
-to add one (an input with a `datalist` of every cavity of the catalogue, "Nombre — Tipo (dónde)",
-which says "en «otro sistema»" for one that is in another, and asks before moving it, as a cavity is
-in one only). Every change sends the whole set with `PUT /systems/{id}/places` and the page is drawn
-again, also when it fails. Under them, "Fotos y documentos del sistema". On the page of a cavity
-that is in a system there is a section "Sistema", at the very end, after its own "Fotos y
-documentos" (and before who added the place): a line that links to the system, its description,
-links to its other cavities (with their subtype and where they are) and its photos and documents,
-read only (they are changed on the page of the system). The form of a cavity has "Sistema
-(opcional)", a select with "— Ninguno —" and the systems, only for the types of the cave kind. The
-photos and documents of a place and of a system are drawn and sent by the same module,
-`place-files.js` (`fileRowsHtml`, `bindFiles`, with the address `/places/3` or `/systems/4` as
-`base`).
+and board, with a confirmation that says the cavities stay), a map with all its cavities, with "Ver
+en el mapa de todos los lugares" under it (as under the map of a place), which opens the big map
+starting on them, then "Cavidades": a card for each with everything the API gives of it — its
+subtype and state, other names, where it is, coordinates, altitude, geology, depth and horizontal
+length, and its "Cómo llegar", "Descripción" and "Ficha técnica" — with "Quitar" to take it out of
+the system, and a row to add one (an input with a `datalist` of every cavity of the catalogue,
+"Nombre — Tipo (dónde)", which says "en «otro sistema»" for one that is in another, and asks before
+moving it, as a cavity is in one only). Every change sends the whole set with `PUT
+/systems/{id}/places` and the page is drawn again, also when it fails. Under them, "Fotos y
+documentos del sistema". On the page of a cavity that is in a system there is a section "Sistema",
+at the very end, after its own "Fotos y documentos" (and before who added the place): a line that
+links to the system, its description, links to its other cavities (with their subtype and where they
+are) and its photos and documents, read only (they are changed on the page of the system). The form
+of a cavity has "Sistema (opcional)", a select with "— Ninguno —" and the systems, only for the
+types of the cave kind. The photos and documents of a place and of a system are drawn and sent by
+the same module, `place-files.js` (`fileRowsHtml`, `bindFiles`, with the address `/places/3` or
+`/systems/4` as `base`).
 
 **The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,

@@ -81,9 +81,11 @@ function renderPlace(place) {
 const params = new URLSearchParams(window.location.search);
 let mapView = params.get('vista') === 'mapa';
 const focusId = Number(params.get('lugar')) || null; // A place to show first, from its own page.
+const focusSystem = Number(params.get('sistema')) || null; // A system whose cavities to show first.
 let mapState = null; // { L, map, cluster, markers }, once the map has been made.
 let mapStarting = null;
 let focused = false;
+let focusedSystem = false;
 
 async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
@@ -139,7 +141,11 @@ async function renderMap(shown) {
     map.once('moveend', () => target.openPopup());
     map.setView(target.getLatLng(), 16, { animate: false });
   } else if (shown.length) {
-    map.fitBounds(L.latLngBounds(shown.map((p) => [p.lat, p.lon])), {
+    // From the page of a system the view starts on its cavities; otherwise, on everything shown.
+    const ofSystem =
+      !focusedSystem && focusSystem ? shown.filter((p) => p.system_id === focusSystem) : [];
+    focusedSystem = true;
+    map.fitBounds(L.latLngBounds((ofSystem.length ? ofSystem : shown).map((p) => [p.lat, p.lon])), {
       padding: [30, 30],
       maxZoom: 15,
     });
@@ -160,6 +166,7 @@ function showView(map) {
   if (map) url.searchParams.set('vista', 'mapa');
   else url.searchParams.delete('vista');
   url.searchParams.delete('lugar');
+  url.searchParams.delete('sistema');
   window.history.replaceState(null, '', url);
   if (map) {
     renderPlaces();

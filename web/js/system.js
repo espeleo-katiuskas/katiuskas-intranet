@@ -88,6 +88,9 @@ let map = null;
 
 async function renderMap() {
   const element = document.getElementById('system-map');
+  // The link goes to the map of all the places, which starts on the cavities of this system.
+  document.getElementById('system-map-link').href = `/lugares?vista=mapa&sistema=${system.id}`;
+  document.getElementById('system-map-link-line').hidden = !system.places.length;
   if (!system.places.length) {
     element.hidden = true;
     return;
