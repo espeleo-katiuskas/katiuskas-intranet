@@ -7,7 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initAreasManager } from './areas-manager.js';
-import { createMap, mapLegend, offerNewPlaces, placeMarker, placePopup } from './map-common.js';
+import { createMap, mapLegend, offerOnMapClick, placeMarker, placePopup } from './map-common.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
@@ -89,7 +89,21 @@ async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
     const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
     map.addLayer(cluster);
-    offerNewPlaces(L, map, () => ({ types, subtypes, systems, geologies }));
+    // A click where there is no place offers to create one there.
+    offerOnMapClick(L, map, {
+      label: 'Crear un lugar aquí',
+      open: (coordinates) =>
+        openPlaceDialog({
+          types,
+          subtypes,
+          systems,
+          geologies,
+          coordinates,
+          onSaved: (place) => {
+            window.location.href = `/lugar?id=${place.id}`;
+          },
+        }),
+    });
     mapState = { L, map, cluster, markers: new Map() };
     return mapState;
   });

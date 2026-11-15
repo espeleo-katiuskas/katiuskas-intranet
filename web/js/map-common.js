@@ -1,6 +1,5 @@
 import { escapeHtml } from './api.js';
 import { formatDecimal } from './coordinates.js';
-import { openPlaceDialog } from './place-dialog.js';
 import { placeTypeLabel, STATE_LABELS } from './places-common.js';
 
 // What the maps of the places share: Leaflet (and its clustering) loaded the first time a map is shown,
@@ -155,12 +154,10 @@ function placePopup(place) {
     <span class="subtitle">${escapeHtml(place.where ?? '')}</span>`;
 }
 
-// A click on a map where there is no place offers to create one there: a small popup with the
-// coordinates and a button that opens the form of a new place with them written in (and the zone they
-// are in asked for); it has its close button, and a click elsewhere only closes it. `lists` gives the
-// types and the geologies the form needs, as `openPlaceDialog` takes them, when they are needed; once
-// the place is saved, its page is shown.
-function offerNewPlaces(L, map, lists) {
+// A click on a map where there is nothing offers to do something there: a small popup with the
+// coordinates and a button, `label`, that calls `open({ lat, lon })` (to open the form of a new place or of
+// a new point with them written in). It has its close button, and a click elsewhere only closes it.
+function offerOnMapClick(L, map, { label, open }) {
   // Leaflet closes an open popup on a click outside it, and then still sends the click: that one only
   // closed the popup, so it must not open another. The close and the click come in the same turn.
   let justClosed = false;
@@ -180,16 +177,10 @@ function offerNewPlaces(L, map, lists) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-secondary btn-small';
-    button.textContent = 'Crear un lugar aquí';
+    button.textContent = label;
     button.addEventListener('click', () => {
       map.closePopup();
-      openPlaceDialog({
-        ...lists(),
-        coordinates: { lat, lon: lng },
-        onSaved: (place) => {
-          window.location.href = `/lugar?id=${place.id}`;
-        },
-      });
+      open({ lat, lon: lng });
     });
     box.append(where, button);
     L.popup().setLatLng(event.latlng).setContent(box).openOn(map);
@@ -206,4 +197,12 @@ function mapLegend() {
     .join('');
 }
 
-export { createMap, loadLeaflet, mapLegend, offerNewPlaces, placeMarker, placePopup, STATE_COLORS };
+export {
+  createMap,
+  loadLeaflet,
+  mapLegend,
+  offerOnMapClick,
+  placeMarker,
+  placePopup,
+  STATE_COLORS,
+};

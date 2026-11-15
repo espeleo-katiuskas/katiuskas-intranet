@@ -28,7 +28,7 @@ import {
   STATE_HELP,
   stateBadge,
 } from './places-common.js';
-import { createMap, offerNewPlaces, placeMarker, placePopup } from './map-common.js';
+import { createMap, offerOnMapClick, placeMarker, placePopup } from './map-common.js';
 import { renderRichText } from './rich-text.js';
 
 const user = await initPage();
@@ -130,8 +130,19 @@ async function renderMap() {
   try {
     if (!placeMap) {
       placeMap = await createMap(document.getElementById('place-map'));
-      // Where nothing is, a click offers to create another place there (once, not at each drawing).
-      offerNewPlaces(placeMap.L, placeMap.map, () => ({ types, subtypes, systems, geologies }));
+      // Where nothing is, a click offers to add a point of this place there (once, not at each drawing).
+      offerOnMapClick(placeMap.L, placeMap.map, {
+        label: 'Añadir un punto aquí',
+        open: (coordinates) =>
+          openPointDialog({
+            placeId,
+            coordinates,
+            onSaved: async () => {
+              showFeedback('Punto añadido.');
+              await load();
+            },
+          }),
+      });
     }
   } catch {
     document.getElementById('place-map').outerHTML =

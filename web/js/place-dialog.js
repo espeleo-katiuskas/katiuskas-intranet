@@ -433,7 +433,7 @@ function ensurePointDialog() {
 }
 
 // Opens the dialog to add a point to the place `placeId`, or to change `point`.
-function openPointDialog({ placeId, point = null, onSaved }) {
+function openPointDialog({ placeId, point = null, coordinates = null, onSaved }) {
   const { dialog, form, updateCoordinates } = ensurePointDialog();
   document.getElementById('pt-title').textContent = point ? 'Editar punto' : 'Nuevo punto';
   document.getElementById('pt-submit').textContent = point ? 'Guardar' : 'Añadir punto';
@@ -443,6 +443,9 @@ function openPointDialog({ placeId, point = null, onSaved }) {
     form.elements.coordinates.value = formatDecimal(point.lat, point.lon);
     form.elements.altitude_m.value = point.altitude_m ?? '';
     form.elements.note.value = point.note ?? '';
+  } else if (coordinates) {
+    // A new point may start at the coordinates of a click on the map.
+    form.elements.coordinates.value = formatDecimal(coordinates.lat, coordinates.lon);
   }
   updateCoordinates();
   form.onsubmit = async (event) => {
