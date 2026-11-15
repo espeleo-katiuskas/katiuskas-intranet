@@ -161,3 +161,24 @@ func TestLoadPlaceFilesRoot(t *testing.T) {
 		t.Errorf("expected the one that was set, got %q", cfg.PlaceFilesRoot)
 	}
 }
+
+// OVERPASS_URL lists the instances, the two public ones unless it is set, and may be "off".
+func TestLoadOverpassURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("OVERPASS_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.OverpassURLs) != 2 || cfg.OverpassURLs[0] != "https://overpass-api.de/api/interpreter" {
+		t.Errorf("expected the public instances, got %q", cfg.OverpassURLs)
+	}
+	t.Setenv("OVERPASS_URL", " http://a/x , http://b/y ,")
+	if cfg, err = Load(); err != nil || len(cfg.OverpassURLs) != 2 || cfg.OverpassURLs[1] != "http://b/y" {
+		t.Errorf("expected the two that were set, got %q, %v", cfg.OverpassURLs, err)
+	}
+	t.Setenv("OVERPASS_URL", "off")
+	if cfg, err = Load(); err != nil || len(cfg.OverpassURLs) != 1 || cfg.OverpassURLs[0] != "off" {
+		t.Errorf("expected off, got %q, %v", cfg.OverpassURLs, err)
+	}
+}

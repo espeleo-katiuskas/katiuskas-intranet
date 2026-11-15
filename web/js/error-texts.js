@@ -134,6 +134,7 @@ const texts = {
   invalid_place_state: 'El estado del lugar no es válido.',
   invalid_coordinates:
     'Las coordenadas no son válidas: latitud entre -90 y 90, longitud entre -180 y 180.',
+  locate_unavailable: 'Ahora no se puede consultar la zona de unas coordenadas.',
   invalid_altitude: 'La altitud no es válida: entre -500 y 9000 metros sobre el nivel del mar.',
   invalid_place_measure: 'La profundidad o el desarrollo del lugar no son válidos.',
   invalid_place_fields:

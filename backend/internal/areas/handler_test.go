@@ -60,7 +60,22 @@ type person struct {
 	token string
 }
 
+// fakeBoundaries answers what a source of boundaries would: what it is set to, or an error.
+type fakeBoundaries struct {
+	answer areas.Containing
+	err    error
+	calls  int
+}
+
+func (f *fakeBoundaries) Containing(context.Context, float64, float64) (areas.Containing, error) {
+	f.calls++
+	return f.answer, f.err
+}
+
 type env struct {
+	boundaries *fakeBoundaries
+	// bare serves the same routes of a service with no source of boundaries.
+	bare     *http.ServeMux
 	t        *testing.T
 	tx       pgx.Tx
 	mux      *http.ServeMux
@@ -82,8 +97,11 @@ func newEnv(t *testing.T) *env {
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 	mux := http.NewServeMux()
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx)), authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver}
+	boundaries := &fakeBoundaries{}
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx)).WithBoundaries(boundaries), authenticator, usersService, notifier).RegisterRoutes(mux)
+	bare := http.NewServeMux()
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx)), authenticator, usersService, notifier).RegisterRoutes(bare)
+	e := &env{t: t, tx: tx, mux: mux, bare: bare, notifier: notifier, resolver: resolver, boundaries: boundaries}
 	e.member = e.person("member")
 	e.board = e.person("board")
 	e.admin = e.person("admin")
@@ -615,4 +633,70 @@ func TestMove(t *testing.T) {
 
 	// Members cannot.
 	errorCode(t, e.json("PUT", path, e.member.token, map[string]any{"name": a.Name, "parent_id": e.spain}), 403, "forbidden")
+}
+
+// The zone of a point is proposed from what the source of boundaries says: the municipality by its INE
+// code, else the country, else none; and a failure of the source is told, not hidden.
+func TestLocate(t *testing.T) {
+	e := newEnv(t)
+	locate := func(query string) *httptest.ResponseRecorder {
+		return e.json("GET", "/api/v1/areas/locate?"+query, e.member.token, nil)
+	}
+	type answer struct {
+		Area *areas.Area `json:"area"`
+	}
+	var valdemancoCode string
+	if err := e.tx.QueryRow(context.Background(), `SELECT code FROM areas WHERE id = $1`, e.valdemanco).Scan(&valdemancoCode); err != nil {
+		t.Fatal(err)
+	}
+
+	e.boundaries.answer = areas.Containing{CountryCode: "ES", MunicipalityCode: valdemancoCode}
+	rec := locate("lat=40.85&lon=-3.62")
+	status(t, rec, http.StatusOK)
+	got := decode[answer](t, rec)
+	if got.Area == nil || got.Area.ID != e.valdemanco || len(got.Area.Ancestors) != 3 {
+		t.Errorf("the municipality, with its ancestors: %+v", got.Area)
+	}
+
+	// A municipality the seed does not have: the country.
+	e.boundaries.answer = areas.Containing{CountryCode: "PT", MunicipalityCode: "99999"}
+	if got := decode[answer](t, locate("lat=39&lon=-8")); got.Area == nil || got.Area.ID != e.portugal {
+		t.Errorf("the country: %+v", got.Area)
+	}
+
+	// Nothing known: no zone, which is not an error.
+	e.boundaries.answer = areas.Containing{}
+	rec = locate("lat=0&lon=-30")
+	status(t, rec, http.StatusOK)
+	if got := decode[answer](t, rec); got.Area != nil {
+		t.Errorf("no zone expected: %+v", got.Area)
+	}
+
+	// The source is down: 502, with its own code.
+	e.boundaries.err = areas.ErrLocateUnavailable
+	errorCode(t, locate("lat=40&lon=-3"), 502, "locate_unavailable")
+	e.boundaries.err = nil
+
+	// Not coordinates: refused before asking anybody.
+	calls := e.boundaries.calls
+	for _, query := range []string{"", "lat=40", "lat=x&lon=1", "lat=91&lon=0", "lat=0&lon=181", "lat=NaN&lon=0"} {
+		errorCode(t, locate(query), 400, "invalid_coordinates")
+	}
+	if e.boundaries.calls != calls {
+		t.Errorf("an invalid point must not be asked for")
+	}
+	// Anybody who can sign in, nobody else.
+	if rec := e.json("GET", "/api/v1/areas/locate?lat=1&lon=1", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+
+	// Without a source configured there is nothing to propose.
+	req := httptest.NewRequest("GET", "/api/v1/areas/locate?lat=40&lon=-3", nil)
+	req.Header.Set("Authorization", "Bearer "+e.member.token)
+	rec = httptest.NewRecorder()
+	e.bare.ServeHTTP(rec, req)
+	status(t, rec, http.StatusOK)
+	if got := decode[answer](t, rec); got.Area != nil {
+		t.Errorf("no source, no zone: %+v", got.Area)
+	}
 }

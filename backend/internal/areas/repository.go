@@ -138,6 +138,22 @@ func (r *Repository) Get(ctx context.Context, id int64) (Area, error) {
 	return list[0], nil
 }
 
+// IDByCode is the zone with an official code: of the given kind, or a country (a zone below none) when
+// kind is empty. Codes are only unique within a kind (a community and a province can share one).
+func (r *Repository) IDByCode(ctx context.Context, kind, code string) (int64, error) {
+	var id int64
+	var err error
+	if kind == "" {
+		err = r.pool.QueryRow(ctx, `SELECT id FROM areas WHERE parent_id IS NULL AND code = $1 LIMIT 1`, code).Scan(&id)
+	} else {
+		err = r.pool.QueryRow(ctx, `SELECT id FROM areas WHERE kind = $1 AND code = $2 LIMIT 1`, kind, code).Scan(&id)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return id, err
+}
+
 // KindBelow is the kind that most of the zones directly below a zone have, or "" if there are none.
 func (r *Repository) KindBelow(ctx context.Context, parentID int64) (string, error) {
 	var kind string

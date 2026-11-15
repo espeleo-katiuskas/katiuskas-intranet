@@ -2302,6 +2302,12 @@ dialog.modal .area-results {
   margin: -8px 0 0;
 }
 
+/* Hints under the field of a zone are not fields, so they take the whole row themselves. */
+.area-add,
+.area-proposal {
+  grid-column: 1 / -1;
+}
+
 #areas-dialog .field-grid {
   margin-top: 12px;
 }

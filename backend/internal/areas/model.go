@@ -36,6 +36,8 @@ var (
 	// ErrMergeParents means two zones are merged only if they are below the same one.
 	ErrMergeParents = errors.New("only two zones below the same one can be merged")
 	ErrMergeSelf    = errors.New("a zone cannot be merged into itself")
+	// ErrInvalidPoint is a latitude and a longitude that are not WGS84.
+	ErrInvalidPoint = errors.New("the coordinates are not valid: latitude -90 to 90 and longitude -180 to 180")
 	// ErrMoveCycle means a zone cannot be moved into itself or into one of the zones below it.
 	ErrMoveCycle = errors.New("a zone cannot be moved into itself or into a zone below it")
 )

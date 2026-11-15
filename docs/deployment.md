@@ -144,6 +144,9 @@ sudo tee /opt/katiuskas-intranet/api.env >/dev/null <<'EOF'
 HTTP_ADDR=127.0.0.1:64711
 DATABASE_URL=postgres://intranet:<password>@localhost:5432/intranet?sslmode=disable
 PUBLIC_BASE_URL=https://intranet.tudominio.org
+# Optional: the Overpass instances that propose the zone of a coordinate, separated by commas (the
+# two public ones by default); "off" turns it off. Only the coordinate is sent.
+#OVERPASS_URL=https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter
 ARCHIVE_ROOT=/opt/katiuskas-intranet/data/archive
 USER_FILES_ROOT=/opt/katiuskas-intranet/data/user-files
 ACTIVITY_RESOURCES_ROOT=/opt/katiuskas-intranet/data/activity-resources

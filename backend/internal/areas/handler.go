@@ -33,6 +33,7 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
 	mux.Handle("GET /api/v1/areas", a.Protect(h.list))
+	mux.Handle("GET /api/v1/areas/locate", a.Protect(h.locate))
 	mux.Handle("GET /api/v1/areas/{id}", a.Protect(h.get))
 	mux.Handle("POST /api/v1/areas", a.Protect(h.create))
 	mux.Handle("PUT /api/v1/areas/{id}", a.Protect(h.update, "admin"))
@@ -59,6 +60,8 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrNotFound, http.StatusNotFound, "not_found"},
 		{ErrUnknownParent, http.StatusBadRequest, "unknown_area"},
 		{ErrRootAdminOnly, http.StatusForbidden, "area_root_admin_only"},
+		{ErrInvalidPoint, http.StatusBadRequest, "invalid_coordinates"},
+		{ErrLocateUnavailable, http.StatusBadGateway, "locate_unavailable"},
 		{ErrMoveCycle, http.StatusConflict, "area_move_cycle"},
 		{ErrBlankName, http.StatusBadRequest, "area_name_required"},
 		{ErrKindRequired, http.StatusBadRequest, "area_kind_required"},
@@ -112,6 +115,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// locate proposes the zone a point (?lat=&lon=) is in, asking an outside source: {"area": Area | null}.
+func (h *Handler) locate(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	lat, latErr := strconv.ParseFloat(query.Get("lat"), 64)
+	lon, lonErr := strconv.ParseFloat(query.Get("lon"), 64)
+	if latErr != nil || lonErr != nil {
+		writeError(w, ErrInvalidPoint, "could not look up the zone")
+		return
+	}
+	a, err := h.service.Locate(r.Context(), lat, lon)
+	if err != nil {
+		writeError(w, err, "could not look up the zone")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]*Area{"area": a})
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {

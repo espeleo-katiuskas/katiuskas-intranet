@@ -1,6 +1,6 @@
 import { apiFetch, escapeHtml, showError } from './api.js';
 import { openAreaDialog } from './area-dialog.js';
-import { areaPickerField, bindAreaPicker } from './area-picker.js';
+import { areaChain, areaPickerField, bindAreaPicker } from './area-picker.js';
 import { formatDecimal, formatUtm, parseCoordinates } from './coordinates.js';
 import { initModal, openModal } from './modal.js';
 import { POINT_KIND_LABELS, STATE_HELP, STATE_LABELS } from './places-common.js';
@@ -10,6 +10,9 @@ import { POINT_KIND_LABELS, STATE_HELP, STATE_LABELS } from './places-common.js'
 
 const HINT =
   '<p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>';
+
+// How long after the last key the zone of the coordinates is asked for.
+const LOOKUP_DELAY_MS = 700;
 
 const COORDINATES_PLACEHOLDER = '40.4168, -3.7038   ó   30T 440290 4474257';
 
@@ -96,11 +99,6 @@ function ensurePlaceDialog() {
           <label for="pd-alt-names">Otros nombres <span class="optional">(opcional)</span></label>
           <input id="pd-alt-names" name="alt_names" type="text">
         </div>
-        ${areaPickerField({ id: 'pd-area', label: 'Dónde está' })}
-        <p class="hint span-2 area-add">
-          Elige la zona más concreta que sepas (el municipio, la provincia o solo el país).
-          <button type="button" class="link-button" id="pd-area-add">¿No está? Añade una zona</button>
-        </p>
         ${coordinatesField('pd-coordinates', 'Coordenadas principales')}
         <div class="field" data-kind-field="cave">
           <label for="pd-depth">Profundidad (m) <span class="optional">(opcional)</span></label>
@@ -120,6 +118,13 @@ function ensurePlaceDialog() {
           <select id="pd-geology" name="geology_id"></select>
           <p class="hint">El material en el que se formó la cueva.</p>
         </div>
+        ${areaPickerField({ id: 'pd-area', label: 'Dónde está' })}
+        <p class="hint area-proposal" id="pd-area-proposal" hidden></p>
+        <p class="hint area-add">
+          Elige la zona más concreta que sepas (el municipio, la provincia o solo el país); si has
+          escrito las coordenadas, se propone una.
+          <button type="button" class="link-button" id="pd-area-add">¿No está? Añade una zona</button>
+        </p>
         <div class="field span-2">
           <label for="pd-access">Cómo llegar <span class="optional">(opcional)</span></label>
           <textarea id="pd-access" name="access"></textarea>
@@ -162,13 +167,63 @@ function ensurePlaceDialog() {
     form.elements.coordinates,
     document.getElementById('pd-coordinates-preview'),
   );
-  const areaPicker = bindAreaPicker(dialog.querySelector('[data-area-picker]'));
+  const areaPicker = bindAreaPicker(dialog.querySelector('[data-area-picker]'), {
+    onChange: () => {
+      // A person's own choice, or an emptied field, is no longer the proposal.
+      if (!proposing && areaPicker.area?.id !== proposedId) clearProposal();
+    },
+  });
+  const proposal = document.getElementById('pd-area-proposal');
+  let proposedId = null; // The zone that was proposed from the coordinates and has not been touched since.
+  let proposing = false; // While the proposal itself is being put in the field.
+  let lookup = 0; // The newest lookup: an older answer is dropped.
+  let lookupTimer = null;
+  function clearProposal() {
+    proposedId = null;
+    proposal.hidden = true;
+  }
+  // When the coordinates change, ask which zone they are in and put it in "Dónde está" if that is empty
+  // or still holds an earlier proposal. It only helps: a failure says nothing, and a zone that a person
+  // chose is never replaced.
+  async function proposeArea() {
+    const found = parseCoordinates(form.elements.coordinates.value);
+    const mine = ++lookup;
+    const typing = !areaPicker.area && document.getElementById('pd-area').value.trim() !== '';
+    if (!found || typing || (areaPicker.area && areaPicker.area.id !== proposedId)) return;
+    try {
+      const { area } = await apiFetch(`/areas/locate?lat=${found.lat}&lon=${found.lon}`);
+      const nowTyping = !areaPicker.area && document.getElementById('pd-area').value.trim() !== '';
+      if (mine !== lookup || nowTyping || (areaPicker.area && areaPicker.area.id !== proposedId)) {
+        return;
+      }
+      if (!area) {
+        if (proposedId) areaPicker.setArea(null);
+        clearProposal();
+        return;
+      }
+      proposing = true;
+      areaPicker.setArea(area);
+      proposing = false;
+      proposedId = area.id;
+      proposal.textContent = `Zona propuesta a partir de las coordenadas: ${areaChain(area)}. Cámbiala si no es esa.`;
+      proposal.hidden = false;
+    } catch {
+      proposing = false; // The lookup is only a help.
+    }
+  }
+  form.elements.coordinates.addEventListener('input', () => {
+    clearTimeout(lookupTimer);
+    lookupTimer = setTimeout(proposeArea, LOOKUP_DELAY_MS);
+  });
   // A zone that is not there is added, and chosen.
   document.getElementById('pd-area-add').addEventListener('click', () => {
     openAreaDialog({ parent: areaPicker.area, onSaved: (area) => areaPicker.setArea(area) });
   });
   dialog.addEventListener('close', () => {
     // initModal resets the form on close: bring the rest back in line with it.
+    clearTimeout(lookupTimer);
+    lookup += 1;
+    clearProposal();
     areaPicker.setArea(null);
     updateCoordinates();
     syncKind();

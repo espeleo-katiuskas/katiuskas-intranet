@@ -2649,6 +2649,34 @@ paths:
         "403": { description: "area_root_admin_only — a country, by somebody who is not admin." }
         "409": { description: "duplicate_area." }
 
+  /areas/locate:
+    get:
+      summary: Propose the zone a point is in
+      description: >
+        Any baseline role. Asks an Overpass API instance (OpenStreetMap's data, configured with
+        `OVERPASS_URL`) which municipality and country contain the point, and answers with the zone of
+        the seed that has that INE code (a Spanish municipality) or else that country's ISO code, with
+        its ancestors; `area` is null when none is known or when the lookup is turned off. Answers are
+        kept for a day, by the point rounded to about ten metres. It is a help to propose a zone, never
+        a fact.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: lon, in: query, required: true, schema: { type: number } }
+      responses:
+        "200":
+          description: The zone, or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  area:
+                    nullable: true
+                    allOf: [{ $ref: "#/components/schemas/Area" }]
+        "400": { description: "invalid_coordinates — missing, not numbers, or out of range." }
+        "502": { description: "locate_unavailable — no Overpass instance answered." }
+
   /areas/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }

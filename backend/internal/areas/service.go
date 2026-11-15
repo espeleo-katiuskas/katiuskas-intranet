@@ -8,11 +8,56 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo       *Repository
+	boundaries Boundaries
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// WithBoundaries gives the service a source to find the zone of a point; without one, Locate finds none.
+func (s *Service) WithBoundaries(b Boundaries) *Service {
+	s.boundaries = b
+	return s
+}
+
+// Locate is the zone that a point is in, with its ancestors, or nil if there is none to say: the
+// municipality when it is a Spanish one the seed knows (by INE code), else the country. It asks an
+// outside source (ErrLocateUnavailable when that fails), so it is a help to propose a zone, never a
+// fact.
+func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
+	if !validPoint(lat, lon) {
+		return nil, ErrInvalidPoint
+	}
+	if s.boundaries == nil {
+		return nil, nil
+	}
+	found, err := s.boundaries.Containing(ctx, lat, lon)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range []struct{ kind, code string }{
+		{"Municipio", found.MunicipalityCode},
+		{"", found.CountryCode},
+	} {
+		if candidate.code == "" {
+			continue
+		}
+		id, err := s.repo.IDByCode(ctx, candidate.kind, candidate.code)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		a, err := s.repo.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return &a, nil
+	}
+	return nil, nil
 }
 
 // Children are the zones directly below a zone, or the countries if parentID is nil.

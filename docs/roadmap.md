@@ -32,18 +32,12 @@ the page of each. What is left, in this order:
   OpenStreetMap element kept in the new place (a column in `places`) so that the same entrance is
   not offered again, nor added twice. They would be asked for the area on view only, by the API (an
   Overpass query with a cache, not from the browser: the public instances ask for light use and an
-  identifiable client) and never stored. The zone would be proposed, not chosen blindly: an Overpass
-  `is_in` query on the coordinate returns the administrative divisions that contain it, and in Spain
-  the municipality carries `ref:ine`, whose first five digits are the INE code that the seeded
-  municipalities already have (`areas.code`), so it is found by code and not by name ("Madrid" is a
-  province and a municipality); the member confirms or changes it. Outside Spain there is no such
-  code, so the member chooses. Nominatim's reverse search is no use for this (it names the place in
-  whatever field it likes and has no INE code), and keeping the boundaries of the 8,100
-  municipalities to test a point in the server would only be worth it for a mass import. To settle:
-  what tells a shaft from a cave (only the name does), the state a place added this way starts with,
-  and the credit: the data is ODbL, so the layer says where it comes from and the id of
-  OpenStreetMap is kept, and the catalogue must not be published as a database without looking at
-  what that asks for.
+  identifiable client) and never stored. The zone of a place added this way would be proposed with
+  `GET /areas/locate`, which already exists (the form of a place uses it when the coordinates are
+  written), and the member confirms or changes it. To settle: what tells a shaft from a cave (only
+  the name does), the state a place added this way starts with, and the credit: the data is ODbL, so
+  the layer says where it comes from and the id of OpenStreetMap is kept, and the catalogue must not
+  be published as a database without looking at what that asks for.
 - **Later**: a technical sheet made of pitches (with their lengths, which would let the rope needed
   be worked out and linked with the material), other fields of a canyon (drop, length, difficulty),
   a catalogue code, and whether the location of some places should be hidden from some people (today

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -106,6 +107,10 @@ type Config struct {
 	// topographies, documents) to, one subdirectory per place. Set with PLACE_FILES_ROOT; when it is
 	// not, it is a directory called place-files next to ActivityResourcesRoot.
 	PlaceFilesRoot string
+	// OverpassURLs are the Overpass API instances internal/areas asks which zone a point is in
+	// (OpenStreetMap's data), the first that answers being the one used. Set with OVERPASS_URL, several
+	// separated by commas; "off" turns the lookup off, and then no zone is ever proposed.
+	OverpassURLs []string
 	// DiskAlertPercent is the share of a filesystem holding ArchiveRoot,
 	// UserFilesRoot, ActivityResourcesRoot, TransactionFilesRoot, LibraryFilesRoot or PlaceFilesRoot that may be used before the
 	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
@@ -125,6 +130,17 @@ func archiveRoot() string {
 		return v
 	}
 	return "/data/archive"
+}
+
+// splitList is a list of values separated by commas, without blanks.
+func splitList(value string) []string {
+	var list []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 func Load() (Config, error) {
@@ -154,6 +170,8 @@ func Load() (Config, error) {
 		TransactionFilesRoot:  getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
 		LibraryFilesRoot:      os.Getenv("LIBRARY_FILES_ROOT"),
 		PlaceFilesRoot:        os.Getenv("PLACE_FILES_ROOT"),
+		OverpassURLs: splitList(getEnv("OVERPASS_URL",
+			"https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter")),
 	}
 	if cfg.PlaceFilesRoot == "" {
 		cfg.PlaceFilesRoot = filepath.Join(filepath.Dir(cfg.ActivityResourcesRoot), "place-files")
