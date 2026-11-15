@@ -242,20 +242,21 @@ made 200 ms after the last key; the list opens under the box (`.area-combo`), is
 or with the arrows, Enter and Escape (Escape closes the list, not the dialog), and what is chosen is
 shown under the box as a chain with its kind ("Municipio · España › Comunidad de Madrid › Madrid ›
 Valdemanco"). Typing again undoes the choice, and the box is invalid until a zone is chosen, which
-the form needs. A new place starts in the last zone used, kept in the browser (`localStorage`, only
-a convenience). If the zone is not in the list, "¿No está? Añade una zona" opens `area-dialog.js`:
-the zone it goes in ("Dentro de", chosen with the same field, the one already chosen in the place's
-form if there is), its name and its kind, which is left blank to take that of the zones already
-below (the dialog says which) and is required for the first one below another; once added it is the
-chosen zone. Anybody can; to add a country, rename, move, merge, delete or add inside a zone, admin
-has "Zonas" on `/lugares` (`areas-manager.js`): "Añadir un país" opens the same dialog with "Dentro
-de" optional (`allowRoot`; text there that is not a choice is refused, never taken for "none"). It
-finds a zone with the same field and shows its chain, its kind and how many zones and places are in
-it, with its name and kind to change, "Mover dentro de" (the zone it is in now, to be changed for
-another, or emptied to make it a country; after a confirmation that says that all it has goes with
-it), the siblings it can be merged into (after a confirmation, which says that everything in it goes
-to the other one), "Añadir una zona dentro" and "Borrar zona", which is disabled for a country or a
-zone with something in it (and says why).
+the form needs. A new place starts with no zone: it is chosen every time. If the zone is not in the
+list, "¿No está? Añade una zona" opens `area-dialog.js`: the zone it goes in ("Dentro de", chosen
+with the same field, the one already chosen in the place's form if there is), its name and its kind,
+which is left blank to take that of the zones already below (the dialog says which) and is required
+for the first one below another; once added it is the chosen zone. Anybody can; to add a country,
+rename, move, merge, delete or add inside a zone, admin has "Zonas" on `/lugares`
+(`areas-manager.js`): "Añadir una zona" opens the same dialog to add a zone anywhere, with "Dentro
+de" optional (`allowRoot`; left empty it adds a country; text there that is not a choice is refused,
+never taken for "none"). Its search field says "Elige una zona para modificarla". It finds a zone
+with the same field and shows its chain, its kind and how many zones and places are in it, with its
+name and kind to change, "Mover dentro de" (the zone it is in now, to be changed for another, or
+emptied to make it a country; after a confirmation that says that all it has goes with it), the
+siblings it can be merged into (after a confirmation, which says that everything in it goes to the
+other one), "Añadir una zona dentro" and "Borrar zona", which is disabled for a country or a zone
+with something in it (and says why).
 
 **The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,

@@ -185,28 +185,6 @@ function areaOfPlace(place) {
   return path.length ? { ...path[path.length - 1], ancestors: path.slice(0, -1) } : null;
 }
 
-// The last zone chosen for a place is kept in the browser, to start the next one there.
-const LAST_AREA_KEY = 'katiuskas:places-last-area';
-
-function lastArea() {
-  try {
-    return JSON.parse(localStorage.getItem(LAST_AREA_KEY));
-  } catch {
-    return null;
-  }
-}
-
-function rememberArea(area) {
-  try {
-    localStorage.setItem(
-      LAST_AREA_KEY,
-      JSON.stringify({ id: area.id, kind: area.kind, name: area.name, ancestors: area.ancestors }),
-    );
-  } catch {
-    // Storage blocked: it is only a convenience.
-  }
-}
-
 const text = (form, name) => form.elements[name].value.trim() || null;
 const whole = (form, name) =>
   form.elements[name].value === '' ? null : Number(form.elements[name].value);
@@ -241,9 +219,8 @@ function openPlaceDialog({ types, geologies, place = null, onSaved }) {
     set('description', place.description);
     set('technical_sheet', place.technical_sheet);
   }
-  // Where it is: the zone of the place, or the last one somebody chose here (the places come in groups
-  // of the same area).
-  areaPicker.setArea(place ? areaOfPlace(place) : lastArea());
+  // Where it is: the zone of the place; a new one starts with none, to be chosen.
+  areaPicker.setArea(place ? areaOfPlace(place) : null);
   updateCoordinates();
   syncKind();
   syncState();
@@ -276,7 +253,6 @@ function openPlaceDialog({ types, geologies, place = null, onSaved }) {
             kind === 'cave' || kind === 'canyon' ? text(form, 'technical_sheet') : null,
         }),
       });
-      rememberArea(areaPicker.area);
       dialog.close();
       await onSaved?.(saved);
     } catch (err) {
