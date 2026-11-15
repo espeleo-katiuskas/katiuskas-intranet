@@ -87,8 +87,7 @@ function renderActivities() {
     : '<tr><td colspan="4">Todavía no se ha hecho ninguna actividad aquí.</td></tr>';
 }
 
-// The system this cavity is in: a line that links to it, its description, links to the other cavities and
-// its photos and documents (to be changed on the page of the system).
+// The system this cavity is in: a line that links to it, its description and links to the other cavities.
 function renderSystem() {
   const section = document.getElementById('system-section');
   section.hidden = !system;
@@ -107,6 +106,18 @@ function renderSystem() {
         )
         .join('')
     : '<li class="subtitle">Todavía es la única cavidad del sistema.</li>';
+}
+
+// The photos and documents of the system, among those of the cavity, after its own (they are changed on
+// the page of the system); with the system, the two lists say whose they are.
+function renderSystemFiles() {
+  const block = document.getElementById('system-files-block');
+  block.hidden = !system;
+  document.getElementById('own-files-title').hidden = !system;
+  document.getElementById('own-form-title').hidden = !system;
+  if (!system) return;
+  document.getElementById('system-files-title').innerHTML =
+    `Del sistema <a href="/sistema?id=${system.id}">${escapeHtml(system.name)}</a>`;
   document.getElementById('system-files').innerHTML = fileRowsHtml(systemFiles, {
     base: `/systems/${system.id}`,
     personLink,
@@ -242,6 +253,7 @@ function render() {
   document.getElementById('place-authorship').innerHTML = created + changed;
   renderFiles();
   renderSystem();
+  renderSystemFiles();
   renderActivities();
   renderMap();
 }

@@ -6881,6 +6881,7 @@ components:
                   access: { type: string }
                   description: { type: string }
                   technical_sheet: { type: string }
+                  files: { type: array, description: "The files of the cavity itself, not the system's.", items: { $ref: "#/components/schemas/PlaceFile" } }
 
     PlaceFile:
       type: object

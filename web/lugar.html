@@ -27,6 +27,14 @@
     <button id="delete-place" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar lugar</button>
   </div>
 
+  <section id="system-section" hidden>
+    <h2>Sistema</h2>
+    <p id="system-intro"></p>
+    <div id="system-description" class="rich-text"></div>
+    <h3>Otras cavidades del sistema</h3>
+    <ul id="system-places"></ul>
+  </section>
+
   <section>
     <h2>Mapa</h2>
     <div id="place-map" class="places-map small"></div>
@@ -78,7 +86,13 @@
   <section>
     <h2>Fotos y documentos</h2>
     <p class="subtitle">Cualquier socio puede añadir fotos, topografías, permisos o cualquier otro documento.</p>
+    <h3 id="own-files-title" hidden>De esta cavidad</h3>
     <div id="place-files"></div>
+    <div id="system-files-block" hidden>
+      <h3 id="system-files-title"></h3>
+      <div id="system-files"></div>
+    </div>
+    <h3 id="own-form-title" hidden>Añadir un fichero a esta cavidad</h3>
     <form id="file-form" class="comment-form">
       <div class="field-grid">
         <div class="field">
@@ -94,16 +108,6 @@
         <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
       </div>
     </form>
-  </section>
-
-  <section id="system-section" hidden>
-    <h2>Sistema</h2>
-    <p id="system-intro"></p>
-    <div id="system-description" class="rich-text"></div>
-    <h3>Cavidades del sistema</h3>
-    <ul id="system-places"></ul>
-    <h3>Fotos y documentos del sistema</h3>
-    <div id="system-files"></div>
   </section>
 
   <p class="subtitle" id="place-authorship"></p>

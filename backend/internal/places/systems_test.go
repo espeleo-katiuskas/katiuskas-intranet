@@ -135,6 +135,20 @@ func TestSystemCavities(t *testing.T) {
 		first.Where == "" || first.Lat == 0 {
 		t.Errorf("the system should carry everything about each cavity: %+v", first)
 	}
+	// Each cavity comes with its own files, not those of the system.
+	if len(first.Files) != 0 {
+		t.Errorf("expected no files yet: %+v", first.Files)
+	}
+	e.uploadTo(systemPath(s, "/files"), e.member.token, "del-sistema.png", "", png)
+	e.notifier.wait(t)
+	rec = e.upload(boca, e.member.token, "de-la-boca.png", "La boca", png)
+	status(t, rec, http.StatusCreated)
+	e.notifier.wait(t)
+	withFiles := decode[places.System](t, e.json("GET", systemPath(s, ""), e.member.token, nil))
+	if withFiles.FileCount != 1 || len(withFiles.Places[0].Files) != 1 || withFiles.Places[0].Files[0].FileName != "de-la-boca.png" ||
+		*withFiles.Places[0].Files[0].Title != "La boca" || len(withFiles.Places[1].Files) != 0 {
+		t.Errorf("the system should carry the files of each cavity, apart from its own: %+v", withFiles.Places)
+	}
 	// The place says which system it is in, in the listing too.
 	if got := decode[places.Place](t, e.json("GET", placePath(boca, ""), e.member.token, nil)); got.SystemID == nil || *got.SystemID != s.ID || *got.System != "Sistema A" {
 		t.Errorf("the place should say its system: %+v", got)

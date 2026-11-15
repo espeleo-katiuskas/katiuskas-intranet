@@ -895,8 +895,8 @@ files; deleting one is for admin and board.
   - errors: 400 `invalid_body`, `system_name_required`, `system_name_too_long`; 409
     `duplicate_system`
 - **GET** `/systems/{id}` — *Any baseline role*. One system with its cavities, each with everything
-  about it (what `GET /places` has of a place and its `access`, `description` and
-  `technical_sheet`).
+  about it (what `GET /places` has of a place and its `access`, `description`, `technical_sheet`
+  and its own `files`).
   - returns: 200 `System`
   - errors: 400 `invalid_id`; 404 `not_found`
 - **PUT** `/systems/{id}` — *Any baseline role*. Replaces the name and the description.
@@ -2078,7 +2078,7 @@ the place, of any of its points or of its files (the same as the creation until 
 | `created_by`, `updated_by` | text (login); the last change of the system, its cavities or its files |
 | `created_at`, `updated_at` | datetime |
 | `file_count` | integer |
-| `places` | `[PlaceListItem]` with `access`, `description` and `technical_sheet` |
+| `places` | `[PlaceListItem]` with `access`, `description`, `technical_sheet` and `files` (its own `[PlaceFile]`, not the system's) |
 
 ### `PlaceFile`
 

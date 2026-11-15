@@ -285,19 +285,22 @@ and board, with a confirmation that says the cavities stay), a map with all its 
 en el mapa de todos los lugares" under it (as under the map of a place), which opens the big map
 starting on them, then "Cavidades": a card for each with everything the API gives of it — its
 subtype and state, other names, where it is, coordinates, altitude, geology, depth and horizontal
-length, and its "Cómo llegar", "Descripción" and "Ficha técnica" — with "Quitar" to take it out of
-the system, and a row to add one (an input with a `datalist` of every cavity of the catalogue,
-"Nombre — Tipo (dónde)", which says "en «otro sistema»" for one that is in another, and asks before
-moving it, as a cavity is in one only). Every change sends the whole set with `PUT
-/systems/{id}/places` and the page is drawn again, also when it fails. Under them, "Fotos y
-documentos del sistema". On the page of a cavity that is in a system there is a section "Sistema",
-at the very end, after its own "Fotos y documentos" (and before who added the place): a line that
-links to the system, its description, links to its other cavities (with their subtype and where they
-are) and its photos and documents, read only (they are changed on the page of the system). The form
-of a cavity has "Sistema (opcional)", a select with "— Ninguno —" and the systems, only for the
-types of the cave kind. The photos and documents of a place and of a system are drawn and sent by
-the same module, `place-files.js` (`fileRowsHtml`, `bindFiles`, with the address `/places/3` or
-`/systems/4` as `base`).
+length, and its "Cómo llegar", "Descripción" and "Ficha técnica", and its own "Fotos y documentos"
+(not the system's, which are under them) — with "Quitar" to take it out of the system, and a row to
+add one (an input with a `datalist` of every cavity of the catalogue, "Nombre — Tipo (dónde)", which
+says "en «otro sistema»" for one that is in another, and asks before moving it, as a cavity is in
+one only). Every change sends the whole set with `PUT /systems/{id}/places` and the page is drawn
+again, also when it fails. Under them, "Fotos y documentos del sistema". On the page of a cavity
+that is in a system there is a section "Sistema", just before the map: a line that links to the
+system, its description and links to its other cavities ("Otras cavidades del sistema", with their
+subtype and where they are). The system's photos and documents are not there but in the "Fotos y
+documentos" of the cavity, after its own: with a system the section has the subtitles "De esta
+cavidad" (its files, the only ones that can be changed there) and "Del sistema «…»" (read only, they
+are changed on the page of the system), and the form to add a file says that it adds one to the
+cavity. The form of a cavity has "Sistema (opcional)", a select with "— Ninguno —" and the systems,
+only for the types of the cave kind. The photos and documents of a place and of a system are drawn
+and sent by the same module, `place-files.js` (`fileRowsHtml`, `bindFiles`, with the address
+`/places/3` or `/systems/4` as `base`).
 
 **The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,

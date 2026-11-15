@@ -123,9 +123,39 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 		if p.AltNames == nil {
 			p.AltNames = []string{}
 		}
+		p.Files = []File{}
 		s.Places = append(s.Places, p)
 	}
-	return s, rows.Err()
+	if err := rows.Err(); err != nil {
+		return System{}, err
+	}
+	rows.Close()
+	// The files of the cavities, in one query for all of them.
+	if len(s.Places) > 0 {
+		index := make(map[int64]int, len(s.Places))
+		ids := make([]int64, len(s.Places))
+		for i, p := range s.Places {
+			index[p.ID] = i
+			ids[i] = p.ID
+		}
+		fileRows, err := r.pool.Query(ctx, fileSelect+` WHERE f.place_id = ANY($1) ORDER BY f.id`, ids)
+		if err != nil {
+			return System{}, err
+		}
+		defer fileRows.Close()
+		for fileRows.Next() {
+			var f File
+			if err := scanFile(fileRows, &f); err != nil {
+				return System{}, err
+			}
+			if f.PlaceID != nil {
+				i := index[*f.PlaceID]
+				s.Places[i].Files = append(s.Places[i].Files, f)
+			}
+		}
+		return s, fileRows.Err()
+	}
+	return s, nil
 }
 
 func (r *Repository) CreateSystem(ctx context.Context, userID int64, name string, description *string) (System, error) {

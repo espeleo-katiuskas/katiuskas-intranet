@@ -81,6 +81,11 @@ function cavityCard(p) {
       ${text('Cómo llegar', p.access)}
       ${text('Descripción', p.description)}
       ${text('Ficha técnica', p.technical_sheet)}
+      ${
+        p.files.length
+          ? `<h4>Fotos y documentos</h4>${fileRowsHtml(p.files, { base: `/places/${p.id}`, personLink })}`
+          : ''
+      }
     </article>`;
 }
 

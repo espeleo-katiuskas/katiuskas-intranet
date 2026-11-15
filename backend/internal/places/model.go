@@ -287,12 +287,14 @@ type SystemListItem struct {
 }
 
 // SystemPlace is a cavity of a system with everything the page of the system shows of it: what the
-// listing of places has and the long texts.
+// listing of places has, the long texts and its files.
 type SystemPlace struct {
 	ListItem
 	Access         *string `json:"access,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	TechnicalSheet *string `json:"technical_sheet,omitempty"`
+	// Files are the photos and documents of the cavity itself (not those of the system), oldest first.
+	Files []File `json:"files"`
 }
 
 // System is a group of cavities connected underground, with a description and files of its own.
