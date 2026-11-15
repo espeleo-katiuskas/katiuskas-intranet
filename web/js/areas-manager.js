@@ -1,11 +1,12 @@
-import { apiFetch, escapeHtml, showError } from './api.js';
+import { apiFetch, showError } from './api.js';
 import { openAreaDialog } from './area-dialog.js';
 import { areaChain, areaPickerField, bindAreaPicker } from './area-picker.js';
 import { initModal, openModal } from './modal.js';
 
-// The dialog of the admin to look after the zones: find one, rename it or change its kind, merge it into
-// another one below the same zone (a municipality that was added twice, or with a typo), delete it if
-// nothing is in it, or add another zone inside it. It is built the first time it is opened.
+// The dialog of the admin to look after the zones: add one, find one, rename it or change its kind, move
+// it, delete it if nothing is in it, or add another zone inside it. Merging two zones is not here, on
+// purpose: it moves everything in one to the other and cannot be undone, so it is only done through the
+// API (POST /areas/{id}/merge). It is built the first time it is opened.
 
 let built = null;
 
@@ -21,7 +22,7 @@ function build() {
   dialog.innerHTML = `
     <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
     <h3>Zonas</h3>
-    <p class="subtitle">Añade una zona nueva (un país, una provincia, un municipio…) o busca una que ya exista para cambiarle el nombre, moverla, fusionarla con otra, borrarla o añadir otra dentro.</p>
+    <p class="subtitle">Añade una zona nueva (un país, una provincia, un municipio…) o busca una que ya exista para cambiarle el nombre, moverla, borrarla o añadir otra dentro.</p>
     <p class="success-message" id="am-feedback" hidden></p>
     <div class="panel-actions">
       <button type="button" class="btn btn-secondary btn-small" id="am-add-area">Añadir una zona</button>
@@ -52,13 +53,6 @@ function build() {
         })}
         <button type="submit" class="btn btn-secondary btn-small">Mover</button>
       </form>
-      <form id="am-merge" class="inline-form">
-        <div class="field">
-          <label for="am-merge-into">Fusionar con otra zona del mismo nivel y de la misma zona superior</label>
-          <select id="am-merge-into" required></select>
-        </div>
-        <button type="submit" class="btn btn-secondary btn-small">Fusionar</button>
-      </form>
       <div class="panel-actions">
         <button type="button" class="btn btn-secondary btn-small" id="am-add">Añadir una zona dentro</button>
         <button type="button" class="btn btn-danger btn-small" id="am-delete">Borrar zona</button>
@@ -71,8 +65,6 @@ function build() {
   const feedback = document.getElementById('am-feedback');
   const renameForm = document.getElementById('am-rename');
   const moveForm = document.getElementById('am-move');
-  const mergeForm = document.getElementById('am-merge');
-  const mergeInto = document.getElementById('am-merge-into');
   const deleteButton = document.getElementById('am-delete');
   let zone = null; // The zone being looked after, as GET /areas/{id} gives it (with its counts).
 
@@ -92,7 +84,7 @@ function build() {
       plural(zone.place_count, 'lugar', 'lugares');
     renameForm.elements.name.value = zone.name;
     renameForm.elements.kind.value = zone.kind;
-    // A country is renamed but never deleted or merged; the rest only when nothing is in them.
+    // A country is renamed but never deleted; the rest only when nothing is in them.
     const isCountry = !zone.parent_id;
     deleteButton.disabled = isCountry || zone.child_count > 0 || zone.place_count > 0;
     deleteButton.title = isCountry
@@ -102,23 +94,11 @@ function build() {
         : zone.place_count > 0
           ? 'Tiene lugares'
           : '';
-    mergeForm.hidden = isCountry;
     // Where it is now; changing it and sending the form moves the zone (with all that is below it).
     const here = zone.id;
     const parent = zone.parent_id ? await apiFetch(`/areas/${zone.parent_id}`) : null;
     if (zone?.id !== here) return; // Another zone was chosen meanwhile.
     moveParent.setArea(parent);
-    if (!isCountry) {
-      const mine = zone.id;
-      const siblings = await apiFetch(`/areas?parent_id=${zone.parent_id}`);
-      if (zone?.id !== mine) return; // Another zone was chosen meanwhile.
-      mergeInto.innerHTML = siblings
-        .filter((s) => s.id !== mine)
-        .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
-        .join('');
-      // With no sibling there is nothing to merge into: the form would only be an empty list.
-      mergeForm.hidden = mergeInto.options.length === 0;
-    }
   }
 
   async function load(id) {
@@ -186,29 +166,6 @@ function build() {
       zone = saved;
       say('Zona movida.');
       await render();
-    } catch (err) {
-      showError(err.message);
-    }
-  });
-
-  mergeForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const target = mergeInto.selectedOptions[0];
-    if (
-      !confirm(
-        `Se pasa todo lo que hay en «${zone.name}» a «${target.text}» y se borra «${zone.name}». ¿Fusionar?`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await apiFetch(`/areas/${zone.id}/merge`, {
-        method: 'POST',
-        body: JSON.stringify({ into_id: Number(target.value) }),
-      });
-      const into = await apiFetch(`/areas/${target.value}`);
-      picker.setArea(into);
-      say('Zonas fusionadas.');
     } catch (err) {
       showError(err.message);
     }
