@@ -201,4 +201,18 @@ function mapUrl(lat, lon) {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`;
 }
 
-export { formatDecimal, formatUtm, fromUtm, mapUrl, parseCoordinates, toUtm, zoneOf };
+// A link that shows the place on a map, in Google Maps.
+function googleMapsUrl(lat, lon) {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+}
+
+export {
+  formatDecimal,
+  formatUtm,
+  fromUtm,
+  googleMapsUrl,
+  mapUrl,
+  parseCoordinates,
+  toUtm,
+  zoneOf,
+};

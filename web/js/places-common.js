@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml } from './api.js';
-import { formatDecimal, formatUtm, mapUrl } from './coordinates.js';
+import { formatDecimal, googleMapsUrl, mapUrl } from './coordinates.js';
 
 // What the pages of the places (/lugares and /lugar) share.
 
@@ -68,13 +68,15 @@ function loadGeologies() {
   return apiFetch('/places/geologies');
 }
 
-// A coordinate for reading: a link that shows it on a map, the same in UTM next to it and, if it is
+// A coordinate for reading: the decimal degrees, "41.52016, -3.63606", with links that show it on
+// Google Maps and on OpenStreetMap ("41.52016, -3.63606 · Google Maps · OpenStreetMap") and, if it is
 // known, its altitude in metres above sea level.
 function coordinatesHtml(lat, lon, altitude = null) {
-  const utm = formatUtm(lat, lon);
+  const link = (url, name) =>
+    `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`;
   return (
-    `<a href="${escapeHtml(mapUrl(lat, lon))}" target="_blank" rel="noopener noreferrer">${formatDecimal(lat, lon)}</a>` +
-    (utm ? ` <span class="subtitle">UTM ${utm}</span>` : '') +
+    `<span class="nowrap">${formatDecimal(lat, lon)}</span>` +
+    ` · ${link(googleMapsUrl(lat, lon), 'Google Maps')} · ${link(mapUrl(lat, lon), 'OpenStreetMap')}` +
     (altitude != null ? ` <span class="subtitle">${altitude} m</span>` : '')
   );
 }

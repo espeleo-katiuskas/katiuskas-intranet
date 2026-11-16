@@ -214,15 +214,16 @@ cavities and the geologies of the caves (none of these two is fixed; one that ha
 deleted), all with the same code (`bindCatalogue` in `places.js`), and "Zonas" (see below).
 `lugar.html`/`place.js` is one place: the data (other names, one row per zone from the country down
 — "País España", "Comunidad autónoma Comunidad de Madrid", "Provincia Madrid", "Municipio
-Valdemanco": the name of the level is the `kind` of the zone —, the main coordinate with a link to
-OpenStreetMap and its UTM next to it, its altitude above sea level, the geology of a cave, the depth
-and the horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha
-técnica" — all three through `renderRichText` —, and "Otros puntos", a table of the other points
-with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of the place, each with a title,
-its name, size and who attached it, "Descargar" and, for who attached it, admin and board, "Borrar";
-an image is shown under it; a form attaches a new one), and who added the place and who changed it
-last. Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar"
-(`data-roles`).
+Valdemanco": the name of the level is the `kind` of the zone —, the main coordinate as "41.52016,
+-3.63606 · Google Maps · OpenStreetMap" (the degrees and a link to each map; the UTM is only in the
+form, where it is read and shown; `coordinatesHtml`, also used for each point and in the page of a
+system), its altitude above sea level, the geology of a cave, the depth and the horizontal length),
+then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
+`renderRichText` —, and "Otros puntos", a table of the other points with "Editar" and "Quitar" on
+each, "Fotos y documentos" (the files of the place, each with a title, its name, size and who
+attached it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image is shown
+under it; a form attaches a new one), and who added the place and who changed it last. Any member
+has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar" (`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
