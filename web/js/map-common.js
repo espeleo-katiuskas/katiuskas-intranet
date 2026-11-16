@@ -149,8 +149,18 @@ const SHRINK_ICON =
 function addExpandButton(L, map, element) {
   let expanded = false;
   let button = null;
+  // The map leaves the flow of the page when it covers the window, which shortens the page and makes the
+  // browser scroll it up: a block as tall as the map stays in its place, and the scroll is put back.
+  let spacer = null;
+  let scrollY = 0;
 
   function set(value) {
+    if (value) {
+      scrollY = window.scrollY;
+      spacer = document.createElement('div');
+      spacer.style.height = `${element.offsetHeight}px`;
+      element.before(spacer);
+    }
     expanded = value;
     element.classList.toggle('map-expanded', expanded);
     document.documentElement.classList.toggle('map-is-expanded', expanded);
@@ -161,6 +171,11 @@ function addExpandButton(L, map, element) {
     // The container changed its size: Leaflet has to know, and by default it keeps the centre of the map
     // where it was (not the corner), so the same place stays in the middle.
     map.invalidateSize({ animate: false });
+    if (!expanded && spacer) {
+      spacer.remove();
+      spacer = null;
+      window.scrollTo(0, scrollY);
+    }
     if (expanded) document.addEventListener('keydown', onKey);
     else document.removeEventListener('keydown', onKey);
   }
