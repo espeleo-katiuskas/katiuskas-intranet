@@ -263,7 +263,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	areasService := areas.NewService(areas.NewRepository(repoPool))
 	// No address, or "off", turns the lookup of the zone of a point off (the tests, an offline host).
 	if cfg.NominatimURL != "" && cfg.NominatimURL != "off" {
-		areasService.WithBoundaries(areas.NewNominatim(cfg.NominatimURL))
+		nominatim := areas.NewNominatim(cfg.NominatimURL) // One client, so its requests are spaced together.
+		areasService.WithBoundaries(nominatim).WithGeocoder(nominatim)
 	}
 
 	licensesRepo := licenses.NewRepository(repoPool)

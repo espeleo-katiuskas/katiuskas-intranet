@@ -93,3 +93,53 @@ func TestNominatimSpacesRequests(t *testing.T) {
 		t.Errorf("expected a waiting request to give up with its context, got %v", err)
 	}
 }
+
+// Searching reads the places out of what the instance answers (its "search" endpoint, next to the
+// "reverse" one), skips what is not a point, keeps the answer for the same text and calls a failure by
+// its name.
+func TestNominatimSearch(t *testing.T) {
+	var requests atomic.Int32
+	var body string
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path != "/search" || r.Header.Get("User-Agent") == "" || r.URL.Query().Get("q") == "" ||
+			r.URL.Query().Get("format") != "jsonv2" {
+			t.Errorf("a GET of /search that says who calls: %s %q", r.URL.Path, r.URL.RawQuery)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	n := areas.NewNominatim(server.URL + "/reverse").Spacing(0)
+	ctx := context.Background()
+
+	body = `[{"display_name":"Valdemanco, Madrid","lat":"40.87","lon":"-3.63","boundingbox":["40.8","40.9","-3.7","-3.6"]},
+		{"display_name":"No box","lat":"1","lon":"2"},
+		{"display_name":"Broken","lat":"x","lon":"2"},
+		{"display_name":"Out","lat":"95","lon":"2"}]`
+	got, err := n.Search(ctx, "Valdemanco")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("two places expected: %+v, %v", got, err)
+	}
+	if got[0].Name != "Valdemanco, Madrid" || got[0].Lat != 40.87 || got[0].Bounds == nil ||
+		got[0].Bounds.South != 40.8 || got[0].Bounds.North != 40.9 || got[0].Bounds.West != -3.7 || got[0].Bounds.East != -3.6 {
+		t.Errorf("unexpected first place: %+v", got[0])
+	}
+	if got[1].Bounds != nil {
+		t.Errorf("no box, no bounds: %+v", got[1])
+	}
+	// The same text, however it is written, is not asked again.
+	if _, err := n.Search(ctx, " valdemanco "); err != nil || requests.Load() != 1 {
+		t.Errorf("expected the answer to be kept, %d requests, %v", requests.Load(), err)
+	}
+
+	status = http.StatusTooManyRequests
+	if _, err := n.Search(ctx, "other"); !errors.Is(err, areas.ErrSearchUnavailable) {
+		t.Errorf("expected unavailable, got %v", err)
+	}
+	status, body = http.StatusOK, "<html>busy</html>"
+	if _, err := n.Search(ctx, "other"); !errors.Is(err, areas.ErrSearchUnavailable) {
+		t.Errorf("expected unavailable, got %v", err)
+	}
+}

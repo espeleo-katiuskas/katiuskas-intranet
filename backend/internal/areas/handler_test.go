@@ -72,8 +72,21 @@ func (f *fakeBoundaries) Containing(context.Context, float64, float64) (areas.Co
 	return f.answer, f.err
 }
 
+// fakeGeocoder answers what a geocoder would: what it is set to, or an error, and says what it was asked.
+type fakeGeocoder struct {
+	answer []areas.Place
+	err    error
+	asked  []string
+}
+
+func (f *fakeGeocoder) Search(_ context.Context, text string) ([]areas.Place, error) {
+	f.asked = append(f.asked, text)
+	return f.answer, f.err
+}
+
 type env struct {
 	boundaries *fakeBoundaries
+	geocoder   *fakeGeocoder
 	// bare serves the same routes of a service with no source of boundaries.
 	bare     *http.ServeMux
 	t        *testing.T
@@ -98,10 +111,11 @@ func newEnv(t *testing.T) *env {
 	notifier := &fakeNotifier{}
 	mux := http.NewServeMux()
 	boundaries := &fakeBoundaries{}
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx)).WithBoundaries(boundaries), authenticator, usersService, notifier).RegisterRoutes(mux)
+	geocoder := &fakeGeocoder{}
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx)).WithBoundaries(boundaries).WithGeocoder(geocoder), authenticator, usersService, notifier).RegisterRoutes(mux)
 	bare := http.NewServeMux()
 	areas.NewHandler(areas.NewService(areas.NewRepository(tx)), authenticator, usersService, notifier).RegisterRoutes(bare)
-	e := &env{t: t, tx: tx, mux: mux, bare: bare, notifier: notifier, resolver: resolver, boundaries: boundaries}
+	e := &env{t: t, tx: tx, mux: mux, bare: bare, notifier: notifier, resolver: resolver, boundaries: boundaries, geocoder: geocoder}
 	e.member = e.person("member")
 	e.board = e.person("board")
 	e.admin = e.person("admin")
@@ -703,5 +717,49 @@ func TestLocate(t *testing.T) {
 	status(t, rec, http.StatusOK)
 	if got := decode[answer](t, rec); got.Area != nil {
 		t.Errorf("no source, no zone: %+v", got.Area)
+	}
+}
+
+// Searching a name for a map gives what the geocoder finds; blank or too long text is not sent, a failure
+// of the source is told, and without a source there is nothing found.
+func TestGeocode(t *testing.T) {
+	e := newEnv(t)
+	search := func(q string) *httptest.ResponseRecorder {
+		return e.json("GET", "/api/v1/areas/geocode?q="+url.QueryEscape(q), e.member.token, nil)
+	}
+	e.geocoder.answer = []areas.Place{{Name: "Valdemanco, Madrid", Lat: 40.87, Lon: -3.63,
+		Bounds: &areas.Bounds{South: 40.8, West: -3.7, North: 40.9, East: -3.6}}}
+	rec := search("  valdemanco ")
+	status(t, rec, http.StatusOK)
+	got := decode[[]areas.Place](t, rec)
+	if len(got) != 1 || got[0].Name != "Valdemanco, Madrid" || got[0].Bounds == nil || got[0].Bounds.North != 40.9 {
+		t.Errorf("unexpected places: %+v", got)
+	}
+	if len(e.geocoder.asked) != 1 || e.geocoder.asked[0] != "valdemanco" {
+		t.Errorf("the text is asked trimmed, got %q", e.geocoder.asked)
+	}
+
+	// Blank: an empty list, and nobody is asked.
+	rec = search("   ")
+	status(t, rec, http.StatusOK)
+	if got := decode[[]areas.Place](t, rec); len(got) != 0 || len(e.geocoder.asked) != 1 {
+		t.Errorf("blank finds nothing and asks nobody: %+v, %q", got, e.geocoder.asked)
+	}
+	errorCode(t, search(strings.Repeat("x", areas.MaxSearchLength+1)), 400, "area_text_too_long")
+
+	e.geocoder.err = areas.ErrSearchUnavailable
+	errorCode(t, search("madrid"), 502, "search_unavailable")
+	e.geocoder.err = nil
+
+	if rec := e.json("GET", "/api/v1/areas/geocode?q=madrid", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+	req := httptest.NewRequest("GET", "/api/v1/areas/geocode?q=madrid", nil)
+	req.Header.Set("Authorization", "Bearer "+e.member.token)
+	rec = httptest.NewRecorder()
+	e.bare.ServeHTTP(rec, req)
+	status(t, rec, http.StatusOK)
+	if got := decode[[]areas.Place](t, rec); len(got) != 0 {
+		t.Errorf("no source, nothing found: %+v", got)
 	}
 }

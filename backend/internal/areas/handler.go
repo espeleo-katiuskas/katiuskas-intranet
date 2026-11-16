@@ -34,6 +34,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
 	mux.Handle("GET /api/v1/areas", a.Protect(h.list))
 	mux.Handle("GET /api/v1/areas/locate", a.Protect(h.locate))
+	mux.Handle("GET /api/v1/areas/geocode", a.Protect(h.geocode))
 	mux.Handle("GET /api/v1/areas/{id}", a.Protect(h.get))
 	mux.Handle("POST /api/v1/areas", a.Protect(h.create))
 	mux.Handle("PUT /api/v1/areas/{id}", a.Protect(h.update, "admin"))
@@ -62,6 +63,7 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrRootAdminOnly, http.StatusForbidden, "area_root_admin_only"},
 		{ErrInvalidPoint, http.StatusBadRequest, "invalid_coordinates"},
 		{ErrLocateUnavailable, http.StatusBadGateway, "locate_unavailable"},
+		{ErrSearchUnavailable, http.StatusBadGateway, "search_unavailable"},
 		{ErrMoveCycle, http.StatusConflict, "area_move_cycle"},
 		{ErrBlankName, http.StatusBadRequest, "area_name_required"},
 		{ErrKindRequired, http.StatusBadRequest, "area_kind_required"},
@@ -132,6 +134,17 @@ func (h *Handler) locate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]*Area{"area": a})
+}
+
+// geocode finds the places a name (?q=) is, asking an outside source, to look for them on a map:
+// [{name, lat, lon, bounds}].
+func (h *Handler) geocode(w http.ResponseWriter, r *http.Request) {
+	found, err := h.service.Geocode(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		writeError(w, err, "could not search for the place")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, found)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {

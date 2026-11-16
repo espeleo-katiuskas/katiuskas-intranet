@@ -32,6 +32,14 @@ this order:
   state a place added this way starts with, and the credit: the data is ODbL, so the layer says
   where it comes from and the id of OpenStreetMap is kept, and the catalogue must not be published
   as a database without looking at what that asks for.
+- **Coordinates for the zones**: `lat` and `lon` (optional) on `areas`, filled once from an open
+  source (the IGN's *Nomenclátor Geográfico de Municipios y Entidades de Población* for Spain,
+  GeoNames for countries and provinces), matching the names of the seed (migration 00062), which
+  will not all match (bilingual names, articles) and need a review. It would make the search of a
+  zone on the map instant and independent of Nominatim, and would allow "see this zone on the map",
+  ordering places by distance and centring the map on the zone of an activity. Today the map
+  searches names with `GET /areas/geocode`, which asks Nominatim, so this is only worth it if one
+  of those is wanted.
 - **Later**: a technical sheet made of pitches (with their lengths, which would let the rope needed
   be worked out and linked with the material), other fields of a canyon (drop, length, difficulty),
   a catalogue code, and whether the location of some places should be hidden from some people (today

@@ -2349,6 +2349,67 @@ html.map-is-expanded {
   justify-content: center;
 }
 
+.leaflet-bar a.map-search-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-search {
+  position: relative;
+}
+
+/* The box opens to the right of the button, over the map. */
+.map-search-panel {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 6px;
+  width: min(280px, calc(100vw - 100px));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+}
+
+.map-search-form {
+  display: flex;
+  gap: 6px;
+}
+
+.map-search-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-search-results {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+
+.map-search-results li {
+  padding: 2px 0;
+}
+
+.map-search-results button {
+  all: unset;
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.map-search-results button:hover,
+.map-search-results button:focus-visible {
+  background: var(--surface-muted);
+}
+
 .map-legend {
   font-size: 0.875rem;
   display: flex;

@@ -2994,6 +2994,40 @@ paths:
         "400": { description: "invalid_coordinates — missing, not numbers, or out of range." }
         "502": { description: "locate_unavailable — the Nominatim instance did not answer." }
 
+  /areas/geocode:
+    get:
+      summary: Look for places by name
+      description: >
+        Any baseline role. Asks the Nominatim instance (`NOMINATIM_URL`) for the places a text names, at
+        most 6, best first, to find them on a map. Answers are kept for a day by the text asked. An
+        empty list when nothing is found, the text is blank or the lookup is turned off.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 200 } }
+      responses:
+        "200":
+          description: The places
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    lat: { type: number }
+                    lon: { type: number }
+                    bounds:
+                      nullable: true
+                      type: object
+                      properties:
+                        south: { type: number }
+                        west: { type: number }
+                        north: { type: number }
+                        east: { type: number }
+        "400": { description: "area_text_too_long." }
+        "502": { description: "search_unavailable — the Nominatim instance did not answer." }
+
   /areas/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }

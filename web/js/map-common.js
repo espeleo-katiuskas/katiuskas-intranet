@@ -1,4 +1,4 @@
-import { escapeHtml } from './api.js';
+import { apiFetch, escapeHtml } from './api.js';
 import { formatDecimal } from './coordinates.js';
 import { placeTypeLabel, POINT_KIND_LABELS, STATE_LABELS } from './places-common.js';
 
@@ -136,6 +136,7 @@ async function createMap(element) {
     .addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
   addExpandButton(L, map, element);
+  addSearchControl(L, map);
   map.on('baselayerchange', (event) => {
     // On a touch screen nothing makes the list of layers go away once one is chosen (it closes when the
     // pointer leaves, and a finger does not): choosing is closing it.
@@ -213,6 +214,112 @@ function addExpandButton(L, map, element) {
     },
   });
   new Expand().addTo(map);
+}
+
+const SEARCH_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l6 6" stroke="currentColor" stroke-width="2"/></svg>';
+
+// A button under the one of the whole window that opens a box to look for a place by name (a town, a
+// valley, a peak) and moves the map there. The API asks an outside geocoder, which is slow and has a
+// limit, so it searches when the text is sent, not as it is typed. The found place is marked with a ring
+// that stays until the next search.
+function addSearchControl(L, map) {
+  let ring = null;
+
+  function show(place) {
+    ring?.remove();
+    ring = L.circleMarker([place.lat, place.lon], {
+      radius: 14,
+      weight: 3,
+      color: '#c0392b',
+      fill: false,
+      interactive: false,
+    }).addTo(map);
+    const b = place.bounds;
+    if (b)
+      map.fitBounds(
+        [
+          [b.south, b.west],
+          [b.north, b.east],
+        ],
+        { maxZoom: 16 },
+      );
+    else map.setView([place.lat, place.lon], 14);
+  }
+
+  const Search = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const container = L.DomUtil.create('div', 'map-search leaflet-control');
+      const bar = L.DomUtil.create('div', 'leaflet-bar', container);
+      const button = L.DomUtil.create('a', 'map-search-button', bar);
+      button.href = '#';
+      button.setAttribute('role', 'button');
+      button.title = 'Buscar un sitio';
+      button.setAttribute('aria-label', 'Buscar un sitio');
+      button.innerHTML = SEARCH_ICON;
+      const panel = L.DomUtil.create('div', 'map-search-panel', container);
+      panel.hidden = true;
+      const form = L.DomUtil.create('form', 'map-search-form', panel);
+      const input = L.DomUtil.create('input', '', form);
+      input.type = 'search';
+      input.maxLength = 200;
+      input.placeholder = 'Pueblo, valle, pico…';
+      input.setAttribute('aria-label', 'Buscar un sitio');
+      const go = L.DomUtil.create('button', 'btn btn-secondary btn-small', form);
+      go.type = 'submit';
+      go.textContent = 'Buscar';
+      const results = L.DomUtil.create('ul', 'map-search-results', panel);
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      const say = (text) => {
+        results.replaceChildren();
+        const li = document.createElement('li');
+        li.className = 'subtitle';
+        li.textContent = text;
+        results.append(li);
+      };
+      L.DomEvent.on(button, 'click', (event) => {
+        L.DomEvent.stop(event);
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) input.focus();
+      });
+      L.DomEvent.on(form, 'submit', async (event) => {
+        L.DomEvent.stop(event);
+        const text = input.value.trim();
+        if (!text) return;
+        go.disabled = true;
+        say('Buscando…');
+        try {
+          const found = await apiFetch(`/areas/geocode?q=${encodeURIComponent(text)}`);
+          if (found.length === 0) {
+            say('No se ha encontrado nada.');
+            return;
+          }
+          results.replaceChildren();
+          for (const place of found) {
+            const li = document.createElement('li');
+            const choose = document.createElement('button');
+            choose.type = 'button';
+            choose.textContent = place.name;
+            choose.addEventListener('click', () => {
+              show(place);
+              panel.hidden = true;
+            });
+            li.append(choose);
+            results.append(li);
+          }
+        } catch (error) {
+          say(error.message);
+        } finally {
+          go.disabled = false;
+        }
+      });
+      return container;
+    },
+  });
+  new Search().addTo(map);
 }
 
 // The marker of a place: a dot of the colour of its state.

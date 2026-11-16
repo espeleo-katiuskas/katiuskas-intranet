@@ -40,10 +40,17 @@ type Nominatim struct {
 	url    string
 	client *http.Client
 
-	mu    sync.Mutex    // Guards next and cache.
+	mu    sync.Mutex    // Guards next, cache and searches.
 	next  time.Time     // When the next request may go out.
 	gap   time.Duration // How long after a request the next may go out.
 	cache map[string]cached
+	// searches keeps the answers of Search by the text asked, as cache does for the points.
+	searches map[string]searched
+}
+
+type searched struct {
+	value   []Place
+	expires time.Time
 }
 
 type cached struct {
@@ -62,7 +69,7 @@ const (
 func NewNominatim(url string) *Nominatim {
 	return &Nominatim{
 		url: url, client: &http.Client{Timeout: nominatimTimeout}, cache: map[string]cached{},
-		gap: nominatimInterval,
+		searches: map[string]searched{}, gap: nominatimInterval,
 	}
 }
 
@@ -110,6 +117,11 @@ func (n *Nominatim) wait(ctx context.Context) error {
 	turn := n.next
 	if now := time.Now(); turn.Before(now) {
 		turn = now
+	}
+	if time.Until(turn) > nominatimTimeout {
+		// So many are waiting that this one would give up anyway: say so now, and do not make the queue longer.
+		n.mu.Unlock()
+		return errors.New("too many requests waiting")
 	}
 	n.next = turn.Add(n.gap)
 	n.mu.Unlock()
@@ -189,4 +201,120 @@ func (n *Nominatim) Containing(ctx context.Context, lat, lon float64) (Containin
 func validPoint(lat, lon float64) bool {
 	ok := func(v, limit float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && math.Abs(v) <= limit }
 	return ok(lat, 90) && ok(lon, 180)
+}
+
+// ErrSearchUnavailable means the geocoder could not be asked or did not answer.
+var ErrSearchUnavailable = errors.New("the search for a place could not be done now")
+
+// Place is a result of searching a name: where it is, and the box that frames it (a town is bigger than a
+// peak), as WGS84 degrees.
+type Place struct {
+	Name   string  `json:"name"`
+	Lat    float64 `json:"lat"`
+	Lon    float64 `json:"lon"`
+	Bounds *Bounds `json:"bounds"`
+}
+
+// Bounds is a box of latitudes and longitudes.
+type Bounds struct {
+	South float64 `json:"south"`
+	West  float64 `json:"west"`
+	North float64 `json:"north"`
+	East  float64 `json:"east"`
+}
+
+// Geocoder finds places by name.
+type Geocoder interface {
+	Search(ctx context.Context, text string) ([]Place, error)
+}
+
+const searchLimit = 6
+
+type searchAnswer struct {
+	DisplayName string   `json:"display_name"`
+	Lat         string   `json:"lat"`
+	Lon         string   `json:"lon"`
+	BoundingBox []string `json:"boundingbox"` // south, north, west, east.
+}
+
+// searchURL is the "search" endpoint of the instance whose "reverse" one is n.url.
+func (n *Nominatim) searchURL() string {
+	return strings.TrimSuffix(n.url, "/reverse") + "/search"
+}
+
+func (n *Nominatim) cachedSearch(key string) ([]Place, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	hit, ok := n.searches[key]
+	if !ok || time.Now().After(hit.expires) {
+		delete(n.searches, key)
+		return nil, false
+	}
+	return hit.value, true
+}
+
+func (n *Nominatim) rememberSearch(key string, value []Place) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if len(n.searches) >= nominatimCacheSize {
+		n.searches = map[string]searched{}
+	}
+	n.searches[key] = searched{value: value, expires: time.Now().Add(nominatimCacheTTL)}
+}
+
+// Search is the places a text names, best first (OpenStreetMap's own ranking), in Spanish when it can
+// be. Like Containing it is spaced out and kept for a day; only the text goes out, with a generic client.
+func (n *Nominatim) Search(ctx context.Context, text string) ([]Place, error) {
+	key := Normalize(text)
+	if hit, ok := n.cachedSearch(key); ok {
+		return hit, nil
+	}
+	if err := n.wait(ctx); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSearchUnavailable, err)
+	}
+	query := url.Values{
+		"format": {"jsonv2"}, "q": {text}, "limit": {strconv.Itoa(searchLimit)}, "accept-language": {"es"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, n.searchURL()+"?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "intranet-zone-lookup/1.0")
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSearchUnavailable, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: status %d", ErrSearchUnavailable, resp.StatusCode)
+	}
+	var answers []searchAnswer
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&answers); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSearchUnavailable, err)
+	}
+	found := []Place{}
+	for _, a := range answers {
+		lat, latErr := strconv.ParseFloat(a.Lat, 64)
+		lon, lonErr := strconv.ParseFloat(a.Lon, 64)
+		if latErr != nil || lonErr != nil || !validPoint(lat, lon) {
+			continue
+		}
+		place := Place{Name: a.DisplayName, Lat: lat, Lon: lon}
+		if len(a.BoundingBox) == 4 {
+			var v [4]float64
+			ok := true
+			for i, s := range a.BoundingBox {
+				var perr error
+				if v[i], perr = strconv.ParseFloat(s, 64); perr != nil {
+					ok = false
+				}
+			}
+			if ok && validPoint(v[0], v[2]) && validPoint(v[1], v[3]) {
+				place.Bounds = &Bounds{South: v[0], North: v[1], West: v[2], East: v[3]}
+			}
+		}
+		found = append(found, place)
+	}
+	n.rememberSearch(key, found)
+	return found, nil
 }

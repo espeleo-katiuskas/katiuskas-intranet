@@ -339,13 +339,17 @@ whose default keeps the centre of the map in the middle, not the corner; `pan: f
 corner); the same button, or Escape, gives the map back its place. The click on the button is
 stopped (`L.DomEvent.stop`), as `disableClickPropagation` alone does not keep a `click` from
 reaching the map, which would take it for a click on the place under the pointer and offer to create
-one. It is deliberately not the Fullscreen API: the monitor is not taken over, only the window, so
-the address bar and the tabs stay. The list of base layers (the button with the stack of squares)
-closes when one is chosen, since on a touch screen nothing else would close it but a click on the
-map, and a click that closes it (or a popup) only closes it: the map is told at `preclick`, before
-Leaflet closes the list, so that it does not also offer to create something there. If the tiles or
-Leaflet cannot be loaded the page says so and the rest keeps working. Nothing here is drawn from the
-server's side, and an offline map is not there.
+one. Below it is a magnifier (`addSearchControl`) that opens a box to look for a place by name (a
+town, a valley, a peak) with `GET /areas/geocode`: it searches when the text is sent, not as it is
+typed, since the geocoder is outside and slow, lists what it finds, and choosing one moves the map
+there (to its box, or to zoom 14 if it has none) and rings it until the next search. The button of
+the whole window is deliberately not the Fullscreen API: the monitor is not taken over, only the
+window, so the address bar and the tabs stay. The list of base layers (the button with the stack of
+squares) closes when one is chosen, since on a touch screen nothing else would close it but a click
+on the map, and a click that closes it (or a popup) only closes it: the map is told at `preclick`,
+before Leaflet closes the list, so that it does not also offer to create something there. If the
+tiles or Leaflet cannot be loaded the page says so and the rest keeps working. Nothing here is drawn
+from the server's side, and an offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

@@ -10,6 +10,7 @@ import (
 type Service struct {
 	repo       *Repository
 	boundaries Boundaries
+	geocoder   Geocoder
 }
 
 func NewService(repo *Repository) *Service {
@@ -20,6 +21,28 @@ func NewService(repo *Repository) *Service {
 func (s *Service) WithBoundaries(b Boundaries) *Service {
 	s.boundaries = b
 	return s
+}
+
+// WithGeocoder gives the service a source to search places by name; without one, Geocode finds none.
+func (s *Service) WithGeocoder(g Geocoder) *Service {
+	s.geocoder = g
+	return s
+}
+
+// MaxSearchLength is the longest text that is searched on a map.
+const MaxSearchLength = 200
+
+// Geocode is the places a text names (a town, a valley, a peak), asking an outside source
+// (ErrSearchUnavailable when that fails). A blank text, or no source, finds nothing.
+func (s *Service) Geocode(ctx context.Context, text string) ([]Place, error) {
+	text = strings.TrimSpace(text)
+	if utf8.RuneCountInString(text) > MaxSearchLength {
+		return nil, ErrTooLong
+	}
+	if text == "" || s.geocoder == nil {
+		return []Place{}, nil
+	}
+	return s.geocoder.Search(ctx, text)
 }
 
 // Locate is the zone that a point is in, with its ancestors, or nil if there is none to say: the

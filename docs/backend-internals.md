@@ -1059,6 +1059,14 @@ instance of one's own), the answers are kept 24 hours by the point rounded to ab
 (2,000 at most), and the request says only a generic name as its client. Nothing about the person
 goes out, only the coordinate.
 
+**Searching a name.** `GET /areas/geocode?q=` serves the search box of the maps. `Service.Geocode`
+asks a `Geocoder` (the same `Nominatim` value as `Boundaries`, so that both share one queue of
+requests and the second between them), which calls the `search` endpoint next to `reverse` and
+answers the name, the point and the box of each result. A blank text or no source is an empty list,
+a failure is 502 `search_unavailable`, and the answers are kept 24 hours by the normalized text. A
+request that would wait longer than the timeout for its turn fails at once instead of lengthening
+the queue, so one person who sends many cannot hold everybody else up.
+
 **Adding.** Any member adds a zone below another; an admin also adds a country (`POST /areas` with
 no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is "País" unless given).
 The `kind` is the one most of its siblings have, unless it is given, and the first zone below

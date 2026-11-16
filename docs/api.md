@@ -950,6 +950,14 @@ admin alone.
   - returns: 200 `{area}`, an `Area` with its `ancestors`, or `null` when none is known or the
     lookup is off (`NOMINATIM_URL=off`)
   - errors: 400 `invalid_coordinates`; 502 `locate_unavailable` (the instance did not answer)
+- **GET** `/areas/geocode` — *Any baseline role*. Looks for places by name (a town, a valley, a
+  peak) to find them on a map, asking the same Nominatim instance as `/areas/locate`: at most 6,
+  best first. The answers are kept for a day by the text asked, the requests to the instance are
+  spaced a second apart, and only the text goes out.
+  - query: `q` (at most 200 characters; blank finds nothing)
+  - returns: 200 `[{name, lat, lon, bounds}]`, `bounds` being `{south, west, north, east}` or
+    `null`; an empty list when nothing is found or the lookup is off (`NOMINATIM_URL=off`)
+  - errors: 400 `area_text_too_long`; 502 `search_unavailable` (the instance did not answer)
 - **GET** `/areas/{id}` — *Any baseline role*. One zone with its `ancestors`, the country first.
   - returns: 200 `Area`
   - errors: 400 `invalid_id`; 404 `not_found`
