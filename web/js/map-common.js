@@ -218,6 +218,19 @@ function pointMarker(L, point, of = null) {
   }).bindTooltip(of ? `${label} (${of})` : label);
 }
 
+// Whether the device has a pointer that can hover: a mouse does, a finger does not.
+const canHover = () => window.matchMedia('(hover: hover)').matches;
+
+// The information of a place on its marker: a popup when it is clicked or tapped and, where there is a
+// pointer that can hover, its name as a tooltip. A finger has no hover, but the browser pretends it
+// had one (the tap is also a "mouseover"), which showed the tooltip and the popup together: so where
+// nothing can hover (a phone, a tablet) there is no tooltip, and the tap shows the popup alone.
+function bindPlaceInfo(marker, place) {
+  marker.bindPopup(placePopup(place));
+  if (canHover()) marker.bindTooltip(place.name);
+  return marker;
+}
+
 // What the popup of a place says: its name as a link, what it is and where, and its state.
 function placePopup(place) {
   return `<strong><a href="/lugar?id=${place.id}">${escapeHtml(place.name)}</a></strong><br>
@@ -273,6 +286,7 @@ export {
   loadLeaflet,
   mapLegend,
   offerOnMapClick,
+  bindPlaceInfo,
   placeMarker,
   pointMarker,
   placePopup,

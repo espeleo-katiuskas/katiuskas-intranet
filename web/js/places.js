@@ -7,7 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initAreasManager } from './areas-manager.js';
-import { createMap, mapLegend, offerOnMapClick, placeMarker, placePopup } from './map-common.js';
+import { bindPlaceInfo, createMap, mapLegend, offerOnMapClick, placeMarker } from './map-common.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
@@ -126,8 +126,7 @@ async function renderMap(shown) {
   cluster.clearLayers();
   markers.clear();
   for (const place of shown) {
-    const marker = placeMarker(L, place).bindPopup(placePopup(place));
-    marker.bindTooltip(place.name);
+    const marker = bindPlaceInfo(placeMarker(L, place), place);
     markers.set(place.id, marker);
   }
   cluster.addLayers([...markers.values()]);
