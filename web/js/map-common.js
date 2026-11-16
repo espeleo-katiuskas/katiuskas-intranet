@@ -121,7 +121,7 @@ async function createMap(element) {
   );
   const first = layers[rememberedLayer()] ? rememberedLayer() : LAYERS[0].id;
   layers[first].addTo(map);
-  L.control
+  const layersControl = L.control
     .layers(Object.fromEntries(LAYERS.map((l) => [l.name, layers[l.id]])), null, {
       collapsed: true,
     })
@@ -129,6 +129,9 @@ async function createMap(element) {
   L.control.scale({ imperial: false }).addTo(map);
   addExpandButton(L, map, element);
   map.on('baselayerchange', (event) => {
+    // On a touch screen nothing makes the list of layers go away once one is chosen (it closes when the
+    // pointer leaves, and a finger does not): choosing is closing it.
+    layersControl.collapse();
     const found = LAYERS.find((layer) => layer.name === event.name);
     if (found) rememberLayer(found.id);
   });
@@ -251,8 +254,18 @@ function offerOnMapClick(L, map, { label, open }) {
       justClosed = false;
     }, 0);
   });
+  // Likewise a click that closes the list of layers (Leaflet closes it on a click on the map, which on a
+  // touch screen is the only way) must only close it. It is told before Leaflet closes it, at "preclick".
+  let closingLayers = false;
+  map.on('preclick', () => {
+    closingLayers = !!map.getContainer().querySelector('.leaflet-control-layers-expanded');
+  });
   map.on('click', (event) => {
     if (justClosed) return;
+    if (closingLayers) {
+      closingLayers = false;
+      return;
+    }
     const { lat, lng } = event.latlng;
     const box = document.createElement('div');
     const where = document.createElement('p');
