@@ -312,26 +312,27 @@ control of the map and remembered in the browser (`localStorage`, `katiuskas:pla
 and is enlarged after that), "Satélite (PNOA)" and "OpenStreetMap", each with its credit; the IGN's
 are the official source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask
 for light use, which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the
-colours of the badges) with its name as a tooltip and a popup with its name as a link, its type, its
-state and where it is; nearby places are grouped (`L.markerClusterGroup`) in the browser, which is
-fine for the thousands of places a club may have: the map uses the same `GET /places` as the table,
-and every filter and the search redraw it and fit it to what is left. The small map of `/lugar` has
-the main coordinate in its state's colour and the other points in grey, with their kind and name as
-a tooltip, and a link to the big map centred on the place. A click on a map where there is nothing
-opens a small popup with the coordinates and a button, which opens a form with them written in: on
-the big map "Crear un lugar aquí", the form of a new place, with the zone they are in already asked
-for (`GET /areas/locate`, as when they are typed); on the small map of a place "Añadir un punto
-aquí", the form of a new point of that place. A click on a place or on a point opens its own popup
-or tooltip, as markers do not pass their clicks on to the map (`bubblingMouseEvents: false`);
-`offerOnMapClick` in `map-common.js` does it for both, each page giving it the label and what to
-open. The popup has its close button, and a click elsewhere on the map only closes it (or any other
-popup that is open) without opening another: Leaflet closes the popup and still sends that click, so
-the close is remembered for the turn it happens in. Every map has, under the zoom buttons, a button
-that makes it take the whole window of the browser (`addExpandButton` in `createMap`, so all of them
-have it): the container gets the class `map-expanded` (fixed, over the sidebar and the top bar, with
-the page under it not scrolling) and Leaflet is told its new size (`invalidateSize`, whose default
-keeps the centre of the map in the middle, not the corner; `pan: false` would keep the corner); the
-same button, or Escape, gives the map back its place. The click on the button is stopped
+colours of the badges; a place whose type has no state is grey, "Otro" in the key of the big map)
+with its name as a tooltip and a popup with its name as a link, its type, its state and where it is;
+nearby places are grouped (`L.markerClusterGroup`) in the browser, which is fine for the thousands
+of places a club may have: the map uses the same `GET /places` as the table, and every filter and
+the search redraw it and fit it to what is left. The small map of `/lugar` has the main coordinate
+in its state's colour and the other points in grey, with their kind and name as a tooltip, and a
+link to the big map centred on the place. A click on a map where there is nothing opens a small
+popup with the coordinates and a button, which opens a form with them written in: on the big map
+"Crear un lugar aquí", the form of a new place, with the zone they are in already asked for (`GET
+/areas/locate`, as when they are typed); on the small map of a place "Añadir un punto aquí", the
+form of a new point of that place. A click on a place or on a point opens its own popup or tooltip,
+as markers do not pass their clicks on to the map (`bubblingMouseEvents: false`); `offerOnMapClick`
+in `map-common.js` does it for both, each page giving it the label and what to open. The popup has
+its close button, and a click elsewhere on the map only closes it (or any other popup that is open)
+without opening another: Leaflet closes the popup and still sends that click, so the close is
+remembered for the turn it happens in. Every map has, under the zoom buttons, a button that makes it
+take the whole window of the browser (`addExpandButton` in `createMap`, so all of them have it): the
+container gets the class `map-expanded` (fixed, over the sidebar and the top bar, with the page
+under it not scrolling) and Leaflet is told its new size (`invalidateSize`, whose default keeps the
+centre of the map in the middle, not the corner; `pan: false` would keep the corner); the same
+button, or Escape, gives the map back its place. The click on the button is stopped
 (`L.DomEvent.stop`), as `disableClickPropagation` alone does not keep a `click` from reaching the
 map, which would take it for a click on the place under the pointer and offer to create one. It is
 deliberately not the Fullscreen API: the monitor is not taken over, only the window, so the address

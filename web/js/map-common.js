@@ -260,7 +260,7 @@ function offerOnMapClick(L, map, { label, open }) {
 
 // The key of the colours, as markup.
 function mapLegend() {
-  return [...Object.entries(STATE_LABELS), ['', 'Sin estado']]
+  return [...Object.entries(STATE_LABELS), ['', 'Otro']]
     .map(
       ([state, label]) =>
         `<span class="map-legend-item"><span class="map-legend-dot" style="background:${STATE_COLORS[state] ?? NO_STATE_COLOR}"></span>${escapeHtml(label)}</span>`,
