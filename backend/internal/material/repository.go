@@ -62,7 +62,7 @@ var (
 	ErrReturnExceedsLoaned = errors.New("cannot return more than is currently on loan for this activity")
 	// ErrInvalidItemFields means CreateItem's given fields don't fit
 	// type's own required shape — a rope or bag with no
-	// code/brand/model, a rope without its own rope-only fields (or a
+	// code/brand (and model, for a rope), a rope without its own rope-only fields (or a
 	// non-rope with them), a bag without bag_type/capacity_liters (or a
 	// non-bag with them), or a general item with no
 	// description (see migration 00006_inventory.sql's own CHECK

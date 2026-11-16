@@ -4451,7 +4451,7 @@ paths:
             invalid_item_fields (the given fields don't fit the kind of
             the item's type: its own required shape — a rope needs rope_type/diameter_mm/
             manufacture_year/length_m in addition to brand/model/code,
-            a bag needs bag_type/capacity_liters, and none of a rope or bag's own
+            a bag needs bag_type/capacity_liters (and a brand and a code, but not a model), and none of a rope or bag's own
             fields may be set on the other two kinds), or
             model_without_brand (a model was given without a brand), or
             color_too_long (more than 40 characters), or
@@ -6535,8 +6535,8 @@ components:
     Item:
       type: object
       description: >
-        rope and bag are individually tracked physical objects — brand,
-        model and code are always known, total_quantity is always 1, and
+        rope and bag are individually tracked physical objects — brand and
+        code are always known (and the model of a rope; that of a bag may not be), total_quantity is always 1, and
         they carry type-specific fields (rope_type/diameter_mm/
         manufacture_year/length_m for rope, bag_type/capacity_liters for bag —
         bag_type extends rope_type's caving/canyoning split with two

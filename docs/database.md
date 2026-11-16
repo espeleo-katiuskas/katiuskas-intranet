@@ -761,8 +761,9 @@ Constraints:
   go in as their hash so that no row is too big for the index. Whether a general item needs a
   description is not a constraint: it depends on its type (`material_types.description_required`)
   and the service checks it
-- `rope_and_bag_require_brand_model`: `(kind = 'general') OR ((brand IS NOT NULL) AND (model IS
-  NOT NULL))`
+- `rope_requires_brand_model`: `(kind <> 'rope') OR ((brand IS NOT NULL) AND (model IS NOT NULL))`
+- `bag_requires_brand`: `(kind <> 'bag') OR (brand IS NOT NULL)` (the model of a bag is optional,
+  migration `00068_bag_model_optional.sql`, which replaced `rope_and_bag_require_brand_model`)
 - `rope_and_bag_require_code`: `(kind = 'general') OR (code IS NOT NULL)`
 - `material_items_code_not_empty`: `code IS NULL OR btrim(code) <> ''`
 - `material_items_code_not_only_digits`: `code IS NULL OR code !~ '^[0-9]+$'` (a listing writes

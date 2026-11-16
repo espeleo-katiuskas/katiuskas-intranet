@@ -600,8 +600,10 @@ if (canManageMovements) {
     // label spans above the textarea.
     // Brand, model and code are in every type's form, but only a rope or a bag must have them. A model
     // is the model of a brand: it can only be written once there is a brand.
+    // (the model of a bag is optional).
     for (const id of ['ni-brand', 'ni-model', 'ni-code']) {
-      document.getElementById(id).required = kind === 'rope' || kind === 'bag';
+      document.getElementById(id).required =
+        (kind === 'rope' || kind === 'bag') && !(id === 'ni-model' && kind === 'bag');
     }
     syncModelWithBrand();
     // What only makes sense when creating (the quantity and the date of acquisition: the stock is

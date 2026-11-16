@@ -499,8 +499,8 @@ files (up to 25 MiB).
     `loanable`, `rental_price_per_week`, `sale_price`, `color`, `rope_type`, `diameter_mm`,
     `manufacture_year`, `length_m`, `bag_type`, `capacity_liters`, `attributes`. `color` is optional
     (at most 40 characters, blank counts as none) and only for a rope or a bag, whose name it joins
-    in the lists. `brand`, `model`
-    and `code` are required for a rope or bag and optional for general material; a `model` needs a
+    in the lists. `brand` and `code` are required for a rope or bag and optional for general
+    material, and `model` is required for a rope and optional for the rest; a `model` needs a
     `brand` (blank text counts as no value). The `description` of general material is required only
     if its type says so (`description_required`). `attributes` are the values for the type's
     attributes, `[{attribute_id, option_id | value}]` (`option_id` for an enum attribute, `value`

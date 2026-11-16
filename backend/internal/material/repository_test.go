@@ -895,6 +895,42 @@ func TestCreateBagItem(t *testing.T) {
 	}
 }
 
+// The model of a bag is optional (its brand is not), and a rope still needs its own.
+func TestBagModelIsOptional(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := material.NewRepository(tx)
+	ctx := context.Background()
+
+	brand, code := "Petzl", "S-018"
+	bagType := material.BagTypeCaving
+	capacity := 30.0
+	item, err := repo.CreateItem(ctx, material.CreateItemInput{
+		TypeID: testutil.MaterialTypeID(t, tx, "Saca"), Brand: &brand, Code: &code,
+		BagType: &bagType, CapacityLiters: &capacity, InitialQuantity: 1, Loanable: true,
+	})
+	if err != nil {
+		t.Fatalf("a bag without a model: %v", err)
+	}
+	if item.Model != nil {
+		t.Errorf("expected no model, got %q", *item.Model)
+	}
+}
+
+func TestRopeStillNeedsModel(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := material.NewRepository(tx)
+	brand, code := "Beal", "C-900"
+	ropeType := material.RopeTypeCaving
+	diameter, length := 9.5, int32(50)
+	year := int32(2024)
+	if _, err := repo.CreateItem(context.Background(), material.CreateItemInput{
+		TypeID: testutil.MaterialTypeID(t, tx, "Cuerda"), Brand: &brand, Code: &code, RopeType: &ropeType,
+		DiameterMM: &diameter, ManufactureYear: &year, LengthM: &length, InitialQuantity: 1, Loanable: true,
+	}); err == nil {
+		t.Error("expected an error for a rope without a model")
+	}
+}
+
 // Each mismatched-fields scenario below gets its own transaction: a
 // CHECK violation aborts the whole Postgres transaction, so a second
 // query on the same tx (even an unrelated category lookup) would fail

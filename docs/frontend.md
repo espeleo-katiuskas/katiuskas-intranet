@@ -77,15 +77,15 @@ rope, or of bag, or the quantity (for general material, on creation only); brand
 for a rope the year of manufacture, the diameter and the length, for a bag the capacity; the colour
 (ropes and bags); for every type the date of acquisition (on creation only), the rental price, the
 sale price and "Se puede prestar"; the attributes of the type; and last the description (the
-"Observaciones" of a rope or a bag). Brand, model and code are in the form for every type,
-required only for ropes and bags; the model field stays disabled (and empty) while there is no
-brand. The attributes of the chosen type (`attributes` in `GET /material/types`) are drawn by
-`syncTypeFields` before the description, one field each: a text box, or a list of the attribute's
-options (`attribute_<id>` is the name of the field), with "(opcional)" on the optional ones and
-`required` on the others; they are drawn again whenever the type changes, so the values typed for
-another type's attributes are dropped. The same function says whether the description is required
-(`description_required` of the type; "(opcional)" is shown next to its label otherwise). Only the
-attributes with a value go in the request.
+"Observaciones" of a rope or a bag). Brand, model and code are in the form for every type, required
+only for ropes and bags (the model of a bag is optional); the model field stays disabled (and empty)
+while there is no brand. The attributes of the chosen type (`attributes` in `GET /material/types`)
+are drawn by `syncTypeFields` before the description, one field each: a text box, or a list of the
+attribute's options (`attribute_<id>` is the name of the field), with "(opcional)" on the optional
+ones and `required` on the others; they are drawn again whenever the type changes, so the values
+typed for another type's attributes are dropped. The same function says whether the description is
+required (`description_required` of the type; "(opcional)" is shown next to its label otherwise).
+Only the attributes with a value go in the request.
 
 **Which material the table lists.** The table of `/material` hides the items with no unit left,
 those that show "0 / 0" (`isGone` in `material.js`: sold, lost, abandoned or retired). They are no
