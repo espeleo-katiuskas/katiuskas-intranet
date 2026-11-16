@@ -345,12 +345,13 @@ the text is sent, not as it is typed, since the geocoder is outside and slow, li
 and choosing one moves the map there (to its box, or to zoom 14 if it has none) and rings it until
 the next search. The button of the whole window is deliberately not the Fullscreen API: the monitor
 is not taken over, only the window, so the address bar and the tabs stay. The list of base layers
-(the button with the stack of
-squares) closes when one is chosen, since on a touch screen nothing else would close it but a click
-on the map, and a click that closes it (or a popup) only closes it: the map is told at `preclick`,
-before Leaflet closes the list, so that it does not also offer to create something there. If the
-tiles or Leaflet cannot be loaded the page says so and the rest keeps working. Nothing here is drawn
-from the server's side, and an offline map is not there.
+(the button with the stack of squares) closes when one is chosen, since on a touch screen nothing
+else would close it but a click on the map, and a click that closes it (or a popup, or the search
+box) only closes it: the map is told at `preclick`, before they close, so that it does not also
+offer to create something there. The search box closes with the magnifier, with a click on the map
+and with Escape (heard in the capture phase and stopped, so a map over the whole window is not also
+given back). If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working.
+Nothing here is drawn from the server's side, and an offline map is not there.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

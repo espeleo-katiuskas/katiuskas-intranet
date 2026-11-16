@@ -281,11 +281,28 @@ function addSearchControl(L, map) {
         li.textContent = text;
         results.append(li);
       };
+      // Escape closes the box (and only that: with the map over the whole window it would also give the
+      // window back), which is why it is heard before the other listeners of the document.
+      const onKey = (event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        setOpen(false);
+      };
+      function setOpen(open) {
+        panel.hidden = !open;
+        if (open) {
+          document.addEventListener('keydown', onKey, true);
+          input.focus();
+        } else {
+          document.removeEventListener('keydown', onKey, true);
+        }
+      }
       L.DomEvent.on(button, 'click', (event) => {
         L.DomEvent.stop(event);
-        panel.hidden = !panel.hidden;
-        if (!panel.hidden) input.focus();
+        setOpen(panel.hidden);
       });
+      // A click on the map, away from the box, closes it (and offerOnMapClick knows it was only that).
+      map.on('click', () => setOpen(false));
       L.DomEvent.on(form, 'submit', async (event) => {
         L.DomEvent.stop(event);
         const text = input.value.trim();
@@ -306,7 +323,7 @@ function addSearchControl(L, map) {
             choose.textContent = place.name;
             choose.addEventListener('click', () => {
               show(place);
-              panel.hidden = true;
+              setOpen(false);
             });
             li.append(choose);
             results.append(li);
@@ -386,11 +403,15 @@ function offerOnMapClick(L, map, { label, open }) {
     }, 0);
   });
   // Likewise a click that closes the list of layers (Leaflet closes it on a click on the map, which on a
-  // touch screen is the only way) must only close it. It is told before Leaflet closes it, at "preclick".
+  // touch screen is the only way) or the box to search a place must only close it. It is told before they
+  // close, at "preclick".
   // A touch screen also fakes mouse events before the click, and leaving the list with the "mouse" closes
   // it, so by "preclick" it may be closed already: whether it was open is noted when the finger goes down.
   let closingLayers = false;
-  const isOpen = () => !!map.getContainer().querySelector('.leaflet-control-layers-expanded');
+  const isOpen = () =>
+    !!map
+      .getContainer()
+      .querySelector('.leaflet-control-layers-expanded, .map-search-panel:not([hidden])');
   let openAtPress = false;
   map.getContainer().addEventListener(
     'pointerdown',
