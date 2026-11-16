@@ -256,9 +256,21 @@ function offerOnMapClick(L, map, { label, open }) {
   });
   // Likewise a click that closes the list of layers (Leaflet closes it on a click on the map, which on a
   // touch screen is the only way) must only close it. It is told before Leaflet closes it, at "preclick".
+  // A touch screen also fakes mouse events before the click, and leaving the list with the "mouse" closes
+  // it, so by "preclick" it may be closed already: whether it was open is noted when the finger goes down.
   let closingLayers = false;
+  const isOpen = () => !!map.getContainer().querySelector('.leaflet-control-layers-expanded');
+  let openAtPress = false;
+  map.getContainer().addEventListener(
+    'pointerdown',
+    () => {
+      openAtPress = isOpen();
+    },
+    true,
+  );
   map.on('preclick', () => {
-    closingLayers = !!map.getContainer().querySelector('.leaflet-control-layers-expanded');
+    closingLayers = openAtPress || isOpen();
+    openAtPress = false;
   });
   map.on('click', (event) => {
     if (justClosed) return;
