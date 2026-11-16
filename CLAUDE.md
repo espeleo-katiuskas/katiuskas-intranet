@@ -285,7 +285,7 @@ attaches photos and documents to a place (`place_files`, bytes in `PLACE_FILES_R
 and **never rewritten**, like the library's); whoever attached one, admin and board remove it. The
 frontend reads UTM as well as decimals (`js/coordinates.js`) but the API only has latitude and
 longitude. No PostGIS. The list has a map of the same places and each place a small one
-(`js/map-common.js`: Leaflet and its clustering are copied into `web/vendor/`, tiles from the IGN or
+(`js/map-common.js`: Leaflet and its clustering are copied into `web/vendor/`, tiles from the IGN, Esri or
 OpenStreetMap). An activity goes to places of the catalogue (`activity_places`, set by whoever can
 edit the activity; a place with activities is not deleted). Not there yet: see `docs/roadmap.md`.
 

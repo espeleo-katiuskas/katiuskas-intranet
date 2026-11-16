@@ -3,7 +3,7 @@ import { formatDecimal } from './coordinates.js';
 import { placeTypeLabel, POINT_KIND_LABELS, STATE_LABELS } from './places-common.js';
 
 // What the maps of the places share: Leaflet (and its clustering) loaded the first time a map is shown,
-// the three layers of tiles, the markers and the legend. Leaflet is copied into web/vendor, so the page
+// the layers of tiles, the markers and the legend. Leaflet is copied into web/vendor, so the page
 // asks nobody for code, only for tiles.
 
 const SCRIPTS = [
@@ -51,7 +51,7 @@ const WMTS = (path, layer) =>
   `https://www.ign.es/wmts/${path}?request=getTile&layer=${layer}&TileMatrixSet=GoogleMapsCompatible&TileMatrix={z}&TileCol={x}&TileRow={y}&format=image/jpeg`;
 
 // The base layers, the first one by default. The IGN's are the official ones of Spain and free to use
-// with their credit; OpenStreetMap's own tiles ask for light use, which is that of a club.
+// with their credit, and Esri's world imagery covers where PNOA does not; OpenStreetMap's own tiles ask for light use, which is that of a club.
 const LAYERS = [
   {
     id: 'topo',
@@ -66,6 +66,14 @@ const LAYERS = [
     url: WMTS('pnoa-ma', 'OI.OrthoimageCoverage'),
     attribution: `Ortofotos PNOA © ${IGN}`,
     maxNativeZoom: 19,
+  },
+  {
+    id: 'world',
+    name: 'Satélite (mundial)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution:
+      'Imágenes © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Vantor, Earthstar Geographics y la comunidad de usuarios de GIS',
+    maxNativeZoom: 18,
   },
   {
     id: 'osm',

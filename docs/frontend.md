@@ -307,12 +307,13 @@ and sent by the same module, `place-files.js` (`fileRowsHtml`, `bindFiles`, with
 **The map of the places** (`map-common.js`). Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 are
 copied into `web/vendor/` (with their licences), so the pages ask nobody for code, only for tiles,
 and no build step is needed; `loadLeaflet` adds their scripts and styles the first time a map is
-shown, so a page without a map does not pay for them. There are three base layers, chosen with the
+shown, so a page without a map does not pay for them. There are four base layers, chosen with the
 control of the map and remembered in the browser (`localStorage`, `katiuskas:places-map-layer`):
 "Topográfico (IGN)" (the default, the IGN's `mapa-raster` WMTS, which has no tiles beyond zoom 17
-and is enlarged after that), "Satélite (PNOA)" and "OpenStreetMap", each with its credit; the IGN's
-are the official source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask
-for light use, which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the
+and is enlarged after that), "Satélite (PNOA)" (Spain only), "Satélite (mundial)" (Esri's World
+Imagery, for everywhere else, with no key) and "OpenStreetMap", each with its credit; the IGN's are
+the official source of Spain and free to use with that credit, and OpenStreetMap's own tiles ask for
+light use, which is a club's. A place is a dot of the colour of its state (`STATE_COLORS`, the
 colours of the badges; a place whose type has no state is grey, "Otro" in the key of the big map)
 with a popup with its name as a link, its type, its state and where it is, and, only where a pointer
 can hover (`(hover: hover)`, `bindPlaceInfo`), its name as a tooltip: on a phone or a tablet a tap
