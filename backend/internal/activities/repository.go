@@ -207,7 +207,9 @@ func (r *Repository) List(ctx context.Context, limit, offset int, ascending bool
 }
 
 // ListActive returns activities that still need attention: any that is not cancelled and
-// has not ended yet (it ends on its end_date, included), plus anything (even over or
+// has not ended yet (it ends on its end_date, included) or ended less than a week ago (so
+// that what has just been done is still at hand to write up, with its memoria, and its material
+// returned), plus anything (even over or
 // cancelled) that still has a rental linked to it that hasn't been returned, or a loan whose
 // activity still has some of that item outstanding (every loan minus
 // every return, summed per item — a loan's own status is always
@@ -219,7 +221,7 @@ func (r *Repository) ListActive(ctx context.Context, limit, offset int, ascendin
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT `+activitySelect+`
 		LEFT JOIN material_movements t ON t.activity_id = a.id AND t.status IN ('active', 'overdue')
-		WHERE (NOT a.cancelled AND a.end_date >= CURRENT_DATE) OR t.id IS NOT NULL OR EXISTS (
+		WHERE (NOT a.cancelled AND a.end_date > CURRENT_DATE - INTERVAL '7 days') OR t.id IS NOT NULL OR EXISTS (
 			SELECT 1 FROM material_movements m
 			WHERE m.activity_id = a.id AND m.type IN ('loan', 'return')
 			GROUP BY m.item_id

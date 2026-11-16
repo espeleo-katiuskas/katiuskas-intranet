@@ -356,8 +356,9 @@ Directiva).
 ## Activities
 
 - **GET** `/activities` — *Any baseline role*. Paged list, most recent first. `active=true` leaves
-  only the ones that still need attention: those not cancelled whose `end_date` is today or later,
-  and any (even over or cancelled) with a loan or rental of material not yet returned.
+  only the ones that still need attention: those not cancelled that have not ended or ended less
+  than a week ago (their `end_date` is later than seven days before today), and any (even over or
+  cancelled) with a loan or rental of material not yet returned.
   - query: `active`, `order`, `limit`, `offset`
   - returns: 200 `[Activity]`
 - **POST** `/activities` — *Any baseline role*. Creates an activity (with initial participants if

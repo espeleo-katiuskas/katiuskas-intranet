@@ -263,6 +263,54 @@ func TestHandlerListActiveLeavesOutWhatIsOverOrCancelled(t *testing.T) {
 	}
 }
 
+// ?active=true also has what ended less than a week ago (so it is still at hand), but not a cancelled one
+// that was to end then, nor what ended a week ago or before.
+func TestHandlerListActiveKeepsWhatEndedLessThanAWeekAgo(t *testing.T) {
+	mux, authn, tx := newTestServer(t)
+	member := testutil.InsertMember(t, tx)
+	admin := testutil.InsertMember(t, tx)
+	token := tokenFor(t, authn, member.ID, "member")
+	adminToken := tokenFor(t, authn, admin.ID, "admin")
+	daysAgo := func(n int) string { return time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02") }
+	create := func(title string, ended int) activities.Activity {
+		t.Helper()
+		rec := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
+			"title": title, "type": "social", "start_date": daysAgo(ended + 1), "end_date": daysAgo(ended),
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d: %s", title, rec.Code, rec.Body.String())
+		}
+		var a activities.Activity
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	create("Yesterday", 1)
+	create("Six days ago", 6)
+	create("Seven days ago", 7)
+	create("Long ago", 40)
+	cancelled := create("Cancelled yesterday", 1)
+	if rec := doRequest(mux, http.MethodPatch, fmt.Sprintf("/api/v1/activities/%d", cancelled.ID), adminToken, map[string]any{"cancelled": true}); rec.Code != http.StatusOK {
+		t.Fatalf("cancel: %d", rec.Code)
+	}
+	rec := doRequest(mux, http.MethodGet, "/api/v1/activities?active=true&order=asc", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list active: %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []activities.Activity
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, a := range list {
+		titles = append(titles, a.Title)
+	}
+	if strings.Join(titles, ",") != "Six days ago,Yesterday" {
+		t.Errorf("expected what ended less than a week ago, oldest first, got %v", titles)
+	}
+}
+
 func TestHandlerCreateWithParticipants(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	person := testutil.InsertMember(t, tx)

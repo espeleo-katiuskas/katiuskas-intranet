@@ -490,12 +490,13 @@ that no longer fits, and the quantity's `max` is what is available or what is ou
 to come, going on or over is worked out from its dates by `activityState` (`api.js`): *Cancelada* if
 cancelled, *Realizada* if its `end_date` is before today, *Planificada* if its `start_date` is after
 today, *En curso* otherwise (`activityStateLabels` has the texts; the badge's CSS class is
-`status-<state>`). `activities.js` (list, with its "active only" filter `?active=true`, and the
-calendar, which leaves cancelled ones out), `activity.js` (the header, and, for whoever can manage
-the activity, a "Cancelar actividad" button next to "Editar actividad", after a confirmation —
-`PATCH` with `cancelled: true` — which becomes "Reactivar actividad" while it is cancelled, `PATCH`
-with `cancelled: false`; the edit dialog has no state field) and `member.js` use it, and
-`material.js` asks for `?active=true` for its activity picker.
+`status-<state>`). `activities.js` (list, with its "active only" filter `?active=true`, which also
+has what ended less than a week ago, and the calendar, which leaves cancelled ones out),
+`activity.js` (the header, and, for whoever can manage the activity, a "Cancelar actividad" button
+next to "Editar actividad", after a confirmation — `PATCH` with `cancelled: true` — which becomes
+"Reactivar actividad" while it is cancelled, `PATCH` with `cancelled: false`; the edit dialog has no
+state field) and `member.js` use it, and `material.js` asks for `?active=true` for its activity
+picker.
 
 **A session that cannot be checked is not a session that is gone.** `initSession()` throws the token
 away and goes to `/login` only when the server answers that it does not accept it (a 4xx).
