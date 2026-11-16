@@ -31,6 +31,8 @@ const typeFilter = document.getElementById('type-filter');
 const stateFilter = document.getElementById('state-filter');
 const subtypeFilter = document.getElementById('subtype-filter');
 const countLine = document.getElementById('places-count');
+// The map of the list is the only one with the box to search a place by name.
+const WITH_SEARCH = { search: true };
 let allPlaces = [];
 let types = [];
 let subtypes = [];
@@ -88,27 +90,29 @@ let focused = false;
 let focusedSystem = false;
 
 async function startMap() {
-  mapStarting ??= createMap(document.getElementById('places-map')).then(({ L, map }) => {
-    const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
-    map.addLayer(cluster);
-    // A click where there is no place offers to create one there.
-    offerOnMapClick(L, map, {
-      label: 'Crear un lugar aquí',
-      open: (coordinates) =>
-        openPlaceDialog({
-          types,
-          subtypes,
-          systems,
-          geologies,
-          coordinates,
-          onSaved: (place) => {
-            window.location.href = `/lugar?id=${place.id}`;
-          },
-        }),
-    });
-    mapState = { L, map, cluster, markers: new Map() };
-    return mapState;
-  });
+  mapStarting ??= createMap(document.getElementById('places-map'), WITH_SEARCH).then(
+    ({ L, map }) => {
+      const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
+      map.addLayer(cluster);
+      // A click where there is no place offers to create one there.
+      offerOnMapClick(L, map, {
+        label: 'Crear un lugar aquí',
+        open: (coordinates) =>
+          openPlaceDialog({
+            types,
+            subtypes,
+            systems,
+            geologies,
+            coordinates,
+            onSaved: (place) => {
+              window.location.href = `/lugar?id=${place.id}`;
+            },
+          }),
+      });
+      mapState = { L, map, cluster, markers: new Map() };
+      return mapState;
+    },
+  );
   return mapStarting;
 }
 
