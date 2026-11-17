@@ -1,0 +1,35 @@
+# Loads the elements of OpenStreetMap that matter to the club (caves, huts, via ferratas) into
+# production's database, once (cmd/osmsync): it downloads the extracts of Spain from Geofabrik if they
+# changed, cuts them with osmium and makes the table osm_elements say what they say. Started once a
+# week by katiuskas-intranet-osm-sync.timer; what it prints is in this unit's journal
+# (journalctl -u katiuskas-intranet-osm-sync). See docs/environments.md ("OpenStreetMap mirror") for
+# how to install it and docs/osm-integration.md for why.
+#
+# It needs the network (the downloads) and the database, so it gets one setting file of its own with
+# the connection (production's api.env has more than it needs, and is not used), and the osmium tool
+# (a package: `apt install osmium-tool`). The extracts it downloads are kept in StateDirectory, which
+# systemd creates for the user.
+[Unit]
+Description=Katiuskas intranet: load OpenStreetMap elements into the mirror
+After=network-online.target postgresql.service
+Wants=network-online.target
+# A failed run is told by Telegram (katiuskas-intranet-notify-failure@.service), once in a while if
+# it keeps failing (a download that cannot be had, a missing tool).
+OnFailure=katiuskas-intranet-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=intranet
+Group=intranet
+# DATABASE_URL, OSM_CACHE_DIR and OSMIUM_BIN (deploy/systemd/osm-sync.env.example).
+EnvironmentFile=/opt/katiuskas-intranet-deploy/osm-sync.env
+ExecStart=/opt/katiuskas-intranet-stable/bin/osmsync
+ExecStartPost=-/bin/rm -f /var/lib/katiuskas-intranet-deploy/notified/%n
+StateDirectory=katiuskas-intranet-osm
+TimeoutStartSec=2h
+# A background job: do not get in the way of the API.
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectHome=true
+NoNewPrivileges=true

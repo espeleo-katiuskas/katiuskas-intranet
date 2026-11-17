@@ -1,0 +1,14 @@
+# Loads the OpenStreetMap extracts into the mirror once a week (katiuskas-intranet-osm-sync.service), at
+# a quiet hour. A run with nothing new costs one request per extract: the files are asked for with
+# If-Modified-Since, and a file that is the one already loaded is not read. Persistent: if the host was
+# off at that time, one runs when it starts.
+[Unit]
+Description=Katiuskas intranet: weekly load of the OpenStreetMap mirror
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
