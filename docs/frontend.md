@@ -344,20 +344,21 @@ to look for a place by name: it asks `GET /osm/search` (the elements of the Open
 find the cave a person knows the name of) and `GET /areas/geocode` (towns, valleys, peaks, from
 Nominatim) at once, when the text is sent, not as it is typed, since the geocoder is outside and
 slow; either may fail or find nothing without the other being lost. It lists first "En
-OpenStreetMap, sin añadir todavía al catálogo" (the name, what it is and its coordinates) and then
-"Otros sitios". Choosing a place moves the map there (to its box, or to zoom 14 if it has none) and
-rings it until the next search; choosing an element goes to zoom 17, puts the layer of its category
-on the map if it was not (the control fires `osmfocus` on the map, which `osm-layer.js` listens to)
-and, when the points of the view are there, opens its popup, with "Añadir al catálogo". The button
-of the whole window is deliberately not the Fullscreen API: the monitor is not taken over, only the
-window, so the address bar and the tabs stay. The list of base layers (the button with the stack of
-squares) closes when one is chosen, since on a touch screen nothing else would close it but a click
-on the map, and a click that closes it (or a popup, or the search box) only closes it: the map is
-told at `preclick`, before they close, so that it does not also offer to create something there. The
-search box closes with the magnifier, with a click on the map and with Escape (heard in the capture
-phase and stopped, so a map over the whole window is not also given back). If the tiles or Leaflet
-cannot be loaded the page says so and the rest keeps working. Nothing here is drawn from the
-server's side, and an offline map is not there.
+OpenStreetMap, sin añadir todavía al catálogo" (the name, what it is and where: the municipality and
+the province, or its coordinates if it is in none known, so that the twenty "Cueva del Agua" can be
+told apart) and then "Otros sitios". Choosing a place moves the map there (to its box, or to zoom 14
+if it has none) and rings it until the next search; choosing an element goes to zoom 17, puts the
+layer of its category on the map if it was not (the control fires `osmfocus` on the map, which
+`osm-layer.js` listens to) and, when the points of the view are there, opens its popup, with "Añadir
+al catálogo". The button of the whole window is deliberately not the Fullscreen API: the monitor is
+not taken over, only the window, so the address bar and the tabs stay. The list of base layers (the
+button with the stack of squares) closes when one is chosen, since on a touch screen nothing else
+would close it but a click on the map, and a click that closes it (or a popup, or the search box)
+only closes it: the map is told at `preclick`, before they close, so that it does not also offer to
+create something there. The search box closes with the magnifier, with a click on the map and with
+Escape (heard in the capture phase and stopped, so a map over the whole window is not also given
+back). If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working. Nothing
+here is drawn from the server's side, and an offline map is not there.
 
 On the map of `/lugares` alone, the selector of layers has under the base layers a box for each
 category of the **points of OpenStreetMap** ("Cuevas (OpenStreetMap)", "Barrancos…", "Refugios…" and
@@ -373,19 +374,19 @@ was not cut, ignores an answer that arrives after the view moved on, and says ho
 that there are more than it can (the API cuts at 1,500). They are grey rings drawn on a canvas (as
 thousands of SVG circles would be slow), apart from the club's places and not clustered with them; a
 click opens a popup that asks `GET /osm/elements/{type}/{id}` for the tags and shows the name, the
-kind, the useful ones (altitude, rappel, difficulty, capacity, fee, access, operator, description)
-and the website if it has one, and draws the outline of a hut or the line of a canyon until the
-popup closes. The credit is not in the popup: while any category is on the map's own credit adds
-"Puntos © colaboradores de OpenStreetMap" (the ODbL asks for it). A click on a ring is for the ring
-(it does not offer to create a place). The popup has a button, **Añadir al catálogo**, that opens
-the form of a new place (`openPlaceDialog` with `osm`) with what OpenStreetMap says already in it
-(`osmDefaults`): the type its category suggests (Cavidad, Cañón, Refugio or Vía ferrata; the subtype
-and the state are left to the person), the name, the other names (`alt_name`, `name:es`), the
-altitude (`ele`), for a cavity the depth and the length when the tags are numbers, the description
-with the website at the end, and the coordinates, from which the zone is proposed as with any
-coordinates. A note above the form says where the data comes from. Saving sends `osm_type` and
-`osm_id` with the rest, so the place keeps its element, and the page goes to the new place; that
-element is no longer offered as a candidate.
+kind and the municipality and province, the useful ones (altitude, rappel, difficulty, capacity,
+fee, access, operator, description) and the website if it has one, and draws the outline of a hut or
+the line of a canyon until the popup closes. The credit is not in the popup: while any category is
+on the map's own credit adds "Puntos © colaboradores de OpenStreetMap" (the ODbL asks for it). A
+click on a ring is for the ring (it does not offer to create a place). The popup has a button,
+**Añadir al catálogo**, that opens the form of a new place (`openPlaceDialog` with `osm`) with what
+OpenStreetMap says already in it (`osmDefaults`): the type its category suggests (Cavidad, Cañón,
+Refugio or Vía ferrata; the subtype and the state are left to the person), the name, the other names
+(`alt_name`, `name:es`), the altitude (`ele`), for a cavity the depth and the length when the tags
+are numbers, the description with the website at the end, and the coordinates, from which the zone
+is proposed as with any coordinates. A note above the form says where the data comes from. Saving
+sends `osm_type` and `osm_id` with the rest, so the place keeps its element, and the page goes to
+the new place; that element is no longer offered as a candidate.
 
 **Linking a place to OpenStreetMap.** The page of a place (`/lugar`) has a section "OpenStreetMap"
 that says whether the place is an element of OpenStreetMap (its type and id) and has the buttons to

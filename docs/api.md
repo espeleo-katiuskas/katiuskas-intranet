@@ -2212,6 +2212,7 @@ What a map needs to draw an element of the mirror.
 | `lon` | number |
 | `category` | cave/canyon/mine/hut/via_ferrata |
 | `name` | text, left out if the element has none |
+| `where` | text, "municipality, province" ("Rasines, Cantabria"); only a search (`/osm/search`) gives it, and it is left out if the element is in no known municipality |
 
 ### `OsmChange`
 
@@ -2240,6 +2241,7 @@ An `OsmPoint` and:
 | `tags` | object of text, all the tags as they are |
 | `geometry` | GeoJSON of its outline (a polygon, a line or a `MultiLineString` for a canyon), null for a node |
 | `deleted_at` | datetime, when it stopped being in OpenStreetMap; null if it is |
+| `where` | text, "municipality, province", left out if the element is in no known municipality |
 
 ### `ArchiveEntry`
 

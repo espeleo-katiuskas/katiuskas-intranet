@@ -563,9 +563,10 @@ API, as `/opt/katiuskas-intranet-stable/bin/osmsync`) fills it from the extracts
 publishes, and a systemd timer
 ([`katiuskas-intranet-osm-sync.timer`](../deploy/systemd/katiuskas-intranet-osm-sync.timer)) runs it
 once a week. The extracts are 1.5 GB (Spain) and 60 MB (the Canary Islands) and are only downloaded
-if they changed; a run takes under a minute where the machine has a few cores, and one with nothing
-new costs one request per extract. A broken download leaves the old file, and a load that finds far
-fewer elements than the source had is refused and told by Telegram, so the mirror is not emptied by
+if they changed; a run takes about a minute where the machine has a few cores (the municipalities of
+the elements are worked out from the boundaries of the same extract), and one with nothing new costs
+one request per extract. A broken download leaves the old file, and a load that finds far fewer
+elements than the source had is refused and told by Telegram, so the mirror is not emptied by
 mistake.
 
 It is installed once, for production: testing's database is a copy of production's, so it gets the

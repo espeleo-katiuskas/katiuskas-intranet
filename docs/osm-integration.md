@@ -142,23 +142,38 @@ same goes for `alpine_hut`. So **ways and relations are in from the first versio
 
 ## 6. Zones of the elements
 
-A place needs a zone (`area_id`, at least the country). Asking Nominatim for every element is out
-of the question (one request a second, and bulk use is against its policy: 73,000 would take a day
-and is abuse). The options:
+Built (option 1 of the first draft): each load works out the municipality of every element from the
+boundaries of the same extract, and keeps it in `osm_elements.area_id`, a foreign key to `areas`.
+Asking Nominatim for each element was out of the question (one request a second, and bulk use is
+against its policy), and PostGIS would have been a new dependency for production, the backup and the
+prod→testing copy.
 
-1. Compute it **offline with the boundaries from the same extract** (`boundary=administrative`
-   with `admin_level` 8 and, in Spain, `ref:ine`), once per load, with `osmium` plus a script
-   (`ogr2ogr`/shapely) that finds the municipality of each point. This is the solid way.
-2. Add PostGIS to the database just for this (and `ST_Contains`). It is simpler to write but it is
-   a new dependency for production, the backup and the prod→testing copy; today none of it is
-   needed.
-3. Leave `area_id` empty until a member touches the place, and then propose it with
-   `GET /areas/locate` as the form does today. Cheap, but the lists cannot say "in Madrid" for
-   elements nobody has opened.
+How: `osmium` cuts the relations with `admin_level=8` and exports them as polygons (17 s for Spain
+and 2 s for the Canary Islands); the loader reads them one feature at a time, keeps those tagged
+`boundary=administrative` with a `ref:ine`, and for each tests the points inside its box, found
+through a grid of 0.1° cells, with the usual even-odd rule (a hole is not inside). The boundary is
+turned into a zone of the club by a rule of each country (`ZoneResolver`: Spain's is the `ref:ine`
+of the boundary, whose first five digits are the `code` of the zone of kind Municipio), so another
+country adds a rule of its own once its zones are in the catalogue; the column is a plain reference
+to `areas` and does not care. It is `ON DELETE SET NULL`, the one foreign key that is not `RESTRICT`
+(a test names it and says why), so an admin deleting a zone is never stopped by the mirror, and
+merging two moves the elements to the zone that stays. The names of the zone and of the one above it
+are joined when it is read: that is how a search says "Cueva del Agua · Valle de Sedano, Burgos" and
+the popup of an element says where it is. In the extract of 16 November 2026, 13,209 of the 13,523
+elements (97.7 %) have one, in 2,196 different municipalities. Country polygons were tried as a
+fallback and are not used: the relation of a country is not a closed polygon in an extract that cuts
+it (only Andorra's was built), so they cannot be trusted. The 314 that do not are on the coast (a
+sea cave is outside the polygon, which ends at the shoreline), in Gibraltar, Ceuta and the Basque
+condominiums that have no `ref:ine`. A whole load now takes about a minute.
 
-**Proposal**: 1 for Spain (where the seed has the INE codes) and the country alone, by a coarse
-box or by `reverse` of the extract's country polygons, for the rest. The result is stored in the
-mirror (`area_id`, nullable) so that it is not computed on every request.
+The zone is part of what the mirror hashes, so the first load after this change marks every element
+as changed (once), and a load in which an element changes municipality says it changed. It does not
+touch the places: the notice of what changed in an element looks at its tags and its point.
+
+**Still to do**: a nearest-municipality fallback for the coastal ones, and the zone of the elements
+of other countries (the country alone, from the country polygons) if they are ever loaded. The form
+of a place made from an element still asks Nominatim for the zone of its coordinates, which works;
+it could take the element's own zone instead.
 
 ## 7. How the elements become places
 
@@ -430,7 +445,7 @@ deleted, as with any other.
    /places/{id}/links/osm/review`, the badge in the list). Nothing is merged or changed by itself.
    **Still to do**: a list to review in one go the places that already exist, which depends on how
    many places the club has that are not linked.
-5. **Zones** for the elements (6), the other countries, the other filters (12).
+5. **Zones** for the elements (done, see 6), the other countries, the other filters (12).
 6. **Contribute** (9), if wanted.
 
 ## 14. To settle (all of it)

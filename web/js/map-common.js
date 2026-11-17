@@ -357,7 +357,7 @@ function addSearchControl(L, map) {
           for (const element of fromOsm) {
             item(
               element.name,
-              `${OSM_CATEGORY_LABELS[element.category] ?? element.category} · ${formatDecimal(element.lat, element.lon)}`,
+              `${OSM_CATEGORY_LABELS[element.category] ?? element.category} · ${element.where || formatDecimal(element.lat, element.lon)}`,
               () => {
                 show(element, 17);
                 // The layer of its category is put on the map and its popup opened (osm-layer.js).

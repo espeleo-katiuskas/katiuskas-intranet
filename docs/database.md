@@ -99,7 +99,9 @@ only says where a delete has a consequence.
 
 Every foreign key is `ON DELETE RESTRICT` (migration `00049`; a test checks it): nothing cascades
 and nothing is set to NULL, so deleting a row fails while any other row still points at it, and
-nothing disappears that the request did not name. Where an endpoint is meant to delete the parts of
+nothing disappears that the request did not name. There is one exception, named in the test with its
+reason: `osm_elements.area_id` is `ON DELETE SET NULL`, because it is derived data that the next
+load of the OpenStreetMap mirror works out again. Where an endpoint is meant to delete the parts of
 what it deletes, the code does it itself, explicitly, in the same transaction:
 
 - `DELETE /transactions/{id}`: its entries and the dues it paid (the license it paid, a file or a
@@ -1397,6 +1399,7 @@ the element, so that what is OpenStreetMap's and what is the club's stay separat
 | `fetched_at` | timestamptz | no | now() |
 | `changed_at` | timestamptz | no | now() |
 | `deleted_at` | timestamptz | yes |  |
+| `area_id` | bigint | yes |  |
 
 Notes on the columns:
 
@@ -1412,23 +1415,32 @@ Notes on the columns:
   them).
 - `tags`: All the tags as they are. `geometry`: the GeoJSON of the outline of a way or a relation
   (a `MultiLineString`, one line per way, for a canyon), empty for a node.
-- `content_hash`: A hash of the tags, the point and the outline, which tells a load that something
-  changed even when the version did not (a node of a way that moved does not change its version).
+- `content_hash`: A hash of the tags, the point, the outline and the zone, which tells a load that
+  something changed even when the version did not (a node of a way that moved does not change its
+  version).
 - `source`: The extract that last had it (`spain`, `canary-islands`).
 - `fetched_at`, `changed_at`: When a load last confirmed it, and when one last found it different
   (or marked it as gone).
 - `deleted_at`: Set when the element is no longer in its extract (deleted from OpenStreetMap, or no
   longer matching the filters); the row stays, since a place may point at it, and the mark is
   cleared if it comes back.
+- `area_id`: The zone (a row of `areas`) the point is in, worked out on each load from the
+  boundaries of the same extract; in Spain it is the municipality whose `ref:ine` is the `code` of
+  the zone. Empty if it is in none known (the sea, a country whose zones are not in the catalogue).
+  It is the one foreign key that is `ON DELETE SET NULL` and not `RESTRICT`: what it holds is
+  derived and the next load works it out again, so deleting a zone is never stopped by the mirror,
+  and merging two moves the elements to the zone that stays (migration `00072_osm_area.sql`).
 
 Constraints:
 
 - primary key (osm_type, osm_id)
+- `area_id` → `areas(id)`, `ON DELETE SET NULL`
 - `osm_type` is `node`, `way` or `relation`; `category` is `cave`, `canyon`, `mine`, `hut` or
   `via_ferrata`
 - `lat` between -90 and 90, `lon` between -180 and 180
 - indexes `idx_osm_elements_lat_lon` on `(lat, lon)` and `idx_osm_elements_source` on `(source)`,
-  both only over the rows that are not marked as gone
+  both only over the rows that are not marked as gone, and `idx_osm_elements_area_id` on
+  `(area_id)`, which deleting a zone needs to find its elements
 
 ### `osm_sync_runs`
 
@@ -2136,3 +2148,6 @@ at the end; that database has to be recreated when a new migration appears.
 - `00069_osm_mirror.sql`: `osm_elements`, `osm_sync_runs` and `places.osm_type`/`osm_id`
 - `00070_place_osm_seen.sql`: `places.osm_seen`, what the place has seen of its OSM element
 - `00071_osm_mines.sql`: `mine` as a category of `osm_elements`
+- `00072_osm_area.sql`: `osm_elements.area_id`, the zone of each element
+- `00073_activity_resource_place_restrict.sql`: the foreign key of the place of a memoria entry,
+  which 00065 left without `ON DELETE RESTRICT`, gets it

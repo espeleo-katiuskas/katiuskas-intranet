@@ -84,7 +84,7 @@ function popupHtml(detail) {
     ? `<br><a href="${escapeHtml(tags.website)}" target="_blank" rel="noopener">Web</a>`
     : '';
   return `<strong>${escapeHtml(name)}</strong><br>
-    <span class="subtitle">${escapeHtml(CATEGORY_LABELS[detail.category] ?? detail.category)} · de OpenStreetMap</span>${rows}${web}`;
+    <span class="subtitle">${escapeHtml([CATEGORY_LABELS[detail.category] ?? detail.category, detail.where, 'de OpenStreetMap'].filter(Boolean).join(' · '))}</span>${rows}${web}`;
 }
 
 // createOsmLayer puts the points on the map: one layer for each category, which is a box to tick in the

@@ -1324,6 +1324,26 @@ keeps its element for good. An element that is a place is no longer a candidate:
 it out, as the map shows it as that place. The data that the new place starts with is the frontend's
 doing (the dialog copies what the tags say), not the API's, and the person confirms every field.
 
+**The zone of each element.** `osmmirror.AssignZones` (`zones.go`) sets `Element.AreaID`, the zone
+(a row of `areas`) the point is in, on each load, before the elements are stored: `Syncer` asks
+`Osmium.ExportBoundaries` for the polygons of the relations with `admin_level=8` of the same
+extract, and `AssignZones` reads them one feature at a time (Spain has about 8,900 and 80 MB:
+keeping them all to test 13,000 points would be a waste). What a boundary is is up to a
+`ZoneResolver`, a function from its tags to the id of a zone of the club (0 if it is none):
+`MunicipalityResolver` is Spain's, which takes a `boundary=administrative` of level 8 with a
+`ref:ine` whose first five digits (the other six are the entity) are the `code` of a zone of kind
+Municipio, from the map that `Repository.MunicipalityIDs` reads at the start of the load; another
+country adds its own rule, with its own reference, once its zones are in the catalogue. For each
+boundary the points inside its box are found with a grid of 0.1° cells and tested with
+`polygon.contains` (even-odd, so a hole is outside); the first zone to hold a point keeps it. The id
+goes into `ContentHash` and is written with the element (`osm_elements.area_id`, `ON DELETE SET
+NULL`: derived data, worked out again on the next load, so deleting a zone is not stopped by it, and
+`areas.Repository.Merge` moves the elements to the zone that stays); the names of the zone and of
+the one above it are joined only when it is read (`whereJoin`: `Point.Where` in a search and
+`Detail.Where`). A failure to read the boundaries fails the load, since storing the elements without
+it would erase every zone. About 2 % of the elements are in no municipality (the coast, Gibraltar,
+Ceuta, the Basque condominiums).
+
 **Searching by name.** `GET /osm/search?q=` (`Service.Search`, `Repository.SearchByWords`) is how a
 person finds the cave they know the name of, to make a place of it. The text is normalized with
 `areas.Normalize` (case, accents and punctuation do not count) and cut into words of two letters or
@@ -1335,9 +1355,8 @@ to say there: the same name (0), a name that starts with the text (1), every wor
 club's category order and the shorter name; it gives 20. The words are letters and digits only, so
 they are safe inside a `LIKE`, and a test checks it with a `%`. It reads all the names on each
 request, which with 13,000 elements takes about 25 ms; if the mirror grew to the whole world, an
-index (`pg_trgm`) would be the next step. Nothing says where an element is but its point, so a name
-that many have ("Cueva del Agua" has twenty) shows only its coordinates: the zone of each element
-would tell them apart (docs/osm-integration.md, section 6).
+index (`pg_trgm`) would be the next step. Each result says where it is ("Valle de Sedano, Burgos"),
+which is what tells apart the twenty "Cueva del Agua".
 
 **Linking a place that already exists.** `PUT /places/{id}/links/osm` (`Service.LinkOsm`,
 `Repository.SetOsm`) says which element a place is, instead of the one it was, and `DELETE` takes
