@@ -289,12 +289,12 @@ longitude. No PostGIS. The list has a map of the same places and each place a sm
 (`js/map-common.js`: Leaflet and its clustering are copied into `web/vendor/`, tiles from the IGN, Esri or
 OpenStreetMap). A local **mirror of OpenStreetMap** (`osm_elements`, `internal/osmmirror`, loaded
 weekly by `cmd/osmsync` from Geofabrik's extracts with `osmium`: caves, canyons, huts, via ferratas)
-is kept apart from the places and joined by element type and id (`places.osm_type`/`osm_id`);
-the API only reads it (`GET /osm/elements`, shown as grey rings on the map of the list), and nothing
-in the intranet asks OpenStreetMap anything
-(`docs/osm-integration.md`). An activity goes to places of the catalogue (`activity_places`, set by
-whoever can edit the activity; a place with activities is not deleted). Not there yet: see
-`docs/roadmap.md`.
+is kept apart from the places and joined by element type and id (`places.osm_type`/`osm_id`); the
+API only reads it (`GET /osm/elements`, shown as grey rings on the map of the list, from which a
+member makes a place that keeps the element), and nothing in the intranet asks OpenStreetMap
+anything (`docs/osm-integration.md`). An activity goes to places of the catalogue
+(`activity_places`, set by whoever can edit the activity; a place with activities is not deleted).
+Not there yet: see `docs/roadmap.md`.
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.
 Notifications are fire-and-forget (own goroutine, bounded timeout, detached context), with two

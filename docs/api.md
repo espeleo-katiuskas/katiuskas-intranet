@@ -825,7 +825,10 @@ known, in metres above sea level.
     `depth_m` and `horizontal_length_m` (metres) and
     `geology_id` (of `/places/geologies`: what it is formed in) only for a cavity, and
     `technical_sheet` (what has to be installed to go through it) for a cavity or a canyon. Blank
-    text counts as no value.
+    text counts as no value. `osm_type` and `osm_id` (both or neither: `node`, `way` or `relation`
+    and its id) make the place an element of the OpenStreetMap mirror (`GET /osm/elements`), which
+    has to be in it and at most one place may be; only creating reads them, an edit leaves them as
+    they were. The element then stops being offered as a candidate on the map.
   - returns: 201 `Place`
   - errors: 400 `invalid_body`, `place_name_required`, `place_type_required`, `unknown_place_type`,
     `place_area_required`, `unknown_area`, `invalid_place_state`, `invalid_coordinates`,
@@ -834,7 +837,8 @@ known, in metres above sea level.
     `invalid_place_measure` (negative, or above 20000 m of depth or 2000000 m of length),
     `invalid_place_fields` (a subtype, a measure or a geology of a place that is not a cavity, a
     technical sheet of one that is neither a cavity nor a canyon, or a state of a type that has
-    none)
+    none), `unknown_osm_element` (not in the mirror, or only the type or only the id); 409
+    `osm_element_in_use` (another place already is that element)
 - **GET** `/places/{id}` — *Any baseline role*. One place with its points.
   - returns: 200 `Place`
   - errors: 400 `invalid_id`; 404 `not_found`
@@ -2058,6 +2062,8 @@ Everything of a `PlaceListItem`, and:
 | `access` | text |
 | `description` | text |
 | `technical_sheet` | text |
+| `osm_type` | node/way/relation, left out if the place is not an element of OpenStreetMap |
+| `osm_id` | integer, with `osm_type` |
 | `area_path` | `[AreaRef]` |
 | `created_by` | text (login) |
 | `created_at` | datetime |

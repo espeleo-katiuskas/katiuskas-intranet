@@ -92,7 +92,22 @@ let focusedSystem = false;
 
 // The points of OpenStreetMap: a layer for each category in the selector of layers of the map.
 function setUpOsm(L, map, layersControl) {
-  createOsmLayer(L, map, { note: document.getElementById('osm-note'), layersControl }).refresh();
+  createOsmLayer(L, map, {
+    note: document.getElementById('osm-note'),
+    layersControl,
+    // A point of OpenStreetMap becomes a place of the catalogue: the same form as a new place, filled in.
+    onUse: (osm) =>
+      openPlaceDialog({
+        types,
+        subtypes,
+        systems,
+        geologies,
+        osm,
+        onSaved: (place) => {
+          window.location.href = `/lugar?id=${place.id}`;
+        },
+      }),
+  }).refresh();
 }
 
 async function startMap() {

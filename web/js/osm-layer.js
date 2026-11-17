@@ -84,8 +84,8 @@ function popupHtml(detail) {
 
 // createOsmLayer puts the points on the map: one layer for each category, which is a box to tick in the
 // selector of layers (`layersControl`, the one of createMap). `note` is the element that says what is on
-// screen (or that the map has to be zoomed in).
-function createOsmLayer(L, map, { note, layersControl }) {
+// screen (or that the map has to be zoomed in); `onUse(detail)` is what the button of the popup does.
+function createOsmLayer(L, map, { note, layersControl, onUse }) {
   const renderer = L.canvas({ padding: 0.5 }); // Thousands of rings are cheap on a canvas, not as SVG.
   const groups = Object.fromEntries(CATEGORIES.map((c) => [c, L.layerGroup()]));
   const details = new Map();
@@ -139,7 +139,21 @@ function createOsmLayer(L, map, { note, layersControl }) {
     ring.on('popupopen', async () => {
       try {
         const detail = await detailOf(point);
-        ring.setPopupContent(popupHtml(detail));
+        const content = document.createElement('div');
+        content.innerHTML = popupHtml(detail);
+        if (onUse) {
+          // To make a place of it: the form of a new place, with what OpenStreetMap says already in it.
+          const use = document.createElement('button');
+          use.type = 'button';
+          use.className = 'btn btn-secondary btn-small';
+          use.textContent = 'Añadir al catálogo';
+          use.addEventListener('click', () => {
+            ring.closePopup();
+            onUse(detail);
+          });
+          content.append(use);
+        }
+        ring.setPopupContent(content);
         dropOutline();
         if (detail.geometry) {
           outline = L.geoJSON(detail.geometry, {

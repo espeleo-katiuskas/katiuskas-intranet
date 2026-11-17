@@ -141,6 +141,8 @@ const texts = {
   too_many_places: 'Una actividad no puede ir a tantos lugares.',
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',
+  unknown_osm_element: 'Ese elemento de OpenStreetMap no está en la copia del club.',
+  osm_element_in_use: 'Ya hay un lugar que es ese elemento de OpenStreetMap.',
   invalid_bbox: 'El área del mapa no es válida.',
   invalid_osm_category: 'La categoría de OpenStreetMap no es válida.',
   invalid_osm_element: 'El tipo de elemento de OpenStreetMap no es válido.',

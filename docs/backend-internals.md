@@ -1294,6 +1294,16 @@ by the browser for five minutes (the mirror changes once a week at most). Why th
 and from zoom 11 and not for everything at once: thousands of points in the view are no use to
 anyone, and the cost does not grow with the size of the mirror.
 
+**Making a place of an element.** `POST /places` takes `osm_type` and `osm_id` (both or neither) for
+a place made from an element of the mirror: `clean` refuses half of the pair or a type that is not
+node, way or relation (400 `unknown_osm_element`), and the foreign key of `places` to `osm_elements`
+refuses an element that is not there (the same code), while the unique constraint refuses a second
+place for the same element (409 `osm_element_in_use`); the repository tells them apart by the name
+of the constraint. The pair is read when creating only: an edit takes it out of the body, so a place
+keeps its element for good. An element that is a place is no longer a candidate: `InBounds` leaves
+it out, as the map shows it as that place. The data that the new place starts with is the frontend's
+doing (the dialog copies what the tags say), not the API's, and the person confirms every field.
+
 ## Telegram
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API

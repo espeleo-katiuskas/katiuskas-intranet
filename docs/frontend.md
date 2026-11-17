@@ -371,7 +371,15 @@ kind, the useful ones (altitude, rappel, difficulty, capacity, fee, access, oper
 and the website if it has one, and draws the outline of a hut or the line of a canyon until the
 popup closes. The credit is not in the popup: while any category is on the map's own credit adds
 "Puntos © colaboradores de OpenStreetMap" (the ODbL asks for it). A click on a ring is for the ring
-(it does not offer to create a place); nothing here creates places yet.
+(it does not offer to create a place). The popup has a button, **Añadir al catálogo**, that opens
+the form of a new place (`openPlaceDialog` with `osm`) with what OpenStreetMap says already in it
+(`osmDefaults`): the type its category suggests (Cavidad, Cañón, Refugio or Vía ferrata; the subtype
+and the state are left to the person), the name, the other names (`alt_name`, `name:es`), the
+altitude (`ele`), for a cavity the depth and the length when the tags are numbers, the description
+with the website at the end, and the coordinates, from which the zone is proposed as with any
+coordinates. A note above the form says where the data comes from. Saving sends `osm_type` and
+`osm_id` with the rest, so the place keeps its element, and the page goes to the new place; that
+element is no longer offered as a candidate.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

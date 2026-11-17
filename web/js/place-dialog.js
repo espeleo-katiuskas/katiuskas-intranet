@@ -77,6 +77,7 @@ function ensurePlaceDialog() {
     'place-dialog',
     `
     <h3 id="pd-title">Nuevo lugar</h3>
+    <p class="hint" id="pd-osm-note" hidden></p>
     <form id="place-form">
       <div class="field-grid">
         <div class="field">
@@ -278,6 +279,45 @@ const whole = (form, name) =>
 // GET /places/geologies. `onSaved` is called with the place the API answers with, once it is saved. A new place may start at `coordinates`
 // ({ lat, lon }, from a click on a map): they are written in the form and the zone they are in is asked
 // for at once.
+// What a place made from an element of OpenStreetMap starts with, from its tags: the type that its category
+// suggests (the club's own activity decides what OpenStreetMap does not say, so the subtype and the state
+// are left to the person), its names, altitude and, for a cavity, the depth and the length when they are
+// numbers, and the description with the website at the end.
+function osmDefaults(osm, types) {
+  const tags = osm.tags ?? {};
+  const name = (tags.name || tags['name:es'] || '').trim();
+  const byKind = (kind) => types.find((t) => t.kind === kind);
+  const byName = (wanted) => types.find((t) => t.name === wanted);
+  const type =
+    {
+      cave: byKind('cave'),
+      canyon: byKind('canyon'),
+      hut: byName('Refugio'),
+      via_ferrata: byName('Vía ferrata'),
+    }[osm.category] ?? null;
+  const altNames = [];
+  for (const other of [...(tags.alt_name ?? '').split(';'), tags['name:es'] ?? '']) {
+    const trimmed = other.trim();
+    if (trimmed && trimmed !== name && !altNames.includes(trimmed)) altNames.push(trimmed);
+  }
+  const whole = (value) => {
+    const n = Math.round(Number.parseFloat(value));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const altitude = Number.parseFloat(tags.ele);
+  const isCave = type?.kind === 'cave';
+  const website = /^https?:\/\//.test(tags.website ?? '') ? `Web: ${tags.website}` : '';
+  return {
+    typeId: type?.id ?? null,
+    name,
+    altNames,
+    altitude: Number.isFinite(altitude) ? Math.round(altitude) : null,
+    depth: isCave ? whole(tags.depth) : null,
+    length: isCave ? whole(tags.length) : null,
+    description: [(tags.description ?? '').trim(), website].filter(Boolean).join('\n\n'),
+  };
+}
+
 function openPlaceDialog({
   types,
   subtypes,
@@ -285,6 +325,7 @@ function openPlaceDialog({
   geologies,
   place = null,
   coordinates = null,
+  osm = null,
   onSaved,
 }) {
   const {
@@ -300,6 +341,11 @@ function openPlaceDialog({
     proposeArea,
   } = ensurePlaceDialog();
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
+  const osmNote = document.getElementById('pd-osm-note');
+  osmNote.hidden = !osm;
+  osmNote.textContent = osm
+    ? 'Datos tomados de OpenStreetMap: revísalos y completa lo que falte (la zona se propone a partir de las coordenadas).'
+    : '';
   document.getElementById('pd-submit').textContent = place ? 'Guardar' : 'Crear lugar';
   form.elements.type_id.innerHTML = types
     .map(
@@ -336,12 +382,25 @@ function openPlaceDialog({
     set('description', place.description);
     set('technical_sheet', place.technical_sheet);
   }
+  const fromOsm = !place && osm ? osmDefaults(osm, types) : null;
+  if (fromOsm) {
+    const set = (name, value) => {
+      form.elements[name].value = value ?? '';
+    };
+    if (fromOsm.typeId) set('type_id', fromOsm.typeId);
+    set('name', fromOsm.name);
+    namesList.setNames(fromOsm.altNames);
+    set('altitude_m', fromOsm.altitude);
+    set('depth_m', fromOsm.depth);
+    set('horizontal_length_m', fromOsm.length);
+    set('description', fromOsm.description);
+  }
   // Where it is: the zone of the place; a new one starts with none, to be chosen.
   areaPicker.setArea(place ? areaOfPlace(place) : null);
-  if (!place && coordinates)
-    form.elements.coordinates.value = formatDecimal(coordinates.lat, coordinates.lon);
+  const start = fromOsm ? { lat: osm.lat, lon: osm.lon } : coordinates;
+  if (!place && start) form.elements.coordinates.value = formatDecimal(start.lat, start.lon);
   updateCoordinates();
-  if (!place && coordinates) proposeArea();
+  if (!place && start) proposeArea();
   syncKind();
   syncState();
   form.onsubmit = async (event) => {
@@ -374,6 +433,8 @@ function openPlaceDialog({
           geology_id: kind === 'cave' ? whole(form, 'geology_id') : null,
           technical_sheet:
             kind === 'cave' || kind === 'canyon' ? text(form, 'technical_sheet') : null,
+          // The element of OpenStreetMap it is made from, for a new place only.
+          ...(!place && osm ? { osm_type: osm.type, osm_id: osm.id } : {}),
         }),
       });
       dialog.close();
