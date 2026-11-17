@@ -69,6 +69,16 @@ a client name that says who it is. A single Overpass query for `natural=cave_ent
 world is an acceptable way to get the very first load of the other countries in one go (about
 73,000 elements), if the public instance answers at that moment.
 
+**Spain takes two files**, because Geofabrik cuts by region and not by country: the Spanish
+extract (`europe/spain-latest.osm.pbf`, 1.5 GB in November 2026, which also has the Balearic
+Islands, Ceuta, Melilla and the other small islands) and the Canary Islands
+(`africa/canary-islands-latest.osm.pbf`, 60 MB, in the African extracts because of where the
+islands are). The two do not overlap, so each is filtered on its own and the results are added
+together. So the list of what is downloaded is a configuration of *files*, not of countries, and
+each file has its own URL, date and `osm_sync_runs` row. The `-latest` addresses redirect to the
+file of the day (`spain-261116.osm.pbf`), and the redirect is what `If-Modified-Since` should be
+sent to.
+
 A cheaper way to stay current between full reloads is a daily Overpass query with
 `newer:"<last run>"` for the same tags: it returns only what changed. It does not say what was
 *deleted*, so a full reload (or the Geofabrik diffs) is still needed now and then to find those.
