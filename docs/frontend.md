@@ -353,22 +353,25 @@ and with Escape (heard in the capture phase and stopped, so a map over the whole
 given back). If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working.
 Nothing here is drawn from the server's side, and an offline map is not there.
 
-On the map of `/lugares` alone, under it, a box turns on the **points of OpenStreetMap**
-(`js/osm-layer.js`, `createOsmLayer`, driven by `setUpOsm` in `places.js`), with a box for each
-category (cuevas, barrancos, refugios and, off by default, vías ferratas; the choice is remembered
-in `katiuskas:places-osm`). They come from the local mirror (`GET /osm/elements`), never from
-OpenStreetMap, and only from zoom 11 up (`MIN_ZOOM`: a few dozen kilometres on screen, hundreds of
-points at most; below that a note says to zoom in): the map asks for the box in view plus a margin
-(`bbox`), when it stops moving (a short delay), does not ask again while the view is inside what it
-has and the answer was not cut, ignores an answer that arrives after the view moved on, and says how
-many it shows or that there are more than it can (the API cuts at 1,500). They are grey rings drawn
-on a canvas (as thousands of SVG circles would be slow), apart from the club's places and not
-clustered with them; a click opens a popup that asks `GET /osm/elements/{type}/{id}` for the tags
-and shows the name, the kind, the useful ones (altitude, rappel, difficulty, capacity, fee, access,
-operator, description) and the website if it has one, and draws the outline of a hut or the line of
-a canyon until the popup closes. The credit is not in the popup: while the layer is on the map's own
-credit adds "Puntos © colaboradores de OpenStreetMap" (the ODbL asks for it). A click on a ring is
-for the ring (it does not offer to create a place); nothing here creates places yet.
+On the map of `/lugares` alone, the selector of layers has under the base layers a box for each
+category of the **points of OpenStreetMap** ("Cuevas (OpenStreetMap)", "Barrancos…", "Refugios…" and
+"Vías ferratas…"; `js/osm-layer.js`, `createOsmLayer`, driven by `setUpOsm` in `places.js`, which
+gets the control from `createMap`). Each category is a layer group added to the map as an overlay,
+so ticking or unticking its box is what adds or removes it, and what is on is remembered as a list
+in `katiuskas:places-osm` (none the first time). They come from the local mirror (`GET
+/osm/elements`), never from OpenStreetMap, and only from zoom 11 up (`MIN_ZOOM`: a few dozen
+kilometres on screen, hundreds of points at most; below that a note under the map says to zoom in):
+the map asks for the box in view plus a margin (`bbox`) and the categories that are on, when it
+stops moving (a short delay), does not ask again while the view is inside what it has and the answer
+was not cut, ignores an answer that arrives after the view moved on, and says how many it shows or
+that there are more than it can (the API cuts at 1,500). They are grey rings drawn on a canvas (as
+thousands of SVG circles would be slow), apart from the club's places and not clustered with them; a
+click opens a popup that asks `GET /osm/elements/{type}/{id}` for the tags and shows the name, the
+kind, the useful ones (altitude, rappel, difficulty, capacity, fee, access, operator, description)
+and the website if it has one, and draws the outline of a hut or the line of a canyon until the
+popup closes. The credit is not in the popup: while any category is on the map's own credit adds
+"Puntos © colaboradores de OpenStreetMap" (the ODbL asks for it). A click on a ring is for the ring
+(it does not offer to create a place); nothing here creates places yet.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of

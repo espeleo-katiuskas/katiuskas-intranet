@@ -90,31 +90,14 @@ let mapStarting = null;
 let focused = false;
 let focusedSystem = false;
 
-// The points of OpenStreetMap: a box to turn them on and the categories to show, driving the layer.
-function setUpOsm(L, map) {
-  const layer = createOsmLayer(L, map, { note: document.getElementById('osm-note') });
-  const toggle = document.getElementById('osm-toggle');
-  const categories = document.getElementById('osm-categories');
-  const boxes = [...categories.querySelectorAll('[data-osm-category]')];
-  const apply = () => {
-    categories.hidden = !toggle.checked;
-    layer.set({
-      on: toggle.checked,
-      categories: boxes.filter((b) => b.checked).map((b) => b.dataset.osmCategory),
-    });
-  };
-  const saved = layer.choice();
-  toggle.checked = saved.on;
-  for (const box of boxes) box.checked = saved.categories.includes(box.dataset.osmCategory);
-  categories.hidden = !saved.on;
-  toggle.addEventListener('change', apply);
-  for (const box of boxes) box.addEventListener('change', apply);
-  layer.refresh();
+// The points of OpenStreetMap: a layer for each category in the selector of layers of the map.
+function setUpOsm(L, map, layersControl) {
+  createOsmLayer(L, map, { note: document.getElementById('osm-note'), layersControl }).refresh();
 }
 
 async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map'), WITH_SEARCH).then(
-    ({ L, map }) => {
+    ({ L, map, layersControl }) => {
       const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
       map.addLayer(cluster);
       // A click where there is no place offers to create one there.
@@ -132,7 +115,7 @@ async function startMap() {
             },
           }),
       });
-      setUpOsm(L, map);
+      setUpOsm(L, map, layersControl);
       mapState = { L, map, cluster, markers: new Map() };
       return mapState;
     },

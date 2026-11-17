@@ -114,7 +114,7 @@ const STATE_COLORS = {
 
 // A map in the element, with the layers (the one chosen last time is the one shown), the scale and
 // Spain in view until something is fitted, and the box to search a place by name if `search` is set
-// (only the map of the list has it). Gives Leaflet's `L` and the map.
+// (only the map of the list has it). Gives Leaflet's `L`, the map and its control of layers.
 async function createMap(element, { search = false } = {}) {
   const L = await loadLeaflet();
   const map = L.map(element, { maxZoom: 19, worldCopyJump: true }).setView([40.2, -3.7], 6);
@@ -145,7 +145,7 @@ async function createMap(element, { search = false } = {}) {
     const found = LAYERS.find((layer) => layer.name === event.name);
     if (found) rememberLayer(found.id);
   });
-  return { L, map };
+  return { L, map, layersControl };
 }
 
 const EXPAND_ICON =

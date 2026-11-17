@@ -2410,28 +2410,7 @@ html.map-is-expanded {
   background: var(--surface-muted);
 }
 
-.osm-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 16px;
-  margin: 8px 0 0;
-  font-size: 0.875rem;
-}
-
-.osm-controls label.checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.osm-categories {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-}
-
-/* The ring that marks the points of OpenStreetMap on the map, also in the box that turns them on. */
+/* The ring that marks the points of OpenStreetMap, in the selector of layers. */
 .osm-ring {
   display: inline-block;
   width: 12px;

@@ -15,30 +15,32 @@ const CATEGORY_LABELS = {
   hut: 'Refugio',
   via_ferrata: 'Vía ferrata',
 };
-const DEFAULT_CATEGORIES = ['cave', 'canyon', 'hut'];
 // The credit the ODbL asks for, on the map while its data is on it.
 const ATTRIBUTION =
   'Puntos © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a>';
 
-// What is remembered between visits: whether the layer is on and which categories it shows.
-function loadChoice() {
+const CATEGORIES = Object.keys(CATEGORY_LABELS);
+const CATEGORY_PLURALS = {
+  cave: 'Cuevas',
+  canyon: 'Barrancos',
+  hut: 'Refugios',
+  via_ferrata: 'Vías ferratas',
+};
+
+// What is remembered between visits: which categories are on the map.
+function loadCategories() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-    if (saved && typeof saved.on === 'boolean' && Array.isArray(saved.categories)) {
-      return {
-        on: saved.on,
-        categories: saved.categories.filter((c) => c in CATEGORY_LABELS),
-      };
-    }
+    if (Array.isArray(saved)) return CATEGORIES.filter((c) => saved.includes(c));
   } catch {
-    // Nothing stored, or a browser that does not allow it: the defaults.
+    // Nothing stored, or a browser that does not allow it: none shown.
   }
-  return { on: false, categories: DEFAULT_CATEGORIES };
+  return [];
 }
 
-function saveChoice(choice) {
+function saveCategories(categories) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(choice));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
   } catch {
     // Not remembered, which only costs choosing again.
   }
@@ -80,13 +82,14 @@ function popupHtml(detail) {
     <span class="subtitle">${escapeHtml(CATEGORY_LABELS[detail.category] ?? detail.category)} · de OpenStreetMap</span>${rows}${web}`;
 }
 
-// createOsmLayer puts the layer on the map and gives what the page needs to drive it. `note` is the element
-// that says what is on screen (or that the map has to be zoomed in).
-function createOsmLayer(L, map, { note }) {
+// createOsmLayer puts the points on the map: one layer for each category, which is a box to tick in the
+// selector of layers (`layersControl`, the one of createMap). `note` is the element that says what is on
+// screen (or that the map has to be zoomed in).
+function createOsmLayer(L, map, { note, layersControl }) {
   const renderer = L.canvas({ padding: 0.5 }); // Thousands of rings are cheap on a canvas, not as SVG.
-  const group = L.layerGroup().addTo(map);
+  const groups = Object.fromEntries(CATEGORIES.map((c) => [c, L.layerGroup()]));
   const details = new Map();
-  let choice = loadChoice();
+  let shown = loadCategories(); // The categories that are on the map, in the order of CATEGORIES.
   let loaded = null; // { bounds, key, truncated } of the last request that was answered.
   let sequence = 0;
   let timer = null;
@@ -98,7 +101,7 @@ function createOsmLayer(L, map, { note }) {
   };
 
   function clear() {
-    group.clearLayers();
+    for (const group of Object.values(groups)) group.clearLayers();
     loaded = null;
   }
 
@@ -164,15 +167,10 @@ function createOsmLayer(L, map, { note }) {
   }
 
   async function refresh() {
-    credit(choice.on);
-    if (!choice.on) {
+    credit(shown.length > 0);
+    if (shown.length === 0) {
       clear();
       say('');
-      return;
-    }
-    if (choice.categories.length === 0) {
-      clear();
-      say('Elige qué puntos de OpenStreetMap quieres ver.');
       return;
     }
     if (map.getZoom() < MIN_ZOOM) {
@@ -180,7 +178,7 @@ function createOsmLayer(L, map, { note }) {
       say('Acerca el mapa para ver los puntos de OpenStreetMap.');
       return;
     }
-    const key = [...choice.categories].sort().join(',');
+    const key = shown.join(',');
     const view = map.getBounds();
     if (loaded && loaded.key === key && !loaded.truncated && loaded.bounds.contains(view)) return;
     const box = wanted();
@@ -188,16 +186,14 @@ function createOsmLayer(L, map, { note }) {
     const bbox = [box.getSouth(), box.getWest(), box.getNorth(), box.getEast()].join(',');
     let answer;
     try {
-      answer = await apiFetch(
-        `/osm/elements?bbox=${bbox}&category=${encodeURIComponent(choice.categories.join(','))}`,
-      );
+      answer = await apiFetch(`/osm/elements?bbox=${bbox}&category=${encodeURIComponent(key)}`);
     } catch (err) {
       if (mine === sequence) say(err.message);
       return;
     }
     if (mine !== sequence) return; // The view moved on, and a later request is the one that counts.
-    group.clearLayers();
-    for (const point of answer.elements) group.addLayer(marker(point));
+    for (const group of Object.values(groups)) group.clearLayers();
+    for (const point of answer.elements) groups[point.category]?.addLayer(marker(point));
     loaded = { bounds: box, key, truncated: answer.truncated };
     say(
       answer.truncated
@@ -212,16 +208,26 @@ function createOsmLayer(L, map, { note }) {
   }
   map.on('moveend', schedule);
 
-  return {
-    choice: () => ({ on: choice.on, categories: [...choice.categories] }),
-    set(next) {
-      choice = { on: next.on, categories: next.categories };
-      saveChoice(choice);
-      loaded = null;
-      refresh();
-    },
-    refresh,
+  // The categories that were on last time, and a box for each in the selector of layers: ticking or
+  // unticking one adds or removes its layer from the map, and that is what says what to ask for.
+  for (const category of shown) groups[category].addTo(map);
+  for (const category of CATEGORIES) {
+    layersControl.addOverlay(
+      groups[category],
+      `<span class="osm-ring"></span> ${CATEGORY_PLURALS[category]} (OpenStreetMap)`,
+    );
+  }
+  const onToggle = (event) => {
+    if (!CATEGORIES.some((c) => groups[c] === event.layer)) return;
+    shown = CATEGORIES.filter((c) => map.hasLayer(groups[c]));
+    saveCategories(shown);
+    loaded = null;
+    refresh();
   };
+  map.on('overlayadd', onToggle);
+  map.on('overlayremove', onToggle);
+
+  return { refresh };
 }
 
 export { CATEGORY_LABELS, MIN_ZOOM, createOsmLayer };
