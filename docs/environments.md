@@ -557,10 +557,10 @@ again, run the script by hand with `--force` as `intranet`.
 ## OpenStreetMap mirror
 
 The table `osm_elements` is a local copy of the elements of OpenStreetMap that matter to the club
-(caves, canyons, huts, via ferratas; `docs/osm-integration.md`, `docs/backend-internals.md`, "The
-mirror of OpenStreetMap"). `osmsync` (built and installed by `scripts/deploy.sh` next to the API, as
-`/opt/katiuskas-intranet-stable/bin/osmsync`) fills it from the extracts that Geofabrik publishes,
-and a systemd timer
+(caves, canyons, mines, huts, via ferratas; `docs/osm-integration.md`, `docs/backend-internals.md`,
+"The mirror of OpenStreetMap"). `osmsync` (built and installed by `scripts/deploy.sh` next to the
+API, as `/opt/katiuskas-intranet-stable/bin/osmsync`) fills it from the extracts that Geofabrik
+publishes, and a systemd timer
 ([`katiuskas-intranet-osm-sync.timer`](../deploy/systemd/katiuskas-intranet-osm-sync.timer)) runs it
 once a week. The extracts are 1.5 GB (Spain) and 60 MB (the Canary Islands) and are only downloaded
 if they changed; a run takes under a minute where the machine has a few cores, and one with nothing

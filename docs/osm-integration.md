@@ -11,11 +11,12 @@ are marked **To settle**, and collected at the end.
 `backend-internals.md` ("The mirror of OpenStreetMap") and how it is installed in `environments.md`
 ("OpenStreetMap mirror"); sections 5 and 11 below keep only what is still to be settled or done.
 What the first version does differently from this draft: the mark of a gone element is `deleted_at`
-(a time) and not a flag; each row has a `category` (cave, canyon, hut, via ferrata) and
+(a time) and not a flag; each row has a `category` (cave, canyon, mine, hut, via ferrata) and
 `content_hash`; ways and relations are in from the start; canyons are read apart from the others,
 since a `route=canyoning` relation is a list of ways and `osmium export` does not turn it into a
-shape; and sinkholes and mines are not loaded yet. Caves and canyons come first, as the club's
-activity, and via ferratas, which it only uses now and then, last.
+shape; mines are loaded as a category of their own (adits, shafts and historic mines, which the club
+explores like any cavity); and sinkholes are not loaded. Caves, canyons and mines come first, as the
+club's activity, and via ferratas, which it only uses now and then, last.
 
 ## 1. What is wanted
 
@@ -277,7 +278,8 @@ without code:
 | Filter | Suggests | Notes |
 |---|---|---|
 | `natural=cave_entrance` | Cavidad | the first and main one |
-| `natural=sinkhole`, `man_made=mineshaft`, `man_made=adit`, `historic=mine` | Cavidad (sima, mina) | check how many and how reliable before adding |
+| `man_made=adit`, `man_made=mineshaft`, `historic=mine` | Cavidad, subtype Mina | built; see "Mines" |
+| `natural=sinkhole` | none | left out: mostly hollows in the ground, 1,350 in Spain and only 394 with a name |
 | `highway=via_ferrata` | Vía ferrata | always ways: a point in the middle, and the line kept (see 5) |
 | `route=canyoning` (relations), `sport=canyoning` | Cañón | built; a line, no points; see "Canyons" |
 | `tourism=wilderness_hut`, `tourism=alpine_hut`, `amenity=shelter` + `shelter_type=basic_hut` | Refugio | see below |
@@ -343,7 +345,7 @@ twice by `osmium export`, as a line and as a polygon: count it once):
   `weather_shelter`, 333 `rock_shelter`, 249 `gazebo`: the filter must keep only
   `basic_hut` (346).
 - **Mines**: 2,334 adits, shafts and mines, of which half have no name (shafts: 26% do), and a
-  third are ways. Whether they are "places" for the club is to settle (12).
+  third are ways. See "Mines" below.
 
 (An attempt to count the huts of Spain with Overpass failed twice before this, on two public
 instances: an empty answer and "at capacity". The extract gave all of this in under a minute.)
@@ -386,6 +388,17 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
   its own entrance, exit and parking points would be written in `place_points`.
 - `max:abseil` and `rating` are read as text on the place (the rating's scale is not stated in
   the tag and has to be seen in the data before it is shown as a grade).
+
+
+**Mines.** Built as the category `mine`: a `man_made=adit` (a horizontal gallery), a
+`man_made=mineshaft` or a `historic=mine`. The club explores mines like any cavity, so the place
+made from one starts as a cavity of the type Cavidad and the subtype Mina, and a cavity is looked
+for among the caves and the mines when it is linked. In the extract of 16 November 2026 there are
+2,335 of them in Spain and the Canary Islands (1,493 and 842), most nodes. **A caveat on the Canary
+Islands:** most of their 842 are "galerías", the tunnels that bring water out of the mountain,
+tagged `man_made=adit`: they are man-made tunnels like any adit, but a different thing from the
+mines of the mainland, and the club may not want them. If it does not, the way to leave them out is
+by name ("Galería …") or by area, not by tag.
 
 ## 13. Phases
 

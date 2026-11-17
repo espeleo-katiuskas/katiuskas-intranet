@@ -12,10 +12,10 @@ import { buildDialog } from './place-dialog.js';
 const NODE_NAMES = { node: 'nodo', way: 'vía', relation: 'relación' };
 const MATCH_LABELS = { exact: 'mismo nombre', similar: 'nombre parecido' };
 
-// What a place may be, by the kind of its type: a cave or a canyon is looked for among the caves or the
-// canyons, and any other place among the huts and the via ferratas.
+// What a place may be, by the kind of its type: a cavity is looked for among the caves and the mines, a canyon
+// among the canyons, and any other place among the huts and the via ferratas.
 function categoriesOf(place) {
-  if (place.kind === 'cave') return 'cave';
+  if (place.kind === 'cave') return 'cave,mine';
   if (place.kind === 'canyon') return 'canyon';
   return 'hut,via_ferrata';
 }

@@ -1374,8 +1374,8 @@ share a path although a place and a system may share a directory number.
 ### `osm_elements`
 
 A local copy of the elements of OpenStreetMap that matter to the club (migration
-`00069_osm_mirror.sql`; `docs/osm-integration.md` says why): caves and canyons, which are what the
-club does, and huts and via ferratas. It is a
+`00069_osm_mirror.sql`; `docs/osm-integration.md` says why): caves, canyons and mines, which are
+what the club does, and huts and via ferratas. It is a
 mirror: only `cmd/osmsync` writes it, from the extracts that Geofabrik publishes, and the API only
 reads it (`GET /osm/elements`). It is apart from `places` and joined to it by the type and the id of
 the element, so that what is OpenStreetMap's and what is the club's stay separate.
@@ -1403,7 +1403,8 @@ Notes on the columns:
 - `osm_type`, `osm_id`: What the element is: an id is only unique among those of its type, so both
   make the key (node 123 and way 123 are not the same).
 - `version`, `osm_timestamp`: Of the element as it was downloaded, and when it was last edited.
-- `category`: What the filters of the loader say it is: `cave`, `canyon`, `hut` or `via_ferrata`.
+- `category`: What the filters of the loader say it is: `cave`, `canyon`, `mine`, `hut` or
+  `via_ferrata`.
 - `lat`, `lon`: The point: a node itself, or a point inside the shape of a way or a relation (not
   the average of its corners, which can be outside an L-shaped building), or the middle of a line
   (of a canyon, the middle of the ways of its stream laid end to end: provisional, since the
@@ -1423,7 +1424,8 @@ Notes on the columns:
 Constraints:
 
 - primary key (osm_type, osm_id)
-- `osm_type` is `node`, `way` or `relation`; `category` is `cave`, `canyon`, `hut` or `via_ferrata`
+- `osm_type` is `node`, `way` or `relation`; `category` is `cave`, `canyon`, `mine`, `hut` or
+  `via_ferrata`
 - `lat` between -90 and 90, `lon` between -180 and 180
 - indexes `idx_osm_elements_lat_lon` on `(lat, lon)` and `idx_osm_elements_source` on `(source)`,
   both only over the rows that are not marked as gone
@@ -2133,3 +2135,4 @@ at the end; that database has to be recreated when a new migration appears.
   `rope_requires_brand_model` and `bag_requires_brand` replace `rope_and_bag_require_brand_model`)
 - `00069_osm_mirror.sql`: `osm_elements`, `osm_sync_runs` and `places.osm_type`/`osm_id`
 - `00070_place_osm_seen.sql`: `places.osm_seen`, what the place has seen of its OSM element
+- `00071_osm_mines.sql`: `mine` as a category of `osm_elements`

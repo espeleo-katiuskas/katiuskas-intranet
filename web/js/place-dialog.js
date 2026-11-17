@@ -280,10 +280,10 @@ const whole = (form, name) =>
 // ({ lat, lon }, from a click on a map): they are written in the form and the zone they are in is asked
 // for at once.
 // What a place made from an element of OpenStreetMap starts with, from its tags: the type that its category
-// suggests (the club's own activity decides what OpenStreetMap does not say, so the subtype and the state
-// are left to the person), its names, altitude and, for a cavity, the depth and the length when they are
-// numbers, and the description with the website at the end.
-function osmDefaults(osm, types) {
+// suggests (a mine is a cavity of the subtype Mina; what OpenStreetMap does not say, the subtype of any
+// other cavity and the state, is left to the person), its names, altitude and, for a cavity, the depth
+// and the length when they are numbers, and the description with the website at the end.
+function osmDefaults(osm, types, subtypes) {
   const tags = osm.tags ?? {};
   const name = (tags.name || tags['name:es'] || '').trim();
   const byKind = (kind) => types.find((t) => t.kind === kind);
@@ -292,6 +292,7 @@ function osmDefaults(osm, types) {
     {
       cave: byKind('cave'),
       canyon: byKind('canyon'),
+      mine: byKind('cave'), // A mine is a cavity of the subtype Mina.
       hut: byName('Refugio'),
       via_ferrata: byName('Vía ferrata'),
     }[osm.category] ?? null;
@@ -309,6 +310,8 @@ function osmDefaults(osm, types) {
   const website = /^https?:\/\//.test(tags.website ?? '') ? `Web: ${tags.website}` : '';
   return {
     typeId: type?.id ?? null,
+    subtypeId:
+      osm.category === 'mine' ? (subtypes.find((s) => s.name === 'Mina')?.id ?? null) : null,
     name,
     altNames,
     altitude: Number.isFinite(altitude) ? Math.round(altitude) : null,
@@ -382,12 +385,13 @@ function openPlaceDialog({
     set('description', place.description);
     set('technical_sheet', place.technical_sheet);
   }
-  const fromOsm = !place && osm ? osmDefaults(osm, types) : null;
+  const fromOsm = !place && osm ? osmDefaults(osm, types, subtypes) : null;
   if (fromOsm) {
     const set = (name, value) => {
       form.elements[name].value = value ?? '';
     };
     if (fromOsm.typeId) set('type_id', fromOsm.typeId);
+    if (fromOsm.subtypeId) set('subtype_id', fromOsm.subtypeId);
     set('name', fromOsm.name);
     namesList.setNames(fromOsm.altNames);
     set('altitude_m', fromOsm.altitude);

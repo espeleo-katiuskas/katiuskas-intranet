@@ -1284,10 +1284,12 @@ exits with an error if any source failed, which the unit turns into a Telegram n
 
 **Which elements.** `osmmirror.Filters`, each with its category, in the order of what the club does:
 a cave is `natural=cave_entrance`; a canyon is a `route=canyoning` relation, or a way or node with
-`sport=canyoning` (the other way they are mapped); a hut is `tourism=wilderness_hut` or
-`alpine_hut`, an `amenity=shelter` with `shelter_type=basic_hut`, or one with no type whose name has
-"refugio"; and a via ferrata, which the club only uses now and then and so comes last, is
-`highway=via_ferrata`. Not there yet: sinkholes and mines (to be decided whether they are places).
+`sport=canyoning` (the other way they are mapped); a mine is a `man_made=adit` (a gallery), a
+`man_made=mineshaft` or a `historic=mine`, explored like any cavity (the place made from one starts
+as a cavity of the subtype Mina); a hut is `tourism=wilderness_hut` or `alpine_hut`, an
+`amenity=shelter` with `shelter_type=basic_hut`, or one with no type whose name has "refugio"; and a
+via ferrata, which the club only uses now and then and so comes last, is `highway=via_ferrata`. Not
+there: sinkholes (`natural=sinkhole`), which are mostly hollows in the ground and not cavities.
 
 **Canyons are read apart.** `osmium export` builds shapes for what is an area or a line, not for a
 route, which is a list of ways. So the filters of a route (`Routes`) are cut with their member ways
@@ -1300,14 +1302,14 @@ club knows. Most of the relations in Spain (208 of 271) have one way and the res
 
 **Reading it for the maps.** `GET /osm/elements?bbox=south,west,north,east&category=…`
 (`Service.Elements`, `Repository.InBounds`) gives the elements not marked as gone inside a box, of
-the categories asked for, ordered by what the club does (caves, canyons, huts, via ferratas) and cut
-at `MaxElements` (1,500) with `truncated` set, so that a request for a view that is too wide costs
-little; it uses the index of latitude and longitude, and a box with `west` greater than `east` goes
-across the antimeridian. It gives only what a map needs to draw (type, id, point, category, name);
-`GET /osm/elements/{type}/{id}` gives one element with all its tags and its outline, which the map
-asks for when a point is chosen. Both are for any member, never touch OpenStreetMap, and are cached
-by the browser for five minutes (the mirror changes once a week at most). Why the map asks by box
-and from zoom 11 and not for everything at once: thousands of points in the view are no use to
+the categories asked for, ordered by what the club does (caves, canyons, mines, huts, via ferratas)
+and cut at `MaxElements` (1,500) with `truncated` set, so that a request for a view that is too wide
+costs little; it uses the index of latitude and longitude, and a box with `west` greater than `east`
+goes across the antimeridian. It gives only what a map needs to draw (type, id, point, category,
+name); `GET /osm/elements/{type}/{id}` gives one element with all its tags and its outline, which
+the map asks for when a point is chosen. Both are for any member, never touch OpenStreetMap, and are
+cached by the browser for five minutes (the mirror changes once a week at most). Why the map asks by
+box and from zoom 11 and not for everything at once: thousands of points in the view are no use to
 anyone, and the cost does not grow with the size of the mirror.
 
 **Making a place of an element.** `POST /places` takes `osm_type` and `osm_id` (both or neither) for

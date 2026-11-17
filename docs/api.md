@@ -950,16 +950,17 @@ A cavity says which system it is in with `system_id` when it is created or edite
 ## OpenStreetMap elements
 
 Read-only access to the local mirror of OpenStreetMap (`docs/osm-integration.md`): the caves,
-canyons, huts and via ferratas that `cmd/osmsync` loads from Geofabrik's extracts. Any baseline role
-reads; nothing here changes the mirror, and nothing in these requests goes to OpenStreetMap.
+canyons, mines, huts and via ferratas that `cmd/osmsync` loads from Geofabrik's extracts. Any
+baseline role reads; nothing here changes the mirror, and nothing in these requests goes to
+OpenStreetMap.
 
 - **GET** `/osm/elements` — *Any baseline role*. The elements inside a box, for a map: those not
-  marked as gone, the club's own activity first (caves, then canyons, huts and via ferratas), at
-  most 1,500; `truncated` says there were more, so the box is too wide. The answer is kept by the
-  browser for five minutes.
+  marked as gone, the club's own activity first (caves, canyons and mines, then huts and via
+  ferratas), at most 1,500; `truncated` says there were more, so the box is too wide. The answer is
+  kept by the browser for five minutes.
   - query: `bbox*` (`south,west,north,east`, in degrees; a `west` greater than `east` is a box
-    across the antimeridian), `category` (a comma-separated list of `cave`, `canyon`, `hut`,
-    `via_ferrata`; all if left out)
+    across the antimeridian), `category` (a comma-separated list of `cave`, `canyon`, `mine`,
+    `hut`, `via_ferrata`; all if left out)
   - returns: 200 `{elements: [OsmPoint], truncated}`, an empty list when there is nothing
   - errors: 400 `invalid_bbox` (missing, not four numbers, out of range, or south above north);
     400 `invalid_osm_category`
@@ -2197,7 +2198,7 @@ What a map needs to draw an element of the mirror.
 | `id` | integer (unique only among those of its type) |
 | `lat` | number (the node itself, or a point inside the shape of a way or a relation) |
 | `lon` | number |
-| `category` | cave/canyon/hut/via_ferrata |
+| `category` | cave/canyon/mine/hut/via_ferrata |
 | `name` | text, left out if the element has none |
 
 ### `OsmChange`

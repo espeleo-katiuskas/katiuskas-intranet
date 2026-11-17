@@ -12,6 +12,7 @@ const STORAGE_KEY = 'katiuskas:places-osm';
 const CATEGORY_LABELS = {
   cave: 'Cueva',
   canyon: 'Barranco',
+  mine: 'Mina',
   hut: 'Refugio',
   via_ferrata: 'Vía ferrata',
 };
@@ -23,6 +24,7 @@ const CATEGORIES = Object.keys(CATEGORY_LABELS);
 const CATEGORY_PLURALS = {
   cave: 'Cuevas',
   canyon: 'Barrancos',
+  mine: 'Minas',
   hut: 'Refugios',
   via_ferrata: 'Vías ferratas',
 };

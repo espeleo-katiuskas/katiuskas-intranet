@@ -576,7 +576,7 @@ const OSM_SOURCE_LABELS = {
   'canary-islands': 'Islas Canarias',
 };
 
-// "Mirror de OpenStreetMap": the copy of caves, canyons, huts and via ferratas that a weekly load keeps (it runs
+// "Mirror de OpenStreetMap": the copy of caves, canyons, mines, huts and via ferratas that a weekly load keeps (it runs
 // outside the API, so nobody would notice it stopping): for each extract, its elements, the date of its data and
 // how the last loads went. A load that failed, or data that is too old, is also in the list of problems.
 function osmGroup(osm) {
