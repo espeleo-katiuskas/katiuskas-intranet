@@ -285,6 +285,7 @@ without code:
 | `natural=cave_entrance` | Cavidad | the first and main one |
 | `natural=sinkhole`, `man_made=mineshaft`, `man_made=adit`, `historic=mine` | Cavidad (sima, mina) | check how many and how reliable before adding |
 | `highway=via_ferrata` | Vía ferrata | always ways: a point in the middle, and the line kept (see 5) |
+| `route=canyoning` (relations) | Cañón | 268 in Spain: a line, no points; see "Canyons" below |
 | `tourism=wilderness_hut`, `tourism=alpine_hut`, `amenity=shelter` + `shelter_type=basic_hut` | Refugio | see below |
 | `natural=spring`, `natural=peak` | none | probably out: the Nominatim search of the maps is enough |
 
@@ -333,6 +334,7 @@ twice by `osmium export`, as a line and as a polygon: count it once):
 | `tourism=alpine_hut` | 445 | 410 | 150 / 294 / 1 |
 | `amenity=shelter` + `shelter_type=basic_hut` | 346 | 246 | 104 / 242 / 0 |
 | `highway=via_ferrata` | 309 | 238 | 17 / 292 / 0 |
+| `route=canyoning` | 269 (Spain) | 267 | 0 / 1 / 268 |
 
 - **Huts: 1,653 elements** with the three tags above, and **three out of four are ways** (the
   buildings), so ways are not an extra but the normal case for a refugio. 1,396 have a name.
@@ -365,6 +367,26 @@ the other names are not, which agrees with taking them only by hand (see below).
 Some will be mapped with only a name that says "Refugio": those are found by linking by hand an
 existing place (see 8), not by guessing.
 
+
+**Canyons.** Canyons are not mapped as points but as **route relations**: `type=route` with
+`route=canyoning`, whose members are the ways of the stream. In the Spanish extract (the Canary
+Islands were not searched) there are 268 of them, plus one loose way; nothing else is used for it:
+`sport=canyoning` has 6 elements, `natural=gorge` 34 (gorges, not descents) and `canyon=*` or
+`canyoning=*` none.
+
+- Tags: `name` on 267 ("Barranco de las Palomeras del Flumen"), `max:abseil` (the longest rappel
+  in metres) on 98, `rating` (the difficulty) on 63, `website` on 39 and `alt_name` on 37. A few
+  have `description`, `access`, `source` or a `fixme`.
+- The geometry is the **line of the stream**, not a place: there is no entrance or exit point,
+  and the direction of the line is not guaranteed to be that of the descent. A place would take
+  the upstream end of the line as its point (to be checked against real canyons: the club knows
+  the right one), and the line is kept as the outline (see 5), which is also what the "Tracks" of
+  `docs/roadmap.md` want to draw.
+- It is far fewer than the canyons there are in Spain (not counted here), so OSM would give the
+  club a trace and a link for some, not the catalogue: what the club knows is more complete, and
+  its own entrance, exit and parking points would be written in `place_points`.
+- `max:abseil` and `rating` are read as text on the place (the rating's scale is not stated in
+  the tag and has to be seen in the data before it is shown as a grade).
 
 ## 13. Phases
 
