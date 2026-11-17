@@ -923,6 +923,28 @@ files; deleting one is for admin and board.
 A cavity says which system it is in with `system_id` when it is created or edited (`POST` and
 `PUT /places`), and `GET /places` and `GET /places/{id}` give `system_id` and `system`.
 
+## OpenStreetMap elements
+
+Read-only access to the local mirror of OpenStreetMap (`docs/osm-integration.md`): the caves,
+canyons, huts and via ferratas that `cmd/osmsync` loads from Geofabrik's extracts. Any baseline role
+reads; nothing here changes the mirror, and nothing in these requests goes to OpenStreetMap.
+
+- **GET** `/osm/elements` — *Any baseline role*. The elements inside a box, for a map: those not
+  marked as gone, the club's own activity first (caves, then canyons, huts and via ferratas), at
+  most 1,500; `truncated` says there were more, so the box is too wide. The answer is kept by the
+  browser for five minutes.
+  - query: `bbox*` (`south,west,north,east`, in degrees; a `west` greater than `east` is a box
+    across the antimeridian), `category` (a comma-separated list of `cave`, `canyon`, `hut`,
+    `via_ferrata`; all if left out)
+  - returns: 200 `{elements: [OsmPoint], truncated}`, an empty list when there is nothing
+  - errors: 400 `invalid_bbox` (missing, not four numbers, out of range, or south above north);
+    400 `invalid_osm_category`
+- **GET** `/osm/elements/{type}/{id}` — *Any baseline role*. One element with all its tags and its
+  outline, which a map asks for when the point is chosen.
+  - returns: 200 `OsmElement`
+  - errors: 400 `invalid_osm_element` (a type that is not `node`, `way` or `relation`), 400
+    `invalid_id`; 404 `not_found`
+
 ## Zones
 
 The tree of zones that says where a place is: the 195 states of the United Nations (its 193 members
@@ -2116,6 +2138,30 @@ the place, of any of its points or of its files (the same as the creation until 
 | `altitude_m` | integer |
 | `note` | text |
 | `created_at` | datetime |
+
+### `OsmPoint`
+
+What a map needs to draw an element of the mirror.
+
+| Field | Type |
+|---|---|
+| `type` | node/way/relation |
+| `id` | integer (unique only among those of its type) |
+| `lat` | number (the node itself, or a point inside the shape of a way or a relation) |
+| `lon` | number |
+| `category` | cave/canyon/hut/via_ferrata |
+| `name` | text, left out if the element has none |
+
+### `OsmElement`
+
+| Field | Type |
+|---|---|
+| `type`, `id`, `lat`, `lon`, `category` | as in `OsmPoint` |
+| `version` | integer, of the element in OpenStreetMap |
+| `timestamp` | datetime, when it was last edited there |
+| `tags` | object of text, all the tags as they are |
+| `geometry` | GeoJSON of its outline (a polygon, a line or a `MultiLineString` for a canyon), null for a node |
+| `deleted_at` | datetime, when it stopped being in OpenStreetMap; null if it is |
 
 ### `ArchiveEntry`
 

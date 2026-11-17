@@ -1369,8 +1369,8 @@ share a path although a place and a system may share a directory number.
 A local copy of the elements of OpenStreetMap that matter to the club (migration
 `00069_osm_mirror.sql`; `docs/osm-integration.md` says why): caves and canyons, which are what the
 club does, and huts and via ferratas. It is a
-mirror: only `cmd/osmsync` writes it, from the extracts that Geofabrik publishes, and nothing in the
-API changes or reads it yet. It is apart from `places` and joined to it by the type and the id of
+mirror: only `cmd/osmsync` writes it, from the extracts that Geofabrik publishes, and the API only
+reads it (`GET /osm/elements`). It is apart from `places` and joined to it by the type and the id of
 the element, so that what is OpenStreetMap's and what is the club's stay separate.
 
 | Column | Type | Null | Default |

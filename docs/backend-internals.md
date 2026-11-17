@@ -1228,9 +1228,9 @@ systemd's default `TimeoutStopSec` (90 s) leaves room for it, and `docker-compos
 
 `internal/osmmirror` and `cmd/osmsync` keep `osm_elements`, a local copy of the elements of
 OpenStreetMap that matter to the club, so that nothing of the intranet asks OpenStreetMap anything
-(the plan, its reasons and what is still to be done are in `docs/osm-integration.md`). Nothing in
-the API reads or changes it yet; the places only have the columns `osm_type` and `osm_id` that will
-say which element each one is.
+(the plan, its reasons and what is still to be done are in `docs/osm-integration.md`). The API only
+reads it (see below); the places only have the columns `osm_type` and `osm_id` that will say which
+element each one is.
 
 **The load.** `osmsync` is a command, not part of the API, run once a week by a systemd timer
 (`docs/environments.md`, "OpenStreetMap mirror"). For each source (`osmmirror.DefaultSources`:
@@ -1281,6 +1281,18 @@ ways, and the point is the middle of those ways laid end to end (each turned rou
 that it is on the stream). That point is provisional: what a canyon needs is its entrance and its
 exit, which OpenStreetMap does not have, and the choice is left until it is seen against canyons the
 club knows. Most of the relations in Spain (208 of 271) have one way and the rest up to 28.
+
+**Reading it for the maps.** `GET /osm/elements?bbox=south,west,north,east&category=…`
+(`Service.Elements`, `Repository.InBounds`) gives the elements not marked as gone inside a box, of
+the categories asked for, ordered by what the club does (caves, canyons, huts, via ferratas) and cut
+at `MaxElements` (1,500) with `truncated` set, so that a request for a view that is too wide costs
+little; it uses the index of latitude and longitude, and a box with `west` greater than `east` goes
+across the antimeridian. It gives only what a map needs to draw (type, id, point, category, name);
+`GET /osm/elements/{type}/{id}` gives one element with all its tags and its outline, which the map
+asks for when a point is chosen. Both are for any member, never touch OpenStreetMap, and are cached
+by the browser for five minutes (the mirror changes once a week at most). Why the map asks by box
+and from zoom 11 and not for everything at once: thousands of points in the view are no use to
+anyone, and the cost does not grow with the size of the mirror.
 
 ## Telegram
 

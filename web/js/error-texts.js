@@ -141,6 +141,9 @@ const texts = {
   too_many_places: 'Una actividad no puede ir a tantos lugares.',
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',
+  invalid_bbox: 'El área del mapa no es válida.',
+  invalid_osm_category: 'La categoría de OpenStreetMap no es válida.',
+  invalid_osm_element: 'El tipo de elemento de OpenStreetMap no es válido.',
   search_unavailable: 'Ahora no se puede buscar sitios: prueba de nuevo en un rato.',
   locate_unavailable: 'Ahora no se puede consultar la zona de unas coordenadas.',
   invalid_altitude: 'La altitud no es válida: entre -500 y 9000 metros sobre el nivel del mar.',

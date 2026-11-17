@@ -9,6 +9,7 @@ import {
 import { initAreasManager } from './areas-manager.js';
 import { bindPlaceInfo, createMap, mapLegend, offerOnMapClick, placeMarker } from './map-common.js';
 import { initPage } from './layout.js';
+import { createOsmLayer } from './osm-layer.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
 import {
@@ -89,6 +90,28 @@ let mapStarting = null;
 let focused = false;
 let focusedSystem = false;
 
+// The points of OpenStreetMap: a box to turn them on and the categories to show, driving the layer.
+function setUpOsm(L, map) {
+  const layer = createOsmLayer(L, map, { note: document.getElementById('osm-note') });
+  const toggle = document.getElementById('osm-toggle');
+  const categories = document.getElementById('osm-categories');
+  const boxes = [...categories.querySelectorAll('[data-osm-category]')];
+  const apply = () => {
+    categories.hidden = !toggle.checked;
+    layer.set({
+      on: toggle.checked,
+      categories: boxes.filter((b) => b.checked).map((b) => b.dataset.osmCategory),
+    });
+  };
+  const saved = layer.choice();
+  toggle.checked = saved.on;
+  for (const box of boxes) box.checked = saved.categories.includes(box.dataset.osmCategory);
+  categories.hidden = !saved.on;
+  toggle.addEventListener('change', apply);
+  for (const box of boxes) box.addEventListener('change', apply);
+  layer.refresh();
+}
+
 async function startMap() {
   mapStarting ??= createMap(document.getElementById('places-map'), WITH_SEARCH).then(
     ({ L, map }) => {
@@ -109,6 +132,7 @@ async function startMap() {
             },
           }),
       });
+      setUpOsm(L, map);
       mapState = { L, map, cluster, markers: new Map() };
       return mapState;
     },

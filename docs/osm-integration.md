@@ -391,9 +391,11 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
 
 1. **Decide** the questions below; confirm the licence reading with the board.
 2. **Mirror** (done): the table, the load of Spain for caves, huts and via ferratas (nodes, ways and
-   relations), the log, the command and the timer. Nothing visible in the intranet yet.
-3. **Show**: the candidates on the map of `/lugares` (bounding box), with attribution, and
-   "Usar" creating the place with the OSM id (the option chosen in 7).
+   relations; and canyons, which are routes), the log, the command and the timer.
+3. **Show** (done): `GET /osm/elements` and the points of OpenStreetMap as grey rings on the map of
+   `/lugares`, from zoom 11 up and by the box in view, with a popup (data, link to osm.org, credit)
+   and the ODbL credit on the map. **Still to do**: "Usar", creating the place from a point with the
+   OSM id (the option chosen in 7, promotion on demand), which needs the zone (6).
 4. **Link** the places that already exist (matching by distance and name, reviewed by hand) and
    the field-by-field display of 8, with the flag when OSM changes.
 5. **Zones** for the elements (6), the other countries, the other filters (12).

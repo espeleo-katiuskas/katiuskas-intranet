@@ -459,6 +459,7 @@ function mapLegend() {
 }
 
 export {
+  canHover,
   createMap,
   loadLeaflet,
   mapLegend,
