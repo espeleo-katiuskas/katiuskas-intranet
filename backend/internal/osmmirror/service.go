@@ -43,7 +43,7 @@ type Candidate struct {
 }
 
 // Categories are all the categories an element can have, in the order of what the club does.
-var Categories = []string{CategoryCave, CategoryCanyon, CategoryHut, CategoryViaFerrata}
+var Categories = []string{CategoryCave, CategoryCanyon, CategoryMine, CategoryHut, CategoryViaFerrata}
 
 type Service struct {
 	repo *Repository

@@ -61,15 +61,17 @@ func TestListElements(t *testing.T) {
 	ctx := context.Background()
 	canyon := osmmirror.Element{Type: "relation", ID: 7, Version: 1, Category: "canyon", Lat: 41.2, Lon: -0.3,
 		Tags: map[string]string{"route": "canyoning", "name": "Barranco"}}
+	mine := osmmirror.Element{Type: "node", ID: 8, Version: 1, Category: "mine", Lat: 40.3, Lon: -1.7,
+		Tags: map[string]string{"man_made": "adit", "name": "Galería"}}
 	if _, err := repo.Apply(ctx, "spain", []osmmirror.Element{
-		at(hut(3), 40.1, -1.9), at(cave(1, "Cueva A"), 40.2, -1.8), at(cave(2, "Cueva B"), 41.5, -3.0), canyon,
+		at(hut(3), 40.1, -1.9), at(cave(1, "Cueva A"), 40.2, -1.8), at(cave(2, "Cueva B"), 41.5, -3.0), canyon, mine,
 		at(cave(5, "Lejos"), -33.0, 151.0), at(cave(6, "Borrada"), 40.15, -1.85),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// 6 disappears in a later load.
 	if _, err := repo.Apply(ctx, "spain", []osmmirror.Element{
-		at(hut(3), 40.1, -1.9), at(cave(1, "Cueva A"), 40.2, -1.8), at(cave(2, "Cueva B"), 41.5, -3.0), canyon,
+		at(hut(3), 40.1, -1.9), at(cave(1, "Cueva A"), 40.2, -1.8), at(cave(2, "Cueva B"), 41.5, -3.0), canyon, mine,
 		at(cave(5, "Lejos"), -33.0, 151.0),
 	}); err != nil {
 		t.Fatal(err)
@@ -88,9 +90,10 @@ func TestListElements(t *testing.T) {
 	}
 	box := "bbox=" + url.QueryEscape("40,-2,42,0")
 	a := list(box)
-	// In the box: cave 1, the hut 3 and the canyon 7; the cave 2 and 5 are outside, 6 is gone. Caves first.
-	if len(a.Elements) != 3 || a.Truncated || a.Elements[0].ID != 1 || a.Elements[0].Name != "Cueva A" ||
-		a.Elements[1].Category != "canyon" || a.Elements[2].Category != "hut" {
+	// In the box: cave 1, the canyon 7, the mine 8 and the hut 3; the cave 2 and 5 are outside, 6 is gone. The
+	// club's own activity first: caves, canyons and mines, then huts.
+	if len(a.Elements) != 4 || a.Truncated || a.Elements[0].ID != 1 || a.Elements[0].Name != "Cueva A" ||
+		a.Elements[1].Category != "canyon" || a.Elements[2].Category != "mine" || a.Elements[3].Category != "hut" {
 		t.Errorf("unexpected elements: %+v", a)
 	}
 	if got := list(box + "&category=hut"); len(got.Elements) != 1 || got.Elements[0].Type != "way" {
@@ -98,6 +101,9 @@ func TestListElements(t *testing.T) {
 	}
 	if got := list(box + "&category=cave,canyon"); len(got.Elements) != 2 {
 		t.Errorf("caves and canyons: %+v", got)
+	}
+	if got := list(box + "&category=mine"); len(got.Elements) != 1 || got.Elements[0].ID != 8 {
+		t.Errorf("only the mines: %+v", got)
 	}
 	// A box across the antimeridian: west greater than east.
 	if got := list("bbox=" + url.QueryEscape("-40,150,-30,-170")); len(got.Elements) != 1 || got.Elements[0].ID != 5 {

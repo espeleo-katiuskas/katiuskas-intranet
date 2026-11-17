@@ -3060,12 +3060,12 @@ paths:
       summary: Elements of the OpenStreetMap mirror inside a box
       description: >
         Any baseline role. Reads the local mirror loaded by cmd/osmsync, never OpenStreetMap: the elements
-        not marked as gone inside the box, caves first, then canyons, huts and via ferratas, at most 1500
+        not marked as gone inside the box, caves, canyons and mines first, then huts and via ferratas, at most 1500
         (`truncated` says there were more). A `west` greater than `east` is a box across the antimeridian.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: bbox, in: query, required: true, description: "south,west,north,east in degrees", schema: { type: string } }
-        - { name: category, in: query, description: "comma-separated: cave, canyon, hut, via_ferrata (all if left out)", schema: { type: string } }
+        - { name: category, in: query, description: "comma-separated: cave, canyon, mine, hut, via_ferrata (all if left out)", schema: { type: string } }
       responses:
         "200":
           description: The elements
@@ -3083,7 +3083,7 @@ paths:
                         id: { type: integer, format: int64 }
                         lat: { type: number }
                         lon: { type: number }
-                        category: { type: string, enum: [cave, canyon, hut, via_ferrata] }
+                        category: { type: string, enum: [cave, canyon, mine, hut, via_ferrata] }
                         name: { type: string }
                   truncated: { type: boolean }
         "400": { description: "invalid_bbox or invalid_osm_category." }
@@ -3101,7 +3101,7 @@ paths:
         - { name: lon, in: query, required: true, schema: { type: number } }
         - { name: radius, in: query, schema: { type: integer, minimum: 1, maximum: 2000 } }
         - { name: name, in: query, schema: { type: string } }
-        - { name: category, in: query, description: "comma-separated: cave, canyon, hut, via_ferrata (all if left out)", schema: { type: string } }
+        - { name: category, in: query, description: "comma-separated: cave, canyon, mine, hut, via_ferrata (all if left out)", schema: { type: string } }
       responses:
         "200":
           description: The candidates
@@ -3119,7 +3119,7 @@ paths:
                         id: { type: integer, format: int64 }
                         lat: { type: number }
                         lon: { type: number }
-                        category: { type: string, enum: [cave, canyon, hut, via_ferrata] }
+                        category: { type: string, enum: [cave, canyon, mine, hut, via_ferrata] }
                         name: { type: string }
                         distance_m: { type: integer }
                         name_match: { type: string, enum: [exact, similar] }
@@ -3145,7 +3145,7 @@ paths:
                   id: { type: integer, format: int64 }
                   version: { type: integer }
                   timestamp: { type: string, format: date-time }
-                  category: { type: string, enum: [cave, canyon, hut, via_ferrata] }
+                  category: { type: string, enum: [cave, canyon, mine, hut, via_ferrata] }
                   lat: { type: number }
                   lon: { type: number }
                   tags: { type: object, additionalProperties: { type: string } }

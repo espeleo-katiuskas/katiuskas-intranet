@@ -285,7 +285,7 @@ type Detail struct {
 }
 
 // InBounds is the elements that are not marked as gone inside a box and of the given categories, the ones
-// of the club's own activity first (caves, then canyons, huts and via ferratas), at most limit of them;
+// of the club's own activity first (caves, canyons and mines, then huts and via ferratas), at most limit of them;
 // `more` says there were others. An element that already is a place of the catalogue is not given: it is
 // on the map as that place.
 func (r *Repository) InBounds(ctx context.Context, b Bounds, categories []string, limit int) (points []Point, more bool, err error) {
@@ -298,7 +298,8 @@ func (r *Repository) InBounds(ctx context.Context, b Bounds, categories []string
 		FROM osm_elements e
 		WHERE deleted_at IS NULL AND lat BETWEEN $1 AND $2 AND `+lonTest+` AND category = ANY($5)
 			AND NOT EXISTS (SELECT 1 FROM places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)
-		ORDER BY CASE category WHEN 'cave' THEN 0 WHEN 'canyon' THEN 1 WHEN 'hut' THEN 2 ELSE 3 END, osm_type, osm_id
+		ORDER BY CASE category WHEN 'cave' THEN 0 WHEN 'canyon' THEN 1 WHEN 'mine' THEN 2 WHEN 'hut' THEN 3 ELSE 4 END,
+			osm_type, osm_id
 		LIMIT $6
 	`, b.South, b.North, b.West, b.East, categories, limit+1)
 	if err != nil {

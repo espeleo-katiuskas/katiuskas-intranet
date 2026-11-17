@@ -22,7 +22,7 @@ func feature(geometry, props string) string {
 
 const point = `{"type":"Point","coordinates":[-3.6,40.8]}`
 
-// The filters keep caves, canyons, huts and via ferratas, once each, and drop what comes out of an extract only
+// The filters keep caves, canyons, mines, huts and via ferratas, once each, and drop what comes out of an extract only
 // because a way refers to it.
 func TestReadFilters(t *testing.T) {
 	square := `{"type":"MultiPolygon","coordinates":[[[[-2.0,40.0],[-2.0,40.2],[-1.8,40.2],[-1.8,40.0],[-2.0,40.0]]]]}`
@@ -43,6 +43,11 @@ func TestReadFilters(t *testing.T) {
 		feature(point, `{"@type":"node","@id":8,"@version":1,"@timestamp":1,"amenity":"shelter","shelter_type":"picnic_shelter","name":"Refugio"}`),
 		// A canyon mapped as a stream tagged sport=canyoning.
 		feature(line, `{"@type":"way","@id":10,"@version":1,"@timestamp":1,"sport":"canyoning","waterway":"stream","name":"Barranco"}`),
+		// Mines: an adit, a shaft and a historic mine; not a sinkhole.
+		feature(point, `{"@type":"node","@id":20,"@version":1,"@timestamp":1,"man_made":"adit","name":"Galería"}`),
+		feature(point, `{"@type":"node","@id":21,"@version":1,"@timestamp":1,"man_made":"mineshaft"}`),
+		feature(point, `{"@type":"node","@id":22,"@version":1,"@timestamp":1,"historic":"mine","name":"Mina vieja"}`),
+		feature(point, `{"@type":"node","@id":23,"@version":1,"@timestamp":1,"natural":"sinkhole","name":"Dolina"}`),
 		// What is there only because it is referenced.
 		feature(point, `{"@type":"node","@id":9,"@version":1,"@timestamp":1,"natural":"tree"}`),
 	)
@@ -54,8 +59,16 @@ func TestReadFilters(t *testing.T) {
 	for _, e := range got {
 		byID[e.ID] = e
 	}
-	if len(got) != 6 {
-		t.Fatalf("expected 6 elements, got %d: %+v", len(got), got)
+	if len(got) != 9 {
+		t.Fatalf("expected 9 elements, got %d: %+v", len(got), got)
+	}
+	for _, id := range []int64{20, 21, 22} {
+		if byID[id].Category != "mine" {
+			t.Errorf("element %d should be a mine: %+v", id, byID[id])
+		}
+	}
+	if _, ok := byID[23]; ok {
+		t.Error("a sinkhole is not a mine, nor anything the mirror keeps")
 	}
 	if byID[10].Category != "canyon" {
 		t.Errorf("a stream tagged sport=canyoning is a canyon: %+v", byID[10])

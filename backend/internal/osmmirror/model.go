@@ -30,11 +30,13 @@ type Key struct {
 func (e Element) Key() Key { return Key{e.Type, e.ID} }
 
 // The categories of an element. The club's activity is caving and canyoning, so caves and canyons are what
-// the mirror is for; huts go with them (people sleep in them before and after), and via ferratas, which
-// the club only uses now and then, are there because they cost nothing and are the least important.
+// the mirror is for, and the mines that are explored like caves go right after; huts go with them (people
+// sleep in them before and after), and via ferratas, which the club only uses now and then, are there
+// because they cost nothing and are the least important.
 const (
 	CategoryCave       = "cave"
 	CategoryCanyon     = "canyon"
+	CategoryMine       = "mine"
 	CategoryHut        = "hut"
 	CategoryViaFerrata = "via_ferrata"
 )
@@ -63,6 +65,14 @@ var Filters = []Filter{
 	}},
 	{Category: CategoryCanyon, Expression: "r/route=canyoning", Routes: true, Match: func(t map[string]string) bool {
 		return t["route"] == "canyoning"
+	}},
+	// A mine: an adit (a horizontal gallery), a shaft or a mine that is no longer worked. Not the sinkholes
+	// (natural=sinkhole), which are mostly hollows in the ground and not cavities.
+	{Category: CategoryMine, Expression: "nwr/man_made=adit,mineshaft", Match: func(t map[string]string) bool {
+		return t["man_made"] == "adit" || t["man_made"] == "mineshaft"
+	}},
+	{Category: CategoryMine, Expression: "nwr/historic=mine", Match: func(t map[string]string) bool {
+		return t["historic"] == "mine"
 	}},
 	// A hut: the two tags that mean it, or a basic hut under an amenity=shelter (which on its own is mostly
 	// a bus stop or a picnic shelter), or an amenity=shelter with no type at all whose name says "refugio".
