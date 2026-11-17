@@ -129,9 +129,9 @@ if the person has linked Telegram, by Telegram too.
   person's own roles; 204 also when there was no change to undo.
   - errors: 403 `forbidden`; 409 `impersonating`
 - **GET** `/admin/status` — *Admin*. Version, database and migration, email, Telegram, timeouts,
-  directories and how full their disks are, what is wrong right now, and how much the API is used
-  (people and requests in the last hour, day and month), of the running process. Never includes
-  secrets.
+  directories and how full their disks are, the state of the OpenStreetMap mirror and of its loads,
+  what is wrong right now, and how much the API is used (people and requests in the last hour, day
+  and month), of the running process. Never includes secrets.
   - returns: 200 `AdminStatus`
 - **GET** `/admin/activity` — *Admin*. Who used the API each day: the days that have any activity,
   oldest first, with the people (by login) and the requests each made. `?days=` is how many days
@@ -1369,13 +1369,24 @@ Nested fields:
 - `storage`: `[{name, path, exists}]`
 - `disks`: `[{paths, total_bytes, free_bytes, used_percent}]`, one per filesystem that holds some of
   the storage directories
+- `osm`: the mirror of OpenStreetMap (`docs/osm-integration.md`): `{elements, max_age_days,
+  sources}`, `elements` those the mirror holds that are in OpenStreetMap as far as the last load
+  knows and `max_age_days` how old the data may be before it is a problem (0: not checked). Each
+  source (one of the extracts it is loaded from, `spain`, `canary-islands`) is `{source, elements,
+  gone, last_run_at, last_run_status, last_error, last_ok_at, data_timestamp, data_age_days, added,
+  changed, deleted, unchanged, stale, failing}`: the elements it holds and those that are no longer
+  in OpenStreetMap, the latest load whatever came of it (when, `ok`, `failed` or `running`, and the
+  error), and the latest load that went well (when it ended, the date of its data, how old that is,
+  and what it did); `stale` says the data is older than the limit and `failing` that the latest load
+  failed. `sources` is empty if the mirror was never loaded; `osm` is left out if it cannot be read
 - `activity`: `{users, requests}`, each `{last_hour, last_day, last_month}`; left out if it cannot
   be read. `users` counts the different people with a session used in the period (a session counts
   in the period of its last use only; an administrator acting as somebody else does not count) and
   `requests` those the API answered under `/api/`, the health check apart, whatever the answer,
   from the counts it keeps per minute (what is still in memory is stored before they are read)
 - `problems` is a list of sentences in Spanish saying what is wrong (database not answering, a
-  missing directory, a disk at `DISK_ALERT_PERCENT` or more); empty when all is well
+  missing directory, a disk at `DISK_ALERT_PERCENT` or more, a load of the OpenStreetMap mirror that
+  failed, data of the mirror older than `OSM_MIRROR_MAX_AGE_DAYS`); empty when all is well
 
 ### `Token`
 

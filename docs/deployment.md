@@ -186,6 +186,10 @@ PLACE_FILES_ROOT=/opt/katiuskas-intranet/data/place-files
 # full (in percent) a disk holding the three directories above may be before
 # that; 90 if left out, 0 turns that one warning off.
 #DISK_ALERT_PERCENT=90
+# Also warns when the data of the OpenStreetMap mirror (the weekly load, see environments.md) is
+# older than this many days; 14 if left out, 0 turns that warning off. A mirror never loaded is
+# no problem.
+#OSM_MIRROR_MAX_AGE_DAYS=14
 EOF
 sudo chown intranet:intranet /opt/katiuskas-intranet/api.env
 sudo chmod 600 /opt/katiuskas-intranet/api.env

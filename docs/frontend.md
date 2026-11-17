@@ -417,6 +417,14 @@ descripción", which is only offered when the place has no description, since wh
 never replaced. Copying does not review: whoever has looked at everything says so with the other
 button.
 
+**The mirror of OpenStreetMap in `/admin`.** The status of the system has a group "Mirror de
+OpenStreetMap" (`osmGroup` in `admin.js`, from `osm` of `GET /admin/status`): the elements in total
+and, for each extract (España con las Baleares, Ceuta y Melilla; Islas Canarias), how many it holds
+(and how many are no longer in OpenStreetMap), the date of its data and how old it is (in bold when
+it is older than the limit), the last good load and what it did, and, if the latest load failed,
+when and why. A mirror never loaded says so. The same two problems (a failed load, old data) are in
+the list "Hay problemas" at the top.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card

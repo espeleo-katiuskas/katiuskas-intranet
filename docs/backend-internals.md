@@ -1160,18 +1160,34 @@ whether each storage directory exists. A database that doesn't answer is reporte
 body, not as an error status. It never includes a secret: no tokens, passwords or
 connection strings.
 
-It also says how full the disks are (`disks`: one entry per filesystem that holds some of the
-three storage directories that exist, with the percentage `df` shows, taken from `statfs`) and
-what is wrong right now (`problems`, sentences in Spanish): the database not answering, a
-storage directory that does not exist, a disk at `DISK_ALERT_PERCENT` (90 by default, 0 turns
-that check off) or more. `Monitor` (`monitor.go`, started from `cmd/api` with the same
-Telegram sender as the error logs) looks at that same status every 5 minutes, the first time a
-minute after starting, and warns when the *set* of problems changes — a new one ("⚠️
-intranet.katiuskas.es: …", one line each), or all gone ("✅ … ya no hay ningún problema") —
-and again once a day while one remains, not at every look. A problem is identified by a key
-that leaves out the details in its text (a disk going from 91 % to 92 % is the same problem).
-It can only warn while the API is running: that the API itself, a backup or a deployment fails
-is told by systemd (`docs/environments.md`, "Alerts when something fails").
+It also says how full the disks are (`disks`: one entry per filesystem that holds some of the three
+storage directories that exist, with the percentage `df` shows, taken from `statfs`) and what is
+wrong right now (`problems`, sentences in Spanish): the database not answering, a storage directory
+that does not exist, a disk at `DISK_ALERT_PERCENT` (90 by default, 0 turns that check off) or more,
+a load of the OpenStreetMap mirror that failed, and data of the mirror older than
+`OSM_MIRROR_MAX_AGE_DAYS` (14 by default, 0 turns that check off; see below). `Monitor`
+(`monitor.go`, started from `cmd/api` with the same Telegram sender as the error logs) looks at that
+same status every 5 minutes, the first time a minute after starting, and warns when the *set* of
+problems changes — a new one ("⚠️ intranet.katiuskas.es: …", one line each), or all gone ("✅ … ya no
+hay ningún problema") — and again once a day while one remains, not at every look. A problem is
+identified by a key that leaves out the details in its text (a disk going from 91 % to 92 % is the
+same problem). It can only warn while the API is running: that the API itself, a backup or a
+deployment fails is told by systemd (`docs/environments.md`, "Alerts when something fails").
+
+**The mirror of OpenStreetMap** (`osm`, `adminstatus/osm.go`, in the status and so in what the
+monitor looks at): the load of the mirror runs outside the API (`cmd/osmsync` from a systemd timer,
+see "The mirror of OpenStreetMap"), so nothing in the API would notice it stopping. One query reads,
+for each extract it is fed from (`osm_sync_runs` and `osm_elements`), how many elements it holds and
+how many are no longer in OpenStreetMap, the latest load whatever came of it, and the latest that
+went well (when, the date of its data, what it did). Two things are a problem, one per extract: its
+latest load **failed** (the key is `osm:<source>:failed`; the timer's own failure notice reaches
+Telegram too, this one stays in the list while it lasts and is reminded once a day), and its data is
+**older than the limit** (`osm:<source>:stale`), which is what a timer that stopped, or an extract
+that Geofabrik no longer renews, looks like. The age is that of the *data* of the last good load,
+not of the load: a run that finds the extract it already has writes no row, so it could not be told
+apart from a run that did not happen. A mirror that was never loaded is not a problem (it is
+optional, and a development machine has none), which also means that a timer that was never
+installed is not noticed until it has loaded once.
 
 **Activity** (`activity`, only in the response of `GET /admin/status`, not in what the monitor
 looks at): how many different people and how many requests there were in the last hour, day and

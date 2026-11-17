@@ -570,6 +570,51 @@ function statusGroup(title, rows) {
 
 const yesNo = (value) => (value ? 'Sí' : 'No');
 
+// What the extracts that feed the mirror of OpenStreetMap are called.
+const OSM_SOURCE_LABELS = {
+  spain: 'España (con las Baleares, Ceuta y Melilla)',
+  'canary-islands': 'Islas Canarias',
+};
+
+// "Mirror de OpenStreetMap": the copy of caves, canyons, huts and via ferratas that a weekly load keeps (it runs
+// outside the API, so nobody would notice it stopping): for each extract, its elements, the date of its data and
+// how the last loads went. A load that failed, or data that is too old, is also in the list of problems.
+function osmGroup(osm) {
+  const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  if (!osm) return '';
+  if (osm.sources.length === 0) {
+    return statusGroup('Mirror de OpenStreetMap', [
+      ['Estado', 'Todavía no se ha hecho ninguna carga (el mirror es opcional).'],
+    ]);
+  }
+  const rows = [['Elementos en total', String(osm.elements)]];
+  for (const source of osm.sources) {
+    // Each part is HTML whose text is already escaped, so that the age of old data can be bold.
+    const parts = [
+      escapeHtml(
+        `${count(source.elements, 'elemento', 'elementos')}${source.gone ? ` (${source.gone} ya no ${source.gone === 1 ? 'está' : 'están'} en OpenStreetMap)` : ''}`,
+      ),
+    ];
+    if (source.data_timestamp) {
+      const age = escapeHtml(`hace ${source.data_age_days} días`);
+      parts.push(
+        `datos del ${escapeHtml(formatDate(source.data_timestamp))} (${source.stale ? `<strong>${age}</strong>` : age})`,
+        escapeHtml(
+          `última carga correcta ${ago(source.last_ok_at)}: ${count(source.added, 'nuevo', 'nuevos')}, ${count(source.changed, 'cambiado', 'cambiados')}, ${count(source.deleted, 'desaparecido', 'desaparecidos')}`,
+        ),
+      );
+    } else {
+      parts.push('ninguna carga correcta todavía');
+    }
+    let html = parts.join(' · ');
+    if (source.failing) {
+      html += `<br><strong>La última carga falló</strong> (${escapeHtml(ago(source.last_run_at))})${source.last_error ? `: ${escapeHtml(source.last_error)}` : ''}`;
+    }
+    rows.push([OSM_SOURCE_LABELS[source.source] ?? source.source, html]);
+  }
+  return statusGroup('Mirror de OpenStreetMap', rows);
+}
+
 // "Actividad": how many different people used the intranet and how many requests it answered in the
 // last hour, day and month.
 function activityGroup(activity) {
@@ -677,6 +722,7 @@ function renderStatus(status) {
         ];
       }),
     ),
+    osmGroup(status.osm),
   ].join('');
 }
 

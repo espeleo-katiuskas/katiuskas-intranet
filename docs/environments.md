@@ -604,9 +604,11 @@ writes its errors and the sign-in notices to). Two mechanisms, for two kinds of 
   `ACTIVITY_RESOURCES_ROOT`, `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` or `PLACE_FILES_ROOT`
   may be, 90 by default, 0 to turn it off). The API looks every 5 minutes and speaks when the set of
   problems changes ("⚠️ intranet.katiuskas.es: • Disco casi lleno (93 % usado, quedan 2.1 GB):
-  /srv/…", then "✅ … ya no hay ningún problema"), and again once a day while one remains. Each API
-  (testing's and production's) does it through its own bot, so there is nothing to install: it works
-  as soon as Telegram is configured.
+  /srv/…", then "✅ … ya no hay ningún problema"), and again once a day while one remains. The same
+  list says when the load of the OpenStreetMap mirror failed, and when its data is older than
+  `OSM_MIRROR_MAX_AGE_DAYS` (14 by default, 0 turns it off): that is how a timer that stopped is
+  noticed, once the mirror has been loaded once. Each API (testing's and production's) does it
+  through its own bot, so there is nothing to install: it works as soon as Telegram is configured.
 - **A deployment, a backup, a run of the thumbnails or a load of the OpenStreetMap mirror that
   fails**: those units name
   [`katiuskas-intranet-notify-failure@.service`](../deploy/systemd/katiuskas-intranet-notify-failure@.service)
