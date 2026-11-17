@@ -1224,6 +1224,64 @@ long): it is lost with the process, as it always was. A crash or a `SIGKILL` ski
 systemd's default `TimeoutStopSec` (90 s) leaves room for it, and `docker-compose.yml` asks for
 `stop_grace_period: 30s`, since docker kills after 10 s unless told otherwise.
 
+## The mirror of OpenStreetMap
+
+`internal/osmmirror` and `cmd/osmsync` keep `osm_elements`, a local copy of the elements of
+OpenStreetMap that matter to the club, so that nothing of the intranet asks OpenStreetMap anything
+(the plan, its reasons and what is still to be done are in `docs/osm-integration.md`). Nothing in
+the API reads or changes it yet; the places only have the columns `osm_type` and `osm_id` that will
+say which element each one is.
+
+**The load.** `osmsync` is a command, not part of the API, run once a week by a systemd timer
+(`docs/environments.md`, "OpenStreetMap mirror"). For each source (`osmmirror.DefaultSources`:
+Geofabrik cuts by region, so Spain is two files, `europe/spain` with the Balearic Islands, Ceuta and
+Melilla, and `africa/canary-islands`; `-source name=url|file` replaces them):
+
+1. `Download` asks for the extract with `If-Modified-Since`, so one that did not change costs one
+   request; it is written beside the old file and swapped in whole, with the server's date, so a
+   download that breaks leaves the old one. The client says `intranet-osm-mirror/1.0` and nothing
+   else.
+2. `Osmium.Timestamp` reads the date of the data (the replication timestamp of the header). If it is
+   not newer than the one of the last successful run of that source in `osm_sync_runs`, the load
+   ends (`ErrUpToDate`), unless `-force`.
+3. `Osmium.Export` cuts the file with `osmium tags-filter` and writes the survivors with `osmium
+   export -f geojsonseq -a type,id,version,timestamp`: osmium builds the polygon of a closed way and
+   the multipolygon of a relation.
+4. `Read` parses it: a closed way comes out twice (as a line and as a polygon) and is kept once, as
+   the polygon; what only came out because a way refers to it is dropped by `Classify`, which is the
+   exact test of `Filters`; and each element gets its point. The point of a way or a relation is one
+   **inside** its shape (the centroid when it is inside, else the middle of the widest stretch of a
+   horizontal line through the shape: `geometry.go`), of a line its middle, and of a node itself.
+   The outline is kept in `geometry`.
+5. `Repository.Apply` makes the table say what the extract says, in one transaction: it compares
+   `ContentHash` (tags, point and outline: a node of a way that moved changes the hash though not
+   the way's version) and adds what is new, updates what changed, only confirms (`fetched_at`) what
+   is the same, and sets `deleted_at` on what the source had and no longer has, clearing it if it
+   comes back. Rows are never deleted, since a place may point at one. Running it twice changes
+   nothing.
+
+**What it refuses.** An extract that has fewer than half of what the source had (`Syncer.MinKept`,
+for sources of 20 or more) is taken for a broken download: `ErrTooFew`, nothing is touched, the run
+is logged as failed, and `-force` overrides it. Every run, ok or failed, leaves a row in
+`osm_sync_runs` (written when it starts and closed even if the process is stopped), and the command
+exits with an error if any source failed, which the unit turns into a Telegram notice.
+
+**Which elements.** `osmmirror.Filters`, each with its category, in the order of what the club does:
+a cave is `natural=cave_entrance`; a canyon is a `route=canyoning` relation, or a way or node with
+`sport=canyoning` (the other way they are mapped); a hut is `tourism=wilderness_hut` or
+`alpine_hut`, an `amenity=shelter` with `shelter_type=basic_hut`, or one with no type whose name has
+"refugio"; and a via ferrata, which the club only uses now and then and so comes last, is
+`highway=via_ferrata`. Not there yet: sinkholes and mines (to be decided whether they are places).
+
+**Canyons are read apart.** `osmium export` builds shapes for what is an area or a line, not for a
+route, which is a list of ways. So the filters of a route (`Routes`) are cut with their member ways
+and the nodes of those in a second pass (`Osmium.ExportRoutes`, `osmium cat -f opl`), and
+`ReadRoutes` puts them together from the text: the outline is a `MultiLineString` of the member
+ways, and the point is the middle of those ways laid end to end (each turned round if need be, so
+that it is on the stream). That point is provisional: what a canyon needs is its entrance and its
+exit, which OpenStreetMap does not have, and the choice is left until it is seen against canyons the
+club knows. Most of the relations in Spain (208 of 271) have one way and the rest up to 28.
+
 ## Telegram
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API

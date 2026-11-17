@@ -88,6 +88,8 @@ export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 
 go build -o katiuskas-api ./cmd/api
 go build -o seed-admin ./cmd/seed-admin
+# Optional, only for the mirror of OpenStreetMap (docs/environments.md, "OpenStreetMap mirror"):
+go build -o osmsync ./cmd/osmsync
 # The version shown by Admin → Estado del sistema is recorded by Go itself, from
 # git (the tag, or a commit after it, and `+dirty` if there are uncommitted
 # changes): you have to build from the clone, with `git` installed.

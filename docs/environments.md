@@ -554,6 +554,43 @@ installed once, for production. A run that fails (a missing tool, a directory th
 told by Telegram like a failed backup (see "Alerts when something fails"). To make every thumbnail
 again, run the script by hand with `--force` as `intranet`.
 
+## OpenStreetMap mirror
+
+The table `osm_elements` is a local copy of the elements of OpenStreetMap that matter to the club
+(caves, canyons, huts, via ferratas; `docs/osm-integration.md`, `docs/backend-internals.md`, "The
+mirror of OpenStreetMap"). `osmsync` (built and installed by `scripts/deploy.sh` next to the API, as
+`/opt/katiuskas-intranet-stable/bin/osmsync`) fills it from the extracts that Geofabrik publishes,
+and a systemd timer
+([`katiuskas-intranet-osm-sync.timer`](../deploy/systemd/katiuskas-intranet-osm-sync.timer)) runs it
+once a week. The extracts are 1.5 GB (Spain) and 60 MB (the Canary Islands) and are only downloaded
+if they changed; a run takes under a minute where the machine has a few cores, and one with nothing
+new costs one request per extract. A broken download leaves the old file, and a load that finds far
+fewer elements than the source had is refused and told by Telegram, so the mirror is not emptied by
+mistake.
+
+It is installed once, for production: testing's database is a copy of production's, so it gets the
+mirror with each copy. It needs the `osmium` tool (a package), the network and the database, so it
+has a setting file of its own with the connection and not production's `api.env`. On the club's
+host, as root:
+
+```sh
+sudo apt install osmium-tool
+sudo install -m 0640 -g intranet deploy/systemd/osm-sync.env.example /opt/katiuskas-intranet-deploy/osm-sync.env
+sudoedit /opt/katiuskas-intranet-deploy/osm-sync.env          # DATABASE_URL, as in production's api.env
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-osm-sync.service \
+  deploy/systemd/katiuskas-intranet-osm-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start katiuskas-intranet-osm-sync.service       # the first one, to see it work
+journalctl -u katiuskas-intranet-osm-sync
+sudo systemctl enable --now katiuskas-intranet-osm-sync.timer
+```
+
+The extracts are kept in `/var/lib/katiuskas-intranet-osm` (the unit's `StateDirectory`), which is
+about 1.6 GB: it is not in the backup (it is a copy of public data that the next run downloads
+again). The log of the loads is the table `osm_sync_runs`. By hand, as `intranet`, in a clone or on
+a laptop: `DATABASE_URL=… OSM_CACHE_DIR=/tmp/osm osmsync` (or `-source name=file.osm.pbf` for a file
+already downloaded, and `-force` to load one that is not newer than the last load).
+
 ## Alerts when something fails
 
 Nobody is going to read the journal every day, so the things that can go wrong without anyone
@@ -570,7 +607,8 @@ writes its errors and the sign-in notices to). Two mechanisms, for two kinds of 
   /srv/…", then "✅ … ya no hay ningún problema"), and again once a day while one remains. Each API
   (testing's and production's) does it through its own bot, so there is nothing to install: it works
   as soon as Telegram is configured.
-- **A deployment, a backup or a run of the thumbnails that fails**: those units name
+- **A deployment, a backup, a run of the thumbnails or a load of the OpenStreetMap mirror that
+  fails**: those units name
   [`katiuskas-intranet-notify-failure@.service`](../deploy/systemd/katiuskas-intranet-notify-failure@.service)
   in `OnFailure=`, which runs [`scripts/notify-failure.sh`](../scripts/notify-failure.sh): it sends
   "⚠️ Ha fallado katiuskas-intranet-backup.service en <host>" with the last lines of that unit's

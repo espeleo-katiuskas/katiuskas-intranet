@@ -6,6 +6,17 @@ built. When a part is decided its design goes to the usual documents (`api.md`, 
 `backend-internals.md`, `frontend.md`) and it is removed from here. Questions that need an answer
 are marked **To settle**, and collected at the end.
 
+**Status.** Phase 2 of section 13 is built: the mirror (`osm_elements`, `osm_sync_runs` and
+`places.osm_type`/`osm_id`), `cmd/osmsync` and its timer. How it works is in `database.md` and
+`backend-internals.md` ("The mirror of OpenStreetMap") and how it is installed in `environments.md`
+("OpenStreetMap mirror"); sections 5 and 11 below keep only what is still to be settled or done.
+What the first version does differently from this draft: the mark of a gone element is `deleted_at`
+(a time) and not a flag; each row has a `category` (cave, canyon, hut, via ferrata) and
+`content_hash`; ways and relations are in from the start; canyons are read apart from the others,
+since a `route=canyoning` relation is a list of ways and `osmium export` does not turn it into a
+shape; and sinkholes and mines are not loaded yet. Caves and canyons come first, as the club's
+activity, and via ferratas, which it only uses now and then, last.
+
 ## 1. What is wanted
 
 - A place may have, optionally, the OSM element it is (type and id).
@@ -92,21 +103,11 @@ may have `osmium-tool` installed (it is a package; the deployment is without Doc
 A table apart from `places`, one row per OSM element that is relevant (a mirror, never edited by
 members):
 
-| Column | What |
-|---|---|
-| `osm_type`, `osm_id` | `node`, `way` or `relation` and its id: the primary key |
-| `version`, `osm_timestamp` | of the element as downloaded |
-| `lat`, `lon` | the point: the node itself, or a point inside the shape of a way or relation |
-| `geometry` | `jsonb` GeoJSON of a way or relation (its outline), null for a node |
-| `tags` | `jsonb`, all the tags as they are |
-| `deleted` | true once it is gone from OSM (the row is kept: a place may point at it) |
-| `fetched_at` | when this row was last confirmed by a download |
+(Built: the columns are in `database.md`, "`osm_elements`". The log of the loads is `osm_sync_runs`,
+which `adminstatus` could show.)
 
-and a log of the loads (`osm_sync_runs`: when, from which file, its date, how many new, changed
-and deleted, how long, the error if any), which `adminstatus` could show.
-
-In `places`: `osm_type` and `osm_id`, both null or both set, **unique** (an element is at most one
-place), with a foreign key to the mirror.
+In `places` (built): `osm_type` and `osm_id`, both null or both set, **unique** (an element is at
+most one place), with a foreign key to the mirror.
 
 **Nodes, ways and relations.** A place is a point, but OSM draws many things as shapes. The
 Refugio de la Zapatilla is a node, and another `tourism=wilderness_hut` is a *way*: a closed line
@@ -257,23 +258,16 @@ Once there is a mirror:
 
 ## 11. The load itself
 
-A command (`backend/cmd/osmsync`, or a script) run by a systemd timer next to the deployment
-(`deploy/systemd/`), with its own failure notice (`scripts/notify-failure.sh`):
+Built (`backend/cmd/osmsync`, `internal/osmmirror`; see `backend-internals.md`), except for step 3
+of the original plan, the zone of each point, which is section 6: the elements are loaded without a
+zone for now. Tests: the filters, the points of the shapes (a square, an L), the load of a changed,
+a deleted and a returned element, the refusal of a damaged extract and the conditional download, all
+with tiny inputs (`internal/osmmirror/*_test.go`). Testing does not run the load, because it gets
+production's database with the mirror in it.
 
-1. Download the extract of each country (conditional request, client name that says who calls,
-   never more often than the extract is refreshed).
-2. Cut it: `osmium tags-filter` with the configured filters (see 12), `osmium export` to
-   GeoJSON lines.
-3. Compute the zone of each point (6).
-4. In one transaction: upsert what is new or has a higher `version`, mark `deleted` what the
-   previous run had and this one does not, flag the places whose element changed, write the
-   `osm_sync_runs` row. It is idempotent: running it twice leaves the same.
-5. Throw away the downloaded file (or keep the last one, on a disk with room: check `adminstatus`).
-
-Tests: a tiny `.osm` file in `testdata`, loaded twice, with a changed and a deleted element
-in the second run. Testing would run it too (it is a copy of production's database, and a real
-download is harmless there), and the production→testing copy needs nothing new because the
-mirror is in the database.
+**Still to see**: how long the load takes on the club's host, what the Geofabrik policy says about
+how often an extract may be downloaded (a weekly run is well within what is usual), and whether the
+diffs (`.osc` files) are worth using instead of the whole extract if it is ever run more often.
 
 ## 12. Which elements are relevant
 
@@ -285,7 +279,7 @@ without code:
 | `natural=cave_entrance` | Cavidad | the first and main one |
 | `natural=sinkhole`, `man_made=mineshaft`, `man_made=adit`, `historic=mine` | Cavidad (sima, mina) | check how many and how reliable before adding |
 | `highway=via_ferrata` | Vía ferrata | always ways: a point in the middle, and the line kept (see 5) |
-| `route=canyoning` (relations) | Cañón | 268 in Spain: a line, no points; see "Canyons" below |
+| `route=canyoning` (relations), `sport=canyoning` | Cañón | built; a line, no points; see "Canyons" |
 | `tourism=wilderness_hut`, `tourism=alpine_hut`, `amenity=shelter` + `shelter_type=basic_hut` | Refugio | see below |
 | `natural=spring`, `natural=peak` | none | probably out: the Nominatim search of the maps is enough |
 
@@ -378,10 +372,15 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
   in metres) on 98, `rating` (the difficulty) on 63, `website` on 39 and `alt_name` on 37. A few
   have `description`, `access`, `source` or a `fixme`.
 - The geometry is the **line of the stream**, not a place: there is no entrance or exit point,
-  and the direction of the line is not guaranteed to be that of the descent. A place would take
-  the upstream end of the line as its point (to be checked against real canyons: the club knows
-  the right one), and the line is kept as the outline (see 5), which is also what the "Tracks" of
-  `docs/roadmap.md` want to draw.
+  and the direction of the line is not guaranteed to be that of the descent. The mirror stores
+  the line as the outline (a `MultiLineString` of the member ways, which is also what the "Tracks"
+  of `docs/roadmap.md` want to draw) and, for now, the middle of it as the point. A place should
+  take the upstream end instead, or the club's own entrance, but that has to be checked against
+  canyons the club knows before it is chosen, and the line gives both ends once it is chosen.
+- Built from the extract of 16 November 2026: 271 relations (268 in Spain, 3 in the Canary Islands),
+  208 with one way and the rest with up to 28, plus 5 ways and a node tagged `sport=canyoning` on
+  their own. A way that is a member of a relation also has its own row if it carries the tag, so
+  the same stream can be there twice: matching them is for the linking of section 8.
 - It is far fewer than the canyons there are in Spain (not counted here), so OSM would give the
   club a trace and a link for some, not the catalogue: what the club knows is more complete, and
   its own entrance, exit and parking points would be written in `place_points`.
@@ -391,8 +390,8 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
 ## 13. Phases
 
 1. **Decide** the questions below; confirm the licence reading with the board.
-2. **Mirror**: table, the load for Spain with `natural=cave_entrance` (nodes), the log, the
-   command and the timer. Nothing visible yet except in `adminstatus`.
+2. **Mirror** (done): the table, the load of Spain for caves, huts and via ferratas (nodes, ways and
+   relations), the log, the command and the timer. Nothing visible in the intranet yet.
 3. **Show**: the candidates on the map of `/lugares` (bounding box), with attribution, and
    "Usar" creating the place with the OSM id (the option chosen in 7).
 4. **Link** the places that already exist (matching by distance and name, reviewed by hand) and

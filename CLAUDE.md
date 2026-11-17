@@ -24,6 +24,7 @@ explanations live in `docs/`; read the one that matches the task before changing
 | `docs/architecture.md` | overview and business rules |
 | `docs/environments.md`, `docs/deployment.md` | local / testing / production, and how to deploy |
 | `docs/roadmap.md` | what is planned and not done yet, with the questions to settle before building it |
+| `docs/osm-integration.md` | the plan to base the places on a local copy of OpenStreetMap (the mirror is built, the rest is not) |
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and
 `docs/api.md`; a migration → `docs/database.md`; a rule or invariant → its section in
@@ -286,8 +287,13 @@ and **never rewritten**, like the library's); whoever attached one, admin and bo
 frontend reads UTM as well as decimals (`js/coordinates.js`) but the API only has latitude and
 longitude. No PostGIS. The list has a map of the same places and each place a small one
 (`js/map-common.js`: Leaflet and its clustering are copied into `web/vendor/`, tiles from the IGN, Esri or
-OpenStreetMap). An activity goes to places of the catalogue (`activity_places`, set by whoever can
-edit the activity; a place with activities is not deleted). Not there yet: see `docs/roadmap.md`.
+OpenStreetMap). A local **mirror of OpenStreetMap** (`osm_elements`, `internal/osmmirror`, loaded
+weekly by `cmd/osmsync` from Geofabrik's extracts with `osmium`: caves, canyons, huts, via ferratas)
+is kept apart from the places and joined by element type and id (`places.osm_type`/`osm_id`);
+nothing reads it yet, and nothing in the intranet asks OpenStreetMap anything
+(`docs/osm-integration.md`). An activity goes to places of the catalogue (`activity_places`, set by
+whoever can edit the activity; a place with activities is not deleted). Not there yet: see
+`docs/roadmap.md`.
 
 **Telegram** (`internal/telegram`, `internal/telegrambot`): plain `net/http` client, no SDK.
 Notifications are fire-and-forget (own goroutine, bounded timeout, detached context), with two

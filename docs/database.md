@@ -1224,6 +1224,8 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 | `horizontal_length_m` | integer | yes |  |
 | `geology_id` | bigint | yes |  |
 | `technical_sheet` | text | yes |  |
+| `osm_type` | text | yes |  |
+| `osm_id` | bigint | yes |  |
 | `created_by` | bigint | no |  |
 | `created_at` | timestamptz | no | now() |
 | `updated_by` | bigint | no |  |
@@ -1247,6 +1249,7 @@ Notes on the columns:
   `js/rich-text.js`. The technical sheet says what has to be installed to go through the place.
 - `depth_m`, `horizontal_length_m`: Of a cave, in metres.
 - `geology_id`: What a cave is formed in.
+- `osm_type`, `osm_id`: The OpenStreetMap element the place is, when it is one (see `osm_elements`).
 - `updated_by`, `updated_at`: The last change of the place or of any of its points; the same as the
   creation until there is one. They are set by the Go service.
 
@@ -1256,6 +1259,10 @@ Constraints:
 - `(type_id, kind, has_state)` → `place_types(id, kind, has_state)`
 - `area_id` → `areas(id)`, `geology_id` → `place_geologies(id)`, `subtype_id` →
   `place_subtypes(id)`, `system_id` → `place_systems(id)`
+- `(osm_type, osm_id)` → `osm_elements(osm_type, osm_id)`, `ON DELETE RESTRICT`: the element is in
+  the mirror
+- `places_osm_both_or_none`: `osm_type` and `osm_id` are both there or both empty
+- unique `places_osm_element_key` on `(osm_type, osm_id)`: an element is at most one place
 - `created_by` → `users(id)`, `updated_by` → `users(id)`
 - `name` is not blank
 - `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
@@ -1356,6 +1363,84 @@ share a path although a place and a system may share a directory number.
 - `file_of_a_place_or_a_system`: exactly one of `place_id` and `system_id` is there
 - indexes `idx_place_files_place_id` on `(place_id)`, `idx_place_files_system_id` on `(system_id)`
   and `idx_place_files_uploaded_by` on `(uploaded_by)`
+
+### `osm_elements`
+
+A local copy of the elements of OpenStreetMap that matter to the club (migration
+`00069_osm_mirror.sql`; `docs/osm-integration.md` says why): caves and canyons, which are what the
+club does, and huts and via ferratas. It is a
+mirror: only `cmd/osmsync` writes it, from the extracts that Geofabrik publishes, and nothing in the
+API changes or reads it yet. It is apart from `places` and joined to it by the type and the id of
+the element, so that what is OpenStreetMap's and what is the club's stay separate.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `osm_type` | text | no |  |
+| `osm_id` | bigint | no |  |
+| `version` | integer | no |  |
+| `osm_timestamp` | timestamptz | no |  |
+| `category` | text | no |  |
+| `lat` | double precision | no |  |
+| `lon` | double precision | no |  |
+| `tags` | jsonb | no |  |
+| `geometry` | jsonb | yes |  |
+| `content_hash` | text | no |  |
+| `source` | text | no |  |
+| `first_seen_at` | timestamptz | no | now() |
+| `fetched_at` | timestamptz | no | now() |
+| `changed_at` | timestamptz | no | now() |
+| `deleted_at` | timestamptz | yes |  |
+
+Notes on the columns:
+
+- `osm_type`, `osm_id`: What the element is: an id is only unique among those of its type, so both
+  make the key (node 123 and way 123 are not the same).
+- `version`, `osm_timestamp`: Of the element as it was downloaded, and when it was last edited.
+- `category`: What the filters of the loader say it is: `cave`, `canyon`, `hut` or `via_ferrata`.
+- `lat`, `lon`: The point: a node itself, or a point inside the shape of a way or a relation (not
+  the average of its corners, which can be outside an L-shaped building), or the middle of a line
+  (of a canyon, the middle of the ways of its stream laid end to end: provisional, since the
+  entrance and the exit of a canyon are what the club will want, and OpenStreetMap does not have
+  them).
+- `tags`: All the tags as they are. `geometry`: the GeoJSON of the outline of a way or a relation
+  (a `MultiLineString`, one line per way, for a canyon), empty for a node.
+- `content_hash`: A hash of the tags, the point and the outline, which tells a load that something
+  changed even when the version did not (a node of a way that moved does not change its version).
+- `source`: The extract that last had it (`spain`, `canary-islands`).
+- `fetched_at`, `changed_at`: When a load last confirmed it, and when one last found it different
+  (or marked it as gone).
+- `deleted_at`: Set when the element is no longer in its extract (deleted from OpenStreetMap, or no
+  longer matching the filters); the row stays, since a place may point at it, and the mark is
+  cleared if it comes back.
+
+Constraints:
+
+- primary key (osm_type, osm_id)
+- `osm_type` is `node`, `way` or `relation`; `category` is `cave`, `canyon`, `hut` or `via_ferrata`
+- `lat` between -90 and 90, `lon` between -180 and 180
+- indexes `idx_osm_elements_lat_lon` on `(lat, lon)` and `idx_osm_elements_source` on `(source)`,
+  both only over the rows that are not marked as gone
+
+### `osm_sync_runs`
+
+One row per load of an extract by `cmd/osmsync`, written when it starts and closed when it ends, so
+that a load that fails is in the log with its error.
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `source` | text | no |  |
+| `source_timestamp` | timestamptz | yes |  |
+| `started_at` | timestamptz | no | now() |
+| `finished_at` | timestamptz | yes |  |
+| `status` | text | no | `running` |
+| `added`, `changed`, `deleted`, `unchanged` | integer | no | 0 |
+| `error` | text | yes |  |
+
+`source_timestamp` is the date of the data in the extract (its replication timestamp): a load
+whose extract is not newer than the one of the last successful load of the same source does
+nothing. `status` is `running`, `ok` or `failed`. Index `idx_osm_sync_runs_source` on `(source,
+started_at DESC)`.
 
 ## Distributions
 
@@ -2031,3 +2116,12 @@ at the end; that database has to be recreated when a new migration appears.
   `place_points`
 - `00062_areas_seed.sql`: the countries and the zones of Spain (generated by
   `scripts/generate-areas-seed.py`)
+- `00063_place_files.sql`: `place_files`
+- `00064_activity_places.sql`: `activity_places`
+- `00065_activity_resource_place.sql`: the place of an entry of an activity's memoria
+- `00066_place_cavities.sql`: the type Cavidad, `place_subtypes`, `has_state` of the types and
+  `alt_names` as an array
+- `00067_place_systems.sql`: `place_systems` and `places.system_id`
+- `00068_bag_model_optional.sql`: the model of a bag is optional (the constraints
+  `rope_requires_brand_model` and `bag_requires_brand` replace `rope_and_bag_require_brand_model`)
+- `00069_osm_mirror.sql`: `osm_elements`, `osm_sync_runs` and `places.osm_type`/`osm_id`
