@@ -1,4 +1,4 @@
-import { apiFetch, escapeHtml, formatDate } from './api.js';
+import { apiFetch, escapeHtml } from './api.js';
 import { canHover } from './map-common.js';
 
 // The points of OpenStreetMap on the map of the places: the elements of the local mirror (caves, canyons,
@@ -76,11 +76,8 @@ function popupHtml(detail) {
   const web = /^https?:\/\//.test(tags.website ?? '')
     ? `<br><a href="${escapeHtml(tags.website)}" target="_blank" rel="noopener">Web</a>`
     : '';
-  const osm = `https://www.openstreetmap.org/${detail.type}/${detail.id}`;
   return `<strong>${escapeHtml(name)}</strong><br>
-    <span class="subtitle">${escapeHtml(CATEGORY_LABELS[detail.category] ?? detail.category)} · de OpenStreetMap</span>${rows}${web}
-    <br><a href="${osm}" target="_blank" rel="noopener">Ver en OpenStreetMap</a>
-    <br><span class="subtitle">Versión ${detail.version}, ${escapeHtml(formatDate(detail.timestamp))}. © colaboradores de OpenStreetMap (ODbL).</span>`;
+    <span class="subtitle">${escapeHtml(CATEGORY_LABELS[detail.category] ?? detail.category)} · de OpenStreetMap</span>${rows}${web}`;
 }
 
 // createOsmLayer puts the layer on the map and gives what the page needs to drive it. `note` is the element
